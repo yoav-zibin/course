@@ -1,0 +1,172 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { margin: 0; padding: 12px 16px; font-family: Inter, sans-serif; background: #111318; color: #eee; font-size: 13px; }
+  h1 { font-size: 18px; margin: 0 0 8px; }
+  h2 { font-size: 13px; text-transform: uppercase; color: #8a93a6; margin: 14px 0 4px; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  pre, textarea { font-family: ui-monospace, monospace; font-size: 12px; }
+  pre { background: #1a1d24; border: 1px solid #333a46; border-radius: 4px; padding: 8px; margin: 0; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; }
+  textarea { width: 100%; box-sizing: border-box; min-height: 160px; background: #0b0c10; color: #eee; border: 1px solid #4a5263; border-radius: 4px; padding: 6px; }
+  select, button { font: inherit; background: #222733; color: #eee; border: 1px solid #4a5263; border-radius: 4px; padding: 5px 10px; }
+  button { cursor: pointer; }
+  button.primary { background: #4a3fbf; border-color: #7a70e0; font-weight: 600; }
+  .row { display: flex; gap: 8px; align-items: center; margin: 6px 0; flex-wrap: wrap; }
+  .note { color: #e8c35a; }
+  .ok { color: #7fd07f; }
+  table { border-collapse: collapse; }
+  td, th { padding: 2px 8px; border-bottom: 1px solid #2a2f3a; text-align: left; }
+  th { color: #8a93a6; font-weight: 600; }
+  #log div { font-family: ui-monospace, monospace; font-size: 12px; border-bottom: 1px solid #22262f; padding: 2px 0; }
+</style>
+</head>
+<body>
+<h1>Debug game</h1>
+<div id="summary">Waiting for the first <code>state_changed</code> message…</div>
+<div class="grid">
+  <div>
+    <h2>Players</h2>
+    <table id="players"></table>
+    <h2>Last state_changed message</h2>
+    <pre id="message">(none yet)</pre>
+  </div>
+  <div>
+    <h2>Send make_move</h2>
+    <div id="acting" class="note"></div>
+    <label for="new-state">new_state (JSON)</label>
+    <textarea id="new-state" spellcheck="false"></textarea>
+    <div class="row">
+      <label for="next-turn">next_turn_player_index</label>
+      <select id="next-turn"></select>
+    </div>
+    <div class="row">
+      <button id="send" class="primary">Send make_move</button>
+      <button id="reset">Reset to current state</button>
+      <button id="increment">Increment counter</button>
+    </div>
+    <div id="error" class="note"></div>
+    <h2>Message log (newest first)</h2>
+    <div id="log"></div>
+  </div>
+</div>
+<script>
+"use strict";
+
+// ---- Game logic: the debug game has no rules; any state and next turn are allowed. ----
+const Logic = (() => {
+  const initialState = () => ({ counter: 0, note: "" });
+  return { initialState };
+})();
+
+// ---- UI: shows what the platform sends and sends whatever you enter. ----
+if (typeof window !== "undefined" && window.document) {
+  let latest = null;
+  const $ = (id) => document.getElementById(id);
+
+  function logLine(direction, message) {
+    const time = new Date().toLocaleTimeString();
+    const summary = message.type === "state_changed"
+      ? `move_count=${message.move_count} turn=${message.turn_of_player_index} acting_for=${message.acting_for_player_index}`
+      : `next_turn=${message.next_turn_player_index} new_state=${JSON.stringify(message.new_state)}`;
+    const line = document.createElement("div");
+    line.textContent = `${time} ${direction} ${message.type}: ${summary}`;
+    $("log").prepend(line);
+  }
+
+  function resetForm() {
+    $("new-state").value = JSON.stringify(latest.state ?? Logic.initialState(), null, 2);
+    const options = latest.players.map((player) => {
+      const option = document.createElement("option");
+      option.value = String(player.player_index);
+      option.textContent = `${player.player_index}: ${player.name} (${player.kind})`;
+      return option;
+    });
+    const end = document.createElement("option");
+    end.value = "null";
+    end.textContent = "null (end the match)";
+    $("next-turn").replaceChildren(...options, end);
+    // Default to the next seat after the current turn.
+    const turn = latest.turn_of_player_index;
+    $("next-turn").value = turn === null ? "null" : String((turn + 1) % latest.players.length);
+  }
+
+  function render() {
+    const m = latest;
+    $("summary").textContent =
+      `status=${m.status} · move_count=${m.move_count} · turn_of_player_index=${m.turn_of_player_index}` +
+      ` · my_player_index=${m.my_player_index} · acting_for_player_index=${m.acting_for_player_index}`;
+    $("message").textContent = JSON.stringify(m, null, 2);
+    const header = document.createElement("tr");
+    for (const title of ["#", "Name", "Kind", ""]) {
+      const th = document.createElement("th");
+      th.textContent = title;
+      header.append(th);
+    }
+    $("players").replaceChildren(header, ...m.players.map((player) => {
+      const tr = document.createElement("tr");
+      const notes = [];
+      if (player.player_index === m.turn_of_player_index) notes.push("turn");
+      if (player.player_index === m.my_player_index) notes.push("you");
+      if (player.player_index === m.acting_for_player_index) notes.push("you act for");
+      for (const text of [player.player_index, player.name, player.kind, notes.join(", ")]) {
+        const td = document.createElement("td");
+        td.textContent = String(text);
+        tr.append(td);
+      }
+      return tr;
+    }));
+    const acting = m.acting_for_player_index;
+    if (m.status !== "ongoing") {
+      $("acting").textContent = "The match is not ongoing; the platform will reject moves.";
+    } else if (acting === null) {
+      $("acting").textContent = "It's not your turn; the platform will reject moves.";
+    } else {
+      const player = m.players[acting];
+      $("acting").textContent = player.kind === "computer"
+        ? `It's computer seat ${acting}'s turn and you move for it.`
+        : `It's your turn (seat ${acting}).`;
+    }
+    resetForm();
+  }
+
+  $("send").addEventListener("click", () => {
+    $("error").textContent = "";
+    let newState;
+    try {
+      newState = JSON.parse($("new-state").value);
+    } catch (error) {
+      $("error").textContent = `new_state is not valid JSON: ${error.message}`;
+      return;
+    }
+    const value = $("next-turn").value;
+    const message = { type: "make_move", new_state: newState, next_turn_player_index: value === "null" ? null : Number(value) };
+    logLine("sent", message);
+    window.parent.postMessage(message, "*");
+  });
+
+  $("reset").addEventListener("click", () => latest && resetForm());
+
+  $("increment").addEventListener("click", () => {
+    try {
+      const state = JSON.parse($("new-state").value);
+      state.counter = (Number(state.counter) || 0) + 1;
+      $("new-state").value = JSON.stringify(state, null, 2);
+    } catch (error) {
+      $("error").textContent = `new_state is not valid JSON: ${error.message}`;
+    }
+  });
+
+  window.addEventListener("message", (event) => {
+    if (event.source !== window.parent) return;
+    const message = event.data;
+    if (!message || message.type !== "state_changed") return;
+    latest = message;
+    logLine("received", message);
+    render();
+  });
+}
+</script>
+</body>
+</html>

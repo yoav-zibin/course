@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Game platform · Portal</title>
+    <link rel="stylesheet" href="/static/common.css?v=2" />
+    <style>
+      .new-match {
+        padding: 0 var(--space-md) var(--space-md);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+      }
+
+      .new-match select {
+        width: 100%;
+      }
+
+      #computers {
+        width: 64px;
+      }
+
+      .match-header h2 {
+        margin: 0;
+        font-size: var(--font-size-md);
+        display: flex;
+        gap: var(--space-sm);
+        align-items: baseline;
+      }
+
+      .waiting-note {
+        padding: var(--space-lg);
+        border: 1px dashed var(--color-border-3);
+        border-radius: var(--radius-sm);
+        color: var(--color-text-secondary);
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Game platform</h1>
+      <nav>
+        <a href="/portal" aria-current="page">Portal</a>
+        <a href="/builder">Builder</a>
+        <a href="/console">API console</a>
+        <a href="/browse">Browse data</a>
+        <a href="/docs">OpenAPI docs</a>
+      </nav>
+      <span class="spacer"></span>
+      <label class="inline">Act as <select id="act-as"></select></label>
+    </header>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="section-title">New match</div>
+        <div class="new-match">
+          <select id="new-game" aria-label="Game"></select>
+          <div class="inline-row">
+            <label class="inline">Computer opponents <input id="computers" type="number" min="0" max="9" value="0" /></label>
+            <button id="create" type="button" class="primary">Create</button>
+          </div>
+          <div id="create-message" class="message"></div>
+        </div>
+        <div id="my-matches"></div>
+        <div class="section-title">Open matches you can join</div>
+        <div id="open-matches"></div>
+      </aside>
+      <main class="work">
+        <div id="placeholder" class="muted">Choose who to act as at the top right, then pick or create a match.</div>
+        <div id="match" hidden>
+          <div class="match-header">
+            <h2><span id="match-title"></span> <span id="match-status" class="badge"></span></h2>
+            <div id="match-meta" class="muted"></div>
+          </div>
+          <div id="seats" class="seats" style="margin: var(--space-sm) 0"></div>
+          <div id="actions" class="inline-row"></div>
+          <div id="match-message" class="message"></div>
+          <div id="waiting" class="waiting-note" hidden></div>
+          <div id="game-box" class="frame-box" hidden></div>
+        </div>
+      </main>
+    </div>
+    <script src="/static/common.js?v=2"></script>
+    <script src="/static/portal.js?v=2"></script>
+  </body>
+</html>

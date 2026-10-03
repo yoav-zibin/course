@@ -1,0 +1,14 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8000,
+    "keep_alive_timeout_seconds": 3600
+  },
+  "data_file": {
+    "path": "~/.local/share/game-platform/data.json",
+    "save_interval_seconds": 1.0
+  },
+  "debug_tools": true,
+  "master_password": "",
+  "log_level": "INFO"
+}

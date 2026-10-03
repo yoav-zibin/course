@@ -1,0 +1,189 @@
+"""A [Store] that keeps everything in memory and saves it to a JSON file.
+
+The file is read once when the store is opened. After a change, a background thread
+rewrites the whole file, at most once per [min_write_interval_seconds], so a burst of
+changes costs one write. [close] writes any pending changes; changes made less than
+[min_write_interval_seconds] before a crash can be lost.
+"""
+
+import logging
+import threading
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Final
+
+from pydantic import TypeAdapter
+
+from game_platform.models import Game, Match, User
+from game_platform.store import InMemoryStore, Snapshot
+
+logger = logging.getLogger(__name__)
+
+# Bump when the file layout changes incompatibly.
+FORMAT_VERSION: Final = 1
+
+
+@dataclass(frozen=True, kw_only=True)
+class _File:
+    format_version: int
+    data: Snapshot
+
+
+@dataclass(frozen=True, kw_only=True)
+class _FileVersion:
+    format_version: int
+
+
+_FILE_ADAPTER: Final = TypeAdapter(_File)
+_VERSION_ADAPTER: Final = TypeAdapter(_FileVersion)
+
+
+class JsonFileStore:
+    def __init__(self, path: Path, *, min_write_interval_seconds: float = 1.0) -> None:
+        """Loads [path] if it exists, otherwise starts empty; the file is created on
+        the first change. Raises if the file exists but can't be parsed, rather than
+        overwriting it."""
+        self._path = path
+        self._min_write_interval_seconds = min_write_interval_seconds
+        self._inner = (
+            InMemoryStore.of_snapshot(read_snapshot(path))
+            if path.exists()
+            else InMemoryStore()
+        )
+        # Guards [_inner] against the writer thread taking a snapshot mid-change.
+        self._lock = threading.Lock()
+        # Serializes writes, so the file always ends up with the latest snapshot.
+        self._write_lock = threading.Lock()
+        # Whether there are changes that haven't been written; guarded by [_lock].
+        self._dirty = False
+        # Wakes the writer thread after a change or when closing.
+        self._wakeup = threading.Event()
+        self._closing = threading.Event()
+        self._writer = threading.Thread(
+            target=self._write_loop, name="json-file-store-writer", daemon=True
+        )
+        self._writer.start()
+
+    def close(self) -> None:
+        """Stops the writer thread and writes any pending changes."""
+        self._closing.set()
+        self._wakeup.set()
+        self._writer.join()
+        self.flush()
+
+    def flush(self) -> None:
+        """Writes the file now if anything changed since the last write."""
+        with self._write_lock:
+            with self._lock:
+                if not self._dirty:
+                    return
+                self._dirty = False
+                snapshot = self._inner.snapshot()
+            try:
+                write_snapshot(self._path, snapshot)
+            except Exception:
+                logger.exception("Failed to write %s; will retry", self._path)
+                with self._lock:
+                    self._set_dirty()
+
+    def _set_dirty(self) -> None:
+        """Callers must hold [_lock]."""
+        self._dirty = True
+        self._wakeup.set()
+
+    def _write_loop(self) -> None:
+        while True:
+            self._wakeup.wait()
+            # Changes made after this point set [_wakeup] again, so none are missed.
+            self._wakeup.clear()
+            if self._closing.is_set():
+                return
+            self.flush()
+            # Rate-limits writes; returns early (true) when closing.
+            if self._closing.wait(self._min_write_interval_seconds):
+                return
+
+    # [Store] interface: reads delegate; writes delegate and schedule a file write.
+
+    def put_user(self, user: User) -> None:
+        with self._lock:
+            self._inner.put_user(user)
+            self._set_dirty()
+
+    def get_user(self, user_id: str) -> User | None:
+        with self._lock:
+            return self._inner.get_user(user_id)
+
+    def list_users(self) -> list[User]:
+        with self._lock:
+            return self._inner.list_users()
+
+    def add_game_version(self, game: Game) -> None:
+        with self._lock:
+            self._inner.add_game_version(game)
+            self._set_dirty()
+
+    def get_game(self, game_id: str) -> Game | None:
+        with self._lock:
+            return self._inner.get_game(game_id)
+
+    def get_game_version(self, game_id: str, version: int) -> Game | None:
+        with self._lock:
+            return self._inner.get_game_version(game_id, version)
+
+    def list_games(self, *, owner_user_id: str | None) -> list[Game]:
+        with self._lock:
+            return self._inner.list_games(owner_user_id=owner_user_id)
+
+    def delete_game(self, game_id: str) -> None:
+        with self._lock:
+            self._inner.delete_game(game_id)
+            self._set_dirty()
+
+    def put_match(self, match: Match) -> None:
+        with self._lock:
+            self._inner.put_match(match)
+            self._set_dirty()
+
+    def get_match(self, match_id: str) -> Match | None:
+        with self._lock:
+            return self._inner.get_match(match_id)
+
+    def list_matches_involving(self, user_id: str) -> list[Match]:
+        with self._lock:
+            return self._inner.list_matches_involving(user_id)
+
+    def delete_match(self, match_id: str) -> None:
+        with self._lock:
+            self._inner.delete_match(match_id)
+            self._set_dirty()
+
+    def list_all_game_versions(self) -> list[Game]:
+        with self._lock:
+            return self._inner.list_all_game_versions()
+
+    def list_all_matches(self) -> list[Match]:
+        with self._lock:
+            return self._inner.list_all_matches()
+
+
+def read_snapshot(path: Path) -> Snapshot:
+    contents = path.read_bytes()
+    # Check the version before validating, which would fail with a less helpful error.
+    format_version = _VERSION_ADAPTER.validate_json(contents).format_version
+    if format_version != FORMAT_VERSION:
+        raise ValueError(
+            f"{path} has format version {format_version}, expected {FORMAT_VERSION}"
+        )
+    return _FILE_ADAPTER.validate_json(contents).data
+
+
+def write_snapshot(path: Path, snapshot: Snapshot) -> None:
+    # Write a temporary file and rename it over the old one, so a crash mid-write
+    # never leaves a truncated file.
+    contents = _FILE_ADAPTER.dump_json(
+        _File(format_version=FORMAT_VERSION, data=snapshot), indent=2
+    )
+    temporary = path.with_name(f"{path.name}.tmp")
+    temporary.write_bytes(contents)
+    temporary.replace(path)

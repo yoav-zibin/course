@@ -1,0 +1,160 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { margin: 0; padding: 16px; font-family: Inter, sans-serif; background: #101114; color: #eee; }
+  h1 { font-size: 18px; margin: 0 0 8px; }
+  #status { margin-bottom: 12px; min-height: 20px; }
+  #board { display: grid; grid-template-columns: repeat(3, 72px); gap: 6px; }
+  #board button {
+    width: 72px; height: 72px; font-size: 40px; font-weight: 700; background: #1d1f24;
+    color: #eee; border: 1px solid #444; border-radius: 6px; cursor: pointer;
+  }
+  #board button:disabled { cursor: default; }
+  #board button.win { background: #2d4a2d; }
+  .players { margin-top: 12px; font-size: 13px; color: #aaa; }
+  .players .turn { color: #fff; font-weight: 700; }
+</style>
+</head>
+<body>
+<h1>Tic-tac-toe</h1>
+<div id="status">Waiting for the platform…</div>
+<div id="board"></div>
+<div class="players" id="players"></div>
+<script>
+"use strict";
+
+// ---- Game logic: pure functions, also used by tools outside the browser. ----
+const Logic = (() => {
+  const LINES = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
+  const MARKS = ["X", "O"];
+
+  function initialState() {
+    return { board: ["", "", "", "", "", "", "", "", ""], winner: null, draw: false };
+  }
+
+  function winningLine(board) {
+    return LINES.find(([a, b, c]) => board[a] && board[a] === board[b] && board[a] === board[c]) ?? null;
+  }
+
+  /** Returns {state, nextTurn}; nextTurn is null when the game is over. */
+  function play(state, seat, cell) {
+    const current = state ?? initialState();
+    if (current.winner !== null || current.draw) throw new Error("the game is over");
+    if (current.board[cell] !== "") throw new Error("that cell is taken");
+    const board = [...current.board];
+    board[cell] = MARKS[seat];
+    const line = winningLine(board);
+    const draw = !line && board.every((mark) => mark !== "");
+    const next = { board, winner: line ? seat : null, draw };
+    return { state: next, nextTurn: line || draw ? null : 1 - seat };
+  }
+
+  /** Perfect play by minimax; ties are broken by [rng]. */
+  function computerCell(state, seat, rng = Math.random) {
+    const current = state ?? initialState();
+    const score = (board, toMove) => {
+      const line = winningLine(board);
+      if (line) return board[line[0]] === MARKS[seat] ? 1 : -1;
+      if (board.every((mark) => mark !== "")) return 0;
+      const scores = board.flatMap((mark, cell) => {
+        if (mark) return [];
+        const next = [...board];
+        next[cell] = MARKS[toMove];
+        return [score(next, 1 - toMove)];
+      });
+      return toMove === seat ? Math.max(...scores) : Math.min(...scores);
+    };
+    const options = current.board.flatMap((mark, cell) => {
+      if (mark) return [];
+      const next = [...current.board];
+      next[cell] = MARKS[seat];
+      return [{ cell, value: score(next, 1 - seat) }];
+    });
+    const best = Math.max(...options.map((option) => option.value));
+    const bestCells = options.filter((option) => option.value === best);
+    return bestCells[Math.floor(rng() * bestCells.length)].cell;
+  }
+
+  return { initialState, winningLine, play, computerCell, MARKS };
+})();
+
+// ---- UI: talks to the platform with state_changed / make_move messages. ----
+if (typeof window !== "undefined" && window.document) {
+  let latest = null; // the last state_changed message
+  let moveSent = false; // at most one make_move per state_changed
+
+  const $ = (id) => document.getElementById(id);
+
+  function makeMove(newState, nextTurn) {
+    if (moveSent) return;
+    moveSent = true;
+    window.parent.postMessage(
+      { type: "make_move", new_state: newState, next_turn_player_index: nextTurn }, "*");
+  }
+
+  function actingSeat() {
+    if (!latest || latest.status !== "ongoing") return null;
+    return latest.acting_for_player_index;
+  }
+
+  function render() {
+    const state = latest.state ?? Logic.initialState();
+    const acting = actingSeat();
+    const humanActing = acting !== null && latest.players[acting].kind === "human";
+    const line = Logic.winningLine(state.board);
+    const name = (seat) => `${latest.players[seat].name} (${Logic.MARKS[seat]})`;
+
+    let status;
+    if (state.winner !== null) status = `${name(state.winner)} wins!`;
+    else if (state.draw) status = "It's a draw.";
+    else if (latest.status === "over") status = "The match is over.";
+    else if (humanActing) status = `Your move, ${name(acting)}.`;
+    else if (acting !== null) status = `${name(acting)} is thinking…`;
+    else status = `Waiting for ${name(latest.turn_of_player_index)}.`;
+    $("status").textContent = status;
+
+    $("board").replaceChildren(...state.board.map((mark, cell) => {
+      const button = document.createElement("button");
+      button.textContent = mark;
+      button.disabled = !humanActing || mark !== "";
+      if (line && line.includes(cell)) button.className = "win";
+      button.addEventListener("click", () => {
+        const { state: next, nextTurn } = Logic.play(latest.state, acting, cell);
+        makeMove(next, nextTurn);
+      });
+      return button;
+    }));
+
+    $("players").replaceChildren(...latest.players.slice(0, 2).map((player) => {
+      const div = document.createElement("div");
+      const you = player.player_index === latest.my_player_index ? " — you" : "";
+      div.textContent = `${Logic.MARKS[player.player_index]}: ${player.name}${you}`;
+      if (player.player_index === latest.turn_of_player_index) div.className = "turn";
+      return div;
+    }));
+
+    if (acting !== null && latest.players[acting].kind === "computer") {
+      const scheduledFor = latest;
+      setTimeout(() => {
+        if (latest !== scheduledFor) return;
+        const cell = Logic.computerCell(latest.state, acting);
+        const { state: next, nextTurn } = Logic.play(latest.state, acting, cell);
+        makeMove(next, nextTurn);
+      }, 600);
+    }
+  }
+
+  window.addEventListener("message", (event) => {
+    if (event.source !== window.parent) return;
+    const message = event.data;
+    if (!message || message.type !== "state_changed") return;
+    latest = message;
+    moveSent = false;
+    render();
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Game platform · API console</title>
+    <link rel="stylesheet" href="/static/common.css?v=2" />
+    <style>
+      main {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 300px minmax(0, 1fr) minmax(0, 1fr);
+      }
+
+      .pane {
+        min-height: 0;
+        overflow: auto;
+        border-right: 1px solid var(--color-border-2);
+        display: flex;
+        flex-direction: column;
+      }
+
+      .pane-header {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        padding: var(--space-sm) var(--space-md);
+        background: var(--color-bg-1);
+        border-bottom: 1px solid var(--color-border-2);
+        min-height: 41px;
+      }
+
+      .pane-header h2 {
+        margin: 0;
+        font-size: var(--font-size-xs);
+        font-weight: 600;
+        text-transform: uppercase;
+        color: var(--color-text-tertiary);
+      }
+
+      .pane-body {
+        padding: var(--space-md);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-md);
+      }
+
+      /* Operation list */
+
+      #operation-filter {
+        width: 100%;
+      }
+
+      .group-title {
+        padding: var(--space-md) var(--space-md) var(--space-xs);
+        font-size: var(--font-size-xs);
+        font-weight: 600;
+        text-transform: uppercase;
+        color: var(--color-text-quaternary);
+      }
+
+      .operation {
+        display: flex;
+        align-items: baseline;
+        width: 100%;
+        text-align: left;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+        background: none;
+        padding: 3px var(--space-md);
+      }
+
+      .operation:hover {
+        background: var(--color-bg-2);
+      }
+
+      .operation[aria-selected="true"] {
+        background: var(--color-bg-3);
+      }
+
+      .operation .path {
+        font-family: var(--font-mono);
+        font-size: var(--font-size-xs);
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Request form */
+
+      .request-title {
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-sm);
+        font-family: var(--font-mono);
+      }
+
+      .fields {
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr);
+        gap: var(--space-sm) var(--space-md);
+        align-items: center;
+      }
+
+      .fields label {
+        font-family: var(--font-mono);
+        font-size: var(--font-size-xs);
+        color: var(--color-text-secondary);
+      }
+
+      .fields .hint {
+        grid-column: 2;
+        margin-top: -6px;
+        font-size: var(--font-size-xs);
+        color: var(--color-text-quaternary);
+      }
+
+      .section-title {
+        font-size: var(--font-size-xs);
+        font-weight: 600;
+        text-transform: uppercase;
+        color: var(--color-text-quaternary);
+        margin-bottom: calc(-1 * var(--space-xs));
+      }
+
+      #body {
+        width: 100%;
+        min-height: 220px;
+      }
+
+      .actions {
+        display: flex;
+        gap: var(--space-sm);
+        align-items: center;
+      }
+
+      .url-preview {
+        word-break: break-all;
+        color: var(--color-text-tertiary);
+      }
+
+      .auth-note {
+        font-size: var(--font-size-xs);
+      }
+
+      .auth-note.missing {
+        color: var(--color-warn);
+      }
+
+      /* Response */
+
+      .response-meta {
+        display: flex;
+        gap: var(--space-sm);
+        align-items: center;
+        font-family: var(--font-mono);
+        font-size: var(--font-size-xs);
+      }
+
+      #response-body {
+        background: var(--color-bg-1);
+        border: 1px solid var(--color-border-2);
+        border-radius: var(--radius-sm);
+        padding: var(--space-md);
+        min-height: 120px;
+      }
+
+      #history {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .history-entry {
+        display: grid;
+        grid-template-columns: 44px 52px minmax(0, 1fr) max-content;
+        gap: var(--space-sm);
+        align-items: baseline;
+        text-align: left;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+        background: none;
+        padding: 3px var(--space-sm);
+        font-family: var(--font-mono);
+        font-size: var(--font-size-xs);
+      }
+
+      .history-entry:hover {
+        background: var(--color-bg-2);
+      }
+
+      .history-entry .path {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      #user-password {
+        width: 200px;
+        font-family: var(--font-mono);
+        font-size: var(--font-size-xs);
+      }
+
+      #user-id {
+        width: 300px;
+        font-family: var(--font-mono);
+        font-size: var(--font-size-xs);
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Game platform</h1>
+      <nav>
+        <a href="/portal">Portal</a>
+        <a href="/builder">Builder</a>
+        <a href="/console" aria-current="page">API console</a>
+        <a href="/browse">Browse data</a>
+        <a href="/docs">OpenAPI docs</a>
+      </nav>
+      <span class="spacer"></span>
+      <label class="inline" title="Sent as the X-User-Id header">
+        Act as
+        <select id="user-select"></select>
+        <input id="user-id" placeholder="X-User-Id (empty: not sent)" spellcheck="false" />
+      </label>
+      <label class="inline" title="Sent as the X-User-Password header. Passwords of users created from this browser are remembered.">
+        Password
+        <input id="user-password" placeholder="X-User-Password" spellcheck="false" />
+      </label>
+      <button id="new-user" title="Create a guest user and act as it">New guest user</button>
+    </header>
+    <main>
+      <section class="pane">
+        <div class="pane-header">
+          <input id="operation-filter" placeholder="Filter operations" spellcheck="false" />
+        </div>
+        <div id="operations"></div>
+      </section>
+      <section class="pane">
+        <div class="pane-header">
+          <h2>Request</h2>
+          <span class="spacer"></span>
+          <span class="muted">Ctrl+Enter to send</span>
+        </div>
+        <form id="request" class="pane-body" autocomplete="off"></form>
+      </section>
+      <section class="pane">
+        <div class="pane-header">
+          <h2>Response</h2>
+          <span class="spacer"></span>
+          <div id="response-meta" class="response-meta"></div>
+        </div>
+        <div class="pane-body">
+          <pre id="response-body" class="muted">Send a request to see its response.</pre>
+          <div class="section-title">History</div>
+          <div id="history"><span class="muted">No requests yet.</span></div>
+        </div>
+      </section>
+    </main>
+    <datalist id="ids-user"></datalist>
+    <datalist id="ids-game"></datalist>
+    <datalist id="ids-match"></datalist>
+    <script src="/static/common.js?v=2"></script>
+    <script src="/static/console.js?v=2"></script>
+  </body>
+</html>
