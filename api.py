@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Annotated, Final
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
@@ -343,6 +344,15 @@ def create_app(
     /debug/all-data, which exposes everything (including users' passwords). /browse and
     /debug/all-data need [master_password], unless it is empty."""
     app = FastAPI(title="Game platform")
+    # Allow REST API requests from any domain (browser cross-origin requests).
+    # Auth uses per-request Authorization headers (HTTP Basic), not cookies,
+    # so a wildcard origin is safe here.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.state.platform = platform if platform is not None else GamePlatform()
     app.state.master_password = master_password
     app.include_router(router)
