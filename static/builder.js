@@ -24,7 +24,7 @@ const TEMPLATE_CODE = [
   "  parent.postMessage({",
   "    type: \"make_move\",",
   "    new_state: { total, winner: won ? seat : null },",
-  "    next_turn_player_index: won ? null : (seat + 1) % latest.players.length,",
+  "    next_turn_player_indices: won ? null : [(seat + 1) % latest.players.length],",
   "  }, \"*\");",
   "}",
   "addEventListener(\"message\", (event) => {",
@@ -298,7 +298,7 @@ function startTest() {
     kind,
     name: kind === "human" ? `Player ${seat + 1}` : `Computer ${seat + 1}`,
   }));
-  state.test = { players, moves: [], state: null, turn: 0, status: "ongoing", awaiting: false };
+  state.test = { players, moves: [], state: null, turn: [0], status: "ongoing", awaiting: false };
   $("test-log").replaceChildren();
   frame.load($("code").value);
   testLog(`Started a test with ${players.length} players.`);
@@ -314,7 +314,8 @@ function stopTest() {
 
 function sendTestState() {
   const test = state.test;
-  const turnSeat = test.turn === null ? null : test.players[test.turn];
+  const firstTurn = test.turn === null ? null : test.turn[0];
+  const turnSeat = firstTurn === null ? null : test.players[firstTurn];
   const message = stateChangedMessage({
     state: test.state,
     players: test.players,
@@ -323,17 +324,17 @@ function sendTestState() {
     endReason: test.status === "over" ? "finished" : null,
     moveCount: test.moves.length,
     // In pass-and-play the person at the screen is whichever human has the turn.
-    mySeat: turnSeat && turnSeat.kind === "human" ? test.turn : null,
-    actingFor: test.status === "ongoing" ? test.turn : null,
+    mySeat: turnSeat && turnSeat.kind === "human" ? firstTurn : null,
+    actingFor: test.status === "ongoing" ? firstTurn : null,
   });
   test.awaiting = test.status === "ongoing";
   frame.send(message);
   setMessage("test-status",
     test.status === "over"
       ? `The game ended after ${test.moves.length} moves.`
-      : `Move ${test.moves.length + 1}: ${test.players[test.turn].name}'s turn.`,
+      : `Move ${test.moves.length + 1}: ${test.turn.map((seat) => test.players[seat].name).join(", ")}'s turn.`,
     test.status === "over" ? "ok" : "");
-  testLog(`sent state_changed: move_count=${test.moves.length} turn=${test.turn} status=${test.status}`);
+  testLog(`sent state_changed: move_count=${test.moves.length} turn=${JSON.stringify(test.turn)} status=${test.status}`);
 }
 
 function onTestMove(move) {
@@ -342,15 +343,17 @@ function onTestMove(move) {
     testLog("ignored make_move: no move is expected now (the game already moved, or it's over)", true);
     return;
   }
-  const next = move.next_turn_player_index;
-  if (next !== null && !(next >= 0 && next < test.players.length)) {
-    testLog(`rejected make_move: next_turn_player_index ${next} is not a seat`, true);
+  const next = move.next_turn_player_indices;
+  const valid = next === null ||
+    (Array.isArray(next) && next.length > 0 && next.every((seat) => seat >= 0 && seat < test.players.length));
+  if (!valid) {
+    testLog(`rejected make_move: next_turn_player_indices ${JSON.stringify(next)} is not a set of seats`, true);
     sendTestState();
     return;
   }
   test.awaiting = false;
-  test.moves.push({ seat: test.turn, new_state: move.new_state, next });
-  testLog(`received make_move from seat ${test.turn}: next=${next} new_state=${JSON.stringify(move.new_state)}`);
+  test.moves.push({ seats: test.turn, new_state: move.new_state, next });
+  testLog(`received make_move from seats ${JSON.stringify(test.turn)}: next=${JSON.stringify(next)} new_state=${JSON.stringify(move.new_state)}`);
   test.state = move.new_state;
   test.turn = next;
   test.status = next === null ? "over" : "ongoing";
@@ -363,7 +366,7 @@ function undoTestMove() {
   test.moves.pop();
   const last = test.moves[test.moves.length - 1];
   test.state = last ? last.new_state : null;
-  test.turn = last ? last.next : 0;
+  test.turn = last ? last.next : [0];
   test.status = "ongoing";
   testLog("undid the last move");
   sendTestState();

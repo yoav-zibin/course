@@ -6,7 +6,7 @@ An in-memory REST backend for a multiplayer turn-based games platform, built wit
   client; the server never executes it.
 - **Match**: playing a game with a set of players (humans and computer opponents).
 - **Move**: a turn that replaces the match's opaque JSON state and either passes the turn
-  to a player or ends the match.
+  to a set of players (any of whom may move next) or ends the match.
 
 All data lives in process memory behind the `Store` interface (`store.py`), so it can later
 be swapped for a database. The server binary uses `JsonFileStore`
@@ -161,9 +161,9 @@ authenticating, at the cost of no longer being able to read passwords back from 
 | `GET /matches/{id}` |  | Get a match; anyone can view it, so it can be shared by URL |
 | `PATCH /matches/{id}` | yes | Set `num_computer_opponents` before the match starts (owner only) |
 | `POST /matches/{id}/join` | yes | Take a seat |
-| `POST /matches/{id}/start` | yes | Start `{first_turn_player_index, initial_state}`, both optional (owner only) |
+| `POST /matches/{id}/start` | yes | Start `{first_turn_player_indices, initial_state}`, both optional (owner only) |
 | `POST /matches/{id}/leave` | yes | Leave the match |
-| `POST /matches/{id}/moves` | yes | Make a move `{new_state, next_turn_player_index, expected_move_count?}` |
+| `POST /matches/{id}/moves` | yes | Make a move `{new_state, next_turn_player_indices, expected_move_count?}` |
 | `GET /matches/{id}/moves` |  | Full move history |
 | `DELETE /matches/{id}` | yes | Owner: delete the match. Other players: hide an ended match from their list |
 
@@ -186,9 +186,10 @@ Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct
   `GET /games/{game_id}/versions/{game_version}`.
 - Before the start, humans sit in join order followed by the computers. Starting requires
   the total number of seats to be in the game's `allowed_player_counts`.
-- A move is accepted from the player whose turn it is. When it is a computer's turn, any
-  human player in the match computes and submits the computer's move.
-  `next_turn_player_index: null` ends the match (`end_reason: "finished"`).
+- A move is accepted from any player whose turn it is: `next_turn_player_indices` names
+  the set of seats that may make the next move, and `null` ends the match
+  (`end_reason: "finished"`). When a computer seat has the turn, any human player in
+  the match computes and submits the computer's move.
   `expected_move_count` optionally guards against two clients submitting the same move.
 - Leaving a waiting match frees the seat (the owner must delete the match instead). Leaving
   an ongoing match replaces the leaver with a computer (which keeps the turn) if the game
@@ -393,7 +394,7 @@ joining or leaving, the match ending), and again if a move the game sent was rej
     {"player_index": 0, "kind": "human", "name": "user1"},
     {"player_index": 1, "kind": "computer", "name": "Computer 2"}
   ],
-  "turn_of_player_index": 0,
+  "turn_of_player_indices": [0],
   "status": "ongoing",
   "end_reason": null,
   "move_count": 2,
@@ -406,7 +407,7 @@ joining or leaving, the match ending), and again if a move the game sent was rej
 |-------|---------|
 | `state` | The match state from the last move: any JSON the game chose. `null` before the first move, so the game must create its own initial state |
 | `players` | Every seat, in order. `kind` is `"human"` or `"computer"`; seats can change kind when players leave or join, and seats can be added mid-match |
-| `turn_of_player_index` | The seat whose turn it is; `null` once the match is over |
+| `turn_of_player_indices` | The seats that may move next; `null` once the match is over |
 | `status` | `"ongoing"` or `"over"` (games aren't loaded while a match waits for players) |
 | `end_reason` | When over: `"finished"` (a move ended it) or `"player_left"` |
 | `move_count` | How many moves were made |
@@ -418,15 +419,21 @@ joining or leaving, the match ending), and again if a move the game sent was rej
 Sent by the game to make the move for `acting_for_player_index`:
 
 ```json
-{"type": "make_move", "new_state": {"board": ["X", "X", "", "", "O", "", "", "", ""]}, "next_turn_player_index": 1}
+{"type": "make_move", "new_state": {"board": ["X", "X", "", "", "O", "", "", "", ""]}, "next_turn_player_indices": [1]}
 ```
 
-`new_state` replaces the match's state. `next_turn_player_index` is the seat that moves
-next, or `null` to end the match. The portal submits it with
+`new_state` replaces the match's state. `next_turn_player_indices` lists the seats that
+may move next (more than one when several players move at once), or `null` to end the
+match. The portal submits it with
 `POST /matches/{id}/moves` (with `expected_move_count`, so a stale move is rejected) and
 then sends a fresh `state_changed`. Moves the server rejects (not your turn, a seat that
 doesn't exist) are shown to the player and followed by `state_changed` with the
 unchanged match. Send at most one `make_move` per `state_changed`.
+
+For compatibility, games written before turn sets may still send `next_turn_player_index`
+(a single seat); the portal wraps it into a one-element set. `state_changed` likewise
+still carries the legacy `turn_of_player_index` (the first seat in the turn), which new
+games should ignore.
 
 ### Rules for games
 

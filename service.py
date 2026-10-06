@@ -274,7 +274,7 @@ class GamePlatform:
                     num_computer_opponents=num_computer_opponents,
                 ),
                 state=None,
-                turn_of_player_index=None,
+                turn_of_player_indices=None,
                 end_reason=None,
                 moves=(),
                 hidden_for_user_ids=frozenset(),
@@ -347,7 +347,7 @@ class GamePlatform:
         *,
         caller_id: str,
         match_id: str,
-        first_turn_player_index: int,
+        first_turn_player_indices: frozenset[int],
         initial_state: JsonValue,
     ) -> Match:
         with self._lock:
@@ -361,13 +361,17 @@ class GamePlatform:
                     f"the match has {num_players} players but the game allows "
                     f"{list(allowed_player_counts)}"
                 )
-            self._check_player_index(match, first_turn_player_index)
+            if not first_turn_player_indices:
+                raise InvalidRequestError(
+                    "the first turn must name at least one player"
+                )
+            self._check_player_indices(match, first_turn_player_indices)
             return self._save(
                 replace(
                     match,
                     status="ongoing",
                     state=initial_state,
-                    turn_of_player_index=first_turn_player_index,
+                    turn_of_player_indices=first_turn_player_indices,
                 )
             )
 
@@ -412,19 +416,21 @@ class GamePlatform:
         caller_id: str,
         match_id: str,
         new_state: JsonValue,
-        next_turn_player_index: int | None,
+        next_turn_player_indices: frozenset[int] | None,
         expected_move_count: int | None,
     ) -> Match:
-        """Records a move by the player whose turn it is.
+        """Records a move by one of the players whose turn it is.
 
-        When it's a computer's turn, any human player may submit the move on its behalf.
-        [next_turn_player_index = None] ends the match. [expected_move_count], if given,
-        guards against two clients submitting the same move.
+        Any player in the turn set may move; the move is recorded for that player's
+        seat. When a computer seat has the turn, any human player may submit the move
+        on its behalf. [next_turn_player_indices = None] ends the match.
+        [expected_move_count], if given, guards against two clients submitting the
+        same move.
         """
         with self._lock:
             match = self._get_match(match_id)
-            self._get_seat(match, caller_id)
-            if match.status != "ongoing" or match.turn_of_player_index is None:
+            seat = self._get_seat(match, caller_id)
+            if match.status != "ongoing" or match.turn_of_player_indices is None:
                 raise ConflictError("the match is not ongoing")
             if expected_move_count is not None and expected_move_count != len(
                 match.moves
@@ -433,29 +439,33 @@ class GamePlatform:
                     f"expected {expected_move_count} moves but the match has "
                     f"{len(match.moves)}"
                 )
-            turn_seat = match.seats[match.turn_of_player_index]
-            if turn_seat.kind == "human" and turn_seat.user_id != caller_id:
-                raise ConflictError("it is not your turn")
-            if next_turn_player_index is not None:
-                self._check_player_index(match, next_turn_player_index)
+            mover_seat = self._mover_seat(match, seat)
+            if next_turn_player_indices is not None:
+                if not next_turn_player_indices:
+                    raise InvalidRequestError(
+                        "the next turn must name at least one player"
+                    )
+                self._check_player_indices(match, next_turn_player_indices)
             now = self._clock()
             move = Move(
                 move_number=len(match.moves) + 1,
-                player_index=turn_seat.player_index,
+                player_index=mover_seat.player_index,
                 made_by_user_id=caller_id,
                 created_at=now,
                 new_state=new_state,
-                next_turn_player_index=next_turn_player_index,
+                next_turn_player_indices=next_turn_player_indices,
             )
             return self._save(
                 replace(
                     match,
                     state=new_state,
                     moves=(*match.moves, move),
-                    turn_of_player_index=next_turn_player_index,
-                    status="ongoing" if next_turn_player_index is not None else "over",
+                    turn_of_player_indices=next_turn_player_indices,
+                    status="ongoing"
+                    if next_turn_player_indices is not None
+                    else "over",
                     end_reason=None
-                    if next_turn_player_index is not None
+                    if next_turn_player_indices is not None
                     else "finished",
                 )
             )
@@ -544,11 +554,30 @@ class GamePlatform:
                 f"{rules.max_players}"
             )
 
-    def _check_player_index(self, match: Match, player_index: int) -> None:
-        if not 0 <= player_index < len(match.seats):
-            raise InvalidRequestError(
-                f"player index {player_index} is not a seat in this match"
+    def _check_player_indices(
+        self, match: Match, player_indices: frozenset[int]
+    ) -> None:
+        for player_index in sorted(player_indices):
+            if not 0 <= player_index < len(match.seats):
+                raise InvalidRequestError(
+                    f"player index {player_index} is not a seat in this match"
+                )
+
+    def _mover_seat(self, match: Match, seat: Seat) -> Seat:
+        """The seat the move is recorded for: the caller's own seat when it's their
+        turn, or a computer's seat when a human moves on its behalf."""
+        turn = match.turn_of_player_indices
+        assert turn is not None
+        if seat.player_index in turn:
+            return seat
+        if seat.kind == "human":
+            computer_index = min(
+                (index for index in turn if match.seats[index].kind == "computer"),
+                default=None,
             )
+            if computer_index is not None:
+                return match.seats[computer_index]
+        raise ConflictError("it is not your turn")
 
     def _take_seat_mid_match(self, match: Match, *, user_id: str) -> tuple[Seat, ...]:
         rules = self._rules_of(match)
@@ -570,7 +599,7 @@ class GamePlatform:
 
     def _ended_by_leaving(self, match: Match) -> Match:
         return replace(
-            match, status="over", turn_of_player_index=None, end_reason="player_left"
+            match, status="over", turn_of_player_indices=None, end_reason="player_left"
         )
 
     def _save(self, match: Match) -> Match:
