@@ -31,6 +31,15 @@ class DataFileConfig(_Section):
     save_interval_seconds: Annotated[float, Field(ge=0)] = 1.0
 
 
+class ModelApiConfig(_Section):
+    # Meta Model API key (get one at https://dev.meta.ai). Empty disables
+    # model features. Prefer the MUSE_SPARK_API_KEY environment variable
+    # over storing the key in this file.
+    api_key: str = ""
+    model: str = "muse-spark-1.3"
+    base_url: str = "https://api.ai.meta.com/v1"
+
+
 class Config(_Section):
     server: ServerConfig = ServerConfig()
     data_file: DataFileConfig = DataFileConfig()
@@ -40,6 +49,7 @@ class Config(_Section):
     # no password, which is only allowed when [server.host] is a numeric IP address.
     master_password: str = ""
     log_level: LogLevel = "INFO"
+    model_api: ModelApiConfig = ModelApiConfig()
 
     @model_validator(mode="after")
     def _require_master_password_for_hostnames(self) -> "Config":
