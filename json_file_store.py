@@ -6,6 +6,7 @@ changes costs one write. [close] writes any pending changes; changes made less t
 [min_write_interval_seconds] before a crash can be lost.
 """
 
+import json
 import logging
 import threading
 from dataclasses import dataclass
@@ -20,7 +21,10 @@ from game_platform.store import InMemoryStore, Snapshot
 logger = logging.getLogger(__name__)
 
 # Bump when the file layout changes incompatibly.
-FORMAT_VERSION: Final = 1
+FORMAT_VERSION: Final = 2
+# Version 1 stored each turn as a single player index; version 2 stores a set of
+# them. [read_snapshot] migrates version 1 files on load.
+_V1_FORMAT_VERSION: Final = 1
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -171,11 +175,29 @@ def read_snapshot(path: Path) -> Snapshot:
     contents = path.read_bytes()
     # Check the version before validating, which would fail with a less helpful error.
     format_version = _VERSION_ADAPTER.validate_json(contents).format_version
-    if format_version != FORMAT_VERSION:
+    if format_version == _V1_FORMAT_VERSION:
+        try:
+            contents = _migrate_v1_to_v2(contents)
+        except (KeyError, TypeError):
+            pass  # fall through; validation below reports the real problem
+    elif format_version != FORMAT_VERSION:
         raise ValueError(
             f"{path} has format version {format_version}, expected {FORMAT_VERSION}"
         )
     return _FILE_ADAPTER.validate_json(contents).data
+
+
+def _migrate_v1_to_v2(contents: bytes) -> bytes:
+    """Turns each single-index turn field into a one-element turn set."""
+    file = json.loads(contents)
+    file["format_version"] = FORMAT_VERSION
+    for match in file["data"]["matches"]:
+        turn = match.pop("turn_of_player_index")
+        match["turn_of_player_indices"] = None if turn is None else [turn]
+        for move in match["moves"]:
+            next_turn = move.pop("next_turn_player_index")
+            move["next_turn_player_indices"] = None if next_turn is None else [next_turn]
+    return json.dumps(file).encode()
 
 
 def write_snapshot(path: Path, snapshot: Snapshot) -> None:

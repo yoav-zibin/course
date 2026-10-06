@@ -81,7 +81,7 @@ class MatchModel {
   move(newState, nextTurn) {
     const seat = this.seats[this.turn];
     const as = seat.kind === "human" ? seat.user : this.seats.find((s) => s.kind === "human").user;
-    op({ op: "move", as, match: this.id, new_state: newState, next_turn_player_index: nextTurn });
+    op({ op: "move", as, match: this.id, new_state: newState, next_turn_player_indices: nextTurn === null ? null : [nextTurn] });
     this.state = newState;
     this.turn = nextTurn;
   }

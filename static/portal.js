@@ -48,10 +48,13 @@ function seatOf(match, userId) {
 
 /** The seat this viewer moves for now: their own turn, or a computer's turn if they play. */
 function actingFor(match, userId) {
-  if (match.status !== "ongoing" || match.turn_of_player_index === null || !userId) return null;
-  if (!seatOf(match, userId)) return null;
-  const turn = match.players[match.turn_of_player_index];
-  return turn.kind === "computer" || turn.user_id === userId ? turn.player_index : null;
+  if (match.status !== "ongoing" || match.turn_of_player_indices === null || !userId) return null;
+  const seat = seatOf(match, userId);
+  if (!seat) return null;
+  const turn = match.turn_of_player_indices;
+  if (turn.includes(seat.player_index)) return seat.player_index;
+  const computer = turn.map((index) => match.players[index]).find((player) => player && player.kind === "computer");
+  return computer ? computer.player_index : null;
 }
 
 function isJoinable(match, userId) {
@@ -239,11 +242,12 @@ function renderMatch() {
   $("match-meta").textContent = meta.join(" · ");
 
   const mySeat = user ? seatOf(match, user.id) : null;
+  const turn = match.turn_of_player_indices ?? [];
   $("seats").replaceChildren(...match.players.map((player) =>
     el("span", {
-      class: `seat-chip${player.player_index === match.turn_of_player_index ? " turn" : ""}`,
+      class: `seat-chip${turn.includes(player.player_index) ? " turn" : ""}`,
       textContent: `${player.player_index}: ${playerName(player)}${player === mySeat ? " (you)" : ""}` +
-        `${player.player_index === match.turn_of_player_index ? " — to move" : ""}`,
+        `${turn.includes(player.player_index) ? " — to move" : ""}`,
     })));
 
   const actions = [];
@@ -334,7 +338,7 @@ async function syncGame() {
       kind: player.kind,
       name: playerName(player),
     })),
-    turn: match.turn_of_player_index,
+    turn: match.turn_of_player_indices,
     status: match.status,
     endReason: match.end_reason,
     moveCount: match.move_count,

@@ -34,16 +34,18 @@ The page and the game talk only through `postMessage`, with two messages:
    - `state`: the match state from the last move (any JSON the game chose), or \
 `null` before the first move, so the game must create its own initial state.
    - `players`: every seat in order: {"player_index", "kind": "human"|"computer", "name"}.
-   - `turn_of_player_index`: the seat whose turn it is, or `null` when over.
+   - `turn_of_player_indices`: the seats that may move next (a non-empty list; any \
+of them may make the next move), or `null` when over.
    - `status`: "ongoing" or "over". `end_reason`: "finished" or "player_left".
    - `move_count`, `my_player_index` (the viewer's seat, `null` for spectators),
      `acting_for_player_index`: the seat this game must move for right now, or \
 `null` if it must wait.
 
 2. `make_move` (game -> platform): {"type": "make_move", "new_state": {...}, \
-"next_turn_player_index": <seat>|null}. `new_state` replaces the match state; \
-`next_turn_player_index: null` ends the match. Send AT MOST ONE `make_move` per \
-`state_changed`.
+"next_turn_player_indices": [<seat>, ...]|null}. `new_state` replaces the match \
+state; `next_turn_player_indices: null` ends the match. List every seat that may \
+move next - more than one when several players move at once (e.g. a simultaneous \
+reveal). Send AT MOST ONE `make_move` per `state_changed`.
 
 Rules you must follow in the code you write:
 - Computers are played by the game: when `acting_for_player_index` is a computer \

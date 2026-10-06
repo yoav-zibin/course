@@ -181,7 +181,7 @@ function actingUser(select, users) {
 // postMessage. The page sends state_changed; the game sends make_move. See README.md.
 
 class GameFrame {
-  /** [onMakeMove({new_state, next_turn_player_index})] is called for valid make_move messages. */
+  /** [onMakeMove({new_state, next_turn_player_indices})] is called for valid make_move messages. */
   constructor(container, onMakeMove, onBadMessage) {
     this.container = container;
     this.onMakeMove = onMakeMove;
@@ -221,12 +221,19 @@ class GameFrame {
       this.onBadMessage(`ignored a message that isn't make_move: ${JSON.stringify(message)}`);
       return;
     }
-    const next = message.next_turn_player_index;
-    if (!(next === null || Number.isInteger(next)) || !("new_state" in message)) {
+    let next = message.next_turn_player_indices;
+    // Games written before turn sets send a single index; wrap it into a set.
+    if (next === undefined && Number.isInteger(message.next_turn_player_index)) {
+      next = [message.next_turn_player_index];
+    }
+    if (
+      !(next === null || (Array.isArray(next) && next.length > 0 && next.every(Number.isInteger))) ||
+      !("new_state" in message)
+    ) {
       this.onBadMessage(`ignored a malformed make_move: ${JSON.stringify(message)}`);
       return;
     }
-    this.onMakeMove({ new_state: message.new_state, next_turn_player_index: next });
+    this.onMakeMove({ new_state: message.new_state, next_turn_player_indices: next });
   }
 }
 
@@ -236,7 +243,9 @@ function stateChangedMessage({ state, players, turn, status, endReason, moveCoun
     type: "state_changed",
     state,
     players,
-    turn_of_player_index: turn,
+    turn_of_player_indices: turn,
+    // Legacy field for games written before turn sets: the first seat in the turn.
+    turn_of_player_index: turn === null ? null : turn[0],
     status,
     end_reason: endReason,
     move_count: moveCount,

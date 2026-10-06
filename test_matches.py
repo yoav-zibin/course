@@ -25,7 +25,7 @@ def test_create_a_match_with_computer_opponents(api: Api) -> None:
             {"player_index": 0, "kind": "human", "user_id": alice},
             {"player_index": 1, "kind": "computer", "user_id": None},
         ],
-        "turn_of_player_index": None,
+        "turn_of_player_indices": None,
         "state": None,
         "move_count": 0,
         "created_at": "2026-01-01T00:03:00Z",
@@ -128,14 +128,33 @@ def test_start_a_match(api: Api) -> None:
         "POST",
         f"/matches/{match_id}/start",
         as_user=alice,
-        json={"first_turn_player_index": 1, "initial_state": {"deck": [1, 2, 3]}},
+        json={"first_turn_player_indices": [1], "initial_state": {"deck": [1, 2, 3]}},
     )
     assert api.summary(match) == {
         "status": "ongoing",
         "players": ["alice", "bob"],
-        "turn": 1,
+        "turn": [1],
         "state": {"deck": [1, 2, 3]},
     }
+
+
+def test_start_can_give_the_first_turn_to_several_players(api: Api) -> None:
+    alice, bob, carol = (
+        api.new_user("alice"),
+        api.new_user("bob"),
+        api.new_user("carol"),
+    )
+    game_id = api.new_game(owner=alice, allowed_player_counts=[3])
+    match_id = api.new_match(
+        owner=alice, game_id=game_id, joiners=[bob, carol]
+    )
+    match = api.ok(
+        "POST",
+        f"/matches/{match_id}/start",
+        as_user=alice,
+        json={"first_turn_player_indices": [2, 0]},
+    )
+    assert api.summary(match)["turn"] == [0, 2]
 
 
 def test_start_defaults_to_player_0_and_no_state(api: Api) -> None:
@@ -146,7 +165,7 @@ def test_start_defaults_to_player_0_and_no_state(api: Api) -> None:
     assert api.summary(match) == {
         "status": "ongoing",
         "players": ["alice", "computer"],
-        "turn": 0,
+        "turn": [0],
         "state": None,
     }
 
@@ -160,13 +179,17 @@ def test_start_is_rejected_when_it_does_not_make_sense(api: Api) -> None:
     game_id = api.new_game(owner=alice, allowed_player_counts=[2, 4])
 
     def start(
-        match_id: str, *, as_user: str = alice, first_turn: int = 0
+        match_id: str, *, as_user: str = alice, first_turn: int | list[int] = 0
     ) -> httpx.Response:
         return api.request(
             "POST",
             f"/matches/{match_id}/start",
             as_user=as_user,
-            json={"first_turn_player_index": first_turn},
+            json={
+                "first_turn_player_indices": [first_turn]
+                if isinstance(first_turn, int)
+                else first_turn
+            },
         )
 
     alone = api.new_match(owner=alice, game_id=game_id)
@@ -184,6 +207,10 @@ def test_start_is_rejected_when_it_does_not_make_sense(api: Api) -> None:
     two = api.new_match(owner=alice, game_id=game_id, joiners=[bob])
     assert error(start(two, as_user=bob)) == (403, "only the match's owner can do this")
     assert error(start(two, first_turn=2)) == (
+        400,
+        "player index 2 is not a seat in this match",
+    )
+    assert error(start(two, first_turn=[0, 2])) == (
         400,
         "player index 2 is not a seat in this match",
     )
@@ -205,7 +232,7 @@ def test_anyone_can_view_a_match(api: Api) -> None:
     assert api.summary(anonymous) == {
         "status": "ongoing",
         "players": ["alice", "computer"],
-        "turn": 1,
+        "turn": [1],
         "state": {"pot": 5},
     }
     assert [

@@ -211,14 +211,15 @@ function gameDetail(versions, matches) {
 }
 
 function seats(match, nameOf) {
+  const turn = match.turn_of_player_indices ?? [];
   return el(
     "span",
     {},
     match.players.map((player, index) => [
       index ? ", " : "",
       el("span", {
-        class: `seat${player.player_index === match.turn_of_player_index ? " turn" : ""}`,
-        title: player.player_index === match.turn_of_player_index ? "Has the turn" : "",
+        class: `seat${turn.includes(player.player_index) ? " turn" : ""}`,
+        title: turn.includes(player.player_index) ? "Has the turn" : "",
         textContent: `${player.player_index}:${player.user_id ? nameOf(player.user_id) : "computer"}`,
       }),
     ]),
@@ -275,7 +276,7 @@ function matchDetail(match, nameOf) {
       el("td", { textContent: `${move.player_index} (${seatName} now)` }),
       el("td", { textContent: nameOf(move.made_by_user_id) }),
       el("td", { class: "time", textContent: formatTime(move.created_at) }),
-      el("td", { class: "num", textContent: move.next_turn_player_index ?? "end" }),
+      el("td", { class: "num", textContent: move.next_turn_player_indices === null ? "end" : move.next_turn_player_indices.join(", ") }),
       el("td", { class: "wrap" }, el("pre", { textContent: JSON.stringify(move.new_state) })),
     );
   });

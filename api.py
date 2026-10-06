@@ -224,7 +224,7 @@ def start_match(
     match = platform.start_match(
         caller_id=caller_id,
         match_id=match_id,
-        first_turn_player_index=body.first_turn_player_index,
+        first_turn_player_indices=frozenset(body.first_turn_player_indices),
         initial_state=body.initial_state,
     )
     return MatchOut.of(match)
@@ -243,7 +243,9 @@ def make_move(
         caller_id=caller_id,
         match_id=match_id,
         new_state=body.new_state,
-        next_turn_player_index=body.next_turn_player_index,
+        next_turn_player_indices=None
+        if body.next_turn_player_indices is None
+        else frozenset(body.next_turn_player_indices),
         expected_move_count=body.expected_move_count,
     )
     return MatchOut.of(match)

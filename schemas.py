@@ -44,6 +44,19 @@ PlayerCounts = Annotated[
 ]
 
 
+def _check_player_indices(indices: list[int]) -> list[int]:
+    if len(set(indices)) != len(indices):
+        raise ValueError("must not contain duplicates")
+    return sorted(indices)
+
+
+PlayerIndex = Annotated[int, Field(ge=0)]
+# The seats that may move next: a non-empty set of player indices, in order.
+PlayerIndices = Annotated[
+    list[PlayerIndex], Field(min_length=1), AfterValidator(_check_player_indices)
+]
+
+
 class _Request(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -182,10 +195,10 @@ class MatchUpdate(_Request):
 
 class MatchStart(_Request):
     model_config = _example(
-        {"first_turn_player_index": 0, "initial_state": {"board": _TIC_TAC_TOE_BOARD}}
+        {"first_turn_player_indices": [0], "initial_state": {"board": _TIC_TAC_TOE_BOARD}}
     )
 
-    first_turn_player_index: Annotated[int, Field(ge=0)] = 0
+    first_turn_player_indices: PlayerIndices = [0]
     initial_state: JsonValue = None
 
 
@@ -193,13 +206,13 @@ class MoveCreate(_Request):
     model_config = _example(
         {
             "new_state": {"board": ["X", *_TIC_TAC_TOE_BOARD[1:]]},
-            "next_turn_player_index": 1,
+            "next_turn_player_indices": [1],
         }
     )
 
     new_state: JsonValue
-    # [None] ends the match.
-    next_turn_player_index: int | None
+    # The seats that may move next; [None] ends the match.
+    next_turn_player_indices: PlayerIndices | None
     # If given, the move is rejected unless the match has exactly this many moves.
     expected_move_count: int | None = None
 
@@ -222,7 +235,7 @@ class MatchOut(BaseModel):
     status: MatchStatus
     end_reason: EndReason | None
     players: list[PlayerOut]
-    turn_of_player_index: int | None
+    turn_of_player_indices: list[int] | None
     state: JsonValue
     move_count: int
     created_at: dt.datetime
@@ -238,7 +251,9 @@ class MatchOut(BaseModel):
             status=match.status,
             end_reason=match.end_reason,
             players=[PlayerOut.of(seat) for seat in match.seats],
-            turn_of_player_index=match.turn_of_player_index,
+            turn_of_player_indices=None
+            if match.turn_of_player_indices is None
+            else sorted(match.turn_of_player_indices),
             state=match.state,
             move_count=len(match.moves),
             created_at=match.created_at,
@@ -252,7 +267,7 @@ class MoveOut(BaseModel):
     made_by_user_id: str
     created_at: dt.datetime
     new_state: JsonValue
-    next_turn_player_index: int | None
+    next_turn_player_indices: list[int] | None
 
     @classmethod
     def of(cls, move: Move) -> "MoveOut":
@@ -262,7 +277,9 @@ class MoveOut(BaseModel):
             made_by_user_id=move.made_by_user_id,
             created_at=move.created_at,
             new_state=move.new_state,
-            next_turn_player_index=move.next_turn_player_index,
+            next_turn_player_indices=None
+            if move.next_turn_player_indices is None
+            else sorted(move.next_turn_player_indices),
         )
 
 
