@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from game_platform.model_api import ModelApiClient
+from game_platform.model_api import ModelApiClient, ModelApiError
 from game_platform.schemas import AgentChatRequest, AgentChatResponse
 
 SYSTEM_PROMPT = """\
@@ -121,6 +121,8 @@ def build_prompt_messages(
 
 def _parse_reply(raw: str) -> AgentChatResponse:
     text = raw.strip()
+    if not text:
+        raise AgentError("The agent returned an empty reply.")
     # Tolerate markdown-fenced JSON even though the prompt forbids it.
     if text.startswith("```"):
         text = text.split("\n", 1)[1] if "\n" in text else ""
@@ -155,9 +157,13 @@ def _parse_reply(raw: str) -> AgentChatResponse:
 
 
 def chat_with_agent(
-    client: ModelApiClient, request: AgentChatRequest
+    client: ModelApiClient, request: AgentChatRequest, *, max_attempts: int = 3
 ) -> AgentChatResponse:
-    """Send one chat turn to the game-building agent. Raises AgentError."""
+    """Send one chat turn to the game-building agent.
+
+    The model occasionally returns an empty or unparsable reply; those are
+    retried automatically. Raises AgentError when all attempts fail.
+    """
     if not client.enabled:
         raise AgentError(
             "The game-building agent is not set up: no Model API key is configured."
@@ -165,8 +171,20 @@ def chat_with_agent(
     if not request.messages:
         raise AgentError("No message to send.")
     messages, _ = build_prompt_messages(request)
-    try:
-        raw = client.chat(messages, max_tokens=6000, temperature=0.7)
-    except Exception as exc:
-        raise AgentError(f"The model call failed: {exc}") from exc
-    return _parse_reply(raw)
+    last_error: AgentError | None = None
+    for _ in range(max_attempts):
+        try:
+            raw = client.chat(messages, max_tokens=6000, temperature=0.7)
+        except ModelApiError as exc:
+            last_error = AgentError(str(exc))
+            continue
+        except Exception as exc:
+            raise AgentError(f"The model call failed: {exc}") from exc
+        try:
+            return _parse_reply(raw)
+        except AgentError as exc:
+            last_error = exc
+    assert last_error is not None  # max_attempts >= 1, so set on first iteration
+    if max_attempts > 1:
+        raise AgentError(f"{last_error} (gave up after {max_attempts} attempts)")
+    raise last_error

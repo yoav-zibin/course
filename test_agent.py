@@ -6,7 +6,7 @@ import pytest
 
 from game_platform.agent import AgentError, build_prompt_messages, chat_with_agent
 from game_platform.config import ModelApiConfig
-from game_platform.model_api import ModelApiClient
+from game_platform.model_api import ModelApiClient, ModelApiError
 from game_platform.schemas import AgentChatRequest
 from game_platform.testing import Api, validation_errors
 
@@ -101,6 +101,79 @@ def test_bad_replies_raise(reply: str) -> None:
 def test_disabled_client_raises() -> None:
     with pytest.raises(AgentError):
         chat_with_agent(_FakeClient("{}", enabled=False), _request())
+
+
+class _SequencedClient(ModelApiClient):
+    """Returns canned replies (or raises) in order, counting calls."""
+
+    def __init__(self, replies: list) -> None:
+        super().__init__(api_key="key")
+        self._replies = list(replies)
+        self.calls = 0
+
+    def chat(self, messages, **kwargs):  # type: ignore[no-untyped-def]
+        self.calls += 1
+        reply = self._replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+
+def test_retries_empty_replies_then_succeeds() -> None:
+    ok = json.dumps({"message": "hi", "code": None})
+    client = _SequencedClient(["", "   ", ok])
+    assert chat_with_agent(client, _request()).message == "hi"
+    assert client.calls == 3
+
+
+def test_retries_unparsable_replies_then_succeeds() -> None:
+    ok = json.dumps({"message": "hi", "code": None})
+    client = _SequencedClient(["not json", ok])
+    assert chat_with_agent(client, _request()).message == "hi"
+    assert client.calls == 2
+
+
+def test_retries_model_api_errors() -> None:
+    ok = json.dumps({"message": "hi", "code": None})
+    client = _SequencedClient([ModelApiError("The model returned an empty reply."), ok])
+    assert chat_with_agent(client, _request()).message == "hi"
+    assert client.calls == 2
+
+
+def test_gives_up_after_max_attempts() -> None:
+    client = _SequencedClient(["", "", ""])
+    with pytest.raises(AgentError, match="gave up after 3 attempts"):
+        chat_with_agent(client, _request())
+    assert client.calls == 3
+
+
+def test_empty_model_content_raises_clear_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Message:
+        content = "  "
+
+    class _Choice:
+        message = _Message()
+
+    class _Response:
+        choices = [_Choice()]
+
+    class _Completions:
+        @staticmethod
+        def create(**kwargs):  # type: ignore[no-untyped-def]
+            return _Response()
+
+    class _Chat:
+        completions = _Completions()
+
+    class _SdkClient:
+        chat = _Chat()
+
+    client = ModelApiClient(api_key="k")
+    monkeypatch.setattr(client, "_client", lambda: _SdkClient())
+    with pytest.raises(ModelApiError, match="empty reply"):
+        client.chat([{"role": "user", "content": "hi"}])
 
 
 def test_chat_endpoint_needs_auth(api: Api) -> None:

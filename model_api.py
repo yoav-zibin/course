@@ -16,6 +16,10 @@ DEFAULT_BASE_URL = "https://api.ai.meta.com/v1"
 DEFAULT_MODEL = "muse-spark-1.3"
 
 
+class ModelApiError(Exception):
+    """The model call failed or the reply was unusable."""
+
+
 class ModelApiClient:
     """Thin wrapper around the OpenAI SDK pointed at Meta's Model API."""
 
@@ -50,13 +54,24 @@ class ModelApiClient:
         *,
         max_tokens: int = 1024,
         temperature: float = 0.7,
+        **kwargs,  # type: ignore[no-untyped-def]
     ) -> str:
-        """Send chat messages, return the assistant's text reply."""
+        """Send chat messages, return the assistant's text reply.
+
+        Raises ModelApiError when the call fails or the reply has no content.
+        """
         client = self._client()
-        response = client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
-        return response.choices[0].message.content or ""
+        try:
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                **kwargs,
+            )
+        except Exception as exc:
+            raise ModelApiError(f"The model call failed: {exc}") from exc
+        content = response.choices[0].message.content if response.choices else None
+        if not content or not content.strip():
+            raise ModelApiError("The model returned an empty reply.")
+        return content
