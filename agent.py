@@ -174,7 +174,9 @@ def chat_with_agent(
     last_error: AgentError | None = None
     for _ in range(max_attempts):
         try:
-            raw = client.chat(messages, max_tokens=6000, temperature=0.7)
+            # Generous token budget: this is a reasoning model, and it can spend
+            # several thousand thinking tokens before writing the reply.
+            raw = client.chat(messages, max_tokens=16000, temperature=0.7)
         except ModelApiError as exc:
             last_error = AgentError(str(exc))
             continue
