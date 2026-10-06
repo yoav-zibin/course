@@ -136,7 +136,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -157,7 +159,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "move",
@@ -178,7 +182,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "create_match",
@@ -211,7 +217,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -232,7 +240,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "create_match",
@@ -265,7 +275,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "create_match",
@@ -303,7 +315,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -324,7 +338,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "move",
@@ -345,7 +361,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -366,7 +384,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "move",
@@ -387,7 +407,7 @@
    "winner": 0,
    "draw": false
   },
-  "next_turn_player_index": null
+  "next_turn_player_indices": null
  },
  {
   "op": "delete_match",
@@ -430,7 +450,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -451,7 +473,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "move",
@@ -472,7 +496,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -493,7 +519,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "move",
@@ -514,7 +542,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -535,7 +565,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "move",
@@ -556,7 +588,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -577,7 +611,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "move",
@@ -598,7 +634,7 @@
    "winner": null,
    "draw": true
   },
-  "next_turn_player_index": null
+  "next_turn_player_indices": null
  },
  {
   "op": "create_match",
@@ -631,7 +667,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -652,7 +690,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "move",
@@ -673,7 +713,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -694,7 +736,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "move",
@@ -715,7 +759,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -736,7 +782,7 @@
    "winner": 1,
    "draw": false
   },
-  "next_turn_player_index": null
+  "next_turn_player_indices": null
  },
  {
   "op": "create_match",
@@ -774,7 +820,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -795,7 +843,9 @@
    "winner": null,
    "draw": false
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "leave",
@@ -933,7 +983,9 @@
     "Hand #1: seat 1 deals; blinds 10/20."
    ]
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "move",
@@ -1036,7 +1088,9 @@
     "user1 calls 10."
    ]
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -1142,7 +1196,9 @@
     "Flop: 10♦ J♣ A♠"
    ]
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -1249,7 +1305,9 @@
     "user2 checks."
    ]
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "create_match",
@@ -1387,7 +1445,9 @@
     "Hand #1: seat 1 deals; blinds 10/20."
    ]
   },
-  "next_turn_player_index": 3
+  "next_turn_player_indices": [
+   3
+  ]
  },
  {
   "op": "move",
@@ -1504,7 +1564,9 @@
     "Computer 4 calls 20."
    ]
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "move",
@@ -1622,7 +1684,9 @@
     "user3 folds."
    ]
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -1741,7 +1805,9 @@
     "user4 folds."
    ]
   },
-  "next_turn_player_index": 2
+  "next_turn_player_indices": [
+   2
+  ]
  },
  {
   "op": "move",
@@ -1863,7 +1929,9 @@
     "Flop: 8♦ 4♣ 4♦"
    ]
   },
-  "next_turn_player_index": 2
+  "next_turn_player_indices": [
+   2
+  ]
  },
  {
   "op": "update_game",
@@ -2060,7 +2128,9 @@
     "Hand #1: seat 1 deals; blinds 10/20."
    ]
   },
-  "next_turn_player_index": 3
+  "next_turn_player_indices": [
+   3
+  ]
  },
  {
   "op": "move",
@@ -2205,7 +2275,9 @@
     "user4 calls 20."
    ]
   },
-  "next_turn_player_index": 4
+  "next_turn_player_indices": [
+   4
+  ]
  },
  {
   "op": "move",
@@ -2351,7 +2423,9 @@
     "user5 folds."
    ]
   },
-  "next_turn_player_index": 5
+  "next_turn_player_indices": [
+   5
+  ]
  },
  {
   "op": "move",
@@ -2498,7 +2572,9 @@
     "user6 calls 20."
    ]
   },
-  "next_turn_player_index": 6
+  "next_turn_player_indices": [
+   6
+  ]
  },
  {
   "op": "move",
@@ -2646,7 +2722,9 @@
     "user7 calls 20."
    ]
   },
-  "next_turn_player_index": 7
+  "next_turn_player_indices": [
+   7
+  ]
  },
  {
   "op": "move",
@@ -2795,7 +2873,9 @@
     "user8 calls 20."
    ]
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "move",
@@ -2945,7 +3025,9 @@
     "user1 folds."
    ]
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "create_match",
@@ -3076,7 +3158,9 @@
     "Hand #1: seat 1 deals; blinds 10/20."
    ]
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "move",
@@ -3186,7 +3270,9 @@
     "user6 folds."
    ]
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -3310,7 +3396,9 @@
     "Hand #2: seat 2 deals; blinds 10/20."
    ]
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -3435,7 +3523,9 @@
     "user7 calls 20."
    ]
   },
-  "next_turn_player_index": 2
+  "next_turn_player_indices": [
+   2
+  ]
  },
  {
   "op": "move",
@@ -3561,7 +3651,9 @@
     "user8 calls 10."
    ]
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "leave",
@@ -3695,7 +3787,9 @@
     "Flop: 7♣ 4♥ 9♥"
    ]
   },
-  "next_turn_player_index": 2
+  "next_turn_player_indices": [
+   2
+  ]
  },
  {
   "op": "create_match",
@@ -3814,7 +3908,9 @@
     "Hand #1: seat 1 deals; blinds 10/20."
    ]
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "move",
@@ -3917,7 +4013,9 @@
     "user2 calls 10."
    ]
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -4023,7 +4121,9 @@
     "Flop: 2♦ 8♣ 4♣"
    ]
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "join",
@@ -4141,7 +4241,9 @@
     "user3 checks."
    ]
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "move",
@@ -4256,7 +4358,9 @@
     "Turn: 2♦ 8♣ 4♣ 5♥"
    ]
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -4372,7 +4476,9 @@
     "user3 checks."
    ]
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "move",
@@ -4490,7 +4596,9 @@
     "River: 2♦ 8♣ 4♣ 5♥ 9♠"
    ]
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -4608,7 +4716,9 @@
     "user3 checks."
    ]
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "move",
@@ -4760,7 +4870,9 @@
     "Hand #2: seat 2 deals; blinds 10/20."
    ]
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "create_match",
@@ -4881,7 +4993,9 @@
     "Hand #1: seat 1 deals; blinds 10/20."
    ]
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "move",
@@ -4991,7 +5105,9 @@
     "user5 calls 20."
    ]
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -5102,7 +5218,9 @@
     "Computer 2 folds."
    ]
   },
-  "next_turn_player_index": 2
+  "next_turn_player_indices": [
+   2
+  ]
  },
  {
   "op": "move",
@@ -5216,7 +5334,9 @@
     "Flop: 3♠ 3♥ 9♥"
    ]
   },
-  "next_turn_player_index": 2
+  "next_turn_player_indices": [
+   2
+  ]
  },
  {
   "op": "join",
@@ -5336,7 +5456,9 @@
     "Computer 3 checks."
    ]
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "create_match",
@@ -5450,7 +5572,9 @@
     "Hand #1: seat 1 deals; blinds 10/20."
    ]
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "move",
@@ -5553,7 +5677,9 @@
     "user2 raises to 1000 (all in)."
    ]
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -5640,7 +5766,7 @@
     "Computer 2 wins 2000 (showdown, won with pair)."
    ]
   },
-  "next_turn_player_index": null
+  "next_turn_player_indices": null
  },
  {
   "op": "create_match",
@@ -5754,7 +5880,9 @@
     "Hand #1: seat 1 deals; blinds 10/20."
    ]
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "move",
@@ -5870,7 +5998,9 @@
     "Hand #2: seat 2 deals; blinds 10/20."
    ]
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -5989,7 +6119,9 @@
     "Hand #3: seat 1 deals; blinds 10/20."
    ]
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "leave",
@@ -6058,7 +6190,9 @@
    "counter": 1,
    "note": "user1 moved"
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -6068,7 +6202,9 @@
    "counter": 2,
    "note": "user2 moved"
   },
-  "next_turn_player_index": 2
+  "next_turn_player_indices": [
+   2
+  ]
  },
  {
   "op": "move",
@@ -6078,7 +6214,9 @@
    "counter": 3,
    "note": "user3 moved; back to user1"
   },
-  "next_turn_player_index": 0
+  "next_turn_player_indices": [
+   0
+  ]
  },
  {
   "op": "create_match",
@@ -6100,7 +6238,9 @@
    "counter": 1,
    "note": "user4 passed the turn to the computer"
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "create_match",
@@ -6127,7 +6267,9 @@
    "counter": 1,
    "note": "user5 moved"
   },
-  "next_turn_player_index": 1
+  "next_turn_player_indices": [
+   1
+  ]
  },
  {
   "op": "move",
@@ -6137,6 +6279,6 @@
    "counter": 2,
    "note": "user6 ended the match"
   },
-  "next_turn_player_index": null
+  "next_turn_player_indices": null
  }
 ]
