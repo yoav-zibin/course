@@ -44,7 +44,7 @@ def test_leaving_ends_the_match_when_the_game_disallows_leaving(api: Api) -> Non
         owner=alice, game_id=game_id, joiners=[bob, carol], start=True
     )
     match = api.ok("POST", f"/matches/{match_id}/leave", as_user=bob)
-    assert (match["status"], match["end_reason"], match["turn_of_player_index"]) == (
+    assert (match["status"], match["end_reason"], match["turn_of_player_indices"]) == (
         "over",
         "player_left",
         None,
@@ -68,7 +68,7 @@ def test_a_computer_replaces_the_leaver_when_the_game_allows_leaving(api: Api) -
     assert api.summary(match) == {
         "status": "ongoing",
         "players": ["alice", "computer", "carol"],
-        "turn": 1,
+        "turn": [1],
         "state": None,
     }
     assert api.move(match_id, as_user=carol, next_turn=2).status_code == 201
@@ -131,7 +131,7 @@ def test_joining_mid_match_takes_over_a_computer_seat_and_its_turn(api: Api) -> 
     assert api.summary(match) == {
         "status": "ongoing",
         "players": ["alice", "bob"],
-        "turn": 1,
+        "turn": [1],
         "state": None,
     }
     # Now that the seat is bob's, alice can no longer move for it.

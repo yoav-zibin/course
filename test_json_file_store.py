@@ -98,16 +98,45 @@ def test_reads_do_not_rewrite_the_file(tmp_path: Path) -> None:
     assert path.stat().st_mtime_ns == written_at
 
 
+def test_a_version_1_file_is_migrated_to_turn_sets(tmp_path: Path) -> None:
+    path = tmp_path / "data.json"
+    store = JsonFileStore(path)
+    api = Api(store=store)
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game_id = api.new_game(owner=alice)
+    match_id = api.new_match(owner=alice, game_id=game_id, joiners=[bob], start=True)
+    api.move(match_id, as_user=alice, next_turn=1, state={"pot": 10})
+    store.close()
+
+    # Rewrite the file in the old layout: single-index turns, format version 1.
+    file = json.loads(path.read_text())
+    assert file["format_version"] == 2
+    file["format_version"] = 1
+    match = file["data"]["matches"][0]
+    turn = match.pop("turn_of_player_indices")
+    match["turn_of_player_index"] = turn[0] if turn is not None else None
+    move = match["moves"][0]
+    next_turn = move.pop("next_turn_player_indices")
+    move["next_turn_player_index"] = next_turn[0] if next_turn is not None else None
+    path.write_text(json.dumps(file))
+
+    restarted = JsonFileStore(path)
+    after = Api(store=restarted).ok("GET", "/debug/all-data")
+    restarted.close()
+    assert after["matches"][0]["turn_of_player_indices"] == [1]
+    assert after["matches"][0]["moves"][0]["next_turn_player_indices"] == [1]
+
+
 def test_an_unreadable_file_is_rejected_rather_than_overwritten(tmp_path: Path) -> None:
     path = tmp_path / "data.json"
-    path.write_text('{"format_version": 1, "data": {"users": "oops"}}')
+    path.write_text('{"format_version": 2, "data": {"users": "oops"}}')
     with pytest.raises(ValidationError):
         JsonFileStore(path)
 
     path.write_text(
-        '{"format_version": 2, "data": {"users": [], "game_versions": [], '
+        '{"format_version": 3, "data": {"users": [], "game_versions": [], '
         '"deleted_game_ids": [], "matches": []}}'
     )
     with pytest.raises(ValueError) as error:
         JsonFileStore(path)
-    assert str(error.value) == f"{path} has format version 2, expected 1"
+    assert str(error.value) == f"{path} has format version 3, expected 2"

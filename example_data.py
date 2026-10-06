@@ -120,15 +120,18 @@ def _apply(
         platform.start_match(
             caller_id=operation["as"],
             match_id=operation["match"],
-            first_turn_player_index=0,
+            first_turn_player_indices=frozenset({0}),
             initial_state=None,
         )
     elif kind == "move":
+        next_turn = operation["next_turn_player_indices"]
         platform.make_move(
             caller_id=operation["as"],
             match_id=operation["match"],
             new_state=operation["new_state"],
-            next_turn_player_index=operation["next_turn_player_index"],
+            next_turn_player_indices=None
+            if next_turn is None
+            else frozenset(next_turn),
             expected_move_count=None,
         )
     elif kind == "leave":

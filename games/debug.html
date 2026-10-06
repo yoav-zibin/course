@@ -38,8 +38,8 @@
     <label for="new-state">new_state (JSON)</label>
     <textarea id="new-state" spellcheck="false"></textarea>
     <div class="row">
-      <label for="next-turn">next_turn_player_index</label>
-      <select id="next-turn"></select>
+      <label for="next-turn">next_turn_player_indices</label>
+      <input id="next-turn" placeholder="e.g. 0,2 — or null to end the match" style="width: 320px">
     </div>
     <div class="row">
       <button id="send" class="primary">Send make_move</button>
@@ -68,8 +68,8 @@ if (typeof window !== "undefined" && window.document) {
   function logLine(direction, message) {
     const time = new Date().toLocaleTimeString();
     const summary = message.type === "state_changed"
-      ? `move_count=${message.move_count} turn=${message.turn_of_player_index} acting_for=${message.acting_for_player_index}`
-      : `next_turn=${message.next_turn_player_index} new_state=${JSON.stringify(message.new_state)}`;
+      ? `move_count=${message.move_count} turn=${JSON.stringify(message.turn_of_player_indices)} acting_for=${message.acting_for_player_index}`
+      : `next_turn=${JSON.stringify(message.next_turn_player_indices)} new_state=${JSON.stringify(message.new_state)}`;
     const line = document.createElement("div");
     line.textContent = `${time} ${direction} ${message.type}: ${summary}`;
     $("log").prepend(line);
@@ -77,25 +77,15 @@ if (typeof window !== "undefined" && window.document) {
 
   function resetForm() {
     $("new-state").value = JSON.stringify(latest.state ?? Logic.initialState(), null, 2);
-    const options = latest.players.map((player) => {
-      const option = document.createElement("option");
-      option.value = String(player.player_index);
-      option.textContent = `${player.player_index}: ${player.name} (${player.kind})`;
-      return option;
-    });
-    const end = document.createElement("option");
-    end.value = "null";
-    end.textContent = "null (end the match)";
-    $("next-turn").replaceChildren(...options, end);
     // Default to the next seat after the current turn.
-    const turn = latest.turn_of_player_index;
-    $("next-turn").value = turn === null ? "null" : String((turn + 1) % latest.players.length);
+    const turn = latest.turn_of_player_indices;
+    $("next-turn").value = turn === null ? "null" : String((Math.max(...turn) + 1) % latest.players.length);
   }
 
   function render() {
     const m = latest;
     $("summary").textContent =
-      `status=${m.status} · move_count=${m.move_count} · turn_of_player_index=${m.turn_of_player_index}` +
+      `status=${m.status} · move_count=${m.move_count} · turn_of_player_indices=${JSON.stringify(m.turn_of_player_indices)}` +
       ` · my_player_index=${m.my_player_index} · acting_for_player_index=${m.acting_for_player_index}`;
     $("message").textContent = JSON.stringify(m, null, 2);
     const header = document.createElement("tr");
@@ -107,7 +97,7 @@ if (typeof window !== "undefined" && window.document) {
     $("players").replaceChildren(header, ...m.players.map((player) => {
       const tr = document.createElement("tr");
       const notes = [];
-      if (player.player_index === m.turn_of_player_index) notes.push("turn");
+      if (m.turn_of_player_indices !== null && m.turn_of_player_indices.includes(player.player_index)) notes.push("turn");
       if (player.player_index === m.my_player_index) notes.push("you");
       if (player.player_index === m.acting_for_player_index) notes.push("you act for");
       for (const text of [player.player_index, player.name, player.kind, notes.join(", ")]) {
@@ -140,8 +130,18 @@ if (typeof window !== "undefined" && window.document) {
       $("error").textContent = `new_state is not valid JSON: ${error.message}`;
       return;
     }
-    const value = $("next-turn").value;
-    const message = { type: "make_move", new_state: newState, next_turn_player_index: value === "null" ? null : Number(value) };
+    const raw = $("next-turn").value.trim();
+    let nextTurn;
+    if (raw === "" || raw.toLowerCase() === "null") {
+      nextTurn = null;
+    } else {
+      nextTurn = raw.split(",").map((part) => Number(part.trim()));
+      if (nextTurn.some((index) => !Number.isInteger(index))) {
+        $("error").textContent = "next_turn_player_indices must be comma-separated seat indices, or null.";
+        return;
+      }
+    }
+    const message = { type: "make_move", new_state: newState, next_turn_player_indices: nextTurn };
     logLine("sent", message);
     window.parent.postMessage(message, "*");
   });

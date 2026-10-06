@@ -78,7 +78,8 @@ class Move:
     made_by_user_id: str
     created_at: dt.datetime
     new_state: JsonValue
-    next_turn_player_index: int | None
+    # The seats that may make the next move; [None] ends the match.
+    next_turn_player_indices: frozenset[int] | None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -92,7 +93,8 @@ class Match:
     status: MatchStatus
     seats: tuple[Seat, ...]
     state: JsonValue
-    turn_of_player_index: int | None
+    # The seats that may move now; [None] when the match isn't ongoing.
+    turn_of_player_indices: frozenset[int] | None
     end_reason: EndReason | None
     moves: tuple[Move, ...]
     # Non-owners who "deleted" this match after it ended; it is excluded from their

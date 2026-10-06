@@ -122,13 +122,25 @@ class Api:
         return match_id
 
     def move(
-        self, match_id: str, *, as_user: str, next_turn: int | None, state: Any = None
+        self,
+        match_id: str,
+        *,
+        as_user: str,
+        next_turn: int | list[int] | None,
+        state: Any = None,
     ) -> httpx.Response:
         return self.request(
             "POST",
             f"/matches/{match_id}/moves",
             as_user=as_user,
-            json={"new_state": state, "next_turn_player_index": next_turn},
+            json={
+                "new_state": state,
+                "next_turn_player_indices": None
+                if next_turn is None
+                else [next_turn]
+                if isinstance(next_turn, int)
+                else next_turn,
+            },
         )
 
     def name(self, user_id: str | None) -> str | None:
@@ -142,7 +154,7 @@ class Api:
                 self.name(player["user_id"]) or player["kind"]
                 for player in match["players"]
             ],
-            "turn": match["turn_of_player_index"],
+            "turn": match["turn_of_player_indices"],
             "state": match["state"],
         }
 

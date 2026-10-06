@@ -91,7 +91,12 @@ if (typeof window !== "undefined" && window.document) {
     if (moveSent) return;
     moveSent = true;
     window.parent.postMessage(
-      { type: "make_move", new_state: newState, next_turn_player_index: nextTurn }, "*");
+      {
+        type: "make_move",
+        new_state: newState,
+        next_turn_player_indices: nextTurn === null ? null : [nextTurn],
+      },
+      "*");
   }
 
   function actingSeat() {
@@ -112,7 +117,7 @@ if (typeof window !== "undefined" && window.document) {
     else if (latest.status === "over") status = "The match is over.";
     else if (humanActing) status = `Your move, ${name(acting)}.`;
     else if (acting !== null) status = `${name(acting)} is thinking…`;
-    else status = `Waiting for ${name(latest.turn_of_player_index)}.`;
+    else status = `Waiting for ${latest.turn_of_player_indices.map((seat) => name(seat)).join(", ")}.`;
     $("status").textContent = status;
 
     $("board").replaceChildren(...state.board.map((mark, cell) => {
@@ -131,7 +136,7 @@ if (typeof window !== "undefined" && window.document) {
       const div = document.createElement("div");
       const you = player.player_index === latest.my_player_index ? " — you" : "";
       div.textContent = `${Logic.MARKS[player.player_index]}: ${player.name}${you}`;
-      if (player.player_index === latest.turn_of_player_index) div.className = "turn";
+      if (latest.turn_of_player_indices.includes(player.player_index)) div.className = "turn";
       return div;
     }));
 
