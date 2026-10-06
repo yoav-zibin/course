@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from game_platform.model_api import ModelApiClient
 from game_platform.schemas import AgentChatRequest, AgentChatResponse
+
 SYSTEM_PROMPT = """\
 You are a game-building assistant inside a turn-based multiplayer game platform's \
 builder. You help the user create and refine a game by writing its code through \
@@ -27,3 +28,145 @@ The game's `code` is a COMPLETE HTML document. It runs in an iframe with \
 self-contained (no external scripts, stylesheets, fonts, or network fetches) and \
 never try to reach the platform's cookies, storage, or API.
 
+The page and the game talk only through `postMessage`, with two messages:
+
+1. `state_changed` (platform -> game), sent on load and after every change:
+   - `state`: the match state from the last move (any JSON the game chose), or \
+`null` before the first move, so the game must create its own initial state.
+   - `players`: every seat in order: {"player_index", "kind": "human"|"computer", "name"}.
+   - `turn_of_player_index`: the seat whose turn it is, or `null` when over.
+   - `status`: "ongoing" or "over". `end_reason`: "finished" or "player_left".
+   - `move_count`, `my_player_index` (the viewer's seat, `null` for spectators),
+     `acting_for_player_index`: the seat this game must move for right now, or \
+`null` if it must wait.
+
+2. `make_move` (game -> platform): {"type": "make_move", "new_state": {...}, \
+"next_turn_player_index": <seat>|null}. `new_state` replaces the match state; \
+`next_turn_player_index: null` ends the match. Send AT MOST ONE `make_move` per \
+`state_changed`.
+
+Rules you must follow in the code you write:
+- Computers are played by the game: when `acting_for_player_index` is a computer \
+seat, compute and send its move after a short delay (so humans can follow).
+- Randomness happens in moves (e.g. the first move deals cards), so every player \
+computes the same outcome.
+- The state is PUBLIC to every player: hide secret information in the UI only.
+- Handle seat changes gracefully (players leaving become computers; joiners take \
+over computer seats or are appended).
+- Disable input when `acting_for_player_index` is null; show whose turn it is and \
+who won.
+
+RESPONSE FORMAT: respond with ONLY a JSON object, no markdown fences, no extra \
+text, with exactly these keys:
+- "message": your chat reply to the user (short markdown is fine).
+- "code": the COMPLETE updated HTML document when you create or change the game, \
+or null when the code is unchanged.
+- "name": a suggested game name, or null to keep the current one.
+- "description": a suggested one-line description, or null to keep it.
+
+Only return "code" when the user asked for a game or a change to it; for \
+questions and discussion, return "code": null and answer in "message"."""
+
+
+class AgentError(Exception):
+    """The model call failed or its reply was unusable."""
+
+
+@dataclass
+class _GameContext:
+    name: str
+    description: str
+    allowed_player_counts: list[int]
+    code: str
+
+
+def _context_block(context: _GameContext) -> str:
+    lines = [
+        "Current game being built:",
+        f"- name: {context.name or '(unnamed)'}",
+        f"- description: {context.description or '(none)'}",
+        f"- allowed player counts: {', '.join(map(str, context.allowed_player_counts)) or '(none)'}",
+    ]
+    if context.code.strip():
+        lines.append("- current code (the full HTML document the iframe runs):")
+        lines.append(context.code)
+    else:
+        lines.append("- current code: (empty - no game code yet)")
+    return "\n".join(lines)
+
+
+def build_prompt_messages(
+    request: AgentChatRequest,
+) -> tuple[list[dict], _GameContext]:
+    """Build the model chat messages: system prompt, game context, history."""
+    context = _GameContext(
+        name=request.game_name,
+        description=request.game_description,
+        allowed_player_counts=list(request.allowed_player_counts),
+        code=request.code,
+    )
+    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    history = [{"role": m.role, "content": m.content} for m in request.messages]
+    # The game context always rides with the first user message so a fresh
+    # conversation starts grounded in the editor's code.
+    first_user = next((m for m in history if m.get("role") == "user"), None)
+    context_text = _context_block(context)
+    if first_user is None:
+        history.insert(0, {"role": "user", "content": context_text})
+    else:
+        first_user["content"] = f"{context_text}\n\n{first_user['content']}"
+    messages.extend(history)
+    return messages, context
+
+
+def _parse_reply(raw: str) -> AgentChatResponse:
+    text = raw.strip()
+    # Tolerate markdown-fenced JSON even though the prompt forbids it.
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else ""
+        if text.rsplit("```", 1)[0].strip():
+            text = text.rsplit("```", 1)[0]
+        text = text.strip()
+        if text.lower().startswith("json"):
+            text = text[4:].strip()
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise AgentError(f"The agent's reply was not valid JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise AgentError("The agent's reply was not a JSON object.")
+    message = data.get("message")
+    if not isinstance(message, str) or not message.strip():
+        raise AgentError("The agent's reply had no message text.")
+    code = data.get("code")
+    if code is not None:
+        if not isinstance(code, str) or "<html" not in code.lower():
+            raise AgentError("The agent's reply had no usable game code.")
+    name = data.get("name")
+    description = data.get("description")
+    return AgentChatResponse(
+        message=message.strip(),
+        code=code,
+        name=name if isinstance(name, str) and name.strip() else None,
+        description=description
+        if isinstance(description, str) and description.strip()
+        else None,
+    )
+
+
+def chat_with_agent(
+    client: ModelApiClient, request: AgentChatRequest
+) -> AgentChatResponse:
+    """Send one chat turn to the game-building agent. Raises AgentError."""
+    if not client.enabled:
+        raise AgentError(
+            "The game-building agent is not set up: no Model API key is configured."
+        )
+    if not request.messages:
+        raise AgentError("No message to send.")
+    messages, _ = build_prompt_messages(request)
+    try:
+        raw = client.chat(messages, max_tokens=6000, temperature=0.7)
+    except Exception as exc:
+        raise AgentError(f"The model call failed: {exc}") from exc
+    return _parse_reply(raw)

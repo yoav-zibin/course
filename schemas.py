@@ -292,3 +292,31 @@ class AllDataOut(BaseModel):
             game_versions=[GameOut.of(game) for game in data.game_versions],
             matches=[MatchDetailOut.of(match) for match in data.matches],
         )
+
+
+class AgentMessage(_Request):
+    role: Annotated[str, StringConstraints(pattern="^(user|assistant)$")]
+    content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+class AgentChatRequest(_Request):
+    """One turn of conversation with the game-building agent.
+
+    [messages] is the conversation so far, ending with the new user message.
+    The game fields carry the builder editor's current values so the agent
+    stays grounded in what the user sees.
+    """
+
+    game_name: str = ""
+    game_description: str = ""
+    allowed_player_counts: list[int] = []
+    code: str = ""
+    messages: Annotated[list[AgentMessage], Field(min_length=1, max_length=50)]
+
+
+class AgentChatResponse(BaseModel):
+    message: str
+    # The complete updated HTML document, or null when the code is unchanged.
+    code: str | None = None
+    name: str | None = None
+    description: str | None = None

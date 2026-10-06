@@ -45,6 +45,7 @@ def main() -> None:
             GamePlatform(store=store),
             debug_tools=config.debug_tools,
             master_password=config.master_password,
+            model_api_config=config.model_api,
         )
         uvicorn.run(
             app,

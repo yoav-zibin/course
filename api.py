@@ -14,6 +14,8 @@ from fastapi.staticfiles import StaticFiles
 
 from game_platform.models import GameRules, MatchStatus
 from game_platform.schemas import (
+    AgentChatRequest,
+    AgentChatResponse,
     AllDataOut,
     GameCreate,
     GameOut,
@@ -38,6 +40,9 @@ from game_platform.service import (
     PlatformError,
     UnauthorizedError,
 )
+from game_platform.agent import AgentError, chat_with_agent
+from game_platform.config import ModelApiConfig
+from game_platform.model_api import ModelApiClient
 
 _STATUS_OF_ERROR: Final[tuple[tuple[type[PlatformError], HTTPStatus], ...]] = (
     (UnauthorizedError, HTTPStatus.UNAUTHORIZED),
@@ -313,6 +318,31 @@ def all_data(platform: Platform) -> AllDataOut:
     return AllDataOut.of(platform.all_data())
 
 
+@debug_router.post("/agent/chat")
+def agent_chat(
+    request: Request, caller_id: CallerId, body: AgentChatRequest
+) -> AgentChatResponse:
+    """One turn of conversation with the game-building agent (backs the builder's
+    Agent tab). Requires the acting user because every turn calls the paid model
+    API. Returns 503 when no Model API key is configured."""
+    config: ModelApiConfig = request.app.state.model_api_config
+    client = ModelApiClient(
+        api_key=config.api_key, model=config.model, base_url=config.base_url
+    )
+    if not client.enabled:
+        raise HTTPException(
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+            detail="The game-building agent is not set up: no Model API key is "
+            "configured on the server.",
+        )
+    try:
+        return chat_with_agent(client, body)
+    except AgentError as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_GATEWAY, detail=str(exc)
+        ) from exc
+
+
 async def _handle_platform_error(_request: Request, exc: Exception) -> JSONResponse:
     status = next(
         (status for kind, status in _STATUS_OF_ERROR if isinstance(exc, kind)),
@@ -339,6 +369,7 @@ def create_app(
     *,
     debug_tools: bool = True,
     master_password: str = "",
+    model_api_config: ModelApiConfig | None = None,
 ) -> FastAPI:
     """[debug_tools] adds the web pages (/portal, /builder, /console, /browse) and
     /debug/all-data, which exposes everything (including users' passwords). /browse and
@@ -355,6 +386,9 @@ def create_app(
     )
     app.state.platform = platform if platform is not None else GamePlatform()
     app.state.master_password = master_password
+    app.state.model_api_config = (
+        model_api_config if model_api_config is not None else ModelApiConfig()
+    )
     app.include_router(router)
     if debug_tools:
         app.include_router(debug_router)
