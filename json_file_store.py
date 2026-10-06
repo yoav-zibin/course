@@ -202,10 +202,9 @@ def _migrate_v1_to_v2(contents: bytes) -> bytes:
 
 def write_snapshot(path: Path, snapshot: Snapshot) -> None:
     # Write a temporary file and rename it over the old one, so a crash mid-write
-    # never leaves a truncated file.
-    contents = _FILE_ADAPTER.dump_json(
-        _File(format_version=FORMAT_VERSION, data=snapshot), indent=2
-    )
+    # never leaves a truncated file. The JSON is not pretty-printed: the game code
+    # embedded in the data makes pretty files ~2x bigger for no benefit.
+    contents = _FILE_ADAPTER.dump_json(_File(format_version=FORMAT_VERSION, data=snapshot))
     temporary = path.with_name(f"{path.name}.tmp")
     temporary.write_bytes(contents)
     temporary.replace(path)
