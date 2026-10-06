@@ -43,6 +43,59 @@
       #test-log .entry.error {
         color: var(--color-error);
       }
+
+      #agent-log {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+        max-height: 480px;
+        overflow: auto;
+        margin: var(--space-md) 0;
+      }
+
+      #agent-log .msg {
+        padding: var(--space-sm) var(--space-md);
+        border-radius: 8px;
+        max-width: 90%;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      #agent-log .msg.user {
+        align-self: flex-end;
+        background: var(--color-accent-bg, #e8f0fe);
+      }
+
+      #agent-log .msg.assistant {
+        align-self: flex-start;
+        background: var(--color-surface-2, #f5f5f5);
+        border: 1px solid var(--color-border-1);
+      }
+
+      #agent-log .msg.system {
+        align-self: center;
+        font-size: var(--font-size-xs);
+        color: var(--color-text-muted, #666);
+      }
+
+      #agent-log:empty::after {
+        content: "No messages yet. Say hello, or describe the game you want to build.";
+        color: var(--color-text-muted, #666);
+        font-style: italic;
+      }
+
+      #agent-input {
+        width: 100%;
+        resize: vertical;
+      }
+
+      .proposal {
+        border: 1px solid var(--color-border-1);
+        border-radius: 8px;
+        padding: var(--space-md);
+        margin: var(--space-md) 0;
+        background: var(--color-surface-2, #f5f5f5);
+      }
     </style>
   </head>
   <body>
@@ -72,6 +125,7 @@
           <div class="tabs" role="tablist">
             <button id="tab-edit" type="button" role="tab" aria-selected="true">Edit</button>
             <button id="tab-test" type="button" role="tab" aria-selected="false">Test</button>
+            <button id="tab-agent" type="button" role="tab" aria-selected="false">Agent</button>
           </div>
           <section id="edit-panel" class="work" style="padding: var(--space-md) 0">
             <div id="game-meta" class="muted"></div>
@@ -116,10 +170,32 @@
               </div>
             </div>
           </section>
-        </div>
+          <section id="agent-panel" class="work" style="padding: var(--space-md) 0" hidden>
+            <div class="muted">
+              Chat with the game-building agent: describe the game you want, or ask for
+              changes to the code in the editor. Apply its proposal, test it in the Test
+              tab, and keep iterating — then publish when you're happy.
+            </div>
+            <div id="agent-log"></div>
+            <div id="agent-proposal" class="proposal" hidden>
+              <div class="muted">The agent proposed new code for the editor.</div>
+              <div class="inline-row">
+                <button id="agent-apply" type="button" class="primary">Apply to editor</button>
+                <button id="agent-discard" type="button">Discard</button>
+              </div>
+            </div>
+            <div class="inline-row">
+              <textarea id="agent-input" rows="3" placeholder="Describe your game, or ask for a change…"></textarea>
+            </div>
+            <div class="inline-row">
+              <button id="agent-send" type="button" class="primary">Send</button>
+              <button id="agent-publish" type="button">Publish new version</button>
+              <span id="agent-message" class="message"></span>
+            </div>
+          </section>
       </main>
     </div>
     <script src="/static/common.js?v=2"></script>
-    <script src="/static/builder.js?v=2"></script>
+    <script src="/static/builder.js?v=3"></script>
   </body>
 </html>

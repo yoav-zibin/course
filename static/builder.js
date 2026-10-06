@@ -67,6 +67,7 @@ const state = {
   pendingSwitch: null, // a selection waiting for a second click to discard edits
   deleteArmed: false,
   test: null,
+  agent: null, // {messages: [{role, content}], pending: {code, name, description} | null}
 };
 
 const frame = new GameFrame(
@@ -176,6 +177,11 @@ function select(id) {
   state.pendingSwitch = null;
   state.selectedId = id;
   state.deleteArmed = false;
+  state.agent = null;
+  $("agent-log").replaceChildren();
+  $("agent-proposal").hidden = true;
+  $("agent-input").value = "";
+  setMessage("agent-message", "");
   const game = selectedGame();
   fillEditor(game ?? NEW_GAME);
   setMessage("edit-message", "");
@@ -244,11 +250,13 @@ function renderEditorMeta() {
 
 // Tabs
 
+const TABS = ["edit", "test", "agent"];
+
 function showTab(name) {
-  $("tab-edit").setAttribute("aria-selected", String(name === "edit"));
-  $("tab-test").setAttribute("aria-selected", String(name === "test"));
-  $("edit-panel").hidden = name !== "edit";
-  $("test-panel").hidden = name !== "test";
+  for (const tab of TABS) {
+    $(`tab-${tab}`).setAttribute("aria-selected", String(name === tab));
+    $(`${tab}-panel`).hidden = name !== tab;
+  }
   if (name === "test") renderTestSetup();
 }
 
@@ -361,6 +369,81 @@ function undoTestMove() {
   sendTestState();
 }
 
+// Game-building agent: iterative chat that proposes code for the editor.
+
+function agentLog(role, text) {
+  $("agent-log").append(el("div", { class: `msg ${role}`, textContent: text }));
+  $("agent-log").scrollTop = $("agent-log").scrollHeight;
+}
+
+function agentHistory() {
+  if (!state.agent) state.agent = { messages: [], pending: null };
+  return state.agent;
+}
+
+async function sendAgentMessage() {
+  const user = me();
+  const input = $("agent-input").value.trim();
+  if (!input) return;
+  const history = agentHistory();
+  if (history.pending) {
+    setMessage("agent-message", "Apply or discard the pending proposal first.", "error");
+    return;
+  }
+  const values = editorValues();
+  const messages = [...history.messages, { role: "user", content: input }];
+  $("agent-input").value = "";
+  agentLog("user", input);
+  setMessage("agent-message", "The agent is thinking…");
+  $("agent-send").disabled = true;
+  try {
+    const reply = await apiRequest("POST", "/agent/chat", {
+      user,
+      body: {
+        game_name: values.name,
+        game_description: values.description,
+        allowed_player_counts: values.allowed_player_counts,
+        code: values.code,
+        messages,
+      },
+    });
+    history.messages.push({ role: "user", content: input });
+    history.messages.push({ role: "assistant", content: reply.message });
+    agentLog("assistant", reply.message);
+    if (reply.code) {
+      history.pending = { code: reply.code, name: reply.name, description: reply.description };
+      $("agent-proposal").hidden = false;
+      agentLog("system", "The agent proposed new code. Review it with Apply to editor, or Discard it.");
+    }
+    setMessage("agent-message", "");
+  } catch (error) {
+    setMessage("agent-message", `The agent couldn't reply: ${error.message}`, "error");
+    $("agent-input").value = input;
+  } finally {
+    $("agent-send").disabled = false;
+  }
+}
+
+function applyAgentProposal() {
+  const history = agentHistory();
+  const pending = history.pending;
+  if (!pending) return;
+  if (pending.name && !$("name").value.trim()) $("name").value = pending.name;
+  if (pending.description && !$("description").value.trim()) $("description").value = pending.description;
+  $("code").value = pending.code;
+  history.pending = null;
+  $("agent-proposal").hidden = true;
+  agentLog("system", "Applied the proposal to the editor. Test it in the Test tab, then keep chatting or publish.");
+  setMessage("agent-message", "Applied. The editor has unsaved changes.", "ok");
+}
+
+function discardAgentProposal() {
+  const history = agentHistory();
+  history.pending = null;
+  $("agent-proposal").hidden = true;
+  agentLog("system", "Discarded the proposal.");
+}
+
 // Rendering
 
 function render() {
@@ -385,6 +468,14 @@ async function main() {
   $("delete").addEventListener("click", deleteGame);
   $("tab-edit").addEventListener("click", () => showTab("edit"));
   $("tab-test").addEventListener("click", () => showTab("test"));
+  $("tab-agent").addEventListener("click", () => showTab("agent"));
+  $("agent-send").addEventListener("click", sendAgentMessage);
+  $("agent-input").addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) sendAgentMessage();
+  });
+  $("agent-apply").addEventListener("click", applyAgentProposal);
+  $("agent-discard").addEventListener("click", discardAgentProposal);
+  $("agent-publish").addEventListener("click", save);
   $("test-count").addEventListener("change", renderSeatKinds);
   $("test-start").addEventListener("click", startTest);
   $("test-undo").addEventListener("click", undoTestMove);
