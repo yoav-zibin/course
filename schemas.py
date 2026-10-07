@@ -157,13 +157,6 @@ class GoogleLogin(_Request):
     id_token: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
-class AppleLogin(_Request):
-    # The ID token from the website's "Sign in with Apple" button.
-    id_token: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-    # The user's name, which Apple only shares on the very first sign-in.
-    name: str = ""
-
-
 class PhoneStart(_Request):
     model_config = _example({"phone_number": "+15551234567"})
 
@@ -202,7 +195,6 @@ class AuthConfigOut(BaseModel):
     """Which login methods the website should offer. Public information."""
 
     google_client_id: str
-    apple_client_id: str
     phone_login_enabled: bool
     email_login_enabled: bool
 

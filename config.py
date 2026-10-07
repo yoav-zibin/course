@@ -47,14 +47,6 @@ class GoogleAuthConfig(_Section):
     client_id: str = ""
 
 
-class AppleAuthConfig(_Section):
-    # Apple Services ID (the "client ID" for Sign in with Apple on the web), from
-    # https://developer.apple.com/account/resources/identifiers/list/serviceId.
-    # Create a Services ID, enable "Sign in with Apple", and configure the site's
-    # domain and return URL there. Empty disables Apple login.
-    client_id: str = ""
-
-
 class SmsAuthConfig(_Section):
     # How login codes are texted. "log" writes them to the server log (development
     # only); "twilio" sends real texts (https://www.twilio.com).
@@ -79,7 +71,6 @@ class EmailAuthConfig(_Section):
 
 class AuthConfig(_Section):
     google: GoogleAuthConfig = GoogleAuthConfig()
-    apple: AppleAuthConfig = AppleAuthConfig()
     sms: SmsAuthConfig = SmsAuthConfig()
     email: EmailAuthConfig = EmailAuthConfig()
 

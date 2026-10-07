@@ -18,12 +18,12 @@ SeatKind = Literal["human", "computer"]
 EndReason = Literal["finished", "player_left"]
 
 
-LinkedAccountKind = Literal["google", "apple", "phone", "email"]
+LinkedAccountKind = Literal["google", "phone", "email"]
 
 
 @dataclass(frozen=True, kw_only=True)
 class LinkedAccount:
-    """A third-party login linked to a user: a Google/Apple subject, a verified
+    """A third-party login linked to a user: a Google subject, a verified
     phone number (E.164), or a verified email address (lowercased)."""
 
     kind: LinkedAccountKind
