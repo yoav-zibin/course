@@ -542,6 +542,10 @@ def portal() -> FileResponse:
 def browse() -> FileResponse:
     return FileResponse(_STATIC_DIR / "browse.html")
 
+@debug_router.get("/privacy")
+def privacy() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "privacy.html")
+
 
 @debug_router.get("/debug/all-data", dependencies=[MasterPassword])
 def all_data(platform: Platform) -> AllDataOut:
