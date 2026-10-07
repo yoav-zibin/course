@@ -8,6 +8,8 @@ import httpx
 from fastapi.testclient import TestClient
 
 from game_platform.api import create_app
+from game_platform.config import AuthConfig
+from game_platform.senders import CodeSender
 from game_platform.service import GamePlatform
 from game_platform.store import Store
 
@@ -24,9 +26,23 @@ class FakeClock:
 
 
 class Api:
-    def __init__(self, *, store: Store | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        store: Store | None = None,
+        auth_config: AuthConfig | None = None,
+        sms_sender: CodeSender | None = None,
+        email_sender: CodeSender | None = None,
+    ) -> None:
         platform = GamePlatform(store=store, clock=FakeClock())
-        self.client = TestClient(create_app(platform))
+        self.client = TestClient(
+            create_app(
+                platform,
+                auth_config=auth_config,
+                sms_sender=sms_sender,
+                email_sender=email_sender,
+            )
+        )
         self._names_by_user_id: dict[str, str] = {}
         self.passwords_by_user_id: dict[str, str] = {}
 

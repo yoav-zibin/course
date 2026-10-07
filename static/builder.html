@@ -109,7 +109,7 @@
         <a href="/docs">OpenAPI docs</a>
       </nav>
       <span class="spacer"></span>
-      <label class="inline">Act as <select id="act-as"></select></label>
+      <span id="account-menu"></span>
     </header>
     <div class="app">
       <aside class="sidebar">
@@ -120,7 +120,7 @@
         <div id="games"></div>
       </aside>
       <main class="work">
-        <div id="no-user" class="muted">Choose who to act as at the top right to see and build your games.</div>
+        <div id="no-user" class="muted">Log in at the top right to see and build your games.</div>
         <div id="workspace" hidden>
           <div class="tabs" role="tablist">
             <button id="tab-edit" type="button" role="tab" aria-selected="true">Edit</button>
@@ -196,6 +196,7 @@
       </main>
     </div>
     <script src="/static/common.js?v=2"></script>
+    <script src="/static/auth.js?v=1"></script>
     <script src="/static/builder.js?v=3"></script>
   </body>
 </html>

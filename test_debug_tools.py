@@ -50,10 +50,19 @@ def test_debug_tools_can_be_disabled() -> None:
 def test_debug_endpoints_are_not_in_the_api_schema(api: Api) -> None:
     paths = api.ok("GET", "/openapi.json")["paths"]
     assert sorted(paths) == [
+        "/auth/config",
+        "/auth/email/start",
+        "/auth/email/verify",
+        "/auth/facebook",
+        "/auth/google",
+        "/auth/me",
+        "/auth/phone/start",
+        "/auth/phone/verify",
         "/games",
         "/games/{game_id}",
         "/games/{game_id}/versions/{version}",
         "/matches",
+        "/matches/open",
         "/matches/{match_id}",
         "/matches/{match_id}/join",
         "/matches/{match_id}/leave",
@@ -61,6 +70,7 @@ def test_debug_endpoints_are_not_in_the_api_schema(api: Api) -> None:
         "/matches/{match_id}/start",
         "/users",
         "/users/{user_id}",
+        "/users/{user_id}/merge",
     ]
 
 

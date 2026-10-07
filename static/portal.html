@@ -47,7 +47,7 @@
         <a href="/docs">OpenAPI docs</a>
       </nav>
       <span class="spacer"></span>
-      <label class="inline">Act as <select id="act-as"></select></label>
+      <span id="account-menu"></span>
     </header>
     <div class="app">
       <aside class="sidebar">
@@ -65,7 +65,7 @@
         <div id="open-matches"></div>
       </aside>
       <main class="work">
-        <div id="placeholder" class="muted">Choose who to act as at the top right, then pick or create a match.</div>
+        <div id="placeholder" class="muted">Log in at the top right, then pick or create a match.</div>
         <div id="match" hidden>
           <div class="match-header">
             <h2><span id="match-title"></span> <span id="match-status" class="badge"></span></h2>
@@ -80,6 +80,7 @@
       </main>
     </div>
     <script src="/static/common.js?v=2"></script>
+    <script src="/static/auth.js?v=1"></script>
     <script src="/static/portal.js?v=2"></script>
   </body>
 </html>

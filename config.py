@@ -40,6 +40,49 @@ class ModelApiConfig(_Section):
     base_url: str = "https://api.ai.meta.com/v1"
 
 
+class GoogleAuthConfig(_Section):
+    # Google OAuth client ID for the website (Google Cloud Console > APIs & Services >
+    # Credentials > Create Credentials > OAuth client ID, type "Web application", with
+    # the site's origin as an authorized JavaScript origin). Empty disables Google login.
+    client_id: str = ""
+
+
+class FacebookAuthConfig(_Section):
+    # Facebook app ID and secret (https://developers.facebook.com/apps, with Facebook
+    # Login added as a product). Empty app ID disables Facebook login.
+    app_id: str = ""
+    app_secret: str = ""
+
+
+class SmsAuthConfig(_Section):
+    # How login codes are texted. "log" writes them to the server log (development
+    # only); "twilio" sends real texts (https://www.twilio.com).
+    provider: Literal["log", "twilio"] = "log"
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    # The Twilio number texts come from, in E.164 format, e.g. +15551234567.
+    twilio_from_number: str = ""
+
+
+class EmailAuthConfig(_Section):
+    # How login codes are emailed. "log" writes them to the server log (development
+    # only); "smtp" sends real email through any SMTP server.
+    provider: Literal["log", "smtp"] = "log"
+    smtp_host: str = ""
+    smtp_port: Annotated[int, Field(ge=1, le=65535)] = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_address: str = ""
+    smtp_use_tls: bool = True
+
+
+class AuthConfig(_Section):
+    google: GoogleAuthConfig = GoogleAuthConfig()
+    facebook: FacebookAuthConfig = FacebookAuthConfig()
+    sms: SmsAuthConfig = SmsAuthConfig()
+    email: EmailAuthConfig = EmailAuthConfig()
+
+
 class Config(_Section):
     server: ServerConfig = ServerConfig()
     data_file: DataFileConfig = DataFileConfig()
@@ -50,6 +93,7 @@ class Config(_Section):
     master_password: str = ""
     log_level: LogLevel = "INFO"
     model_api: ModelApiConfig = ModelApiConfig()
+    auth: AuthConfig = AuthConfig()
 
     @model_validator(mode="after")
     def _require_master_password_for_hostnames(self) -> "Config":

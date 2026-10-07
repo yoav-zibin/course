@@ -18,8 +18,17 @@ class Store(Protocol):
 
     def list_users(self) -> list[User]: ...
 
+    def delete_user(self, user_id: str) -> None:
+        """Removes a user. Callers move the user's data elsewhere first."""
+        ...
+
     def add_game_version(self, game: Game) -> None:
         """Stores a new version of a game, which becomes its latest version."""
+        ...
+
+    def put_game_version(self, game: Game) -> None:
+        """Replaces an existing game version in place, keeping its version number
+        (for ownership changes; new content goes through [add_game_version])."""
         ...
 
     def get_game(self, game_id: str) -> Game | None:
@@ -110,10 +119,21 @@ class InMemoryStore:
     def list_users(self) -> list[User]:
         return list(self._users.values())
 
+    def delete_user(self, user_id: str) -> None:
+        self._users.pop(user_id, None)
+
     def add_game_version(self, game: Game) -> None:
         versions = self._game_versions.setdefault(game.id, [])
         assert game.version == len(versions) + 1, (game.id, game.version)
         versions.append(game)
+
+    def put_game_version(self, game: Game) -> None:
+        versions = self._game_versions.get(game.id)
+        assert versions is not None and 1 <= game.version <= len(versions), (
+            game.id,
+            game.version,
+        )
+        versions[game.version - 1] = game
 
     def get_game(self, game_id: str) -> Game | None:
         versions = self._game_versions.get(game_id)

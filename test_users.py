@@ -15,12 +15,16 @@ def test_create_and_get_a_guest_user(api: Api) -> None:
         "id": user["id"],
         "display_name": "alice",
         "password": user["password"],
+        "linked_accounts": [],
         "created_at": "2026-01-01T00:01:00Z",
         "updated_at": "2026-01-01T00:01:00Z",
     }
     assert len(user["password"]) >= 20
-    # The password is only ever returned on creation.
-    user_without_password = {key: user[key] for key in user if key != "password"}
+    # The password is only ever returned on creation (linked logins only to the
+    # owner, through /auth/*).
+    user_without_password = {
+        key: user[key] for key in user if key not in ("password", "linked_accounts")
+    }
     assert api.ok("GET", f"/users/{user['id']}") == user_without_password
 
 

@@ -9,6 +9,7 @@ import uvicorn
 from game_platform.api import create_app
 from game_platform.config import Config, load_config
 from game_platform.json_file_store import JsonFileStore
+from game_platform.senders import make_email_sender, make_sms_sender
 from game_platform.service import GamePlatform
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,9 @@ def main() -> None:
             debug_tools=config.debug_tools,
             master_password=config.master_password,
             model_api_config=config.model_api,
+            auth_config=config.auth,
+            sms_sender=make_sms_sender(config.auth.sms),
+            email_sender=make_email_sender(config.auth.email),
         )
         uvicorn.run(
             app,

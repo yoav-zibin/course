@@ -122,9 +122,19 @@ class JsonFileStore:
         with self._lock:
             return self._inner.list_users()
 
+    def delete_user(self, user_id: str) -> None:
+        with self._lock:
+            self._inner.delete_user(user_id)
+            self._set_dirty()
+
     def add_game_version(self, game: Game) -> None:
         with self._lock:
             self._inner.add_game_version(game)
+            self._set_dirty()
+
+    def put_game_version(self, game: Game) -> None:
+        with self._lock:
+            self._inner.put_game_version(game)
             self._set_dirty()
 
     def get_game(self, game_id: str) -> Game | None:

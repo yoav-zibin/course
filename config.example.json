@@ -15,5 +15,29 @@
     "api_key": "",
     "model": "muse-spark-1.3",
     "base_url": "https://api.ai.meta.com/v1"
+  },
+  "auth": {
+    "google": {
+      "client_id": ""
+    },
+    "facebook": {
+      "app_id": "",
+      "app_secret": ""
+    },
+    "sms": {
+      "provider": "log",
+      "twilio_account_sid": "",
+      "twilio_auth_token": "",
+      "twilio_from_number": ""
+    },
+    "email": {
+      "provider": "log",
+      "smtp_host": "",
+      "smtp_port": 587,
+      "smtp_username": "",
+      "smtp_password": "",
+      "smtp_from_address": "",
+      "smtp_use_tls": true
+    }
   }
 }
