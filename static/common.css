@@ -480,3 +480,170 @@ button:disabled {
 .page-error[hidden] {
   display: none;
 }
+
+/* Login dialog and account menu */
+
+.auth-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 10vh var(--space-lg);
+  z-index: 100;
+}
+
+.auth-dialog {
+  position: relative;
+  background: var(--color-bg-1);
+  border: 1px solid var(--color-border-3);
+  border-radius: var(--radius-md);
+  padding: var(--space-xl);
+  width: 360px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.auth-dialog h2 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+}
+
+.auth-close {
+  position: absolute;
+  top: var(--space-sm);
+  right: var(--space-sm);
+  border: none;
+  background: none;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+}
+
+.auth-methods {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.auth-method {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border-2);
+}
+
+.auth-method:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.auth-facebook {
+  background: #1877f2;
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--font-size-md);
+  cursor: pointer;
+  width: 100%;
+}
+
+.auth-menu-button {
+  background: none;
+  border: 1px solid var(--color-border-3);
+  border-radius: var(--radius-sm);
+  padding: var(--space-xs) var(--space-sm);
+  cursor: pointer;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-md);
+}
+
+#account-menu {
+  position: relative;
+}
+
+.auth-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--space-xs));
+  background: var(--color-bg-1);
+  border: 1px solid var(--color-border-3);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm);
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 50;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.auth-menu-panel[hidden] {
+  display: none;
+}
+
+.auth-menu-panel button {
+  text-align: left;
+  background: none;
+  border: none;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-md);
+}
+
+.auth-menu-panel button:hover {
+  background: var(--color-bg-2);
+}
+
+.auth-menu-heading {
+  font-weight: 700;
+  padding: var(--space-xs) var(--space-sm);
+  border-top: 1px solid var(--color-border-2);
+  margin-top: var(--space-xs);
+}
+
+.auth-menu-heading:first-child {
+  border-top: none;
+  margin-top: 0;
+}
+
+.auth-linked {
+  padding: 2px var(--space-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.auth-toast {
+  position: fixed;
+  bottom: var(--space-xl);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-bg-2);
+  border: 1px solid var(--color-ok);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm) var(--space-lg);
+  z-index: 200;
+}
+
+.auth-toast[hidden] {
+  display: none;
+}
+
+/* Text button that looks like a link, for inline actions. */
+button.link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-accent);
+  cursor: pointer;
+  font-size: inherit;
+  text-decoration: underline;
+}

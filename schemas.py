@@ -18,6 +18,7 @@ from game_platform.models import (
     MIN_PLAYERS,
     EndReason,
     Game,
+    LinkedAccount,
     Match,
     MatchStatus,
     Move,
@@ -102,10 +103,106 @@ class UserWithPasswordOut(UserOut):
 
     # Send it as the X-User-Password header, along with X-User-Id.
     password: str
+    linked_accounts: list["LinkedAccountOut"] = []
 
     @classmethod
     def of_user(cls, user: User) -> "UserWithPasswordOut":
-        return cls(**UserOut.of(user).model_dump(), password=user.password)
+        return cls(
+            **UserOut.of(user).model_dump(),
+            password=user.password,
+            linked_accounts=[LinkedAccountOut.of(a) for a in user.linked_accounts],
+        )
+
+
+class LinkedAccountOut(BaseModel):
+    """A login method linked to the caller's own account. Never exposed for other users."""
+
+    kind: str
+    identifier: str
+    linked_at: dt.datetime
+
+    @classmethod
+    def of(cls, account: LinkedAccount) -> "LinkedAccountOut":
+        return cls(
+            kind=account.kind,
+            identifier=account.identifier,
+            linked_at=account.linked_at,
+        )
+
+
+class AuthResponse(BaseModel):
+    """The credential to use from now on: [user_id] as X-User-Id and [password] as
+    X-User-Password. [merged_from_user_id] is set when this login merged another of
+    the caller's accounts into this one."""
+
+    user_id: str
+    display_name: str
+    password: str
+    linked_accounts: list[LinkedAccountOut] = []
+    merged_from_user_id: str | None = None
+
+    @classmethod
+    def of(cls, user: User, merged_from_user_id: str | None = None) -> "AuthResponse":
+        return cls(
+            user_id=user.id,
+            display_name=user.display_name,
+            password=user.password,
+            linked_accounts=[LinkedAccountOut.of(a) for a in user.linked_accounts],
+            merged_from_user_id=merged_from_user_id,
+        )
+
+
+class GoogleLogin(_Request):
+    # The ID token from the website's Sign in with Google button.
+    id_token: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+class FacebookLogin(_Request):
+    # The access token from the website's Facebook Login button.
+    access_token: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+class PhoneStart(_Request):
+    model_config = _example({"phone_number": "+15551234567"})
+
+    phone_number: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+class EmailStart(_Request):
+    model_config = _example({"email": "player@example.com"})
+
+    email: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+class VerificationStarted(BaseModel):
+    verification_id: str
+    # The code stops working this many seconds after it was sent.
+    expires_in_seconds: int
+
+
+class VerifyCode(_Request):
+    model_config = _example({"verification_id": "<id>", "code": "123456"})
+
+    verification_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    code: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    # The new account's display name, used only on first login with this credential.
+    display_name: Name | None = None
+
+
+class MergeRequest(_Request):
+    model_config = _example({"into_user_id": "<user id>"})
+
+    # The account that survives. Everything of the URL's user moves into it.
+    into_user_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+class AuthConfigOut(BaseModel):
+    """Which login methods the website should offer. Public information."""
+
+    google_client_id: str
+    facebook_app_id: str
+    phone_login_enabled: bool
+    email_login_enabled: bool
 
 
 class GameCreate(_Request):

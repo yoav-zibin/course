@@ -1,6 +1,8 @@
 // Portal: list your matches, create, join, start, leave and delete them, and play them.
 // The selected match's game runs in a sandboxed iframe; the page polls the server and
 // sends the game state_changed whenever the match changes.
+// Identity comes from Auth (the account menu); data comes from the public and
+// authenticated API endpoints, never from the debug tools.
 
 "use strict";
 
@@ -8,13 +10,14 @@ const $ = (id) => document.getElementById(id);
 const POLL_MS = 2000;
 
 const state = {
-  allData: { users: [], game_versions: [], matches: [] },
-  usersKey: "",
+  games: [], // latest versions, from GET /games
+  gameCache: new Map(), // "game_id@version" -> game (null when gone)
+  nameCache: new Map(), // user id -> display name
   myMatches: [],
+  openMatches: [],
   selectedId: null,
   match: null, // the selected match, from GET /matches/{id}
   armed: null, // an action waiting for a confirming second click
-  codeCache: new Map(), // "game_id@version" -> code
   loaded: null, // "match_id@game_id@version" loaded in the iframe
   lastSent: null, // the last state_changed sent, as JSON
   moveInFlight: false,
@@ -27,19 +30,20 @@ const frame = new GameFrame($("game-box"), (move) => onMakeMove(move), (problem)
 // Data
 
 function me() {
-  return actingUser($("act-as"), state.allData.users);
+  return Auth.current();
 }
 
-function names() {
-  return userNames(state.allData);
-}
-
-function gameVersion(gameId, version) {
-  return state.allData.game_versions.find((game) => game.id === gameId && game.version === version) ?? null;
+/** A display name from the cache, or a short id while it loads. */
+function nameOf(userId) {
+  return state.nameCache.get(userId) ?? shortId(userId);
 }
 
 function playerName(player) {
-  return player.user_id ? names().get(player.user_id) ?? shortId(player.user_id) : `Computer ${player.player_index + 1}`;
+  return player.user_id ? nameOf(player.user_id) : `Computer ${player.player_index + 1}`;
+}
+
+function gameOf(gameId, version) {
+  return state.gameCache.get(`${gameId}@${version}`) ?? null;
 }
 
 function seatOf(match, userId) {
@@ -59,7 +63,7 @@ function actingFor(match, userId) {
 
 function isJoinable(match, userId) {
   if (!userId || seatOf(match, userId)) return false;
-  const game = gameVersion(match.game_id, match.game_version);
+  const game = gameOf(match.game_id, match.game_version);
   if (!game) return false;
   const max = Math.max(...game.allowed_player_counts);
   if (match.status === "waiting_for_players") return match.players.length < max;
@@ -67,6 +71,44 @@ function isJoinable(match, userId) {
     return match.players.some((player) => player.kind === "computer") || match.players.length < max;
   }
   return false;
+}
+
+/** Fetches the names and game versions for everything on screen. */
+async function ensureDetails() {
+  const userIds = new Set();
+  const gameKeys = new Set();
+  const collect = (match) => {
+    userIds.add(match.owner_user_id);
+    for (const player of match.players) if (player.user_id) userIds.add(player.user_id);
+    gameKeys.add(`${match.game_id}@${match.game_version}`);
+  };
+  state.myMatches.forEach(collect);
+  state.openMatches.forEach(collect);
+  if (state.match) collect(state.match);
+  await Promise.all([
+    ...[...userIds]
+      .filter((id) => !state.nameCache.has(id))
+      .map(async (id) => {
+        try {
+          state.nameCache.set(id, (await apiRequest("GET", `/users/${id}`)).display_name);
+        } catch {
+          state.nameCache.set(id, shortId(id));
+        }
+      }),
+    ...[...gameKeys]
+      .filter((key) => !state.gameCache.has(key))
+      .map(async (key) => {
+        const at = key.lastIndexOf("@");
+        try {
+          state.gameCache.set(
+            key,
+            await apiRequest("GET", `/games/${key.slice(0, at)}/versions/${key.slice(at + 1)}`)
+          );
+        } catch {
+          state.gameCache.set(key, null);
+        }
+      }),
+  ]);
 }
 
 async function refresh() {
@@ -78,14 +120,15 @@ async function refresh() {
   state.refreshing = true;
   state.refreshAgain = false;
   try {
-    state.allData = await fetchAllData();
-    const usersKey = JSON.stringify(state.allData.users.map((user) => [user.id, user.display_name]));
-    if (usersKey !== state.usersKey) {
-      state.usersKey = usersKey;
-      setUpActAs($("act-as"), state.allData.users, onUserChanged);
-    }
     const user = me();
-    state.myMatches = user ? await apiRequest("GET", "/matches", { user }) : [];
+    const [games, myMatches, openMatches] = await Promise.all([
+      apiRequest("GET", "/games"),
+      user ? apiRequest("GET", "/matches", { user }) : [],
+      apiRequest("GET", "/matches/open"),
+    ]);
+    state.games = games;
+    state.myMatches = myMatches;
+    state.openMatches = openMatches;
     if (state.selectedId) {
       try {
         state.match = await apiRequest("GET", `/matches/${state.selectedId}`);
@@ -95,6 +138,7 @@ async function refresh() {
         state.match = null;
       }
     }
+    await ensureDetails();
     render();
     await syncGame();
     showPageError("");
@@ -106,17 +150,10 @@ async function refresh() {
   if (state.refreshAgain) await refresh();
 }
 
-function onUserChanged() {
-  state.armed = null;
-  state.lastSent = null;
-  showMessage("");
-  refresh();
-}
-
 // Lists
 
 function matchItem(match) {
-  const game = gameVersion(match.game_id, match.game_version);
+  const game = gameOf(match.game_id, match.game_version);
   const user = me();
   const yourTurn = user && actingFor(match, user.id) !== null;
   const badges = [el("span", { class: `badge ${match.status}`, textContent: match.status.replaceAll("_", " ") })];
@@ -153,15 +190,21 @@ function renderLists() {
     children.push(el("div", { class: "section-title", textContent: `${title} (${matches.length})` }));
     if (matches.length) children.push(...matches.map(matchItem));
   }
-  if (!user) children.push(el("div", { class: "empty-note", textContent: "Choose a user to see their matches." }));
+  if (!user) {
+    children.push(
+      el("div", { class: "empty-note" },
+        "Log in at the top right to see your matches. ",
+        el("button", { type: "button", class: "link", textContent: "Log in", onclick: () => Auth.openDialog("login") }))
+    );
+  }
   $("my-matches").replaceChildren(...children);
 
-  const open = user ? state.allData.matches.filter((m) => isJoinable(m, user.id)) : [];
+  const open = user ? state.openMatches.filter((m) => isJoinable(m, user.id)) : state.openMatches;
   $("open-matches").replaceChildren(
     ...(open.length ? open.map(matchItem) : [el("div", { class: "empty-note", textContent: "None right now." })]),
   );
 
-  const games = latestGames(state.allData).filter((game) => !game.deleted);
+  const games = state.games;
   const select = $("new-game");
   const previous = select.value;
   const key = JSON.stringify(games.map((game) => [game.id, game.version]));
@@ -227,12 +270,12 @@ function renderMatch() {
   if (!match) {
     $("placeholder").textContent = user
       ? "Pick a match on the left, or create one."
-      : "Choose who to act as at the top right, then pick or create a match.";
+      : "Log in at the top right, then pick or create a match.";
     return;
   }
-  const game = gameVersion(match.game_id, match.game_version);
+  const game = gameOf(match.game_id, match.game_version);
   const counts = game ? game.allowed_player_counts : [];
-  const ownerName = names().get(match.owner_user_id) ?? shortId(match.owner_user_id);
+  const ownerName = nameOf(match.owner_user_id);
   $("match-title").textContent = `${game ? game.name : "?"} (version ${match.game_version})`;
   $("match-status").textContent = match.status.replaceAll("_", " ");
   $("match-status").className = `badge ${match.status}`;
@@ -308,11 +351,12 @@ function render() {
 
 async function gameCode(match) {
   const key = `${match.game_id}@${match.game_version}`;
-  if (!state.codeCache.has(key)) {
-    const game = await apiRequest("GET", `/games/${match.game_id}/versions/${match.game_version}`);
-    state.codeCache.set(key, game.code);
+  let game = state.gameCache.get(key);
+  if (!game) {
+    game = await apiRequest("GET", `/games/${match.game_id}/versions/${match.game_version}`);
+    state.gameCache.set(key, game);
   }
-  return state.codeCache.get(key);
+  return game.code;
 }
 
 async function syncGame() {
@@ -383,6 +427,11 @@ async function onMakeMove(move) {
 
 async function createMatch() {
   const user = me();
+  if (!user) {
+    $("create-message").textContent = "Log in first.";
+    $("create-message").className = "message error";
+    return;
+  }
   try {
     const match = await apiRequest("POST", "/matches", {
       user,
@@ -401,11 +450,19 @@ function selectFromHash() {
   if (id && id !== state.selectedId) selectMatch(id);
 }
 
-async function main() {
+function main() {
+  Auth.renderMenu($("account-menu"));
+  document.addEventListener("auth-changed", () => {
+    Auth.renderMenu($("account-menu"));
+    state.armed = null;
+    state.lastSent = null;
+    showMessage("");
+    refresh();
+  });
   $("create").addEventListener("click", createMatch);
   window.addEventListener("hashchange", selectFromHash);
   selectFromHash();
-  await refresh();
+  refresh();
   setInterval(refresh, POLL_MS);
 }
 

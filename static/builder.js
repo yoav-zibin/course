@@ -60,7 +60,6 @@ const NEW_GAME = {
 };
 
 const state = {
-  users: [],
   games: [], // the acting user's games (latest versions)
   selectedId: null, // a game id, "new", or null
   baseline: null, // the editor values when last loaded or saved
@@ -79,13 +78,7 @@ const frame = new GameFrame(
 // Acting user and the game list
 
 function me() {
-  return actingUser($("act-as"), state.users);
-}
-
-async function loadUsers() {
-  const allData = await fetchAllData();
-  state.users = allData.users;
-  setUpActAs($("act-as"), state.users, onUserChanged);
+  return Auth.current();
 }
 
 async function onUserChanged() {
@@ -125,7 +118,7 @@ function renderGames() {
       el("div", { class: "title" }, "New game (unsaved)")));
   }
   if (!items.length) {
-    items.push(el("div", { class: "empty-note", textContent: me() ? "No games yet. Create one with New game." : "Choose a user first." }));
+    items.push(el("div", { class: "empty-note", textContent: me() ? "No games yet. Create one with New game." : "Log in first." }));
   }
   $("games").replaceChildren(...items);
 }
@@ -454,9 +447,14 @@ function render() {
   const showWorkspace = Boolean(me()) && state.selectedId !== null;
   $("workspace").hidden = !showWorkspace;
   $("no-user").hidden = showWorkspace;
-  $("no-user").textContent = me()
-    ? "Select a game on the left, or create one with New game."
-    : "Choose who to act as at the top right to see and build your games.";
+  if (!me()) {
+    $("no-user").replaceChildren(
+      "Log in at the top right to see and build your games. ",
+      el("button", { type: "button", class: "link", textContent: "Log in", onclick: () => Auth.openDialog("login") })
+    );
+  } else {
+    $("no-user").textContent = "Select a game on the left, or create one with New game.";
+  }
   $("new-game").disabled = !me();
   if (showWorkspace) renderEditorMeta();
 }
@@ -482,8 +480,12 @@ async function main() {
   $("test-count").addEventListener("change", renderSeatKinds);
   $("test-start").addEventListener("click", startTest);
   $("test-undo").addEventListener("click", undoTestMove);
+  Auth.renderMenu($("account-menu"));
+  document.addEventListener("auth-changed", async () => {
+    Auth.renderMenu($("account-menu"));
+    await onUserChanged();
+  });
   try {
-    await loadUsers();
     await loadGames();
   } catch (error) {
     showPageError(`Couldn't load data from the server: ${error.message}`);
