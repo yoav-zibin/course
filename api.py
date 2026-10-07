@@ -19,8 +19,8 @@ from game_platform.schemas import (
     AllDataOut,
     AuthConfigOut,
     AuthResponse,
+    AppleLogin,
     EmailStart,
-    FacebookLogin,
     GameCreate,
     GameOut,
     GameUpdate,
@@ -56,7 +56,7 @@ from game_platform.model_api import ModelApiClient
 from game_platform.models import LinkedAccountKind
 from game_platform.oauth import (
     ProviderError,
-    verify_facebook_access_token,
+    verify_apple_id_token,
     verify_google_id_token,
 )
 from game_platform.senders import CodeSender, LogSender, SenderError
@@ -163,7 +163,7 @@ def auth_config(request: Request) -> AuthConfigOut:
     config = _auth_config_of(request)
     return AuthConfigOut(
         google_client_id=config.google.client_id,
-        facebook_app_id=config.facebook.app_id,
+        apple_client_id=config.apple.client_id,
         phone_login_enabled=config.sms.provider != "log",
         email_login_enabled=config.email.provider != "log",
     )
@@ -219,31 +219,32 @@ def auth_google(
     )
 
 
-@auth_router.post("/facebook")
-def auth_facebook(
+@auth_router.post("/apple")
+def auth_apple(
     platform: Platform,
     request: Request,
     caller_id: OptionalCallerId,
-    body: FacebookLogin,
+    body: AppleLogin,
 ) -> AuthResponse:
-    """Logs in with a Facebook Login access token. Pass the caller's headers to link
-    Facebook to the current account instead."""
-    config = _auth_config_of(request).facebook
-    if not config.app_id:
+    """Logs in with an Apple ID token from the website's "Sign in with Apple"
+    button. Pass the caller's headers to link Apple to the current account
+    instead. The token's email claim is only used as a display-name fallback;
+    Apple only shares the user's name on the very first sign-in."""
+    client_id = _auth_config_of(request).apple.client_id
+    if not client_id:
         raise HTTPException(
-            HTTPStatus.NOT_IMPLEMENTED, "Facebook login is not configured"
+            HTTPStatus.NOT_IMPLEMENTED, "Apple login is not configured"
         )
     try:
-        subject, name = verify_facebook_access_token(
-            body.access_token, config.app_id, config.app_secret
-        )
+        subject, email = verify_apple_id_token(body.id_token, client_id)
     except ProviderError as error:
         raise HTTPException(HTTPStatus.BAD_GATEWAY, str(error)) from error
+    display_name = body.name.strip() or email.split("@")[0]
     return _login_or_link(
         platform,
-        kind="facebook",
+        kind="apple",
         identifier=subject,
-        display_name=name,
+        display_name=display_name,
         as_user_id=caller_id,
     )
 
@@ -541,6 +542,7 @@ def portal() -> FileResponse:
 @debug_router.get("/browse", dependencies=[MasterPassword])
 def browse() -> FileResponse:
     return FileResponse(_STATIC_DIR / "browse.html")
+
 
 @debug_router.get("/privacy")
 def privacy() -> FileResponse:

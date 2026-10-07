@@ -87,14 +87,14 @@ const Auth = (() => {
   function authConfig() {
     configPromise ??= apiRequest("GET", "/auth/config").catch(() => ({
       google_client_id: "",
-      facebook_app_id: "",
+      apple_client_id: "",
       phone_login_enabled: false,
       email_login_enabled: false,
     }));
     return configPromise;
   }
 
-  // The dialog being filled in, for the Google/Facebook callbacks.
+  // The dialog being filled in, for the Google/Apple callbacks.
   let pendingDialog = null;
 
   let googleLoading = null;
@@ -118,23 +118,33 @@ const Auth = (() => {
     });
   }
 
-  let facebookLoading = null;
-  function ensureFacebook(appId) {
-    facebookLoading ??= new Promise((resolve, reject) => {
-      if (window.FB) return resolve();
-      window.fbAsyncInit = () => {
-        window.FB.init({ appId, cookie: false, xfbml: false, version: "v21.0" });
-        resolve();
-      };
+  let appleLoading = null;
+  function ensureApple(clientId) {
+    appleLoading ??= new Promise((resolve, reject) => {
+      if (window.AppleID?.auth) return resolve();
       const script = document.createElement("script");
-      script.src = "https://connect.facebook.net/en_US/sdk.js";
+      script.src =
+        "https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js";
       script.async = true;
       script.defer = true;
+      script.onload = () => {
+        try {
+          window.AppleID.auth.init({
+            clientId,
+            scope: "name email",
+            redirectURI: location.origin + "/",
+            usePopup: true,
+          });
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      };
       script.onerror = () =>
-        reject(new Error("couldn't load Facebook's login script"));
+        reject(new Error("couldn't load Apple's login script"));
       document.head.appendChild(script);
     });
-    return facebookLoading;
+    return appleLoading;
   }
 
   function toast(text) {
@@ -153,8 +163,8 @@ const Auth = (() => {
     switch (kind) {
       case "google":
         return "Google";
-      case "facebook":
-        return "Facebook";
+      case "apple":
+        return "Apple";
       case "phone":
         return `text ${identifier}`;
       case "email":
@@ -210,25 +220,25 @@ const Auth = (() => {
       }
     };
 
-    dialog.onFacebook = async () => {
+    dialog.onApple = async () => {
       try {
-        await ensureFacebook(dialog.facebookAppId);
-        window.FB.login(
-          async (response) => {
-            if (!response.authResponse) return;
-            try {
-              const result = await apiRequest("POST", "/auth/facebook", {
-                user: mode === "link" ? account : null,
-                body: { access_token: response.authResponse.accessToken },
-              });
-              finishLogin(dialog, result);
-            } catch (error) {
-              dialogFailed(dialog, error);
-            }
-          },
-          { scope: "public_profile" }
-        );
+        await ensureApple(dialog.appleClientId);
+        const response = await window.AppleID.auth.signIn();
+        const idToken = response?.authorization?.id_token;
+        if (!idToken) throw new Error("Apple didn't return a login token");
+        // Apple only shares the user's name on the very first sign-in.
+        const personName = response?.user?.name;
+        const name = personName
+          ? `${personName.firstName || ""} ${personName.lastName || ""}`.trim()
+          : "";
+        const result = await apiRequest("POST", "/auth/apple", {
+          user: mode === "link" ? account : null,
+          body: { id_token: idToken, name },
+        });
+        finishLogin(dialog, result);
       } catch (error) {
+        // Closing the Apple popup rejects the promise; stay silent for that.
+        if (error?.error === "popup_closed_by_user") return;
         dialogFailed(dialog, error);
       }
     };
@@ -248,11 +258,11 @@ const Auth = (() => {
           )
           .catch((error) => dialogFailed(dialog, error));
       }
-      if (config.facebook_app_id) {
-        dialog.facebookAppId = config.facebook_app_id;
+      if (config.apple_client_id) {
+        dialog.appleClientId = config.apple_client_id;
         methods.append(
           el("div", { class: "auth-method" },
-            el("button", { type: "button", class: "auth-facebook", textContent: "Continue with Facebook", onclick: dialog.onFacebook }))
+            el("button", { type: "button", class: "auth-apple", textContent: " Continue with Apple", onclick: dialog.onApple }))
         );
       }
       if (config.phone_login_enabled) {
