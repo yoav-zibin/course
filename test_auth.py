@@ -7,9 +7,7 @@ import pytest
 from pathlib import Path
 
 import game_platform.api as api_module
-import game_platform.oauth as oauth_module
 from game_platform.config import (
-    AppleAuthConfig,
     AuthConfig,
     EmailAuthConfig,
     GoogleAuthConfig,
@@ -80,14 +78,12 @@ def test_auth_config_reports_the_enabled_login_methods() -> None:
     api = Api(
         auth_config=AuthConfig(
             google=GoogleAuthConfig(client_id="g-client"),
-            apple=AppleAuthConfig(client_id="apple-client"),
             sms=SmsAuthConfig(provider="twilio"),
             email=EmailAuthConfig(provider="smtp"),
         )
     )
     assert api.ok("GET", "/auth/config") == {
         "google_client_id": "g-client",
-        "apple_client_id": "apple-client",
         "phone_login_enabled": True,
         "email_login_enabled": True,
     }
@@ -96,7 +92,6 @@ def test_auth_config_reports_the_enabled_login_methods() -> None:
 def test_auth_config_is_all_disabled_by_default() -> None:
     assert Api().ok("GET", "/auth/config") == {
         "google_client_id": "",
-        "apple_client_id": "",
         "phone_login_enabled": False,
         "email_login_enabled": False,
     }
@@ -142,176 +137,6 @@ def test_google_login_rejects_bad_tokens(monkeypatch: pytest.MonkeyPatch) -> Non
     )
 
 
-# Apple login
-
-
-def _apple_api(
-    monkeypatch: pytest.MonkeyPatch,
-    subject: str = "apple-sub-1",
-    email: str = "ada@example.com",
-) -> Api:
-    api = Api(auth_config=AuthConfig(apple=AppleAuthConfig(client_id="apple-client")))
-    monkeypatch.setattr(
-        api_module,
-        "verify_apple_id_token",
-        lambda token, client_id: (subject, email),
-    )
-    return api
-
-
-def test_apple_login_creates_a_user(monkeypatch: pytest.MonkeyPatch) -> None:
-    api = _apple_api(monkeypatch)
-    # Apple shares the user's name only on the very first sign-in.
-    first = api.ok(
-        "POST", "/auth/apple", json={"id_token": "token", "name": "Ada Appleseed"}
-    )
-    assert first["display_name"] == "Ada Appleseed"
-    assert [
-        (account["kind"], account["identifier"])
-        for account in first["linked_accounts"]
-    ] == [("apple", "apple-sub-1")]
-    # Later sign-ins carry no name; the email's local part is the fallback.
-    second = api.ok("POST", "/auth/apple", json={"id_token": "token"})
-    assert second["user_id"] == first["user_id"]
-    assert second["display_name"] == "Ada Appleseed"
-
-
-def test_apple_login_falls_back_to_email_prefix_without_a_name(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    api = _apple_api(monkeypatch)
-    response = api.ok("POST", "/auth/apple", json={"id_token": "token"})
-    assert response["display_name"] == "ada"
-
-
-def test_apple_login_needs_configuration() -> None:
-    assert error(Api().request("POST", "/auth/apple", json={"id_token": "x"})) == (
-        501,
-        "Apple login is not configured",
-    )
-
-
-def test_apple_login_rejects_bad_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
-    api = _apple_api(monkeypatch)
-    monkeypatch.setattr(
-        api_module,
-        "verify_apple_id_token",
-        lambda token, client_id: (_ for _ in ()).throw(
-            api_module.ProviderError("Apple token signature is invalid")
-        ),
-    )
-    assert error(api.request("POST", "/auth/apple", json={"id_token": "bad"})) == (
-        502,
-        "Apple token signature is invalid",
-    )
-
-
-# Apple ID token verification (unit tests with a fixed RSA test vector)
-
-
-_APPLE_TEST_JWKS = {
-    "keys": [
-        {
-            "kty": "RSA",
-            "kid": "test-key-1",
-            "use": "sig",
-            "alg": "RS256",
-            "n": "n23LDiAa1mCVGxC73MnVMl0vmb34ue67maU1MYjBCE4NOL7UYqqk87Eo0yKMjar-l2Yco-u-00kZwNUe8Mr3JP0El5D-tMaRm6zXUhr534vg-s6pYPj7tAEmpzxpPdm1PXqsQfGofffOJ4Sxg5ZGNgT1oBBgfWJ82FEShPgbOebFZzqaRWF_Hy_cMsz_T0niviXWxEmiCs1VB4s-IY_Qkj8CQKGUr216TCHPlrOcl69eWpg9scCGP7oZ23yiebfSNvYqpzMPeDbVuim0n40JSyWhVuZcOY2xWsxqsrbxgoJLaFaSZ_Xw-0A8r7FBdnQp2VPqnpMoKhG-faddzPfUzw",
-            "e": "AQAB",
-        }
-    ]
-}
-
-_APPLE_TEST_TOKEN_GOOD = (
-    "eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3Qta2V5LTEiLCJ0eXAiOiJKV1QifQ"
-    ".eyJpc3MiOiJodHRwczovL2FwcGxlaWQuYXBwbGUuY29tIiwiYXVkIjoiYXBwbGUtY2xpZW50LWlkIiwic3ViIjoiYXBwbGUtc3ViLTEiLCJlbWFpbCI6ImFkYUBleGFtcGxlLmNvbSIsImlhdCI6MTcwMDAwMDAwMCwiZXhwIjo0MTAyNDQ0ODAwfQ"
-    ".ZwkJAoTG7i2mshF_tZHdRps3gIgO4zFRDwqQu_ymYTyeIU1dWzXIc5aZp1GK8wK1jgDwHgl7awfEDu0BmmagT-vkSG4-hKYAUKoxDHp_D860JROPmyn9ijqi-Epk_8FPWurkek1ZlAmw4DwKjLpeOW-1Fdp6dfMWwJclk0wKcHA4Nu5RvP_kr4CSpDCrumQTU_mIc8K6o5hNoBzHuXXFG_5hsfY7CDXI7YaocmaPfx52uhP5EpU43nc1etp3X5Gt6aoXNZ9o1QrGS-wP2Ixz8lgniwysTr_lmSQgL1EyegTwt1PAoucz9BNJtS0IIMCMftmouuLqm_R6jEoezUYkUg"
-)
-
-_APPLE_TEST_TOKEN_WRONG_AUD = (
-    "eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3Qta2V5LTEiLCJ0eXAiOiJKV1QifQ"
-    ".eyJpc3MiOiJodHRwczovL2FwcGxlaWQuYXBwbGUuY29tIiwiYXVkIjoib3RoZXItYXBwIiwic3ViIjoiYXBwbGUtc3ViLTEiLCJlbWFpbCI6ImFkYUBleGFtcGxlLmNvbSIsImlhdCI6MTcwMDAwMDAwMCwiZXhwIjo0MTAyNDQ0ODAwfQ"
-    ".hPC2Gsmon1OZfIQVGuuYi5Ff96fFF1fwff5mQ2EWqIy2EI6DsqVgnzCSszx80VhLXrZ8omYBSlbpmAOwJFukRn0uBPWvgLXFI3I0FFQfEpbjqLXtFDpEvrbSTCdpgX7yhtRdB5CzbCSzCWRGpuKhI8mGW797GBndDbjhd5P_NKfKhM3DebXnPxQQrNV7l1tZIq9Fu_pMZ0nOuGZRkG2a0V_JxTXaQBqNxVwfMiveIlA0VI5LITHsSvdX5uuh27uE_qUT_LZApXtY52QGMne-jhmbe00LK-_LMhEo4mBQGYHg7fOh57dnu_NaFcpy8Ooff-N2NsNgAJje-qYR9Edm2Q"
-)
-
-_APPLE_TEST_TOKEN_EXPIRED = (
-    "eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3Qta2V5LTEiLCJ0eXAiOiJKV1QifQ"
-    ".eyJpc3MiOiJodHRwczovL2FwcGxlaWQuYXBwbGUuY29tIiwiYXVkIjoiYXBwbGUtY2xpZW50LWlkIiwic3ViIjoiYXBwbGUtc3ViLTEiLCJlbWFpbCI6ImFkYUBleGFtcGxlLmNvbSIsImlhdCI6MTYwMDAwMDAwMCwiZXhwIjoxNzAwMDAwMDAxfQ"
-    ".EJsPXH5JLpTUHcFjfKhc4lIYu71bqBvRQwsQFIKbr6PbltL_oLBshcD1IB9nhEXKg9dxW1GueiYaiDEkdPd0I1rv3Naw56wKjs8WpEqapTdEnSQgfBFMGEizBZEcXX8oMBcZhyQlap3Bh_jgsa-JpFIpp2xOAxa57w0LHt_INOd1H3sSQ_DIXP6Co_AsWe7m8yi4dY1kTsihG-TQpSw6iG_S2sp0IgBPrdbsqCAUbTgvImzbuad8wyr9H05Kqtydd0qYDKMRYBZzMzYapqXzvJXlSBJW2qseEWGcjP2OjZ76Q4hQ4rlppaN2JjQfQcQAnk8lz1tdIzS7acTuH91Gbg"
-)
-
-_APPLE_TEST_TOKEN_TAMPERED = _APPLE_TEST_TOKEN_GOOD[:-1] + "A"
-
-
-def _apple_keys(monkeypatch: pytest.MonkeyPatch, keys: dict = _APPLE_TEST_JWKS) -> None:
-    class _Response:
-        status_code = 200
-
-        def json(self) -> dict:
-            return keys
-
-    monkeypatch.setattr(oauth_module.httpx, "get", lambda *args, **kwargs: _Response())
-
-
-def test_verify_apple_id_token_accepts_a_valid_token(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _apple_keys(monkeypatch)
-    assert oauth_module.verify_apple_id_token(
-        _APPLE_TEST_TOKEN_GOOD, "apple-client-id"
-    ) == ("apple-sub-1", "ada@example.com")
-
-
-def test_verify_apple_id_token_rejects_a_tampered_signature(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _apple_keys(monkeypatch)
-    with pytest.raises(
-        oauth_module.ProviderError, match="Apple token signature is invalid"
-    ):
-        oauth_module.verify_apple_id_token(
-            _APPLE_TEST_TOKEN_TAMPERED, "apple-client-id"
-        )
-
-
-def test_verify_apple_id_token_rejects_a_wrong_audience(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _apple_keys(monkeypatch)
-    with pytest.raises(
-        oauth_module.ProviderError, match="the token was issued for a different app"
-    ):
-        oauth_module.verify_apple_id_token(
-            _APPLE_TEST_TOKEN_WRONG_AUD, "apple-client-id"
-        )
-
-
-def test_verify_apple_id_token_rejects_an_expired_token(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _apple_keys(monkeypatch)
-    with pytest.raises(oauth_module.ProviderError, match="Apple token is expired"):
-        oauth_module.verify_apple_id_token(
-            _APPLE_TEST_TOKEN_EXPIRED, "apple-client-id"
-        )
-
-
-def test_verify_apple_id_token_rejects_an_unknown_key(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _apple_keys(monkeypatch, {"keys": []})
-    with pytest.raises(
-        oauth_module.ProviderError, match="Apple token was signed by an unknown key"
-    ):
-        oauth_module.verify_apple_id_token(_APPLE_TEST_TOKEN_GOOD, "apple-client-id")
-
-
-def test_verify_apple_id_token_rejects_a_non_jwt(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _apple_keys(monkeypatch)
-    with pytest.raises(oauth_module.ProviderError, match="Apple token is not a JWT"):
-        oauth_module.verify_apple_id_token("not-a-token", "apple-client-id")
 
 
 # Phone and email codes

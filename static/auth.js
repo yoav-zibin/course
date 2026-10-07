@@ -87,14 +87,13 @@ const Auth = (() => {
   function authConfig() {
     configPromise ??= apiRequest("GET", "/auth/config").catch(() => ({
       google_client_id: "",
-      apple_client_id: "",
       phone_login_enabled: false,
       email_login_enabled: false,
     }));
     return configPromise;
   }
 
-  // The dialog being filled in, for the Google/Apple callbacks.
+  // The dialog being filled in, for the Google callback.
   let pendingDialog = null;
 
   let googleLoading = null;
@@ -118,34 +117,6 @@ const Auth = (() => {
     });
   }
 
-  let appleLoading = null;
-  function ensureApple(clientId) {
-    appleLoading ??= new Promise((resolve, reject) => {
-      if (window.AppleID?.auth) return resolve();
-      const script = document.createElement("script");
-      script.src =
-        "https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js";
-      script.async = true;
-      script.defer = true;
-      script.onload = () => {
-        try {
-          window.AppleID.auth.init({
-            clientId,
-            scope: "name email",
-            redirectURI: location.origin + "/",
-            usePopup: true,
-          });
-          resolve();
-        } catch (error) {
-          reject(error);
-        }
-      };
-      script.onerror = () =>
-        reject(new Error("couldn't load Apple's login script"));
-      document.head.appendChild(script);
-    });
-    return appleLoading;
-  }
 
   function toast(text) {
     let box = document.getElementById("auth-toast");
@@ -163,8 +134,6 @@ const Auth = (() => {
     switch (kind) {
       case "google":
         return "Google";
-      case "apple":
-        return "Apple";
       case "phone":
         return `text ${identifier}`;
       case "email":
@@ -220,28 +189,6 @@ const Auth = (() => {
       }
     };
 
-    dialog.onApple = async () => {
-      try {
-        await ensureApple(dialog.appleClientId);
-        const response = await window.AppleID.auth.signIn();
-        const idToken = response?.authorization?.id_token;
-        if (!idToken) throw new Error("Apple didn't return a login token");
-        // Apple only shares the user's name on the very first sign-in.
-        const personName = response?.user?.name;
-        const name = personName
-          ? `${personName.firstName || ""} ${personName.lastName || ""}`.trim()
-          : "";
-        const result = await apiRequest("POST", "/auth/apple", {
-          user: mode === "link" ? account : null,
-          body: { id_token: idToken, name },
-        });
-        finishLogin(dialog, result);
-      } catch (error) {
-        // Closing the Apple popup rejects the promise; stay silent for that.
-        if (error?.error === "popup_closed_by_user") return;
-        dialogFailed(dialog, error);
-      }
-    };
 
     authConfig().then((config) => {
       if (pendingDialog !== dialog) return; // closed while loading
@@ -257,13 +204,6 @@ const Auth = (() => {
             })
           )
           .catch((error) => dialogFailed(dialog, error));
-      }
-      if (config.apple_client_id) {
-        dialog.appleClientId = config.apple_client_id;
-        methods.append(
-          el("div", { class: "auth-method" },
-            el("button", { type: "button", class: "auth-apple", textContent: " Continue with Apple", onclick: dialog.onApple }))
-        );
       }
       if (config.phone_login_enabled) {
         methods.append(codeMethod(dialog, "phone", "Phone number", "+15551234567", "/auth/phone", "phone_number", "Text me a code"));

@@ -19,7 +19,6 @@ from game_platform.schemas import (
     AllDataOut,
     AuthConfigOut,
     AuthResponse,
-    AppleLogin,
     EmailStart,
     GameCreate,
     GameOut,
@@ -54,11 +53,7 @@ from game_platform.agent import AgentError, chat_with_agent
 from game_platform.config import AuthConfig, ModelApiConfig
 from game_platform.model_api import ModelApiClient
 from game_platform.models import LinkedAccountKind
-from game_platform.oauth import (
-    ProviderError,
-    verify_apple_id_token,
-    verify_google_id_token,
-)
+from game_platform.oauth import ProviderError, verify_google_id_token
 from game_platform.senders import CodeSender, LogSender, SenderError
 
 _STATUS_OF_ERROR: Final[tuple[tuple[type[PlatformError], HTTPStatus], ...]] = (
@@ -163,7 +158,6 @@ def auth_config(request: Request) -> AuthConfigOut:
     config = _auth_config_of(request)
     return AuthConfigOut(
         google_client_id=config.google.client_id,
-        apple_client_id=config.apple.client_id,
         phone_login_enabled=config.sms.provider != "log",
         email_login_enabled=config.email.provider != "log",
     )
@@ -215,36 +209,6 @@ def auth_google(
         kind="google",
         identifier=subject,
         display_name=name,
-        as_user_id=caller_id,
-    )
-
-
-@auth_router.post("/apple")
-def auth_apple(
-    platform: Platform,
-    request: Request,
-    caller_id: OptionalCallerId,
-    body: AppleLogin,
-) -> AuthResponse:
-    """Logs in with an Apple ID token from the website's "Sign in with Apple"
-    button. Pass the caller's headers to link Apple to the current account
-    instead. The token's email claim is only used as a display-name fallback;
-    Apple only shares the user's name on the very first sign-in."""
-    client_id = _auth_config_of(request).apple.client_id
-    if not client_id:
-        raise HTTPException(
-            HTTPStatus.NOT_IMPLEMENTED, "Apple login is not configured"
-        )
-    try:
-        subject, email = verify_apple_id_token(body.id_token, client_id)
-    except ProviderError as error:
-        raise HTTPException(HTTPStatus.BAD_GATEWAY, str(error)) from error
-    display_name = body.name.strip() or email.split("@")[0]
-    return _login_or_link(
-        platform,
-        kind="apple",
-        identifier=subject,
-        display_name=display_name,
         as_user_id=caller_id,
     )
 
