@@ -320,7 +320,7 @@ class GamePlatform:
         display_name: str,
         as_user_id: str | None = None,
     ) -> tuple[User, str | None]:
-        """Logs in with a verified Google/Facebook subject, phone number or email.
+        """Logs in with a verified Google/Apple subject, phone number or email.
 
         With [as_user_id] None this is a plain login: a new user is created on first
         use. With [as_user_id] set (the caller is logged in as that user) the

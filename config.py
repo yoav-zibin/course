@@ -47,11 +47,12 @@ class GoogleAuthConfig(_Section):
     client_id: str = ""
 
 
-class FacebookAuthConfig(_Section):
-    # Facebook app ID and secret (https://developers.facebook.com/apps, with Facebook
-    # Login added as a product). Empty app ID disables Facebook login.
-    app_id: str = ""
-    app_secret: str = ""
+class AppleAuthConfig(_Section):
+    # Apple Services ID (the "client ID" for Sign in with Apple on the web), from
+    # https://developer.apple.com/account/resources/identifiers/list/serviceId.
+    # Create a Services ID, enable "Sign in with Apple", and configure the site's
+    # domain and return URL there. Empty disables Apple login.
+    client_id: str = ""
 
 
 class SmsAuthConfig(_Section):
@@ -78,7 +79,7 @@ class EmailAuthConfig(_Section):
 
 class AuthConfig(_Section):
     google: GoogleAuthConfig = GoogleAuthConfig()
-    facebook: FacebookAuthConfig = FacebookAuthConfig()
+    apple: AppleAuthConfig = AppleAuthConfig()
     sms: SmsAuthConfig = SmsAuthConfig()
     email: EmailAuthConfig = EmailAuthConfig()
 

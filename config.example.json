@@ -20,9 +20,8 @@
     "google": {
       "client_id": ""
     },
-    "facebook": {
-      "app_id": "",
-      "app_secret": ""
+    "apple": {
+      "client_id": ""
     },
     "sms": {
       "provider": "log",

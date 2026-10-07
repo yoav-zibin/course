@@ -543,8 +543,8 @@ button:disabled {
   padding-top: 0;
 }
 
-.auth-facebook {
-  background: #1877f2;
+.auth-apple {
+  background: #000;
   color: #fff;
   border: none;
   border-radius: var(--radius-sm);
