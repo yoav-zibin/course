@@ -6,17 +6,21 @@ matters, and raises a subclass of [PlatformError] when a request can't be honore
 
 import datetime as dt
 import hmac
+import re
 import secrets
 import threading
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
+from typing import Final
 
 from pydantic import JsonValue
 
 from game_platform.models import (
     Game,
     GameRules,
+    LinkedAccount,
+    LinkedAccountKind,
     Match,
     MatchStatus,
     Move,
@@ -70,6 +74,55 @@ def _new_password() -> str:
     return secrets.token_urlsafe(16)
 
 
+def _new_verification_code() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+# Login codes sent by text/email live this long, survive this many wrong guesses, and
+# can be re-requested this often per identifier (sliding window of one hour).
+VERIFICATION_TTL_SECONDS: Final = 600
+VERIFICATION_MAX_ATTEMPTS: Final = 5
+VERIFICATION_MAX_STARTS_PER_HOUR: Final = 5
+
+
+def _normalize_identifier(*, kind: str, identifier: str) -> str:
+    """Validates and canonicalizes a phone number or email address."""
+    if kind == "phone":
+        normalized = re.sub(r"[\s\-().]", "", identifier)
+        if not re.fullmatch(r"\+\d{7,15}", normalized):
+            raise InvalidRequestError(
+                "phone_number must be in E.164 format, e.g. +15551234567"
+            )
+        return normalized
+    if kind == "email":
+        normalized = identifier.strip().lower()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized):
+            raise InvalidRequestError("email doesn't look like an email address")
+        return normalized
+    raise InvalidRequestError(f"unknown verification kind: {kind!r}")
+
+
+def _clean_display_name(name: str) -> str:
+    """A provider-supplied name, made safe for a new account."""
+    name = name.strip()
+    if len(name) > 200:
+        name = name[:200].rstrip()
+    return name or "Player"
+
+
+@dataclass(kw_only=True)
+class _Verification:
+    """A pending login-code check. Kept in memory only: a restart invalidates codes,
+    and the owner just requests a new one."""
+
+    id: str
+    kind: LinkedAccountKind
+    identifier: str
+    code: str
+    created_at: dt.datetime
+    attempts: int = 0
+
+
 def _waiting_seats(
     *, human_user_ids: Sequence[str], num_computer_opponents: int
 ) -> tuple[Seat, ...]:
@@ -100,24 +153,32 @@ class GamePlatform:
         clock: Callable[[], dt.datetime] = _utc_now,
         new_id: Callable[[], str] = _new_id,
         new_password: Callable[[], str] = _new_password,
+        new_verification_code: Callable[[], str] = _new_verification_code,
     ) -> None:
         self._store: Store = store if store is not None else InMemoryStore()
         self._clock = clock
         self._new_id = new_id
         self._new_password = new_password
+        self._new_verification_code = new_verification_code
+        self._verifications: dict[str, _Verification] = {}
+        self._verification_starts: dict[str, list[dt.datetime]] = {}
         # Each public method is a read-modify-write on the store; the server handles
-        # requests on a thread pool, so serialize them.
-        self._lock = threading.Lock()
+        # requests on a thread pool, so serialize them. Reentrant, because verifying a
+        # code and merging accounts compose smaller locked operations.
+        self._lock = threading.RLock()
 
     # Users
 
-    def create_user(self, *, display_name: str) -> User:
+    def create_user(
+        self, *, display_name: str, linked_accounts: tuple[LinkedAccount, ...] = ()
+    ) -> User:
         with self._lock:
             now = self._clock()
             user = User(
                 id=self._new_id(),
                 display_name=display_name,
                 password=self._new_password(),
+                linked_accounts=linked_accounts,
                 created_at=now,
                 updated_at=now,
             )
@@ -158,6 +219,236 @@ class GamePlatform:
                     "missing or invalid X-User-Id / X-User-Password headers"
                 )
             return user
+
+    # Third-party login and account merging
+
+    def _require_user(self, user_id: str) -> User:
+        user = self._store.get_user(user_id)
+        if user is None:
+            raise NotFoundError("user not found")
+        return user
+
+    def _find_by_linked_account(
+        self, kind: LinkedAccountKind, identifier: str
+    ) -> User | None:
+        for user in self._store.list_users():
+            if any(
+                account.kind == kind and account.identifier == identifier
+                for account in user.linked_accounts
+            ):
+                return user
+        return None
+
+    def start_verification(
+        self, *, kind: LinkedAccountKind, identifier: str
+    ) -> tuple[str, str, str]:
+        """Starts a login-code check for a phone number or email address. Returns
+        (verification_id, code, normalized_identifier); the API layer sends the code
+        through the configured sender."""
+        with self._lock:
+            normalized = _normalize_identifier(kind=kind, identifier=identifier)
+            now = self._clock()
+            starts = [
+                when
+                for when in self._verification_starts.get(normalized, [])
+                if (now - when).total_seconds() < 3600
+            ]
+            if len(starts) >= VERIFICATION_MAX_STARTS_PER_HOUR:
+                raise ConflictError("too many codes requested; try again later")
+            for verification_id, verification in list(self._verifications.items()):
+                if verification.identifier == normalized:
+                    del self._verifications[verification_id]
+            verification_id = self._new_id()
+            code = self._new_verification_code()
+            self._verifications[verification_id] = _Verification(
+                id=verification_id,
+                kind=kind,
+                identifier=normalized,
+                code=code,
+                created_at=now,
+            )
+            self._verification_starts[normalized] = [*starts, now]
+            return verification_id, code, normalized
+
+    def verify_code(
+        self,
+        *,
+        verification_id: str,
+        code: str,
+        display_name: str | None = None,
+        as_user_id: str | None = None,
+    ) -> tuple[User, str | None]:
+        """Checks a login code, then logs the owner in (see
+        [login_with_linked_account]). Returns (user, merged_from_user_id)."""
+        with self._lock:
+            verification = self._verifications.get(verification_id)
+            if verification is None:
+                raise NotFoundError("verification not found or expired")
+            if (
+                self._clock() - verification.created_at
+            ).total_seconds() > VERIFICATION_TTL_SECONDS:
+                del self._verifications[verification_id]
+                raise NotFoundError("verification not found or expired")
+            if verification.attempts >= VERIFICATION_MAX_ATTEMPTS:
+                del self._verifications[verification_id]
+                raise ConflictError("too many wrong codes; request a new one")
+            if not hmac.compare_digest(code.strip(), verification.code):
+                verification.attempts += 1
+                raise InvalidRequestError("wrong code")
+            del self._verifications[verification_id]
+            name = (
+                display_name
+                if display_name
+                else (
+                    verification.identifier.split("@")[0]
+                    if verification.kind == "email"
+                    else verification.identifier
+                )
+            )
+            return self.login_with_linked_account(
+                kind=verification.kind,
+                identifier=verification.identifier,
+                display_name=name,
+                as_user_id=as_user_id,
+            )
+
+    def login_with_linked_account(
+        self,
+        *,
+        kind: LinkedAccountKind,
+        identifier: str,
+        display_name: str,
+        as_user_id: str | None = None,
+    ) -> tuple[User, str | None]:
+        """Logs in with a verified Google/Facebook subject, phone number or email.
+
+        With [as_user_id] None this is a plain login: a new user is created on first
+        use. With [as_user_id] set (the caller is logged in as that user) the
+        credential is linked to that account instead; if it already belongs to a
+        different user, that account is merged into the caller's. Returns (user,
+        merged_from_user_id).
+        """
+        with self._lock:
+            user = self._find_by_linked_account(kind, identifier)
+            if user is None:
+                linked = LinkedAccount(
+                    kind=kind, identifier=identifier, linked_at=self._clock()
+                )
+                if as_user_id is None:
+                    return (
+                        self.create_user(
+                            display_name=_clean_display_name(display_name),
+                            linked_accounts=(linked,),
+                        ),
+                        None,
+                    )
+                owner = self._require_user(as_user_id)
+                owner = replace(
+                    owner,
+                    linked_accounts=(*owner.linked_accounts, linked),
+                    updated_at=self._clock(),
+                )
+                self._store.put_user(owner)
+                return owner, None
+            if as_user_id is None or as_user_id == user.id:
+                return user, None
+            target = self._require_user(as_user_id)
+            merged_from = user.id
+            return self._merge_locked(source=user, into=target), merged_from
+
+    def merge_users(
+        self, *, caller_id: str, from_user_id: str, into_user_id: str
+    ) -> User:
+        """Merges [from_user_id] into [into_user_id]: games (all versions), matches
+        (owner, seats, hidden flags and move authors), and linked accounts move over,
+        then the source user is deleted. The caller must authenticate as the source
+        user, so nobody can absorb someone else's account. Returns the surviving user.
+        """
+        with self._lock:
+            if from_user_id == into_user_id:
+                raise InvalidRequestError("cannot merge a user into itself")
+            source = self._require_user(from_user_id)
+            if source.id != caller_id:
+                raise ForbiddenError(
+                    "only the merged-away user can request the merge"
+                )
+            target = self._require_user(into_user_id)
+            return self._merge_locked(source=source, into=target)
+
+    def _merge_locked(self, *, source: User, into: User) -> User:
+        """Moves everything of [source] into [into] and deletes [source]. The caller
+        holds the lock."""
+        from_user_id, into_user_id = source.id, into.id
+        for game in self._store.list_all_game_versions():
+            if game.owner_user_id == from_user_id:
+                self._store.put_game_version(
+                    replace(game, owner_user_id=into_user_id)
+                )
+        for match in self._store.list_all_matches():
+            updated = match
+            if match.owner_user_id == from_user_id:
+                updated = replace(updated, owner_user_id=into_user_id)
+            if any(seat.user_id == from_user_id for seat in updated.seats):
+                updated = replace(
+                    updated,
+                    seats=tuple(
+                        replace(seat, user_id=into_user_id)
+                        if seat.user_id == from_user_id
+                        else seat
+                        for seat in updated.seats
+                    ),
+                )
+            if from_user_id in updated.hidden_for_user_ids:
+                updated = replace(
+                    updated,
+                    hidden_for_user_ids=(updated.hidden_for_user_ids - {from_user_id})
+                    | {into_user_id},
+                )
+            if any(
+                move.made_by_user_id == from_user_id for move in updated.moves
+            ):
+                updated = replace(
+                    updated,
+                    moves=tuple(
+                        replace(move, made_by_user_id=into_user_id)
+                        if move.made_by_user_id == from_user_id
+                        else move
+                        for move in updated.moves
+                    ),
+                )
+            if updated is not match:
+                self._save(updated)
+        have = {
+            (account.kind, account.identifier) for account in into.linked_accounts
+        }
+        moved = tuple(
+            account
+            for account in source.linked_accounts
+            if (account.kind, account.identifier) not in have
+        )
+        into = replace(
+            into,
+            linked_accounts=(*into.linked_accounts, *moved),
+            updated_at=self._clock(),
+        )
+        self._store.put_user(into)
+        self._store.delete_user(from_user_id)
+        return into
+
+    def list_open_matches(self) -> list[Match]:
+        """Matches anyone may join: waiting for players, or ongoing with mid-match
+        joins allowed. Match details are public by URL anyway, so listing them is
+        consistent."""
+        with self._lock:
+            return [
+                match
+                for match in self._store.list_all_matches()
+                if match.status == "waiting_for_players"
+                or (
+                    match.status == "ongoing"
+                    and self._rules_of(match).allows_join_mid_match
+                )
+            ]
 
     # Games
 

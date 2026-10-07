@@ -143,6 +143,46 @@ authenticating, at the cost of no longer being able to read passwords back from 
 - Anyone can call `POST /users`, so this is guest access rather than real login: it
   proves a request comes from whoever created the account, not who that person is.
 
+### Third-party login
+
+Besides guest accounts, users can log in with Google, Facebook, a phone number (texted
+code) or an email address (emailed code). Each method links a verified credential to
+the account: a Google/Facebook subject id, an E.164 phone number, or a lowercased email
+address. The website's login dialog offers whichever methods are configured (see
+[config file](#config-file)); all of them return the same credential pair (`user_id` +
+`password`) as `POST /users`, so the rest of the API works unchanged.
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /auth/config` |  | Which login methods are enabled, and the Google/Facebook app ids |
+| `GET /auth/me` | yes | Your own profile, including linked logins |
+| `POST /auth/google` |  | Log in with a Google ID token `{id_token}` |
+| `POST /auth/facebook` |  | Log in with a Facebook Login token `{access_token}` |
+| `POST /auth/phone/start` |  | Text a login code to `{phone_number}` |
+| `POST /auth/phone/verify` |  | Log in with `{verification_id, code}` |
+| `POST /auth/email/start` |  | Email a login code to `{email}` |
+| `POST /auth/email/verify` |  | Log in with `{verification_id, code}` |
+
+Passing your own `X-User-Id`/`X-User-Password` headers to a login endpoint *links* the
+credential to your current account instead of logging in. If that credential already
+belongs to a different account, the two are merged (see below) and the response's
+`merged_from_user_id` tells you which account disappeared.
+
+Codes are 6 digits, expire after 10 minutes, die after 5 wrong guesses, and can be
+re-requested at most 5 times an hour per phone number or address. Sending needs a
+provider: Twilio for texts, any SMTP server for email, configured under `auth` in the
+config file. With the default `log` provider the code is only written to the server log,
+which is fine for development and useless for real users.
+
+#### Merging accounts
+
+`POST /users/{id}/merge` `{into_user_id}` merges one account into another: every game
+(all versions), match (owner, seats, hidden flags, and move authors), and linked login
+of the URL's user moves to `into_user_id`, then the URL's user is deleted. Authenticate
+as the merged-away user, so nobody can absorb someone else's account; merging a user
+into itself is a 400. The website uses this when you link a login that belongs to
+another of your accounts.
+
 ### Endpoints
 
 | Endpoint | Auth | Description |
@@ -150,6 +190,8 @@ authenticating, at the cost of no longer being able to read passwords back from 
 | `POST /users` |  | Create a guest user `{display_name}`; returns its `password` |
 | `GET /users/{id}` |  | Get a user |
 | `PATCH /users/{id}` | yes | Change your own `display_name` (403 for other users) |
+| `POST /users/{id}/merge` | yes | Merge this account into `into_user_id` and delete it (authenticate as this user) |
+| `GET /matches/open` |  | Matches anyone may join (waiting, or ongoing with mid-match joins) |
 | `POST /games` | yes | Create a game |
 | `GET /games?owner_user_id=` |  | List games that aren't deleted, optionally by owner |
 | `GET /games/{id}` |  | Get the latest version of a game |
@@ -286,6 +328,20 @@ stop the server at startup with an error naming the field.
 | `debug_tools`                     | `true`                                   | Serve `/console`, `/browse` and `/debug/all-data` (see [Pages](#pages)) |
 | `master_password`                 | `""`                                     | Password for `/browse` and `/debug/all-data` (see [Master password](#master-password)). Empty means none, which is only allowed when `server.host` is a numeric IP address |
 | `log_level`                       | `"INFO"`                                 | `"DEBUG"`, `"INFO"`, `"WARNING"` or `"ERROR"` |
+| `auth.google.client_id`           | `""`                                     | Google OAuth client ID for the website (empty disables Google login). Create one in Google Cloud Console > APIs & Services > Credentials, type "Web application", with the site's origin as an authorized JavaScript origin |
+| `auth.facebook.app_id`            | `""`                                     | Facebook app ID (empty disables Facebook login). Create an app at developers.facebook.com with Facebook Login |
+| `auth.facebook.app_secret`        | `""`                                     | Facebook app secret |
+| `auth.sms.provider`               | `"log"`                                  | `"log"` writes codes to the server log; `"twilio"` texts them |
+| `auth.sms.twilio_account_sid`     | `""`                                     | Twilio account SID |
+| `auth.sms.twilio_auth_token`      | `""`                                     | Twilio auth token |
+| `auth.sms.twilio_from_number`     | `""`                                     | Twilio number texts come from, E.164 (e.g. `"+15551234567"`) |
+| `auth.email.provider`             | `"log"`                                  | `"log"` writes codes to the server log; `"smtp"` emails them |
+| `auth.email.smtp_host`            | `""`                                     | SMTP server hostname |
+| `auth.email.smtp_port`            | `587`                                    | SMTP server port |
+| `auth.email.smtp_username`        | `""`                                     | SMTP username (empty for no authentication) |
+| `auth.email.smtp_password`        | `""`                                     | SMTP password |
+| `auth.email.smtp_from_address`    | `""`                                     | The From address login codes are sent from |
+| `auth.email.smtp_use_tls`         | `true`                                   | Use STARTTLS |
 
 For example, to serve other machines on port 45123 and keep the data next to the config:
 
@@ -329,16 +385,17 @@ layout is
 
 Once the server is running, open these pages in a browser:
 
-- `/portal` (also `/`): play games with others. Choose who you are with "Act as" at the
-  top (every user is listed, and their password is filled in for you). The left side
-  lists your matches (your move, ongoing, waiting for players, over), a form to create a
-  match for any game with some computer opponents, and open matches you can join. The
-  selected match shows its players and the actions you can take (join, add or remove
-  computers and start if you own it, leave, delete or hide), and runs the game in an
-  iframe. The page checks the server every 2 seconds, so other players' moves show up
-  on their own. Links like `/portal#match=<id>` open a match directly, also for people
-  who aren't playing in it.
-- `/builder`: create, edit and delete your games (those owned by the user you act as).
+- `/portal` (also `/`): play games with others. Log in at the top right — with Google,
+  Facebook, a texted or emailed code, or as a guest — and switch between accounts, log
+  out, or link more logins to your account from the account menu (see [Third-party
+  login](#third-party-login)). The left side lists your matches (your move, ongoing,
+  waiting for players, over), a form to create a match for any game with some computer
+  opponents, and open matches you can join. The selected match shows its players and
+  the actions you can take (join, add or remove computers and start if you own it,
+  leave, delete or hide), and runs the game in an iframe. The page checks the server
+  every 2 seconds, so other players' moves show up on their own. Links like
+  `/portal#match=<id>` open a match directly, also for people who aren't playing in it.
+- `/builder`: create, edit and delete your games (those owned by the logged-in user).
   New games start from a small template that shows the [game API](#game-api). The Test
   tab runs the editor's code (saved or not) in pass-and-play mode: pick the number of
   players and which seats are computers, and play every human seat yourself, in turn.
@@ -355,9 +412,10 @@ Once the server is running, open these pages in a browser:
   and hidden matches. It has a filter box and optional auto-refresh.
 - `/docs`: FastAPI's generated OpenAPI docs.
 
-All these pages read `/debug/all-data`, which returns everything, including every user's
-password (that's how "Act as" knows them). Set `"debug_tools": false` in the config to
-turn off the pages and that endpoint; the API itself keeps working.
+The `/console` and `/browse` pages read `/debug/all-data`, which returns everything,
+including every user's password. Set `"debug_tools": false` in the config to turn off
+the pages and that endpoint; the API itself keeps working. (The portal and builder no
+longer use it: they log in as real accounts.)
 
 ### Master password
 

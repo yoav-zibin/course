@@ -17,21 +17,31 @@ from game_platform.schemas import (
     AgentChatRequest,
     AgentChatResponse,
     AllDataOut,
+    AuthConfigOut,
+    AuthResponse,
+    EmailStart,
+    FacebookLogin,
     GameCreate,
     GameOut,
     GameUpdate,
+    GoogleLogin,
     MatchCreate,
     MatchOut,
     MatchStart,
     MatchUpdate,
+    MergeRequest,
     MoveCreate,
     MoveOut,
+    PhoneStart,
     UserCreate,
     UserOut,
     UserUpdate,
     UserWithPasswordOut,
+    VerificationStarted,
+    VerifyCode,
 )
 from game_platform.service import (
+    VERIFICATION_TTL_SECONDS,
     ConflictError,
     ForbiddenError,
     GamePlatform,
@@ -41,8 +51,15 @@ from game_platform.service import (
     UnauthorizedError,
 )
 from game_platform.agent import AgentError, chat_with_agent
-from game_platform.config import ModelApiConfig
+from game_platform.config import AuthConfig, ModelApiConfig
 from game_platform.model_api import ModelApiClient
+from game_platform.models import LinkedAccountKind
+from game_platform.oauth import (
+    ProviderError,
+    verify_facebook_access_token,
+    verify_google_id_token,
+)
+from game_platform.senders import CodeSender, LogSender, SenderError
 
 _STATUS_OF_ERROR: Final[tuple[tuple[type[PlatformError], HTTPStatus], ...]] = (
     (UnauthorizedError, HTTPStatus.UNAUTHORIZED),
@@ -72,6 +89,23 @@ def _get_caller_id(
 
 CallerId = Annotated[str, Depends(_get_caller_id)]
 
+
+def _get_caller_id_or_none(
+    platform: Platform,
+    x_user_id: Annotated[str | None, Header()] = None,
+    x_user_password: Annotated[str | None, Header()] = None,
+) -> str | None:
+    """The caller's id when it authenticated, else None. Login endpoints use this:
+    an authenticated call links the new credential to that account (merging another
+    account that already holds it); an anonymous call logs in or signs up."""
+    try:
+        return platform.authenticate(user_id=x_user_id, password=x_user_password).id
+    except UnauthorizedError:
+        return None
+
+
+OptionalCallerId = Annotated[str | None, Depends(_get_caller_id_or_none)]
+
 router = APIRouter()
 
 # Users
@@ -98,6 +132,194 @@ def update_user(
         caller_id=caller_id, user_id=user_id, display_name=body.display_name
     )
     return UserOut.of(user)
+
+
+@router.post("/users/{user_id}/merge")
+def merge_users(
+    platform: Platform, caller_id: CallerId, user_id: str, body: MergeRequest
+) -> UserOut:
+    """Merges the URL's user into [body.into_user_id]: its games, matches and linked
+    logins move over, then it is deleted. Authenticate as the merged-away user."""
+    user = platform.merge_users(
+        caller_id=caller_id, from_user_id=user_id, into_user_id=body.into_user_id
+    )
+    return UserOut.of(user)
+
+
+# Third-party login
+
+auth_router = APIRouter(prefix="/auth")
+
+
+def _auth_config_of(request: Request) -> AuthConfig:
+    config = request.app.state.auth_config
+    assert isinstance(config, AuthConfig)
+    return config
+
+
+@auth_router.get("/config")
+def auth_config(request: Request) -> AuthConfigOut:
+    """Which login methods the website should offer. Public information."""
+    config = _auth_config_of(request)
+    return AuthConfigOut(
+        google_client_id=config.google.client_id,
+        facebook_app_id=config.facebook.app_id,
+        phone_login_enabled=config.sms.provider != "log",
+        email_login_enabled=config.email.provider != "log",
+    )
+
+
+@auth_router.get("/me")
+def auth_me(platform: Platform, caller_id: CallerId) -> AuthResponse:
+    """The caller's own profile, including linked logins."""
+    return AuthResponse.of(platform.get_user(caller_id))
+
+
+def _login_or_link(
+    platform: Platform,
+    *,
+    kind: LinkedAccountKind,
+    identifier: str,
+    display_name: str,
+    as_user_id: str | None,
+) -> AuthResponse:
+    user, merged_from = platform.login_with_linked_account(
+        kind=kind,
+        identifier=identifier,
+        display_name=display_name,
+        as_user_id=as_user_id,
+    )
+    return AuthResponse.of(user, merged_from_user_id=merged_from)
+
+
+@auth_router.post("/google")
+def auth_google(
+    platform: Platform,
+    request: Request,
+    caller_id: OptionalCallerId,
+    body: GoogleLogin,
+) -> AuthResponse:
+    """Logs in with a Google ID token from the website's Sign in with Google button.
+    Pass the caller's headers to link Google to the current account instead."""
+    client_id = _auth_config_of(request).google.client_id
+    if not client_id:
+        raise HTTPException(
+            HTTPStatus.NOT_IMPLEMENTED, "Google login is not configured"
+        )
+    try:
+        subject, name = verify_google_id_token(body.id_token, client_id)
+    except ProviderError as error:
+        raise HTTPException(HTTPStatus.BAD_GATEWAY, str(error)) from error
+    return _login_or_link(
+        platform,
+        kind="google",
+        identifier=subject,
+        display_name=name,
+        as_user_id=caller_id,
+    )
+
+
+@auth_router.post("/facebook")
+def auth_facebook(
+    platform: Platform,
+    request: Request,
+    caller_id: OptionalCallerId,
+    body: FacebookLogin,
+) -> AuthResponse:
+    """Logs in with a Facebook Login access token. Pass the caller's headers to link
+    Facebook to the current account instead."""
+    config = _auth_config_of(request).facebook
+    if not config.app_id:
+        raise HTTPException(
+            HTTPStatus.NOT_IMPLEMENTED, "Facebook login is not configured"
+        )
+    try:
+        subject, name = verify_facebook_access_token(
+            body.access_token, config.app_id, config.app_secret
+        )
+    except ProviderError as error:
+        raise HTTPException(HTTPStatus.BAD_GATEWAY, str(error)) from error
+    return _login_or_link(
+        platform,
+        kind="facebook",
+        identifier=subject,
+        display_name=name,
+        as_user_id=caller_id,
+    )
+
+
+@auth_router.post("/phone/start")
+def phone_start(
+    platform: Platform, request: Request, body: PhoneStart
+) -> VerificationStarted:
+    """Texts a login code to [body.phone_number]."""
+    if _auth_config_of(request).sms.provider == "log":
+        raise HTTPException(
+            HTTPStatus.NOT_IMPLEMENTED, "phone login is not configured"
+        )
+    verification_id, code, normalized = platform.start_verification(
+        kind="phone", identifier=body.phone_number
+    )
+    try:
+        request.app.state.sms_sender.send_login_code(normalized, code)
+    except SenderError as error:
+        raise HTTPException(HTTPStatus.BAD_GATEWAY, str(error)) from error
+    return VerificationStarted(
+        verification_id=verification_id,
+        expires_in_seconds=VERIFICATION_TTL_SECONDS,
+    )
+
+
+@auth_router.post("/phone/verify")
+def phone_verify(
+    platform: Platform, caller_id: OptionalCallerId, body: VerifyCode
+) -> AuthResponse:
+    """Logs in with a texted code. Pass the caller's headers to link the number to the
+    current account instead."""
+    user, merged_from = platform.verify_code(
+        verification_id=body.verification_id,
+        code=body.code,
+        display_name=body.display_name,
+        as_user_id=caller_id,
+    )
+    return AuthResponse.of(user, merged_from_user_id=merged_from)
+
+
+@auth_router.post("/email/start")
+def email_start(
+    platform: Platform, request: Request, body: EmailStart
+) -> VerificationStarted:
+    """Emails a login code to [body.email]."""
+    if _auth_config_of(request).email.provider == "log":
+        raise HTTPException(
+            HTTPStatus.NOT_IMPLEMENTED, "email login is not configured"
+        )
+    verification_id, code, normalized = platform.start_verification(
+        kind="email", identifier=body.email
+    )
+    try:
+        request.app.state.email_sender.send_login_code(normalized, code)
+    except SenderError as error:
+        raise HTTPException(HTTPStatus.BAD_GATEWAY, str(error)) from error
+    return VerificationStarted(
+        verification_id=verification_id,
+        expires_in_seconds=VERIFICATION_TTL_SECONDS,
+    )
+
+
+@auth_router.post("/email/verify")
+def email_verify(
+    platform: Platform, caller_id: OptionalCallerId, body: VerifyCode
+) -> AuthResponse:
+    """Logs in with an emailed code. Pass the caller's headers to link the address to
+    the current account instead."""
+    user, merged_from = platform.verify_code(
+        verification_id=body.verification_id,
+        code=body.code,
+        display_name=body.display_name,
+        as_user_id=caller_id,
+    )
+    return AuthResponse.of(user, merged_from_user_id=merged_from)
 
 
 # Games
@@ -184,6 +406,13 @@ def list_matches(
 ) -> list[MatchOut]:
     matches = platform.list_matches(caller_id=caller_id, status=status, game_id=game_id)
     return [MatchOut.of(match) for match in matches]
+
+
+@router.get("/matches/open")
+def list_open_matches(platform: Platform) -> list[MatchOut]:
+    """Matches anyone may join: waiting for players, or ongoing with mid-match joins
+    allowed. Public, like match details themselves."""
+    return [MatchOut.of(match) for match in platform.list_open_matches()]
 
 
 @router.get("/matches/{match_id}")
@@ -372,6 +601,9 @@ def create_app(
     debug_tools: bool = True,
     master_password: str = "",
     model_api_config: ModelApiConfig | None = None,
+    auth_config: AuthConfig | None = None,
+    sms_sender: CodeSender | None = None,
+    email_sender: CodeSender | None = None,
 ) -> FastAPI:
     """[debug_tools] adds the web pages (/portal, /builder, /console, /browse) and
     /debug/all-data, which exposes everything (including users' passwords). /browse and
@@ -391,7 +623,11 @@ def create_app(
     app.state.model_api_config = (
         model_api_config if model_api_config is not None else ModelApiConfig()
     )
+    app.state.auth_config = auth_config if auth_config is not None else AuthConfig()
+    app.state.sms_sender = sms_sender if sms_sender is not None else LogSender()
+    app.state.email_sender = email_sender if email_sender is not None else LogSender()
     app.include_router(router)
+    app.include_router(auth_router)
     if debug_tools:
         app.include_router(debug_router)
         # Build environments may symlink the packaged files.
