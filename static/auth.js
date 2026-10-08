@@ -54,6 +54,7 @@ const Auth = (() => {
     rest.push({
       id: response.user_id,
       display_name: response.display_name,
+      picture_url: response.picture_url ?? "",
       password: response.password,
       linked: response.linked_accounts ?? [],
     });
@@ -309,6 +310,11 @@ const Auth = (() => {
     );
   }
 
+  /** An <img> for a stored picture URL, or null when there is none. */
+  function avatarImg(url) {
+    return url ? el("img", { class: "auth-avatar", src: url, alt: "", referrerPolicy: "no-referrer" }) : null;
+  }
+
   // Account menu for the top bar
 
   /** Renders the account menu into [container]; call again after auth changes. */
@@ -319,9 +325,11 @@ const Auth = (() => {
     const button = el("button", {
       type: "button",
       class: "auth-menu-button",
-      textContent: account ? account.display_name : "Log in",
       "aria-haspopup": "true",
-    });
+    },
+      avatarImg(account?.picture_url),
+      account ? account.display_name : "Log in"
+    );
     const panel = el("div", { class: "auth-menu-panel", hidden: true });
     button.onclick = (event) => {
       event.stopPropagation();
@@ -330,7 +338,9 @@ const Auth = (() => {
     document.addEventListener("click", () => (panel.hidden = true), { once: true });
 
     if (account) {
-      panel.append(el("div", { class: "auth-menu-heading", textContent: `Logged in as ${account.display_name}` }));
+      panel.append(el("div", { class: "auth-menu-heading" },
+        avatarImg(account.picture_url),
+        `Logged in as ${account.display_name}`));
       if (account.linked.length) {
         panel.append(
           el("div", { class: "auth-menu-section" },

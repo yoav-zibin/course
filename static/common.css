@@ -543,7 +543,17 @@ button:disabled {
   padding-top: 0;
 }
 
+.auth-avatar {
+  width: 1.5em;
+  height: 1.5em;
+  border-radius: 50%;
+  margin-right: 0.4em;
+  flex: none;
+}
+
 .auth-menu-button {
+  display: inline-flex;
+  align-items: center;
   background: none;
   border: 1px solid var(--color-border-3);
   border-radius: var(--radius-sm);

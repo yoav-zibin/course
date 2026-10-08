@@ -51,7 +51,7 @@ def _google_api(
     monkeypatch.setattr(
         api_module,
         "verify_google_id_token",
-        lambda token, client_id: (subject, name),
+        lambda token, client_id: (subject, name, "gina@example.com", "https://pic/gina"),
     )
     return api
 
@@ -113,6 +113,33 @@ def test_google_login_creates_a_user_on_first_use(monkeypatch: pytest.MonkeyPatc
     # The same Google account logs back into the same user.
     second = api.ok("POST", "/auth/google", json={"id_token": "token"})
     assert second["user_id"] == first["user_id"]
+
+
+def test_google_login_saves_profile_details(monkeypatch: pytest.MonkeyPatch) -> None:
+    api = _google_api(monkeypatch)
+    response = api.ok("POST", "/auth/google", json={"id_token": "token"})
+    assert response["display_name"] == "Gina"
+    assert response["email"] == "gina@example.com"
+    assert response["picture_url"] == "https://pic/gina"
+    # The public user profile exposes the picture but not the email.
+    profile = api.ok("GET", f"/users/{response['user_id']}")
+    assert profile["picture_url"] == "https://pic/gina"
+    assert "email" not in profile
+
+
+def test_google_login_refreshes_changed_profile_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    api = _google_api(monkeypatch)
+    first = api.ok("POST", "/auth/google", json={"id_token": "token"})
+    monkeypatch.setattr(
+        api_module,
+        "verify_google_id_token",
+        lambda token, client_id: ("sub-1", "Gina", "gina@example.com", "https://pic/new"),
+    )
+    second = api.ok("POST", "/auth/google", json={"id_token": "token"})
+    assert second["user_id"] == first["user_id"]
+    assert second["picture_url"] == "https://pic/new"
 
 
 def test_google_login_needs_configuration() -> None:
@@ -406,7 +433,7 @@ def test_merge_does_not_duplicate_an_already_linked_login(
     api.ok("POST", "/auth/google", json={"id_token": "token"}, as_user=ann)
     # Bob links a *different* Google account first.
     monkeypatch.setattr(
-        api_module, "verify_google_id_token", lambda token, cid: ("sub-2", "Bea")
+        api_module, "verify_google_id_token", lambda token, cid: ("sub-2", "Bea", "bea@example.com", "")
     )
     api.ok("POST", "/auth/google", json={"id_token": "token"}, as_user=bob)
     # Merge Ann into Bob: Bob keeps both logins, no duplicates.
