@@ -175,12 +175,16 @@ def _login_or_link(
     kind: LinkedAccountKind,
     identifier: str,
     display_name: str,
+    email: str = "",
+    picture_url: str = "",
     as_user_id: str | None,
 ) -> AuthResponse:
     user, merged_from = platform.login_with_linked_account(
         kind=kind,
         identifier=identifier,
         display_name=display_name,
+        email=email,
+        picture_url=picture_url,
         as_user_id=as_user_id,
     )
     return AuthResponse.of(user, merged_from_user_id=merged_from)
@@ -201,7 +205,9 @@ def auth_google(
             HTTPStatus.NOT_IMPLEMENTED, "Google login is not configured"
         )
     try:
-        subject, name = verify_google_id_token(body.id_token, client_id)
+        subject, name, email, picture_url = verify_google_id_token(
+            body.id_token, client_id
+        )
     except ProviderError as error:
         raise HTTPException(HTTPStatus.BAD_GATEWAY, str(error)) from error
     return _login_or_link(
@@ -209,6 +215,8 @@ def auth_google(
         kind="google",
         identifier=subject,
         display_name=name,
+        email=email,
+        picture_url=picture_url,
         as_user_id=caller_id,
     )
 

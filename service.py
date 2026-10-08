@@ -110,6 +110,22 @@ def _clean_display_name(name: str) -> str:
     return name or "Player"
 
 
+def _refresh_profile_from_provider(
+    user: User, *, display_name: str, email: str, picture_url: str
+) -> User:
+    """Returns [user] with the provider's latest profile applied, or [user]
+    unchanged when there is nothing new. Empty provider values never overwrite
+    stored ones."""
+    updates: dict = {}
+    if display_name and display_name != user.display_name:
+        updates["display_name"] = display_name
+    if email and email != user.email:
+        updates["email"] = email
+    if picture_url and picture_url != user.picture_url:
+        updates["picture_url"] = picture_url
+    return replace(user, **updates) if updates else user
+
+
 @dataclass(kw_only=True)
 class _Verification:
     """A pending login-code check. Kept in memory only: a restart invalidates codes,
@@ -170,13 +186,20 @@ class GamePlatform:
     # Users
 
     def create_user(
-        self, *, display_name: str, linked_accounts: tuple[LinkedAccount, ...] = ()
+        self,
+        *,
+        display_name: str,
+        email: str = "",
+        picture_url: str = "",
+        linked_accounts: tuple[LinkedAccount, ...] = (),
     ) -> User:
         with self._lock:
             now = self._clock()
             user = User(
                 id=self._new_id(),
                 display_name=display_name,
+                email=email,
+                picture_url=picture_url,
                 password=self._new_password(),
                 linked_accounts=linked_accounts,
                 created_at=now,
@@ -318,6 +341,8 @@ class GamePlatform:
         kind: LinkedAccountKind,
         identifier: str,
         display_name: str,
+        email: str = "",
+        picture_url: str = "",
         as_user_id: str | None = None,
     ) -> tuple[User, str | None]:
         """Logs in with a verified Google subject, phone number or email.
@@ -325,8 +350,9 @@ class GamePlatform:
         With [as_user_id] None this is a plain login: a new user is created on first
         use. With [as_user_id] set (the caller is logged in as that user) the
         credential is linked to that account instead; if it already belongs to a
-        different user, that account is merged into the caller's. Returns (user,
-        merged_from_user_id).
+        different user, that account is merged into the caller's. The provider's
+        profile (name, email, picture) is saved on the user and refreshed on each
+        login. Returns (user, merged_from_user_id).
         """
         with self._lock:
             user = self._find_by_linked_account(kind, identifier)
@@ -338,6 +364,8 @@ class GamePlatform:
                     return (
                         self.create_user(
                             display_name=_clean_display_name(display_name),
+                            email=email.strip(),
+                            picture_url=picture_url.strip(),
                             linked_accounts=(linked,),
                         ),
                         None,
@@ -351,7 +379,16 @@ class GamePlatform:
                 self._store.put_user(owner)
                 return owner, None
             if as_user_id is None or as_user_id == user.id:
-                return user, None
+                refreshed = _refresh_profile_from_provider(
+                    user,
+                    display_name=_clean_display_name(display_name),
+                    email=email.strip(),
+                    picture_url=picture_url.strip(),
+                )
+                if refreshed is not user:
+                    refreshed = replace(refreshed, updated_at=self._clock())
+                    self._store.put_user(refreshed)
+                return refreshed, None
             target = self._require_user(as_user_id)
             merged_from = user.id
             return self._merge_locked(source=user, into=target), merged_from

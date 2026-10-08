@@ -14,9 +14,10 @@ class ProviderError(Exception):
     """The provider rejected the token, or couldn't be reached."""
 
 
-def verify_google_id_token(id_token: str, client_id: str) -> tuple[str, str]:
-    """Returns (subject, display name) for a Google ID token coming from the
-    website's Sign in with Google button. Raises [ProviderError]."""
+def verify_google_id_token(id_token: str, client_id: str) -> tuple[str, str, str, str]:
+    """Returns (subject, display name, email, profile picture URL) for a Google ID
+    token coming from the website's Sign in with Google button. Raises
+    [ProviderError]."""
     try:
         response = httpx.get(
             "https://oauth2.googleapis.com/tokeninfo",
@@ -33,4 +34,9 @@ def verify_google_id_token(id_token: str, client_id: str) -> tuple[str, str]:
     subject = claims.get("sub")
     if not subject:
         raise ProviderError("Google didn't return a subject")
-    return str(subject), str(claims.get("name") or "")
+    return (
+        str(subject),
+        str(claims.get("name") or ""),
+        str(claims.get("email") or ""),
+        str(claims.get("picture") or ""),
+    )
