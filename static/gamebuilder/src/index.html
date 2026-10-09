@@ -1,0 +1,1487 @@
+<title>GameBuilder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,800&family=Space+Mono:wght@400;700&display=swap">
+<style>
+/* Look: "game night". Deep navy ground, lime for actions, pink and cyan for players.
+   Layout: three steps (Describe, Play, Change). Left rail lists games; the main area shows
+   the composer, or the game table beside the change panel. */
+:root {
+  --bg: #10141F;
+  --surface: #171C2A;
+  --surface-2: #1C2233;
+  --ink: #EEF0F5;
+  --muted: #9AA3B8;
+  --line: #2A3247;
+  --accent: #C6F432;
+  --accent-ink: #10141F;
+  --accent-soft: #232D1C;
+  --pink: #FF5FA2;
+  --board: #26304A;
+  --warn-bg: #3A2E10;
+  --warn-ink: #FFD98A;
+  --danger: #FF7A7A;
+  --code-bg: #0C0F18;
+  --p0: #FF5FA2; --p1: #FFD84D; --p2: #5FD4FF; --p3: #C6F432; --p4: #B49BFF;
+  --p5: #FF9F4D; --p6: #3FE0C0; --p7: #FF6B6B; --p8: #A3ACC0; --p9: #D9A96C;
+  --font-display: "Bricolage Grotesque", "Trebuchet MS", system-ui, sans-serif;
+  --font-body: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Space Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --radius: 4px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-body); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+.mono { font-family: var(--font-mono); }
+
+/* Top bar with the three steps */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--bg); flex-wrap: wrap; }
+.logo { font: 800 21px/1 var(--font-display); letter-spacing: -0.02em; }
+.logo span { color: var(--accent); }
+.stepsbar { display: flex; gap: 4px; font: 13px/1 var(--font-mono); list-style: none; margin: 0; padding: 0; }
+.stepsbar li { padding: 8px 12px; color: var(--muted); }
+.stepsbar li[aria-current="step"] { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.stepsbar li.done { color: var(--ink); }
+#courseAccount { position:relative; }
+.top nav { font-size:13px; }
+.top nav a { color:var(--accent); }
+.who { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); white-space: nowrap; }
+.avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--pink); color: var(--accent-ink); font-weight: 800; font-size: 12px; }
+
+.shell { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: calc(100% - 59px); }
+.side { border-right: 1px solid var(--line); padding: 20px 16px; display: flex; flex-direction: column; gap: 24px; }
+.side h3 { font: 400 12px/1 var(--font-mono); color: var(--muted); margin-bottom: 8px; }
+.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.list button { width: 100%; text-align: left; border: 0; border-left: 3px solid transparent; background: transparent; padding: 8px 10px; cursor: pointer; display: grid; gap: 1px; }
+.list button:hover { background: var(--surface); }
+.list button[aria-current="true"] { background: var(--surface-2); border-left-color: var(--pink); }
+.list .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list .m { font-size: 12px; color: var(--muted); }
+.empty { font-size: 14px; color: var(--muted); margin: 0; }
+.savenote { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 0 16px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-weight: 600; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-family: var(--font-mono); font-weight: 700; font-size: 14px; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.outline { background: transparent; border: 1.5px solid var(--accent); color: var(--accent); font-family: var(--font-mono); font-weight: 700; font-size: 14px; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn.small { min-height: 34px; padding: 0 12px; font-size: 13px; }
+.btn.icon { width: 44px; min-height: 44px; padding: 0; background: var(--bg); }
+.btn.danger { color: var(--danger); }
+.linkish { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
+
+main { padding: 28px clamp(16px, 3vw, 40px) 48px; min-width: 0; }
+
+/* Describe */
+.composer { max-width: 780px; display: grid; gap: 20px; }
+.composer h1 { font: 800 clamp(32px, 4.4vw, 48px)/1 var(--font-display); letter-spacing: -0.03em; }
+.composer h1 span { color: var(--accent); }
+.lede { margin: 0; color: var(--muted); font-size: 17px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+.prompt { width: 100%; min-height: 120px; resize: vertical; border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; background: var(--bg); line-height: 1.5; font-size: 16px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.row.end { justify-content: space-between; }
+.field { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+select { min-height: 40px; border: 1px solid var(--line); border-radius: var(--radius); padding: 0 10px; background: var(--bg); }
+#aiSettings input { min-width:0;width:100%;min-height:40px;border:1px solid var(--line);border-radius:var(--radius);padding:8px 10px;background:var(--bg); }
+#cloudSettings { overflow-wrap:anywhere; }
+#cloudSettings .btn { width:100%; }
+#firebaseAccount { display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin-bottom:10px; }
+#importLibraryLabel { display:grid;gap:6px;min-width:0; }
+#importLibrary { width:100%;min-width:0; }
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.stepper button { width: 42px; height: 42px; border: 0; background: var(--bg); color: var(--accent); font-size: 20px; cursor: pointer; }
+.stepper button:disabled { color: var(--line); cursor: default; }
+.stepper output { min-width: 40px; text-align: center; font-weight: 700; font-size: 17px; font-variant-numeric: tabular-nums; }
+.counts { display: flex; flex-wrap: wrap; gap: 4px; }
+.counts button { width: 36px; height: 36px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--bg); cursor: pointer; font-variant-numeric: tabular-nums; }
+.counts button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.chip { text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 7px 14px; font-size: 14px; color: var(--ink); cursor: pointer; }
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.notice { background: var(--warn-bg); color: var(--warn-ink); border-radius: var(--radius); padding: 10px 14px; font-size: 14px; margin: 0; }
+
+/* Build progress */
+.progress { display: grid; gap: 12px; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 14px; }
+.steps li { display: flex; gap: 10px; align-items: baseline; color: var(--muted); }
+.steps li::before { content: ""; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--line); flex: none; transform: translateY(1px); }
+.steps li.on { color: var(--ink); }
+.steps li.on::before { border-color: var(--accent); border-top-color: transparent; animation: spin 0.8s linear infinite; }
+.steps li.done::before { background: var(--accent); border-color: var(--accent); }
+.steps li.fail { color: var(--danger); }
+.steps li.fail::before { background: var(--danger); border-color: var(--danger); }
+@keyframes spin { to { transform: translateY(1px) rotate(360deg); } }
+.stream { margin: 0; max-height: 220px; overflow: auto; background: var(--code-bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; font: 12px/1.5 var(--font-mono); white-space: pre-wrap; word-break: break-word; color: var(--muted); }
+.err { color: var(--danger); font-size: 14px; margin: 0; }
+
+/* Play */
+.ghead { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+.ghead h1 { font: 800 clamp(28px, 3.6vw, 44px)/1.05 var(--font-display); letter-spacing: -0.03em; }
+.ghead p { margin: 6px 0 0; color: var(--muted); max-width: 70ch; }
+.tags { font: 12px/1.4 var(--font-mono); color: var(--muted); margin-top: 8px; }
+.work { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); gap: 20px; align-items: start; }
+.play, .chat { display: grid; gap: 14px; }
+.check { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); }
+.status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 32px; font-size: 19px; font-weight: 600; }
+.dot { width: 10px; height: 10px; flex: none; }
+.status .sub { color: var(--muted); font-weight: 400; font-size: 14px; }
+.stagewrap { position: relative; min-height: 260px; }
+#stage {
+  display: block; padding: 6px 0;
+  --g-bg: var(--surface-2); --g-surface: var(--bg); --g-fg: var(--ink); --g-muted: var(--muted); --g-line: var(--line);
+  --g-accent: var(--accent); --g-accent-ink: var(--accent-ink); --g-board: var(--board);
+  --g-p0: var(--p0); --g-p1: var(--p1); --g-p2: var(--p2); --g-p3: var(--p3); --g-p4: var(--p4);
+  --g-p5: var(--p5); --g-p6: var(--p6); --g-p7: var(--p7); --g-p8: var(--p8); --g-p9: var(--p9);
+}
+.handoff { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 14px; text-align: center; background: var(--surface); padding: 20px; }
+.handoff strong { font: 800 24px/1.2 var(--font-display); }
+.handoff p { margin: 0; color: var(--muted); max-width: 36ch; }
+.resultbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; background: var(--accent-soft); border-left: 3px solid var(--accent); padding: 12px 14px; }
+.resultbar strong { font-size: 18px; }
+.resultbar span { color: var(--muted); font-size: 14px; }
+.bug { border: 1px solid var(--danger); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 8px; }
+.bug p { margin: 0; font-size: 14px; }
+.bug code { font: 12px/1.5 var(--font-mono); color: var(--danger); word-break: break-word; }
+.tabs { display: flex; gap: 4px; border-top: 1px solid var(--line); padding-top: 12px; font: 13px/1 var(--font-mono); }
+.tabs button { min-height: 34px; padding: 0 12px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--ink); color: var(--bg); font-weight: 700; }
+.tabpanel { font-size: 15px; color: var(--ink); }
+.tabpanel h4 { margin: 14px 0 6px; font: 400 12px/1 var(--font-mono); color: var(--muted); }
+.log { margin: 0; max-height: 260px; overflow: auto; background: var(--code-bg); border-radius: var(--radius); padding: 10px; font: 12px/1.5 var(--font-mono); white-space: pre-wrap; word-break: break-word; }
+.log .k { color: var(--accent); }
+.rules { margin: 0; line-height: 1.6; color: #C9CFDC; }
+.code { margin: 0; max-height: 320px; overflow: auto; background: var(--code-bg); border-radius: var(--radius); padding: 10px; font: 12px/1.5 var(--font-mono); white-space: pre; }
+.tutorial { margin: 0; padding-left: 20px; display: grid; gap: 4px; color: #C9CFDC; }
+#frameHost iframe { display: block; width: 100%; height: 320px; border: 0; background: transparent; }
+
+/* Change */
+.chat.card { background: var(--accent); color: var(--accent-ink); border: 0; }
+.chat h2 { font: 800 24px/1.1 var(--font-display); letter-spacing: -0.02em; }
+.chat .hint { margin: 0; font-size: 14px; color: #2C3519; }
+.chat .vlabel { font: 700 12px/1 var(--font-mono); color: var(--accent-ink); }
+.bubbles { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 300px; overflow: auto; }
+.bubbles li { padding: 9px 12px; font-size: 14px; max-width: 92%; }
+.bubbles li.user { justify-self: end; background: var(--accent-ink); color: var(--ink); }
+.bubbles li.ai { justify-self: start; background: #E3FF8A; color: var(--accent-ink); }
+.bubbles li small { display: block; font-size: 11px; opacity: 0.75; margin-top: 2px; }
+.chatform { display: grid; gap: 8px; }
+.chatform textarea { min-height: 84px; resize: vertical; border: 1.5px solid var(--accent-ink); border-radius: 0; padding: 10px 12px; background: #E3FF8A; color: var(--accent-ink); font: 14px/1.5 var(--font-mono); }
+.chatform textarea::placeholder { color: #55613A; }
+.chat .btn.primary { background: var(--accent-ink); border-color: var(--accent-ink); color: var(--accent); }
+.chat .progress { background: var(--bg); color: var(--ink); padding: 12px; }
+.versions { list-style: none; margin: 0; padding: 12px 0 0; border-top: 1.5px solid var(--accent-ink); display: grid; gap: 8px; font-size: 14px; }
+.versions li { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.versions li span { color: #2C3519; }
+.versions .cur { font: 700 12px/1 var(--font-mono); padding: 3px 8px; background: var(--accent-ink); color: var(--accent); }
+.versions .linkish { color: var(--accent-ink); font-family: var(--font-mono); font-size: 13px; }
+.chat :focus-visible { outline-color: var(--accent-ink); }
+.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; font-size: 14px; max-width: min(90vw, 460px); box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+
+@media (max-width: 900px) {
+  .work { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .side { border-right: 0; border-bottom: 1px solid var(--line); padding: 14px 16px; gap: 14px; }
+  .side .list { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .top { padding: 10px 16px; }
+  .stepsbar { order: 3; width: 100%; justify-content: space-between; }
+  .stepsbar li { padding: 8px 10px; }
+  #whoName { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .steps li.on::before { animation: none; }
+}
+</style>
+
+<header class="top">
+  <div class="logo">game<span>/</span>builder</div>
+  <ol class="stepsbar" id="stepsBar" aria-label="Steps">
+    <li data-step="describe" aria-current="step">[1] describe</li>
+    <li data-step="play">[2] play</li>
+    <li data-step="change">[3] change</li>
+  </ol>
+  <nav aria-label="Platform"><a href="/portal">Portal</a> · <a href="/builder">Builder</a> · <a href="/static/gamebuilder/index.html" aria-current="page">Marcelle’s GameBuilder</a></nav><div id="courseAccount" class="auth-menu"></div><div class="who" id="who"><span class="avatar" id="avatar">?</span><span id="whoName">Connecting…</span></div>
+</header>
+
+<div class="shell">
+  <aside class="side">
+    <button class="btn outline" id="newBtn" type="button">+ new game</button>
+    <section id="cloudSettings" hidden>
+      <h3>// cloud & AI</h3>
+      <p>Saved games are visible in the shared course portal. Your Firebase library stays separate.</p>
+      <p id="cloudStatus" role="status" aria-live="polite">Connecting to cloud…</p>
+      <div id="firebaseAccount" hidden>
+        <button class="btn" id="googleSignIn" type="button">Sign in with Google</button>
+        <button class="btn outline" id="googleSignOut" type="button" hidden>Sign out</button>
+        <label for="importLibrary" id="importLibraryLabel" hidden>Import saved games
+          <input id="importLibrary" type="file" accept="application/json,.json">
+        </label>
+      </div>
+      <button class="btn outline" id="refreshCloud" type="button">Refresh cloud games</button>
+      <details style="margin-top:14px" open>
+        <summary>AI settings</summary>
+        <form id="aiSettings" style="display:grid;gap:10px;margin-top:12px">
+          <label for="aiProvider">Provider</label>
+          <select id="aiProvider"><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option></select>
+          <label for="aiModel">Model ID</label>
+          <input id="aiModel" value="gpt-4.1" required spellcheck="false">
+          <label for="aiKey">API key</label>
+          <input id="aiKey" type="password" autocomplete="off" required placeholder="Paste your API key">
+          <small>Used only in this tab. Never saved with games. Your provider bills API usage.</small>
+          <button class="btn" type="submit">Use this key</button>
+          <button class="btn outline" id="clearAiKey" type="button">Clear key</button>
+          <p id="aiSettingsStatus" role="status" aria-live="polite"></p>
+        </form>
+      </details>
+    </section>
+    <section>
+      <h3>// my games</h3>
+      <ul class="list" id="myList"></ul>
+      <p class="empty" id="myEmpty">Games you build appear here.</p>
+      <p class="savenote" id="saveNote" hidden></p>
+    </section>
+    <section>
+      <h3>// built-in</h3>
+      <ul class="list" id="exList"></ul>
+    </section>
+  </aside>
+
+  <main>
+    <section id="viewNew" class="composer">
+      <h1>Describe a <span>game</span></h1>
+      <p class="lede">Say the rules in plain words. We build it, test it, and you play.</p>
+      <p class="notice" id="noAi" hidden>Enter an API key in AI settings to create and change games. You can still play saved games and the built-in example.</p>
+      <form class="card" id="newForm" style="display:grid;gap:16px">
+        <label for="newPrompt" style="font-weight:600">What game should we build?</label>
+        <textarea class="prompt" id="newPrompt" placeholder="Example: Tic-Tac-Toe on a 4×4 board, 4 in a row wins"></textarea>
+        <div class="row end">
+          <div class="row">
+            <span class="field" id="plLabel">Players</span>
+            <div class="stepper" id="stepper" role="group" aria-labelledby="plLabel">
+              <button type="button" id="plMinus" aria-label="Fewer players">−</button>
+              <output id="plValue" aria-live="polite">2</output>
+              <button type="button" id="plPlus" aria-label="More players">+</button>
+            </div>
+            <div class="counts" id="counts" role="group" aria-labelledby="plLabel" hidden></div>
+            <button class="linkish" type="button" id="plMore">Allow other counts</button>
+          </div>
+          <button class="btn primary" id="buildBtn" type="submit">build game →</button>
+        </div>
+      </form>
+      <div class="chips"><span>Try:</span><span class="chips" id="ideas"></span></div>
+      <div class="card progress" id="newProgress" hidden></div>
+    </section>
+
+    <section id="viewGame" hidden>
+      <div class="ghead">
+        <div style="min-width:0">
+          <h1 id="gTitle"></h1>
+          <p id="gDesc"></p>
+          <div class="tags" id="gTags"></div>
+        </div>
+        <div class="row" id="gActions"></div>
+      </div>
+
+      <div class="work">
+        <section class="play card">
+          <div class="row end">
+            <div class="row">
+              <label class="field mono" for="modeSel">vs</label>
+              <select id="modeSel" class="mono">
+                <option value="computer">computer</option>
+                <option value="pass">friend, same device</option>
+              </select>
+              <span class="field mono" id="pWrap">players <select id="pCount" aria-label="Number of players"></select></span>
+            </div>
+            <button class="btn icon" id="restartBtn" type="button" aria-label="New match" title="New match"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--accent)"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></button>
+          </div>
+          <div class="row" id="passOpts">
+            <label class="check"><input type="checkbox" id="hideBetween"> Hide the screen between turns</label>
+          </div>
+          <div class="bug" id="bug" hidden>
+            <p><strong>This version of the game has a bug.</strong></p>
+            <code id="bugMsg"></code>
+            <div class="row"><button class="btn small primary" id="fixBtn" type="button">ask AI to fix it</button></div>
+          </div>
+          <div class="status" id="status"></div>
+          <div class="stagewrap">
+            <div id="frameHost"></div>
+            <div id="stage" hidden></div>
+            <div class="handoff" id="handoff" hidden>
+              <strong id="handoffTitle"></strong>
+              <p>Hand the device over. The next player taps the button when nobody else is looking.</p>
+              <button class="btn primary" id="handoffBtn" type="button"></button>
+            </div>
+          </div>
+          <div class="resultbar" id="resultBar" hidden>
+            <div><strong id="resultText"></strong><br><span id="resultSub"></span></div>
+            <button class="btn small primary" id="againBtn" type="button">play again</button>
+          </div>
+          <div class="tabs" role="tablist" aria-label="About this game">
+            <button type="button" role="tab" id="tabRules" aria-controls="panelRules" aria-selected="true">rules</button>
+            <button type="button" role="tab" id="tabTutorial" aria-controls="panelTutorial" aria-selected="false">tutorial</button>
+            <button type="button" role="tab" id="tabCode" aria-controls="panelCode" aria-selected="false">code</button>
+          </div>
+          <div class="tabpanel" role="tabpanel" id="panelRules" aria-labelledby="tabRules"><p class="rules" id="gRules"></p></div>
+          <div class="tabpanel" role="tabpanel" id="panelTutorial" aria-labelledby="tabTutorial" hidden><ol class="tutorial" id="gTutorial"></ol></div>
+          <div class="tabpanel" role="tabpanel" id="panelCode" aria-labelledby="tabCode" hidden>
+            <h4>// game api messages</h4>
+            <div class="log" id="apiLog"></div>
+            <h4>// game code</h4>
+            <pre class="code" id="gCode"></pre>
+          </div>
+        </section>
+
+        <aside class="chat card">
+          <h2>Change the game</h2>
+          <p class="hint" id="chatHint">Describe a change. It becomes a new version.</p>
+          <div id="chatAiSetup" hidden>
+            <p class="hint" id="chatAiNote"></p>
+            <button class="btn small primary" id="chatAiSettings" type="button" style="margin-top:8px">Open AI settings</button>
+          </div>
+          <ol class="bubbles" id="bubbles"></ol>
+          <div class="progress" id="chatProgress" hidden></div>
+          <form class="chatform" id="chatForm">
+            <label for="chatInput" class="vlabel">// your change</label>
+            <textarea id="chatInput" placeholder="make the board 4×4 with 4 in a row"></textarea>
+            <button class="btn primary" id="sendBtn" type="submit">update game →</button>
+          </form>
+          <div>
+            <div class="vlabel">// versions</div>
+            <ol class="versions" id="versions" style="margin-top:8px"></ol>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+/*__EXAMPLES__*/
+/*__HARNESS__*/
+
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const newId = () => "g" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const playerName = (i) => "Player " + (i + 1);
+  const pColor = (i) => "var(--p" + (i % 10) + ")";
+
+  const IDEAS = [
+    "Tic-Tac-Toe on a 4×4 board, 4 in a row wins",
+  ];
+
+  /* ---------- Steps bar: describe → play → change ---------- */
+  function setStep(name) {
+    const order = ["describe", "play", "change"];
+    const at = order.indexOf(name);
+    document.querySelectorAll("#stepsBar li").forEach((li) => {
+      const i = order.indexOf(li.dataset.step);
+      if (i === at) li.setAttribute("aria-current", "step"); else li.removeAttribute("aria-current");
+      li.classList.toggle("done", i < at);
+    });
+  }
+
+  const caps = { sample: null, db: null, user: null };
+  let uid = null;
+  let myGames = [];
+  let current = null;
+  let runner = null;
+  let meta = null;
+  let match = null;
+  let building = null;
+  let saveQueue = Promise.resolve();
+  let canSave = false;
+
+  /* ---------- Toast ---------- */
+  let toastTimer;
+  function toast(text) {
+    const t = $("toast");
+    t.textContent = text;
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.hidden = true; }, 3200);
+  }
+
+  /* ---------- Sanitizing the game's HTML ---------- */
+  const BAD_TAGS = new Set(["SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED", "LINK", "META", "BASE", "FORM", "FRAME", "FRAMESET", "NOSCRIPT", "TEMPLATE", "FOREIGNOBJECT", "AUDIO", "VIDEO", "SOURCE", "PORTAL"]);
+  const URL_ATTRS = new Set(["href", "src", "xlink:href", "action", "formaction", "srcset", "poster", "background", "data", "ping"]);
+  function sanitizeHtml(html) {
+    const doc = new DOMParser().parseFromString("<body>" + html + "</body>", "text/html");
+    const walk = (el) => {
+      for (const child of Array.from(el.children)) {
+        if (BAD_TAGS.has(child.tagName.toUpperCase())) { child.remove(); continue; }
+        for (const attr of Array.from(child.attributes)) {
+          const name = attr.name.toLowerCase();
+          if (name.startsWith("on") || name === "srcdoc" || name === "target") child.removeAttribute(attr.name);
+          else if (URL_ATTRS.has(name)) {
+            const v = attr.value.trim().toLowerCase();
+            if (!(v.startsWith("#") || v.startsWith("data:image/"))) child.removeAttribute(attr.name);
+          } else if (name === "style" && /url\s*\(|expression|@import/i.test(attr.value)) child.removeAttribute(attr.name);
+        }
+        walk(child);
+      }
+    };
+    walk(doc.body);
+    return doc.body.innerHTML;
+  }
+  function sanitizeCss(css) {
+    return String(css)
+      .replace(/<\/?style[^>]*>/gi, "")
+      .replace(/@import[^;]*;?/gi, "")
+      .replace(/url\s*\([^)]*\)/gi, "none")
+      .replace(/position\s*:\s*fixed/gi, "position:absolute");
+  }
+
+  /* ---------- Sandbox runner (one Web Worker per game version) ---------- */
+  function makeRunner(code) {
+    // A data URL gives this worker an opaque origin, preventing generated code
+    // from reading the host's Firebase authentication storage or cookies.
+    const bytes = new TextEncoder().encode(code + "\n" + HARNESS);
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    const url = "data:text/javascript;base64," + btoa(binary);
+    const pending = new Map();
+    let seq = 0, dead = null, worker;
+    let readyOk, readyFail;
+    const ready = new Promise((res, rej) => { readyOk = res; readyFail = rej; });
+    const failAll = (text) => {
+      dead = text;
+      readyFail(new Error(text));
+      for (const p of pending.values()) { clearTimeout(p.t); p.rej(new Error(text)); }
+      pending.clear();
+    };
+    try {
+      worker = new Worker(url);
+    } catch (e) {
+      failAll("The sandbox could not start: " + (e && e.message));
+      return { ready, call: () => Promise.reject(new Error(dead)), stop() {} };
+    }
+    worker.onmessage = (e) => {
+      const d = e.data || {};
+      if (d.id === 0) { readyOk(); return; }
+      const p = pending.get(d.id);
+      if (!p) return;
+      pending.delete(d.id);
+      clearTimeout(p.t);
+      d.ok ? p.res(d.value) : p.rej(Object.assign(new Error(d.error), { fromGame: true }));
+    };
+    worker.onerror = (e) => {
+      e.preventDefault();
+      failAll((e.message || "The game code could not run") + (e.lineno ? " (line " + e.lineno + ")" : ""));
+    };
+    const readyWithTimeout = Promise.race([
+      ready,
+      sleep(5000).then(() => { throw new Error("The game code did not start within 5 seconds."); }),
+    ]);
+    return {
+      ready: readyWithTimeout,
+      call(kind, args, ms = 4000) {
+        if (dead) return Promise.reject(new Error(dead));
+        return new Promise((res, rej) => {
+          const id = ++seq;
+          const t = setTimeout(() => {
+            pending.delete(id);
+            worker.terminate();
+            failAll("The game code took too long to answer. It may be stuck in a loop.");
+            rej(new Error(dead));
+          }, ms);
+          pending.set(id, { res, rej, t });
+          worker.postMessage({ id, kind, args });
+        });
+      },
+      stop() { try { worker.terminate(); } catch (e) {} URL.revokeObjectURL(url); },
+    };
+  }
+
+  /* ---------- Prompting ---------- */
+  const CONTRACT = `You are writing a turn-based multiplayer game for a web game builder. Write plain JavaScript with no import/export, no DOM access, no timers, no network and no Math.random (use the random() function you are given). The code runs in an isolated sandbox and must define exactly one top-level constant:
+
+const game = {
+  title: "Short name",
+  allowedPlayers: [2, 3, 6],     // every total number of players the game supports, 2-10 (a list, not a range)
+  hiddenInformation: false,      // true when players hold secrets (such as cards in hand)
+
+  init(numPlayers, random) { /* return the starting state */ },
+  currentPlayer(state) { /* index 0..numPlayers-1 of the player who must move, or null when the game is over */ },
+  legalMoves(state) { /* array of every legal move for the current player; never empty while the game is not over */ },
+  applyMove(state, move, random) { /* return a NEW state; throw new Error("short reason a player can read") if the move is illegal */ },
+  result(state) { /* null while playing; when over: { winners: [player indices], summary: "one sentence" }; winners [] means a draw */ },
+  computerMove(state, random) { /* optional: a sensible move for the current player (win or block when possible); must be one of legalMoves(state) */ },
+  render(state, viewer, ui) { /* return { html, css }, see below */ }
+};
+
+Rules for the code:
+- state and every move are plain JSON data (objects, arrays, strings, numbers, booleans, null). Keep the number of players in the state. Never put functions or class instances in state.
+- Every move from legalMoves must be accepted by applyMove, and applyMove accepts nothing else.
+- Name moves by their action, for example {"type":"place","cell":4} for placing a mark, {"type":"draw"} for drawing a card. For Tic-Tac-Toe-style games use exactly {"type":"place","cell":index} with cells numbered row by row from 0, and the marks "X" (player 0) and "O" (player 1).
+- The game must always end: add a move limit or a draw rule if needed.
+- Call your own methods with this (for example this.result(state)). You may add helper methods and constants as extra properties of game.
+- Keep the code under about 400 lines.
+
+How render works:
+- render(state, viewer, ui) returns { html: "...", css: "..." }. viewer is the index of the player looking at the screen, or -1 for a spectator at the end of the game, when everything may be revealed. If hiddenInformation is true and viewer >= 0, show only that player's secrets and show other players' secrets face down (for example as a card count).
+- Make every clickable thing a <button>. A click on an element with data-move='...' submits that move; the attribute value must be exactly the move as JSON. Build it as: "data-move='" + JSON.stringify(move).replace(/'/g, "&#39;") + "'".
+- A click on an element with data-ui='{"key":"value"}' merges that object into ui and re-renders (a null value removes the key). ui starts as {} and is cleared after every move. Use ui for choices that take several clicks (pick a piece, then a square).
+- Enable move buttons only when it is the viewer's turn (currentPlayer(state) === viewer); disable the rest.
+- No <script>, no inline event handlers, no external images, fonts or links. Draw with HTML, CSS, inline SVG and Unicode symbols.
+- The css is scoped to the game area. Use these CSS variables for every color so the game works in light and dark mode: --g-bg (background), --g-surface (panels), --g-fg (text), --g-muted (secondary text), --g-line (borders), --g-accent and --g-accent-ink (highlight, and text on it), --g-board (a board or table surface; white text reads on it), --g-p0 to --g-p9 (one color per player).
+- The game area is 320px to 640px wide. Use flexible layouts (grid, flex, percentages, aspect-ratio). Buttons at least 36px tall.
+- Show useful context in the game area (scores, cards in hand, the last move). The page already shows whose turn it is and the final result.`;
+
+  const FORMAT = `Reply in exactly this format and nothing else:
+<game_meta>{"title":"a short, specific name; include the board size or variant when it is not the classic game, e.g. Tic-Tac-Toe 4×4","description":"one sentence a player would read","rules":"the rules in 2 to 4 plain sentences","tutorial":["3 to 5 short steps that teach a new player, each one sentence"],"allowedPlayers":[2],"hiddenInformation":false}</game_meta>
+<game_code>
+const game = { ... };
+</game_code>
+<notes>One or two plain sentences telling the user what you built or changed.</notes>`;
+
+  function promptNew(request, allowed) {
+    return `${CONTRACT}
+
+Build this game:
+"""${request}"""
+
+Set allowedPlayers to [${allowed.join(", ")}] (these are the only player totals the game supports), unless the request above clearly asks for different numbers.
+
+${FORMAT}`;
+  }
+  function promptChange(rec, request) {
+    return `${CONTRACT}
+
+Here is the current game: ${rec.title}. Rules: ${rec.rules || "(not written)"}
+<game_code>
+${rec.code}
+</game_code>
+
+The user asked for this change:
+"""${request}"""
+
+Return the complete updated game with the change, keeping everything else working. allowedPlayers is now [${allowedOf(rec).join(", ")}]; change it only if the user asked.
+
+${FORMAT}`;
+  }
+  function promptFix(rec, error) {
+    return `${CONTRACT}
+
+This game failed automatic testing:
+<game_code>
+${rec.code}
+</game_code>
+
+The error was:
+${error}
+
+Find the cause, fix it, and return the complete corrected game. Make sure legalMoves and applyMove agree, currentPlayer is null exactly when result is not null, and render returns { html, css }.
+
+${FORMAT}`;
+  }
+
+  function parseReply(text) {
+    const metaM = text.match(/<game_meta>([\s\S]*?)<\/game_meta>/);
+    const codeM = text.match(/<game_code>([\s\S]*?)(<\/game_code>|$)/);
+    const notesM = text.match(/<notes>([\s\S]*?)<\/notes>/);
+    if (!codeM) throw new Error("The reply didn't include any game code.");
+    let code = codeM[1].trim().replace(/^```[a-z]*\s*/i, "").replace(/```\s*$/, "").trim();
+    if (!/\bgame\b/.test(code)) throw new Error("The reply didn't define the game.");
+    let m = {};
+    if (metaM) {
+      try { m = JSON.parse(metaM[1].trim().replace(/^```[a-z]*\s*/i, "").replace(/```\s*$/, "")); } catch (e) { m = {}; }
+    }
+    return {
+      code,
+      title: String(m.title || ""),
+      description: String(m.description || ""),
+      rules: String(m.rules || ""),
+      tutorial: Array.isArray(m.tutorial) ? m.tutorial.map(String).slice(0, 8) : [],
+      notes: notesM ? notesM[1].trim() : "",
+    };
+  }
+
+  /* ---------- Build pipeline: write → test → fix once → done ---------- */
+  function progressUI(box) {
+    box.hidden = false;
+    box.innerHTML = '<div class="row end"><strong id="pTitle">Building…</strong><button class="btn small" type="button" data-stop>Stop</button></div>' +
+      '<ol class="steps"><li data-s="write">Writing the game</li><li data-s="test">Playtesting it in the sandbox</li><li data-s="fix" hidden>Fixing a bug found in testing</li><li data-s="done">Ready to play</li></ol>' +
+      '<pre class="stream" aria-live="off"></pre><p class="err" hidden></p>';
+    const step = (name, state) => {
+      const li = box.querySelector('[data-s="' + name + '"]');
+      if (!li) return;
+      li.hidden = false;
+      li.className = state || "";
+    };
+    return {
+      step,
+      stream(text) {
+        const pre = box.querySelector(".stream");
+        const i = text.indexOf("<game_code>");
+        const body = i >= 0 ? text.slice(i + 11) : text;
+        pre.textContent = (body.length > 1800 ? "…" + body.slice(-1800) : body).replace(/<\/game_code>[\s\S]*$/, "");
+        pre.scrollTop = pre.scrollHeight;
+        box.querySelector("#pTitle").textContent = "Writing… " + (text.length / 1024).toFixed(1) + " KB";
+      },
+      title(t) { box.querySelector("#pTitle").textContent = t; },
+      error(t) { const p = box.querySelector(".err"); p.textContent = t; p.hidden = false; },
+      onStop(fn) { box.querySelector("[data-stop]").onclick = fn; },
+      hideStop() { const b = box.querySelector("[data-stop]"); if (b) b.hidden = true; },
+      close() { box.hidden = true; box.innerHTML = ""; },
+    };
+  }
+
+  const SAMPLE_COPY = {
+    not_granted: "GameBuilder needs your permission to use Claude. Allow it when asked, then try again.",
+    sampling_disabled: "Claude isn't available for this account.",
+    rate_limited: "Too many requests right now. Wait a minute and try again.",
+    session_expired: "Your session expired. Sign in again and retry.",
+    refused: "Claude declined that request. Try describing the game differently.",
+    prompt_too_large: "The game's code got too long to send. Try a simpler change.",
+  };
+
+  async function build({ kind, request, base, error, allowed, box }) {
+    if (!caps.sample) throw new Error("Log in and enter an API key in AI settings to build games.");
+    const buildingUid = uid;
+    const ui = progressUI(box);
+    const ctl = new AbortController();
+    building = ctl;
+    ui.onStop(() => ctl.abort());
+    setBusy(true);
+    try {
+      let prompt = kind === "new" ? promptNew(request, allowed) : kind === "change" ? promptChange(base, request) : promptFix(base, error);
+      let fixed = false;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        ui.step(attempt === 0 ? "write" : "fix", "on");
+        let res;
+        try {
+          res = await caps.sample(prompt, { cache: false, signal: ctl.signal, onText: ({ text }) => ui.stream(text) });
+        } catch (e) {
+      if (e && e.code === "cancelled") throw Object.assign(new Error("Stopped."), { quiet: true });
+          if (e && e.code === "not_granted") { caps.sample = null; applyAiAvailability(); }
+          if (e.name === "AbortError") throw Object.assign(new Error("Stopped."), { quiet: true });
+          throw new Error(SAMPLE_COPY[e && e.code] || e.message || "Couldn't reach the AI provider. Try again.");
+        }
+        if (res.truncated) throw new Error("The game was too long to write in one go. Try a simpler description.");
+        const parsed = parseReply(res.text);
+        ui.step(attempt === 0 ? "write" : "fix", "done");
+        ui.step("test", "on");
+        ui.title("Playtesting…");
+        const r = makeRunner(parsed.code);
+        try {
+          await r.ready;
+          const m = await r.call("meta");
+          if (m.allowedPlayers.some(n => n < 2 || n > 10)) throw new Error("The course platform supports 2 to 10 players. Update allowedPlayers and the game rules.");
+          const smoke = await r.call("smoke", {}, 9000);
+          r.stop();
+          ui.step("test", "done");
+          ui.step("done", "done");
+          ui.title("Ready");
+          ui.hideStop();
+          if (buildingUid !== uid) throw new Error("Account changed during generation. Build again after logging in.");
+          return { parsed, meta: m, smoke, fixed };
+        } catch (e) {
+          r.stop();
+          if (attempt === 1) {
+            ui.step("test", "fail");
+            throw Object.assign(new Error("The game still has a bug after one fix: " + e.message), { parsed });
+          }
+          ui.step("test", "fail");
+          ui.title("Found a bug, fixing it…");
+          fixed = true;
+          prompt = promptFix({ ...parsed, title: parsed.title || "game" }, e.message);
+        }
+      }
+    } catch (e) {
+      ui.title(e.quiet ? "Stopped" : "Couldn't finish");
+      ui.hideStop();
+      if (!e.quiet) ui.error(e.message);
+      throw e;
+    } finally {
+      building = null;
+      setBusy(false);
+    }
+  }
+
+  function setBusy(on) {
+    $("buildBtn").disabled = on || !caps.sample;
+    $("sendBtn").disabled = on || !caps.sample;
+    $("fixBtn").disabled = on || !caps.sample;
+  }
+
+  /* ---------- Saving ---------- */
+  function toDoc(rec) {
+    return {
+      title: rec.title, description: rec.description, rules: rec.rules,
+      tutorial: rec.tutorial || [],
+      allowedPlayers: allowedOf(rec), hiddenInformation: !!rec.hiddenInformation,
+      code: rec.code,
+      chat: (rec.chat || []).slice(-24),
+      versions: (rec.versions || []).slice(-5),
+      createdAt: rec.createdAt || Date.now(), updatedAt: Date.now(),
+    };
+  }
+  function saveGame(rec) {
+    rec.updatedAt = Date.now();
+    const local = myGames.findIndex((g) => g.id === rec.id);
+    if (local >= 0) myGames[local] = rec; else myGames.unshift(rec);
+    renderSidebar();
+    if (window.__gbCloud) {
+      const savingUid = uid, documentToSave = toDoc(rec);
+      cloudPending.add(rec.id);
+      $("cloudStatus").textContent = "Saving to cloud…";
+      saveQueue = saveQueue.then(async () => {
+        if (savingUid !== uid) throw new Error("Account changed before saving.");
+        await GameBuilderCloud.save(rec.id, documentToSave);
+        if (savingUid !== uid) return;
+        cloudPending.delete(rec.id);
+        $("cloudStatus").textContent = "Saved to cloud · " + new Date().toLocaleTimeString();
+        showSaveNote("");
+      }).catch(() => {
+        $("cloudStatus").textContent = "Cloud save failed";
+        showSaveNote("This game has not reached the cloud. Keep this tab open and use Retry cloud saves.");
+        $("retryCloud").hidden = false;
+      });
+      return;
+    }
+    if (!canSave) return;
+    saveQueue = saveQueue.then(() => caps.db.collection("data/users/" + uid).doc(rec.id).set(toDoc(rec))).catch((e) => {
+      canSave = false;
+      showSaveNote("Saving is off in this view, so games last until you close the page.");
+    });
+  }
+  function deleteGame(rec) {
+    if (window.__gbCloud) {
+      const deletingUid = uid;
+      saveQueue = saveQueue.then(async () => {
+        if (deletingUid !== uid) throw new Error("Account changed before deleting.");
+        await GameBuilderCloud.remove(rec.id);
+        if (deletingUid !== uid) return;
+        cloudPending.delete(rec.id);
+        myGames = myGames.filter(g => g.id !== rec.id);
+        renderSidebar();
+        $("cloudStatus").textContent = "Deleted from cloud";
+      }).catch(() => toast("Cloud deletion failed. Refresh and try again."));
+      return;
+    }
+    myGames = myGames.filter((g) => g.id !== rec.id);
+    renderSidebar();
+    if (canSave) saveQueue = saveQueue.then(() => caps.db.collection("data/users/" + uid).doc(rec.id).delete()).catch(() => {});
+  }
+  function showSaveNote(t) { const n = $("saveNote"); n.textContent = t; n.hidden = !t; }
+
+  /* ---------- Sidebar ---------- */
+  function renderSidebar() {
+    const mine = myGames.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    $("myList").innerHTML = mine.map((g) =>
+      '<li><button type="button" data-open="' + esc(g.id) + '"' + (current && current.id === g.id ? ' aria-current="true"' : "") + '><span class="t">' + esc(g.title || "Untitled game") + '</span><span class="m">' + playersLabel(g) + " · " + esc(statusLabel(g)) + (savedAt(g) ? " · " + esc(savedAt(g)) : "") + "</span></button></li>"
+    ).join("");
+    $("myEmpty").hidden = mine.length > 0;
+    $("exList").innerHTML = EXAMPLES.map((g) =>
+      '<li><button type="button" data-open="' + g.id + '"' + (current && current.id === g.id ? ' aria-current="true"' : "") + '><span class="t">' + esc(g.title) + '</span><span class="m">Test game · ' + playersLabel(g) + "</span></button></li>"
+    ).join("");
+  }
+  function allowedOf(g) {
+    if (Array.isArray(g.allowedPlayers) && g.allowedPlayers.length) return g.allowedPlayers.map(Number).sort((a, b) => a - b);
+    const out = [];
+    for (let n = g.minPlayers || 2; n <= (g.maxPlayers || g.minPlayers || 2); n++) out.push(n);
+    return out;
+  }
+  function playersLabel(g) {
+    const a = allowedOf(g);
+    const word = a.length === 1 && a[0] === 1 ? " player" : " players";
+    if (a.length === 1) return a[0] + word;
+    const contiguous = a.every((n, i) => i === 0 || n === a[i - 1] + 1);
+    if (contiguous) return a[0] + "–" + a[a.length - 1] + word;
+    return a.slice(0, -1).join(", ") + " or " + a[a.length - 1] + word;
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-open]");
+    if (!b) return;
+    const id = b.getAttribute("data-open");
+    const rec = myGames.find((g) => g.id === id) || EXAMPLES.find((g) => g.id === id);
+    if (rec) openGame(rec);
+  });
+
+  /* ---------- Views ---------- */
+  function showNew() {
+    stopMatch();
+    current = null;
+    $("viewGame").hidden = true;
+    $("viewNew").hidden = false;
+    setStep("describe");
+    renderSidebar();
+    $("newPrompt").focus();
+  }
+  $("newBtn").onclick = showNew;
+
+  function fillSelect(sel, from, to, value) {
+    sel.innerHTML = "";
+    for (let i = from; i <= to; i++) sel.add(new Option(String(i), String(i), false, i === value));
+  }
+
+  async function openGame(rec) {
+    if (building) { toast("Wait for the current build to finish."); return; }
+    stopMatch();
+    current = rec;
+    $("viewNew").hidden = true;
+    $("viewGame").hidden = false;
+    setStep("play");
+    selectTab("Rules");
+    $("gTitle").textContent = rec.title || "Untitled game";
+    $("gDesc").textContent = rec.description || "";
+    renderHeadTags(rec);
+    renderActions(rec);
+    $("gRules").textContent = rec.rules || "No rules written yet.";
+    $("gTutorial").innerHTML = (rec.tutorial || []).length ? rec.tutorial.map((t) => "<li>" + esc(t) + "</li>").join("") : "<li>No tutorial yet. Ask for one in the chat.</li>";
+    $("gCode").textContent = rec.code;
+    $("chatHint").textContent = rec.example
+      ? "Describe a change. Your version is saved under My games."
+      : "Describe a change: rules, board size, players, looks. It becomes a new version.";
+    renderChat();
+    renderVersions();
+    $("bug").hidden = true;
+    $("chatProgress").hidden = true;
+    const allowed = allowedOf(rec);
+    $("pCount").innerHTML = allowed.map((n) => '<option value="' + n + '">' + n + "</option>").join("");
+    $("pWrap").hidden = allowed.length < 2;
+    $("hideBetween").checked = !!rec.hiddenInformation;
+    setMode(rec.hiddenInformation && allowed[allowed.length - 1] > 1 ? "pass" : "computer");
+    renderSidebar();
+    if (runner) runner.stop();
+    runner = makeRunner(rec.code);
+    try {
+      await runner.ready;
+      meta = await runner.call("meta");
+      if (current !== rec) return;
+      await mountGame(rec.code);
+      if (current !== rec) return;
+      await startMatch();
+    } catch (e) {
+      if (current === rec) showBug(e.message);
+    }
+  }
+
+  function curN(rec) { return (rec.versions || []).slice(-1)[0]?.n || 1; }
+  function statusLabel(rec) { return rec.example ? "Built-in test game" : "Version " + curN(rec); }
+  function savedAt(rec) {
+    const t = rec.updatedAt || rec.createdAt;
+    if (!t) return "";
+    const d = new Date(t), now = new Date();
+    return d.toDateString() === now.toDateString()
+      ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      : d.toLocaleDateString([], { month: "short", day: "numeric" });
+  }
+  function renderHeadTags(rec) {
+    $("gTags").textContent = [playersLabel(rec), statusLabel(rec), rec.hiddenInformation ? "Hidden hands" : ""].filter(Boolean).join(" · ");
+  }
+
+  /* ---------- Tabs under the board: rules, tutorial, code ---------- */
+  function selectTab(name) {
+    ["Rules", "Tutorial", "Code"].forEach((t) => {
+      $("tab" + t).setAttribute("aria-selected", String(t === name));
+      $("panel" + t).hidden = t !== name;
+    });
+  }
+  ["Rules", "Tutorial", "Code"].forEach((t) => { $("tab" + t).onclick = () => selectTab(t); });
+  function renderActions(rec) {
+    if (rec.example) { $("gActions").innerHTML = ""; return; }
+    $("gActions").innerHTML = '<button class="btn small danger" type="button" id="delBtn">Delete</button>';
+    $("delBtn").onclick = () => confirmDelete();
+  }
+
+  function confirmDelete() {
+    const box = $("gActions");
+    box.innerHTML = '<span class="field">Delete this game?</span><button class="btn small danger" type="button" id="delYes">Delete</button><button class="btn small" type="button" id="delNo">Keep</button>';
+    $("delYes").onclick = () => { const rec = current; deleteGame(rec); showNew(); toast("Deleted " + (rec.title || "game") + "."); };
+    $("delNo").onclick = () => openGame(current);
+  }
+
+  function renderChat() {
+    const chat = (current && current.chat) || [];
+    $("bubbles").innerHTML = chat.map((m) =>
+      '<li class="' + (m.role === "user" ? "user" : "ai") + '">' + esc(m.text) + (m.v ? "<small>Version " + m.v + "</small>" : "") + "</li>"
+    ).join("");
+    $("bubbles").scrollTop = $("bubbles").scrollHeight;
+  }
+  function renderVersions() {
+    const vs = (current && current.versions) || [];
+    if (!vs.length) { $("versions").innerHTML = '<li><div><strong>Version 1</strong> <span>' + (current && current.example ? "built-in" : "original") + '</span></div><span class="cur">current</span></li>'; return; }
+    $("versions").innerHTML = vs.slice().reverse().map((v, i) =>
+      '<li><div><strong>Version ' + v.n + "</strong>" + " <span>" + esc(v.note || "") + "</span></div>" +
+      (i === 0 ? '<span class="cur">current</span>' : '<button class="linkish" type="button" data-restore="' + v.n + '">use this</button>') + "</li>"
+    ).join("");
+  }
+  $("versions").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-restore]");
+    if (!b || !current) return;
+    const n = Number(b.getAttribute("data-restore"));
+    const v = current.versions.find((x) => x.n === n);
+    if (!v) return;
+    const next = (current.versions.slice(-1)[0]?.n || 1) + 1;
+    const rec = { ...current, code: v.code, versions: current.versions.concat({ n: next, note: "Restored version " + n, code: v.code, at: Date.now() }), chat: (current.chat || []).concat({ role: "ai", text: "Went back to version " + n + ".", v: next }) };
+    saveGame(rec);
+    openGame(rec);
+  });
+
+  /* ---------- New game ---------- */
+  /* Players: one number by default (− 2 +). "Allow other counts" opens the full set picker (for example 2, 3 or 6). */
+  let chosen = new Set([2]);
+  let manyCounts = false;
+  function renderCounts() {
+    const one = Math.min(...chosen);
+    $("plValue").textContent = String(one);
+    $("plMinus").disabled = one <= 2;
+    $("plPlus").disabled = one >= 10;
+    $("stepper").hidden = manyCounts;
+    $("counts").hidden = !manyCounts;
+    $("plMore").textContent = manyCounts ? "Just one count" : "Allow other counts";
+    $("counts").innerHTML = Array.from({ length: 9 }, (_, i) => i + 2).map((n) =>
+      '<button type="button" data-n="' + n + '" aria-pressed="' + chosen.has(n) + '" aria-label="' + n + ' players">' + n + "</button>").join("");
+  }
+  $("plMinus").onclick = () => { chosen = new Set([Math.max(2, Math.min(...chosen) - 1)]); renderCounts(); };
+  $("plPlus").onclick = () => { chosen = new Set([Math.min(10, Math.min(...chosen) + 1)]); renderCounts(); };
+  $("plMore").onclick = () => {
+    manyCounts = !manyCounts;
+    if (!manyCounts) chosen = new Set([Math.min(...chosen)]);
+    renderCounts();
+  };
+  $("counts").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-n]");
+    if (!b) return;
+    const n = +b.getAttribute("data-n");
+    if (chosen.has(n)) { if (chosen.size > 1) chosen.delete(n); } else chosen.add(n);
+    renderCounts();
+  });
+  renderCounts();
+  $("ideas").innerHTML = IDEAS.map((t) => '<button class="chip" type="button">' + esc(t) + "</button>").join("");
+  $("ideas").addEventListener("click", (e) => {
+    const c = e.target.closest(".chip");
+    if (!c) return;
+    $("newPrompt").value = c.textContent;
+    chosen = new Set([2]);
+    manyCounts = false;
+    renderCounts();
+    $("newPrompt").focus();
+  });
+
+  $("newForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const request = $("newPrompt").value.trim();
+    if (!request) { toast("Describe the game you want first."); $("newPrompt").focus(); return; }
+    const allowed = Array.from(chosen).sort((a, b) => a - b);
+    try {
+      const out = await build({ kind: "new", request, allowed, box: $("newProgress") });
+      const v = 1;
+      const rec = {
+        id: newId(),
+        title: out.parsed.title || out.meta.title || "New game",
+        description: out.parsed.description,
+        rules: out.parsed.rules,
+        tutorial: out.parsed.tutorial,
+        allowedPlayers: out.meta.allowedPlayers, hiddenInformation: out.meta.hiddenInformation,
+        code: out.parsed.code,
+        chat: [{ role: "user", text: request }, { role: "ai", text: (out.parsed.notes || "Built the game.") + (out.fixed ? " (I found and fixed a bug while testing it.)" : ""), v }],
+        versions: [{ n: v, note: "First version", code: out.parsed.code, at: Date.now() }],
+        createdAt: Date.now(),
+      };
+      saveGame(rec);
+      const openingUid = uid;
+      await sleep(400);
+      if (openingUid !== uid) return;
+      $("newProgress").hidden = true;
+      $("newPrompt").value = "";
+      openGame(rec);
+    } catch (err) { /* shown in the progress card */ }
+  });
+
+  /* ---------- Change and fix ---------- */
+  async function changeGame({ kind, request, error }) {
+    const base = current;
+    if (!base) return;
+    $("bug").hidden = true;
+    setStep("change");
+    try {
+      const out = await build({ kind, request, error, base, box: $("chatProgress") });
+      const prevN = (base.versions || []).slice(-1)[0]?.n || 1;
+      const n = base.example ? 2 : prevN + 1;
+      const startVersions = base.example ? [{ n: 1, note: "The example", code: base.code, at: Date.now() }] : (base.versions || []);
+      const userText = kind === "fix" ? "Fix the bug: " + error : request;
+      const rec = {
+        ...base,
+        id: base.example ? newId() : base.id,
+        example: false,
+        title: out.parsed.title || base.title,
+        description: out.parsed.description || base.description,
+        rules: out.parsed.rules || base.rules,
+        tutorial: out.parsed.tutorial.length ? out.parsed.tutorial : (base.tutorial || []),
+        allowedPlayers: out.meta.allowedPlayers, hiddenInformation: out.meta.hiddenInformation,
+        code: out.parsed.code,
+        chat: (base.chat || []).concat({ role: "user", text: userText }, { role: "ai", text: (out.parsed.notes || "Updated the game.") + (out.fixed ? " (I also fixed a bug found while testing.)" : ""), v: n }),
+        versions: startVersions.concat({ n, note: (kind === "fix" ? "Bug fix" : request).slice(0, 80), code: out.parsed.code, at: Date.now() }),
+        createdAt: base.example ? Date.now() : base.createdAt,
+      };
+      saveGame(rec);
+      if (base.example) toast("Saved your version under My games.");
+      const openingUid = uid;
+      await sleep(500);
+      if (openingUid !== uid) return;
+      $("chatProgress").hidden = true;
+      $("chatInput").value = "";
+      openGame(rec);
+    } catch (err) { /* shown in the progress card */ }
+  }
+  $("chatInput").addEventListener("focus", () => setStep("change"));
+  $("chatInput").addEventListener("blur", () => { if (!building && current) setStep("play"); });
+  $("chatForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const request = $("chatInput").value.trim();
+    if (!request) { toast("Describe the change first."); return; }
+    changeGame({ kind: "change", request });
+  });
+  $("fixBtn").onclick = () => changeGame({ kind: "fix", error: $("bugMsg").textContent });
+
+  function showBug(text) {
+    $("bugMsg").textContent = text;
+    $("bug").hidden = false;
+    $("fixBtn").hidden = !caps.sample;
+    $("status").innerHTML = "";
+  }
+
+  /* ---------- Playing ---------- */
+  /* The game runs as a standalone package inside a sandboxed iframe (no same-origin access).
+     The page and the game talk only through the course's JSON messages:
+     page → game: {message_kind:"state_change", state, turn_of_user, my_user, players}
+     game → page: {message_kind:"make_move", turn_of_player_index, next_state}
+     If the iframe can't start in this view, the page falls back to drawing the game itself. */
+  const PACKAGE_RUNTIME = String.raw`
+;(function () {
+  var G = (typeof game !== "undefined") ? game : null;
+  var root = document.getElementById("root"), note = document.getElementById("gbmsg"), css = document.getElementById("gcss");
+  var S = null, turn = null, me = null, ui = {}, waiting = false;
+  function clone(x) { return x === undefined ? undefined : JSON.parse(JSON.stringify(x)); }
+  function send(m) { parent.postMessage(m, "*"); }
+  function fail(e) { send({ message_kind: "game_error", error: String((e && e.message) || e) }); }
+  function size() { send({ message_kind: "resize", height: Math.ceil(document.documentElement.scrollHeight) }); }
+  function draw() {
+    var viewer = turn === null ? -1 : (me === null ? -1 : me);
+    var out = G.render(clone(S), viewer, ui);
+    if (typeof out === "string") out = { html: out, css: "" };
+    css.textContent = (out && out.css) || "";
+    root.innerHTML = (out && out.html) || "";
+    root.className = (turn !== null && me !== null && turn === me && !waiting) ? "" : "locked";
+    size();
+  }
+  window.addEventListener("message", function (e) {
+    if (e.source !== parent) return;
+    var d = e.data || {};
+    if (d.message_kind !== "state_change") return;
+    S = d.state;
+    turn = d.turn_of_user ? d.turn_of_user.player_index : null;
+    me = d.my_user ? d.my_user.player_index : null;
+    ui = {}; waiting = false; note.hidden = true;
+    try { draw(); } catch (err) { fail(err); }
+  });
+  root.addEventListener("click", function (e) {
+    var el = e.target.closest("[data-move],[data-ui]");
+    if (!el || el.disabled || waiting) return;
+    if (turn === null || me === null || turn !== me) return;
+    var move;
+    try {
+      if (el.hasAttribute("data-ui")) {
+        var p = JSON.parse(el.getAttribute("data-ui")) || {};
+        for (var k in p) { if (p[k] === null) delete ui[k]; else ui[k] = p[k]; }
+        draw();
+        return;
+      }
+      move = JSON.parse(el.getAttribute("data-move"));
+    } catch (err) { fail(err); return; }
+    var next;
+    try { next = G.applyMove(clone(S), clone(move), Math.random); }
+    catch (err) { note.textContent = "Not allowed: " + ((err && err.message) || err); note.hidden = false; size(); return; }
+    var res = G.result(clone(next));
+    var nt = res ? null : G.currentPlayer(clone(next));
+    waiting = true; root.className = "locked";
+    send({ message_kind: "make_move", turn_of_player_index: (nt === undefined ? null : nt), next_state: clone(next), move: clone(move) });
+  });
+  window.addEventListener("error", function (e) { fail(e.message || "Script error"); });
+  if (typeof ResizeObserver !== "undefined") new ResizeObserver(size).observe(document.body);
+  if (!G) { fail("The code must define: const game = { ... }"); return; }
+  send({ message_kind: "game_ready" });
+})();
+`;
+
+  function themeVars() {
+    const cs = getComputedStyle(document.documentElement);
+    const v = (n) => cs.getPropertyValue(n).trim();
+    const map = { "--g-bg": "--surface-2", "--g-surface": "--surface", "--g-fg": "--ink", "--g-muted": "--muted", "--g-line": "--line", "--g-accent": "--accent", "--g-accent-ink": "--accent-ink", "--g-board": "--board" };
+    const out = {};
+    for (const [k, src] of Object.entries(map)) out[k] = v(src);
+    for (let i = 0; i < 10; i++) out["--g-p" + i] = v("--p" + i);
+    return out;
+  }
+  function packageHtml(code) {
+    const vars = Object.entries(themeVars()).map(([k, val]) => k + ":" + val).join(";");
+    const safe = code.replace(/<\/script/gi, "<\\/script");
+    return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; script-src &#39;unsafe-inline&#39;; style-src &#39;unsafe-inline&#39;; img-src data:; connect-src &#39;none&#39;; form-action &#39;none&#39;; base-uri &#39;none&#39;">' +
+      "<style>:root{" + vars + ";color-scheme:dark}" + // the page is always dark; matching it keeps the frame transparent
+
+      "html,body{margin:0;background:transparent;color:var(--g-fg);font:15px/1.4 system-ui,-apple-system,'Segoe UI',sans-serif}" +
+      "*{box-sizing:border-box}button{font:inherit;color:inherit;cursor:pointer}button[disabled]{cursor:default}" +
+      "#root{padding:4px 2px;min-width:0;overflow-x:auto}#root.locked [data-move],#root.locked [data-ui]{pointer-events:none}" +
+      ".gb-msg{margin:10px 0 0;padding:8px 12px;border-radius:8px;background:var(--g-surface);border:1px solid var(--g-line);font-size:14px}[hidden]{display:none!important}</style>" +
+      '<style id="gcss"></style></head><body><div id="root"></div><p class="gb-msg" id="gbmsg" hidden></p><script>' + safe + "\n" + PACKAGE_RUNTIME + "</scr" + "ipt></body></html>";
+  }
+
+  let frame = null;
+  let surface = "iframe";
+  let frameReadyResolve = null;
+  window.addEventListener("message", (e) => {
+    if (!frame || e.source !== frame.contentWindow) return;
+    const d = e.data || {};
+    if (d.message_kind === "game_ready") { if (frameReadyResolve) frameReadyResolve(true); return; }
+    if (d.message_kind === "resize") { frame.style.height = Math.max(120, Math.min(1800, Number(d.height) || 0)) + "px"; return; }
+    if (d.message_kind === "game_error") { showBug("The game package failed: " + d.error); return; }
+    if (d.message_kind === "make_move") onProposal(d);
+  });
+
+  async function mountGame(code) {
+    $("frameHost").innerHTML = "";
+    frame = null;
+    if (window.__gbInline) { surface = "inline"; $("stage").hidden = false; return; }
+    const f = document.createElement("iframe");
+    f.setAttribute("sandbox", "allow-scripts");
+    f.setAttribute("title", "Game");
+    f.setAttribute("referrerpolicy", "no-referrer");
+    frame = f;
+    const ready = new Promise((res) => { frameReadyResolve = res; setTimeout(() => res(false), 3000); });
+    f.srcdoc = packageHtml(code);
+    $("frameHost").appendChild(f);
+    const ok = await ready;
+    frameReadyResolve = null;
+    if (ok) { surface = "iframe"; $("stage").hidden = true; return; }
+    $("frameHost").innerHTML = "";
+    frame = null;
+    surface = "inline";
+    $("stage").hidden = false;
+  }
+
+  /* Inline fallback: same messages, drawn by the page from the sandboxed worker. */
+  const shadow = $("stage").attachShadow({ mode: "open" });
+  const STAGE_BASE = ":host{display:block;color:var(--g-fg);font:15px/1.4 var(--font-body)}" +
+    "*{box-sizing:border-box}button{font:inherit;color:inherit;cursor:pointer}button[disabled]{cursor:default}" +
+    ".g-root{min-width:0;overflow-x:auto}.g-root.locked [data-move],.g-root.locked [data-ui]{pointer-events:none}";
+  let inlineMsg = null, inlineUi = {};
+  async function inlinePaint() {
+    const m = match, d = inlineMsg;
+    if (!m || !d) return;
+    const turn = d.turn_of_user ? d.turn_of_user.player_index : null;
+    const me = d.my_user ? d.my_user.player_index : null;
+    const viewer = turn === null || me === null ? -1 : me;
+    const locked = !(turn !== null && me !== null && turn === me);
+    try {
+      const v = await runner.call("view", { state: d.state, viewer, ui: inlineUi });
+      if (m.stopped || match !== m) return;
+      shadow.innerHTML = "<style>" + STAGE_BASE + "\n" + sanitizeCss(v.css) + '</style><div class="g-root' + (locked ? " locked" : "") + '">' + sanitizeHtml(v.html) + "</div>";
+    } catch (e) { showBug("Drawing the game failed: " + e.message); }
+  }
+  shadow.addEventListener("click", async (e) => {
+    const d = inlineMsg;
+    if (!d || !match) return;
+    const el = e.target.closest("[data-move],[data-ui]");
+    if (!el || el.disabled) return;
+    const turn = d.turn_of_user ? d.turn_of_user.player_index : null;
+    const me = d.my_user ? d.my_user.player_index : null;
+    if (turn === null || me === null || turn !== me) return;
+    if (el.hasAttribute("data-ui")) {
+      let patch;
+      try { patch = JSON.parse(el.getAttribute("data-ui")); } catch (err) { toast("That button is broken (bad data-ui)."); return; }
+      for (const [k, v] of Object.entries(patch || {})) { if (v === null) delete inlineUi[k]; else inlineUi[k] = v; }
+      inlinePaint();
+      return;
+    }
+    let move;
+    try { move = JSON.parse(el.getAttribute("data-move")); } catch (err) { toast("That button is broken (bad data-move)."); return; }
+    try {
+      const info = await runner.call("apply", { state: d.state, move });
+      onProposal({ message_kind: "make_move", turn_of_player_index: info.current, next_state: info.state, move });
+    } catch (err) {
+      if (err.fromGame) toast("Not allowed: " + err.message); else showBug(err.message);
+    }
+  });
+
+  function sendStateChange(msg) {
+    log(msg);
+    if (surface === "iframe" && frame && frame.contentWindow) frame.contentWindow.postMessage(msg, "*");
+    else { inlineMsg = msg; inlineUi = {}; inlinePaint(); }
+  }
+
+  let mode = "computer";
+  function setMode(m) {
+    mode = m;
+    $("modeSel").value = m;
+    $("passOpts").hidden = m !== "pass";
+  }
+  $("modeSel").onchange = () => { setMode($("modeSel").value); startMatch(); };
+  $("pCount").onchange = () => startMatch();
+  $("hideBetween").onchange = () => { if (match) step(); };
+  $("restartBtn").onclick = () => startMatch();
+  $("againBtn").onclick = () => startMatch();
+
+  function stopMatch() {
+    if (match) match.stopped = true;
+    match = null;
+    inlineMsg = null;
+    $("handoff").hidden = true;
+    $("resultBar").hidden = true;
+  }
+
+  function brief(v) {
+    if (v && typeof v === "object") { const t = JSON.stringify(v); return t.length > 90 ? t.slice(0, 87) + "…" : t; }
+    return v;
+  }
+  function log(obj) {
+    if (!match) return;
+    match.log.push(obj);
+    if (match.log.length > 40) match.log.shift();
+    $("apiLog").innerHTML = match.log.slice().reverse().map((m) =>
+      '<div><span class="k">' + esc(m.message_kind) + "</span> " +
+      esc(JSON.stringify(m, (k, v) => (k === "message_kind" ? undefined : (k === "state" || k === "next_state") ? brief(v) : v))) + "</div>"
+    ).join("");
+  }
+
+  async function startMatch() {
+    if (!runner || !current || !meta) return;
+    stopMatch();
+    const n = +$("pCount").value || meta.allowedPlayers[0];
+    const players = Array.from({ length: n }, (_, i) => ({ player_index: i, kind: mode === "computer" && i > 0 ? "computer" : "human" }));
+    const m = { players, n, state: null, current: null, result: null, viewer: null, log: [], busy: false, stopped: false };
+    match = m;
+    $("apiLog").innerHTML = "";
+    log({ message_kind: "note", text: surface === "iframe" ? "Game package running in a sandboxed iframe" : "Iframe unavailable in this view; the page is drawing the game (fallback)" });
+    try {
+      const info = await runner.call("init", { numPlayers: n });
+      if (m.stopped) return;
+      Object.assign(m, info);
+      await step();
+    } catch (e) { if (!m.stopped) showBug(e.message); }
+  }
+
+  function setStatus(html) { $("status").innerHTML = html; }
+  const dot = (i) => '<span class="dot" style="background:' + pColor(i) + '"></span>';
+
+  async function step() {
+    const m = match;
+    if (!m || m.stopped || !m.state) return; // the match is still starting
+    $("handoff").hidden = true;
+    $("resultBar").hidden = true;
+    if (m.result) {
+      const w = m.result.winners;
+      const text = w.length === 0 ? "It's a draw" : w.length === 1 ? (m.players[w[0]] && m.players[w[0]].kind === "computer" ? "The computer wins" : playerName(w[0]) + " wins!") : "Tie: " + w.map(playerName).join(" and ");
+      $("resultText").textContent = text;
+      $("resultSub").textContent = m.result.summary;
+      $("resultBar").hidden = false;
+      setStatus(w.length === 1 ? dot(w[0]) + "Game over" : "Game over");
+      sendStateChange({ message_kind: "state_change", state: m.state, turn_of_user: null, my_user: null, players: m.players });
+      return;
+    }
+    const cur = m.current;
+    const who = m.players[cur];
+    if (!who) { showBug("currentPlayer returned " + JSON.stringify(cur) + " for a " + m.n + "-player game."); return; }
+    if (who.kind === "computer") {
+      setStatus(dot(cur) + playerName(cur) + " (computer) is thinking…");
+      sendStateChange({ message_kind: "state_change", state: m.state, turn_of_user: { player_index: cur, kind: "computer" }, my_user: { player_index: 0, kind: "human" }, players: m.players });
+      await sleep(650);
+      if (m.stopped) return;
+      try {
+        const move = await runner.call("computer", { state: m.state });
+        if (m.stopped) return;
+        const info = await runner.call("apply", { state: m.state, move });
+        if (m.stopped) return;
+        log({ message_kind: "make_move", turn_of_player_index: info.current, next_state: info.state, move, from: "computer player " + cur });
+        Object.assign(m, info);
+        await step();
+      } catch (e) { if (!m.stopped) showBug("The computer player broke the game: " + e.message); }
+      return;
+    }
+    const viewer = mode === "computer" ? 0 : cur;
+    if (mode === "pass" && $("hideBetween").checked && m.n > 1 && m.viewer !== cur) {
+      setStatus(dot(cur) + playerName(cur) + "'s turn");
+      $("handoffTitle").textContent = "Pass the device to " + playerName(cur);
+      $("handoffBtn").textContent = "I'm " + playerName(cur) + ", show my view";
+      $("handoff").hidden = false;
+      $("handoffBtn").onclick = () => { m.viewer = cur; step(); };
+      return;
+    }
+    m.viewer = viewer;
+    if (mode === "computer") setStatus(dot(cur) + "Your turn");
+    else setStatus(dot(cur) + playerName(cur) + "'s turn");
+    sendStateChange({ message_kind: "state_change", state: m.state, turn_of_user: { player_index: cur, kind: "human" }, my_user: { player_index: viewer, kind: "human" }, players: m.players });
+  }
+
+  /* make_move from the game: the page checks it like a backend would, then moves on. */
+  async function onProposal(d) {
+    const m = match;
+    if (!m || m.stopped || m.busy || m.result) return;
+    const who = m.players[m.current];
+    if (!who || who.kind !== "human" || m.viewer !== m.current) return;
+    m.busy = true;
+    log(d);
+    try {
+      const info = await runner.call("apply", { state: m.state, move: d.move });
+      if (m.stopped) return;
+      if ((info.current ?? null) !== (d.turn_of_player_index ?? null)) log({ message_kind: "note", text: "turn_of_player_index from the game didn't match the rules; using " + info.current });
+      Object.assign(m, info);
+      m.busy = false;
+      await step();
+    } catch (err) {
+      m.busy = false;
+      if (err.fromGame) { toast("Not allowed: " + err.message); step(); }
+      else showBug(err.message);
+    }
+  }
+
+  /* ---------- Capabilities ---------- */
+  const cloudPending = new Set();
+  async function refreshCloud() {
+    if (!uid) return;
+    const loadingUid = uid;
+    $("cloudStatus").textContent = "Loading cloud games…";
+    try {
+      const saved = await GameBuilderCloud.list();
+      if (loadingUid !== uid) return;
+      myGames = saved.filter(g => !cloudPending.has(g.id)).concat(myGames.filter(g => cloudPending.has(g.id)));
+      renderSidebar();
+      $("cloudStatus").textContent = cloudPending.size ? "Unsaved changes · retry cloud saves" : "Cloud connected · " + saved.length + " saved game" + (saved.length === 1 ? "" : "s");
+    } catch {
+      $("cloudStatus").textContent = "Cloud unavailable · refresh to retry";
+      toast("Couldn't load cloud games. Your open game is preserved.");
+    }
+  }
+  async function connectCloud() {
+    $("cloudSettings").hidden = false;
+    const retry = document.createElement("button");
+    retry.id = "retryCloud"; retry.type = "button"; retry.className = "btn outline";
+    retry.textContent = "Retry cloud saves"; retry.hidden = true;
+    $("cloudSettings").appendChild(retry);
+    retry.onclick = () => { retry.hidden = true; for (const id of cloudPending) { const rec = myGames.find(g => g.id === id); if (rec) saveGame(rec); } };
+    $("refreshCloud").onclick = refreshCloud;
+    $("chatAiSettings").onclick = () => {
+      $("aiSettings").closest("details").open = true;
+      const target = !uid ? $("courseAccount").querySelector("button") : $("aiKey");
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+      target.focus({ preventScroll: true });
+    };
+    $("aiProvider").onchange = () => { $("aiModel").value = $("aiProvider").value === "openai" ? "gpt-4.1" : "claude-sonnet-4-6"; };
+    $("aiSettings").onsubmit = e => {
+      e.preventDefault();
+      if (!uid) { toast("Log in to the course platform first."); return; }
+      GameBuilderCloud.configure({ provider: $("aiProvider").value, model: $("aiModel").value.trim(), key: $("aiKey").value.trim() });
+      $("aiKey").value = "";
+      caps.sample = GameBuilderCloud.sample;
+      $("aiSettingsStatus").textContent = "Key set for this tab. It will be checked when you build a game.";
+      applyAiAvailability();
+    };
+    $("clearAiKey").onclick = () => {
+      GameBuilderCloud.configure(null); caps.sample = null; $("aiKey").value = "";
+      $("aiSettingsStatus").textContent = "Key cleared."; applyAiAvailability();
+    };
+    const updateSession = async user => {
+      const previousUid = uid;
+      uid = user?.id || null; canSave = !!uid;
+      if (previousUid !== uid) { building?.abort(); $("aiKey").value = ""; $("aiSettingsStatus").textContent = ""; cloudPending.clear(); myGames = []; if (current && !current.example) showNew(); renderSidebar(); }
+      $("whoName").textContent = user?.name || "Guest"; $("avatar").textContent = user?.name?.slice(0, 1).toUpperCase() || "?";
+      caps.sample = uid && GameBuilderCloud.configured() ? GameBuilderCloud.sample : null;
+      applyAiAvailability();
+      Auth.renderMenu($("courseAccount"));
+      if (GameBuilderCloud.backend === "firebase") {
+        $("googleSignIn").hidden = !!uid; $("googleSignOut").hidden = !uid;
+        $("importLibraryLabel").hidden = !uid;
+        caps.sample = uid && GameBuilderCloud.configured() ? GameBuilderCloud.sample : null;
+        applyAiAvailability();
+      }
+      if (uid) await refreshCloud();
+      else $("cloudStatus").textContent = "Log in above to load and save your course games.";
+    };
+    try {
+      if (GameBuilderCloud.backend === "course") $("aiProvider").querySelector('[value="anthropic"]')?.remove();
+      if (GameBuilderCloud.backend === "firebase") {
+        $("firebaseAccount").hidden = false;
+        $("aiProvider").querySelector('[value="anthropic"]').remove();
+        $("googleSignIn").onclick = () => GameBuilderCloud.signIn().catch(() => toast("Google sign-in failed. Please try again."));
+        $("googleSignOut").onclick = () => {
+          if (cloudPending.size || building) { toast("Finish building and saving before signing out."); return; }
+          GameBuilderCloud.signOut().catch(() => toast("Sign-out failed. Please retry."));
+        };
+        $("importLibrary").onchange = async () => {
+          const file = $("importLibrary").files[0]; if (!file) return;
+          try {
+            if (file.size > 10000000) throw new Error("The library export is too large.");
+            const count = await GameBuilderCloud.importLibrary(JSON.parse(await file.text()));
+            await refreshCloud(); toast("Imported " + count + " game(s) into Firestore.");
+          } catch (error) { toast(error.message || "Import failed. Please retry."); }
+          finally { $("importLibrary").value = ""; }
+        };
+      }
+      await updateSession(await GameBuilderCloud.session());
+      GameBuilderCloud.onSession?.(updateSession);
+    } catch { $("cloudStatus").textContent = "Connection failed · reload to retry"; }
+    document.addEventListener("visibilitychange", () => { if (!document.hidden && !building && uid) refreshCloud(); });
+    setInterval(() => { if (!document.hidden && !building && !cloudPending.size && uid) refreshCloud(); }, 30000);
+    window.addEventListener("beforeunload", e => { if (cloudPending.size) { e.preventDefault(); e.returnValue = ""; } });
+  }
+  function applyAiAvailability() {
+    $("noAi").hidden = !!caps.sample;
+    $("chatAiSetup").hidden = !!caps.sample;
+    $("chatAiSettings").hidden = !window.__gbCloud;
+    $("chatAiNote").textContent = window.__gbCloud
+      ? (!uid
+        ? "Log in above, then enter your OpenAI API key in AI settings to update this game."
+        : "Enter your API key in AI settings to update this game. Keys clear when you reload the page.")
+      : "AI editing is unavailable in this view. Open this artifact in Claude to update the game.";
+    setBusy(!!building);
+  }
+
+  async function connect() {
+    if (window.__gbCloud) return connectCloud();
+    const use = window.claude && typeof window.claude.use === "function" ? (n) => window.claude.use(n).catch(() => null) : async () => null;
+    const [sample, db, user] = await Promise.all([use("sample"), use("db"), use("user")]);
+    caps.sample = sample; caps.db = db; caps.user = user;
+    applyAiAvailability();
+    let name = "";
+    if (user) {
+      try { uid = await user.id(); } catch (e) { uid = null; }
+      try { name = (await user.name()) || ""; } catch (e) { name = ""; }
+    }
+    $("whoName").textContent = name ? name : uid ? "Signed in" : "Guest";
+    $("avatar").textContent = name ? name.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase() : "?";
+    if (db && uid) {
+      canSave = true;
+      db.collection("data/users/" + uid).onSnapshot(
+        (snap) => {
+          const fromDb = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const ids = new Set(fromDb.map((g) => g.id));
+          myGames = fromDb.concat(myGames.filter((g) => !ids.has(g.id) && !g.example));
+          renderSidebar();
+        },
+        () => { canSave = false; showSaveNote("Saving is off in this view, so games last until you close the page."); }
+      );
+    } else {
+      showSaveNote(uid ? "Saving is off in this view, so games last until you close the page." : "Sign in to keep your games.");
+    }
+  }
+
+  renderSidebar();
+  applyAiAvailability();
+  connect();
+})();
+</script>
