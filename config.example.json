@@ -2,11 +2,14 @@
   "server": {
     "host": "127.0.0.1",
     "port": 8000,
-    "keep_alive_timeout_seconds": 3600
+    "keep_alive_timeout_seconds": 3600,
+    "cors_allow_origins": ["*"]
   },
   "data_file": {
     "path": "~/.local/share/game-platform/data.json",
-    "save_interval_seconds": 1.0
+    "save_interval_seconds": 1.0,
+    "backup_interval_seconds": 3600.0,
+    "backup_keep": 48
   },
   "debug_tools": true,
   "master_password": "",

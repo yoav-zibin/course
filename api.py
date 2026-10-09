@@ -1,7 +1,7 @@
 """FastAPI routes for the game platform."""
 
 import secrets
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from http import HTTPStatus
 from pathlib import Path
 from typing import Annotated, Final
@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
+from pydantic import JsonValue
 
 from game_platform.models import GameRules, MatchStatus
 from game_platform.schemas import (
@@ -516,6 +517,11 @@ def browse() -> FileResponse:
     return FileResponse(_STATIC_DIR / "browse.html")
 
 
+@debug_router.get("/stats", dependencies=[MasterPassword])
+def stats_page() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "stats.html")
+
+
 @debug_router.get("/privacy")
 def privacy() -> FileResponse:
     return FileResponse(_STATIC_DIR / "privacy.html")
@@ -525,6 +531,39 @@ def privacy() -> FileResponse:
 def all_data(platform: Platform) -> AllDataOut:
     """Everything, including users' passwords."""
     return AllDataOut.of(platform.all_data())
+
+
+@debug_router.get("/admin/stats", dependencies=[MasterPassword])
+def admin_stats(platform: Platform) -> dict[str, JsonValue]:
+    """Counts about users, games and matches (the backoffice's statistics page)."""
+    return platform.stats()
+
+
+@debug_router.delete(
+    "/admin/users/{user_id}",
+    dependencies=[MasterPassword],
+    status_code=HTTPStatus.NO_CONTENT,
+)
+def admin_delete_user(platform: Platform, user_id: str) -> None:
+    platform.admin_delete_user(user_id)
+
+
+@debug_router.delete(
+    "/admin/games/{game_id}",
+    dependencies=[MasterPassword],
+    status_code=HTTPStatus.NO_CONTENT,
+)
+def admin_delete_game(platform: Platform, game_id: str) -> None:
+    platform.admin_delete_game(game_id)
+
+
+@debug_router.delete(
+    "/admin/matches/{match_id}",
+    dependencies=[MasterPassword],
+    status_code=HTTPStatus.NO_CONTENT,
+)
+def admin_delete_match(platform: Platform, match_id: str) -> None:
+    platform.admin_delete_match(match_id)
 
 
 @debug_router.post("/agent/chat")
@@ -582,20 +621,26 @@ def create_app(
     auth_config: AuthConfig | None = None,
     sms_sender: CodeSender | None = None,
     email_sender: CodeSender | None = None,
+    cors_allow_origins: Sequence[str] = ("*",),
 ) -> FastAPI:
     """[debug_tools] adds the web pages (/portal, /builder, /console, /browse) and
-    /debug/all-data, which exposes everything (including users' passwords). /browse and
-    /debug/all-data need [master_password], unless it is empty."""
+    /debug/all-data, which exposes everything (including users' passwords), and the
+    backoffice's /stats and /admin/* endpoints. /browse, /stats, /debug/all-data and
+    /admin/* need [master_password], unless it is empty.
+
+    [cors_allow_origins] are the origins whose pages may call the API from a browser;
+    empty adds no CORS headers, for when a reverse proxy already adds them (two
+    `Access-Control-Allow-Origin` headers make browsers reject the response)."""
     app = FastAPI(title="Game platform")
-    # Allow REST API requests from any domain (browser cross-origin requests).
-    # Auth uses per-request Authorization headers (HTTP Basic), not cookies,
-    # so a wildcard origin is safe here.
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # Allow REST API requests from other domains (browser cross-origin requests).
+    # Auth uses per-request headers, not cookies, so a wildcard origin is safe here.
+    if cors_allow_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(cors_allow_origins),
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
     app.state.platform = platform if platform is not None else GamePlatform()
     app.state.master_password = master_password
     app.state.model_api_config = (

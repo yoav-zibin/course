@@ -22,6 +22,11 @@ class ServerConfig(_Section):
     # connections without noticing they were closed (and don't retry) then fail the next
     # request with errors like "Connection closed by remote host".
     keep_alive_timeout_seconds: Annotated[int, Field(ge=1)] = 3600
+    # Origins whose web pages may call the API from a browser ("*" is any origin).
+    # Use [] when a reverse proxy (e.g. Caddy) already adds the CORS headers: if both
+    # do, every response carries two Access-Control-Allow-Origin headers and browsers
+    # reject it.
+    cors_allow_origins: tuple[str, ...] = ("*",)
 
 
 class DataFileConfig(_Section):
@@ -29,6 +34,11 @@ class DataFileConfig(_Section):
     path: Path = Path("~/.local/share/game-platform/data.json")
     # After a change, the file is rewritten at most once per this many seconds.
     save_interval_seconds: Annotated[float, Field(ge=0)] = 1.0
+    # Timestamped copies of the data file, in "<path>.backups/", so a corrupted or
+    # wiped file can be restored. At most one copy per interval; 0 turns backups off.
+    backup_interval_seconds: Annotated[float, Field(ge=0)] = 3600.0
+    # How many of the newest copies to keep.
+    backup_keep: Annotated[int, Field(ge=1)] = 48
 
 
 class ModelApiConfig(_Section):
