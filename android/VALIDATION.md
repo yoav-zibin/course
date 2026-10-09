@@ -19,15 +19,18 @@ Service: `https://buildplay.fun/`. No local development backend is needed for ga
   duplicate filtering, rejected-move state resend and nonzero Compose viewport checks.
 - A simulated committed move with a lost acknowledgement passed recovery: submissions
   stayed blocked offline and reconnect fetched the saved result without replaying it.
+- A separate live lifecycle test passed a full activity close/relaunch with a new
+  ViewModel, preserving the account and selected match. Disabling the emulator's
+  Wi-Fi and mobile data produced the connection error; restoring their prior settings
+  recovered the same authoritative match. This test passed on October 9.
 - Live API checks rejected wrong-turn, duplicate and stale submissions; fresh clients
   observed the saved users, matches and moves. No local backend served these games.
 
 Debug APK SHA-256:
 `c38dbe491311b0980f6b8161bf67bfe6d1d4e186efa2524c49db21521b9fc9ef`.
 
-Hardware network toggling and a process-kill/relaunch test are not separately claimed;
-the automated checks above cover simulated network failure, configuration recreation
-and new session-store/ViewModel instances.
+An OS process-kill test is not separately claimed. The checks cover full activity
+destruction/relaunch, rotation, new session-store/ViewModel instances and real network loss.
 
 ## Known shared-service issues
 
@@ -54,7 +57,8 @@ must be checked with the VM administrator.
 ## Delivery boundaries
 
 - Shared repository write access is pending: GitHub denied the `DaPillah` push dry run.
-- Google Cloud project access was reported by the user; selecting the authorized
-  browser account and confirming VM SSH access are still pending. VM release
-  signing/build and cloud restart tests have not run.
+- Google Cloud project access is confirmed. The existing VM is an e2-micro with
+  1 GB RAM and a 10 GB boot Persistent Disk configured to delete with the VM.
+  CLI/SSH authentication, build-resource inspection, VM release signing/build,
+  data-path verification and cloud restart tests remain pending.
 - Physical-device testing is pending; emulator testing does not replace the class requirement.

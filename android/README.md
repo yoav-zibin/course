@@ -117,6 +117,16 @@ cells from top-left, play O at `3,4` for the first match and `1,4,5,6` for the s
 The test checks a win, draw and portrait/landscape restoration. Each browser action
 has a three-minute timeout. It retains these demonstration matches for inspection.
 
+On the dedicated test emulator, the following additionally checks full activity
+close/relaunch and a real network interruption. It temporarily disables Wi-Fi and
+mobile data, then restores their previous settings, including on failure:
+
+```bash
+./android/scripts/build_android.sh connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=com.dapillah.gameportal.CloudLifecycleTest \
+  -Pandroid.testInstrumentationRunnerArguments.lifecycleBackend=true
+```
+
 Work on a branch in `yoav-zibin/course`. Before committing, inspect staged paths and
 the diff. The intended additions live under `android/`, plus local/secret exclusions
 in the root `.gitignore`. Do not include server data, account files, keys, APKs, or
