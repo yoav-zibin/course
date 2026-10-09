@@ -11,5 +11,7 @@ const page = '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
   '<script>window.__gbCloud=true;\n' + script('src/course-package.js') + '\n' +
   script('src/course-cloud.js') + '</script></head><body>' + read('dist/gamebuilder.html') +
   '</body></html>';
-fs.writeFileSync(path.join(root, 'index.html'), page);
-console.log('Built static/gamebuilder/index.html');
+fs.writeFileSync(path.join(root, '..', 'builder.html'), page);
+// Keep old preview/bookmark links working through the same existing entry point.
+fs.writeFileSync(path.join(root, 'index.html'), '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Game Builder</title><meta http-equiv="refresh" content="0;url=/builder"></head><body><a href="/builder">Open Game Builder</a></body></html>');
+console.log('Built static/builder.html and the legacy preview redirect');

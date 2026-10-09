@@ -14,7 +14,7 @@ const example = EXAMPLES[0];
     const context = await browser.newContext(); contexts.push(context);
     const page = await context.newPage();
     page.on('pageerror', error => errors.push(error.message));
-    await page.goto(base + '/static/gamebuilder/index.html');
+    await page.goto(base + '/builder');
     if (user) await page.evaluate(user => Auth.upsert({ ...user, user_id: user.id }), user);
     await page.waitForFunction(() => document.querySelector('#cloudStatus').textContent.includes('Cloud connected'));
     return page;
@@ -26,6 +26,11 @@ const example = EXAMPLES[0];
     const response = await fetch(base + '/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ display_name: 'Builder test' }) });
     const user = await response.json();
     const a = await device(user);
+    assert.equal(await a.locator('nav a[href="/builder"]').count(), 1);
+    assert.equal(await a.locator('nav a[href="/static/gamebuilder/index.html"]').count(), 0);
+    const legacy = await a.request.get(base + '/static/gamebuilder/code-editor.html');
+    assert.equal(legacy.status(), 200);
+    assert.ok((await legacy.text()).includes('/static/builder.js'));
     // Test the actual generation and save flow; no real provider call or key.
     let generation = 0;
     await a.route('https://api.openai.com/v1/responses', route => {

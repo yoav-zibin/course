@@ -3,8 +3,10 @@
 Adapted from https://github.com/marcelle-r/gamebuilder at `f23953e`.
 The original Firebase demo remains at https://gamebuilder-demo-c9e4e.web.app/.
 
-Open `/static/gamebuilder/index.html` on the course server. The course pages link
-to this tab. Log in using the same course account on both devices. Enter an
+Open `/builder` on the course server using the existing **Game Builder** tab.
+The original course editor is retained at `/static/gamebuilder/code-editor.html`,
+linked as **Code editor**; existing games made there remain editable there.
+Old `/static/gamebuilder/index.html` bookmarks redirect to `/builder`. Log in using the same course account on both devices. Enter an
 OpenAI API key to generate/refine a game, wait for **Saved to cloud**, then load
 it on another device using **Refresh cloud games**. Play it in `/portal`.
 Google/email logins recover the same account across devices; separately created
@@ -46,7 +48,7 @@ node static/gamebuilder/tests/harness.test.js
 node static/gamebuilder/tests/course-package.test.cjs
 ```
 
-The generated `index.html` is committed, so the server needs no Node build step.
+The generated `static/builder.html` is committed, so the server needs no Node build step.
 Source lives in `src/`; rebuild after source edits. The intermediate `dist/` is
 ignored. The rest of the course project still uses its normal Python setup.
 
@@ -65,7 +67,6 @@ sign-in and production deployment must be checked separately after release.
 ## Release
 
 Merge the frontend changes into the shared repository, then update the course VM
-using its existing deployment process. The new tab will appear at
-`https://buildplay.fun/static/gamebuilder/index.html`. Pushing a branch by itself
+using its existing deployment process. The existing tab will open your frontend at `https://buildplay.fun/builder`. Pushing a branch by itself
 does not demonstrate deployment. No VM access/configuration was supplied in this
 chat, so these changes are prepared and tested locally only.
