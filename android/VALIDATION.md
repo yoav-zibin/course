@@ -46,9 +46,10 @@ Until the shared web frontend is fixed and deployed, use Android X to make the
 winning fifth move or drawing ninth move. This is a web frontend compatibility fix,
 not a proposed API change; the Android contribution does not modify shared web files.
 
-The unmodified backend baseline has 146 passing tests and one stale example-data
-fixture failure. Regenerating that fixture locally made all 147 pass, but the
-unrelated data change is excluded from this contribution.
+After integrating shared main `dab47ed`, the backend suite has 160 passing tests
+and one stale example-data fixture failure. Every backend source and test file is
+identical to that upstream commit. The same fixture failure existed before this
+integration; the unrelated generated-data change is excluded from this contribution.
 
 Local process persistence passed with SIGINT. An immediate SIGTERM after a move
 lost pending data; see VM_BUILD.md. Cloud restart behavior and retained storage
@@ -56,9 +57,25 @@ must be checked with the VM administrator.
 
 ## Delivery boundaries
 
-- Shared repository write access is pending: GitHub denied the `DaPillah` push dry run.
+- Shared repository write access is confirmed by a successful push dry run.
+  The Android branch has not been published or merged into shared main.
 - Google Cloud project access is confirmed. The existing VM is an e2-micro with
   1 GB RAM and a 10 GB boot Persistent Disk configured to delete with the VM.
   CLI/SSH authentication, build-resource inspection, VM release signing/build,
   data-path verification and cloud restart tests remain pending.
 - Physical-device testing is pending; emulator testing does not replace the class requirement.
+
+## Pre-submission scope review
+
+- Integrated upstream main `dab47ed` without conflicts, preserving the iOS portal
+  and backend changes already merged by classmates.
+- The final diff adds only 38 files under `android/`. Existing shared files,
+  including the root ignore file, backend APIs, web portal and iOS frontend,
+  are byte-for-byte identical to upstream main.
+- Android build, JVM test task and lint passed after integration. Unchanged
+  Gradle tasks reused their previously successful outputs.
+- No APKs, local account data, signing keys, private build configuration or IDE
+  files are tracked in the contribution. A targeted credential-pattern scan
+  found no matches; this is not a guarantee against every possible secret format.
+- Android build scripts run explicitly; they add no shared deployment hook or
+  server restart. Live cloud tests are opt-in.

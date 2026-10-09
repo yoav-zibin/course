@@ -128,11 +128,11 @@ mobile data, then restores their previous settings, including on failure:
 ```
 
 Work on a branch in `yoav-zibin/course`. Before committing, inspect staged paths and
-the diff. The intended additions live under `android/`, plus local/secret exclusions
-in the root `.gitignore`. Do not include server data, account files, keys, APKs, or
+the diff. The intended additions live entirely under `android/`. Keep local Python
+environments and test-account files outside Git using `.git/info/exclude`. Do not include server data, account files, keys, APKs, or
 local IDE settings. Backend endpoints, schemas and portal/game messages remain unchanged.
 
 The upstream backend suite currently has a pre-existing stale example fixture failure
-at `test_example_data.py::test_the_example_data_file_is_up_to_date` (146 passed, 1 failed).
-Regenerating the fixture locally makes all 147 pass, but that unrelated generated-data
-change is deliberately excluded from the Android frontend contribution.
+at `test_example_data.py::test_the_example_data_file_is_up_to_date` (160 passed, 1 failed after integrating shared main `dab47ed`).
+That unrelated generated-data change is deliberately excluded from the Android
+frontend contribution.

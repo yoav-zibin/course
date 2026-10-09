@@ -2,9 +2,3 @@ __pycache__/
 *.pyc
 .pytest_cache/
 data.json
-.venv/
-.local/
-.DS_Store
-*.jks
-*.keystore
-artifacts/

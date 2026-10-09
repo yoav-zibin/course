@@ -7,3 +7,5 @@ signing.properties
 *-build.json
 *.jks
 *.keystore
+artifacts/
+.DS_Store
