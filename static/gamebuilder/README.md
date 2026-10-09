@@ -1,4 +1,4 @@
-# Marcelle’s GameBuilder
+# Game Builder
 
 Adapted from https://github.com/marcelle-r/gamebuilder at `f23953e`.
 The original Firebase demo remains at https://gamebuilder-demo-c9e4e.web.app/.
