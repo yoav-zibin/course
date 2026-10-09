@@ -1,0 +1,38 @@
+// !$*UTF8*$!
+{ archiveVersion = 1; classes = {}; objectVersion = 56; objects = {
+00000000000000000000012C = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamePortalTests/PortalUITests.swift; sourceTree = "<group>"; };
+00000000000000000000012D = { isa = PBXBuildFile; fileRef = 00000000000000000000012C; };
+00000000000000000000012E = { isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = GamePortalUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+00000000000000000000012F = { isa = PBXNativeTarget; buildConfigurationList = 000000000000000000000134; buildPhases = (000000000000000000000130); buildRules = (); dependencies = (000000000000000000000136); name = GamePortalUITests; productName = GamePortalUITests; productReference = 00000000000000000000012E; productType = "com.apple.product-type.bundle.ui-testing"; };
+000000000000000000000130 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (00000000000000000000012D); runOnlyForDeploymentPostprocessing = 0; };
+000000000000000000000132 = { isa = XCBuildConfiguration; name = Debug; buildSettings = { PRODUCT_BUNDLE_IDENTIFIER = edu.columbia.gameportal.uitests; PRODUCT_NAME = "$(TARGET_NAME)"; GENERATE_INFOPLIST_FILE = YES; TARGETED_DEVICE_FAMILY = "1,2"; TEST_TARGET_NAME = GamePortal; CODE_SIGN_STYLE = Automatic; }; };
+000000000000000000000133 = { isa = XCBuildConfiguration; name = Release; buildSettings = { PRODUCT_BUNDLE_IDENTIFIER = edu.columbia.gameportal.uitests; PRODUCT_NAME = "$(TARGET_NAME)"; GENERATE_INFOPLIST_FILE = YES; TARGETED_DEVICE_FAMILY = "1,2"; TEST_TARGET_NAME = GamePortal; CODE_SIGN_STYLE = Automatic; }; };
+000000000000000000000134 = { isa = XCConfigurationList; buildConfigurations = (000000000000000000000132,000000000000000000000133); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+000000000000000000000135 = { isa = PBXContainerItemProxy; containerPortal = 000000000000000000000001; proxyType = 1; remoteGlobalIDString = 000000000000000000000005; remoteInfo = GamePortal; };
+000000000000000000000136 = { isa = PBXTargetDependency; target = 000000000000000000000005; targetProxy = 000000000000000000000135; };
+000000000000000000000064 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamePortalApp.swift; sourceTree = "<group>"; };
+0000000000000000000000C8 = { isa = PBXBuildFile; fileRef = 000000000000000000000064; };
+000000000000000000000065 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Match.swift; sourceTree = "<group>"; };
+0000000000000000000000C9 = { isa = PBXBuildFile; fileRef = 000000000000000000000065; };
+000000000000000000000066 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortalStore.swift; sourceTree = "<group>"; };
+0000000000000000000000CA = { isa = PBXBuildFile; fileRef = 000000000000000000000066; };
+000000000000000000000067 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameWebView.swift; sourceTree = "<group>"; };
+0000000000000000000000CB = { isa = PBXBuildFile; fileRef = 000000000000000000000067; };
+00000000000000000000006E = { isa = PBXFileReference; lastKnownFileType = folder; path = Game; sourceTree = "<group>"; };
+0000000000000000000000D2 = { isa = PBXBuildFile; fileRef = 00000000000000000000006E; };
+00000000000000000000006F = { isa = PBXFileReference; explicitFileType = wrapper.application; path = GamePortal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+000000000000000000000001 = { isa = PBXProject; attributes = { LastUpgradeCheck = 2600; }; buildConfigurationList = 000000000000000000000014; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; knownRegions = (en, Base); mainGroup = 000000000000000000000002; productRefGroup = 000000000000000000000004; projectDirPath = ""; projectRoot = ""; targets = (000000000000000000000005,00000000000000000000012F); };
+000000000000000000000002 = { isa = PBXGroup; children = (000000000000000000000003,000000000000000000000004,00000000000000000000012C); sourceTree = "<group>"; };
+000000000000000000000003 = { isa = PBXGroup; children = (000000000000000000000064,000000000000000000000065,000000000000000000000066,000000000000000000000067,00000000000000000000006E); path = GamePortal; sourceTree = "<group>"; };
+000000000000000000000004 = { isa = PBXGroup; children = (00000000000000000000006F,00000000000000000000012E); name = Products; sourceTree = "<group>"; };
+000000000000000000000005 = { isa = PBXNativeTarget; buildConfigurationList = 000000000000000000000015; buildPhases = (000000000000000000000006,000000000000000000000007,000000000000000000000008); buildRules = (); dependencies = (); name = GamePortal; productName = GamePortal; productReference = 00000000000000000000006F; productType = "com.apple.product-type.application"; };
+000000000000000000000006 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (0000000000000000000000C8,0000000000000000000000C9,0000000000000000000000CA,0000000000000000000000CB); runOnlyForDeploymentPostprocessing = 0; };
+000000000000000000000007 = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+000000000000000000000008 = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (0000000000000000000000D2); runOnlyForDeploymentPostprocessing = 0; };
+00000000000000000000001E = { isa = XCBuildConfiguration; name = Debug; buildSettings = { SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0; }; };
+00000000000000000000001F = { isa = XCBuildConfiguration; name = Release; buildSettings = { SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0; }; };
+000000000000000000000020 = { isa = XCBuildConfiguration; name = Debug; buildSettings = { PRODUCT_BUNDLE_IDENTIFIER = edu.columbia.gameportal.starter; PRODUCT_NAME = "$(TARGET_NAME)"; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_CFBundleDisplayName = GamePortal; INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait; TARGETED_DEVICE_FAMILY = "1,2"; CODE_SIGN_STYLE = Automatic; ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES; CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 1.0; SWIFT_EMIT_LOC_STRINGS = YES; }; };
+000000000000000000000021 = { isa = XCBuildConfiguration; name = Release; buildSettings = { PRODUCT_BUNDLE_IDENTIFIER = edu.columbia.gameportal.starter; PRODUCT_NAME = "$(TARGET_NAME)"; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_CFBundleDisplayName = GamePortal; INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait; TARGETED_DEVICE_FAMILY = "1,2"; CODE_SIGN_STYLE = Automatic; ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES; CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 1.0; SWIFT_EMIT_LOC_STRINGS = YES; }; };
+000000000000000000000014 = { isa = XCConfigurationList; buildConfigurations = (00000000000000000000001E,00000000000000000000001F); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+000000000000000000000015 = { isa = XCConfigurationList; buildConfigurations = (000000000000000000000020,000000000000000000000021); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+}; rootObject = 000000000000000000000001; }
