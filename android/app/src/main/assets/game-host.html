@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>html,body{margin:0;width:100%;height:100%;background:#fff}iframe{position:fixed;inset:0;display:block;border:0;width:100%;height:100%}</style>
+</head><body><script>
+"use strict";
+// This adapter is private to Android. The game's public postMessage API is unchanged.
+(() => {
+  let frame = null, key = null, pending = null, ready = false, last = null, sentCount = null;
+  const emit = data => window.PortalNative.postMessage(JSON.stringify(data));
+  function send() {
+    if (!ready || !pending || !frame) return;
+    const signature = JSON.stringify([pending.message, pending.revision]);
+    if (last === signature) return;
+    last = signature;
+    sentCount = pending.message.move_count;
+    frame.contentWindow.postMessage(pending.message, "*");
+  }
+  window.PortalHost = {
+    render(payload) {
+      pending = payload;
+      if (key !== payload.key) {
+        key = payload.key; ready = false; last = null; sentCount = null;
+        const next = document.createElement("iframe");
+        next.title = "Game";
+        next.setAttribute("sandbox", "allow-scripts");
+        next.addEventListener("load", () => {
+          if (frame !== next) return;
+          next.dataset.loaded = "true";
+          last = null; ready = true; send();
+        });
+        next.srcdoc = payload.code;
+        frame = next;
+        document.body.replaceChildren(next);
+      }
+      send();
+    }
+  };
+  window.addEventListener("message", event => {
+    if (!frame || event.source !== frame.contentWindow || sentCount === null) return;
+    const move = event.data;
+    if (!move || move.type !== "make_move") return;
+    const expected = sentCount;
+    sentCount = null; // One make_move per state_changed, matching the course contract.
+    emit({type:"move", key, expected, move});
+  });
+  emit({type:"ready"});
+})();
+</script></body></html>
