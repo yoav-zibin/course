@@ -1,0 +1,11 @@
+:root { color-scheme: light; font-family: -apple-system, sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; color: #122938; }
+main { padding: 18px; max-width: 360px; margin: auto; }
+#board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+button { aspect-ratio: 1; border: 0; border-radius: 16px; background: #f0f3ef; font-size: clamp(30px, 12vw, 55px); font-weight: 600; color: #076e6e; touch-action: manipulation; }
+button.o { color: #d64d2b; }
+button:disabled { opacity: 1; }
+button:focus-visible { outline: 3px solid #076e6e; outline-offset: 2px; }
+button:active:not(:disabled) { background: #d6e8df; }
+p { font-size: 13px; color: #657079; text-align: center; margin: 15px 0 0; }
