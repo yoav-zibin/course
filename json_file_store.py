@@ -6,9 +6,12 @@ changes costs one write. [close] writes any pending changes; changes made less t
 [min_write_interval_seconds] before a crash can be lost.
 """
 
+import datetime as dt
 import json
 import logging
+import shutil
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -43,11 +46,23 @@ _VERSION_ADAPTER: Final = TypeAdapter(_FileVersion)
 
 
 class JsonFileStore:
-    def __init__(self, path: Path, *, min_write_interval_seconds: float = 1.0) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        min_write_interval_seconds: float = 1.0,
+        backup_interval_seconds: float = 0,
+        backup_keep: int = 48,
+    ) -> None:
         """Loads [path] if it exists, otherwise starts empty; the file is created on
         the first change. Raises if the file exists but can't be parsed, rather than
-        overwriting it."""
+        overwriting it. With a positive [backup_interval_seconds], writes copy the
+        file into "<path>.backups/" at most that often, keeping the newest
+        [backup_keep]."""
         self._path = path
+        self._backup_interval_seconds = backup_interval_seconds
+        self._backup_keep = backup_keep
+        self._last_backup = float("-inf")
         self._min_write_interval_seconds = min_write_interval_seconds
         self._inner = (
             InMemoryStore.of_snapshot(read_snapshot(path))
@@ -85,10 +100,32 @@ class JsonFileStore:
                 snapshot = self._inner.snapshot()
             try:
                 write_snapshot(self._path, snapshot)
+                self._back_up_if_due()
             except Exception:
                 logger.exception("Failed to write %s; will retry", self._path)
                 with self._lock:
                     self._set_dirty()
+
+    def _back_up_if_due(self) -> None:
+        """Callers must hold [_write_lock]. A backup failure is logged, not retried:
+        the data itself was written."""
+        if self._backup_interval_seconds <= 0:
+            return
+        now = time.monotonic()
+        if now - self._last_backup < self._backup_interval_seconds:
+            return
+        try:
+            directory = self._path.with_name(f"{self._path.name}.backups")
+            directory.mkdir(parents=True, exist_ok=True)
+            stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            shutil.copyfile(self._path, directory / f"{self._path.stem}-{stamp}.json")
+            for old in sorted(directory.glob(f"{self._path.stem}-*.json"))[
+                : -self._backup_keep
+            ]:
+                old.unlink()
+            self._last_backup = now
+        except OSError:
+            logger.exception("Failed to back up %s", self._path)
 
     def _set_dirty(self) -> None:
         """Callers must hold [_lock]."""

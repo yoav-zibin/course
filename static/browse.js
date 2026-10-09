@@ -38,6 +38,8 @@ function renderTable(container, countNode, columns, rows) {
     container.replaceChildren(el("div", { class: "empty", textContent: message }));
     return;
   }
+  const deletable = visible.some((row) => row.remove);
+  const allColumns = deletable ? [...columns, { title: "" }] : columns;
   const body = el("tbody");
   for (const row of visible) {
     const expandable = Boolean(row.detail);
@@ -48,23 +50,65 @@ function renderTable(container, countNode, columns, rows) {
         class: [expandable ? "row" : "", expanded ? "expanded" : ""].join(" "),
         onclick: expandable ? () => toggle(row.key) : undefined,
       },
-      row.cells.map((cell, index) =>
-        el("td", { class: columns[index].class ?? "" }, cell ?? ""),
-      ),
+      [
+        ...row.cells.map((cell, index) =>
+          el("td", { class: columns[index].class ?? "" }, cell ?? ""),
+        ),
+        deletable
+          ? el(
+              "td",
+              {},
+              row.remove
+                ? el("button", {
+                    class: "danger",
+                    textContent: "Delete",
+                    onclick: (event) => {
+                      event.stopPropagation();
+                      deleteRows([row]);
+                    },
+                  })
+                : "",
+            )
+          : null,
+      ],
     );
     body.append(tr);
     if (expanded) {
-      body.append(el("tr", { class: "detail" }, el("td", { colSpan: columns.length }, row.detail())));
+      body.append(el("tr", { class: "detail" }, el("td", { colSpan: allColumns.length }, row.detail())));
     }
   }
   container.replaceChildren(
     el(
       "table",
       {},
-      el("thead", {}, el("tr", {}, columns.map((column) => el("th", { class: column.class ?? "", textContent: column.title })))),
+      el("thead", {}, el("tr", {}, allColumns.map((column) => el("th", { class: column.class ?? "", textContent: column.title })))),
       body,
     ),
+    deletable
+      ? el("button", {
+          class: "danger",
+          textContent: `Delete these ${visible.filter((row) => row.remove).length} rows`,
+          onclick: () => deleteRows(visible.filter((row) => row.remove)),
+        })
+      : null,
   );
+}
+
+/** Deletes rows through the admin API after a confirmation; the list shows the count. */
+async function deleteRows(rows) {
+  const names = rows.slice(0, 5).map((row) => row.remove.label).join(", ");
+  const more = rows.length > 5 ? ` and ${rows.length - 5} more` : "";
+  if (!confirm(`Delete ${rows.length} row(s): ${names}${more}?
+This can't be undone.`)) return;
+  const failures = [];
+  for (const row of rows) {
+    const response = await fetch(row.remove.path, { method: "DELETE" });
+    if (!response.ok) failures.push(`${row.remove.label}: ${response.status}`);
+  }
+  $("error").textContent = failures.length ? `Couldn't delete: ${failures.join("; ")}` : "";
+  toast(`Deleted ${rows.length - failures.length} row(s)`);
+  state.allData = null;
+  await refresh();
 }
 
 function toggle(key) {
@@ -110,6 +154,7 @@ function renderUsers(data, games) {
     return {
       key: `user:${user.id}`,
       text: `${user.display_name} ${user.id}`,
+      remove: { path: `/admin/users/${encodeURIComponent(user.id)}`, label: user.display_name },
       cells: [
         user.display_name,
         idChip(user.id),
@@ -141,6 +186,7 @@ function renderGames(data, games, versionsById, nameOf) {
     const matches = data.matches.filter((match) => match.game_id === game.id);
     return {
       key: `game:${game.id}`,
+      remove: game.deleted ? null : { path: `/admin/games/${encodeURIComponent(game.id)}`, label: game.name },
       text: `${game.name} ${game.id} ${nameOf(game.owner_user_id)} ${game.deleted ? "deleted" : "live"}`,
       cells: [
         game.name,
@@ -245,6 +291,7 @@ function renderMatches(data, gamesById, nameOf) {
     const players = match.players.map((player) => (player.user_id ? nameOf(player.user_id) : "computer"));
     return {
       key: `match:${match.id}`,
+      remove: { path: `/admin/matches/${encodeURIComponent(match.id)}`, label: match.id },
       text: [match.id, gameName, nameOf(match.owner_user_id), match.status, match.end_reason ?? "", ...players].join(" "),
       cells: [
         idChip(match.id),
