@@ -323,8 +323,11 @@ stop the server at startup with an error naming the field.
 | `server.host`                     | `"127.0.0.1"`                            | Interface to listen on; use `"0.0.0.0"` to accept connections from other machines |
 | `server.port`                     | `8000`                                   | Port to listen on |
 | `server.keep_alive_timeout_seconds` | `3600`                                 | How long an idle connection is kept open; see below |
+| `server.cors_allow_origins`       | `["*"]`                                  | Origins whose pages may call the API from a browser. Use `[]` when a reverse proxy (Caddy, nginx) already adds CORS headers: if both do, responses carry two `Access-Control-Allow-Origin` headers and browsers reject them |
 | `data_file.path`                  | `"~/.local/share/game-platform/data.json"` | Where all data is saved. `~` is expanded, and a relative path is relative to the config file's directory |
 | `data_file.save_interval_seconds` | `1.0`                                    | After a change, the data file is rewritten at most once per this many seconds. `0` writes after every change |
+| `data_file.backup_interval_seconds` | `3600.0`                               | Copy the data file to `<path>.backups/data-<UTC time>.json` at most this often (checked when the file is written). `0` turns backups off |
+| `data_file.backup_keep`           | `48`                                     | How many of the newest backups to keep |
 | `debug_tools`                     | `true`                                   | Serve `/console`, `/browse` and `/debug/all-data` (see [Pages](#pages)) |
 | `master_password`                 | `""`                                     | Password for `/browse` and `/debug/all-data` (see [Master password](#master-password)). Empty means none, which is only allowed when `server.host` is a numeric IP address |
 | `log_level`                       | `"INFO"`                                 | `"DEBUG"`, `"INFO"`, `"WARNING"` or `"ERROR"` |
@@ -410,12 +413,52 @@ Once the server is running, open these pages in a browser:
 - `/browse`: every user (including their password), game (expand a row for all versions
   and their code) and match (expand for its state and moves), including deleted games
   and hidden matches. It has a filter box and optional auto-refresh.
+- `/stats`: backoffice statistics (needs the [master password](#master-password)): users
+  (total, guests vs. Google/email logins, who built a game, who played), games (live,
+  deleted, versions, builders, matches per game, top builders), matches (by status, moves,
+  computer seats, ended by leaving) and 14-day charts of new users, games and matches.
+  The numbers come from `GET /admin/stats`.
 - `/docs`: FastAPI's generated OpenAPI docs.
 
 The `/console` and `/browse` pages read `/debug/all-data`, which returns everything,
 including every user's password. Set `"debug_tools": false` in the config to turn off
 the pages and that endpoint; the API itself keeps working. (The portal and builder no
 longer use it: they log in as real accounts.)
+
+### Administration
+
+Backoffice endpoints, hidden from `/openapi.json` and protected by the
+[master password](#master-password) (HTTP basic auth, any username), so administrators
+don't need a user's credentials:
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /admin/stats` | The statistics behind `/stats` |
+| `DELETE /admin/users/{id}` | Delete a user and the matches they own; their games are marked deleted, and they leave the matches they're seated in |
+| `DELETE /admin/games/{id}` | Mark a game deleted (its versions are kept for existing matches) |
+| `DELETE /admin/matches/{id}` | Delete a match |
+
+`/browse` has a Delete button on every row and one to delete every row matching the
+filter (bulk).
+
+### Operating a public server
+
+- **Remove the example data.** The example users' passwords are their names, so on a
+  public server anyone can act as them. Stop the server, then run
+  `python -m game_platform.main --config config.json --purge-example-data`: it deletes
+  those users (passwords equal to ids; real users' are random) with their games and
+  matches, and exits. At startup the server warns when such users exist or when the
+  debug tools have no master password.
+- **Set `master_password`.** `/browse`, `/stats` and `/admin/*` show or change everything.
+- **CORS behind a proxy.** If Caddy adds `Access-Control-Allow-Origin`, set
+  `"server": {"cors_allow_origins": []}`; otherwise remove the proxy's header. Check with
+  `curl -si -H 'Origin: https://x.github.io' https://<host>/games | grep -i allow-origin`:
+  it must print exactly one line.
+- **Email login.** `/auth/config` reports `email_login_enabled` only when
+  `auth.email.provider` is `smtp`; with `log`, codes only reach the server log.
+- **Backups.** The data file is copied hourly to `<path>.backups/` (see the config
+  table). To restore, stop the server and copy a backup over the data file. Also copy
+  that directory off the VM (e.g. `gsutil rsync` to a bucket) in case the disk is lost.
 
 ### Master password
 

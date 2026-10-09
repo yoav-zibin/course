@@ -110,6 +110,22 @@ def _clean_display_name(name: str) -> str:
     return name or "Player"
 
 
+def _refresh_profile_from_provider(
+    user: User, *, display_name: str, email: str, picture_url: str
+) -> User:
+    """Returns [user] with the provider's latest profile applied, or [user]
+    unchanged when there is nothing new. Empty provider values never overwrite
+    stored ones."""
+    updates: dict = {}
+    if display_name and display_name != user.display_name:
+        updates["display_name"] = display_name
+    if email and email != user.email:
+        updates["email"] = email
+    if picture_url and picture_url != user.picture_url:
+        updates["picture_url"] = picture_url
+    return replace(user, **updates) if updates else user
+
+
 @dataclass(kw_only=True)
 class _Verification:
     """A pending login-code check. Kept in memory only: a restart invalidates codes,
@@ -170,13 +186,20 @@ class GamePlatform:
     # Users
 
     def create_user(
-        self, *, display_name: str, linked_accounts: tuple[LinkedAccount, ...] = ()
+        self,
+        *,
+        display_name: str,
+        email: str = "",
+        picture_url: str = "",
+        linked_accounts: tuple[LinkedAccount, ...] = (),
     ) -> User:
         with self._lock:
             now = self._clock()
             user = User(
                 id=self._new_id(),
                 display_name=display_name,
+                email=email,
+                picture_url=picture_url,
                 password=self._new_password(),
                 linked_accounts=linked_accounts,
                 created_at=now,
@@ -318,6 +341,8 @@ class GamePlatform:
         kind: LinkedAccountKind,
         identifier: str,
         display_name: str,
+        email: str = "",
+        picture_url: str = "",
         as_user_id: str | None = None,
     ) -> tuple[User, str | None]:
         """Logs in with a verified Google subject, phone number or email.
@@ -325,8 +350,9 @@ class GamePlatform:
         With [as_user_id] None this is a plain login: a new user is created on first
         use. With [as_user_id] set (the caller is logged in as that user) the
         credential is linked to that account instead; if it already belongs to a
-        different user, that account is merged into the caller's. Returns (user,
-        merged_from_user_id).
+        different user, that account is merged into the caller's. The provider's
+        profile (name, email, picture) is saved on the user and refreshed on each
+        login. Returns (user, merged_from_user_id).
         """
         with self._lock:
             user = self._find_by_linked_account(kind, identifier)
@@ -338,6 +364,8 @@ class GamePlatform:
                     return (
                         self.create_user(
                             display_name=_clean_display_name(display_name),
+                            email=email.strip(),
+                            picture_url=picture_url.strip(),
                             linked_accounts=(linked,),
                         ),
                         None,
@@ -351,7 +379,16 @@ class GamePlatform:
                 self._store.put_user(owner)
                 return owner, None
             if as_user_id is None or as_user_id == user.id:
-                return user, None
+                refreshed = _refresh_profile_from_provider(
+                    user,
+                    display_name=_clean_display_name(display_name),
+                    email=email.strip(),
+                    picture_url=picture_url.strip(),
+                )
+                if refreshed is not user:
+                    refreshed = replace(refreshed, updated_at=self._clock())
+                    self._store.put_user(refreshed)
+                return refreshed, None
             target = self._require_user(as_user_id)
             merged_from = user.id
             return self._merge_locked(source=user, into=target), merged_from
@@ -790,6 +827,130 @@ class GamePlatform:
                 game_versions=self._store.list_all_game_versions(),
                 matches=self._store.list_all_matches(),
             )
+
+    def stats(self) -> dict[str, JsonValue]:
+        """Aggregate numbers about users, games and matches, for the backoffice."""
+        with self._lock:
+            now = self._clock()
+            users = self._store.list_users()
+            versions = self._store.list_all_game_versions()
+            matches = self._store.list_all_matches()
+
+        def last_days(timestamps: Sequence[dt.datetime], days: int = 14) -> list[JsonValue]:
+            today = now.date()
+            counts = {today - dt.timedelta(days=d): 0 for d in range(days - 1, -1, -1)}
+            for timestamp in timestamps:
+                if timestamp.date() in counts:
+                    counts[timestamp.date()] += 1
+            return [{"date": day.isoformat(), "count": n} for day, n in counts.items()]
+
+        latest = {game.id: game for game in versions}  # later versions overwrite
+        live = [game for game in latest.values() if not game.deleted]
+        builders = {game.owner_user_id for game in latest.values()}
+        players = {uid for match in matches for uid in match.human_user_ids}
+        owners = {match.owner_user_id for match in matches}
+        by_status = {"waiting_for_players": 0, "ongoing": 0, "over": 0}
+        matches_per_game: dict[str, int] = {}
+        for match in matches:
+            by_status[match.status] += 1
+            matches_per_game[match.game_id] = matches_per_game.get(match.game_id, 0) + 1
+        games_per_builder: dict[str, int] = {}
+        for game in live:
+            games_per_builder[game.owner_user_id] = (
+                games_per_builder.get(game.owner_user_id, 0) + 1
+            )
+        names = {user.id: user.display_name for user in users}
+        total_moves = sum(len(match.moves) for match in matches)
+        finished = [m for m in matches if m.status == "over"]
+        return {
+            "generated_at": now.isoformat(),
+            "users": {
+                "total": len(users),
+                "guests_only": sum(1 for u in users if not u.linked_accounts),
+                "with_google": sum(
+                    1 for u in users if any(a.kind == "google" for a in u.linked_accounts)
+                ),
+                "with_email": sum(
+                    1 for u in users if any(a.kind == "email" for a in u.linked_accounts)
+                ),
+                "with_phone": sum(
+                    1 for u in users if any(a.kind == "phone" for a in u.linked_accounts)
+                ),
+                "who_built_a_game": len(builders),
+                "who_played_a_match": len(players | owners),
+                "new_per_day": last_days([u.created_at for u in users]),
+            },
+            "games": {
+                "total": len(latest),
+                "live": len(live),
+                "deleted": len(latest) - len(live),
+                "versions": len(versions),
+                "builders": len(builders),
+                "new_per_day": last_days(
+                    [g.created_at for g in versions if g.version == 1]
+                ),
+                "per_game": [
+                    {
+                        "game_id": game.id,
+                        "name": game.name,
+                        "owner": names.get(game.owner_user_id, game.owner_user_id),
+                        "versions": game.version,
+                        "matches": matches_per_game.get(game.id, 0),
+                        "deleted": game.deleted,
+                    }
+                    for game in sorted(
+                        latest.values(),
+                        key=lambda g: -matches_per_game.get(g.id, 0),
+                    )
+                ],
+                "top_builders": [
+                    {"user": names.get(uid, uid), "games": n}
+                    for uid, n in sorted(
+                        games_per_builder.items(), key=lambda kv: -kv[1]
+                    )[:10]
+                ],
+            },
+            "matches": {
+                "total": len(matches),
+                "by_status": dict(by_status),
+                "computer_seats": sum(m.num_computer_opponents for m in matches),
+                "human_seats": sum(len(m.human_user_ids) for m in matches),
+                "total_moves": total_moves,
+                "avg_moves_per_match": round(total_moves / len(matches), 1)
+                if matches
+                else 0,
+                "ended_because_a_player_left": sum(
+                    1 for m in finished if m.end_reason == "player_left"
+                ),
+                "new_per_day": last_days([m.created_at for m in matches]),
+            },
+        }
+
+    # Administration (the caller has the master password, not a user's credentials)
+
+    def admin_delete_user(self, user_id: str) -> None:
+        """Deletes a user, the matches they own and the games they own (soft-deleted,
+        like a creator's delete). Elsewhere, they leave the matches they're seated in."""
+        with self._lock:
+            self._require_user(user_id)
+            for game in self._store.list_games(owner_user_id=user_id):
+                self._store.delete_game(game.id)
+            for match in self._store.list_matches_involving(user_id):
+                if match.owner_user_id == user_id:
+                    self._store.delete_match(match.id)
+                elif match.status != "over" and match.seat_of(user_id) is not None:
+                    self.leave_match(caller_id=user_id, match_id=match.id)
+            self._store.delete_user(user_id)
+
+    def admin_delete_game(self, game_id: str) -> None:
+        with self._lock:
+            self._get_live_game(game_id)
+            self._store.delete_game(game_id)
+
+    def admin_delete_match(self, match_id: str) -> None:
+        with self._lock:
+            self._get_match(match_id)
+            self._store.delete_match(match_id)
 
     # Helpers; callers must hold [_lock].
 

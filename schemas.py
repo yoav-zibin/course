@@ -85,6 +85,7 @@ class UserUpdate(_Request):
 class UserOut(BaseModel):
     id: str
     display_name: str
+    picture_url: str = ""
     created_at: dt.datetime
     updated_at: dt.datetime
 
@@ -93,6 +94,7 @@ class UserOut(BaseModel):
         return cls(
             id=user.id,
             display_name=user.display_name,
+            picture_url=user.picture_url,
             created_at=user.created_at,
             updated_at=user.updated_at,
         )
@@ -137,6 +139,8 @@ class AuthResponse(BaseModel):
 
     user_id: str
     display_name: str
+    email: str = ""
+    picture_url: str = ""
     password: str
     linked_accounts: list[LinkedAccountOut] = []
     merged_from_user_id: str | None = None
@@ -146,6 +150,8 @@ class AuthResponse(BaseModel):
         return cls(
             user_id=user.id,
             display_name=user.display_name,
+            email=user.email,
+            picture_url=user.picture_url,
             password=user.password,
             linked_accounts=[LinkedAccountOut.of(a) for a in user.linked_accounts],
             merged_from_user_id=merged_from_user_id,
