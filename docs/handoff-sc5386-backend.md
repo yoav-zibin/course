@@ -1,171 +1,152 @@
-# Handoff: tested backend integration for portal/builder scaling
+# Handoff: backend scaling and verified portal activity
 
-From: Chad (sc5386) — for Ian (zkamenov) and his agent. Left on
-`origin/feature/scaling` on 2026-10-29 so it can be picked up right away.
-Chad has not messaged Ian separately; this note is the notification.
+From Chad (sc5386) to Ian (zkamenov) and his agent. Updated October 29, 2026.
+This note is the handoff; Chad has not sent a separate message or email.
 
-## Latest update from Chad — October 29, after CI repair
+## Current integration point
 
-Use PR #32 head **`d1d3c13`** as the tested integration point. It merges main
-at `0362408` (including the Agent Host / A/B experiment changes). GitHub reports
-the PR conflict-free, and **Tests, Firestore query storage, and CI/CD all passed**
-on that head. This is a draft test release; the scaling assignment is not complete.
+Use [PR #32](https://github.com/yoav-zibin/course/pull/32), branch
+`sc5386/backend-scaling`, head **e58c264**. It integrates main through
+**ee2890c**, including Marcelle's live fake-user generator. This note changes
+only documentation on your branch; it does not install or deploy the backend.
 
-What Chad fixed after `fc62b7b`:
+GitHub CI on **e58c264** is green: backend, unit-tests, Firestore emulator
+and desktop/mobile UI tests all passed. The production deploy job correctly
+skipped this PR run. GitHub reports the PR conflict-free. The PR remains an
+opt-in draft test release, with the limits below.
 
-- Fixed both emulator failures: the merge runner now dispatches `match_moves`
-  before the ordinary stage planner, and resumed deletion/merge jobs accept
-  omitted account IDs while still rejecting a different target. New jobs need IDs.
-- Merge finalization transfers both token balances and the latest daily-grant
-  date atomically, clearing the source balance. Account merging waits when both
-  accounts occupy seats in an active match; it does not force a token settlement.
-- Resolved the service, portal, builder, browse and stats conflicts with main,
-  preserving both pagination/idempotency and experiment scripts/campaign headers.
-- Added query-store persistence and migration for experiments, assignments and
-  events. Merge jobs preserve experiment assignments; deletion cleans up the
-  user's assignments/events. Signup deduplication uses direct record IDs, and
-  match-start attribution reads the relevant users rather than scanning all users.
-- Updated workflow triggers so feature PR updates run one set of checks rather
-  than duplicate push and PR runs. Pushes to main retain their checks/deployment.
+## What Chad completed
 
-Local verification: **538 backend tests, 29 final emulator tests, 152 web unit
-tests**, and the full browser suite with two workers: **72 passed, 1 skipped**.
-One earlier browser run at default parallelism timed out; the bounded full rerun
-and GitHub CI passed. Evidence and remaining limits are in
-`docs/scaling-validation.md` on the backend branch.
+- Query storage reads records on demand, rather than loading the database into
+  each process. Moves, token ledgers, counters, idempotency records and durable
+  jobs commit atomically. Two independent API processes and restart/retry
+  behavior were previously rehearsed on the named cloud database.
+- Repaired the merge/delete emulator failures from fc62b7b: move-history stage
+  dispatch and omitted resume parameters. Merges transfer balances and daily
+  grant dates, preserve game player IDs and wait if both accounts occupy seats
+  in the same unfinished match. Jobs remain offline with writers stopped.
+- Preserved main's experiment/campaign integration, added query storage and
+  migration for experiment records, and removed global scans from signup and
+  match-start attribution. The new A/B report uses persistent distinct-user
+  markers and atomically publishes an offline aggregate snapshot.
+- Saved libraries now use separate records, with paginated reads, idempotent
+  saves/removals, resumable legacy normalization and merge/delete handling.
+- Daily creation reports can anchor their 30-day window to a historical date.
+  Transitive referral reports use a persistent leaf queue with bounded memory;
+  admin pages page through leaders, roots, children and search results.
+- Fixed the account menu rebuilding during polling, which could interrupt guest
+  signup. Browser regression covers typing/focus and repeated menu dismissal.
+- Changed CI triggers to avoid duplicate feature push and PR workflow runs.
 
-For Ian's agent:
+## Required activity: actually executed
 
-1. Reuse the pagination/client work in PR #32 and preserve main's experiment
-   integration when combining it with your branch. Do not replace either side
-   wholesale. This handoff commit changes this note only; it does not install the
-   backend changes on your branch or deploy them to your running demo.
-2. Deploy the latest generated query-store index configuration before testing
-   the merged experiment attribution paths. It now includes an experiment-event
-   composite index; the previous cloud index deployment predates this addition.
-3. Large A/B aggregate reports still need a scalable reporting path beyond the
-   legacy 100-record guard. Storage statistics remain usable if that separate
-   experiment report is unavailable. Embedded libraries/invite acceptance arrays
-   and broader referral analytics also remain release gates.
-4. Account maintenance is **offline with writers stopped**, not a live UI API.
-   Keep the test namespace isolated and plan client flows around that limit.
-5. The programmatic `activity` tool is a historical service/QuickJS fixture,
-   not a complete portal-activity simulation. Its counter-game family is useful
-   for correctness tests; it does not satisfy the directive to duplicate the real
-   catalog and exercise portal activity for the final demonstration.
+On `game-platform-scaling`, named database `game-platform-scaling`, namespace
+`scaling_v1`, the deterministic browser fixture played September 1–30:
 
-Production migration/reconciliation/rollback and sustained target-scale tests
-remain unfinished. No completed 10M-user / 1B-match / 100K-game result is claimed.
+- 44 guest accounts created through the portal, 30 completed matches.
+- 14 two-human and 16 human-versus-computer matches, 7 early departures.
+- 372 UI actions, 192 committed moves (136 human, 56 computer).
+- Zero page errors, failed actions or server 5xx responses.
+- Exact copies of shipped client/server game sources; zero model API calls.
 
-## Yoav's directives (email Oct 29, 7:05am ET, to Ian, Marcelle and Chad)
+A separate referral-link scenario produced a three-level chain. Offline reports
+completed for the entire namespace: **170 users, 73 games, 1,137 matches and
+2,413 moves**. Every match history was reconciled across all 12 pages against
+move counters. Referral summary: 3 inviters, 3 invited users, longest chain 3,
+biggest tree 4. These totals include earlier synthetic correctness fixtures.
 
-Answering Ian's API-key question, Yoav wrote:
+See these files on the backend branch:
 
-> "Same API key is fine. You won't make API calls to the agent, you'll just
-> duplicate the existing games. We don't want to get charge a lot of tokens.
-> Similarly for scaling activity: we only care about the portal activity."
+- `docs/portal-activity.md`: reproducible private harness/runner instructions.
+- `docs/portal-activity-cloud.json`: successful month and per-match evidence.
+- `docs/portal-friends-cloud.json`: referred signup scenario.
+- `docs/portal-cloud-dashboards.json`: aggregate cloud report snapshots.
+- `docs/portal-cloud-history-validation.json`: full history reconciliation.
+- `docs/portal-http-benchmark.json`: your actual benchmark's output.
+- `docs/portal-live-generator-emulator.json`: Marcelle tool compatibility run.
 
-Concretely, for both sides:
+The month fixture currently plays tic-tac-toe; poker was copied but not played.
+It is a deterministic backend fixture, not a replacement for Marcelle's
+`tools/fake_users` control/health tool. Her merged generator passed 24 tests;
+a two-minute browser rehearsal recorded 4 accounts, 6 created matches, 23 moves,
+3 departures, 2 speed matches and 1 referral signup with zero errors. Its generic
+click adapter gave up on 3 turns and left; that limitation is recorded.
 
-1. **Reuse the production Meta API key** on the scaling VM's builder. Do
-   NOT create a new API key for the scaling instance.
-2. **No agent calls to create fake games.** Fake games must be duplicates
-   of the existing games, not fresh AI-agent generations — the point is to
-   avoid token charges. (Chad's backend seeders comply on cost: they are
-   purely programmatic fixtures and make zero agent/API calls. For the
-   demo dataset itself, duplicate the real catalog — `scaling_tools
-   migrate` already copies the existing games into the scaling namespace.)
-3. **Scaling activity = portal activity only.** Simulated users playing
-   games through the portal (matches, moves, joins/leaves) — not builder
-   or agent activity.
+## Benchmark and deployment state
 
-## Division of labour (per the class sheet, "2026 main")
+Your `scale_benchmark.py` ran the read-only paginated mix on the same cloud
+query-store deployment through an authenticated SSH tunnel. Ten-second stages:
 
-- Chad / sc5386: "Scale data and fix the rest" — the backend.
-- Ian / zkamenov: "Scale data and fix portal and builder" — the portal and
-  builder UIs on the same fake dataset.
+| Clients | Requests/second | p95 ms | Errors |
+|---:|---:|---:|---:|
+| 1 | 6.7 | 187.70 | 0 |
+| 2 | 13.4 | 205.23 | 0 |
+| 4 | 19.4 | 263.81 | 0 |
 
-## What is done on the backend (PR #32, branch `sc5386/backend-scaling`)
+Measured private harness peak cgroup memory: 85,880,832 bytes. This short read
+test is not sustained capacity proof or a one-versus-two-VM comparison.
+All **13 composite indexes and 60 field overrides are ready** in the named test
+database. Its service account was verified denied access to `(default)`.
 
-PR: https://github.com/yoav-zibin/course/pull/32 — draft; originally based on
-10902cb, now integrated with main at `0362408` in head `d1d3c13`.
-It is opt-in and isolated: snapshot mode is still the default and
-production (`buildplay.fun`, the `(default)` database) is untouched.
+Your existing shared `game-platform-scaling` demo on port 8000 remained active.
+Chad's private temporary harness/API processes were stopped after testing.
+Your demo still uses its existing configuration/schema until you integrate and
+explicitly select query mode. Production `buildplay.fun` and `(default)` were
+not changed. Do not stop the shared VM merely to stop a private test process.
 
-- `QueryStore`: on-demand Firestore reads in a named database
-  (`game-platform-scaling`, namespace `scaling_v1`). Startup reads one schema
-  marker; it never loads the dataset into memory.
-- Paginated v2 list APIs return `{items, next_cursor}` (default page 50, max
-  100): `/v2/games` (published catalog, word-prefix `q` of 2–24 chars),
-  `/v2/builder/games`, `/v2/game-drafts`, `/v2/matches`,
-  `/v2/matches/open`, `/v2/matches/{id}/history` (`start`/`limit`,
-  `next_start`, `total`), `/v2/users/me/referred-users`,
-  `/v2/users/me/invites`, `/v2/admin/{kind}`. `GET /storage/capabilities`
-  advertises the mode. Legacy list endpoints fail explicitly above 100
-  records in query mode; game source is omitted from catalog responses and
-  fetched per game when needed.
-- Transactional, idempotent moves (`Idempotency-Key`), durable
-  revision-fenced jobs for computer turns/deadlines, push via a transactional
-  outbox, stats from 64 counter shards.
-- Resumable offline jobs (`scaling_tools`): `dashboard` (totals + daily
-  charts for the last 30 days, with build timestamps), `activity` (a fake
-  September 2026 month played through the real service and QuickJS rules),
-  `seed`, `export`, `validate`, `cleanup` — and, added in the latest push,
-  `merge` and `delete-user` (resumable account merge/deletion for the query
-  store; see `docs/scaling-storage.md`). The merge/delete jobs landed on
-  Oct 29 in commits `2a0de81` (code) and `fc62b7b` (tests + docs) — the
-  account-maintenance implementation. Their two failing emulator cases were
-  subsequently fixed and verified in `d1d3c13`; other release gates remain below.
-- Validation so far (see `docs/scaling-validation.md` on PR #32): emulator
-  suite, two independent HTTP processes against the named test database, and
-  a 1,000-match cloud milestone: 1,104 matches / 2,211 moves / 114 users /
-  69 games; 20 page reads of 50 items: median 40.7 ms, p95 51.79 ms; store
-  construction ~10 ms. This is a rehearsal, not a billion-match load test.
+## Portal/Builder integration contract
 
-## What Ian's agent should do next (portal + builder)
+`GET /storage/capabilities` advertises pagination. v2 lists return
+`{items,next_cursor}`, default 50 and maximum 100. Follow the cursor even after
+a short/empty page; publication checks and tombstones can remove returned items.
+Cursors bind to namespace, filters and caller; concurrent writes may shift pages.
 
-1. Point the portal and builder at the paginated APIs above: follow
-   `next_cursor` even after a short/empty page (tombstones and unpublished
-   games are filtered after the query). Cursors are opaque and bound to the
-   query + caller; they are not snapshots, so pages can shift under
-   concurrent writes. PR #32 already adapts `static/portal.js`,
-   `static/browse.js`, `static/builder.js` and `static/stats.js` to
-   negotiate pagination — start from those changes, check them against your
-   branch, and finish whatever is missing rather than starting over.
-2. Fetch game source/detail on demand (per game), never from the catalog
-   list. Catalog prefix search and client-side filtering apply to the
-   current page only — there is no global substring search.
-3. History views must page (`start`/`limit` ≤ 100 moves), not load a whole
-   match history.
-4. Benchmark: your `scale_benchmark.py` can now run against query mode with
-   the read-only paginated mix in `benchmark.query-requests.example.json`
-   on PR #32. First confirm `/storage/capabilities` reports pagination
-   enabled. Your branch's current example routes are the legacy unbounded
-   ones your plan flags as needing pagination. Keep dataset, mix and stages
-   identical when comparing one VM vs two, and record write budgets.
-5. Deployment: your `config.scaling.example.json` /
-   `deploy/game-platform-scaling.service` should set Firestore mode
-   `query`, the named database `game-platform-scaling` and namespace
-   `scaling_v1`, with the service account restricted to that database
-   (it must get PermissionDenied on `(default)` — that isolation was
-   verified in the cloud rehearsal).
+- Catalog: `/v2/games`, optional one word-prefix `q` (2–24 characters). Source is
+  omitted; fetch one game's detail/source when needed.
+- Builder: `/v2/builder/games`, `/v2/game-drafts`.
+- Matches: `/v2/matches`, `/v2/matches/open`; history uses
+  `/v2/matches/{id}/history?start=...&limit=...`, with `next_start` and `total`.
+- Saved library: `GET /v2/users/me/saved-games`; `PUT`/`DELETE`
+  `/v2/users/me/saved-games/{game_id}` return 204. Normalize legacy arrays first
+  with the offline `libraries` command. The old response-returning save API
+  retains a 100-record guard; clients should use the new commands plus page read.
+- Referrals/invites: `/v2/users/me/referred-users`, `/v2/users/me/invites`.
+- Protected admin referral report: `/v2/admin/referrals/summary` and
+  `/v2/admin/referrals/users`, with `parent_id`, `q`, `cursor`, `limit`.
+- Admin record lists: `/v2/admin/{kind}`.
 
-## Known limits (documented on PR #32, not surprises)
+Reuse the existing capability-negotiating portal/builder changes from PR #32;
+preserve main's experiment scripts and campaign headers when merging. Check
+saved-library client flows against the new API rather than retaining arrays.
+Set Firestore mode `query`, database `game-platform-scaling`, namespace
+`scaling_v1`; do not point the test configuration at `(default)`.
 
-- No production cutover, migration reconciliation, or sustained load test
-  yet; the headline 10M users / 1B matches / 100K games is a design target,
-  not a measured result.
-- Account merge/deletion are offline resumable jobs, not in-request
-  operations; UI flows for them do not exist yet.
-- Stats are near-real-time counter shards, not a consistent snapshot; the
-  dashboard report is an offline snapshot with a build timestamp.
-- The query store uses the Firestore SDK's private transaction
-  begin/commit methods; emulator + cloud tests must pass before any SDK
-  upgrade.
+## Validation and remaining release gates
 
-## Coordination
+Backend with emulator: **548 passed**. Final query/index tests: **39 passed**.
+Web unit suite: **152 passed**. Full desktop/mobile browser suite with two
+workers: **76 passed, 1 skipped**. A preceding default-concurrency run timed out
+once on pagination; ten repetitions and the full bounded rerun then passed.
 
-- Do not merge PR #32 into production config or point anything at the
-  `(default)` database. Demo target is tomorrow, Oct 30.
-- If a portal/builder need conflicts with an API shape above, note it on
-  PR #32 rather than forking the contract silently.
+Implemented account jobs require a maintenance window; live sign-in merge and
+job-starting UI flows remain a client/integration task. Invite acceptance and
+linked identity arrays still have bounded legacy representations. Per-game
+analytics, full production migration/recovery/rollback rehearsal and sustained
+multi-instance load remain release gates. Query storage uses private Firestore
+transaction methods; upgrades require emulator and cloud verification.
+
+The **10M users / 1B matches / 100K games** figures remain an unproved target.
+The user has been asked for a cloud spending cap before larger paid generation.
+Do not represent this small functional workload as target-scale proof or merge
+production configuration changes on that assumption.
+
+## Course direction and ownership
+
+The class sheet assigns Chad/sc5386 "Scale data and fix the rest" and
+Ian/zkamenov "Scale data and fix portal and builder". Marcelle owns the live
+portal activity generator; use that tool for autoscaling/monitoring demos.
+
+Yoav's October 29 direction was to duplicate existing games, avoid AI-agent
+calls for fake games, and focus scaling activity on portal users. The same API
+key is acceptable; no new key is needed for the demonstration. None of Chad's
+activity runs called a model API.
