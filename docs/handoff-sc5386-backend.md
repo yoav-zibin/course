@@ -1,8 +1,61 @@
-# Handoff: backend scaling is ready for the portal/builder work
+# Handoff: tested backend integration for portal/builder scaling
 
 From: Chad (sc5386) — for Ian (zkamenov) and his agent. Left on
 `origin/feature/scaling` on 2026-10-29 so it can be picked up right away.
 Chad has not messaged Ian separately; this note is the notification.
+
+## Latest update from Chad — October 29, after CI repair
+
+Use PR #32 head **`d1d3c13`** as the tested integration point. It merges main
+at `0362408` (including the Agent Host / A/B experiment changes). GitHub reports
+the PR conflict-free, and **Tests, Firestore query storage, and CI/CD all passed**
+on that head. This is a draft test release; the scaling assignment is not complete.
+
+What Chad fixed after `fc62b7b`:
+
+- Fixed both emulator failures: the merge runner now dispatches `match_moves`
+  before the ordinary stage planner, and resumed deletion/merge jobs accept
+  omitted account IDs while still rejecting a different target. New jobs need IDs.
+- Merge finalization transfers both token balances and the latest daily-grant
+  date atomically, clearing the source balance. Account merging waits when both
+  accounts occupy seats in an active match; it does not force a token settlement.
+- Resolved the service, portal, builder, browse and stats conflicts with main,
+  preserving both pagination/idempotency and experiment scripts/campaign headers.
+- Added query-store persistence and migration for experiments, assignments and
+  events. Merge jobs preserve experiment assignments; deletion cleans up the
+  user's assignments/events. Signup deduplication uses direct record IDs, and
+  match-start attribution reads the relevant users rather than scanning all users.
+- Updated workflow triggers so feature PR updates run one set of checks rather
+  than duplicate push and PR runs. Pushes to main retain their checks/deployment.
+
+Local verification: **538 backend tests, 29 final emulator tests, 152 web unit
+tests**, and the full browser suite with two workers: **72 passed, 1 skipped**.
+One earlier browser run at default parallelism timed out; the bounded full rerun
+and GitHub CI passed. Evidence and remaining limits are in
+`docs/scaling-validation.md` on the backend branch.
+
+For Ian's agent:
+
+1. Reuse the pagination/client work in PR #32 and preserve main's experiment
+   integration when combining it with your branch. Do not replace either side
+   wholesale. This handoff commit changes this note only; it does not install the
+   backend changes on your branch or deploy them to your running demo.
+2. Deploy the latest generated query-store index configuration before testing
+   the merged experiment attribution paths. It now includes an experiment-event
+   composite index; the previous cloud index deployment predates this addition.
+3. Large A/B aggregate reports still need a scalable reporting path beyond the
+   legacy 100-record guard. Storage statistics remain usable if that separate
+   experiment report is unavailable. Embedded libraries/invite acceptance arrays
+   and broader referral analytics also remain release gates.
+4. Account maintenance is **offline with writers stopped**, not a live UI API.
+   Keep the test namespace isolated and plan client flows around that limit.
+5. The programmatic `activity` tool is a historical service/QuickJS fixture,
+   not a complete portal-activity simulation. Its counter-game family is useful
+   for correctness tests; it does not satisfy the directive to duplicate the real
+   catalog and exercise portal activity for the final demonstration.
+
+Production migration/reconciliation/rollback and sustained target-scale tests
+remain unfinished. No completed 10M-user / 1B-match / 100K-game result is claimed.
 
 ## Yoav's directives (email Oct 29, 7:05am ET, to Ian, Marcelle and Chad)
 
@@ -34,8 +87,9 @@ Concretely, for both sides:
 
 ## What is done on the backend (PR #32, branch `sc5386/backend-scaling`)
 
-PR: https://github.com/yoav-zibin/course/pull/32 — draft, based on main at
-10902cb. It is opt-in and isolated: snapshot mode is still the default and
+PR: https://github.com/yoav-zibin/course/pull/32 — draft; originally based on
+10902cb, now integrated with main at `0362408` in head `d1d3c13`.
+It is opt-in and isolated: snapshot mode is still the default and
 production (`buildplay.fun`, the `(default)` database) is untouched.
 
 - `QueryStore`: on-demand Firestore reads in a named database
@@ -60,8 +114,8 @@ production (`buildplay.fun`, the `(default)` database) is untouched.
   `merge` and `delete-user` (resumable account merge/deletion for the query
   store; see `docs/scaling-storage.md`). The merge/delete jobs landed on
   Oct 29 in commits `2a0de81` (code) and `fc62b7b` (tests + docs) — the
-  last previously unfinished backend item. Their emulator tests run in the
-  PR's `Firestore query storage` CI workflow.
+  account-maintenance implementation. Their two failing emulator cases were
+  subsequently fixed and verified in `d1d3c13`; other release gates remain below.
 - Validation so far (see `docs/scaling-validation.md` on PR #32): emulator
   suite, two independent HTTP processes against the named test database, and
   a 1,000-match cloud milestone: 1,104 matches / 2,211 moves / 114 users /
