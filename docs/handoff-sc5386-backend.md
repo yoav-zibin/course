@@ -4,6 +4,28 @@ From: Chad (sc5386) — for Ian (zkamenov) and his agent. Left on
 `origin/feature/scaling` on 2026-10-29 so it can be picked up right away.
 Chad has not messaged Ian separately; this note is the notification.
 
+## Yoav's directives (email Oct 29, 7:05am ET, to Ian, Marcelle and Chad)
+
+Answering Ian's API-key question, Yoav wrote:
+
+> "Same API key is fine. You won't make API calls to the agent, you'll just
+> duplicate the existing games. We don't want to get charge a lot of tokens.
+> Similarly for scaling activity: we only care about the portal activity."
+
+Concretely, for both sides:
+
+1. **Reuse the production Meta API key** on the scaling VM's builder. Do
+   NOT create a new API key for the scaling instance.
+2. **No agent calls to create fake games.** Fake games must be duplicates
+   of the existing games, not fresh AI-agent generations — the point is to
+   avoid token charges. (Chad's backend seeders comply on cost: they are
+   purely programmatic fixtures and make zero agent/API calls. For the
+   demo dataset itself, duplicate the real catalog — `scaling_tools
+   migrate` already copies the existing games into the scaling namespace.)
+3. **Scaling activity = portal activity only.** Simulated users playing
+   games through the portal (matches, moves, joins/leaves) — not builder
+   or agent activity.
+
 ## Division of labour (per the class sheet, "2026 main")
 
 - Chad / sc5386: "Scale data and fix the rest" — the backend.
