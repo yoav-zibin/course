@@ -628,6 +628,55 @@ npx firebase-tools emulators:start --only firestore --project demo-game-platform
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 python -m pytest game_platform/tests
 ```
 
+### Staged HTTP benchmark
+
+`scale_benchmark.py` sends the same weighted HTTP request mix at increasing concurrency
+and reports requests per second, latency percentiles, status codes, and errors. Run it
+from a separate machine with Python 3.10 or newer so the load generator does not
+consume the server's CPU. The runner uses only the Python standard library.
+
+Create a dedicated benchmark user and save its credentials in a local JSON file that is
+not committed, such as `/tmp/benchmark-headers.json`:
+
+```json
+{
+  "X-User-Id": "BENCHMARK_USER_ID",
+  "X-User-Password": "BENCHMARK_USER_PASSWORD"
+}
+```
+
+Run the same dataset, request mix, and stages first against one VM, then against the
+load balancer:
+
+```bash
+python course/scale_benchmark.py \
+  --base-url http://SINGLE_VM_ADDRESS:8000 \
+  --requests course/benchmark.requests.example.json \
+  --headers-file /tmp/benchmark-headers.json \
+  --stages 1,2,4,8,16 \
+  --duration-seconds 60 \
+  --report /tmp/one-vm.json
+
+python course/scale_benchmark.py \
+  --base-url https://LOAD_BALANCER_ADDRESS \
+  --requests course/benchmark.requests.example.json \
+  --headers-file /tmp/benchmark-headers.json \
+  --stages 1,2,4,8,16 \
+  --duration-seconds 60 \
+  --report /tmp/two-vm.json
+```
+
+The sample weights are placeholders; edit them to match your expected request mix. The
+highest sustained stage that meets your latency and error objectives is the measured
+peak for that dataset and mix. `/health` alone measures health-check overhead, not
+application capacity. The runner is read-only by default; other methods require
+`--allow-write` and an isolated benchmark database.
+
+**Current limitation:** the existing snapshot-based Firestore store is single-process
+only, and several list routes are unpaginated. Do not use two VMs or a target-sized
+dataset for a capacity claim until those backend paths have been changed. See the
+[backend scaling plan](docs/backend-scaling-plan.md).
+
 ### Pages
 
 Once the server is running, open these pages in a browser:
