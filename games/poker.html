@@ -29,7 +29,7 @@
 </style>
 </head>
 <body>
-<h1>Texas hold'em</h1>
+<h1 id="title">Texas hold'em</h1>
 <div class="muted" id="info"></div>
 <div id="status">Waiting for the platform…</div>
 <div id="board"></div>
@@ -38,8 +38,59 @@
 <div id="previous" hidden></div>
 <div id="log"></div>
 
+<script type="application/json" id="i18n-strings">
+{
+  "title": "Texas hold'em",
+  "waiting_platform": "Waiting for the platform…",
+  "waiting_deal": "Waiting for the first deal…",
+  "info": "Hand #{number} · blinds {small}/{big} · pot {pot}",
+  "game_winner": "{name} wins the game!",
+  "over": "The match is over.",
+  "your_turn": "Your turn, {name}.",
+  "waiting_for": "Waiting for {name}.",
+  "waiting_next": "Waiting for the next player.",
+  "player_you": "{name} (you)",
+  "note_dealer": "dealer",
+  "note_folded": "folded",
+  "note_all_in": "all in",
+  "note_joins": "joins next hand",
+  "note_out": "out",
+  "head_player": "Player",
+  "head_chips": "Chips",
+  "head_bet": "Bet",
+  "head_cards": "Cards",
+  "fold": "Fold",
+  "check": "Check",
+  "call": "Call {amount}",
+  "bet": "Bet",
+  "raise_to": "Raise to",
+  "all_in": "All in ({amount})",
+  "last_hand": "Last hand (#{number}): {description}",
+  "shown_player": "{name}:",
+  "seat": "Seat {number}",
+  "won_amount": "{name} won {amount}"
+}
+</script>
 <script>
 "use strict";
+
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings) strings = { ...SOURCE_STRINGS, ...message.strings };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
 
 // ---- UI only: the rules live in poker.server.js, on the server. ----
 // state_changed carries this player's view: the public table, the
@@ -59,6 +110,7 @@ if (typeof window !== "undefined" && window.document) {
     return node;
   };
   const view = () => latest.view ?? latest.state;
+  $("status").textContent = t("waiting_platform");
 
   function cardNode(card) {
     if (!card) return el("span", { className: "card back", textContent: "🂠" });
@@ -75,20 +127,21 @@ if (typeof window !== "undefined" && window.document) {
   function render() {
     const s = view();
     if (!s) {
-      $("status").textContent = "Waiting for the first deal…";
+      $("status").textContent = t("waiting_deal");
       return;
     }
     const acting = latest.status === "ongoing" ? latest.acting_for_player_index : null;
     const players = latest.players;
     const me = latest.my_player_index;
     const pot = s.contributed.reduce((a, b) => a + b, 0);
-    $("info").textContent =
-      `Hand #${s.hand_number} · blinds ${s.small_blind}/${s.big_blind} · pot ${pot}`;
+    $("title").textContent = t("title");
+    $("info").textContent = t("info", { number: s.hand_number, small: s.small_blind, big: s.big_blind, pot });
 
-    if (s.winner !== null) $("status").textContent = `${players[s.winner].name} wins the game!`;
-    else if (latest.status === "over") $("status").textContent = "The match is over.";
-    else if (acting !== null) $("status").textContent = `Your turn, ${players[acting].name}.`;
-    else $("status").textContent = `Waiting for ${players[s.to_act]?.name ?? "the next player"}.`;
+    if (s.winner !== null) $("status").textContent = t("game_winner", { name: players[s.winner].name });
+    else if (latest.status === "over") $("status").textContent = t("over");
+    else if (acting !== null) $("status").textContent = t("your_turn", { name: players[acting].name });
+    else if (players[s.to_act]) $("status").textContent = t("waiting_for", { name: players[s.to_act].name });
+    else $("status").textContent = t("waiting_next");
 
     $("board").replaceChildren(...s.board.map(cardNode));
 
@@ -100,12 +153,12 @@ if (typeof window !== "undefined" && window.document) {
         cards = el("span", {}, cardNode(null), cardNode(null));
       }
       const notes = [];
-      if (seat === s.dealer) notes.push("dealer");
-      if (s.dealt_in[seat] && !s.in_hand[seat]) notes.push("folded");
-      if (s.in_hand[seat] && s.chips[seat] === 0) notes.push("all in");
-      if (!s.dealt_in[seat] && s.chips[seat] > 0 && s.winner === null) notes.push("joins next hand");
-      if (s.chips[seat] === 0 && !s.in_hand[seat]) notes.push("out");
-      const label = `${player.name}${seat === me ? " (you)" : ""}`;
+      if (seat === s.dealer) notes.push(t("note_dealer"));
+      if (s.dealt_in[seat] && !s.in_hand[seat]) notes.push(t("note_folded"));
+      if (s.in_hand[seat] && s.chips[seat] === 0) notes.push(t("note_all_in"));
+      if (!s.dealt_in[seat] && s.chips[seat] > 0 && s.winner === null) notes.push(t("note_joins"));
+      if (s.chips[seat] === 0 && !s.in_hand[seat]) notes.push(t("note_out"));
+      const label = seat === me ? t("player_you", { name: player.name }) : player.name;
       return el("tr", { className: seat === s.to_act ? "turn" : !s.in_hand[seat] ? "out" : "" },
         el("td", { textContent: label }),
         el("td", { className: "num", textContent: s.chips[seat] }),
@@ -114,21 +167,21 @@ if (typeof window !== "undefined" && window.document) {
         el("td", { className: "muted", textContent: notes.join(", ") }));
     });
     $("table").replaceChildren(
-      el("tr", {}, ...["Player", "Chips", "Bet", "Cards", ""].map((t) => el("th", { textContent: t }))),
+      el("tr", {}, ...[t("head_player"), t("head_chips"), t("head_bet"), t("head_cards"), ""].map((text) => el("th", { textContent: text }))),
       ...rows);
 
     const controls = [];
     if (acting !== null && acting === me && s.to_act === acting && s.legal) {
       const options = s.legal;
-      if (options.canFold) controls.push(el("button", { textContent: "Fold", onclick: () => play({ type: "fold" }) }));
-      if (options.canCheck) controls.push(el("button", { textContent: "Check", onclick: () => play({ type: "check" }) }));
-      else if (!options.canCheck && options.callAmount > 0) controls.push(el("button", { textContent: `Call ${options.callAmount}`, onclick: () => play({ type: "call" }) }));
+      if (options.canFold) controls.push(el("button", { textContent: t("fold"), onclick: () => play({ type: "fold" }) }));
+      if (options.canCheck) controls.push(el("button", { textContent: t("check"), onclick: () => play({ type: "check" }) }));
+      else if (!options.canCheck && options.callAmount > 0) controls.push(el("button", { textContent: t("call", { amount: options.callAmount }), onclick: () => play({ type: "call" }) }));
       if (options.minRaiseTo !== null) {
         const amount = el("input", { type: "number", min: options.minRaiseTo, max: options.maxRaiseTo, step: 1, value: options.minRaiseTo });
         controls.push(
-          el("button", { textContent: s.current_bet === 0 ? "Bet" : "Raise to", onclick: () => play({ type: "raise", to: Number(amount.value) }) }),
+          el("button", { textContent: s.current_bet === 0 ? t("bet") : t("raise_to"), onclick: () => play({ type: "raise", to: Number(amount.value) }) }),
           amount,
-          el("button", { textContent: `All in (${options.maxRaiseTo})`, onclick: () => play({ type: "raise", to: options.maxRaiseTo }) }));
+          el("button", { textContent: t("all_in", { amount: options.maxRaiseTo }), onclick: () => play({ type: "raise", to: options.maxRaiseTo }) }));
       }
     }
     $("controls").replaceChildren(...controls);
@@ -137,12 +190,12 @@ if (typeof window !== "undefined" && window.document) {
     $("previous").hidden = !previous;
     if (previous) {
       const shown = previous.shown.map(({ seat, cards, hand }) =>
-        el("div", {}, `${players[seat]?.name ?? `Seat ${seat + 1}`}: `, ...cards.map(cardNode), ` ${hand}`));
+        el("div", {}, t("shown_player", { name: players[seat]?.name ?? t("seat", { number: seat + 1 }) }), " ", ...cards.map(cardNode), ` ${hand}`));
       $("previous").replaceChildren(
-        el("div", { className: "muted", textContent: `Last hand (#${previous.hand_number}): ${previous.description}` }),
+        el("div", { className: "muted", textContent: t("last_hand", { number: previous.hand_number, description: previous.description }) }),
         el("div", {}, ...previous.board.map(cardNode)),
         ...shown,
-        el("div", { textContent: previous.won.map(({ seat, amount }) => `${players[seat]?.name ?? seat} won ${amount}`).join(", ") }));
+        el("div", { textContent: previous.won.map(({ seat, amount }) => t("won_amount", { name: players[seat]?.name ?? seat, amount })).join(", ") }));
     }
     $("log").textContent = s.log.join("\n");
   }
@@ -151,6 +204,7 @@ if (typeof window !== "undefined" && window.document) {
     if (event.source !== window.parent) return;
     const message = event.data;
     if (!message || message.type !== "state_changed") return;
+    applyLocale(message);
     latest = message;
     moveSent = false;
     render();

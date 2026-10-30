@@ -18,13 +18,48 @@
 </style>
 </head>
 <body>
-<h1>Tic-tac-toe</h1>
+<h1 id="title">Tic-tac-toe</h1>
 <div id="status" role="status" aria-live="polite">Waiting for the platform…</div>
 <div id="board"></div>
 <div class="players" id="players"></div>
 
+<script type="application/json" id="i18n-strings">
+{
+  "title": "Tic-tac-toe",
+  "waiting_platform": "Waiting for the platform…",
+  "replay": "Viewing move {index} of {total} · read only",
+  "wins": "{name} wins!",
+  "draw": "It's a draw.",
+  "over": "The match is over.",
+  "your_move": "Your move, {name}.",
+  "waiting_for": "Waiting for {names}.",
+  "player_label": "{name} ({mark})",
+  "cell": "Row {row}, column {column}: {mark}",
+  "cell_empty": "Row {row}, column {column}: empty",
+  "player_line": "{mark}: {name}",
+  "player_line_you": "{mark}: {name} — you"
+}
+</script>
 <script>
 "use strict";
+
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings) strings = { ...SOURCE_STRINGS, ...message.strings };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
 
 // ---- UI only: the rules live in tictactoe.server.js, on the server. ----
 // state_changed carries this player's view (the board, the winner, the
@@ -38,26 +73,29 @@ if (typeof window !== "undefined" && window.document) {
 
   const $ = (id) => document.getElementById(id);
   const view = () => latest.view ?? latest.state;
+  $("status").textContent = t("waiting_platform");
 
   function render() {
     const state = view();
     const acting = latest.status === "ongoing" ? latest.acting_for_player_index : null;
     const myTurn = !latest.replay && acting !== null && acting === latest.my_player_index;
-    const name = (seat) => `${latest.players[seat].name} (${MARKS[seat]})`;
+    const name = (seat) => t("player_label", { name: latest.players[seat].name, mark: MARKS[seat] });
 
     let status;
-    if (latest.replay) status = `Viewing move ${latest.replay.index} of ${latest.replay.total} · read only`;
-    else if (state.winner !== null) status = `${name(state.winner)} wins!`;
-    else if (state.draw) status = "It's a draw.";
-    else if (latest.status === "over") status = "The match is over.";
-    else if (myTurn) status = `Your move, ${name(acting)}.`;
-    else status = `Waiting for ${latest.turn_of_player_indices.map((seat) => name(seat)).join(", ")}.`;
+    if (latest.replay) status = t("replay", { index: latest.replay.index, total: latest.replay.total });
+    else if (state.winner !== null) status = t("wins", { name: name(state.winner) });
+    else if (state.draw) status = t("draw");
+    else if (latest.status === "over") status = t("over");
+    else if (myTurn) status = t("your_move", { name: name(acting) });
+    else status = t("waiting_for", { names: latest.turn_of_player_indices.map((seat) => name(seat)).join(", ") });
+    $("title").textContent = t("title");
     $("status").textContent = status;
 
     $("board").replaceChildren(...state.board.map((mark, cell) => {
       const button = document.createElement("button");
       button.textContent = mark;
-      button.setAttribute("aria-label", `Row ${Math.floor(cell / 3) + 1}, column ${cell % 3 + 1}: ${mark || "empty"}`);
+      const where = { row: Math.floor(cell / 3) + 1, column: cell % 3 + 1 };
+      button.setAttribute("aria-label", mark ? t("cell", { ...where, mark }) : t("cell_empty", where));
       button.disabled = !myTurn || mark !== "";
       if (state.line && state.line.includes(cell)) button.className = "win";
       button.addEventListener("click", () => {
@@ -70,8 +108,9 @@ if (typeof window !== "undefined" && window.document) {
 
     $("players").replaceChildren(...latest.players.slice(0, 2).map((player) => {
       const div = document.createElement("div");
-      const you = player.player_index === latest.my_player_index ? " — you" : "";
-      div.textContent = `${MARKS[player.player_index]}: ${player.name}${you}`;
+      const line = { mark: MARKS[player.player_index], name: player.name };
+      if (player.player_index === latest.my_player_index) div.textContent = t("player_line_you", line);
+      else div.textContent = t("player_line", line);
       if (latest.turn_of_player_indices && latest.turn_of_player_indices.includes(player.player_index)) div.className = "turn";
       return div;
     }));
@@ -81,6 +120,7 @@ if (typeof window !== "undefined" && window.document) {
     if (event.source !== window.parent) return;
     const message = event.data;
     if (!message || message.type !== "state_changed") return;
+    applyLocale(message);
     latest = message;
     moveSent = false;
     render();

@@ -6,7 +6,9 @@ const path=require('node:path');
 function setup(){
   const nodes=new Map(),sent=[];let receive;
   const element=()=>({attributes:{},children:[],setAttribute(k,v){this.attributes[k]=v;},replaceChildren(...items){this.children=items;},addEventListener(k,f){this[k]=f;}});
-  const document={getElementById(id){if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);},createElement:element};
+  const document={getElementById(id){if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);},createElement:element,documentElement:{}};
+  const html=fs.readFileSync(path.join(__dirname,'../../games/tictactoe.html'),'utf8');
+  document.getElementById('i18n-strings').textContent=html.match(/<script type="application\/json" id="i18n-strings">([\s\S]*?)<\/script>/)[1];
   const parent={postMessage:m=>sent.push(m)},window={document,parent,addEventListener:(name,f)=>{receive=f;}};
   const code=fs.readFileSync(path.join(__dirname,'../../games/tictactoe.html'),'utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
   vm.runInNewContext(code,{window,document});
@@ -26,4 +28,12 @@ test('history shows read-only status instead of waiting and cannot submit moves'
   t.nodes.get('board').children[1].click();assert.equal(t.sent.length,0);
   t.send({replay:null});assert.match(t.nodes.get('status').textContent,/Your move/);
   assert.equal(t.nodes.get('board').children[1].disabled,false);
+});
+test('texts come from the translations the platform sends',()=>{
+  const t=setup();
+  t.send({locale:'es',direction:'ltr',strings:{your_move:'Tu turno, {name}.',cell_empty:'Fila {row}, columna {column}: vacía',player_line_you:'{mark}: {name} — tú'}});
+  assert.equal(t.nodes.get('status').textContent,'Tu turno, You (X).');
+  assert.equal(t.nodes.get('board').children[8].attributes['aria-label'],'Fila 3, columna 3: vacía');
+  assert.match(t.nodes.get('players').children[0].textContent,/— tú$/);
+  t.send({});assert.match(t.nodes.get('status').textContent,/^Your move/);
 });
