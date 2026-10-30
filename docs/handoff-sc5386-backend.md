@@ -1,7 +1,8 @@
 # Handoff: backend scaling and verified portal activity
 
 From Chad (sc5386) to Ian (zkamenov) and his agent. Updated October 30, 2026.
-This note is the handoff; Chad has not sent a separate message or email.
+This note is the handoff. A coordination comment is also on your code commit
+`e45a25a`; Chad has not sent a separate email.
 
 ## Current integration point
 
@@ -9,13 +10,40 @@ This note is the handoff; Chad has not sent a separate message or email.
 [PR #38](https://github.com/yoav-zibin/course/pull/38) merged as **888c52e** and
 **production query storage is now activated**, not merely available on a branch.
 [PR #39](https://github.com/yoav-zibin/course/pull/39) subsequently merged as
-**5a03a78**, the current production release. It keeps A/B metric counts anchored
+**5a03a78**. It keeps A/B metric counts anchored
 to their published snapshot while reading current experiment configuration;
 create/delete/toggle/name/spend changes therefore appear immediately in admin.
 Both PR and merged-main CI checks passed. The release preserves the recent
 catalog/practice/replay UX and experiment deletion panel. Local full backend
 validation with emulator: **564 passed**; prior web/browser validations remain
 recorded below.
+
+**Latest verified production release: 01b11c8**, including shared navigation
+[PR #40](https://github.com/yoav-zibin/course/pull/40), the intervening monitoring
+and translation work, and compatibility repair
+[PR #43](https://github.com/yoav-zibin/course/pull/43). Portal, Builder and Admin
+now share the same navigation initializer, active-page treatment, language
+picker and account menu. Page-specific controls remain in place. Production
+and the isolated demo passed desktop (1440px) and mobile (390px) live checks:
+all three headers, no horizontal overflow and no JavaScript errors. Demo
+received only the shared-header static assets; its backend, data, config and
+allowance remain separate. Keep main's current asset versions when merging.
+
+The intervening monitoring/translation merges had two missing type imports
+that prevented Python 3.12 startup. PR #43 fixes them, adds a production Python
+3.12 import check to CI, and implements translation-memory operations in
+QueryStore, migration and rollback. No paid translator was called. All merged
+main checks, including emulator, browser, runtime import and deployment, passed.
+Final live checks at 01b11c8 confirmed health OK, pagination enabled, live A/B
+configuration, and published counts of 131 users, 212 matches and 1,780 moves.
+
+Your `e45a25a` integration and `c363675` work are preserved on this branch; this
+documentation update does not merge them into main. Your compressed snapshot
+adapter still concerns legacy storage, while production uses QueryStore. When
+integrating your computer-play UI, reconcile its labels and handler with main's
+server-game practice behavior; distinguish local practice from a server
+computer-opponent match. Reuse main's query APIs and shared header instead of
+recreating them.
 
 Production `buildplay.fun` runs `game_platform.main` with **query mode in the
 existing (default) database, namespace production_v1**. Its private external
@@ -75,7 +103,7 @@ use `/admin`, `/stats`, `/invites` and `/browse` to inspect the fake month.
 
 For your Portal/Builder scope:
 
-1. Merge/rebase current main (including **5a03a78**) into your branch to reuse
+1. Merge/rebase current main (including **01b11c8**) into your branch to reuse
    PR #32's capability-negotiating clients, preserving your newer
    UI work and main's experiments/campaign headers. Do not independently recreate
    the storage API. See the endpoint contract below.
@@ -107,7 +135,7 @@ and stronger target-scale recovery/rollback validation. The small production
 conversion, full reconciliation and rollback rehearsal are completed. Larger
 emulator and sustained multi-process tests still need acceptance criteria and
 evidence. Small two-process/restart correctness rehearsals already passed.
-PR #32, #38 and #39 are merged/deployed, and production query mode is active.
+PR #32, #38, #39, #40 and #43 are merged/deployed, and production query mode is active.
 Instructor acceptance and target-scale proof remain separate milestones.
 Do not label the entire mandate complete.
 
