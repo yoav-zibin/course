@@ -9,6 +9,7 @@ class PortalOffline {
     this.online = online;
     this.network = true;
     this.notice = "";
+    this.cacheWarning = "";
     this.retryAfter = 0;
   }
   key() {
@@ -95,7 +96,15 @@ class PortalOffline {
         for (const match of value)
           if (!d.queues[match.id]?.length)
             d.responses[`/matches/${match.id}`] = match;
-      this.write(d);
+      // A failed optional cache write must not discard a successful server read.
+      // Keep the stored data untouched, including all pending moves and practice.
+      try {
+        this.write(d);
+        this.cacheWarning = "";
+      } catch (error) {
+        if (!error.storageFailure) throw error;
+        this.cacheWarning = "Online data loaded, but could not be saved for offline use. Browser storage is full or unavailable.";
+      }
     } catch (error) {
       if (error.storageFailure) throw error;
       if (

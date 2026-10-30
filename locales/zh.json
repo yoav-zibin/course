@@ -1,4 +1,6 @@
 {
+  "error.builder_size": "Builder specification is too large; reduce image detail or test count",
+  "error.guided_game_edit": "此游戏已有获批规格；请在引导式编辑器中修改并验证",
   "error.unauthorized": "缺少 X-User-Id / X-User-Password 请求头，或其无效",
   "error.master_password_required": "需要主密码（用户名任意）",
   "error.user_not_found": "找不到该用户",

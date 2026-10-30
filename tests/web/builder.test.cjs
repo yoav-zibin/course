@@ -11,7 +11,7 @@ function setup(request=async()=>{},catalog=async()=>[]) {
     replaceChildren(...items){this.children=items;for(const item of items)if(item&&typeof item==='object')item.parentNode=this;},
     append(...items){this.children.push(...items);for(const item of items)if(item&&typeof item==='object')item.parentNode=this;},
     focus(){},setAttribute(){},getBoundingClientRect(){return {x:100,y:100,width:420,height:500};},addEventListener(){}});return nodes.get(id);}
-  const ctx=vm.createContext({console,Set,Map,AbortController,Date,JSON,structuredClone,
+  const ctx=vm.createContext({console,Set,Map,AbortController,Date,JSON,structuredClone,location:{hash:""},
     document:{getElementById:node,addEventListener(){}},window:{addEventListener(){},innerWidth:1280,innerHeight:720},
     localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
     setTimeout:(fn,ms)=>{if(ms===1500)Promise.resolve().then(fn);return ++timer;},clearTimeout(){},setInterval:()=>++timer,clearInterval(){},
@@ -219,4 +219,12 @@ test('stopping while a new draft is being created restores the prompt',async()=>
   t.node('agent-input').value='Keep this prompt';const pending=t.run('sendAgentMessage()');
   t.run('stopAgentWaiting()');wait.resolve(saved({name:'Draft',code:'',allowed_player_counts:[1]},'new-id'));await pending;
   assert.equal(t.node('agent-input').value,'Keep this prompt');assert.equal(t.run('state.agentSending'),false);
+});
+
+test('guided builder link selects its draft before the remembered workspace',async()=>{
+  const t=setup(async()=>({...game,revision:1,base_version:0}));
+  t.storage.set('game-platform.builder.last.v2.owner','other');
+  t.run('state.drafts=[{id:"game"}];location.hash="#game"');
+  await t.run('resumeWorkspace()');
+  assert.equal(t.run('state.selectedId'),'game');
 });

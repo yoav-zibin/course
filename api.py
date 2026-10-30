@@ -1593,6 +1593,8 @@ def create_app(
     app.state.push_config = push_config if push_config is not None else PushConfig()
     app.state.sms_sender = sms_sender if sms_sender is not None else LogSender()
     app.state.email_sender = email_sender if email_sender is not None else LogSender()
+    from game_platform.builder_api import make_router
+    app.include_router(make_router(_get_platform, _get_caller_id))
     app.include_router(router)
     app.include_router(auth_router)
     app.include_router(i18n_router)

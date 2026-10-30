@@ -224,3 +224,20 @@ test('deleting an already missing owned match clears its cached ghost',async()=>
   o.save('/matches/match',{...base,owner_user_id:'alice'});
   await o.api('DELETE','/matches/match');assert.equal(o.cached('/matches/match'),undefined);
 });
+
+
+test("cache quota failure preserves successful online reads and queued moves", async () => {
+  const remote = {...base, id:"fresh"};
+  const {o, storage, setOnline} = setup(async () => [remote]);
+  o.enqueue(base, body);
+  const before = storage.getItem(o.key());
+  storage.setItem = () => {throw Error("quota");};
+  setOnline(true);
+  const matches = await o.get("/matches");
+  assert.ok(matches.some(m => m.id === "fresh"));
+  assert.ok(matches.some(m => m.id === "match" && m.pending === 1));
+  assert.equal(storage.getItem(o.key()), before);
+  assert.equal(o.network, true);
+  assert.match(o.cacheWarning, /offline use/);
+  assert.throws(() => o.enqueue({...base, move_count:1}, {...body, expected_move_count:1}), /not saved/);
+});

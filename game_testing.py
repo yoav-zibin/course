@@ -107,11 +107,16 @@ def test_server_code(
     max_walks: int = 1000,
     max_moves_per_walk: int = 1000,
     run_seed: int | None = None,
+    contract: dict | None = None,
 ) -> GameTestReport:
     """Tests [server_code] under [rules] with random walks, replaying
     [regression_seeds] first. Never raises for a broken game: every game
     bug becomes a failure in the report."""
-    logic = GameLogic(server_code)
+    if contract:
+        from game_platform.builder_validation import ContractLogic
+        logic = ContractLogic(server_code, contract)
+    else:
+        logic = GameLogic(server_code)
     master = random.Random(run_seed)
     deadline = time.monotonic() + budget_seconds
     walk_seeds = [

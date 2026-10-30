@@ -1,4 +1,6 @@
 {
+  "error.builder_size": "Builder specification is too large; reduce image detail or test count",
+  "error.guided_game_edit": "इस गेम के विनिर्देश स्वीकृत हैं; निर्देशित बिल्डर में संपादित और सत्यापित करें",
   "error.unauthorized": "X-User-Id / X-User-Password हेडर गायब हैं या अमान्य हैं",
   "error.master_password_required": "मास्टर पासवर्ड आवश्यक है (कोई भी उपयोगकर्ता नाम)",
   "error.user_not_found": "उपयोगकर्ता नहीं मिला",

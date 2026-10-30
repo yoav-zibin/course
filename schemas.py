@@ -478,6 +478,9 @@ class GameSummaryOut(BaseModel):
 
 
 class GameOut(GameSummaryOut):
+    game_logic_rules: str = ""
+    game_ui_rules: str = ""
+    translations: dict[str, JsonValue] = {}
     code: str
     # The v2 names for the two parts of a game: [client_code] is the same code
     # as [code]; [server_code] is None for a v1 game.
@@ -488,6 +491,9 @@ class GameOut(GameSummaryOut):
     def of(cls, game: Game) -> "GameOut":
         return cls(
             **GameSummaryOut.of(game).model_dump(),
+            game_logic_rules=(game.builder_workflow or {}).get("artifacts", {}).get("logic", {}).get("value", {}).get("text", ""),
+            game_ui_rules=(game.builder_workflow or {}).get("artifacts", {}).get("ui", {}).get("value", {}).get("text", ""),
+            translations=(game.builder_workflow or {}).get("translations", {}),
             code=game.code,
             client_code=game.code,
             server_code=game.server_code,
@@ -627,6 +633,7 @@ class GameDraftPublish(_Request):
 
 
 class GameDraftOut(GameDraftContent):
+    builder_workflow: dict[str, JsonValue] | None = None
     id: str
     owner_user_id: str
     revision: int
@@ -643,6 +650,7 @@ class GameDraftOut(GameDraftContent):
             allowed_player_counts=list(draft.rules.allowed_player_counts),
             allows_leave_mid_match=draft.rules.allows_leave_mid_match,
             allows_join_mid_match=draft.rules.allows_join_mid_match,
+            builder_workflow=draft.builder_workflow,
             revision=draft.revision, base_version=draft.base_version,
             created_at=draft.created_at, updated_at=draft.updated_at,
         )

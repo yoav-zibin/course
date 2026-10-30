@@ -1,4 +1,6 @@
 {
+  "error.builder_size": "Builder specification is too large; reduce image detail or test count",
+  "error.guided_game_edit": "Dieses Spiel hat genehmigte Spezifikationen; bearbeiten und prüfen Sie es im geführten Editor",
   "error.unauthorized": "die Header X-User-Id / X-User-Password fehlen oder sind ungültig",
   "error.master_password_required": "das Master-Passwort ist erforderlich (beliebiger Benutzername)",
   "error.user_not_found": "Benutzer nicht gefunden",

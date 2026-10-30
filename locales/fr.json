@@ -1,4 +1,6 @@
 {
+  "error.builder_size": "Builder specification is too large; reduce image detail or test count",
+  "error.guided_game_edit": "Ce jeu a des spécifications approuvées ; modifiez-le et vérifiez-le dans le créateur guidé",
   "error.unauthorized": "les en-têtes X-User-Id / X-User-Password sont absents ou invalides",
   "error.master_password_required": "le mot de passe maître est requis (n'importe quel nom d'utilisateur)",
   "error.user_not_found": "utilisateur introuvable",

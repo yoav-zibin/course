@@ -9,3 +9,6 @@ playwright-report/
 test-results/
 .venv/
 audit-report/
+
+# Generated guided-builder review artifacts (not source).
+.builder-artifacts/

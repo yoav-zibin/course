@@ -65,6 +65,8 @@ def test_debug_endpoints_are_not_in_the_api_schema(api: Api) -> None:
         "/game-drafts",
         "/game-drafts/{draft_id}",
         "/game-drafts/{draft_id}/publish",
+        "/game-drafts/{draft_id}/workflow/images/{filename}",
+        "/game-drafts/{draft_id}/workflow/{action}",
         "/games",
         "/games/test",
         "/games/{game_id}",

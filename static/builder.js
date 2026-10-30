@@ -632,6 +632,8 @@ async function onUserChanged() {
 }
 async function resumeWorkspace() {
   let last;
+  const requested = decodeURIComponent(location.hash.slice(1));
+  if (me() && requested && state.drafts.some(draft=>draft.id===requested)) { await select(requested); return; }
   try {last=me() && localStorage.getItem("game-platform.builder.last.v2."+me().id);} catch {}
   if (last && (state.games.some(game=>game.id===last) || state.drafts.some(game=>game.id===last) ||
       (last==="new" && localStorage.getItem(recoveryKey("new"))))) await select(last);

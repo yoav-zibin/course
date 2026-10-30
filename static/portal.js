@@ -387,7 +387,7 @@ async function refreshLocked() {
       outcome: state.match ? matchOutcome(state.match, user?.id)?.kind : null,
     });
     await syncGame();
-    showPageError("");
+    showPageError(offline.cacheWarning || "");
     offlineStatus();
   } catch (error) {
     window.PortalFeedback?.reset();
@@ -806,6 +806,11 @@ function renderMatch() {
   }
   const game = gameOf(match.game_id, match.game_version);
   updateMatchCurrency(match, user);
+  const rulesText = game?.translations?.[I18n.locale()]?.game_logic_rules || game?.game_logic_rules || "";
+  if ($("how-to-play")) {
+    $("how-to-play").hidden = !rulesText;
+    $("game-rules-text").textContent = rulesText;
+  }
   const counts = game ? game.allowed_player_counts : [];
   const ownerName = nameOf(match.owner_user_id);
   $("match-title").textContent =

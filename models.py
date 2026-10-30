@@ -116,6 +116,7 @@ class Game:
     # None means a v1 game: the client computes everything and the server only
     # stores the state. Defaults to None so older data files load.
     server_code: str | None = None
+    builder_workflow: dict[str, JsonValue] | None = None
     created_at: dt.datetime
     updated_at: dt.datetime
     # Applies to the whole game, so it is set on every version read back from the store
@@ -137,6 +138,7 @@ class GameDraft:
     code: str
     # The draft's server code (v2 Game API); see [Game.server_code].
     server_code: str | None = None
+    builder_workflow: dict[str, JsonValue] | None = None
     created_at: dt.datetime
     updated_at: dt.datetime
     base_version: int = 0

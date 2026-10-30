@@ -1,9 +1,7 @@
 # Player avatars and match feedback
 
-The web portal assigns one of 1,000 animal avatars when an account has no profile
-picture. The server saves the URL in `User.picture_url`. Existing provider pictures
-are preserved; accounts missing pictures are backfilled during the existing startup
-account migration. Ten red animal avatars identify computers, with the word
+The web portal assigns one of 1,000 animal avatars for every account. The server saves the URL in `User.picture_url`. Existing provider pictures and missing pictures are replaced during the startup
+account migration. Later provider logins preserve the assigned animal avatar. Ten red animal avatars identify computers, with the word
 “Computer” retained beside them. The same stable player-ID mapping is used in the
 portal and game context. Game clients receive picture URLs but choose whether to
 render them.
@@ -28,7 +26,7 @@ move, result or timing rule.
 ## Verification
 
 - Python tests cover asset counts/dimensions, persisted assignment, legacy-account
-  backfill, provider-picture preservation and stable computer selection.
+  backfill, provider-picture replacement and repeat-login persistence and stable computer selection.
 - JavaScript tests cover event transitions, duplicate suppression and silent replay,
   offline, account/match switch cases.
 - Browser tests load real avatar images, enable synthesized audio, confirm a turn
