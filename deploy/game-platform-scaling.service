@@ -9,7 +9,7 @@ User=zachary
 Group=zachary
 WorkingDirectory=/home/zachary
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/zachary/game-platform-venv/bin/python -m game_platform.main --config /home/zachary/game_platform/config.scaling.json
+ExecStart=/usr/local/sbin/game-platform-scaling-start
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=60

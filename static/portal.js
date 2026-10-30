@@ -1274,22 +1274,55 @@ async function onMakeMove(move) {
 }
 
 async function practice() {
+  if (state.creating) return;
+  const user = me();
+  if (!user) {
+    $("create-message").textContent = "Log in first.";
+    $("create-message").className = "message error";
+    return;
+  }
+  let match;
+  state.creating = true;
+  $("practice").disabled = true;
+  const game = state.games.find((g) => g.id === $("new-game").value);
   try {
-    const game = state.games.find((g) => g.id === $("new-game").value);
+    if (!game) throw new Error("Choose a game from the search results first.");
     const full = await portalRequest(
       "GET",
       `/games/${game.id}/versions/${game.version}`,
     );
     if (full.server_code) {
-      $("create-message").textContent =
-        "Practice isn't available for server-side games: their logic runs on the server. Create a match instead.";
+      if ($("practice-mode").value !== "computer") {
+        throw new Error("Pass and play isn't available for server-side games. Choose Against computer to start a match with a computer opponent.");
+      }
+      if (!game.allowed_player_counts.includes(2)) {
+        throw new Error("This server-side game doesn't support a two-player match against a computer.");
+      }
+      match = await portalRequest("POST", "/matches", {
+        user,
+        body: {game_id: full.id, num_computer_opponents: 1, bet_per_player: 0},
+      });
+      state.gameCache.set(`${full.id}@${full.version}`, full);
+      match = await portalRequest("POST", `/matches/${match.id}/start`, {
+        user,
+        body: {first_turn_player_indices: [0]},
+      });
+      $("create-message").textContent = "";
+      selectMatch(match.id);
       return;
     }
     const match = offline.practice(full, $("practice-mode").value);
     state.gameCache.set(`${full.id}@${full.version}`, full);
     selectMatch(match.id);
   } catch (error) {
-    $("create-message").textContent = error.message;
+    $("create-message").textContent = match
+      ? `Match created, but couldn't start automatically: ${error.message}. You can retry Start from the lobby.`
+      : error.message;
+    $("create-message").className = "message error";
+    if (match) selectMatch(match.id);
+  } finally {
+    state.creating = false;
+    renderLists();
   }
 }
 

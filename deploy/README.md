@@ -13,8 +13,21 @@ Open the portal at:
 The VM uses a reserved external IPv4 address. Its Let's Encrypt IP certificate lasts
 160 hours; a systemd timer checks renewal every six hours and reloads Nginx after a
 successful renewal. Nginx redirects port 80 to HTTPS and serves only the `static/`
-assets directly. The app's `debug_tools` setting stays off, and port 8000 remains bound
-to localhost.
+assets directly. The app's `debug_tools` setting stays off, the builder agent has its
+own authenticated API route, and port 8000 remains bound to localhost.
+
+The agent key is stored in Secret Manager as
+`game-platform-scaling-model-api-key`. The scaling VM service account has access to
+that secret only. Its systemd start wrapper fetches version 1 using the VM identity,
+sets `MUSE_SPARK_API_KEY` in the API process, and does not write the key to disk.
+Update the pinned secret version in the wrapper when rotating the key.
+
+To seed the scaling catalog without copying accounts, matches, drafts, or agent
+conversations, stream the output of `copy_published_games.py export --config
+<production-config>` into `copy_published_games.py import --config <scaling-config>`.
+The export includes active published games, every stored version, and both client and
+server code. Run the importer with `--dry-run` first; it refuses to overwrite a
+different game that already uses the same ID.
 
 The VM's systemd unit is `game-platform-scaling.service`; its config is
 `/home/zachary/game_platform/config.scaling.json`, and its Firestore database is

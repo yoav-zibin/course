@@ -7,9 +7,10 @@ server process at a time. A save writes only the records that changed.
 Each record is one Firestore document, in a collection named after its [Snapshot]
 field (plus an optional prefix): "users/<id>", "game_versions/<game id>@<version>",
 "matches/<id>", "deleted_game_ids/<game id>" and so on. A document holds the record
-as JSON text in its "json" field rather than as Firestore fields, because game states
-are arbitrary JSON and Firestore can't store all of it (a list directly inside a
-list, for one).
+as JSON text because game states are arbitrary JSON and Firestore can't store all of
+it natively. Large JSON records that compress well are stored as level-1 zlib bytes;
+small or incompressible records keep the legacy text representation to avoid extra
+CPU and metadata. Readers accept both formats.
 
 Firestore documents hold at most 1 MiB, so:
 - A match's moves and an agent conversation's entries live in a subcollection, one
@@ -31,6 +32,7 @@ import dataclasses
 import logging
 import re
 import typing
+import zlib
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,6 +52,11 @@ _MAX_DOCUMENT_TEXT_BYTES: Final = 900_000
 # A chunk of at most this many characters fits a document even if every character
 # takes 4 bytes in UTF-8.
 _CHUNK_CHARS: Final = 200_000
+_CHUNK_BYTES: Final = 200_000
+_COMPRESS_MIN_BYTES: Final = 1_024
+_COMPRESS_MIN_SAVING: Final = 0.10
+# Firestore's stored representation evolves independently of exported JSON files.
+_FIRESTORE_FORMAT_VERSION: Final = 11
 # Firestore batches hold at most 500 writes; keep requests well under 10 MiB.
 _MAX_BATCH_WRITES: Final = 500
 _MAX_BATCH_BYTES: Final = 8_000_000
@@ -167,7 +174,9 @@ class _Writes:
 
     def set(self, ref: Any, data: dict[str, Any]) -> None:
         self._batch.set(ref, data)
-        self._added(sum(len(value) for value in data.values() if isinstance(value, str)))
+        self._added(
+            sum(len(value) for value in data.values() if isinstance(value, (str, bytes)))
+        )
 
     def delete(self, ref: Any) -> None:
         self._batch.delete(ref)
@@ -190,13 +199,31 @@ class _Writes:
 def _write_text(writes: _Writes, ref: Any, text: str, old_chunk_count: int) -> int:
     """Writes [text] to the document [ref], splitting it if needed, and removes
     chunks a longer old text left behind. Returns the new chunk count."""
-    parts = _chunks(text)
-    data: dict[str, Any] = {"json": parts[0]}
-    if len(parts) > 1:
-        data["chunks"] = len(parts)
-    writes.set(ref, data)
-    for index in range(1, len(parts)):
-        writes.set(ref.collection("chunks").document(_item_id(index)), {"json": parts[index]})
+    raw = text.encode("utf-8")
+    compressed = zlib.compress(raw, level=1) if len(raw) >= _COMPRESS_MIN_BYTES else raw
+    use_compression = (
+        len(raw) >= _COMPRESS_MIN_BYTES
+        and len(compressed) <= len(raw) * (1 - _COMPRESS_MIN_SAVING)
+    )
+    if use_compression:
+        parts = [
+            compressed[offset : offset + _CHUNK_BYTES]
+            for offset in range(0, len(compressed), _CHUNK_BYTES)
+        ]
+        data: dict[str, Any] = {"encoding": "zlib", "data": parts[0]}
+        if len(parts) > 1:
+            data["chunks"] = len(parts)
+        writes.set(ref, data)
+        for index, part in enumerate(parts[1:], start=1):
+            writes.set(ref.collection("chunks").document(_item_id(index)), {"data": part})
+    else:
+        parts = _chunks(text)
+        data = {"json": parts[0]}
+        if len(parts) > 1:
+            data["chunks"] = len(parts)
+        writes.set(ref, data)
+        for index in range(1, len(parts)):
+            writes.set(ref.collection("chunks").document(_item_id(index)), {"json": parts[index]})
     for index in range(len(parts), old_chunk_count):
         writes.delete(ref.collection("chunks").document(_item_id(index)))
     return len(parts)
@@ -211,6 +238,17 @@ def _delete_text(writes: _Writes, ref: Any, chunk_count: int) -> None:
 def _read_text(snapshot: Any) -> str:
     data = snapshot.to_dict()
     count = data.get("chunks", 1)
+    if data.get("encoding") == "zlib":
+        parts = [data["data"]]
+        if count > 1:
+            rest = snapshot.reference.collection("chunks").order_by("__name__").stream()
+            parts.extend(chunk.to_dict()["data"] for chunk in rest)
+        if len(parts) != count:
+            raise ValueError(f"{snapshot.reference.path}: expected {count} chunks, found {len(parts)}")
+        try:
+            return zlib.decompress(b"".join(parts)).decode("utf-8")
+        except (zlib.error, UnicodeDecodeError) as error:
+            raise ValueError(f"{snapshot.reference.path}: invalid compressed JSON") from error
     if count == 1:
         return data["json"]
     rest = snapshot.reference.collection("chunks").order_by("__name__").stream()
@@ -275,13 +313,13 @@ class FirestoreStore(SavingStore):
     def _check_format(self) -> None:
         stored = self._format_ref().get()
         version = stored.to_dict().get("version", 0) if stored.exists else 0
-        if version > FORMAT_VERSION:
+        if version > _FIRESTORE_FORMAT_VERSION:
             raise ValueError(
                 f"Firestore data has format version {version}, but this server "
-                f"understands up to {FORMAT_VERSION}; update the server"
+                f"understands up to {_FIRESTORE_FORMAT_VERSION}; update the server"
             )
-        if version < FORMAT_VERSION:
-            self._format_ref().set({"version": FORMAT_VERSION})
+        if version < _FIRESTORE_FORMAT_VERSION:
+            self._format_ref().set({"version": _FIRESTORE_FORMAT_VERSION})
 
     def _load(self) -> tuple[Snapshot, dict[str, int]]:
         fields: dict[str, list[Any]] = {}

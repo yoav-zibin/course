@@ -1141,7 +1141,7 @@ def admin_delete_match(platform: Platform, match_id: str) -> None:
     platform.admin_delete_match(match_id)
 
 
-@debug_router.post("/agent/chat")
+@router.post("/agent/chat", include_in_schema=False)
 async def agent_chat(
     request: Request, platform: Platform, caller_id: CallerId, body: AgentChatRequest
 ) -> AgentChatResponse:

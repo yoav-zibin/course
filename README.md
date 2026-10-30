@@ -582,9 +582,10 @@ process at a time (`firestore_store.py`).
 
 **Layout.** One document per record, named after the record: `users/<id>`,
 `game_versions/<game id>@<version>`, `matches/<id>`, `invites/<token>`, ... Each
-document holds the record as JSON text in its `json` field (game states are arbitrary
-JSON, and Firestore can't store all of it natively). A match's moves are one document
-each in `matches/<id>/moves`, and an agent conversation's entries in
+document holds the record as JSON. Large records that compress well are saved as
+level-1 zlib bytes; small and incompressible records stay as text to avoid spending
+CPU for little storage reduction. Readers accept both formats. A match's moves are
+one document each in `matches/<id>/moves`, and an agent conversation's entries in
 `agent_conversations/<game id>/entries`, so long matches never hit Firestore's 1 MiB
 document limit; text over ~900 KB is split into a `chunks` subcollection.
 `meta/format` holds the data format, so an older server refuses newer data. A save
