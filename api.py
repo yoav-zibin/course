@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from http import HTTPStatus
 from pathlib import Path
 from typing import Annotated, Final, Literal
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,7 +24,7 @@ import segno
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import State
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from pydantic import JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from game_platform.invariants import InvariantRequest, InvariantReport, check_invariants
 from game_platform import i18n, observability
@@ -178,6 +178,60 @@ def health(platform: Platform, request: Request, response: Response) -> HealthOu
         uptime_seconds=int(time.monotonic() - request.app.state.started_at),
         storage=error or "ok",
     )
+
+
+# Browser error reports
+
+MAX_CLIENT_ERROR_BYTES: Final = 4096
+
+
+class ClientErrorReport(BaseModel):
+    """What a page tells the server about an error it hit (no passwords, tokens or user
+    data: the page sends the error's message, which is also cleaned here)."""
+
+    model_config = ConfigDict(extra="ignore")
+    kind: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")]
+    message: Annotated[str, Field(max_length=1000)] = ""
+    page: Annotated[str, Field(max_length=500)] = ""
+    user_agent: Annotated[str, Field(max_length=500)] = ""
+
+
+@router.post("/client-errors", status_code=HTTPStatus.ACCEPTED)
+async def report_client_error(request: Request) -> dict[str, bool]:
+    """Public. A page reports an error (a script error, or the device's storage being
+    full) so it reaches the server's log as a `client_error` event. The body is small JSON
+    (kind, message, page, user_agent); each client may send a few per minute (429 after)."""
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > MAX_CLIENT_ERROR_BYTES:
+        raise HTTPException(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "report too large")
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > MAX_CLIENT_ERROR_BYTES:
+            raise HTTPException(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "report too large")
+    monitor: observability.Monitor = request.app.state.monitor
+    client = observability.CLIENT.get() or "unknown"
+    # Counted before the body is checked, so garbage can't be sent without limit either.
+    if not monitor.take_client_error_slot(client):
+        raise HTTPException(HTTPStatus.TOO_MANY_REQUESTS, "too many error reports; try again later")
+    try:
+        report = ClientErrorReport.model_validate_json(bytes(body))
+    except ValueError:
+        raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY, "invalid error report") from None
+    page = urlsplit(report.page)
+    monitor.log_client_error(
+        client,
+        {
+            "kind": report.kind,
+            "message": observability.scrub_text(report.message, 500),
+            # Only the path: a query or fragment may hold a token.
+            "page": observability.scrub_text(page.path or report.page, 200),
+            "user_agent": observability.scrub_text(
+                report.user_agent or request.headers.get("user-agent", ""), 200
+            ),
+        },
+    )
+    return {"ok": True}
 
 
 @router.get("/c/{campaign_code}")

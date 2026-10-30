@@ -42,6 +42,11 @@
     "overloaded_in_flight": 80,
     "memory_warn_percent": 70.0,
     "memory_critical_percent": 90.0,
+    "event_loop_blocked_ms": 500,
+    "event_loop_blocked_critical_ms": 5000,
+    "store_slow_p95_ms": 300,
+    "client_errors_per_client_per_minute": 10,
+    "client_error_spike_per_minute": 30,
     "metrics_interval_seconds": 60.0,
     "alert_cooldown_seconds": 300.0
   },

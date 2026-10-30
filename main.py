@@ -155,6 +155,8 @@ def main() -> None:
             backup_keep=config.data_file.backup_keep,
         )
         logger.info("Using data file %s", data_file)
+    # Times every database call, for the metrics line and the store_slow alert.
+    store = observability.TimedStore(store, monitor)
     push_notifier: PushNotifier | None = None
     try:
         push_notifier = make_push_notifier(push_config, store=store)

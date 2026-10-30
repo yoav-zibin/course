@@ -8,6 +8,8 @@
 #   ./investigate.sh game                 # game functions that timed out, ran out of memory or failed
 #   ./investigate.sh illegal              # rejected moves
 #   ./investigate.sh signups              # surges and floods of new accounts
+#   ./investigate.sh cause                # alerts with a likely_cause, a blocked event loop, slow database calls
+#   ./investigate.sh browser              # errors the browsers reported (client_error)
 #   ./investigate.sh request 3f9c2a1b7d4e8a60   # everything one request did
 #   ./investigate.sh match MATCH_ID       # everything about one match
 #   ./investigate.sh digest               # the summary of the last hours
@@ -25,8 +27,10 @@ case "${1:-}" in
   game)    read_logs "$BASE AND jsonPayload.event=(\"game_function_timeout\" OR \"game_function_memory\" OR \"game_function_error\" OR \"computer_illegal_move\" OR \"game_function_slow\")" ;;
   illegal) read_logs "$BASE AND jsonPayload.event=\"illegal_move\"" ;;
   signups) read_logs "$BASE AND jsonPayload.event=(\"signup_surge\" OR \"signup_flood\")" ;;
+  cause)   read_logs "$BASE AND (jsonPayload.likely_cause:* OR jsonPayload.event=(\"event_loop_blocked\" OR \"store_slow\"))" ;;
+  browser) read_logs "$BASE AND jsonPayload.event=(\"client_error\" OR \"client_error_spike\")" ;;
   request) read_logs "$BASE AND (jsonPayload.request_id=\"${2:?a request id}\" OR jsonPayload.request_id_stuck=\"$2\")" ;;
   match)   read_logs "$BASE AND jsonPayload.match_id=\"${2:?a match id}\"" ;;
   digest)  read_logs "$BASE" | python3 "$(dirname "${BASH_SOURCE[0]}")/../../tools/log_digest.py" - ;;
-  *) sed -n '2,13p' "${BASH_SOURCE[0]}"; exit 1 ;;
+  *) sed -n '2,15p' "${BASH_SOURCE[0]}"; exit 1 ;;
 esac

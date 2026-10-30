@@ -200,6 +200,20 @@ class MonitoringConfig(_Section):
     # The server process's memory, as a percent of the machine's.
     memory_warn_percent: Annotated[float, Field(gt=0, le=100)] = 70.0
     memory_critical_percent: Annotated[float, Field(gt=0, le=100)] = 90.0
+    # The server's asyncio loop must answer a tiny task quickly. When the monitor thread
+    # waits longer than this (ms) it logs event_loop_blocked (minor) with the loop thread's
+    # stack, which names the blocking line...
+    event_loop_blocked_ms: Annotated[int, Field(ge=1)] = 500
+    # ...and longer than this is a major alert: every request is stuck behind it.
+    event_loop_blocked_critical_ms: Annotated[int, Field(ge=1)] = 5000
+    # A minute's database calls (the store) with a 95th percentile at or above this (ms)
+    # is a minor alert (store_slow).
+    store_slow_p95_ms: Annotated[int, Field(ge=1)] = 300
+    # Browser error reports (POST /client-errors): at most this many per client per
+    # minute are kept (the rest get 429)...
+    client_errors_per_client_per_minute: Annotated[int, Field(ge=1)] = 10
+    # ...and this many reports from all clients in one minute is a minor alert.
+    client_error_spike_per_minute: Annotated[int, Field(ge=1)] = 30
     # Seconds between the "metrics" summary lines (requests, errors, latency...) and
     # the checks for stuck requests and memory. 0 turns this background work off.
     metrics_interval_seconds: Annotated[float, Field(ge=0)] = 60.0

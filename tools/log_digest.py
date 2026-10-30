@@ -10,7 +10,8 @@ prints) from a file or stdin:
     python3 log_digest.py server.log --request-id 3f9c2a1b7d4e8a60   # everything one request did
     python3 log_digest.py server.log --json                          # machine-readable
 
-The digest lists, most important first: the alerts, the errors with their request ids
+The digest lists, most important first: the alerts (each with its `likely_cause` when the
+server named one, and the event loop's lag), the likely causes by count, the errors with their request ids
 (each is the start of an investigation: filter on the id), the slowest requests with their
 arguments, game functions that failed, illegal moves by game, and the busiest minutes.
 Standard library only.
@@ -59,7 +60,8 @@ def read_entries(lines: Iterable[str]) -> list[dict[str, Any]]:
 def _brief(entry: dict[str, Any]) -> dict[str, Any]:
     keep = ("timestamp", "severity", "event", "alert", "message", "request_id", "method", "path",
             "status", "duration_ms", "user_id", "client", "game_id", "game_version", "function",
-            "match_id", "error", "reason")
+            "match_id", "error", "reason", "likely_cause", "blocking_frame", "event_loop_lag_ms",
+            "store_p95_ms")
     return {key: entry[key] for key in keep if key in entry and entry[key] not in (None, "")}
 
 
@@ -92,6 +94,16 @@ def digest(entries: list[dict[str, Any]], top: int = 10) -> dict[str, Any]:
     for e in events:
         if e["event"] == "metrics" and e.get("timestamp"):
             minutes[str(e["timestamp"])[:16]] = e.get("requests", 0)
+    # What the server thinks is wrong, most common first (alerts of one event share a cause).
+    causes = collections.Counter(
+        (e["event"], e["likely_cause"]) for e in events if e.get("alert") and e.get("likely_cause"))
+    # The event loop's lag per minute (the metrics line has the worst of its minute); a lag over
+    # 500 ms means something blocked the loop, and event_loop_blocked says what.
+    lags = {str(e["timestamp"])[:16]: e["event_loop_lag_ms"] for e in events
+            if e["event"] == "metrics" and e.get("timestamp") and e.get("event_loop_lag_ms") is not None}
+    blocked = [e for e in events if e["event"] == "event_loop_blocked"]
+    browser_errors = collections.Counter(
+        f"{e.get('kind')}: {e.get('error_message')} ({e.get('page')})" for e in events if e["event"] == "client_error")
     endpoints: dict[str, list[float]] = collections.defaultdict(list)
     for e in events:
         if e["event"] in ("request_slow", "request_very_slow") and e.get("duration_ms") is not None:
@@ -101,6 +113,14 @@ def digest(entries: list[dict[str, Any]], top: int = 10) -> dict[str, Any]:
         "events": dict(by_event.most_common()),
         "severities": dict(by_severity),
         "alerts": alerts,
+        "likely_causes": [{"event": event, "likely_cause": cause, "count": count}
+                          for (event, cause), count in causes.most_common(top)],
+        "event_loop": {
+            "max_lag_ms": max(lags.values(), default=None),
+            "worst_minutes": dict(sorted(lags.items(), key=lambda item: -item[1])[:top]),
+            "blocked": [_brief(e) | {"event_loop_stack": e.get("event_loop_stack")} for e in blocked[-top:]],
+        } if lags or blocked else {},
+        "browser_errors": dict(browser_errors.most_common(top)),
         "errors": [_brief(e) for e in errors][-top * 3:],
         "slowest_requests": [_brief(e) for e in slow[:top]],
         "slow_endpoints": {k: {"count": len(v), "max_ms": max(v)} for k, v in
@@ -131,6 +151,13 @@ def render(result: dict[str, Any]) -> str:
 
     section("Alerts (minor = email, major = page; filter the log on a request_id to see the whole request)",
             result["alerts"])
+    section("Likely causes the server named (event, cause, how many alerts)", result["likely_causes"])
+    loop = result["event_loop"]
+    if loop:
+        section("Event loop lag (ms; over 500 means something blocked the loop; max_lag_ms is the worst minute)",
+                {"max_lag_ms": loop["max_lag_ms"], "worst_minutes": loop["worst_minutes"]})
+        section("Event loop blocked (the stack names the blocking line)", loop["blocked"])
+    section("Errors the browsers reported (kind: message (page))", result["browser_errors"])
     section("Other errors", result["errors"])
     section("Game functions that failed (timeouts, memory, exceptions)", result["game_function_failures"])
     section("Slowest requests", result["slowest_requests"])
