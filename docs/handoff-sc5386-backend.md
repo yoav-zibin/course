@@ -1,33 +1,65 @@
 # Handoff: backend scaling and verified portal activity
 
-From Chad (sc5386) to Ian (zkamenov) and his agent. Updated October 29, 2026.
+From Chad (sc5386) to Ian (zkamenov) and his agent. Updated October 30, 2026.
 This note is the handoff; Chad has not sent a separate message or email.
 
 ## Current integration point
 
-[PR #32](https://github.com/yoav-zibin/course/pull/32) is **merged into main** as
-**3a4bda3** and the normal CI production deployment succeeded. Its final reviewed
-head **65891ef** integrated main through **0091652**, preserving the recent
-catalog/practice/replay UX and experiment deletion panel. HTML conflicts were
-resolved and Portal/stats asset versions bumped. Backend, unit, emulator and
-full desktop/mobile CI checks passed on both the final PR head and merged main.
-Local checks passed: **556 backend/emulator**, **157 web**, **18 affected browser**.
+[PR #32](https://github.com/yoav-zibin/course/pull/32) merged as **3a4bda3**;
+[PR #38](https://github.com/yoav-zibin/course/pull/38) merged as **888c52e** and
+**production query storage is now activated**, not merely available on a branch.
+[PR #39](https://github.com/yoav-zibin/course/pull/39) subsequently merged as
+**5a03a78**, the current production release. It keeps A/B metric counts anchored
+to their published snapshot while reading current experiment configuration;
+create/delete/toggle/name/spend changes therefore appear immediately in admin.
+Both PR and merged-main CI checks passed. The release preserves the recent
+catalog/practice/replay UX and experiment deletion panel. Local full backend
+validation with emulator: **564 passed**; prior web/browser validations remain
+recorded below.
 
-Production `buildplay.fun` was verified running **3a4bda3** with its external
-configuration byte-for-byte unchanged. It still uses `game_platform.main`,
-**snapshot mode / (default)** and no namespace; `/storage/capabilities` returns
-`pagination: false`. All **131 users, 167 game versions and 211 matches** from the
-protected pre-merge baseline remained, with **zero new users**. `/demo`, its
-account/budget helpers and `/admin/demo-fixtures` are absent on production.
-Public Portal/Builder checks found no page errors and confirmed the combined
-assets/recent UX were served. The protected config/data baseline is on the
-primary VM at `/opt/game-platform/backups/backend-merge-20261030T030035Z`.
+Production `buildplay.fun` runs `game_platform.main` with **query mode in the
+existing (default) database, namespace production_v1**. Its private external
+config has `allow_default_database_query: true`; non-storage settings and all
+credentials were preserved. Do not overwrite it with the example config or
+switch it back to stale legacy collections. `/storage/capabilities` now returns
+`pagination: true`; `/debug/all-data` returns 409 instead of loading/exporting
+everything. The ordinary Portal/Builder/admin pages remain the application UI.
+
+During a writer-maintenance window, the existing records were converted and
+fully reconciled: **131 users, 167 game versions, 212 matches, 1,780 moves**, plus
+drafts, conversations, saved libraries, identities, experiments and subscriptions.
+All existing credentials and balances verified; **zero synthetic users were
+added**. Public checks passed health, Portal/Builder, a 50-game page plus cursor,
+omitted catalog source, and admin authentication, with no page errors. Protected
+admin checks verified all user IDs across three pages and every match ID.
+
+The full-data and rollback rehearsals ran in a loopback emulator on the same VM;
+private credentials were not downloaded. Original collections and protected
+snapshots remain for recovery at `/opt/game-platform/backups/production-query-cutover`.
+If rollback is needed after new writes, export current query state into a fresh
+legacy prefix; never select the stale pre-cutover source. See main's
+`docs/scaling-production-cutover.md` and `scaling_cutover.py`.
+
+The durable worker wakes after commits/deadlines with a 60-second recovery poll;
+half-second idle Firestore polling is removed. Ordinary online account merges
+and deletion now work through bounded user-filtered queries. Large operations
+retain atomic refusal and offline-job fallback (100 legacy records, 250 merge
+moves, 450 transaction writes); shared unfinished seats still block merging.
+
+The default database received 13 composites and 65 field overrides for the new
+namespace. Conversion used 52,383 of its 100,000 conservative operation units,
+with 10.7 MB cumulative write payload; source preflight/migration reads stayed
+under their 25,000-unit ceiling. These are local allowance counters, not an
+invoice. No VM/database was created and no model or stress generator was called.
+Temporary maintenance/conversion/emulator processes are stopped; production is
+healthy. The fake-month site's data and its spending allowance were not used by
+the production conversion.
 
 The isolated port-8132 test service was also updated to **3a4bda3**, preserving
 its config, dataset, persistent allowance, limits and expiry. Portal and the
 merged statistics UI passed public browser checks. Its database remains
 **game-platform-scaling**, namespace **scaling_v1**, with query mode enabled.
-Code merging does not migrate data or enable production query mode. Isolation
+The production conversion was an explicit operation after merging. Isolation
 comes from database/namespace/config, not merely separate VMs. Normal startup
 never imports the isolated wrapper or runs synthetic seeding.
 
@@ -43,7 +75,7 @@ use `/admin`, `/stats`, `/invites` and `/browse` to inspect the fake month.
 
 For your Portal/Builder scope:
 
-1. Merge/rebase current main (including **3a4bda3**) into your branch to reuse
+1. Merge/rebase current main (including **5a03a78**) into your branch to reuse
    PR #32's capability-negotiating clients, preserving your newer
    UI work and main's experiments/campaign headers. Do not independently recreate
    the storage API. See the endpoint contract below.
@@ -51,10 +83,12 @@ For your Portal/Builder scope:
    and history use bounded pages, follow cursors, and retain snapshot-mode
    fallback. Check desktop/mobile and old cached-client behavior. Existing
    small-fixture checks passed; larger emulator datasets still need validation.
-3. Your pre-existing port-8000 configuration was last observed in snapshot mode.
+3. Your pre-existing service on the **scaling VM's** port 8000 was last observed
+   in snapshot mode; the **primary VM's** production service is now query mode.
    Adopting query mode there is a separate integration step. The working query
    demonstration is the protected port-8132 service; do not mistake the two.
-   Coordinate any service switch with Chad; leave production/default DB alone.
+   Coordinate any test-service switch with Chad. Do not reset production's query
+   config or point it at the synthetic scaling database.
 4. Exercise normal Portal/Builder against the shared fake-month namespace and
    record any client-specific failures. Use the existing VM and database. Do not
    launch cloud load generation or raise/reset the operation allowance.
@@ -67,13 +101,14 @@ fully demonstrated**. The user explicitly accepted a smaller dataset for this
 live demonstration; that does not establish target capacity.
 
 Remaining backend/release work belongs with Chad/shared integration, not all
-with Ian: live account-merge/deletion job UX (maintenance jobs already exist),
+with Ian: UI for large account maintenance jobs (ordinary online flows work),
 remaining bounded legacy representations, per-game analytics/reconciliation,
-and migration/recovery/rollback rehearsal before production cutover. Larger
+and stronger target-scale recovery/rollback validation. The small production
+conversion, full reconciliation and rollback rehearsal are completed. Larger
 emulator and sustained multi-process tests still need acceptance criteria and
 evidence. Small two-process/restart correctness rehearsals already passed.
-PR #32's code is merged/deployed with production defaults preserved. Production
-query-mode activation and instructor acceptance remain separate milestones.
+PR #32, #38 and #39 are merged/deployed, and production query mode is active.
+Instructor acceptance and target-scale proof remain separate milestones.
 Do not label the entire mandate complete.
 
 The extra cloud/test authorization remains **less than $1**, excluding normal
@@ -90,7 +125,8 @@ optional fixture presentation is now only at `/admin/demo-fixtures`. It runs
 `sc5386-live-demo.service` on loopback **8132**, from the private csccs checkout.
 The pre-existing `game-platform-scaling` service on 8000 and IP virtual host are
 unchanged and active. The primary VM received the merged code through normal CI;
-its routing, runtime config and database selection were preserved. Synthetic
+its routing and non-storage configuration were preserved, and its storage mode
+was upgraded as described above. Synthetic
 data remains confined to the separate test deployment.
 
 The live namespace contains a prepared September dataset: **233 synthetic users,
@@ -260,16 +296,17 @@ Web unit suite: **152 passed**. Full desktop/mobile browser suite with two
 workers: **76 passed, 1 skipped**. A preceding default-concurrency run timed out
 once on pagination; ten repetitions and the full bounded rerun then passed.
 
-These remaining gates apply to production query-mode activation. The opt-in
-implementation is already merged; do not confuse that with migrating production.
+Production query activation, full reconciliation and the small-deployment
+rollback rehearsal are complete. The following are remaining scaling limits.
 The recent experiment-variant delete action retains a 100-record legacy limit
 in query mode; an oversized delete returns 409 and rolls back all writes.
 
-Implemented account jobs require a maintenance window; live sign-in merge and
-job-starting UI flows remain a client/integration task. Invite acceptance and
+Large account jobs require a maintenance window; job-starting UI remains a
+client/integration task. Ordinary bounded sign-in merges/deletions work online.
+Invite acceptance and
 linked identity arrays still have bounded legacy representations. Per-game
-analytics, full production migration/recovery/rollback rehearsal and sustained
-multi-instance load remain release gates. Query storage uses private Firestore
+analytics, target-scale recovery/rollback validation and sustained multi-instance
+load remain follow-ups. Query storage uses private Firestore
 transaction methods; upgrades require emulator and cloud verification.
 
 The **10M users / 1B matches / 100K games** figures remain an unproved target.
