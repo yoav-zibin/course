@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Synthetic monthly scaling charts</title>
+<style>
+body{margin:0;background:#f3f5f8;color:#172033;font:16px/1.5 Inter,Arial,sans-serif}
+main{max-width:1280px;margin:36px auto;padding:0 20px}
+h1{margin-bottom:4px}.notice{padding:14px 18px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));gap:20px;margin-top:24px}
+figure{margin:0;background:white;border-radius:10px;padding:12px;box-shadow:0 2px 8px #10182812}
+img{display:block;width:100%;height:auto}figcaption{padding:8px 12px;color:#667085}
+@media(max-width:600px){.charts{grid-template-columns:1fr}}
+</style>
+</head>
+<body><main>
+<h1>Synthetic monthly scaling scenario</h1>
+<p class="notice"><strong>Modeled data only.</strong> These charts are generated from
+assumptions for a 10M-user / 1B-match / 100K-game inventory. These are not measured
+GCE telemetry, a production trace, or an HTTP load-test result.</p>
+<section class="charts"><figure><img src="requests-per-second.svg" alt="requests per second"><figcaption>Requests Per Second</figcaption></figure>
+<figure><img src="hourly-route-mix.svg" alt="hourly route mix"><figcaption>Hourly Route Mix</figcaption></figure>
+<figure><img src="api-instances.svg" alt="api instances"><figcaption>Api Instances</figcaption></figure>
+<figure><img src="api-cpu.svg" alt="api cpu"><figcaption>Api Cpu</figcaption></figure>
+<figure><img src="firestore-operations.svg" alt="firestore operations"><figcaption>Firestore Operations</figcaption></figure>
+<figure><img src="network-throughput.svg" alt="network throughput"><figcaption>Network Throughput</figcaption></figure>
+<figure><img src="modeled-latency.svg" alt="modeled latency"><figcaption>Modeled Latency</figcaption></figure></section>
+</main></body></html>

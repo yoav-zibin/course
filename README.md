@@ -9,7 +9,11 @@ An in-memory REST backend for a multiplayer turn-based games platform, built wit
   to a set of players (any of whom may move next) or ends the match.
 
 All data lives in process memory behind the `Store` interface (`store.py`), so it can later
-be swapped for a database. The server binary uses `JsonFileStore`
+be swapped for a database. The in-memory store maintains secondary indexes for
+user-linked login accounts, match participants, and match status, avoiding full user or
+match scans on common login, match-history, open-match, and quick-match candidate
+requests. These indexes are process-local and do not make snapshot-based persistence
+safe across multiple server processes. The server binary uses `JsonFileStore`
 (`json_file_store.py`), which also saves everything to a JSON file; see
 [Data file](#data-file).
 
@@ -674,9 +678,40 @@ application capacity. The runner is read-only by default; other methods require
 `--allow-write` and an isolated benchmark database.
 
 **Current limitation:** the existing snapshot-based Firestore store is single-process
-only, and several list routes are unpaginated. Do not use two VMs or a target-sized
-dataset for a capacity claim until those backend paths have been changed. See the
+only, and several list routes are unpaginated. In-memory indexes reduce scans for
+login-account, per-user match-history, and open-match lookups, but do not change this
+consistency or memory limitation. Do not use two VMs or a target-sized dataset for a
+capacity claim until those backend paths have been changed. See the
 [backend scaling plan](docs/backend-scaling-plan.md).
+
+### Synthetic target-scale traffic and resource data
+
+`scale_traffic_simulation.py` generates 720 hourly records for a 30-day scenario using
+the 10M-user / 1B-match / 100K-game inventory. It writes
+`reports/scaling-traffic-30d.csv` and `reports/scaling-traffic-30d-summary.json`.
+Regenerate the deterministic sample with:
+
+```bash
+python course/scale_traffic_simulation.py
+```
+
+The current scenario assumes 20% monthly active users, 20% of those active daily, and
+40 HTTP requests per daily active user per day (480M requests/month). The hourly mix
+includes authentication/profile, catalog, match history/details, matchmaking, match
+creation/join, moves, invites, and health. CPU, memory, autoscaled instance count,
+latency, network, and Firestore document operations are model estimates, not measured
+benchmarks or GCE telemetry. The summary records the assumptions and warns that the
+current snapshot-based service cannot load the full target inventory into one VM.
+Generating the files makes no cloud calls; this model is not a capacity claim.
+
+Generate charts from the CSV with the standard-library-only renderer:
+
+```bash
+python course/reports/generate_graphs.py
+```
+
+Open `reports/graphs/index.html` for the dashboard or view the individual SVGs there.
+The images retain synthetic-data labels when viewed separately.
 
 ### Pages
 

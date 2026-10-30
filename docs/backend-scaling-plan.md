@@ -13,9 +13,13 @@ every record into each process at startup, serves reads from its private in-memo
 copy, and periodically writes changed records. Two processes would have divergent
 copies and can overwrite one another. Several lookups also scan all records, including
 finding matches involving a user, open matches, quick-match candidates, and users linked
-to a login credential. `GamePlatform` serializes operations behind one process-wide
-lock; that limits parallelism within a VM and does not coordinate requests handled by
-another VM.
+to a login credential. The in-memory store now indexes linked-login lookups, matches by
+participant and status, which avoids scans of all users for third-party login and all
+matches for match history, open-match candidates, and quick-match candidate selection.
+These indexes are rebuilt from the snapshot at startup and do not address the
+process-wide lock, memory footprint, or cross-process consistency. `GamePlatform`
+serializes operations behind one process-wide lock; that limits parallelism within a VM
+and does not coordinate requests handled by another VM.
 
 ## Recommended direction
 
@@ -78,4 +82,3 @@ them with the results so the measured peak has a clear meaning.
   limit for the new Compute Engine instance and supporting resources.
 - Latency and error-rate objectives to use when selecting the highest sustained test
   stage.
-

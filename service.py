@@ -456,13 +456,7 @@ class GamePlatform:
     def _find_by_linked_account(
         self, kind: LinkedAccountKind, identifier: str
     ) -> User | None:
-        for user in self._store.list_users():
-            if any(
-                account.kind == kind and account.identifier == identifier
-                for account in user.linked_accounts
-            ):
-                return user
-        return None
+        return self._store.get_user_by_linked_account(kind, identifier)
 
     def _resolve_replaced(self, user: User) -> User:
         """Returns the surviving user for a replaced account.
@@ -872,9 +866,16 @@ class GamePlatform:
         joins allowed. Match details are public by URL anyway, so listing them is
         consistent."""
         with self._lock:
+            matches = (
+                *self._store.list_matches_by_status("waiting_for_players"),
+                *self._store.list_matches_by_status("ongoing"),
+            )
             return [
                 match
-                for match in map(self._enforce_clock, self._store.list_all_matches())
+                for match in map(
+                    self._enforce_clock,
+                    sorted(matches, key=lambda item: (item.created_at, item.id)),
+                )
                 if not match.private
                 and (game := self._store.get_game(match.game_id)) is not None
                 and game.published and not game.deleted
@@ -2759,7 +2760,7 @@ class GamePlatform:
                 )
             waiting = [
                 match
-                for match in self._store.list_all_matches()
+                for match in self._store.list_matches_by_status("waiting_for_players")
                 if match.game_id == game.id
                 and match.matchmaking_player_count == target
                 and match.status == "waiting_for_players"

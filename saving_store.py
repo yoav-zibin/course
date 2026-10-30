@@ -18,7 +18,9 @@ from game_platform.models import (
     GameTestSeeds,
     GameVersionError,
     Invite,
+    LinkedAccountKind,
     Match,
+    MatchStatus,
     User,
     WebPushSubscription,
 )
@@ -113,6 +115,12 @@ class SavingStore:
         with self._lock:
             return self._inner.get_user(user_id)
 
+    def get_user_by_linked_account(
+        self, kind: LinkedAccountKind, identifier: str
+    ) -> User | None:
+        with self._lock:
+            return self._inner.get_user_by_linked_account(kind, identifier)
+
     def list_users(self) -> list[User]:
         with self._lock:
             return self._inner.list_users()
@@ -184,6 +192,10 @@ class SavingStore:
     def list_matches_involving(self, user_id: str) -> list[Match]:
         with self._lock:
             return self._inner.list_matches_involving(user_id)
+
+    def list_matches_by_status(self, status: MatchStatus) -> list[Match]:
+        with self._lock:
+            return self._inner.list_matches_by_status(status)
 
     def delete_match(self, match_id: str) -> None:
         with self._lock:
