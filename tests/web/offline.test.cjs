@@ -122,6 +122,43 @@ test("storage quota failure never reports a move saved", () => {
   assert.throws(() => o.enqueue(base, body), /not saved/);
   assert.deepEqual(o.read().queues, {});
 });
+function fullStorage(limit) {
+  const map = new Map();
+  return {
+    map,
+    getItem: (k) => map.get(k) || null,
+    setItem: (k, v) => {
+      if (v.length > limit) throw Error("quota");
+      map.set(k, v);
+    },
+  };
+}
+test("a full cache of server answers is pruned so a move is still saved", () => {
+  const storage = fullStorage(5000);
+  const o = new Offline(storage, undefined, () => ({ id: "alice", password: "t" }), () => false);
+  o.save("/matches/match", base);
+  for (let i = 0; i < 20; i++) {
+    const data = o.read();
+    data.responses[`/games/g${i}/versions/1`] = { code: "x".repeat(150) };
+    storage.setItem(o.key(), JSON.stringify(data));
+  }
+  assert.ok(JSON.stringify(o.read()).length > 3000);
+  storage.setItem = ((original) => (k, v) => {
+    if (v.length > 2500) throw Error("quota");
+    original(k, v);
+  })(storage.setItem);
+  const shown = o.enqueue(base, body);
+  assert.equal(shown.pending, 1);
+  assert.equal(o.read().queues.match.length, 1);
+  assert.equal(o.read().responses["/matches/match"].id, "match");
+  assert.ok(Object.keys(o.read().responses).length < 21);
+});
+test("caching a fetched answer never fails the page when storage is full", async () => {
+  const storage = fullStorage(10);
+  const o = new Offline(storage, async () => [base], () => ({ id: "alice", password: "t" }), () => true);
+  const list = await o.get("/matches");
+  assert.equal(list[0].id, "match");
+});
 test("all listed matches become available individually offline", async () => {
   const { o, setOnline } = setup(async () => [base, { ...base, id: "second" }]);
   setOnline(true);
