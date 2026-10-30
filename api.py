@@ -1,6 +1,7 @@
 """FastAPI routes for the game platform."""
 
 import io
+import logging
 import mimetypes
 import secrets
 import asyncio
@@ -11,7 +12,7 @@ from dataclasses import replace
 from collections.abc import Awaitable, Callable, Sequence
 from http import HTTPStatus
 from pathlib import Path
-from typing import Annotated, Final
+from typing import Annotated, Final, Literal
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
@@ -25,7 +26,8 @@ from starlette.datastructures import State
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import JsonValue
 
-from game_platform import i18n
+from game_platform.invariants import InvariantRequest, InvariantReport, check_invariants
+from game_platform import i18n, observability
 from game_platform.models import Game, GameRules, Match, MatchStatus
 from game_platform.schemas import (
     AdminGameCodeRequest,
@@ -36,6 +38,11 @@ from game_platform.schemas import (
     RefactorGameResultOut,
     RefactorJobOut,
     CatalogOut,
+    GameStringsOut,
+    GamesTextOut,
+    GameTextOut,
+    CampaignLinkCreate,
+    CampaignSpendUpdate,
     LocaleOut,
     LocalesOut,
     AgentChatResponse,
@@ -43,6 +50,8 @@ from game_platform.schemas import (
     AuthConfigOut,
     AuthResponse,
     EmailStart,
+    ExperimentActiveUpdate,
+    ExperimentVariantCreate,
     GameCreate,
     GameDraftSave,
     GameDraftPublish,
@@ -73,8 +82,11 @@ from game_platform.schemas import (
     PushConfigOut,
     PushSubscribe,
     PushSubscriptionOut,
+    SkinAssignmentOut,
     QuickMatchRequest,
     ReferralsOut,
+    TranslationOut,
+    TranslationSet,
     UserCreate,
     UserOut,
     UserUpdate,
@@ -83,6 +95,8 @@ from game_platform.schemas import (
     VerifyCode,
 )
 from game_platform.service import (
+    CAMPAIGN_EXPERIMENT_ID,
+    SKIN_EXPERIMENT_ID,
     UNSET,
     VERIFICATION_TTL_SECONDS,
     ConflictError,
@@ -99,7 +113,7 @@ from game_platform.model_api import ModelApiClient
 from game_platform.models import LinkedAccountKind
 from game_platform.oauth import ProviderError, verify_google_id_token
 from game_platform.push import vapid_public_key
-from game_platform.senders import CodeSender, LogSender, SenderError
+from game_platform.senders import CodeSender, LogSender, SenderError, TwilioVerifyClient
 
 _STATUS_OF_ERROR: Final[tuple[tuple[type[PlatformError], HTTPStatus], ...]] = (
     (UnauthorizedError, HTTPStatus.UNAUTHORIZED),
@@ -166,6 +180,15 @@ def health(platform: Platform, request: Request, response: Response) -> HealthOu
     )
 
 
+@router.get("/c/{campaign_code}")
+def campaign_link(platform: Platform, campaign_code: str) -> RedirectResponse:
+    platform.record_campaign_click(campaign_code=campaign_code)
+    return RedirectResponse(
+        f"/portal?{urlencode({'campaign': campaign_code})}",
+        status_code=HTTPStatus.FOUND,
+    )
+
+
 def _match_out(
     platform: GamePlatform, match: Match, caller_id: str | None = None
 ) -> MatchOut:
@@ -181,8 +204,23 @@ def _match_out(
 # Users
 
 
+@router.post("/validation/invariants", tags=["validation"])
+def validate_invariants(body: InvariantRequest) -> InvariantReport:
+    """Validate a supplied closed dataset without accessing or modifying server data.
+
+    Use raw snapshot-shaped records (seats, nested rules, and full move history).
+    Credentials, code, and game state are not required. Missing references are
+    errors; incomplete legacy first-turn history is reported as a warning.
+    """
+    return check_invariants(body)
+
+
 @router.post("/users", status_code=HTTPStatus.CREATED)
-def create_user(platform: Platform, body: UserCreate) -> UserWithPasswordOut:
+def create_user(
+    platform: Platform,
+    body: UserCreate,
+    x_campaign_code: Annotated[str | None, Header()] = None,
+) -> UserWithPasswordOut:
     """Returns the new user's password, which authenticated requests need. Apart from
     the debug tools, this is the only place the API returns it."""
     user = platform.create_user(
@@ -190,6 +228,7 @@ def create_user(platform: Platform, body: UserCreate) -> UserWithPasswordOut:
         locale=body.locale,
         invited_by_user_id=body.invited_by_user_id,
         invite_token=body.invite_token,
+        campaign_code=x_campaign_code,
     )
     return UserWithPasswordOut.of_user(user)
 
@@ -201,6 +240,18 @@ def create_user(platform: Platform, body: UserCreate) -> UserWithPasswordOut:
 def list_saved_games(platform: Platform, caller_id: CallerId) -> list[GameOut]:
     """The caller's library of saved games, most recently saved first."""
     return [GameOut.of(g) for g in platform.list_saved_games(caller_id=caller_id)]
+
+
+@router.get("/users/me/experiments/skin")
+def user_skin_assignment(
+    platform: Platform, caller_id: CallerId
+) -> SkinAssignmentOut | None:
+    variant = platform.assign_skin(user_id=caller_id)
+    if variant is None:
+        return None
+    return SkinAssignmentOut(
+        variant_id=variant.id, name=variant.name, key=variant.key
+    )
 
 
 @router.put("/users/me/saved-games/{game_id}")
@@ -288,6 +339,7 @@ def auth_config(request: Request) -> AuthConfigOut:
     return AuthConfigOut(
         google_client_id=config.google.client_id,
         phone_login_enabled=config.sms.provider != "log",
+        phone_call_enabled=config.sms.provider == "verify" or (config.sms.provider == "twilio" and config.sms.twilio_voice_enabled),
         email_login_enabled=config.email.provider != "log",
     )
 
@@ -308,6 +360,7 @@ def _login_or_link(
     picture_url: str = "",
     as_user_id: str | None,
     invited_by_user_id: str | None = None,
+    campaign_code: str | None = None,
 ) -> AuthResponse:
     user, merged_from = platform.login_with_linked_account(
         kind=kind,
@@ -317,6 +370,7 @@ def _login_or_link(
         picture_url=picture_url,
         as_user_id=as_user_id,
         invited_by_user_id=invited_by_user_id,
+        campaign_code=campaign_code,
     )
     return AuthResponse.of(user, merged_from_user_id=merged_from)
 
@@ -327,6 +381,7 @@ def auth_google(
     request: Request,
     caller_id: OptionalCallerId,
     body: GoogleLogin,
+    x_campaign_code: Annotated[str | None, Header()] = None,
 ) -> AuthResponse:
     """Logs in with a Google ID token from the website's Sign in with Google button.
     Pass the caller's headers to link Google to the current account instead."""
@@ -350,6 +405,7 @@ def auth_google(
         picture_url=picture_url,
         as_user_id=caller_id,
         invited_by_user_id=body.invited_by_user_id,
+        campaign_code=x_campaign_code,
     )
 
 
@@ -357,18 +413,37 @@ def auth_google(
 def phone_start(
     platform: Platform, request: Request, body: PhoneStart
 ) -> VerificationStarted:
-    """Texts a login code to [body.phone_number]."""
-    if _auth_config_of(request).sms.provider == "log":
+    config = _auth_config_of(request).sms
+    if config.provider == "log":
         raise HTTPException(
             HTTPStatus.NOT_IMPLEMENTED, "phone login is not configured"
         )
-    verification_id, code, normalized = platform.start_verification(
+    if body.delivery_method == "call" and config.provider == "twilio" and not config.twilio_voice_enabled:
+        raise HTTPException(
+            HTTPStatus.NOT_IMPLEMENTED, "phone login is not configured"
+        )
+
+    verification_id, local_code, number = platform.start_verification(
         kind="phone", identifier=body.phone_number
     )
     try:
-        request.app.state.sms_sender.send_login_code(normalized, code)
+        if config.provider == "verify":
+            client = request.app.state.verify_client
+            if client is None:
+                raise SenderError("Twilio Verify is not configured")
+            client.start_verification(number, body.delivery_method)
+        else:
+            sender = (
+                request.app.state.voice_sender
+                if body.delivery_method == "call"
+                else request.app.state.sms_sender
+            )
+            sender.send_login_code(number, local_code)
     except SenderError as error:
-        raise HTTPException(HTTPStatus.BAD_GATEWAY, str(error)) from error
+        raise HTTPException(
+            HTTPStatus.BAD_GATEWAY, str(error)
+        ) from error
+
     return VerificationStarted(
         verification_id=verification_id,
         expires_in_seconds=VERIFICATION_TTL_SECONDS,
@@ -377,18 +452,44 @@ def phone_start(
 
 @auth_router.post("/phone/verify")
 def phone_verify(
-    platform: Platform, caller_id: OptionalCallerId, body: VerifyCode
+    platform: Platform, request: Request,
+    caller_id: OptionalCallerId, body: VerifyCode,
+    x_campaign_code: Annotated[str | None, Header()] = None,
 ) -> AuthResponse:
-    """Logs in with a texted code. Pass the caller's headers to link the number to the
-    current account instead."""
-    user, merged_from = platform.verify_code(
-        verification_id=body.verification_id,
-        code=body.code,
-        display_name=body.display_name,
-        as_user_id=caller_id,
-        invited_by_user_id=body.invited_by_user_id,
+    if _auth_config_of(request).sms.provider == "verify":
+        number = platform.pending_external_phone(body.verification_id)
+        client = request.app.state.verify_client
+        if client is None:
+            raise HTTPException(
+                HTTPStatus.BAD_GATEWAY, "Twilio Verify is not configured"
+            )
+        try:
+            approved = client.check_verification(number, body.code.strip())
+        except SenderError as error:
+            raise HTTPException(
+                HTTPStatus.BAD_GATEWAY, str(error)
+            ) from error
+
+        user, merged_from = platform.finish_external_phone(
+            body.verification_id,
+            approved=approved,
+            display_name=body.display_name,
+            as_user_id=caller_id,
+            invited_by_user_id=body.invited_by_user_id,
+            campaign_code=x_campaign_code,
+        )
+    else:
+        user, merged_from = platform.verify_code(
+            verification_id=body.verification_id,
+            code=body.code,
+            display_name=body.display_name,
+            as_user_id=caller_id,
+            invited_by_user_id=body.invited_by_user_id,
+            campaign_code=x_campaign_code,
+        )
+    return AuthResponse.of(
+        user, merged_from_user_id=merged_from
     )
-    return AuthResponse.of(user, merged_from_user_id=merged_from)
 
 
 @auth_router.post("/email/start")
@@ -415,7 +516,10 @@ def email_start(
 
 @auth_router.post("/email/verify")
 def email_verify(
-    platform: Platform, caller_id: OptionalCallerId, body: VerifyCode
+    platform: Platform,
+    caller_id: OptionalCallerId,
+    body: VerifyCode,
+    x_campaign_code: Annotated[str | None, Header()] = None,
 ) -> AuthResponse:
     """Logs in with an emailed code. Pass the caller's headers to link the address to
     the current account instead."""
@@ -425,6 +529,7 @@ def email_verify(
         display_name=body.display_name,
         as_user_id=caller_id,
         invited_by_user_id=body.invited_by_user_id,
+        campaign_code=x_campaign_code,
     )
     return AuthResponse.of(user, merged_from_user_id=merged_from)
 
@@ -587,6 +692,24 @@ def get_game(platform: Platform, game_id: str, caller_id: OptionalCallerId) -> G
 @router.get("/games/{game_id}/versions/{version}")
 def get_game_version(platform: Platform, game_id: str, version: int, caller_id: OptionalCallerId) -> GameOut:
     return GameOut.of(platform.get_game_version(game_id, version, caller_id=caller_id))
+
+
+@router.get("/games/{game_id}/versions/{version}/strings")
+def get_game_strings(
+    request: Request,
+    platform: Platform,
+    game_id: str,
+    version: int,
+    caller_id: OptionalCallerId,
+    lang: str | None = None,
+) -> GameStringsOut:
+    """The texts of this game version in the viewer's language (`lang`, else their saved
+    language, else Accept-Language): its name, description and the game's own string
+    table. A text is translated the first time it is asked for, then remembered. What
+    cannot be translated comes back as the game wrote it, so a game can always show it."""
+    return GameStringsOut.of(
+        platform.game_strings(game_id, version, request.state.locale, caller_id=caller_id)
+    )
 
 
 @router.patch("/games/{game_id}")
@@ -759,9 +882,12 @@ def player_left(platform: Platform, caller_id: CallerId, match_id: str) -> Match
 
 @router.post("/matches/{match_id}/moves", status_code=HTTPStatus.CREATED)
 def make_move(
-    platform: Platform, caller_id: CallerId, match_id: str, body: MoveCreate
+    platform: Platform, caller_id: CallerId, match_id: str, body: MoveCreate,
+    idempotency_key: str | None = Header(default=None, max_length=128),
 ) -> MatchOut:
+    extra = {"request_id": idempotency_key} if getattr(platform._store, "scalable", False) else {}
     match = platform.make_move(
+        **extra,
         caller_id=caller_id,
         match_id=match_id,
         new_state=body.new_state,
@@ -777,11 +903,15 @@ def make_move(
 
 @router.get("/matches/{match_id}/history")
 def get_match_history(platform: Platform, match_id: str, caller_id: OptionalCallerId) -> MatchHistoryOut:
+    if getattr(platform._store, "scalable", False):
+        raise HTTPException(409, "use /v2/matches/{match_id}/history with bounded pages")
     return MatchHistoryOut.of(platform.get_match(match_id, caller_id=caller_id))
 
 
 @router.get("/matches/{match_id}/moves")
 def list_moves(platform: Platform, match_id: str, caller_id: OptionalCallerId) -> list[MoveOut]:
+    if getattr(platform._store, "scalable", False):
+        raise HTTPException(409, "use /v2/matches/{match_id}/history with bounded pages")
     return [MoveOut.of(move) for move in platform.get_match(match_id, caller_id=caller_id).moves]
 
 
@@ -899,6 +1029,23 @@ def list_locales() -> LocalesOut:
     return LocalesOut(
         default=i18n.DEFAULT_LOCALE,
         locales=[LocaleOut.of(locale) for locale in i18n.LOCALES],
+    )
+
+
+@i18n_router.get("/games/{locale}")
+def get_games_text(platform: Platform, locale: str) -> GamesTextOut:
+    """The names and descriptions of every published game in [locale], for a portal's game
+    cards. Translated the first time they are asked for, then remembered; whatever cannot be
+    translated is as its builder wrote it."""
+    code = i18n.normalize_locale(locale)
+    if code is None:
+        raise NotFoundError(f"language not supported: {locale}")
+    status, games = platform.games_text(code)
+    return GamesTextOut(
+        locale=code,
+        direction=i18n.get_locale(code).direction,
+        status=status,  # type: ignore[arg-type]
+        games={game_id: GameTextOut(**text) for game_id, text in games.items()},
     )
 
 
@@ -1107,6 +1254,152 @@ def admin_stats(platform: Platform) -> dict[str, JsonValue]:
     return platform.stats()
 
 
+@debug_router.get("/admin/translations", dependencies=[MasterPassword])
+def admin_list_translations(platform: Platform, locale: str | None = None) -> list[TranslationOut]:
+    """Every remembered translation of games' texts (of one language), to review them."""
+    return [TranslationOut.of(item) for item in platform.list_translations(locale)]
+
+
+@debug_router.put("/admin/translations", dependencies=[MasterPassword])
+def admin_set_translation(platform: Platform, body: TranslationSet) -> TranslationOut:
+    """Writes the translation of a text, replacing the machine one for good."""
+    return TranslationOut.of(
+        platform.set_translation(locale=body.locale, source=body.source, text=body.text)
+    )
+
+
+@debug_router.delete(
+    "/admin/translations/{locale}/{source_hash}",
+    dependencies=[MasterPassword],
+    status_code=HTTPStatus.NO_CONTENT,
+)
+def admin_delete_translation(platform: Platform, locale: str, source_hash: str) -> None:
+    """Forgets a translation: the text is machine-translated again when next asked for."""
+    platform.delete_translation(locale, source_hash)
+
+
+@debug_router.get("/admin/monitoring", dependencies=[MasterPassword])
+def admin_monitoring(request: Request) -> dict[str, JsonValue]:
+    """What the monitor sees now: requests in flight, sign-ups in the last minute,
+    memory, and the alert thresholds."""
+    return request.app.state.monitor.snapshot()
+
+
+@debug_router.post("/admin/alerts/test", dependencies=[MasterPassword])
+def admin_test_alert(
+    request: Request, tier: Literal["minor", "major"] = "minor"
+) -> dict[str, JsonValue]:
+    """Writes a test alert to the log, to check that it reaches the right people: a
+    "minor" one should send an email, a "major" one should page. Nothing else happens."""
+    observability.log_event(
+        "alert_test",
+        f"this is a test of a {tier} alert; nobody needs to act",
+        level=logging.CRITICAL if tier == "major" else logging.WARNING,
+        alert=tier,
+        test=True,
+    )
+    return {"logged": "alert_test", "alert": tier, "request_id": request.state.request_id}
+
+
+@debug_router.get("/admin/experiments", dependencies=[MasterPassword])
+def admin_experiment_stats(platform: Platform) -> dict[str, JsonValue]:
+    return platform.experiment_stats()
+
+
+@debug_router.post(
+    "/admin/experiments/campaign-links",
+    dependencies=[MasterPassword],
+    status_code=HTTPStatus.CREATED,
+)
+def admin_create_campaign_link(
+    platform: Platform, request: Request, body: CampaignLinkCreate
+) -> dict[str, JsonValue]:
+    _, variant = platform.add_experiment_variant(
+        experiment_id=CAMPAIGN_EXPERIMENT_ID,
+        name=body.name,
+        key=body.key,
+        budget_usd=body.budget_usd,
+    )
+    base_url = (
+        request.app.state.public_base_url.rstrip("/")
+        or str(request.base_url).rstrip("/")
+    )
+    return {
+        "variant_id": variant.id,
+        "name": variant.name,
+        "key": variant.key,
+        "url": f"{base_url}/c/{variant.key}",
+        "budget_usd": variant.budget_usd,
+    }
+
+
+@debug_router.patch(
+    "/admin/experiments/campaign-links/{variant_id}",
+    dependencies=[MasterPassword],
+)
+def admin_set_campaign_spend(
+    platform: Platform, variant_id: str, body: CampaignSpendUpdate
+) -> dict[str, JsonValue]:
+    variant = platform.set_campaign_spend(
+        variant_id=variant_id, spend_usd=body.spend_usd
+    )
+    return {
+        "variant_id": variant.id,
+        "name": variant.name,
+        "budget_usd": variant.budget_usd,
+        "spend_usd": variant.spend_usd,
+    }
+
+
+@debug_router.post(
+    "/admin/experiments/skin-variants",
+    dependencies=[MasterPassword],
+    status_code=HTTPStatus.CREATED,
+)
+def admin_create_skin_variant(
+    platform: Platform, body: ExperimentVariantCreate
+) -> dict[str, JsonValue]:
+    _, variant = platform.add_experiment_variant(
+        experiment_id=SKIN_EXPERIMENT_ID, name=body.name, key=body.key
+    )
+    return {
+        "variant_id": variant.id,
+        "name": variant.name,
+        "key": variant.key,
+    }
+
+
+@debug_router.delete(
+    "/admin/experiments/{experiment_id}/variants/{variant_id}",
+    dependencies=[MasterPassword],
+    status_code=HTTPStatus.NO_CONTENT,
+)
+def admin_delete_experiment_variant(
+    platform: Platform, experiment_id: str, variant_id: str
+) -> None:
+    platform.delete_experiment_variant(
+        experiment_id=experiment_id, variant_id=variant_id
+    )
+
+
+@debug_router.patch(
+    "/admin/experiments/{experiment_id}",
+    dependencies=[MasterPassword],
+)
+def admin_set_experiment_active(
+    platform: Platform, experiment_id: str, body: ExperimentActiveUpdate
+) -> dict[str, JsonValue]:
+    experiment = platform.set_experiment_active(
+        experiment_id=experiment_id, active=body.active
+    )
+    return {
+        "id": experiment.id,
+        "name": experiment.name,
+        "kind": experiment.kind,
+        "active": experiment.active,
+    }
+
+
 @debug_router.get("/admin/invites", dependencies=[MasterPassword])
 def admin_invites(platform: Platform) -> dict[str, JsonValue]:
     """The invite tree: who brought whom, with direct and total (transitive)
@@ -1190,8 +1483,27 @@ async def agent_chat(
             timeout=GENERATION_BUDGET_SECONDS,
         )
     except asyncio.TimeoutError as exc:
+        observability.log_event(
+            "ai_generation_timeout",
+            f"the game-building agent took more than {GENERATION_BUDGET_SECONDS:.0f}s",
+            level=logging.WARNING,
+            alert="minor",
+            budget_seconds=GENERATION_BUDGET_SECONDS,
+            game_id=body.game_id,
+            messages=len(body.messages),
+            last_message=observability.capture(body.messages[-1].content, 1000),
+        )
         raise HTTPException(status_code=504, detail="Muse did not finish within two minutes. Try a smaller game or change.") from exc
     except AgentError as exc:
+        observability.log_event(
+            "ai_generation_failed",
+            f"the game-building agent failed: {str(exc)[:200]}",
+            level=logging.WARNING,
+            error=str(exc)[:1000],
+            game_id=body.game_id,
+            messages=len(body.messages),
+            last_message=observability.capture(body.messages[-1].content, 1000),
+        )
         raise HTTPException(
             status_code=HTTPStatus.BAD_GATEWAY, detail=str(exc)
         ) from exc
@@ -1494,6 +1806,17 @@ async def _handle_platform_error(request: Request, exc: Exception) -> JSONRespon
     return JSONResponse(status_code=status, content=_error_body(request, str(exc)))
 
 
+async def _handle_unexpected_exception(request: Request, exc: Exception) -> JSONResponse:
+    """A bug: the request middleware has already logged it with its arguments and stack
+    trace. The caller gets the request id to quote when reporting it."""
+    request_id = getattr(request.state, "request_id", None)
+    return JSONResponse(
+        status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+        content={"detail": "internal server error", "code": "internal_error", "request_id": request_id},
+        headers={"X-Request-Id": request_id} if request_id else None,
+    )
+
+
 async def _handle_http_exception(request: Request, exc: Exception) -> Response:
     """Like Starlette's default handler, but with a localized `detail` and a `code`."""
     assert isinstance(exc, StarletteHTTPException)
@@ -1511,9 +1834,14 @@ async def _choose_locale(
     saved on the user named by X-User-Id, else Accept-Language, else English. The user
     isn't authenticated here (it only picks a language)."""
     platform = _get_platform(request)
+    user_id = request.headers.get("x-user-id")
+    saved = platform.cached_saved_locale(user_id)
+    if saved is None:
+        # A database read: on the event loop it would stall every request behind it.
+        saved = await run_in_threadpool(platform.saved_locale, user_id)
     request.state.locale = i18n.negotiate(
         explicit=request.query_params.get("lang"),
-        saved=platform.saved_locale(request.headers.get("x-user-id")),
+        saved=saved,
         accept_language=request.headers.get("accept-language"),
     )
     response = await call_next(request)
@@ -1547,10 +1875,13 @@ def create_app(
     auth_config: AuthConfig | None = None,
     push_config: PushConfig | None = None,
     sms_sender: CodeSender | None = None,
+    voice_sender: CodeSender | None = None,
+    verify_client: TwilioVerifyClient | None = None,
     email_sender: CodeSender | None = None,
     cors_allow_origins: Sequence[str] = ("*",),
     public_base_url: str = "",
     ai_max_fix_attempts: int = 3,
+    monitor: observability.Monitor | None = None,
 ) -> FastAPI:
     """[debug_tools] adds the web pages (/portal, /builder, /admin, /console, /browse)
     and /debug/all-data, which exposes everything (including users' passwords),
@@ -1562,7 +1893,10 @@ def create_app(
     `Access-Control-Allow-Origin` headers make browsers reject the response).
 
     [public_base_url] is where invite links and QR codes point; empty uses the
-    address each request came to."""
+    address each request came to.
+
+    [monitor] counts requests and raises alerts (see docs/monitoring.md); every request
+    is also given an id (the X-Request-Id header) and logged when it is slow or fails."""
     # Windows registry associations can otherwise break service-worker loading.
     mimetypes.init()
     mimetypes.add_type("text/javascript", ".js")
@@ -1578,6 +1912,9 @@ def create_app(
         )
     app.state.platform = platform if platform is not None else GamePlatform()
     app.state.master_password = master_password
+    monitor = monitor if monitor is not None else observability.Monitor()
+    app.state.monitor = monitor
+    observability.set_current(monitor)
     app.state.public_base_url = public_base_url
     app.state.started_at = time.monotonic()
     app.state.model_api_config = (
@@ -1592,10 +1929,14 @@ def create_app(
     app.state.auth_config = auth_config if auth_config is not None else AuthConfig()
     app.state.push_config = push_config if push_config is not None else PushConfig()
     app.state.sms_sender = sms_sender if sms_sender is not None else LogSender()
+    app.state.voice_sender = voice_sender if voice_sender is not None else LogSender()
+    app.state.verify_client = verify_client
     app.state.email_sender = email_sender if email_sender is not None else LogSender()
     from game_platform.builder_api import make_router
     app.include_router(make_router(_get_platform, _get_caller_id))
     app.include_router(router)
+    from game_platform.scaling_api import install as install_scaling_api
+    install_scaling_api(app, debug_tools=debug_tools)
     app.include_router(auth_router)
     app.include_router(i18n_router)
     app.include_router(push_router)
@@ -1608,4 +1949,7 @@ def create_app(
         app.middleware("http")(_revalidate_pages)
     app.add_exception_handler(PlatformError, _handle_platform_error)
     app.add_exception_handler(StarletteHTTPException, _handle_http_exception)
+    app.add_exception_handler(Exception, _handle_unexpected_exception)
+    # Last added, so outermost: it times everything, including the other middleware.
+    app.add_middleware(observability.RequestLogMiddleware, monitor=lambda: monitor)
     return app

@@ -131,6 +131,8 @@ class ApiError extends Error {
 /** Calls the API as [user] ({id, password} or null); throws ApiError on failure. */
 async function apiRequest(method, path, { body, user, signal } = {}) {
   const headers = {};
+  const campaignCode = experimentCampaignCode();
+  if (campaignCode) headers["X-Campaign-Code"] = campaignCode;
   if (user) {
     headers["X-User-Id"] = user.id;
     headers["X-User-Password"] = user.password;
@@ -155,6 +157,31 @@ async function apiRequest(method, path, { body, user, signal } = {}) {
   }
   return data;
 }
+
+const EXPERIMENT_CAMPAIGN_KEY = "game-platform.experiment-campaign.v1";
+
+function experimentCampaignCode() {
+  try {
+    const code = localStorage.getItem(EXPERIMENT_CAMPAIGN_KEY);
+    return code && /^[a-z0-9][a-z0-9-]{0,49}$/.test(code) ? code : null;
+  } catch (error) {
+    console.warn("Campaign attribution is unavailable in this browser.", error);
+    return null;
+  }
+}
+
+function rememberExperimentCampaign() {
+  const code = new URLSearchParams(location.search).get("campaign");
+  if (!code || !/^[a-z0-9][a-z0-9-]{0,49}$/.test(code)) return;
+  try {
+    if (!localStorage.getItem(EXPERIMENT_CAMPAIGN_KEY))
+      localStorage.setItem(EXPERIMENT_CAMPAIGN_KEY, code);
+  } catch (error) {
+    console.warn("Campaign attribution could not be saved in this browser.", error);
+  }
+}
+
+rememberExperimentCampaign();
 
 // "Act as": a select of every user, shared by the builder and portal. The chosen user
 // is remembered across pages (the console uses the same key).
@@ -380,6 +407,25 @@ function statusClass(status) {
   if (status >= 400 && status < 500) return "warn";
   return "error";
 }
+
+/** Common app navigation; page-specific wallet/notification controls stay in place. */
+function setUpAppTopbar() {
+  const bar = document.querySelector?.('.topbar[data-app-page]');
+  const current = bar?.dataset?.appPage;
+  if (!current) return;
+  const brand = bar.querySelector('h1');
+  brand.setAttribute('data-i18n', 'ui.app_name');
+  const nav = bar.querySelector('nav');
+  nav.replaceChildren(...[
+    ['portal', 'Portal'], ['builder', 'Builder'], ['admin', 'Admin'],
+  ].map(([page, label]) => el('a', {
+    href: '/' + page,
+    'data-i18n': 'ui.nav.' + page,
+    'aria-current': page === current ? 'page' : null,
+    textContent: label,
+  })));
+}
+setUpAppTopbar();
 
 /** Dock beside the page when 280px of navigation leaves at least 620px to work. */
 function setUpSidebarDrawer() {

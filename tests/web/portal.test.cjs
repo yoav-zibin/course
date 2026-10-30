@@ -13,15 +13,15 @@ function setup(request=async()=>{}, hash='', search='') {
   };
   const navigations=[];
   const pageErrors=[];
-  const ctx=vm.createContext({console,Map,Set,URLSearchParams,
+  const ctx=vm.createContext({StoragePages:{enabled:async()=>false,list:(request,path,options)=>request("GET",path,options),controls(){},search(){return false;}},console,Map,Set,URLSearchParams,
     navigator:{onLine:true},localStorage:{},PortalOffline:class {api(...args){return request(...args);}read(){return {};}write(){}} ,
     document:{getElementById:node,body:{classList:{toggle(){}}}},window:{addEventListener(){}},
     location:{hash,search,assign(url){navigations.push(url);}},history:{replaceState(){}},
-    Auth:{current:()=>({id:'owner'})},I18n:{t:(key,params,fallback)=>fallback??key,locale:()=>'en',revision:()=>0},GameFrame:class{load(){}unload(){}send(){}},
+    Auth:{current:()=>({id:'owner'})},I18n:{t:(key,params,fallback)=>fallback??key,locale:()=>'en',revision:()=>0,gameName:(id,fallback)=>fallback,gameDescription:(id,fallback)=>fallback,gameText:async()=>({locale:'en',direction:'ltr'})},GameFrame:class{load(){}unload(){}send(){}},
     apiRequest:request,formatTime:()=>'',shortId:x=>x,showPageError:text=>pageErrors.push(text),el:(tag,attrs={},...children)=>({...attrs,children})});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../../static/portal.js'),'utf8').replace(/main\(\);\s*$/,''),ctx);
   const run=code=>vm.runInContext(code,ctx);
-  run('refresh=async()=>{};state.games=[{id:"game",version:2,name:"Hanoi",allowed_player_counts:[1]}]');
+  run('globalThis.originalRefresh=refresh;refresh=async()=>{};state.games=[{id:"game",version:2,name:"Hanoi",allowed_player_counts:[1]}]');
   node('new-game').value='game';
   return {node,run,navigations,pageErrors};
 }
@@ -375,4 +375,30 @@ test('current account avatar wins over stale match profile cache',()=>{
   assert.equal(run('playerPicture({kind:"human",user_id:"owner"})'),'/saved-deer.png');
   run('state.pictureCache.set("other","/other-cat.png")');
   assert.equal(run('playerPicture({kind:"human",user_id:"other"})'),'/other-cat.png');
+});
+
+test('v2 games offer local practice and offline instructions',()=>{
+ const t=setup();t.run('state.games[0].supports_local_practice=false;updateMatchSetup()');
+ assert.equal(t.node('practice').disabled,false);
+ assert.equal(t.node('practice-mode').disabled,false);
+ assert.equal(t.node('practice-offline-note').hidden,false);
+});
+test('duplicate names have stable distinct labels across search and catalog filters',()=>{
+ const t=setup();t.run('state.games=[{id:"abcdefgh-one",name:"Gomoku",version:2},{id:"ijklmnop-two",name:" gomoku ",version:2},{id:"unique",name:"Chess",version:1}]');
+ assert.notEqual(t.run('catalogGameLabel(state.games[0])'),t.run('catalogGameLabel(state.games[1])'));
+ assert.equal(t.run('catalogGameLabel(state.games[2])'),'Chess');
+ t.run('state.games[1].id="abcdefgh-two"');
+ assert.match(t.run('catalogGameLabel(state.games[0])'),/abcdefgh-one/);
+});
+
+
+test('background polls coalesce before entering the shared move lock',async()=>{
+ const t=setup();
+ t.run('let releaseRefresh;let lockCalls=0;navigator.locks={request(_name,fn){lockCalls++;return fn();}};refreshLocked=()=>new Promise(resolve=>{releaseRefresh=resolve;});');
+ const first=t.run('originalRefresh()');
+ const second=t.run('originalRefresh()');
+ assert.equal(first,second);assert.equal(t.run('lockCalls'),1);
+ t.run('releaseRefresh()');await first;
+ const third=t.run('originalRefresh()');assert.equal(t.run('lockCalls'),2);
+ t.run('releaseRefresh()');await third;
 });

@@ -20,6 +20,10 @@ EndReason = Literal["finished", "player_left", "timed_out"]
 
 
 LinkedAccountKind = Literal["google", "phone", "email"]
+ExperimentKind = Literal["skin", "campaign"]
+ExperimentEventKind = Literal[
+    "click", "signup", "match_start", "returning_active"
+]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -82,6 +86,46 @@ class User:
     last_token_grant_day: str | None = None
     created_at: dt.datetime
     updated_at: dt.datetime
+
+
+@dataclass(frozen=True, kw_only=True)
+class ExperimentVariant:
+    id: str
+    name: str
+    key: str
+    budget_usd: float | None = None
+    spend_usd: float = 0.0
+
+
+@dataclass(frozen=True, kw_only=True)
+class Experiment:
+    id: str
+    name: str
+    kind: ExperimentKind
+    active: bool
+    variants: tuple[ExperimentVariant, ...]
+    created_at: dt.datetime
+    updated_at: dt.datetime
+
+
+@dataclass(frozen=True, kw_only=True)
+class ExperimentAssignment:
+    user_id: str
+    experiment_id: str
+    variant_id: str
+    assigned_at: dt.datetime
+
+
+@dataclass(frozen=True, kw_only=True)
+class ExperimentEvent:
+    id: str
+    experiment_id: str
+    variant_id: str
+    kind: ExperimentEventKind
+    user_id: str | None
+    occurred_at: dt.datetime
+    match_id: str | None = None
+    count: int = 1
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -176,6 +220,25 @@ class GameVersionError:
 
 
 @dataclass(frozen=True, kw_only=True)
+class Translation:
+    """One text translated into one language, remembered so that the same text is never
+    translated (and paid for) twice, whichever game or version it appears in. The key is
+    the language and the hash of the source text (see translation.py)."""
+
+    locale: str
+    # sha256 of the source text, as translation.text_hash makes it.
+    source_hash: str
+    # The source text itself, so a reviewer can see what a translation is of.
+    source: str
+    text: str
+    # "google" for a machine translation, "manual" for one an administrator wrote.
+    provider: str
+    created_at: dt.datetime
+    # True once a person has looked at it (every manual one is).
+    reviewed: bool = False
+
+
+@dataclass(frozen=True, kw_only=True)
 class GameTestSeeds:
     """The random-walk test seeds that failed for a game (or a draft with
     the same id), replayed first on the next test run as regression seeds
@@ -200,6 +263,9 @@ class Seat:
     kind: SeatKind
     # Set exactly when [kind] is "human".
     user_id: str | None
+    # Account ownership can change on merge; a game's opaque state may still
+    # contain the original player ID. Keep that game identity stable.
+    logic_player_id: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -312,7 +378,7 @@ class Match:
         the Nth computer seat (counting from 1, in seat order)."""
         if seat.kind == "human":
             assert seat.user_id is not None
-            return seat.user_id
+            return seat.logic_player_id or seat.user_id
         computers = [s for s in self.seats if s.kind == "computer"]
         return f"computer-{computers.index(seat) + 1}"
 

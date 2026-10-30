@@ -1,21 +1,25 @@
 "use strict";
 // Scope deliberately stays /static/: no backend route or Service-Worker-Allowed change.
-const CACHE = "playroom-portal-shell-v65";
+const CACHE = "playroom-portal-shell-v75";
 const SHELL = [
-  "/static/portal-feedback.js?v=1",
+  "/static/storage-pages.js?v=2",
+  "/static/portal-feedback.js?v=2",
   "/static/portal.html",
   "/static/common.css?v=12",
   "/static/portal.css?v=27",
-  "/static/common.js?v=14",
-  "/static/i18n.js?v=2",
-  "/static/auth.js?v=6",
+  "/static/common.js?v=15",
+  "/static/i18n.js?v=3",
+  "/static/auth.js?v=7",
+  "/static/experiments.js?v=1",
+  "/static/experiments.css?v=1",
   "/static/push-notifications.js?v=1",
-  "/static/portal.js?v=50",
+  "/static/portal.js?v=57",
   "/static/portal-match-layout.js?v=4",
   "/static/portal-speed.js?v=2",
   "/static/portal-match-layout.css?v=1",
   "/static/portal-speed.css?v=2",
-  "/static/portal-offline.js?v=5",
+  "/static/portal-practice.js?v=1",
+  "/static/portal-offline.js?v=8",
   "/static/portal.webmanifest",
   "/static/portal-icon.svg",
   "/static/portal-install.js?v=1",
@@ -57,7 +61,7 @@ self.addEventListener("fetch", (event) => {
   // Never cache API/auth requests or other students' pages.
   if (
     url.origin !== self.location.origin ||
-    !SHELL.includes(url.pathname + url.search) && !/^\/static\/avatars\/(users\/[^/]+|computers)\/[^/]+\.png$/.test(url.pathname)
+    url.pathname !== "/static/portal.html" && !SHELL.includes(url.pathname + url.search) && !/^\/static\/avatars\/(users\/[^/]+|computers)\/[^/]+\.png$/.test(url.pathname)
   )
     return;
   // The page itself comes from the network when online, so a deploy shows up on the
@@ -68,10 +72,10 @@ self.addEventListener("fetch", (event) => {
       caches.open(CACHE).then(async (cache) => {
         try {
           const response = await fetch(event.request, { cache: "no-cache" });
-          if (response.ok) await cache.put(event.request, response.clone());
+          if (response.ok) await cache.put("/static/portal.html", response.clone());
           return response;
         } catch (error) {
-          const saved = await cache.match(event.request);
+          const saved = await cache.match("/static/portal.html");
           if (saved) return saved;
           throw error;
         }

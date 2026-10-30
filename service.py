@@ -5,12 +5,16 @@ matters, and raises a subclass of [PlatformError] when a request can't be honore
 """
 
 import collections
+from game_platform.move_history import append_move
 import datetime as dt
 import hashlib
 import hmac
+import json
+import math
 import re
 import secrets
 import threading
+import time
 import uuid
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
@@ -18,11 +22,19 @@ from typing import Any, Final
 
 from pydantic import JsonValue
 
-from game_platform import i18n
+import logging
+
+from game_platform import game_text, i18n, observability
 from game_platform.avatars import user_avatar, USER_AVATARS, computer_avatar
 from game_platform.models import (
     AgentConversation,
     AgentConversationEntry,
+    Experiment,
+    ExperimentAssignment,
+    ExperimentEvent,
+    ExperimentEventKind,
+    ExperimentKind,
+    ExperimentVariant,
     Game,
     GameDraft,
     GameRules,
@@ -37,13 +49,22 @@ from game_platform.models import (
     Move,
     SeatTimeout,
     Seat,
+    Translation,
     User,
     WebPushSubscription,
 )
-from game_platform.game_logic import GameLogic, GameLogicError, InvalidMoveError
+from game_platform.game_logic import (
+    TIME_LIMIT_SECONDS,
+    GameLogic,
+    GameLogicError,
+    GameLogicTimeout,
+    InvalidMoveError,
+)
 from game_platform.game_testing import GameTestReport, test_server_code
 from game_platform.push import LogPushNotifier, PushMessage, PushNotifier
 from game_platform.store import InMemoryStore, Store
+from game_platform import translation as translation_module
+from game_platform.translation import Translator, TranslationService
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -56,6 +77,27 @@ class InviteView:
     inviter: User
     # Why the invite can't seat anyone new (an English error message), or None.
     problem: str | None
+
+
+@dataclass(frozen=True, kw_only=True)
+class GameStrings:
+    """A game version's texts in one language (see game_text.py and translation.py)."""
+
+    game_id: str
+    game_version: int
+    locale: str
+    # "source" (the language wanted needs no translation), "translated", "partial" or
+    # "unavailable" (no translator, or it failed): see translation.Translated.
+    status: str
+    name: str
+    description: str
+    # The game's string table with each text in [locale] where there is a translation, and
+    # as the game wrote it where there is not. Empty when the game has no table.
+    strings: dict[str, str]
+    # Whether the game has a string table (a game without one shows only its own texts).
+    translatable: bool
+    # Why the game may translate badly (game_text.lint), in plain words.
+    warnings: list[str]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -129,6 +171,34 @@ PLAYER_LEFT_TIME_LIMIT_SECONDS: Final = 2.0
 # How many failed random-walk test seeds are kept per game and replayed
 # first on the next test run (regression seeds, Phase 5).
 MAX_STORED_TEST_SEEDS: Final = 20
+SKIN_EXPERIMENT_ID: Final = "ui-skins"
+CAMPAIGN_EXPERIMENT_ID: Final = "ad-campaigns"
+RETURNING_WINDOW: Final = dt.timedelta(days=7)
+PILOT_SKINS: Final = (
+    ExperimentVariant(id="skin-classic", name="Classic", key="classic"),
+    ExperimentVariant(id="skin-aurora", name="Aurora", key="aurora"),
+    ExperimentVariant(id="skin-sunset", name="Sunset", key="sunset"),
+)
+PILOT_CAMPAIGNS: Final = (
+    ExperimentVariant(
+        id="campaign-students-a",
+        name="Student campaign A",
+        key="students-a",
+        budget_usd=100,
+    ),
+    ExperimentVariant(
+        id="campaign-students-b",
+        name="Student campaign B",
+        key="students-b",
+        budget_usd=100,
+    ),
+    ExperimentVariant(
+        id="campaign-students-c",
+        name="Student campaign C",
+        key="students-c",
+        budget_usd=100,
+    ),
+)
 
 
 def _emulator_roster(players: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -299,9 +369,17 @@ class GamePlatform:
         push_notifier: PushNotifier | None = None,
         max_push_subscriptions_per_user: int = 10,
         computer_move_delay_seconds: float = 0.6,
+        translator: Translator | None = None,
+        translation_daily_character_limit: int = 200_000,
     ) -> None:
         self._store: Store = store if store is not None else InMemoryStore()
         self._clock = clock
+        self._translation = TranslationService(
+            self._store,
+            translator,
+            clock=clock,
+            daily_character_limit=translation_daily_character_limit,
+        )
         self._new_id = new_id
         self._new_password = new_password
         self._new_verification_code = new_verification_code
@@ -323,11 +401,573 @@ class GamePlatform:
         # Each public method is a read-modify-write on the store; the server handles
         # requests on a thread pool, so serialize them. Reentrant, because verifying a
         # code and merging accounts compose smaller locked operations.
-        self._lock = threading.RLock()
+        self._lock = getattr(self._store, "operation_lock", None) or threading.RLock()
+        # User id -> (when it was read, the language they saved), so the language of a
+        # response doesn't cost a database read on every request.
+        self._saved_locales: dict[str, tuple[float, str]] = {}
         # Referral code -> the user id it was given to (possibly merged away since,
         # which resolves to the survivor like any old id).
         self._user_ids_by_code: dict[str, str] = {}
         self._give_missing_referral_codes()
+
+    def _ensure_pilot_experiments(
+        self, *, created_at: dt.datetime | None = None
+    ) -> None:
+        with self._lock:
+            existing = {experiment.id for experiment in self._store.list_experiments()}
+            if SKIN_EXPERIMENT_ID not in existing:
+                now = created_at or self._clock()
+                self._store.put_experiment(
+                    Experiment(
+                        id=SKIN_EXPERIMENT_ID,
+                        name="UI skin pilot",
+                        kind="skin",
+                        active=True,
+                        variants=PILOT_SKINS,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+            if CAMPAIGN_EXPERIMENT_ID not in existing:
+                now = created_at or self._clock()
+                self._store.put_experiment(
+                    Experiment(
+                        id=CAMPAIGN_EXPERIMENT_ID,
+                        name="Advertisement campaign pilot",
+                        kind="campaign",
+                        active=True,
+                        variants=PILOT_CAMPAIGNS,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+
+    def _active_experiment(self, experiment_id: str) -> Experiment:
+        self._ensure_pilot_experiments()
+        experiment = next(
+            (
+                experiment
+                for experiment in self._store.list_experiments()
+                if experiment.id == experiment_id
+            ),
+            None,
+        )
+        if experiment is None:
+            raise NotFoundError("experiment not found")
+        return experiment
+
+    def list_experiments(self) -> list[Experiment]:
+        self._ensure_pilot_experiments()
+        with self._lock:
+            return self._store.list_experiments()
+
+    def set_experiment_active(self, *, experiment_id: str, active: bool) -> Experiment:
+        with self._lock:
+            experiment = self._active_experiment(experiment_id)
+            updated = replace(
+                experiment, active=active, updated_at=self._clock()
+            )
+            self._store.put_experiment(updated)
+            return updated
+
+    def add_experiment_variant(
+        self,
+        *,
+        experiment_id: str,
+        name: str,
+        key: str,
+        budget_usd: float | None = None,
+    ) -> tuple[Experiment, ExperimentVariant]:
+        with self._lock:
+            experiment = self._active_experiment(experiment_id)
+            if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,49}", key):
+                raise InvalidRequestError(
+                    "variant key must be 1-50 lowercase letters, digits or hyphens"
+                )
+            if any(variant.key == key for variant in experiment.variants):
+                raise ConflictError("a variant with that key already exists")
+            if experiment.kind == "campaign" and (
+                budget_usd is None
+                or not isinstance(budget_usd, (int, float))
+                or isinstance(budget_usd, bool)
+                or not math.isfinite(budget_usd)
+                or budget_usd < 0
+                or budget_usd > 100
+            ):
+                raise InvalidRequestError("campaign budget must be between $0 and $100")
+            variant = ExperimentVariant(
+                id=self._new_id(),
+                name=name.strip(),
+                key=key,
+                budget_usd=budget_usd,
+            )
+            updated = replace(
+                experiment,
+                variants=(*experiment.variants, variant),
+                updated_at=self._clock(),
+            )
+            self._store.put_experiment(updated)
+            return updated, variant
+
+    def set_campaign_spend(self, *, variant_id: str, spend_usd: float) -> ExperimentVariant:
+        with self._lock:
+            experiment = self._active_experiment(CAMPAIGN_EXPERIMENT_ID)
+            variant = next(
+                (item for item in experiment.variants if item.id == variant_id), None
+            )
+            if variant is None:
+                raise NotFoundError("campaign link not found")
+            if (
+                not isinstance(spend_usd, (int, float))
+                or isinstance(spend_usd, bool)
+                or not math.isfinite(spend_usd)
+                or spend_usd < 0
+                or (variant.budget_usd is not None and spend_usd > variant.budget_usd)
+            ):
+                raise InvalidRequestError("spend must be between $0 and the campaign budget")
+            updated_variant = replace(variant, spend_usd=float(spend_usd))
+            updated_experiment = replace(
+                experiment,
+                variants=tuple(
+                    updated_variant if item.id == variant_id else item
+                    for item in experiment.variants
+                ),
+                updated_at=self._clock(),
+            )
+            self._store.put_experiment(updated_experiment)
+            return updated_variant
+
+    def delete_experiment_variant(
+        self, *, experiment_id: str, variant_id: str
+    ) -> None:
+        with self._lock:
+            experiment = self._active_experiment(experiment_id)
+            variant = next(
+                (item for item in experiment.variants if item.id == variant_id), None
+            )
+            if variant is None:
+                raise NotFoundError("experiment not found")
+
+            self._store.put_experiment(
+                replace(
+                    experiment,
+                    variants=tuple(
+                        item for item in experiment.variants if item.id != variant_id
+                    ),
+                    updated_at=self._clock(),
+                )
+            )
+            for assignment in self._store.list_experiment_assignments():
+                if (
+                    assignment.experiment_id == experiment_id
+                    and assignment.variant_id == variant_id
+                ):
+                    self._store.delete_experiment_assignment(
+                        user_id=assignment.user_id,
+                        experiment_id=experiment_id,
+                    )
+            for event in self._store.list_experiment_events():
+                if (
+                    event.experiment_id == experiment_id
+                    and event.variant_id == variant_id
+                ):
+                    self._store.delete_experiment_event(event.id)
+
+    def assign_skin(
+        self, *, user_id: str, assigned_at: dt.datetime | None = None
+    ) -> ExperimentVariant | None:
+        with self._lock:
+            self._ensure_pilot_experiments(created_at=assigned_at)
+            experiment = self._active_experiment(SKIN_EXPERIMENT_ID)
+            if not experiment.active or not experiment.variants:
+                return None
+            assignment = self._store.get_experiment_assignment(
+                user_id=user_id, experiment_id=experiment.id
+            )
+            by_id = {variant.id: variant for variant in experiment.variants}
+            if assignment is not None and assignment.variant_id in by_id:
+                return by_id[assignment.variant_id]
+            digest = hashlib.sha256(user_id.encode("utf-8")).digest()
+            variant = experiment.variants[
+                int.from_bytes(digest[:8], "big") % len(experiment.variants)
+            ]
+            self._store.put_experiment_assignment(
+                ExperimentAssignment(
+                    user_id=user_id,
+                    experiment_id=experiment.id,
+                    variant_id=variant.id,
+                    assigned_at=assigned_at or self._clock(),
+                )
+            )
+            return variant
+
+    def _record_experiment_event(
+        self,
+        *,
+        experiment_id: str,
+        variant_id: str,
+        kind: ExperimentEventKind,
+        user_id: str | None,
+        match_id: str | None = None,
+        occurred_at: dt.datetime | None = None,
+    ) -> ExperimentEvent:
+        events = [] if getattr(self._store, "scalable", False) else self._store.list_experiment_events()
+        duplicate = next(
+            (
+                event
+                for event in events
+                if event.experiment_id == experiment_id
+                and event.variant_id == variant_id
+                and event.kind == kind
+                and event.user_id == user_id
+                and event.match_id == match_id
+            ),
+            None,
+        )
+        if duplicate is not None:
+            return duplicate
+        event_identity = json.dumps(
+            [experiment_id, variant_id, kind, user_id, match_id],
+            separators=(",", ":"),
+        )
+        event_id = hashlib.sha256(event_identity.encode()).hexdigest()
+        if getattr(self._store, "scalable", False):
+            existing = self._store._get("experiment_events", f"experiment-event:{event_id}")
+            if existing is not None:
+                return existing
+        event = ExperimentEvent(
+            id=f"experiment-event:{event_id}",
+            experiment_id=experiment_id,
+            variant_id=variant_id,
+            kind=kind,
+            user_id=user_id,
+            occurred_at=occurred_at or self._clock(),
+            match_id=match_id,
+        )
+        self._store.put_experiment_event(event)
+        return event
+
+    def record_campaign_click(self, *, campaign_code: str) -> None:
+        with self._lock:
+            experiment = self._active_experiment(CAMPAIGN_EXPERIMENT_ID)
+            if not experiment.active:
+                raise NotFoundError("campaign link not found")
+            variant = next(
+                (v for v in experiment.variants if v.key == campaign_code), None
+            )
+            if variant is None:
+                raise NotFoundError("campaign link not found")
+            now = self._clock()
+            event_id = f"click:{experiment.id}:{variant.id}:{now.date().isoformat()}"
+            existing = self._store._get("experiment_events", event_id) if getattr(self._store, "scalable", False) else next(
+                (
+                    event
+                    for event in self._store.list_experiment_events()
+                    if event.id == event_id
+                ),
+                None,
+            )
+            if existing is None:
+                self._store.put_experiment_event(
+                    ExperimentEvent(
+                        id=event_id,
+                        experiment_id=experiment.id,
+                        variant_id=variant.id,
+                        kind="click",
+                        user_id=None,
+                        occurred_at=now,
+                    )
+                )
+            else:
+                self._store.put_experiment_event(
+                    replace(existing, count=existing.count + 1)
+                )
+
+    def record_new_user(
+        self,
+        *,
+        user_id: str,
+        campaign_code: str | None,
+        occurred_at: dt.datetime | None = None,
+    ) -> None:
+        with self._lock:
+            self._ensure_pilot_experiments(created_at=occurred_at)
+            variant = self.assign_skin(user_id=user_id, assigned_at=occurred_at)
+            experiment = self._active_experiment(SKIN_EXPERIMENT_ID)
+            if variant is not None:
+                self._record_experiment_event(
+                    experiment_id=experiment.id,
+                    variant_id=variant.id,
+                    kind="signup",
+                    user_id=user_id,
+                    occurred_at=occurred_at,
+                )
+            if campaign_code:
+                campaign = next(
+                    (
+                        item
+                        for item in self._store.list_experiments()
+                        if item.id == CAMPAIGN_EXPERIMENT_ID and item.active
+                    ),
+                    None,
+                )
+                campaign_variant = (
+                    next(
+                        (v for v in campaign.variants if v.key == campaign_code),
+                        None,
+                    )
+                    if campaign is not None
+                    else None
+                )
+                if campaign is not None and campaign_variant is not None:
+                    self._record_experiment_event(
+                        experiment_id=campaign.id,
+                        variant_id=campaign_variant.id,
+                        kind="signup",
+                        user_id=user_id,
+                        occurred_at=occurred_at,
+                    )
+
+    def record_match_start(
+        self, *, user_id: str, match_id: str, occurred_at: dt.datetime
+    ) -> None:
+        self._ensure_pilot_experiments(created_at=occurred_at)
+        with self._lock:
+            experiments = self._store.list_experiments()
+            skin = next(
+                (experiment for experiment in experiments if experiment.id == SKIN_EXPERIMENT_ID),
+                None,
+            )
+            if skin is not None and skin.active:
+                assignment = self._store.get_experiment_assignment(
+                    user_id=user_id, experiment_id=skin.id
+                )
+                skin_variant = (
+                    next(
+                        (variant for variant in skin.variants if assignment.variant_id == variant.id),
+                        None,
+                    )
+                    if assignment is not None
+                    else self.assign_skin(
+                        user_id=user_id, assigned_at=occurred_at
+                    )
+                )
+                if skin_variant is not None:
+                    self._record_experiment_event(
+                        experiment_id=skin.id,
+                        variant_id=skin_variant.id,
+                        kind="match_start",
+                        user_id=user_id,
+                        match_id=match_id,
+                        occurred_at=occurred_at,
+                    )
+            campaign = next(
+                (experiment for experiment in experiments if experiment.id == CAMPAIGN_EXPERIMENT_ID),
+                None,
+            )
+            account = self._store.get_user(user_id)
+            survivor_ids = {
+                user_id,
+                *(account.replaced_user_ids if account is not None else ()),
+            }
+            events = (self._store.experiment_signups(survivor_ids, CAMPAIGN_EXPERIMENT_ID)
+                      if getattr(self._store, "scalable", False) else self._store.list_experiment_events())
+            campaign_signups = (
+                [
+                    event
+                    for event in events
+                    if campaign is not None
+                    and event.experiment_id == campaign.id
+                    and event.kind == "signup"
+                    and event.user_id in survivor_ids
+                ]
+                if campaign is not None
+                else []
+            )
+            campaign_signup = max(
+                campaign_signups, key=lambda event: event.occurred_at, default=None
+            )
+            if campaign_signup is not None:
+                self._record_experiment_event(
+                    experiment_id=campaign.id,
+                    variant_id=campaign_signup.variant_id,
+                    kind="match_start",
+                    user_id=user_id,
+                    match_id=match_id,
+                    occurred_at=occurred_at,
+                )
+            signup_experiments = [
+                experiment
+                for experiment in (skin, campaign)
+                if experiment is not None
+            ]
+            for experiment in signup_experiments:
+                if not experiment.active:
+                    continue
+                signup_events = [
+                    event
+                    for event in events
+                    if event.experiment_id == experiment.id
+                    and event.kind == "signup"
+                    and event.user_id in survivor_ids
+                    and event.occurred_at + RETURNING_WINDOW <= occurred_at
+                    and event.occurred_at + RETURNING_WINDOW * 2 > occurred_at
+                ]
+                if signup_events:
+                    assignment = self._store.get_experiment_assignment(
+                        user_id=user_id, experiment_id=experiment.id
+                    )
+                    if experiment.id == CAMPAIGN_EXPERIMENT_ID:
+                        variant_id = (
+                            campaign_signup.variant_id
+                            if campaign_signup is not None
+                            else signup_events[0].variant_id
+                        )
+                    else:
+                        variant_id = (
+                            assignment.variant_id
+                            if assignment is not None
+                            else signup_events[0].variant_id
+                        )
+                    self._record_experiment_event(
+                        experiment_id=experiment.id,
+                        variant_id=variant_id,
+                        kind="returning_active",
+                        user_id=user_id,
+                        occurred_at=occurred_at,
+                    )
+
+    def experiment_stats(self) -> dict[str, JsonValue]:
+        self._ensure_pilot_experiments()
+        with self._lock:
+            experiments = self._store.list_experiments()
+            assignments = self._store.list_experiment_assignments()
+            events = self._store.list_experiment_events()
+            users = self._store.list_users()
+            now = self._clock()
+        user_by_id = {user.id: user for user in users}
+
+        def canonical(user_id: str | None) -> str | None:
+            user = user_by_id.get(user_id or "")
+            return (
+                user.replaced_by_user_id
+                if user is not None and user.replaced_by_user_id
+                else user_id
+            )
+
+        def report(experiment_id: str) -> list[JsonValue]:
+            experiment = next(
+                (item for item in experiments if item.id == experiment_id), None
+            )
+            if experiment is None:
+                return []
+            rows: list[JsonValue] = []
+            for variant in experiment.variants:
+                variant_assignments = [
+                    item
+                    for item in assignments
+                    if item.experiment_id == experiment.id
+                    and item.variant_id == variant.id
+                    and item.user_id in user_by_id
+                    and user_by_id[item.user_id].replaced_by_user_id is None
+                ]
+                variant_events = [
+                    item
+                    for item in events
+                    if item.experiment_id == experiment.id
+                    and item.variant_id == variant.id
+                ]
+                clicks = sum(
+                    item.count for item in variant_events if item.kind == "click"
+                )
+                signups = {
+                    canonical(item.user_id)
+                    for item in variant_events
+                    if item.kind == "signup"
+                } - {None}
+                started = {
+                    canonical(item.user_id)
+                    for item in variant_events
+                    if item.kind == "match_start"
+                } - {None}
+                returns = {
+                    canonical(item.user_id)
+                    for item in variant_events
+                    if item.kind == "returning_active"
+                } - {None}
+                rows.append(
+                    {
+                        "variant_id": variant.id,
+                        "name": variant.name,
+                        "key": variant.key,
+                        "link": f"/c/{variant.key}"
+                        if experiment.kind == "campaign"
+                        else None,
+                        "budget_usd": variant.budget_usd,
+                        "spend_usd": variant.spend_usd,
+                        "assigned": len(variant_assignments),
+                        "clicks": clicks,
+                        "signups": len(signups),
+                        "match_starts": sum(
+                            item.kind == "match_start" for item in variant_events
+                        ),
+                        "users_started_match": len(started),
+                        "returning_active_users": len(returns),
+                        "signup_rate": round(len(signups) * 100 / clicks, 1)
+                        if clicks
+                        else 0,
+                        "match_start_rate": round(len(started) * 100 / len(signups), 1)
+                        if signups
+                        else 0,
+                        "return_rate": round(len(returns) * 100 / len(signups), 1)
+                        if signups
+                        else 0,
+                        "cost_per_signup_usd": round(
+                            variant.spend_usd / len(signups), 2
+                        )
+                        if signups and variant.spend_usd
+                        else None,
+                        "cost_per_match_user_usd": round(
+                            variant.spend_usd / len(started), 2
+                        )
+                        if started and variant.spend_usd
+                        else None,
+                        "cost_per_returning_user_usd": round(
+                            variant.spend_usd / len(returns), 2
+                        )
+                        if returns and variant.spend_usd
+                        else None,
+                    }
+                )
+            return rows
+
+        return {
+            "generated_at": now.isoformat(),
+            "skin_experiment": {
+                "id": SKIN_EXPERIMENT_ID,
+                "name": next(
+                    (item.name for item in experiments if item.id == SKIN_EXPERIMENT_ID),
+                    "UI skin pilot",
+                ),
+                "active": next(
+                    (item.active for item in experiments if item.id == SKIN_EXPERIMENT_ID),
+                    False,
+                ),
+                "variants": report(SKIN_EXPERIMENT_ID),
+            },
+            "campaign_experiment": {
+                "id": CAMPAIGN_EXPERIMENT_ID,
+                "name": next(
+                    (item.name for item in experiments if item.id == CAMPAIGN_EXPERIMENT_ID),
+                    "Advertisement campaign pilot",
+                ),
+                "active": next(
+                    (item.active for item in experiments if item.id == CAMPAIGN_EXPERIMENT_ID),
+                    False,
+                ),
+                "variants": report(CAMPAIGN_EXPERIMENT_ID),
+            },
+        }
 
     # Users
 
@@ -341,6 +981,7 @@ class GamePlatform:
         locale: str = "",
         invited_by_user_id: str | None = None,
         invite_token: str | None = None,
+        campaign_code: str | None = None,
     ) -> User:
         """[invited_by_user_id] is the user whose invite link brought this one here:
         their 5-digit referral code, or their user id (older links). Each new user
@@ -380,6 +1021,12 @@ class GamePlatform:
                 updated_at=now,
             )
             self._store.put_user(user)
+            observability.current().note_signup(user.id)
+            self.record_new_user(
+                user_id=user.id,
+                campaign_code=campaign_code,
+                occurred_at=user.created_at,
+            )
             return user
 
     def update_user(
@@ -406,23 +1053,45 @@ class GamePlatform:
                 return user
             user = replace(user, updated_at=self._clock(), **changes)
             self._store.put_user(user)
+            self._saved_locales.pop(user.id, None)
             return user
+
+    SAVED_LOCALE_SECONDS = 60.0
+    _SAVED_LOCALES_MAX = 10_000
+
+    def cached_saved_locale(self, user_id: str | None) -> str | None:
+        """What [saved_locale] would answer, from memory only (no database read), or None
+        when it isn't remembered or is older than a minute. Safe to call from the event
+        loop; [saved_locale] is not."""
+        if not user_id:
+            return ""
+        entry = self._saved_locales.get(user_id)
+        if entry is not None and time.monotonic() - entry[0] < self.SAVED_LOCALE_SECONDS:
+            return entry[1]
+        return None
 
     def saved_locale(self, user_id: str | None) -> str:
         """The language [user_id] chose, or empty if they chose none or don't exist.
-        Not authenticated: it only picks the language of a response."""
+        Not authenticated: it only picks the language of a response. One plain read, no
+        lock or transaction (a stale answer for a minute is harmless), and it blocks on
+        the database, so call it off the event loop."""
         if not user_id:
             return ""
-        with self._lock:
-            user = self._store.get_user(user_id)
-            return user.locale if user is not None else ""
+        user = self._store.get_user(user_id)
+        locale = user.locale if user is not None else ""
+        if len(self._saved_locales) >= self._SAVED_LOCALES_MAX:
+            self._saved_locales.clear()
+        self._saved_locales[user_id] = (time.monotonic(), locale)
+        return locale
 
     def get_user(self, user_id: str) -> User:
-        with self._lock:
-            user = self._store.get_user(user_id)
-            if user is None:
-                raise NotFoundError("user not found")
-            return self._resolve_replaced(user)
+        # Reads only, so no lock: on Firestore the lock is a transaction (a round trip to
+        # begin it, one to roll it back, and a lock on every document read), which is
+        # costly for the most frequent call there is.
+        user = self._store.get_user(user_id)
+        if user is None:
+            raise NotFoundError("user not found")
+        return self._resolve_replaced(user)
 
     def authenticate(self, *, user_id: str | None, password: str | None) -> User:
         """Checks the caller's credentials. The error doesn't say which part was wrong,
@@ -430,18 +1099,19 @@ class GamePlatform:
 
         A replaced user still authenticates with its old credentials; the
         returned user is the surviving account it was merged into.
+
+        Reads only, so no lock (see [get_user]); nearly every request calls this.
         """
-        with self._lock:
-            user = None if user_id is None else self._store.get_user(user_id)
-            if (
-                user is None
-                or password is None
-                or not hmac.compare_digest(password.encode(), user.password.encode())
-            ):
-                raise UnauthorizedError(
-                    "missing or invalid X-User-Id / X-User-Password headers"
-                )
-            return self._resolve_replaced(user)
+        user = None if user_id is None else self._store.get_user(user_id)
+        if (
+            user is None
+            or password is None
+            or not hmac.compare_digest(password.encode(), user.password.encode())
+        ):
+            raise UnauthorizedError(
+                "missing or invalid X-User-Id / X-User-Password headers"
+            )
+        return self._resolve_replaced(user)
 
     # Third-party login and account merging
 
@@ -454,6 +1124,8 @@ class GamePlatform:
     def _find_by_linked_account(
         self, kind: LinkedAccountKind, identifier: str
     ) -> User | None:
+        if getattr(self._store, "scalable", False):
+            return self._store.find_linked_account(kind, identifier)
         for user in self._store.list_users():
             if any(
                 account.kind == kind and account.identifier == identifier
@@ -468,7 +1140,7 @@ class GamePlatform:
         Merges always flatten, so a replaced user points directly at the final
         survivor: this is a single lookup. The extra hop below is purely
         defensive (it should never trigger) so a corrupt record can never make
-        this return a replaced user. The caller holds the lock.
+        this return a replaced user. Reads only: callers may or may not hold the lock.
         """
         if user.replaced_by_user_id is None:
             return user
@@ -484,6 +1156,8 @@ class GamePlatform:
     def _give_missing_referral_codes(self) -> None:
         """At startup: indexes the codes accounts have, and gives one to every account
         from before referral codes."""
+        if getattr(self._store, "scalable", False):
+            return  # Migration assigns old codes; new accounts reserve codes atomically.
         with self._lock:
             users = self._store.list_users()
             for user in users:
@@ -503,6 +1177,8 @@ class GamePlatform:
         # TODO: free the codes of long-inactive accounts once there's a policy for it;
         # until then a code is never reused (except a deleted account's, see
         # admin_delete_user).
+        if getattr(self._store, "scalable", False):
+            return self._store.reserve_referral(user_id)
         if len(self._user_ids_by_code) > REFERRAL_CODE_MAX - REFERRAL_CODE_MIN:
             raise RuntimeError(
                 f"all {REFERRAL_CODE_MAX - REFERRAL_CODE_MIN + 1} referral codes are taken"
@@ -516,7 +1192,9 @@ class GamePlatform:
         """The surviving account an invite link's "ref" names: a 5-digit referral code
         or (older links) a user id. None when it names nobody. The caller holds the
         lock."""
-        if ref and _REFERRAL_CODE_RE.fullmatch(ref):
+        if ref and getattr(self._store, "scalable", False):
+            ref = self._store.user_for_referral(ref) or ref
+        elif ref and _REFERRAL_CODE_RE.fullmatch(ref):
             ref = self._user_ids_by_code.get(ref)
         return self._existing_user_id(ref)
 
@@ -579,6 +1257,43 @@ class GamePlatform:
             self._verification_starts[normalized] = [*starts, now]
             return verification_id, code, normalized
 
+    def _external_phone_pending(self, verification_id: str) -> _Verification:
+        entry = self._verifications.get(verification_id)
+        if entry is None or entry.kind != "phone":
+            raise NotFoundError("verification not found or expired")
+        if (self._clock() - entry.created_at).total_seconds() > VERIFICATION_TTL_SECONDS:
+            del self._verifications[verification_id]
+            raise NotFoundError("verification not found or expired")
+        if entry.attempts >= VERIFICATION_MAX_ATTEMPTS:
+            raise ConflictError("too many wrong codes; request a new one")
+        return entry
+
+    def pending_external_phone(self, verification_id: str) -> str:
+        with self._lock:
+            return self._external_phone_pending(verification_id).identifier
+
+    def finish_external_phone(
+        self, verification_id: str, *, approved: bool,
+        display_name: str | None = None,
+        as_user_id: str | None = None,
+        invited_by_user_id: str | None = None,
+        campaign_code: str | None = None,
+    ) -> tuple[User, str | None]:
+        with self._lock:
+            entry = self._external_phone_pending(verification_id)
+            if not approved:
+                entry.attempts += 1
+                raise InvalidRequestError("wrong code")
+            del self._verifications[verification_id]
+            return self.login_with_linked_account(
+                kind="phone",
+                identifier=entry.identifier,
+                display_name=display_name or entry.identifier,
+                as_user_id=as_user_id,
+                invited_by_user_id=invited_by_user_id,
+                campaign_code=campaign_code,
+            )
+
     def verify_code(
         self,
         *,
@@ -587,6 +1302,7 @@ class GamePlatform:
         display_name: str | None = None,
         as_user_id: str | None = None,
         invited_by_user_id: str | None = None,
+        campaign_code: str | None = None,
     ) -> tuple[User, str | None]:
         """Checks a login code, then logs the owner in (see
         [login_with_linked_account]). Returns (user, merged_from_user_id)."""
@@ -621,6 +1337,7 @@ class GamePlatform:
                 display_name=name,
                 as_user_id=as_user_id,
                 invited_by_user_id=invited_by_user_id,
+                campaign_code=campaign_code,
             )
 
     def login_with_linked_account(
@@ -633,6 +1350,7 @@ class GamePlatform:
         picture_url: str = "",
         as_user_id: str | None = None,
         invited_by_user_id: str | None = None,
+        campaign_code: str | None = None,
     ) -> tuple[User, str | None]:
         """Logs in with a verified Google subject, phone number or email.
 
@@ -660,6 +1378,7 @@ class GamePlatform:
                             picture_url=picture_url.strip(),
                             linked_accounts=(linked,),
                             invited_by_user_id=invited_by_user_id,
+                            campaign_code=campaign_code,
                         ),
                         None,
                     )
@@ -748,6 +1467,21 @@ class GamePlatform:
         if source.id == into.id:
             raise InvalidRequestError("cannot merge a user into itself")
         from_user_id, into_user_id = source.id, into.id
+        for match in self._store.list_matches_involving(from_user_id):
+            if match.status != "over" and match.seat_of(from_user_id) is not None and match.seat_of(into_user_id) is not None:
+                raise ConflictError("wait until shared matches end before merging these accounts")
+        for assignment in self._store.list_experiment_assignments():
+            if assignment.user_id != from_user_id:
+                continue
+            if self._store.get_experiment_assignment(
+                user_id=into_user_id, experiment_id=assignment.experiment_id
+            ) is None:
+                self._store.put_experiment_assignment(
+                    replace(assignment, user_id=into_user_id)
+                )
+            self._store.delete_experiment_assignment(
+                user_id=from_user_id, experiment_id=assignment.experiment_id
+            )
         for game in self._store.list_all_game_versions():
             if game.owner_user_id == from_user_id:
                 self._store.put_game_version(
@@ -763,7 +1497,8 @@ class GamePlatform:
                 updated = replace(
                     updated,
                     seats=tuple(
-                        replace(seat, user_id=into_user_id)
+                        replace(seat, user_id=into_user_id,
+                                logic_player_id=match.player_id_of(seat))
                         if seat.user_id == from_user_id
                         else seat
                         for seat in updated.seats
@@ -787,6 +1522,12 @@ class GamePlatform:
                         for move in updated.moves
                     ),
                 )
+            if any(timeout.user_id == from_user_id for timeout in updated.timeouts):
+                updated = replace(updated, timeouts=tuple(
+                    replace(timeout, user_id=into_user_id)
+                    if timeout.user_id == from_user_id else timeout
+                    for timeout in updated.timeouts
+                ))
             if updated is not match:
                 self._save(updated)
         for subscription in self._store.list_push_subscriptions(user_id=from_user_id):
@@ -832,6 +1573,12 @@ class GamePlatform:
         into = replace(
             into,
             linked_accounts=(*into.linked_accounts, *moved),
+            token_balance=into.token_balance + source.token_balance,
+            # Neither account may claim today's grant a second time after merging.
+            last_token_grant_day=max(
+                (day for day in (into.last_token_grant_day, source.last_token_grant_day) if day),
+                default=None,
+            ),
             replaced_user_ids=replaced_ids,
             saved_game_ids=_dedupe((*into.saved_game_ids, *source.saved_game_ids)),
             invited_by_user_id=invited_by,
@@ -851,6 +1598,7 @@ class GamePlatform:
                 old = replace(
                     old,
                     replaced_by_user_id=into_user_id,
+                    token_balance=0,
                     linked_accounts=(),
                     replaced_user_ids=(),
                     updated_at=self._clock(),
@@ -1043,12 +1791,87 @@ class GamePlatform:
             if game is None:
                 raise NotFoundError("game version not found")
             if not game.published and caller_id != game.owner_user_id:
-                if caller_id is None or not any(
+                if caller_id is None or not (self._store.has_game_membership(caller_id, game_id, version)
+                    if getattr(self._store, "scalable", False) else any(
                     match.game_id == game_id and match.game_version == version
                     for match in self._store.list_matches_involving(caller_id)
-                ):
+                )):
                     raise NotFoundError("game version not found")
             return game
+
+    def game_strings(
+        self, game_id: str, version: int, locale: str, *, caller_id: str | None = None
+    ) -> GameStrings:
+        """The texts of one game version in [locale]: its name, its description and its
+        string table. Texts are translated the first time they are asked for and
+        remembered. Anything that cannot be translated is returned as the game wrote it, so
+        this never fails because of the translator."""
+        game = self.get_game_version(game_id, version, caller_id=caller_id)
+        try:
+            table = game_text.extract_strings(game.code)
+        except game_text.StringsError:
+            table = None
+        warnings = game_text.lint(game.code)
+        # Not under the platform's lock: translating may wait for Google.
+        translated = self._translation.translate(
+            [game.name, game.description, *(table or {}).values()], locale
+        )
+        shown = lambda text: translated.texts.get(text, text)  # noqa: E731
+        return GameStrings(
+            game_id=game.id,
+            game_version=game.version,
+            locale=i18n.normalize_locale(locale) or i18n.DEFAULT_LOCALE,
+            status=translated.status,
+            name=shown(game.name),
+            description=shown(game.description),
+            strings={key: shown(text) for key, text in (table or {}).items()},
+            translatable=table is not None,
+            warnings=warnings,
+        )
+
+    def list_translations(self, locale: str | None = None) -> list[Translation]:
+        """Every remembered translation (of one language), for the backoffice."""
+        return sorted(self._store.list_translations(locale), key=lambda item: (item.locale, item.source))
+
+    def set_translation(self, *, locale: str, source: str, text: str) -> Translation:
+        """An administrator's translation of [source], which replaces a machine one and is
+        never replaced by one again."""
+        code = i18n.normalize_locale(locale)
+        if code is None or code == i18n.DEFAULT_LOCALE:
+            raise InvalidRequestError(f"{locale!r} is not a language that texts are translated into")
+        if not source.strip() or not text.strip():
+            raise InvalidRequestError("both the text and its translation are needed")
+        if translation_module.placeholders_of(text) != translation_module.placeholders_of(source):
+            raise InvalidRequestError("the translation must keep the text's placeholders (the words in curly braces)")
+        translation = Translation(
+            locale=code,
+            source_hash=translation_module.text_hash(source),
+            source=source,
+            text=text,
+            provider="manual",
+            created_at=self._clock(),
+            reviewed=True,
+        )
+        self._store.put_translations([translation])
+        return translation
+
+    def delete_translation(self, locale: str, source_hash: str) -> None:
+        """Forgets a translation: the text is translated again next time it is asked for."""
+        self._store.delete_translation(locale, source_hash)
+
+    def games_text(self, locale: str) -> tuple[str, dict[str, dict[str, str]]]:
+        """(status, {game id: {"name", "description"}}) for the published games, in [locale]:
+        what a portal shows on its game cards. Like [game_strings], it never fails because
+        of the translator."""
+        games = self.list_games(owner_user_id=None)
+        translated = self._translation.translate(
+            [text for game in games for text in (game.name, game.description)], locale
+        )
+        shown = lambda text: translated.texts.get(text, text)  # noqa: E731
+        return translated.status, {
+            game.id: {"name": shown(game.name), "description": shown(game.description)}
+            for game in games
+        }
 
     def list_owned_games(self, *, caller_id: str) -> list[Game]:
         with self._lock:
@@ -1856,8 +2679,9 @@ class GamePlatform:
         """Runs one game function; records bug-level failures on the game
         version and raises a PlatformError for them. InvalidMove passes
         through: it is the player's fault, not a bug."""
+        started = time.perf_counter()
         try:
-            return self._logic_for(game).call(
+            result = self._logic_for(game).call(
                 function,
                 *args,
                 ctx=self._game_ctx(match),
@@ -1865,16 +2689,28 @@ class GamePlatform:
                 now=self._clock(),
                 time_limit_seconds=time_limit_seconds,
             )
-        except InvalidMoveError:
+        except InvalidMoveError as error:
+            self._log_illegal_move(game, match, function, args, error)
             raise
         except GameLogicError as error:
-            self._record_logic_error(game, function, error)
+            self._record_logic_error(game, function, error, match=match, args=args)
             raise PlatformError(
                 f"the game's server code failed in {function}: {error}"
             ) from error
+        self._log_if_slow(
+            game, match, function, args,
+            (time.perf_counter() - started) * 1000, time_limit_seconds,
+        )
+        return result
 
     def _record_logic_error(
-        self, game: Game, function: str, error: Exception
+        self,
+        game: Game,
+        function: str,
+        error: Exception,
+        *,
+        match: Match | None = None,
+        args: Sequence[Any] | None = None,
     ) -> None:
         self._store.add_game_version_error(
             GameVersionError(
@@ -1885,6 +2721,118 @@ class GamePlatform:
                 message=str(error)[:2000],
                 created_at=self._clock(),
             )
+        )
+        self._log_logic_error(game, function, error, match, args)
+
+    def _game_log_fields(self, game: Game, match: Match | None, function: str) -> dict[str, Any]:
+        """Who and what a game-function log line is about, to find it again."""
+        fields: dict[str, Any] = {
+            "game_id": game.id,
+            "game_version": game.version,
+            "game_name": game.name,
+            "owner_user_id": game.owner_user_id,
+            "function": function,
+        }
+        if match is not None:
+            fields.update(
+                match_id=match.id,
+                move_count=len(match.moves),
+                # With the state and the seed, a call can be repeated exactly.
+                seed=self._call_seed(match),
+            )
+        return fields
+
+    def _log_logic_error(
+        self,
+        game: Game,
+        function: str,
+        error: Exception,
+        match: Match | None,
+        args: Sequence[Any] | None,
+    ) -> None:
+        """A bug in a game's server code: a timeout, too much memory, an exception, a
+        bad result, or a computer's move that the game itself rejects. Logged with the
+        function's inputs, so it can be reproduced."""
+        monitor = observability.current()
+        limit = monitor.config.max_logged_game_input_bytes
+        text = str(error).lower()
+        if isinstance(error, InvalidMoveError):
+            event = "computer_illegal_move"
+        elif isinstance(error, GameLogicTimeout):
+            event = "game_function_timeout"
+        elif "memory" in text:
+            event = "game_function_memory"
+        else:
+            event = "game_function_error"
+        monitor.count("game_errors")
+        fields = self._game_log_fields(game, match, function)
+        if match is not None:
+            fields["ctx"] = observability.capture(self._game_ctx(match), limit)
+        if args is not None:
+            fields["inputs"] = observability.capture(list(args), limit, keep_long_strings=True)
+        observability.log_event(
+            event,
+            f"{function} failed in {game.name} v{game.version}: {str(error)[:300]}",
+            level=logging.ERROR,
+            alert="minor",
+            error=str(error)[:2000],
+            error_type=type(error).__name__,
+            **fields,
+        )
+
+    def _log_illegal_move(
+        self,
+        game: Game,
+        match: Match,
+        function: str,
+        args: Sequence[Any],
+        error: InvalidMoveError,
+    ) -> None:
+        """The game rejected a move. That is usually a player's mistake, so it is only
+        counted and logged (a computer's rejected move is a bug: see above)."""
+        player_id = args[1] if len(args) > 1 else None
+        if isinstance(player_id, str) and player_id.startswith("computer-"):
+            return
+        monitor = observability.current()
+        monitor.count("illegal_moves")
+        observability.log_event(
+            "illegal_move",
+            f"{function} rejected a move in {game.name}: {error.message[:200]}",
+            level=logging.INFO,
+            reason=error.message[:500],
+            player_id=player_id,
+            move=observability.capture(args[2] if len(args) > 2 else None, 2048),
+            inputs=observability.capture(list(args), monitor.config.max_logged_body_bytes),
+            **self._game_log_fields(game, match, function),
+        )
+
+    def _log_if_slow(
+        self,
+        game: Game,
+        match: Match,
+        function: str,
+        args: Sequence[Any],
+        elapsed_ms: float,
+        time_limit_seconds: float | None,
+    ) -> None:
+        """A game function that ran, but took a worrying share of its time limit."""
+        monitor = observability.current()
+        limit_ms = (time_limit_seconds or TIME_LIMIT_SECONDS) * 1000
+        # "Slow" scales with the limit: playerLeft is allowed 2 s, other calls 100 ms.
+        slow_ms = monitor.config.game_function_slow_ms * limit_ms / (TIME_LIMIT_SECONDS * 1000)
+        if elapsed_ms < slow_ms:
+            return
+        monitor.count("game_slow_calls")
+        observability.log_event(
+            "game_function_slow",
+            f"{function} took {elapsed_ms:.0f} ms in {game.name} (limit {limit_ms:.0f} ms)",
+            level=logging.WARNING,
+            elapsed_ms=round(elapsed_ms, 1),
+            limit_ms=round(limit_ms),
+            inputs=observability.capture(
+                list(args), monitor.config.max_logged_game_input_bytes, keep_long_strings=True
+            ),
+            **self._game_log_fields(game, match, function),
         )
 
     def _turn_indices(
@@ -1943,7 +2891,7 @@ class GamePlatform:
             replace(
                 match,
                 state=result.get("state"),
-                moves=(*match.moves, record),
+                moves=append_move(match.moves, record),
                 turn_of_player_indices=turn_indices,
                 status="ongoing" if turn_indices is not None else "over",
                 end_reason=None if turn_indices is not None else "finished",
@@ -2014,7 +2962,7 @@ class GamePlatform:
                 now=self._clock(),
             )
         except GameLogicError as error:
-            self._record_logic_error(game, "newMatch", error)
+            self._record_logic_error(game, "newMatch", error, match=funded_view, args=())
             raise PlatformError(
                 f"the game's server code failed in newMatch: {error}"
             ) from error
@@ -2086,7 +3034,7 @@ class GamePlatform:
             current = match
             # Games could in principle pass the turn between computers
             # forever; the cap keeps a broken game from wedging the server.
-            for _ in range(1000):
+            for _ in range(1 if getattr(self._store, "scalable", False) else 1000):
                 if (
                     current.status != "ongoing"
                     or not current.turn_of_player_indices
@@ -2116,7 +3064,10 @@ class GamePlatform:
                     )
                 except InvalidMoveError as error:
                     # A computer move the game itself rejects is a game bug.
-                    self._record_logic_error(game, "applyMove", error)
+                    self._record_logic_error(
+                        game, "applyMove", error,
+                        match=current, args=(current.state, player_id, move),
+                    )
                     return
                 except PlatformError:
                     # Already recorded by _call_logic; leave the match as is.
@@ -2158,7 +3109,10 @@ class GamePlatform:
                 now=self._clock(),
             )
         except GameLogicError as error:
-            self._record_logic_error(game, "viewFor", error)
+            self._record_logic_error(
+                game, "viewFor", error,
+                match=match, args=(match.state, match.player_id_of(seat)),
+            )
             return None
 
     def start_match(
@@ -2185,14 +3139,20 @@ class GamePlatform:
                 # A v2 match starts itself: the game's newMatch decides the
                 # state and the first turn; the client's start values (kept
                 # for v1 games) are ignored.
-                return self._begin_v2_match(match, game)
+                started = self._begin_v2_match(match, game)
+                self.record_match_start(
+                    user_id=caller_id,
+                    match_id=started.id,
+                    occurred_at=started.updated_at,
+                )
+                return started
             if not first_turn_player_indices:
                 raise InvalidRequestError(
                     "the first turn must name at least one player"
                 )
             self._check_player_indices(match, first_turn_player_indices)
             humans = self._fund_match_tokens(match)
-            return self._save(
+            started = self._save(
                 replace(
                     match,
                     status="ongoing",
@@ -2204,6 +3164,12 @@ class GamePlatform:
                     turn_started_at=self._clock() if match.turn_seconds else None,
                 )
             )
+            self.record_match_start(
+                user_id=caller_id,
+                match_id=started.id,
+                occurred_at=started.updated_at,
+            )
+            return started
 
     def leave_match(self, *, caller_id: str, match_id: str) -> Match:
         with self._lock:
@@ -2332,7 +3298,7 @@ class GamePlatform:
                 match,
                 "playerLeft",
                 match.state,
-                caller_id,
+                match.player_id_of(self._get_seat(match, caller_id)),
                 time_limit_seconds=PLAYER_LEFT_TIME_LIMIT_SECONDS,
             )
         except InvalidMoveError as error:
@@ -2662,7 +3628,7 @@ class GamePlatform:
                 replace(
                     match,
                     state=new_state,
-                    moves=(*match.moves, move),
+                    moves=append_move(match.moves, move),
                     turn_of_player_indices=next_turn_player_indices,
                     status="ongoing"
                     if next_turn_player_indices is not None
@@ -2725,7 +3691,7 @@ class GamePlatform:
             raise ForbiddenError("it is not your turn")
         try:
             result = self._call_logic(
-                game, match, "applyMove", match.state, caller_id, move
+                game, match, "applyMove", match.state, match.player_id_of(seat), move
             )
         except InvalidMoveError as error:
             raise InvalidRequestError(error.message) from error
@@ -3222,6 +4188,8 @@ class GamePlatform:
     def storage_error(self) -> str | None:
         """Why the data isn't being saved, or None when it is (or the store has no
         file). Taking the lock also proves requests aren't stuck behind it."""
+        if getattr(self._store, "scalable", False):
+            return self._store.health()
         with self._lock:
             return getattr(self._store, "last_write_error", None)
 
@@ -3449,6 +4417,17 @@ class GamePlatform:
             # The people this user invited now count as invited by this user's own
             # inviter (or nobody), so everyone above keeps the credit.
             deleted = self._require_user(user_id)
+            deleted_ids = {user_id, *deleted.replaced_user_ids}
+            for account_id in deleted_ids:
+                for assignment in self._store.list_experiment_assignments():
+                    if assignment.user_id == account_id:
+                        self._store.delete_experiment_assignment(
+                            user_id=account_id,
+                            experiment_id=assignment.experiment_id,
+                        )
+                for event in self._store.list_experiment_events():
+                    if event.user_id == account_id:
+                        self._store.delete_experiment_event(event.id)
             new_inviter = self._inviter_of(deleted)
             for user in self._store.list_users():
                 if user.id != user_id and self._inviter_of(user) == user_id:

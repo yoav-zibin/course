@@ -1,6 +1,7 @@
 """Languages: catalogs, negotiation, localized errors, the /i18n API and user locale."""
 
 import ast
+import asyncio
 import json
 import re
 from pathlib import Path
@@ -10,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from game_platform import i18n
 from game_platform.api import create_app
+from game_platform.store import InMemoryStore
 from game_platform.tests.helpers import Api
 
 PLACEHOLDER = re.compile(r"\{(\w+)\}")
@@ -267,6 +269,43 @@ def test_a_users_saved_language_applies_to_their_requests(api: Api) -> None:
         "/matches/nope", params={"lang": "zh"}, headers=headers | {"Accept-Language": "fr"}
     )
     assert chosen.json()["detail"] == "找不到该对局"
+
+
+class _LoopWatchingStore(InMemoryStore):
+    """Fails any user read made on the event loop's thread, and counts the reads."""
+
+    reads = 0
+
+    def get_user(self, user_id):
+        self.reads += 1
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return super().get_user(user_id)
+        raise AssertionError("the database was read on the event loop")
+
+
+def test_the_saved_language_is_read_off_the_event_loop_and_remembered() -> None:
+    store = _LoopWatchingStore()
+    api = Api(store=store)
+    user = api.ok("POST", "/users", json={"display_name": "hans", "locale": "de"})
+    headers = {"X-User-Id": user["id"], "X-User-Password": user["password"]}
+    store.reads = 0
+    for _ in range(3):
+        response = api.client.get("/matches/nope", headers=headers)
+        assert response.json()["detail"] == "Partie nicht gefunden"
+    # one read for the language, one per request to check the password: the language isn't re-read
+    languages_read = store.reads - 3
+    assert languages_read == 1
+
+
+def test_changing_the_saved_language_applies_at_once() -> None:
+    api = Api(store=_LoopWatchingStore())
+    user = api.ok("POST", "/users", json={"display_name": "hans", "locale": "de"})
+    headers = {"X-User-Id": user["id"], "X-User-Password": user["password"]}
+    assert api.client.get("/matches/nope", headers=headers).json()["detail"] == "Partie nicht gefunden"
+    assert api.client.patch(f"/users/{user['id']}", json={"locale": "fr"}, headers=headers).status_code == 200
+    assert api.client.get("/matches/nope", headers=headers).json()["detail"] == "partie introuvable"
 
 
 def test_errors_carry_the_values_they_mention(api: Api) -> None:

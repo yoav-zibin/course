@@ -64,11 +64,13 @@ class GoogleAuthConfig(_Section):
 class SmsAuthConfig(_Section):
     # How login codes are texted. "log" writes them to the server log (development
     # only); "twilio" sends real texts (https://www.twilio.com).
-    provider: Literal["log", "twilio"] = "log"
+    provider: Literal["log", "twilio", "verify"] = "log"
     twilio_account_sid: str = ""
     twilio_auth_token: str = ""
+    twilio_verify_service_sid: str = ""
     # The Twilio number texts come from, in E.164 format, e.g. +15551234567.
     twilio_from_number: str = ""
+    twilio_voice_enabled: bool = False
 
 
 class EmailAuthConfig(_Section):
@@ -108,6 +110,9 @@ class PushConfig(_Section):
 
 
 class FirestoreConfig(_Section):
+    # query mode requires a migrated, explicitly named namespace.
+    mode: Literal["snapshot", "query"] = "snapshot"
+    namespace: str = ""
     # Save the data in Firestore instead of the data file (see "Firestore" in the
     # README). data_file is then unused.
     enabled: bool = False
@@ -115,11 +120,103 @@ class FirestoreConfig(_Section):
     # (on a Google Cloud VM, the VM's project).
     project_id: str = ""
     database: str = "(default)"
+    # A separate acknowledgement is required before using the query schema in
+    # the existing production database. It never migrates data at startup.
+    allow_default_database_query: bool = False
     # Prepended to every collection name, to keep several servers (e.g. staging) apart
     # in one database.
     collection_prefix: str = ""
     # After a change, Firestore is written at most once per this many seconds.
     save_interval_seconds: Annotated[float, Field(ge=0)] = 1.0
+
+    @model_validator(mode="after")
+    def _validate_query_mode(self):
+        if self.enabled and self.mode == "query":
+            if (
+                not self.project_id
+                or not self.namespace
+                or not self.namespace.replace("_", "").replace("-", "").isalnum()
+            ):
+                raise ValueError(
+                    "query mode requires an explicit project_id and alphanumeric namespace"
+                )
+            if self.collection_prefix:
+                raise ValueError("query mode uses namespace, not collection_prefix")
+        return self
+
+
+class TranslationConfig(_Section):
+    """Translating the texts of games into the player's language (docs/game-translation.md).
+    A text is translated the first time it is asked for in a language, then remembered."""
+
+    # "google": Google Cloud Translation. "off": nothing is translated, and games show
+    # their own (English) texts. "fake": for trying it out with no key: every text is
+    # prefixed with its language, e.g. "[es] Your turn"; never use it on a real server.
+    provider: Literal["off", "google", "fake"] = "off"
+    # A Google Cloud API key restricted to the Cloud Translation API (Console > APIs &
+    # Services > Credentials). Prefer the GAME_PLATFORM_TRANSLATE_API_KEY environment
+    # variable to keeping it in this file. Empty (with "google") signs in as the Google
+    # Cloud VM's service account instead.
+    google_api_key: str = ""
+    # At most this many characters are sent to Google per (UTC) day: a cap on the cost.
+    # Beyond it, new texts stay in their original language until tomorrow.
+    daily_character_limit: Annotated[int, Field(ge=0)] = 200_000
+    timeout_seconds: Annotated[float, Field(gt=0)] = 10.0
+
+
+class MonitoringConfig(_Section):
+    """What the server logs and when it raises an alert (see docs/monitoring.md).
+
+    Alerts are log lines with an `alert` field: "minor" (an email) or "major" (a page).
+    Google Cloud Monitoring turns them into notifications; the thresholds below decide
+    when the server writes them."""
+
+    # "json": one JSON object per line, which Google Cloud Logging parses into fields
+    # (use it on the server). "text": readable lines for a terminal.
+    log_format: Literal["text", "json"] = "text"
+    # Also write the log as JSON lines to this file (rotated at 50 MB, 5 kept), for the
+    # Google Cloud Ops Agent to read. Empty writes only to the terminal / journal.
+    log_file: str = ""
+    # A request slower than this is logged with its arguments (WARNING)...
+    slow_request_ms: Annotated[int, Field(ge=1)] = 1000
+    # ...and one slower than this is a minor alert (ERROR).
+    very_slow_request_ms: Annotated[int, Field(ge=1)] = 5000
+    # A request still running after this many seconds is logged once, with every
+    # thread's stack, since it may never finish (minor alert).
+    stuck_request_seconds: Annotated[float, Field(gt=0)] = 30.0
+    # How much of a request's JSON body is logged with it (secrets are always hidden).
+    max_logged_body_bytes: Annotated[int, Field(ge=0)] = 8192
+    # How much of a game function's inputs (its state) are logged when it fails.
+    max_logged_game_input_bytes: Annotated[int, Field(ge=0)] = 65536
+    # A game function slower than this is logged (WARNING); the hard limit is 100 ms.
+    game_function_slow_ms: Annotated[int, Field(ge=1)] = 50
+    # Sign-ups in one minute: this many is a minor alert (a surge)...
+    signup_surge_per_minute: Annotated[int, Field(ge=1)] = 30
+    # ...and this many is a major alert (a flood, probably bots).
+    signup_flood_per_minute: Annotated[int, Field(ge=1)] = 120
+    # Requests being handled at once: busy is a minor alert, overloaded a major one.
+    busy_in_flight: Annotated[int, Field(ge=1)] = 30
+    overloaded_in_flight: Annotated[int, Field(ge=1)] = 80
+    # The server process's memory, as a percent of the machine's.
+    memory_warn_percent: Annotated[float, Field(gt=0, le=100)] = 70.0
+    memory_critical_percent: Annotated[float, Field(gt=0, le=100)] = 90.0
+    # Seconds between the "metrics" summary lines (requests, errors, latency...) and
+    # the checks for stuck requests and memory. 0 turns this background work off.
+    metrics_interval_seconds: Annotated[float, Field(ge=0)] = 60.0
+    # The same alert is written at most once per this many seconds.
+    alert_cooldown_seconds: Annotated[float, Field(ge=0)] = 300.0
+
+    @model_validator(mode="after")
+    def _thresholds_are_ordered(self) -> "MonitoringConfig":
+        for low, high in (
+            ("slow_request_ms", "very_slow_request_ms"),
+            ("signup_surge_per_minute", "signup_flood_per_minute"),
+            ("busy_in_flight", "overloaded_in_flight"),
+            ("memory_warn_percent", "memory_critical_percent"),
+        ):
+            if getattr(self, low) >= getattr(self, high):
+                raise ValueError(f"monitoring.{low} must be less than monitoring.{high}")
+        return self
 
 
 class Config(_Section):
@@ -132,6 +229,8 @@ class Config(_Section):
     # no password, which is only allowed when [server.host] is a numeric IP address.
     master_password: str = ""
     log_level: LogLevel = "INFO"
+    monitoring: MonitoringConfig = MonitoringConfig()
+    translation: TranslationConfig = TranslationConfig()
     model_api: ModelApiConfig = ModelApiConfig()
     auth: AuthConfig = AuthConfig()
     push: PushConfig = PushConfig()

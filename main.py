@@ -7,15 +7,34 @@ from pathlib import Path
 
 import uvicorn
 
+from game_platform import observability
 from game_platform.api import create_app
 from game_platform.config import Config, load_config
 from game_platform.json_file_store import JsonFileStore
 from game_platform.saving_store import SavingStore
 from game_platform.push import PushNotifier, generate_vapid_keys, make_push_notifier
-from game_platform.senders import make_email_sender, make_sms_sender
+from game_platform.senders import (
+    make_email_sender,
+    make_sms_sender,
+    make_voice_sender,
+    make_verify_client,
+)
 from game_platform.service import GamePlatform
+from game_platform.translation import FakeTranslator, GoogleTranslator, Translator
 
 logger = logging.getLogger(__name__)
+
+
+def make_translator(config: Config) -> Translator | None:
+    """The translator the config asks for, or None when translation is off. The API key is
+    taken from GAME_PLATFORM_TRANSLATE_API_KEY if set, else from the config; with neither,
+    the Google Cloud VM's own service account signs in."""
+    if config.translation.provider == "fake":
+        return FakeTranslator()
+    if config.translation.provider != "google":
+        return None
+    key = os.environ.get("GAME_PLATFORM_TRANSLATE_API_KEY") or config.translation.google_api_key
+    return GoogleTranslator(key, timeout_seconds=config.translation.timeout_seconds)
 
 
 def warn_about_insecure_setup(config: Config, platform: GamePlatform) -> None:
@@ -25,6 +44,8 @@ def warn_about_insecure_setup(config: Config, platform: GamePlatform) -> None:
             "debug_tools is on with no master_password: anyone who can reach this "
             "server can read every user's password via /browse and /debug/all-data"
         )
+    if getattr(platform._store, "scalable", False):
+        return  # Full-database hygiene checks belong to offline maintenance.
     weak = [u.id for u in platform.all_data().users if u.password == u.id]
     if weak:
         logger.warning(
@@ -85,9 +106,31 @@ def main() -> None:
     if env_key := os.environ.get("GAME_PLATFORM_VAPID_PRIVATE_KEY"):
         push_config = push_config.model_copy(update={"vapid_private_key": env_key})
 
-    logging.basicConfig(level=config.log_level)
+    observability.setup_logging(
+        config.log_level, config.monitoring.log_format, config.monitoring.log_file
+    )
+    monitor = observability.Monitor(config.monitoring)
     store: SavingStore
-    if config.firestore.enabled:
+    if config.firestore.enabled and config.firestore.mode == "query":
+        if (
+            config.firestore.database == "(default)"
+            and not config.firestore.allow_default_database_query
+            and not os.environ.get("FIRESTORE_EMULATOR_HOST")
+        ):
+            raise ValueError(
+                "query mode in the default database requires explicit production opt-in after migration"
+            )
+        from google.cloud import firestore
+        from game_platform.query_store import QueryStore
+
+        store = QueryStore(
+            firestore.Client(
+                project=config.firestore.project_id or None,
+                database=config.firestore.database,
+            ),
+            namespace=config.firestore.namespace,
+        )
+    elif config.firestore.enabled:
         # Imported here so that servers using the data file don't load the client.
         from game_platform.firestore_store import FirestoreStore
 
@@ -115,11 +158,18 @@ def main() -> None:
     push_notifier: PushNotifier | None = None
     try:
         push_notifier = make_push_notifier(push_config, store=store)
-        platform = GamePlatform(
+        platform_class = GamePlatform
+        if getattr(store, "scalable", False):
+            from game_platform.scaling_service import ScalablePlatform
+
+            platform_class = ScalablePlatform
+        platform = platform_class(
             store=store,
             push_notifier=push_notifier,
             max_push_subscriptions_per_user=push_config.max_subscriptions_per_user,
             computer_move_delay_seconds=config.computer_move_delay_seconds,
+            translator=make_translator(config),
+            translation_daily_character_limit=config.translation.daily_character_limit,
         )
         if args.purge_example_data:
             purge_example_data(platform)
@@ -134,10 +184,23 @@ def main() -> None:
             auth_config=config.auth,
             push_config=push_config,
             sms_sender=make_sms_sender(config.auth.sms),
+            voice_sender=make_voice_sender(config.auth.sms),
+            verify_client=make_verify_client(config.auth.sms),
             email_sender=make_email_sender(config.auth.email),
             cors_allow_origins=config.server.cors_allow_origins,
             public_base_url=config.server.public_base_url,
             ai_max_fix_attempts=config.ai_max_fix_attempts,
+            monitor=monitor,
+        )
+        monitor.start()
+        observability.log_event(
+            "server_started",
+            f"serving on {config.server.host}:{config.server.port}",
+            host=config.server.host,
+            port=config.server.port,
+            store="firestore" if config.firestore.enabled else "data_file",
+            log_format=config.monitoring.log_format,
+            translation=config.translation.provider,
         )
         uvicorn.run(
             app,
@@ -145,8 +208,14 @@ def main() -> None:
             port=config.server.port,
             timeout_keep_alive=config.server.keep_alive_timeout_seconds,
             log_level=config.log_level.lower(),
+            # Use the logging set up above, so uvicorn's lines are JSON too.
+            log_config=None,
         )
     finally:
+        monitor.stop()
+        observability.log_event("server_stopping", "the server is shutting down")
+        if "platform" in locals() and hasattr(platform, "close_workers"):
+            platform.close_workers()
         # Deliver queued notifications first: subscriptions found dead while draining
         # are dropped by the final write below.
         if push_notifier is not None:

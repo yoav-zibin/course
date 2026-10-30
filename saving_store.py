@@ -9,13 +9,20 @@ can be lost. Subclasses decide where the data goes (a JSON file, Firestore).
 
 import logging
 import threading
+from collections.abc import Sequence
+
+from game_platform import observability
 
 from game_platform.models import (
     AgentConversation,
     AgentConversationEntry,
+    Experiment,
+    ExperimentAssignment,
+    ExperimentEvent,
     Game,
     GameDraft,
     GameTestSeeds,
+    Translation,
     GameVersionError,
     Invite,
     Match,
@@ -42,6 +49,7 @@ class SavingStore:
         self._writer_name = writer_name
         # Why the last save failed, or None after a successful one. For health checks.
         self.last_write_error: str | None = None
+        self._consecutive_failures = 0
         # Guards [_inner] against the writer thread taking a snapshot mid-change.
         self._lock = threading.Lock()
         # Serializes saves, so the destination always ends up with the latest snapshot.
@@ -79,8 +87,29 @@ class SavingStore:
             try:
                 self._save(snapshot)
                 self.last_write_error = None
+                if self._consecutive_failures:
+                    observability.log_event(
+                        "data_save_recovered",
+                        f"saved {self._writer_name} again after "
+                        f"{self._consecutive_failures} failures",
+                        log=logger,
+                        failures=self._consecutive_failures,
+                    )
+                    self._consecutive_failures = 0
             except Exception as error:
-                logger.exception("Failed to save (%s); will retry", self._writer_name)
+                self._consecutive_failures += 1
+                # The first failure is retried and may be a blip (minor); three in a row
+                # means changes are piling up in memory and would be lost (major).
+                observability.log_event(
+                    "data_save_failed",
+                    f"Failed to save ({self._writer_name}); will retry",
+                    level=logging.ERROR,
+                    alert="major" if self._consecutive_failures >= 3 else "minor",
+                    exc_info=True,
+                    log=logger,
+                    destination=self._writer_name,
+                    consecutive_failures=self._consecutive_failures,
+                )
                 self.last_write_error = type(error).__name__
                 with self._lock:
                     self._set_dirty()
@@ -244,6 +273,28 @@ class SavingStore:
         with self._lock:
             return self._inner.list_game_test_seeds()
 
+    def get_translations(
+        self, locale: str, source_hashes: Sequence[str]
+    ) -> dict[str, Translation]:
+        with self._lock:
+            return self._inner.get_translations(locale, source_hashes)
+
+    def put_translations(self, translations: Sequence[Translation]) -> None:
+        if not translations:
+            return
+        with self._lock:
+            self._inner.put_translations(translations)
+            self._set_dirty()
+
+    def delete_translation(self, locale: str, source_hash: str) -> None:
+        with self._lock:
+            self._inner.delete_translation(locale, source_hash)
+            self._set_dirty()
+
+    def list_translations(self, locale: str | None = None) -> list[Translation]:
+        with self._lock:
+            return self._inner.list_translations(locale)
+
     def put_push_subscription(self, subscription: WebPushSubscription) -> None:
         with self._lock:
             self._inner.put_push_subscription(subscription)
@@ -291,4 +342,53 @@ class SavingStore:
     def delete_invite(self, token: str) -> None:
         with self._lock:
             self._inner.delete_invite(token)
+            self._set_dirty()
+
+    def put_experiment(self, experiment: Experiment) -> None:
+        with self._lock:
+            self._inner.put_experiment(experiment)
+            self._set_dirty()
+
+    def list_experiments(self) -> list[Experiment]:
+        with self._lock:
+            return self._inner.list_experiments()
+
+    def put_experiment_assignment(self, assignment: ExperimentAssignment) -> None:
+        with self._lock:
+            self._inner.put_experiment_assignment(assignment)
+            self._set_dirty()
+
+    def get_experiment_assignment(
+        self, *, user_id: str, experiment_id: str
+    ) -> ExperimentAssignment | None:
+        with self._lock:
+            return self._inner.get_experiment_assignment(
+                user_id=user_id, experiment_id=experiment_id
+            )
+
+    def list_experiment_assignments(self) -> list[ExperimentAssignment]:
+        with self._lock:
+            return self._inner.list_experiment_assignments()
+
+    def delete_experiment_assignment(
+        self, *, user_id: str, experiment_id: str
+    ) -> None:
+        with self._lock:
+            self._inner.delete_experiment_assignment(
+                user_id=user_id, experiment_id=experiment_id
+            )
+            self._set_dirty()
+
+    def put_experiment_event(self, event: ExperimentEvent) -> None:
+        with self._lock:
+            self._inner.put_experiment_event(event)
+            self._set_dirty()
+
+    def list_experiment_events(self) -> list[ExperimentEvent]:
+        with self._lock:
+            return self._inner.list_experiment_events()
+
+    def delete_experiment_event(self, event_id: str) -> None:
+        with self._lock:
+            self._inner.delete_experiment_event(event_id)
             self._set_dirty()
