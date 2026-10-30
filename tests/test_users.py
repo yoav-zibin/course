@@ -1,7 +1,9 @@
 import json
+import threading
 from pathlib import Path
 
 from game_platform.json_file_store import JsonFileStore
+from game_platform.store import InMemoryStore
 from game_platform.tests.helpers import Api, error, validation_errors
 
 UNAUTHORIZED = (401, "missing or invalid X-User-Id / X-User-Password headers")
@@ -141,3 +143,34 @@ def test_passwords_are_saved_and_only_shown_by_the_debug_tools(
     )
     restarted.close()
     assert response.status_code == 200
+
+
+class _CountingLock:
+    """A platform lock that counts how often it is taken. On Firestore taking it opens a
+    transaction (round trips, and a lock on each document read)."""
+
+    def __init__(self) -> None:
+        self.entered = 0
+        self._inner = threading.RLock()
+
+    def __enter__(self):
+        self.entered += 1
+        return self._inner.__enter__()
+
+    def __exit__(self, *args):
+        return self._inner.__exit__(*args)
+
+
+def test_reading_a_user_and_checking_a_password_take_no_lock() -> None:
+    store = InMemoryStore()
+    store.operation_lock = _CountingLock()
+    api = Api(store=store)
+    user = api.ok("POST", "/users", json={"display_name": "alice"})
+    headers = {"X-User-Id": user["id"], "X-User-Password": user["password"]}
+    taken = store.operation_lock.entered
+    for _ in range(3):
+        response = api.client.get(f"/users/{user['id']}", headers=headers)
+        assert response.status_code == 200
+        assert response.json()["referral_code"]  # authenticated, so it is the caller's own
+    assert api.client.get(f"/users/{user['id']}").status_code == 200
+    assert store.operation_lock.entered == taken

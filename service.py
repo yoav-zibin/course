@@ -1085,11 +1085,13 @@ class GamePlatform:
         return locale
 
     def get_user(self, user_id: str) -> User:
-        with self._lock:
-            user = self._store.get_user(user_id)
-            if user is None:
-                raise NotFoundError("user not found")
-            return self._resolve_replaced(user)
+        # Reads only, so no lock: on Firestore the lock is a transaction (a round trip to
+        # begin it, one to roll it back, and a lock on every document read), which is
+        # costly for the most frequent call there is.
+        user = self._store.get_user(user_id)
+        if user is None:
+            raise NotFoundError("user not found")
+        return self._resolve_replaced(user)
 
     def authenticate(self, *, user_id: str | None, password: str | None) -> User:
         """Checks the caller's credentials. The error doesn't say which part was wrong,
@@ -1097,18 +1099,19 @@ class GamePlatform:
 
         A replaced user still authenticates with its old credentials; the
         returned user is the surviving account it was merged into.
+
+        Reads only, so no lock (see [get_user]); nearly every request calls this.
         """
-        with self._lock:
-            user = None if user_id is None else self._store.get_user(user_id)
-            if (
-                user is None
-                or password is None
-                or not hmac.compare_digest(password.encode(), user.password.encode())
-            ):
-                raise UnauthorizedError(
-                    "missing or invalid X-User-Id / X-User-Password headers"
-                )
-            return self._resolve_replaced(user)
+        user = None if user_id is None else self._store.get_user(user_id)
+        if (
+            user is None
+            or password is None
+            or not hmac.compare_digest(password.encode(), user.password.encode())
+        ):
+            raise UnauthorizedError(
+                "missing or invalid X-User-Id / X-User-Password headers"
+            )
+        return self._resolve_replaced(user)
 
     # Third-party login and account merging
 
@@ -1137,7 +1140,7 @@ class GamePlatform:
         Merges always flatten, so a replaced user points directly at the final
         survivor: this is a single lookup. The extra hop below is purely
         defensive (it should never trigger) so a corrupt record can never make
-        this return a replaced user. The caller holds the lock.
+        this return a replaced user. Reads only: callers may or may not hold the lock.
         """
         if user.replaced_by_user_id is None:
             return user
