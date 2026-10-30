@@ -10,15 +10,60 @@ Use [PR #32](https://github.com/yoav-zibin/course/pull/32), branch
 **ee2890c**, including Marcelle's live fake-user generator. This note changes
 only documentation on your branch; it does not install or deploy the backend.
 
-GitHub CI on **c317412** is green: backend, unit-tests, Firestore emulator
+GitHub CI on **47f6c07** is green: backend, unit-tests, Firestore emulator
 and desktop/mobile UI tests all passed. The production deploy job correctly
 skipped this PR run. GitHub reports the PR conflict-free. The PR remains an
 opt-in draft test release, with the limits below.
 
-The subsequent **47f6c07** restores the normal Portal as the isolated site's
-entry. Its five targeted emulator tests and public route/browser checks passed;
-GitHub CI was still running when this note was updated. Normal production
+The **47f6c07** change restores the normal Portal as the isolated site's
+entry. Its five targeted emulator tests and public route/browser checks passed.
+Normal production
 `main.py` never imported the demo wrapper, so its homepage is unchanged.
+
+## Action list for Ian and mandate status
+
+The user wants the ordinary website with synthetic data visible through the
+existing admin pages. Do not make the fixture presentation the homepage or add
+a separate mandatory demo flow. The root and `/demo` now open the usual Portal;
+use `/admin`, `/stats`, `/invites` and `/browse` to inspect the fake month.
+
+For your Portal/Builder scope:
+
+1. Integrate/reuse PR #32's capability-negotiating clients, preserving your newer
+   UI work and main's experiments/campaign headers. Do not independently recreate
+   the storage API. See the endpoint contract below.
+2. Verify catalog/search, owned games, drafts, saved games, open/current matches
+   and history use bounded pages, follow cursors, and retain snapshot-mode
+   fallback. Check desktop/mobile and old cached-client behavior. Existing
+   small-fixture checks passed; larger emulator datasets still need validation.
+3. Your pre-existing port-8000 configuration was last observed in snapshot mode.
+   Adopting query mode there is a separate integration step. The working query
+   demonstration is the protected port-8132 service; do not mistake the two.
+   Coordinate any service switch with Chad; leave production/default DB alone.
+4. Exercise normal Portal/Builder against the shared fake-month namespace and
+   record any client-specific failures. Use the existing VM and database. Do not
+   launch cloud load generation or raise/reset the operation allowance.
+
+**Completion assessment:** the user-requested smaller live fake-month demo is
+delivered: existing second VM and named Firestore database, query backend,
+synthetic month, published dashboards/backoffice and normal entry pages.
+The original **10M users / 1B matches / 100K games** scaling mandate is **not
+fully demonstrated**. The user explicitly accepted a smaller dataset for this
+live demonstration; that does not establish target capacity.
+
+Remaining backend/release work belongs with Chad/shared integration, not all
+with Ian: live account-merge/deletion job UX (maintenance jobs already exist),
+remaining bounded legacy representations, per-game analytics/reconciliation,
+and migration/recovery/rollback rehearsal before production cutover. Larger
+emulator and sustained multi-process tests still need acceptance criteria and
+evidence. Small two-process/restart correctness rehearsals already passed.
+PR #32 remains draft/unmerged; the live test deployment is not a production
+rollout or instructor acceptance. Do not label the entire mandate complete.
+
+The extra cloud/test authorization remains **less than $1**, excluding normal
+VM operation. Prefer local emulator tests for further volume checks; any new
+paid scale run needs explicit authorization. Preserve the current ledger and
+its November 2 00:32 UTC expiry; do not extend it automatically.
 
 ## Separate live demo deployed after this handoff
 
@@ -27,7 +72,7 @@ https://buildplay-demo.34.26.223.67.sslip.io/ . Both `/` and the old `/demo` pat
 open the usual Portal. Builder and the existing admin pages stay normal. The
 optional fixture presentation is now only at `/admin/demo-fixtures`. It runs
 `sc5386-live-demo.service` on loopback **8132**, from the private csccs checkout.
-Your original `game-platform-scaling` service on 8000 and IP virtual host are
+The pre-existing `game-platform-scaling` service on 8000 and IP virtual host are
 unchanged and active. The primary VM, buildplay.fun routing and default database
 were not modified. PR #32 is still unmerged/draft; this is a separate test release.
 
@@ -124,15 +169,16 @@ a two-minute browser rehearsal recorded 4 accounts, 6 created matches, 23 moves,
 3 departures, 2 speed matches and 1 referral signup with zero errors. Its generic
 click adapter gave up on 3 turns and left; that limitation is recorded.
 
-## Landing-page and address update
+## Optional fixture page and address history
 
-The latest backend head is **c317412**. The user requested a simpler demo
+The earlier **c317412** change added a simpler demo
 sign-in and a nicer landing page. The free BuildPlay Demo hostname above is live;
 the old sc5386 hostname redirects there, and the TLS certificate covers both.
 No domain was purchased, no VM was created, and production/Ian's service were
 not changed. Credentials remain outside Git.
 
-The source is `demo-site/index.html`: responsive BuildPlay branding, actual
+The source is `demo-site/index.html`, now optional at `/admin/demo-fixtures`:
+responsive BuildPlay branding, actual
 September match bars, dataset totals and direct links to existing features.
 `/demo/overview` reads an existing saved snapshot from disk, so the landing page
 does not repeatedly scan Firestore. Portal/Builder implementations were not
@@ -205,7 +251,8 @@ multi-instance load remain release gates. Query storage uses private Firestore
 transaction methods; upgrades require emulator and cloud verification.
 
 The **10M users / 1B matches / 100K games** figures remain an unproved target.
-The user has been asked for a cloud spending cap before larger paid generation.
+The user authorized only a small live demo under $1 in additional database/test
+usage, not a paid target-scale generation run.
 Do not represent this small functional workload as target-scale proof or merge
 production configuration changes on that assumption.
 
