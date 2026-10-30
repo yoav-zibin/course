@@ -404,6 +404,9 @@ class GamePlatform:
         # requests on a thread pool, so serialize them. Reentrant, because verifying a
         # code and merging accounts compose smaller locked operations.
         self._lock = getattr(self._store, "operation_lock", None) or threading.RLock()
+        # User id -> (when it was read, the language they saved), so the language of a
+        # response doesn't cost a database read on every request.
+        self._saved_locales: dict[str, tuple[float, str]] = {}
         # Referral code -> the user id it was given to (possibly merged away since,
         # which resolves to the survivor like any old id).
         self._user_ids_by_code: dict[str, str] = {}
@@ -1052,16 +1055,36 @@ class GamePlatform:
                 return user
             user = replace(user, updated_at=self._clock(), **changes)
             self._store.put_user(user)
+            self._saved_locales.pop(user.id, None)
             return user
+
+    SAVED_LOCALE_SECONDS = 60.0
+    _SAVED_LOCALES_MAX = 10_000
+
+    def cached_saved_locale(self, user_id: str | None) -> str | None:
+        """What [saved_locale] would answer, from memory only (no database read), or None
+        when it isn't remembered or is older than a minute. Safe to call from the event
+        loop; [saved_locale] is not."""
+        if not user_id:
+            return ""
+        entry = self._saved_locales.get(user_id)
+        if entry is not None and time.monotonic() - entry[0] < self.SAVED_LOCALE_SECONDS:
+            return entry[1]
+        return None
 
     def saved_locale(self, user_id: str | None) -> str:
         """The language [user_id] chose, or empty if they chose none or don't exist.
-        Not authenticated: it only picks the language of a response."""
+        Not authenticated: it only picks the language of a response. One plain read, no
+        lock or transaction (a stale answer for a minute is harmless), and it blocks on
+        the database, so call it off the event loop."""
         if not user_id:
             return ""
-        with self._lock:
-            user = self._store.get_user(user_id)
-            return user.locale if user is not None else ""
+        user = self._store.get_user(user_id)
+        locale = user.locale if user is not None else ""
+        if len(self._saved_locales) >= self._SAVED_LOCALES_MAX:
+            self._saved_locales.clear()
+        self._saved_locales[user_id] = (time.monotonic(), locale)
+        return locale
 
     def get_user(self, user_id: str) -> User:
         with self._lock:

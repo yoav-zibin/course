@@ -1834,9 +1834,14 @@ async def _choose_locale(
     saved on the user named by X-User-Id, else Accept-Language, else English. The user
     isn't authenticated here (it only picks a language)."""
     platform = _get_platform(request)
+    user_id = request.headers.get("x-user-id")
+    saved = platform.cached_saved_locale(user_id)
+    if saved is None:
+        # A database read: on the event loop it would stall every request behind it.
+        saved = await run_in_threadpool(platform.saved_locale, user_id)
     request.state.locale = i18n.negotiate(
         explicit=request.query_params.get("lang"),
-        saved=platform.saved_locale(request.headers.get("x-user-id")),
+        saved=saved,
         accept_language=request.headers.get("accept-language"),
     )
     response = await call_next(request)
