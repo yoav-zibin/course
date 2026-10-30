@@ -6,11 +6,11 @@ This note is the handoff; Chad has not sent a separate message or email.
 ## Current integration point
 
 Use [PR #32](https://github.com/yoav-zibin/course/pull/32), branch
-`sc5386/backend-scaling`, head **0b5b199**. It integrates main through
+`sc5386/backend-scaling`, head **c317412**. It integrates main through
 **ee2890c**, including Marcelle's live fake-user generator. This note changes
 only documentation on your branch; it does not install or deploy the backend.
 
-GitHub CI on **0b5b199** is green: backend, unit-tests, Firestore emulator
+GitHub CI on **c317412** is green: backend, unit-tests, Firestore emulator
 and desktop/mobile UI tests all passed. The production deploy job correctly
 skipped this PR run. GitHub reports the PR conflict-free. The PR remains an
 opt-in draft test release, with the limits below.
@@ -18,7 +18,7 @@ opt-in draft test release, with the limits below.
 ## Separate live demo deployed after this handoff
 
 Chad deployed a **separate protected hostname** on the existing scaling VM:
-https://sc5386.34.26.223.67.sslip.io/demo . It runs
+https://buildplay-demo.34.26.223.67.sslip.io/demo . It runs
 `sc5386-live-demo.service` on loopback **8132**, from the private csccs checkout.
 Your original `game-platform-scaling` service on 8000 and IP virtual host are
 unchanged and active. The primary VM, buildplay.fun routing and default database
@@ -116,6 +116,23 @@ It is a deterministic backend fixture, not a replacement for Marcelle's
 a two-minute browser rehearsal recorded 4 accounts, 6 created matches, 23 moves,
 3 departures, 2 speed matches and 1 referral signup with zero errors. Its generic
 click adapter gave up on 3 turns and left; that limitation is recorded.
+
+## Landing-page and address update
+
+The latest backend head is **c317412**. The user requested a simpler demo
+sign-in and a nicer landing page. The free BuildPlay Demo hostname above is live;
+the old sc5386 hostname redirects there, and the TLS certificate covers both.
+No domain was purchased, no VM was created, and production/Ian's service were
+not changed. Credentials remain outside Git.
+
+The source is `demo-site/index.html`: responsive BuildPlay branding, actual
+September match bars, dataset totals and direct links to existing features.
+`/demo/overview` reads an existing saved snapshot from disk, so the landing page
+does not repeatedly scan Firestore. Portal/Builder implementations were not
+redesigned in this change. The database operation allowance, expiry and ledger
+were preserved. Desktop/mobile public checks passed chart rendering, navigation,
+sign-in and the controls-menu layout with no page JavaScript errors. The five
+budget/emulator tests also passed. CI for c317412 is green: backend, unit, emulator and UI checks passed; production deployment correctly skipped.
 
 ## Benchmark and deployment state
 
