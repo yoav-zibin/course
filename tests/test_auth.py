@@ -128,10 +128,10 @@ def test_google_login_saves_profile_details(monkeypatch: pytest.MonkeyPatch) -> 
     response = api.ok("POST", "/auth/google", json={"id_token": "token"})
     assert response["display_name"] == "Gina"
     assert response["email"] == "gina@example.com"
-    assert response["picture_url"] == "https://pic/gina"
+    assert response["picture_url"].startswith("/static/avatars/users/")
     # The public user profile exposes the picture but not the email.
     profile = api.ok("GET", f"/users/{response['user_id']}")
-    assert profile["picture_url"] == "https://pic/gina"
+    assert profile["picture_url"] == response["picture_url"]
     assert "email" not in profile
 
 
@@ -152,7 +152,7 @@ def test_google_login_refreshes_changed_profile_details(
     )
     second = api.ok("POST", "/auth/google", json={"id_token": "token"})
     assert second["user_id"] == first["user_id"]
-    assert second["picture_url"] == "https://pic/new"
+    assert second["picture_url"] == first["picture_url"]
 
 
 def test_google_login_needs_configuration() -> None:

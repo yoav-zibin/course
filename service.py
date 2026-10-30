@@ -25,7 +25,7 @@ from pydantic import JsonValue
 import logging
 
 from game_platform import game_text, i18n, observability
-from game_platform.avatars import random_user_avatar, computer_avatar
+from game_platform.avatars import user_avatar, USER_AVATARS, computer_avatar
 from game_platform.models import (
     AgentConversation,
     AgentConversationEntry,
@@ -309,16 +309,14 @@ def _clean_display_name(name: str) -> str:
 def _refresh_profile_from_provider(
     user: User, *, display_name: str, email: str, picture_url: str
 ) -> User:
-    """Returns [user] with the provider's latest profile applied, or [user]
-    unchanged when there is nothing new. Empty provider values never overwrite
-    stored ones."""
+    """Refreshes provider name/email while retaining the account's animal avatar."""
     updates: dict = {}
     if display_name and display_name != user.display_name:
         updates["display_name"] = display_name
     if email and email != user.email:
         updates["email"] = email
-    if picture_url and picture_url != user.picture_url:
-        updates["picture_url"] = picture_url
+    if user.picture_url not in USER_AVATARS:
+        updates["picture_url"] = user_avatar(user.picture_url)
     return replace(user, **updates) if updates else user
 
 
@@ -1013,7 +1011,7 @@ class GamePlatform:
                 referral_code=self._take_referral_code(user_id),
                 display_name=display_name,
                 email=email,
-                picture_url=picture_url.strip() or random_user_avatar(),
+                picture_url=user_avatar(picture_url.strip()),
                 locale=locale,
                 password=self._new_password(),
                 linked_accounts=linked_accounts,
@@ -1163,11 +1161,11 @@ class GamePlatform:
                 if user.referral_code:
                     self._user_ids_by_code[user.referral_code] = user.id
             for user in users:
-                if not user.referral_code or not user.picture_url:
+                if not user.referral_code or user.picture_url not in USER_AVATARS:
                     self._store.put_user(replace(
                         user,
                         referral_code=user.referral_code or self._take_referral_code(user.id),
-                        picture_url=user.picture_url or random_user_avatar(),
+                        picture_url=user_avatar(user.picture_url),
                     ))
 
     def _take_referral_code(self, user_id: str) -> str:
@@ -1358,8 +1356,7 @@ class GamePlatform:
         credential is linked to that account instead; if it already belongs to a
         different user, the two accounts merge, and the one with the stronger
         login method survives (google > phone > email > guest). The provider's
-        profile (name, email, picture) is saved on the user and refreshed on each
-        login. [invited_by_user_id] is recorded only when this creates a new user.
+        name and email are refreshed on login; the assigned animal avatar persists. [invited_by_user_id] is recorded only when this creates a new user.
         Returns (user, merged_from_user_id).
         """
         with self._lock:
