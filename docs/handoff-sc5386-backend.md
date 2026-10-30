@@ -6,14 +6,59 @@ This note is the handoff; Chad has not sent a separate message or email.
 ## Current integration point
 
 Use [PR #32](https://github.com/yoav-zibin/course/pull/32), branch
-`sc5386/backend-scaling`, head **e58c264**. It integrates main through
+`sc5386/backend-scaling`, head **0b5b199**. It integrates main through
 **ee2890c**, including Marcelle's live fake-user generator. This note changes
 only documentation on your branch; it does not install or deploy the backend.
 
-GitHub CI on **e58c264** is green: backend, unit-tests, Firestore emulator
+GitHub CI on **0b5b199** is green: backend, unit-tests, Firestore emulator
 and desktop/mobile UI tests all passed. The production deploy job correctly
 skipped this PR run. GitHub reports the PR conflict-free. The PR remains an
 opt-in draft test release, with the limits below.
+
+## Separate live demo deployed after this handoff
+
+Chad deployed a **separate protected hostname** on the existing scaling VM:
+https://sc5386.34.26.223.67.sslip.io/demo . It runs
+`sc5386-live-demo.service` on loopback **8132**, from the private csccs checkout.
+Your original `game-platform-scaling` service on 8000 and IP virtual host are
+unchanged and active. The primary VM, buildplay.fun routing and default database
+were not modified. PR #32 is still unmerged/draft; this is a separate test release.
+
+The live namespace contains a prepared September dataset: **233 synthetic users,
+133 games, 1,257 matches, 2,949 moves, 60 drafts and 60 library entries**. Public
+browser checks may add a few test matches/moves afterward. New playable catalog
+entries are unchanged shipped game copies; old counter capacity fixtures remain
+available to the backoffice but are unpublished from the playable catalog.
+Daily, A/B and referral snapshots were rebuilt before publishing.
+
+The user explicitly approved **less than $1 additional database/test usage**,
+excluding ordinary VM cost. Do not run a load generator or bulk seed against
+this site, raise its allowance, or change its ledger. `scaling_live_budget.py`
+reserves SDK RPC units before dispatch in a persistent SQLite allowance shared
+by preparation and the live server. Limits are 250,000 conservative operation
+units, 32 MiB written payload, 128 MiB served response bodies, and a three-day
+period ending 2026-11-02 00:32 UTC. The deliberately conservative operation
+reservation is $0.50, with margin under $1 for small storage/transfer usage.
+This is **not** a project-wide Cloud Billing cap or a verified invoice.
+
+The wrapper blocks AI/refactor/external-auth actions, uses its own HTTPS/Basic
+sign-in, rate limits requests, caps CPU/RAM, and wakes workers for jobs rather
+than constantly polling an idle database. Scoped GET caching reduces repeated
+unchanged reads; mutations and worker passes invalidate it, and live match
+detail stays uncached for fresh clocks. This is a single demo process, not a
+general distributed cache. Credentials/config/fixture accounts/ledger stay out
+of Git; get access details from Chad rather than publishing them in this note.
+
+Validation for the wrapper: full local backend **553 passed**; five dedicated
+budget/real-SDK/emulator/worker/cache tests passed. Public HTTPS checks passed
+Portal/Builder pagination, stats/referrals/backoffice, saved-library pages and
+history, with zero page JavaScript errors. Actual UI human moves, server computer
+replies and leaving the match also passed. Final CI for 0b5b199 is green: backend, unit, emulator and UI checks all passed; production deployment correctly skipped.
+See PR docs/scaling-live-demo.md and docs/scaling-live-verification.json.
+
+Rollback stops only sc5386-live-demo and disables only its nginx virtual host;
+it does not touch your original service or delete data. Preserve the allowance
+ledger across restarts. The site returns 503 when its allowance or period ends.
 
 ## What Chad completed
 
