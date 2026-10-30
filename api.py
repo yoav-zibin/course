@@ -26,6 +26,7 @@ from starlette.datastructures import State
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import JsonValue
 
+from game_platform.invariants import InvariantRequest, InvariantReport, check_invariants
 from game_platform import i18n, observability
 from game_platform.models import Game, GameRules, Match, MatchStatus
 from game_platform.schemas import (
@@ -201,6 +202,17 @@ def _match_out(
 
 
 # Users
+
+
+@router.post("/validation/invariants", tags=["validation"])
+def validate_invariants(body: InvariantRequest) -> InvariantReport:
+    """Validate a supplied closed dataset without accessing or modifying server data.
+
+    Use raw snapshot-shaped records (seats, nested rules, and full move history).
+    Credentials, code, and game state are not required. Missing references are
+    errors; incomplete legacy first-turn history is reported as a warning.
+    """
+    return check_invariants(body)
 
 
 @router.post("/users", status_code=HTTPStatus.CREATED)
