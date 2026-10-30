@@ -6,7 +6,7 @@ This note is the handoff; Chad has not sent a separate message or email.
 ## Current integration point
 
 Use [PR #32](https://github.com/yoav-zibin/course/pull/32), branch
-`sc5386/backend-scaling`, head **c317412**. It integrates main through
+`sc5386/backend-scaling`, head **47f6c07**. It integrates main through
 **ee2890c**, including Marcelle's live fake-user generator. This note changes
 only documentation on your branch; it does not install or deploy the backend.
 
@@ -15,10 +15,17 @@ and desktop/mobile UI tests all passed. The production deploy job correctly
 skipped this PR run. GitHub reports the PR conflict-free. The PR remains an
 opt-in draft test release, with the limits below.
 
+The subsequent **47f6c07** restores the normal Portal as the isolated site's
+entry. Its five targeted emulator tests and public route/browser checks passed;
+GitHub CI was still running when this note was updated. Normal production
+`main.py` never imported the demo wrapper, so its homepage is unchanged.
+
 ## Separate live demo deployed after this handoff
 
 Chad deployed a **separate protected hostname** on the existing scaling VM:
-https://buildplay-demo.34.26.223.67.sslip.io/demo . It runs
+https://buildplay-demo.34.26.223.67.sslip.io/ . Both `/` and the old `/demo` path
+open the usual Portal. Builder and the existing admin pages stay normal. The
+optional fixture presentation is now only at `/admin/demo-fixtures`. It runs
 `sc5386-live-demo.service` on loopback **8132**, from the private csccs checkout.
 Your original `game-platform-scaling` service on 8000 and IP virtual host are
 unchanged and active. The primary VM, buildplay.fun routing and default database
