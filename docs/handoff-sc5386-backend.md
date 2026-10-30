@@ -5,20 +5,34 @@ This note is the handoff; Chad has not sent a separate message or email.
 
 ## Current integration point
 
-Use [PR #32](https://github.com/yoav-zibin/course/pull/32), branch
-`sc5386/backend-scaling`, head **47f6c07**. It integrates main through
-**ee2890c**, including Marcelle's live fake-user generator. This note changes
-only documentation on your branch; it does not install or deploy the backend.
+[PR #32](https://github.com/yoav-zibin/course/pull/32) is **merged into main** as
+**3a4bda3** and the normal CI production deployment succeeded. Its final reviewed
+head **65891ef** integrated main through **0091652**, preserving the recent
+catalog/practice/replay UX and experiment deletion panel. HTML conflicts were
+resolved and Portal/stats asset versions bumped. Backend, unit, emulator and
+full desktop/mobile CI checks passed on both the final PR head and merged main.
+Local checks passed: **556 backend/emulator**, **157 web**, **18 affected browser**.
 
-GitHub CI on **47f6c07** is green: backend, unit-tests, Firestore emulator
-and desktop/mobile UI tests all passed. The production deploy job correctly
-skipped this PR run. GitHub reports the PR conflict-free. The PR remains an
-opt-in draft test release, with the limits below.
+Production `buildplay.fun` was verified running **3a4bda3** with its external
+configuration byte-for-byte unchanged. It still uses `game_platform.main`,
+**snapshot mode / (default)** and no namespace; `/storage/capabilities` returns
+`pagination: false`. All **131 users, 167 game versions and 211 matches** from the
+protected pre-merge baseline remained, with **zero new users**. `/demo`, its
+account/budget helpers and `/admin/demo-fixtures` are absent on production.
+Public Portal/Builder checks found no page errors and confirmed the combined
+assets/recent UX were served. The protected config/data baseline is on the
+primary VM at `/opt/game-platform/backups/backend-merge-20261030T030035Z`.
 
-The **47f6c07** change restores the normal Portal as the isolated site's
-entry. Its five targeted emulator tests and public route/browser checks passed.
-Normal production
-`main.py` never imported the demo wrapper, so its homepage is unchanged.
+The isolated port-8132 test service was also updated to **3a4bda3**, preserving
+its config, dataset, persistent allowance, limits and expiry. Portal and the
+merged statistics UI passed public browser checks. Its database remains
+**game-platform-scaling**, namespace **scaling_v1**, with query mode enabled.
+Code merging does not migrate data or enable production query mode. Isolation
+comes from database/namespace/config, not merely separate VMs. Normal startup
+never imports the isolated wrapper or runs synthetic seeding.
+
+This commit changes only documentation on your branch. Pull/merge current main
+to obtain the implementation; this note does not update your branch's code.
 
 ## Action list for Ian and mandate status
 
@@ -29,7 +43,8 @@ use `/admin`, `/stats`, `/invites` and `/browse` to inspect the fake month.
 
 For your Portal/Builder scope:
 
-1. Integrate/reuse PR #32's capability-negotiating clients, preserving your newer
+1. Merge/rebase current main (including **3a4bda3**) into your branch to reuse
+   PR #32's capability-negotiating clients, preserving your newer
    UI work and main's experiments/campaign headers. Do not independently recreate
    the storage API. See the endpoint contract below.
 2. Verify catalog/search, owned games, drafts, saved games, open/current matches
@@ -57,8 +72,9 @@ remaining bounded legacy representations, per-game analytics/reconciliation,
 and migration/recovery/rollback rehearsal before production cutover. Larger
 emulator and sustained multi-process tests still need acceptance criteria and
 evidence. Small two-process/restart correctness rehearsals already passed.
-PR #32 remains draft/unmerged; the live test deployment is not a production
-rollout or instructor acceptance. Do not label the entire mandate complete.
+PR #32's code is merged/deployed with production defaults preserved. Production
+query-mode activation and instructor acceptance remain separate milestones.
+Do not label the entire mandate complete.
 
 The extra cloud/test authorization remains **less than $1**, excluding normal
 VM operation. Prefer local emulator tests for further volume checks; any new
@@ -73,8 +89,9 @@ open the usual Portal. Builder and the existing admin pages stay normal. The
 optional fixture presentation is now only at `/admin/demo-fixtures`. It runs
 `sc5386-live-demo.service` on loopback **8132**, from the private csccs checkout.
 The pre-existing `game-platform-scaling` service on 8000 and IP virtual host are
-unchanged and active. The primary VM, buildplay.fun routing and default database
-were not modified. PR #32 is still unmerged/draft; this is a separate test release.
+unchanged and active. The primary VM received the merged code through normal CI;
+its routing, runtime config and database selection were preserved. Synthetic
+data remains confined to the separate test deployment.
 
 The live namespace contains a prepared September dataset: **233 synthetic users,
 133 games, 1,257 matches, 2,949 moves, 60 drafts and 60 library entries**. Public
@@ -242,6 +259,11 @@ Backend with emulator: **548 passed**. Final query/index tests: **39 passed**.
 Web unit suite: **152 passed**. Full desktop/mobile browser suite with two
 workers: **76 passed, 1 skipped**. A preceding default-concurrency run timed out
 once on pagination; ten repetitions and the full bounded rerun then passed.
+
+These remaining gates apply to production query-mode activation. The opt-in
+implementation is already merged; do not confuse that with migrating production.
+The recent experiment-variant delete action retains a 100-record legacy limit
+in query mode; an oversized delete returns 409 and rolls back all writes.
 
 Implemented account jobs require a maintenance window; live sign-in merge and
 job-starting UI flows remain a client/integration task. Invite acceptance and
