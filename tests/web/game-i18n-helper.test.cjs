@@ -56,3 +56,11 @@ test('going back to English restores the original texts',()=>{
   game.apply({strings:{}}); // an English message carries no strings
   assert.equal(game.t('your_turn'),'Your turn');
 });
+
+test('a message without translations (the viewer went back to English) shows the original texts again',()=>{
+  const game=page(TABLE);
+  game.apply({locale:'es',direction:'ltr',strings:{wins:'¡{name} gana!'}});
+  assert.equal(game.t('wins',{name:'Ana'}),'¡Ana gana!');
+  game.apply({locale:'en',direction:'ltr'});
+  assert.equal(game.t('wins',{name:'Ana'}),'Ana wins!');
+});
