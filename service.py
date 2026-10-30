@@ -1499,6 +1499,12 @@ class GamePlatform:
                         for move in updated.moves
                     ),
                 )
+            if any(timeout.user_id == from_user_id for timeout in updated.timeouts):
+                updated = replace(updated, timeouts=tuple(
+                    replace(timeout, user_id=into_user_id)
+                    if timeout.user_id == from_user_id else timeout
+                    for timeout in updated.timeouts
+                ))
             if updated is not match:
                 self._save(updated)
         for subscription in self._store.list_push_subscriptions(user_id=from_user_id):
@@ -1544,6 +1550,12 @@ class GamePlatform:
         into = replace(
             into,
             linked_accounts=(*into.linked_accounts, *moved),
+            token_balance=into.token_balance + source.token_balance,
+            # Neither account may claim today's grant a second time after merging.
+            last_token_grant_day=max(
+                (day for day in (into.last_token_grant_day, source.last_token_grant_day) if day),
+                default=None,
+            ),
             replaced_user_ids=replaced_ids,
             saved_game_ids=_dedupe((*into.saved_game_ids, *source.saved_game_ids)),
             invited_by_user_id=invited_by,
@@ -1563,6 +1575,7 @@ class GamePlatform:
                 old = replace(
                     old,
                     replaced_by_user_id=into_user_id,
+                    token_balance=0,
                     linked_accounts=(),
                     replaced_user_ids=(),
                     updated_at=self._clock(),
