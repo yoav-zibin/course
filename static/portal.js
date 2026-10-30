@@ -713,6 +713,9 @@ function updateMatchSetup() {
   const maximum = game ? Math.max(...game.allowed_player_counts) - 1 : 0;
   $("create").disabled = !me() || !game || state.creating || !navigator.onLine;
   $("practice").disabled = !me() || !game;
+  const supportsComputerMatch=Boolean(game?.server_code && game.allowed_player_counts.some(count=>count>1));
+  $("computer-match-option").hidden=!supportsComputerMatch;
+  $("play-computers").disabled=!me() || !game || state.creating || !navigator.onLine;
   const solo = game?.allowed_player_counts.length === 1 && maximum === 0;
   $("speed-choice").hidden = solo;
   updateStakePreview();
@@ -1374,6 +1377,50 @@ async function createMatch() {
   }
 }
 
+async function playWithAllComputers() {
+  if (state.creating) return;
+  const user=me();
+  const game=state.games.find(item=>item.id===(state.detailGameId || $("new-game").value));
+  if (!user) {
+    $("create-message").textContent="Log in first.";
+    $("create-message").className="message error";
+    return;
+  }
+  if (!game?.server_code) {
+    $("create-message").textContent="Play with computers is available for server-side games.";
+    $("create-message").className="message error";
+    return;
+  }
+  const playerCount=Math.max(...game.allowed_player_counts.filter(count=>count>1));
+  if (!Number.isFinite(playerCount)) {
+    $("create-message").textContent="This game needs at least two player seats.";
+    $("create-message").className="message error";
+    return;
+  }
+  let match;
+  state.creating=true;
+  $("play-computers").disabled=true;
+  $("play-computers").textContent="Starting match…";
+  $("create-message").textContent=`Starting a free match against ${playerCount-1} computer${playerCount===2?"":"s"}…`;
+  $("create-message").className="message";
+  try {
+    match=await portalRequest("POST","/matches",{user,body:{game_id:game.id,num_computer_opponents:playerCount-1,bet_per_player:0}});
+    match=await portalRequest("POST",`/matches/${match.id}/start`,{user,body:{first_turn_player_indices:[0]}});
+    $("create-message").textContent="";
+    selectMatch(match.id);
+  } catch(error) {
+    $("create-message").textContent=match
+      ? `Match created, but couldn't start automatically: ${error.message}. Press Start to retry.`
+      : error.message;
+    $("create-message").className="message error";
+    if (match) selectMatch(match.id);
+  } finally {
+    state.creating=false;
+    $("play-computers").textContent="Play with computers ↗";
+    renderLists();
+  }
+}
+
 function selectFromHash() {
   const id = new URLSearchParams(location.hash.slice(1)).get("match");
   if (id && id !== state.selectedId) selectMatch(id);
@@ -1422,6 +1469,7 @@ async function main() {
     setupNotifications();
   });
   $("practice").addEventListener("click", practice);
+  $("play-computers").addEventListener("click", playWithAllComputers);
   $("retry-sync").addEventListener("click", () => {
     offline.retryAfter = 0;
     state.lastSent = null;
