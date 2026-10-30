@@ -21,16 +21,36 @@ class PortalOffline {
       : { responses: {}, queues: {}, conflicts: {}, local: {} };
   }
   write(data) {
-    try {
-      this.storage.setItem(this.key(), JSON.stringify(data));
-    } catch {
-      throw Object.assign(
-        new Error(
-          "Device storage is full or unavailable. This move was not saved; free space and retry.",
-        ),
-        { storageFailure: true },
-      );
+    const attempt = () => {
+      try {
+        this.storage.setItem(this.key(), JSON.stringify(data));
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    if (attempt()) return;
+    // The saved server answers (game lists, every version's code...) are only a cache and
+    // grow without limit; queued moves and local practice matches cannot be re-fetched.
+    // Drop the oldest cached answers, half at a time, until what must be kept fits. An
+    // answer a queued move is built on stays.
+    const keep = (path) => {
+      const id = /^\/matches\/([^/]+)$/.exec(path)?.[1];
+      return id !== undefined && data.queues?.[id]?.length > 0;
+    };
+    let droppable = Object.keys(data.responses || {}).filter((path) => !keep(path));
+    while (droppable.length) {
+      const dropped = droppable.slice(0, Math.max(1, Math.ceil(droppable.length / 2)));
+      for (const path of dropped) delete data.responses[path];
+      droppable = droppable.slice(dropped.length);
+      if (attempt()) return;
     }
+    throw Object.assign(
+      new Error(
+        "Device storage is full or unavailable. This move was not saved; free space and retry.",
+      ),
+      { storageFailure: true },
+    );
   }
   cached(path) {
     return this.read().responses[path];
@@ -107,7 +127,12 @@ class PortalOffline {
         for (const match of value)
           if (!d.queues[match.id]?.length)
             d.responses[`/matches/${match.id}`] = match;
-      this.write(d);
+      try {
+        this.write(d);
+      } catch (cacheError) {
+        // Not being able to remember an answer is not an error for the page asking for it.
+        if (!cacheError.storageFailure) throw cacheError;
+      }
     } catch (error) {
       if (error.storageFailure) throw error;
       if (
