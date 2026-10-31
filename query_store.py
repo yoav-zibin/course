@@ -14,6 +14,7 @@ import threading
 from dataclasses import replace
 
 from google.api_core.exceptions import Aborted, AlreadyExists, FailedPrecondition
+from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import TypeAdapter
 
@@ -37,6 +38,7 @@ from game_platform.models import (
 from game_platform.move_history import MoveHistory
 from game_platform.scaling_library import LibraryEntry
 from game_platform.paging import Page, decode_cursor, encode_cursor, page_size
+from game_platform.translation_bundle import TranslationMemory
 
 TYPES = {
     "translations": Translation,
@@ -58,6 +60,7 @@ TYPES = {
 INTERNAL_COLLECTIONS = frozenset(
     {
         "meta",
+        "translation_bundles",
         "counters",
         "identities",
         "referrals",
@@ -112,6 +115,47 @@ class _Operation:
         return self.store._local.contexts.pop().__exit__(*args)
 
 
+class _BundleBackend:
+    """Saves translation bundles (see translation_bundle.py) in this store's namespace."""
+
+    def __init__(self, store, *, ignore_migrated_marker=False):
+        self._store = store
+        # The migration command reads the old rows even after it has marked them folded.
+        self._ignore_marker = ignore_migrated_marker
+
+    @property
+    def _bundles(self):
+        return self._store.collection("translation_bundles")
+
+    def read_bundles(self):
+        # One query for every chunk of every language; never inside a transaction.
+        return [doc.to_dict() for doc in self._bundles.stream()]
+
+    def write_entries(self, locale, chunk, puts, deletes):
+        from game_platform.translation_bundle import doc_id
+
+        ref = self._bundles.document(doc_id(locale, chunk))
+        # merge=True merges the entries map key by key: other entries are untouched, and
+        # one write holds both the additions and the removals (DELETE_FIELD).
+        entries = {**puts, **{h: firestore.DELETE_FIELD for h in deletes}}
+        ref.set({"locale": locale, "chunk": chunk, "entries": entries}, merge=True)
+
+    def read_legacy(self):
+        marker = self._store.collection("meta").document("translations").get()
+        if marker.exists and marker.to_dict().get("bundled") and not self._ignore_marker:
+            return None
+        rows = []
+        for doc in self._store.collection("translations").stream():
+            data = doc.to_dict()
+            if data and not data.get("tombstone"):
+                rows.append(ADAPTERS["translations"].validate_json(data["json"]))
+        return rows
+
+    def delete_legacy(self, locale, source_hash):
+        # The old row is simply removed; nothing refers to it.
+        self._store.ref("translations", json.dumps([locale, source_hash])).delete()
+
+
 class QueryStore:
     scalable = True
     last_write_error = None
@@ -123,6 +167,7 @@ class QueryStore:
         self.namespace = namespace
         self._local = threading.local()
         self.operation_lock = _Operation(self)
+        self.translation_memory = TranslationMemory(_BundleBackend(self))
         marker = self.collection("meta").document("schema").get()
         if not marker.exists or marker.to_dict().get("version") != SCHEMA:
             raise ValueError(
@@ -216,24 +261,23 @@ class QueryStore:
     def put_experiment(self, experiment):
         self._put("experiments", experiment.id, experiment)
 
+    # Translations are kept in memory, loaded from one document per language (see
+    # translation_bundle.py): a lookup never reads the database, and none of these
+    # methods uses a transaction.
     def get_translations(self, locale, source_hashes):
-        found = {}
-        for source_hash in dict.fromkeys(source_hashes):
-            row = self._get("translations", json.dumps([locale, source_hash]))
-            if row is not None:
-                found[source_hash] = row
-        return found
+        return self.translation_memory.get(locale, source_hashes)
 
     def put_translations(self, translations):
-        # Keep each translation atomic without creating an unbounded batch.
-        for row in translations:
-            self._put("translations", json.dumps([row.locale, row.source_hash]), row)
+        self.translation_memory.put(list(translations))
 
     def delete_translation(self, locale, source_hash):
-        self._delete("translations", json.dumps([locale, source_hash]))
+        self.translation_memory.delete(locale, source_hash)
 
     def list_translations(self, locale=None):
-        return self._list("translations", [("locale", "==", locale)] if locale else ())
+        return sorted(
+            self.translation_memory.list(locale),
+            key=lambda row: (row.locale, row.source_hash),
+        )
 
     def list_experiments(self):
         return self._list("experiments")
@@ -296,6 +340,20 @@ class QueryStore:
         page_size(limit)
         scope = [self.namespace, kind, list(filters), scope]
         after = decode_cursor(scope, cursor)
+        if kind == "translations":
+            rows = [
+                row
+                for row in self.list_translations(
+                    next((value for field, _, value in filters if field == "locale"), None)
+                )
+                if f"{row.locale}@{row.source_hash}" > (after or "")
+            ]
+            return Page(
+                rows[:limit],
+                encode_cursor(scope, f"{rows[limit - 1].locale}@{rows[limit - 1].source_hash}")
+                if len(rows) > limit
+                else None,
+            )
         docs = self._query(kind, filters, limit=limit + 1, after=after)
         items = [
             self._decode(kind, doc.to_dict(), doc.reference, detail=False)
@@ -717,6 +775,24 @@ class QueryStore:
         if not include_unpublished:
             filters.append(("published", "==", True))
         return self._list("games", filters)
+
+    def list_games_without_code(self, *, owner_user_id=None, include_unpublished=False):
+        """Like [list_games], but the games have no code: one query and no body reads."""
+        filters = [("deleted", "==", False)]
+        if owner_user_id is not None:
+            filters.append(("owner_user_id", "==", owner_user_id))
+        if not include_unpublished:
+            filters.append(("published", "==", True))
+        docs = self._query("games", filters, limit=LEGACY_LIMIT + 1)
+        if len(docs) > LEGACY_LIMIT:
+            raise conflict(
+                "result exceeds 100 records; use the paginated API or an administrative job"
+            )
+        return [
+            game
+            for doc in docs
+            if (game := self._decode("games", doc.to_dict(), doc.reference, detail=False))
+        ]
 
     def list_all_game_versions(self):
         return self._list("game_versions")

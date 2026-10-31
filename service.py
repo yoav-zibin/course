@@ -101,6 +101,30 @@ class GameStrings:
 
 
 @dataclass(frozen=True, kw_only=True)
+class BundleGame:
+    """One published game's texts in a [TranslationBundle]."""
+
+    version: int
+    name: str
+    description: str
+    # "source", "translated", "partial" or "unavailable", for this game's texts alone.
+    status: str
+    # Whether the game has a string table; [strings] is empty if not.
+    translatable: bool
+    strings: dict[str, str]
+
+
+@dataclass(frozen=True, kw_only=True)
+class TranslationBundle:
+    """Everything a portal needs to show games in one language, in one piece."""
+
+    locale: str
+    # "source", "translated", "partial" or "unavailable", for all the texts together.
+    status: str
+    games: dict[str, BundleGame]
+
+
+@dataclass(frozen=True, kw_only=True)
 class AllData:
     users: list[User]
     # Every version of every game, including deleted games.
@@ -371,6 +395,8 @@ class GamePlatform:
         computer_move_delay_seconds: float = 0.6,
         translator: Translator | None = None,
         translation_daily_character_limit: int = 200_000,
+        bundle_wait_seconds: float = 3.0,
+        bundle_games_ttl_seconds: float = 10.0,
     ) -> None:
         self._store: Store = store if store is not None else InMemoryStore()
         self._clock = clock
@@ -380,6 +406,14 @@ class GamePlatform:
             clock=clock,
             daily_character_limit=translation_daily_character_limit,
         )
+        # Translation bundles (see translation_bundle): how long a request waits for the
+        # translator, and how long the list of games is reused between requests.
+        self._bundle_wait_seconds = bundle_wait_seconds
+        self._bundle_games_ttl_seconds = bundle_games_ttl_seconds
+        self._bundle_games: tuple[float, list[Game]] | None = None
+        self._bundle_tables: dict[tuple[str, int], tuple[dict[str, str] | None]] = {}
+        self._bundle_jobs: dict[str, threading.Event] = {}
+        self._bundle_jobs_lock = threading.Lock()
         self._new_id = new_id
         self._new_password = new_password
         self._new_verification_code = new_verification_code
@@ -1806,6 +1840,106 @@ class GamePlatform:
             translatable=table is not None,
             warnings=warnings,
         )
+
+    def translation_bundle(self, locale: str) -> TranslationBundle:
+        """The names, descriptions and string tables of the published games in [locale],
+        all at once. Reads only memory once the games are known (the translations are in
+        memory, and so are the tables of versions seen before). Texts without a translation
+        are asked from the translator in the background; this waits for it only for a
+        short while, and returns the originals for what is still missing, with a status."""
+        code = i18n.normalize_locale(locale)
+        if code is None:
+            raise NotFoundError(f"language not supported: {locale}")
+        games = self._bundle_published_games()
+        tables = {game.id: self._bundle_table(game) for game in games}
+        wanted = [
+            text
+            for game in games
+            for text in (game.name, game.description, *(tables[game.id] or {}).values())
+        ]
+        translated = self._translate_for_bundle(wanted, code)
+        shown = lambda text: translated.texts.get(text, text)  # noqa: E731
+
+        def status_of(texts: list[str]) -> str:
+            if translated.status == "source":
+                return "source"
+            known = [text for text in texts if text.strip() and text in translated.texts]
+            wanted_here = [text for text in texts if text.strip()]
+            if len(known) == len(wanted_here):
+                return "translated"
+            return "partial" if known else "unavailable"
+
+        entries = {}
+        for game in games:
+            table = tables[game.id]
+            texts = [game.name, game.description, *(table or {}).values()]
+            entries[game.id] = BundleGame(
+                version=game.version,
+                name=shown(game.name),
+                description=shown(game.description),
+                status=status_of(texts),
+                translatable=table is not None,
+                strings={key: shown(text) for key, text in (table or {}).items()},
+            )
+        return TranslationBundle(locale=code, status=translated.status, games=entries)
+
+    def _bundle_published_games(self) -> list[Game]:
+        now = time.monotonic()
+        cached = self._bundle_games
+        if cached is not None and now < cached[0]:
+            return cached[1]
+        # Games without their code where the store can: the code is only needed for the
+        # string table, which is remembered per version.
+        lister = getattr(self._store, "list_games_without_code", None) or self._store.list_games
+        games = self._plain_read(lambda: lister(owner_user_id=None))
+        self._bundle_games = (now + self._bundle_games_ttl_seconds, games)
+        return games
+
+    def _plain_read(self, read: Callable[[], Any]) -> Any:
+        """Runs a read of the store. A scalable store (Firestore queries) reads without a
+        transaction, so the platform lock, which would open one, is not taken for it."""
+        if getattr(self._store, "scalable", False):
+            return read()
+        with self._lock:
+            return read()
+
+    def _bundle_table(self, game: Game) -> dict[str, str] | None:
+        key = (game.id, game.version)
+        if key not in self._bundle_tables:
+            # A version's code never changes, so its table is read once.
+            code = game.code
+            if not code:
+                full = self._plain_read(lambda: self._store.get_game_version(game.id, game.version))
+                code = full.code if full is not None else ""
+            try:
+                table = game_text.extract_strings(code)
+            except game_text.StringsError:
+                table = None
+            self._bundle_tables[key] = (table,)
+        return self._bundle_tables[key][0]
+
+    def _translate_for_bundle(self, texts: list[str], code: str) -> Any:
+        """Translations of [texts], waiting at most [bundle_wait_seconds] for the
+        translator. What it translates after that is there for the next request."""
+        found = self._translation.translate(texts, code, remote=False)
+        if found.status in ("translated", "source") or not self._translation.enabled:
+            return found
+        with self._bundle_jobs_lock:
+            job = self._bundle_jobs.get(code)
+            if job is None or job.is_set():
+                job = self._bundle_jobs[code] = threading.Event()
+
+                def run(done: threading.Event = job) -> None:
+                    try:
+                        self._translation.translate(texts, code)
+                    except Exception:  # noqa: BLE001 - a background job must not die loudly
+                        logging.getLogger(__name__).exception("bundle translation failed")
+                    finally:
+                        done.set()
+
+                threading.Thread(target=run, name=f"bundle-translate-{code}", daemon=True).start()
+        job.wait(self._bundle_wait_seconds)
+        return self._translation.translate(texts, code, remote=False)
 
     def list_translations(self, locale: str | None = None) -> list[Translation]:
         """Every remembered translation (of one language), for the backoffice."""

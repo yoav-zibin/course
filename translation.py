@@ -245,7 +245,9 @@ class TranslationService:
     def enabled(self) -> bool:
         return self._translator is not None
 
-    def translate(self, texts: Sequence[str], locale: str) -> Translated:
+    def translate(self, texts: Sequence[str], locale: str, *, remote: bool = True) -> Translated:
+        """The translations of [texts] into [locale]. With [remote] false only what is
+        remembered is used and the translator is never called (so it never waits)."""
         wanted = list(dict.fromkeys(text for text in texts if text.strip()))
         code = i18n.normalize_locale(locale)
         if code is None or code == i18n.DEFAULT_LOCALE or not wanted:
@@ -253,7 +255,7 @@ class TranslationService:
         hashes = {text: text_hash(text) for text in wanted}
         found = self._store.get_translations(code, list(hashes.values()))
         missing = [text for text in wanted if hashes[text] not in found]
-        if missing and self._translator is not None:
+        if missing and remote and self._translator is not None:
             with self._lock:
                 # Another request may have translated them while this one waited.
                 found = self._store.get_translations(code, list(hashes.values()))

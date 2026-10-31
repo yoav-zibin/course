@@ -41,7 +41,7 @@ from game_platform.models import (
 )
 from game_platform.game_testing import GameTestReport, TestFailure
 from game_platform.i18n import LOCALE_CODES, Locale, get_locale, normalize_locale
-from game_platform.service import AllData, GameStrings
+from game_platform.service import AllData, GameStrings, TranslationBundle
 
 Name = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
@@ -1329,6 +1329,54 @@ class GamesTextOut(BaseModel):
     direction: Literal["ltr", "rtl"]
     status: Literal["source", "translated", "partial", "unavailable"]
     games: dict[str, GameTextOut]
+
+
+class BundleGameOut(BaseModel):
+    """One published game's texts inside a [BundleOut]."""
+
+    # The version these texts belong to (the game's latest).
+    version: int
+    name: str
+    description: str
+    # "source", "translated", "partial" or "unavailable", for this game's texts alone.
+    status: Literal["source", "translated", "partial", "unavailable"]
+    # Whether the game has a string table (a game without one has empty `strings`).
+    translatable: bool
+    # key -> text; every key of the game's table, as the game wrote it where untranslated.
+    strings: dict[str, str]
+
+
+class BundleOut(BaseModel):
+    """Everything a frontend needs to show the platform and its games in one language."""
+
+    locale: str
+    direction: Literal["ltr", "rtl"]
+    # "source", "translated", "partial" or "unavailable" for all the games' texts together.
+    status: Literal["source", "translated", "partial", "unavailable"]
+    # The interface catalog, as GET /i18n/{locale} answers it.
+    catalog: CatalogOut
+    # Published games by id.
+    games: dict[str, BundleGameOut]
+
+    @classmethod
+    def of(cls, bundle: TranslationBundle, catalog: "CatalogOut") -> "BundleOut":
+        return cls(
+            locale=bundle.locale,
+            direction=get_locale(bundle.locale).direction,
+            status=bundle.status,  # type: ignore[arg-type]
+            catalog=catalog,
+            games={
+                game_id: BundleGameOut(
+                    version=game.version,
+                    name=game.name,
+                    description=game.description,
+                    status=game.status,  # type: ignore[arg-type]
+                    translatable=game.translatable,
+                    strings=game.strings,
+                )
+                for game_id, game in bundle.games.items()
+            },
+        )
 
 
 class TranslationOut(BaseModel):

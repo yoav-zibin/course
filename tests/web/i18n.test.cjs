@@ -23,9 +23,9 @@ function element(tag){
 // Objects made inside the sandbox have another realm's prototypes; compare their JSON.
 const plain=value=>JSON.parse(JSON.stringify(value));
 
-function setup({stored={},languages=['en-US'],user=null,accountLocale='',catalogs=CATALOGS,stringsAnswer=GAME_STRINGS,stringsFail=false,games=GAMES_TEXT}={}){
+function setup({stored={},languages=['en-US'],user=null,accountLocale='',catalogs=CATALOGS,stringsAnswer=GAME_STRINGS,stringsFail=false,games=GAMES_TEXT,bundle=null,storageFails=false}={}){
   const storage=new Map(Object.entries(stored).map(([k,v])=>[k,JSON.stringify(v)]));
-  const requests=[],apiCalls=[],events=[];
+  const requests=[],apiCalls=[],events=[],bundleRequests=[];
   const topbar=element('header');
   const translatable=[],withPlaceholder=[];
   const document={
@@ -41,6 +41,13 @@ function setup({stored={},languages=['en-US'],user=null,accountLocale='',catalog
     const url=typeof input==='string'?input:input.url;
     requests.push({url,headers:new Headers(init.headers??{})});
     if(url==='/i18n/locales')return {ok:true,json:async()=>({locales:LOCALES})};
+    if(/^\/i18n\/bundle\/\w+$/.test(url)){
+      bundleRequests.push({url,headers:new Headers(init.headers??{})});
+      const answer=typeof bundle==='function'?bundle(url):bundle;
+      if(!answer)return {ok:false,status:404,json:async()=>({})};
+      if(new Headers(init.headers??{}).get('if-none-match')===answer.etag)return {ok:false,status:304,json:async()=>({})};
+      return {ok:true,status:200,headers:{get:name=>name==='ETag'?answer.etag:null},json:async()=>JSON.parse(JSON.stringify(answer.body))};
+    }
     if(/^\/i18n\/games\/\w+$/.test(url))return {ok:true,json:async()=>({status:'translated',games})};
     const match=/^\/i18n\/(\w+)$/.exec(url);
     if(match&&catalogs[match[1]])return {ok:true,json:async()=>catalogs[match[1]]};
@@ -50,7 +57,7 @@ function setup({stored={},languages=['en-US'],user=null,accountLocale='',catalog
     console,Map,Set,JSON,Promise,URL,Headers,Request:class{},
     CustomEvent:class{constructor(type,init){this.type=type;this.detail=init?.detail;}},
     document,navigator:{languages},location:{href:'http://localhost/portal',origin:'http://localhost'},
-    localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
+    localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>{if(storageFails)throw new Error('quota');storage.set(k,v);},removeItem:k=>storage.delete(k)},
     fetch:nativeFetch,
     Auth:{current:()=>user},
     apiRequest:async(method,url,options)=>{
@@ -65,7 +72,7 @@ function setup({stored={},languages=['en-US'],user=null,accountLocale='',catalog
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../../static/i18n.js'),'utf8'),sandbox);
   const run=code=>vm.runInContext(code,sandbox);
   const settle=async()=>{await run('I18n.ready');await new Promise(resolve=>setImmediate(resolve));};
-  return {run,settle,document,storage,requests,apiCalls,events,topbar,translatable,withPlaceholder,sandbox};
+  return {run,settle,document,storage,requests,bundleRequests,apiCalls,events,topbar,translatable,withPlaceholder,sandbox};
 }
 
 test('a saved choice beats the browser language',async()=>{
@@ -195,4 +202,108 @@ test('game names and descriptions are translated once they arrive, and fall back
   await t.run('I18n.choose("en")');
   assert.equal(t.run('I18n.gameName("chess","Chess")'),'Chess'); // English shows the original
   assert.ok(t.run('I18n.revision()')>before); // so a script that skips unchanged redraws redraws
+});
+
+// The bundle: everything for a language in one request
+
+const BUNDLE_KEY='game-platform.i18n-bundle.v1:es';
+const game=(overrides={})=>({version:3,name:'Ajedrez',description:'Un clásico',status:'translated',translatable:true,strings:{wins:'¡{name} gana!'},...overrides});
+const bundleOf=(games={chess:game()},status='translated')=>({
+  etag:'"b1"',body:{locale:'es',direction:'ltr',status,catalog:{locale:'es',direction:'ltr',version:'es1',messages:CATALOGS.es.messages},games}});
+const spanish={'game-platform.locale.v1':'es'};
+
+test('a language is one request: texts, game names and game strings together',async()=>{
+  const t=setup({stored:spanish,bundle:bundleOf()});await t.settle();t.apiCalls.length=0;
+  assert.deepEqual(t.requests.map(r=>r.url).filter(url=>url.startsWith('/i18n/')&&url!=='/i18n/locales'),['/i18n/bundle/es']);
+  assert.equal(t.run('I18n.t("ui.action.save")'),'Guardar');
+  assert.equal(t.run('I18n.gameName("chess","Chess")'),'Ajedrez');
+  assert.equal(t.run('I18n.gameDescription("chess","A classic")'),'Un clásico');
+  assert.deepEqual(plain(await t.run('I18n.gameText("chess", 3)')),{locale:'es',direction:'ltr',strings:{wins:'¡{name} gana!'}});
+  assert.equal(t.apiCalls.length,0); // no request per game version
+});
+
+test('the bundle is saved with its ETag instead of the older separate copies',async()=>{
+  const t=setup({stored:{...spanish,'game-platform.i18n-catalog.v1:es':{version:'old',messages:{}},'game-platform.i18n-games.v1:es':{}},bundle:bundleOf()});
+  await t.settle();
+  const saved=JSON.parse(t.storage.get(BUNDLE_KEY));
+  assert.equal(saved.etag,'"b1"');assert.equal(saved.data.games.chess.strings.wins,'¡{name} gana!');
+  assert.equal(t.storage.has('game-platform.i18n-catalog.v1:es'),false);
+  assert.equal(t.storage.has('game-platform.i18n-games.v1:es'),false);
+});
+
+test('on the next visit the saved bundle is used at once and revalidated with its ETag',async()=>{
+  const first=setup({stored:spanish,bundle:bundleOf()});await first.settle();
+  const t=setup({stored:{...spanish,[BUNDLE_KEY]:JSON.parse(first.storage.get(BUNDLE_KEY))},bundle:bundleOf()});
+  assert.equal(t.run('I18n.t("ui.action.save")'),'Guardar'); // before any answer
+  await t.settle();
+  assert.equal(t.bundleRequests.length,1);
+  assert.equal(t.bundleRequests[0].headers.get('if-none-match'),'"b1"');
+  assert.equal(t.run('I18n.gameName("chess","Chess")'),'Ajedrez'); // the 304 changed nothing
+  assert.deepEqual(plain(await t.run('I18n.gameText("chess", 3)')).strings,{wins:'¡{name} gana!'});
+});
+
+test('a changed bundle replaces the saved one and the page redraws',async()=>{
+  const old=bundleOf();
+  const fresh={etag:'"b2"',body:{...bundleOf({chess:game({name:'Ajedrez 2'})}).body}};
+  const t=setup({stored:{...spanish,[BUNDLE_KEY]:{etag:old.etag,data:old.body}},bundle:fresh});
+  await t.settle();
+  assert.equal(t.run('I18n.gameName("chess","Chess")'),'Ajedrez 2');
+  assert.equal(JSON.parse(t.storage.get(BUNDLE_KEY)).etag,'"b2"');
+  assert.ok(t.events.some(event=>event.type==='i18n-changed'));
+});
+
+test('without a bundle the old requests are used, and still work',async()=>{
+  const t=setup({stored:spanish,bundle:null});await t.settle();t.apiCalls.length=0;
+  const urls=t.requests.map(r=>r.url);
+  assert.ok(urls.includes('/i18n/es')&&urls.includes('/i18n/games/es'));
+  assert.equal(t.run('I18n.gameName("chess","Chess")'),'Ajedrez');
+  await t.run('I18n.gameText("chess", 3)');
+  assert.deepEqual(t.apiCalls.map(call=>call.url),['/games/chess/versions/3/strings?lang=es']);
+  assert.equal(t.storage.has(BUNDLE_KEY),false);
+});
+
+test('a game version or a partly translated game that the bundle cannot answer is asked for on its own',async()=>{
+  const t=setup({stored:spanish,bundle:bundleOf({chess:game(),poker:game({status:'partial',version:1})})});await t.settle();t.apiCalls.length=0;
+  await t.run('I18n.gameText("chess", 2)'); // an older version than the bundle has
+  await t.run('I18n.gameText("poker", 1)'); // the bundle's texts are not all translated yet
+  await t.run('I18n.gameText("go", 1)'); // not in the bundle (say, an unpublished game)
+  assert.deepEqual(t.apiCalls.map(call=>call.url),[
+    '/games/chess/versions/2/strings?lang=es','/games/poker/versions/1/strings?lang=es','/games/go/versions/1/strings?lang=es']);
+});
+
+test('a game without a string table gets no strings from the bundle',async()=>{
+  const t=setup({stored:spanish,bundle:bundleOf({chess:game({translatable:false,strings:{}})})});await t.settle();
+  assert.deepEqual(plain(await t.run('I18n.gameText("chess", 3)')),{locale:'es',direction:'ltr'});
+});
+
+test('a big bundle is saved without the string tables, and a full disk is survived',async()=>{
+  const big={};for(let i=0;i<300;i++)big['g'+i]=game({strings:{wins:'x'.repeat(1000)}});
+  const t=setup({stored:spanish,bundle:bundleOf(big)});await t.settle();
+  const saved=JSON.parse(t.storage.get(BUNDLE_KEY));
+  assert.ok(t.storage.get(BUNDLE_KEY).length<200000);
+  assert.equal(saved.data.games.g0.name,'Ajedrez');assert.equal('strings' in saved.data.games.g0,false);
+  assert.equal(t.run('I18n.gameName("g5","")'),'Ajedrez'); // still used in this visit
+  assert.equal((await t.run('I18n.gameText("g5", 3)')).strings.wins.length,1000);
+  const full=setup({stored:spanish,bundle:bundleOf(),storageFails:true});await full.settle();
+  assert.equal(full.run('I18n.t("ui.action.save")'),'Guardar');
+});
+
+test('when nothing could be translated, the games\' texts saved earlier are kept',async()=>{
+  const old=bundleOf();
+  const down={etag:'"b9"',body:bundleOf({chess:game({name:'Chess',description:'A classic',status:'unavailable',strings:{wins:'{name} wins!'}})},'unavailable').body};
+  const t=setup({stored:{...spanish,[BUNDLE_KEY]:{etag:old.etag,data:old.body}},bundle:down});await t.settle();
+  assert.equal(t.run('I18n.gameName("chess","Chess")'),'Ajedrez');
+});
+
+test('English asks for no bundle',async()=>{
+  const t=setup({bundle:bundleOf()});await t.settle();
+  assert.equal(t.bundleRequests.length,0);
+});
+
+test('switching language loads that language\'s bundle',async()=>{
+  const t=setup({bundle:url=>url.endsWith('/es')?bundleOf():null});await t.settle();
+  await t.run('I18n.choose("es")');
+  assert.equal(t.run('I18n.gameName("chess","Chess")'),'Ajedrez');
+  await t.run('I18n.choose("en")');
+  assert.equal(t.run('I18n.gameName("chess","Chess")'),'Chess');
 });

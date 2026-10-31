@@ -1220,4 +1220,36 @@ def test_merged_translation_memory_works_in_query_mode_and_survives_rollback(sto
         ).status_code
         == 204
     )
-    assert second.get_translations("es", [added["source_hash"]]) == {}
+    # a store started after the deletion no longer has it (a running one drops it within
+    # the bundle's refresh time)
+    third = QueryStore(store.client, namespace=store.namespace)
+    assert third.get_translations("es", [added["source_hash"]]) == {}
+    assert store.get_translations("es", [added["source_hash"]]) == {}
+
+
+def test_translation_bundles_on_the_emulator_merge_entries_and_load_in_one_query(store):
+    import datetime as dt
+    from game_platform.models import Translation
+    from game_platform.translation import text_hash
+
+    def row(source, text="", locale="es"):
+        return Translation(
+            locale=locale,
+            source_hash=text_hash(source),
+            source=source,
+            text=text or f"[{locale}] {source}",
+            provider="google",
+            created_at=dt.datetime.now(dt.timezone.utc),
+        )
+
+    other = QueryStore(store.client, namespace=store.namespace)
+    store.put_translations([row("One"), row("Two")])
+    other.put_translations([row("Three")])  # a merge: it must not erase One and Two
+    store.delete_translation("es", text_hash("Two"))
+    store.delete_translation("fr", text_hash("never there"))  # no document: no error
+    fresh = QueryStore(store.client, namespace=store.namespace)
+    with patch.object(fresh.client, "get_all", side_effect=AssertionError("no per-text reads")):
+        found = fresh.list_translations("es")
+    assert {item.source for item in found} == {"One", "Three"}
+    document = store.client.collection(store.namespace + "_translation_bundles").document("es-000").get()
+    assert set(document.to_dict()["entries"]) == {text_hash("One"), text_hash("Three")}

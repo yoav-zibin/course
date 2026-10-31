@@ -7,7 +7,9 @@ each player, on demand, and remembered.
 
 ```
 AI writes the game  ->  the game lists every text it shows in one JSON block (in English)
-player opens it     ->  the portal asks  GET /games/{id}/versions/{v}/strings?lang=es
+player opens the portal -> it asks  GET /i18n/bundle/es  (one request: the catalog, the game names
+                        and every published game's strings; GET /games/{id}/versions/{v}/strings?lang=es
+                        is the fallback for one version)
 server              ->  reads the block, translates the texts it has never translated (Google
                         Translate), remembers each one, returns them
 portal              ->  puts them in the game's state_changed message (strings, locale, direction)
@@ -64,6 +66,7 @@ returns them as `warnings`. A game with no block still has its **name and descri
 |---|---|
 | `GET /games/{id}/versions/{v}/strings` | The version's name, description and string table in the viewer's language (`?lang=`, else the user's saved language, else `Accept-Language`). Same visibility as `GET /games/{id}/versions/{v}` |
 | `GET /i18n/games/{locale}` | The names and descriptions of every published game, for a portal's game cards |
+| `GET /i18n/bundle/{locale}` | **Everything in one response**: the interface catalog, and for every published game its name, description and translated string table (see "The bundle" below) |
 
 ```json
 {"game_id": "…", "game_version": 3, "locale": "es", "direction": "ltr",
@@ -88,6 +91,78 @@ games does the same) gains three optional fields, which a game that does not kno
 once per game version and language, send them with every message, and send a new message when the
 player changes language. **iOS, Android and React Native portals must do this to translate games;
 until they do, games there show their English.**
+
+## The bundle: one request, one read
+
+A portal used to ask for the catalog, for the game names, and for each game version's strings
+separately, and the server answered each with a Firestore read per text. Now both sides work in bundles.
+
+**On the server**, the machine translations of a language are one Firestore document (more only if the
+language outgrows ~600 KB, see below), loaded into memory once:
+
+```
+<namespace>_translation_bundles/es-000 = {
+  "locale": "es", "chunk": 0,
+  "entries": {"<sha256 of the source text>": {"t": "Tu turno", "s": "Your turn", "p": "google",
+                                              "c": "2026-10-30T12:00:00+00:00", "r": false}, ...}}
+```
+
+- The server reads **all** the bundle documents with one query on first use and again after 60 seconds
+  (so a second server process catches up), serving the old copy while it does and if it fails. Lookups
+  never touch Firestore: a request that needs translations makes **zero reads**.
+- A new, corrected (`PUT /admin/translations`) or deleted translation is written with one merge-set that
+  touches **only that entry** (no transaction, no read-modify-write), and then
+  applied to the memory in place, so concurrent requests and servers cannot overwrite each other's entries.
+- A language that would near Firestore's 1 MiB document limit spills into `es-001`, `es-002`, ...; a
+  correction stays in the chunk it was in. All chunks of all languages still load in the one query.
+- `FirestoreStore` (the whole-database-in-memory mode) and the data-file stores keep the same behaviour:
+  they already serve translations from memory; `FirestoreStore` saves them in the same bundle layout.
+- `GET /admin/translations` (and `/v2/admin/translations`) answer from the memory too, without the old
+  limit of 100 rows.
+
+**Migration (run once, on the VM).** Until it is run the server keeps working: when no bundle exists it
+reads the old rows (`<namespace>_translations`, one document per language and text) once at startup and
+serves them. To fold them into bundles:
+
+```bash
+cd /path/to/game_platform/..          # the directory that contains game_platform/
+python3 -m game_platform.tools.migrate_translation_bundles --project PROJECT --database DATABASE --namespace NAMESPACE --dry-run
+python3 -m game_platform.tools.migrate_translation_bundles --project PROJECT --database DATABASE --namespace NAMESPACE
+```
+
+(`project_id`, `database` and `namespace` are the `firestore` section of `config.json`.) It prints the
+counts, adds only entries no bundle has (so it is idempotent and never overwrites a correction made
+meanwhile), checks the bundles from the database, and then marks `<namespace>_meta/translations` as
+migrated, after which the server no longer reads the old rows. The old documents are left alone;
+delete the `<namespace>_translations` collection when you are happy. A server running `FirestoreStore`
+needs no command: its first save after the upgrade rewrites the rows as bundles and deletes the old ones.
+
+**To the browser**, `GET /i18n/bundle/{locale}` answers in one response:
+
+```json
+{"locale": "es", "direction": "ltr", "status": "translated",
+ "catalog": {"locale": "es", "direction": "ltr", "version": "9f2c4e1ab07d", "messages": {"ui.action.save": "Guardar"}},
+ "games": {"<game id>": {"version": 3, "name": "Tres en raya", "description": "…", "status": "translated",
+                         "translatable": true, "strings": {"your_turn": "Tu turno"}}}}
+```
+
+- It has the **published games' latest versions**. A viewer who may see other versions (their own
+  unpublished game, an older version of a running match) asks `GET /games/{id}/versions/{v}/strings`, which
+  is unchanged. The bundle is therefore the same for everybody and cacheable.
+- It has a strong `ETag` (a hash of the answer) and `Cache-Control: no-cache`: send the ETag in
+  `If-None-Match` and an unchanged bundle answers `304` with no body. The ETag changes when a
+  translation is added, corrected or deleted, when a game is published or changed, or when the catalog changes.
+- Texts without a translation yet are asked from the translator **in the background**, under the same
+  daily budget; the request waits for it for at most 3 seconds and then answers with what it has: the
+  original text for the rest, with `status` (`translated`, `partial`, `unavailable`, or `source` for
+  English) for the whole bundle and for each game. The next request has what finished meanwhile.
+- `static/i18n.js` loads it once per language, keeps it in `localStorage` with its ETag (without the
+  string tables if it exceeds 200,000 characters, and in place of the older separate copies, since the
+  browser's storage is small), revalidates it on each visit, and falls back to the old requests if the
+  bundle cannot be had. A game whose texts the bundle lacks or has only partly translated is asked for
+  with the per-version endpoint as before.
+
+The game connection protocol (`state_changed` with `strings`, `locale`, `direction`) is unchanged.
 
 ## Turn it on
 
@@ -117,7 +192,7 @@ characters and its monthly free allowance before raising the limit. For trying i
 
 ## Checking and correcting translations
 
-Machine translations are remembered in the data (the `translations` collection) with their source text.
+Machine translations are remembered in the data (the translation bundles above) with their source text.
 An administrator (master password) can review and fix them:
 
 ```bash

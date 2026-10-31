@@ -724,7 +724,9 @@ A game lists every text it shows in one JSON block in its HTML; the server trans
 (and the game's name and description) into the player's language the first time it is asked for, with
 Google Translate, remembers each text, and the portal passes the translations to the game in its
 `state_changed` message (`strings`, `locale`, `direction`). `GET /games/{id}/versions/{v}/strings` and
-`GET /i18n/games/{locale}` return them. The game-building agent is told how to write such games.
+`GET /i18n/games/{locale}` return them, and `GET /i18n/bundle/{locale}` returns the catalog, the game
+names and every published game's strings in one cacheable response (the translations of a language are one
+Firestore document, kept in memory). The game-building agent is told how to write such games.
 Off until `translation.provider` is set. See [docs/game-translation.md](docs/game-translation.md).
 
 ### Monitoring and alerts

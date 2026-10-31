@@ -1,6 +1,8 @@
 """FastAPI routes for the game platform."""
 
+import hashlib
 import io
+import json
 import logging
 import mimetypes
 import secrets
@@ -39,6 +41,8 @@ from game_platform.schemas import (
     RefactorJobOut,
     CatalogOut,
     GameStringsOut,
+    BundleOut,
+    CatalogOut,
     GamesTextOut,
     GameTextOut,
     CampaignLinkCreate,
@@ -1047,6 +1051,50 @@ def get_games_text(platform: Platform, locale: str) -> GamesTextOut:
         status=status,  # type: ignore[arg-type]
         games={game_id: GameTextOut(**text) for game_id, text in games.items()},
     )
+
+
+def _etag_matches(header: str | None, etag: str) -> bool:
+    """Whether an If-None-Match header names [etag] (a strong comparison, as for GET)."""
+    if not header:
+        return False
+    tags = [tag.strip() for tag in header.split(",")]
+    return "*" in tags or etag in tags or f"W/{etag}" in tags
+
+
+@i18n_router.get("/bundle/{locale}", response_model=BundleOut)
+def get_bundle(request: Request, platform: Platform, locale: str) -> Response:
+    """Everything a frontend needs in one language, in one response: the interface catalog
+    (as `GET /i18n/{locale}`), and for every published game its name, description and the
+    translated string table of its latest version. Replaces a request per game.
+
+    Texts that have no translation yet are returned as the game wrote them, and the
+    `status` (of the whole bundle and of each game) says so; the server translates them in
+    the background, within the daily budget, and a later request has them. The ETag is a
+    hash of the answer, so it changes when anything in it does (a new or corrected
+    translation, a game published): send it back as If-None-Match to get a `304`. It is
+    the same for every viewer, since only published games are included; a version the
+    viewer is allowed to see but is not the latest published one is still answered by
+    `GET /games/{id}/versions/{v}/strings`."""
+    code = i18n.normalize_locale(locale)
+    if code is None:
+        raise NotFoundError(f"language not supported: {locale}")
+    catalog = CatalogOut(
+        locale=code,
+        direction=i18n.get_locale(code).direction,
+        version=i18n.catalog_version(code),
+        messages=i18n.messages(code),
+    )
+    body = json.dumps(
+        BundleOut.of(platform.translation_bundle(code), catalog).model_dump(),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    etag = '"' + hashlib.sha256(body).hexdigest()[:32] + '"'
+    headers = {"ETag": etag, "Cache-Control": "no-cache"}
+    if _etag_matches(request.headers.get("if-none-match"), etag):
+        return Response(status_code=HTTPStatus.NOT_MODIFIED, headers=headers)
+    return Response(content=body, media_type="application/json", headers=headers)
 
 
 @i18n_router.get("/{locale}", response_model=CatalogOut)
