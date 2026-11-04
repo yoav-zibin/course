@@ -76,6 +76,17 @@ def test_updates_through_publish_gate_and_is_idempotent(patch_case, monkeypatch)
     assert len(calls) == 1
 
 
+def test_second_batch_uses_its_own_guarded_manifest(patch_case, monkeypatch):
+    platform, store, original, client, server, directory, _ = patch_case
+    monkeypatch.setattr(migrations, "BATCH2_DIRECTORY", directory)
+    result = migrations.apply_audit_batch2(platform)
+    assert result[0]["status"] == "updated"
+    updated = platform.get_game(original.id)
+    assert (updated.version, updated.code, updated.server_code) == (10, client, server)
+    assert store.get_game_version(original.id, 9) == original
+    assert migrations.apply_audit_batch2(platform)[0]["status"] == "unchanged"
+
+
 @pytest.mark.parametrize(
     "changes,status",
     [
