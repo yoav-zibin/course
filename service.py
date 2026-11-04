@@ -1933,6 +1933,7 @@ class GamePlatform:
         server_code: str | None | object = UNSET,
         _publishing: bool = False,
         _admin: bool = False,
+        _test_budget_seconds: float = 1.0,
     ) -> Game:
         """Creates a new version of the game, unless nothing changes.
 
@@ -1983,7 +1984,13 @@ class GamePlatform:
             ):
                 # New or re-ruled server code must pass its tests before
                 # the new version is published (Phase 5 gate).
-                self._gate_server_code(game_id, updated.server_code, updated.rules)
+                if _admin and _test_budget_seconds != 1.0:
+                    self._gate_server_code(
+                        game_id, updated.server_code, updated.rules,
+                        budget_seconds=_test_budget_seconds,
+                    )
+                else:
+                    self._gate_server_code(game_id, updated.server_code, updated.rules)
             updated = replace(
                 updated, version=game.version + 1, updated_at=self._clock()
             )
@@ -2392,7 +2399,8 @@ class GamePlatform:
             )
 
     def _run_game_tests(
-        self, *, server_code: str, rules: GameRules, game_id: str | None
+        self, *, server_code: str, rules: GameRules, game_id: str | None,
+        budget_seconds: float = 1.0,
     ) -> GameTestReport:
         stored = (
             self._store.get_game_test_seeds(game_id) if game_id else None
@@ -2401,6 +2409,7 @@ class GamePlatform:
             server_code,
             rules=rules,
             regression_seeds=stored.seeds if stored else (),
+            budget_seconds=budget_seconds,
         )
         if game_id:
             self._store.put_game_test_seeds(
@@ -2412,13 +2421,15 @@ class GamePlatform:
         return report
 
     def _gate_server_code(
-        self, game_id: str, server_code: str, rules: GameRules
+        self, game_id: str, server_code: str, rules: GameRules,
+        *, budget_seconds: float = 1.0,
     ) -> None:
         """The publish gate (Phase 5): server code about to be published
         must pass the random-walk tests, or publishing is refused and the
         version stays a draft the author can keep fixing."""
         report = self._run_game_tests(
-            server_code=server_code, rules=rules, game_id=game_id
+            server_code=server_code, rules=rules, game_id=game_id,
+            budget_seconds=budget_seconds,
         )
         if report.passed:
             return

@@ -83,6 +83,9 @@ def _apply_audit_batch(
                             code=client,
                             server_code=server,
                             _admin=True,
+                            # A slower production CPU still has to finish whole
+                            # walks. Keep all checks and the 100ms call limit.
+                            _test_budget_seconds=5.0 if batch_name == "audit-batch2" else 1.0,
                         )
                         result.update(status="updated", version=updated.version)
         except Exception as error:
