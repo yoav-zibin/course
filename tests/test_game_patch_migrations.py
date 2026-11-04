@@ -79,12 +79,31 @@ def test_updates_through_publish_gate_and_is_idempotent(patch_case, monkeypatch)
 def test_second_batch_uses_its_own_guarded_manifest(patch_case, monkeypatch):
     platform, store, original, client, server, directory, _ = patch_case
     monkeypatch.setattr(migrations, "BATCH2_DIRECTORY", directory)
+    gate = platform._gate_server_code
+    budgets = []
+
+    def checked_gate(*args, **kwargs):
+        budgets.append(kwargs.get("budget_seconds", 1.0))
+        return gate(*args, **kwargs)
+
+    monkeypatch.setattr(platform, "_gate_server_code", checked_gate)
     result = migrations.apply_audit_batch2(platform)
     assert result[0]["status"] == "updated"
     updated = platform.get_game(original.id)
     assert (updated.version, updated.code, updated.server_code) == (10, client, server)
     assert store.get_game_version(original.id, 9) == original
     assert migrations.apply_audit_batch2(platform)[0]["status"] == "unchanged"
+    assert budgets == [5.0]
+
+
+def test_normal_owner_update_cannot_extend_publication_budget(patch_case, monkeypatch):
+    platform, _, original, _, server, _, _ = patch_case
+    budgets = []
+    monkeypatch.setattr(platform, "_gate_server_code",
+                        lambda *args, **kwargs: budgets.append(kwargs.get("budget_seconds", 1.0)))
+    platform.update_game(caller_id=original.owner_user_id, game_id=original.id,
+                         server_code=server, _test_budget_seconds=5.0)
+    assert budgets == [1.0]
 
 
 @pytest.mark.parametrize(
@@ -122,15 +141,17 @@ def test_missing_game_is_skipped(patch_case):
     assert migrations.apply_audit_batch1(platform)[0]["status"] == "skipped_missing_or_unpublished"
 
 
-def test_gate_rejection_keeps_both_code_parts_and_continues(patch_case):
+@pytest.mark.parametrize("batch", [1, 2])
+def test_gate_rejection_keeps_both_code_parts_and_continues(patch_case, monkeypatch, batch):
     platform, store, original, _, _, directory, entry = patch_case
+    monkeypatch.setattr(migrations, "BATCH2_DIRECTORY", directory)
     following = replace(original, id="following-game")
     _seed_versions(store, following)
     (directory / "bad-server.js").write_text("const game = {newMatch(){ throw new Error('rejected candidate'); }};")
     (directory / "manifest.json").write_text(json.dumps([
         {**entry, "server": "bad-server.js"}, {**entry, "id": following.id}
     ]))
-    results = migrations.apply_audit_batch1(platform)
+    results = getattr(migrations, f"apply_audit_batch{batch}")(platform)
     assert [r["status"] for r in results] == ["error", "updated"]
     assert "failed its tests" in results[0]["detail"]
     assert store.get_game(original.id) == original
