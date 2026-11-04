@@ -15,6 +15,7 @@ from game_platform.service import NotFoundError
 
 logger = logging.getLogger(__name__)
 BATCH1_DIRECTORY = Path(__file__).resolve().parent / "games" / "audit-batch1"
+BATCH2_DIRECTORY = Path(__file__).resolve().parent / "games" / "audit-batch2"
 
 
 def _sha256(code: str | None) -> str:
@@ -22,6 +23,16 @@ def _sha256(code: str | None) -> str:
 
 
 def apply_audit_batch1(platform: GamePlatform) -> list[dict[str, Any]]:
+    return _apply_audit_batch(platform, BATCH1_DIRECTORY, "audit-batch1")
+
+
+def apply_audit_batch2(platform: GamePlatform) -> list[dict[str, Any]]:
+    return _apply_audit_batch(platform, BATCH2_DIRECTORY, "audit-batch2")
+
+
+def _apply_audit_batch(
+    platform: GamePlatform, directory: Path, batch_name: str
+) -> list[dict[str, Any]]:
     """Publish only reviewed originals; keep author edits and old versions intact.
 
     Each game is its own platform operation. The version/hash precondition and
@@ -31,18 +42,18 @@ def apply_audit_batch1(platform: GamePlatform) -> list[dict[str, Any]]:
     """
     results: list[dict[str, Any]] = []
     try:
-        entries = json.loads((BATCH1_DIRECTORY / "manifest.json").read_text(encoding="utf-8"))
+        entries = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
         if not isinstance(entries, list):
             raise ValueError("batch manifest must be a list")
     except Exception as error:
-        logger.exception("game audit batch1 manifest could not be loaded")
-        return [{"id": "audit-batch1", "status": "error", "detail": str(error)}]
+        logger.exception("%s manifest could not be loaded", batch_name)
+        return [{"id": batch_name, "status": "error", "detail": str(error)}]
 
     for entry in entries:
         result: dict[str, Any] = {"id": entry.get("id"), "name": entry.get("name")}
         try:
-            client = (BATCH1_DIRECTORY / entry["client"]).read_text(encoding="utf-8")
-            server = (BATCH1_DIRECTORY / entry["server"]).read_text(encoding="utf-8")
+            client = (directory / entry["client"]).read_text(encoding="utf-8")
+            server = (directory / entry["server"]).read_text(encoding="utf-8")
             with platform._lock:
                 try:
                     game = platform.get_game(entry["id"])
@@ -77,7 +88,7 @@ def apply_audit_batch1(platform: GamePlatform) -> list[dict[str, Any]]:
         except Exception as error:
             # One refused publish must not prevent checking the other games.
             result.update(status="error", detail=str(error))
-            logger.exception("game audit batch1 failed for %s", result["id"])
-        logger.info("game audit batch1: %s", json.dumps(result, sort_keys=True))
+            logger.exception("%s failed for %s", batch_name, result["id"])
+        logger.info("%s: %s", batch_name, json.dumps(result, sort_keys=True))
         results.append(result)
     return results
