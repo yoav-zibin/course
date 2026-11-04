@@ -703,6 +703,12 @@ def list_games(
     return [GameSummaryOut.of(game) for game in games]
 
 
+@router.get("/games/popular")
+def list_popular_games(platform: Platform, limit: int = 8) -> list[GameSummaryOut]:
+    """The bounded top games by cumulative players in started matches."""
+    return [GameSummaryOut.of(game) for game in platform.list_popular_games(limit=limit)]
+
+
 @router.get("/builder/games")
 def list_owned_games(platform: Platform, caller_id: CallerId) -> list[GameOut]:
     return [GameOut.of(g) for g in platform.list_owned_games(caller_id=caller_id)]

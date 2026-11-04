@@ -75,6 +75,7 @@ INTERNAL_COLLECTIONS = frozenset(
         "seed_runs",
         "token_ledger",
         "dashboard_runs",
+        "game_popularity",
     }
 )
 COLLECTIONS = frozenset(TYPES) | INTERNAL_COLLECTIONS
@@ -234,6 +235,42 @@ class QueryStore:
 
     def delete_translation(self, locale, source_hash):
         self._delete("translations", json.dumps([locale, source_hash]))
+
+    def record_game_match_start(self, game_id, player_count):
+        """Adds one started match's player count to its durable popularity score.
+
+        Called inside the match-start unit of work, so a match transition and its
+        score update commit together. One small aggregate document per game keeps
+        the browse query bounded regardless of match history size.
+        """
+        if type(player_count) is not int or player_count < 1:
+            raise ValueError("player_count must be a positive integer")
+        ref = self.collection("game_popularity").document(key(game_id))
+        current = self.raw_get(ref) or {
+            "game_id": game_id,
+            "matches_started": 0,
+            "score": 0,
+        }
+        self.raw_put(
+            ref,
+            {
+                "game_id": game_id,
+                "matches_started": current.get("matches_started", 0) + 1,
+                "score": current.get("score", 0) + player_count,
+            },
+        )
+
+    def list_popular_game_ids(self, limit):
+        query = self.collection("game_popularity").order_by(
+            "score", direction="DESCENDING"
+        ).limit(limit)
+        with timed_external("firestore"):
+            rows = list(query.stream())
+        return [
+            (data["game_id"], data["score"])
+            for row in rows
+            if (data := row.to_dict()) and data.get("score", 0) > 0
+        ]
 
     def list_translations(self, locale=None):
         return self._list("translations", [("locale", "==", locale)] if locale else ())

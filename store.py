@@ -191,6 +191,10 @@ class Store(Protocol):
 
     def delete_experiment_event(self, event_id: str) -> None: ...
 
+    def record_game_match_start(self, game_id: str, player_count: int) -> None: ...
+
+    def list_popular_game_ids(self, limit: int) -> list[tuple[str, int]]: ...
+
 
 @dataclass(frozen=True, kw_only=True)
 class Snapshot:
@@ -256,6 +260,9 @@ class InMemoryStore:
         self._experiments: dict[str, Experiment] = {}
         self._experiment_assignments: dict[tuple[str, str], ExperimentAssignment] = {}
         self._experiment_events: dict[str, ExperimentEvent] = {}
+        # Test/local fallback only. Production query mode keeps these aggregates
+        # in the dedicated Firestore game_popularity collection.
+        self._game_popularity: dict[str, tuple[int, int]] = {}
 
     @classmethod
     def of_snapshot(cls, snapshot: Snapshot) -> "InMemoryStore":
@@ -345,6 +352,18 @@ class InMemoryStore:
 
     def delete_experiment_event(self, event_id: str) -> None:
         self._experiment_events.pop(event_id, None)
+
+    def record_game_match_start(self, game_id: str, player_count: int) -> None:
+        if type(player_count) is not int or player_count < 1:
+            raise ValueError("player_count must be a positive integer")
+        matches, score = self._game_popularity.get(game_id, (0, 0))
+        self._game_popularity[game_id] = (matches + 1, score + player_count)
+
+    def list_popular_game_ids(self, limit: int) -> list[tuple[str, int]]:
+        return sorted(
+            ((game_id, score) for game_id, (_, score) in self._game_popularity.items()),
+            key=lambda item: (-item[1], item[0]),
+        )[:limit]
 
     def put_user(self, user: User) -> None:
         previous = self._users.get(user.id)

@@ -1921,6 +1921,28 @@ class GamePlatform:
                 )
             ]
 
+    def list_popular_games(self, *, limit: int = 8) -> list[Game]:
+        """Returns the highest player-match totals from the persistent ranking."""
+        if type(limit) is not int or not 1 <= limit <= 20:
+            raise InvalidRequestError("limit must be between 1 and 20")
+        with self._lock:
+            list_rankings = getattr(self._store, "list_popular_game_ids", None)
+            if list_rankings is None:
+                return []
+            rankings = list_rankings(limit)
+            games = []
+            for game_id, _score in rankings:
+                game = self._store.get_game(game_id)
+                if game is not None and game.published and not game.deleted:
+                    games.append(game)
+            return games
+
+    def _record_game_match_start(self, match: Match) -> None:
+        """Adds this start once, in the same storage unit of work as the match."""
+        recorder = getattr(self._store, "record_game_match_start", None)
+        if recorder is not None:
+            recorder(match.game_id, len(match.seats))
+
     def update_game(
         self,
         *,
@@ -2258,6 +2280,7 @@ class GamePlatform:
                     token_pot=saved.bet_per_player * len(humans),
                 )
             )
+            self._record_game_match_start(saved)
             self._notify_match_event(
                 "notify.turn",
                 match=saved,
@@ -2976,6 +2999,7 @@ class GamePlatform:
                 turn_started_at=self._clock() if match.turn_seconds else None,
             )
         )
+        self._record_game_match_start(saved)
         self._schedule_computer_moves(saved)
         return self._store.get_match(match.id) or saved
 
@@ -3165,6 +3189,7 @@ class GamePlatform:
                     turn_started_at=self._clock() if match.turn_seconds else None,
                 )
             )
+            self._record_game_match_start(started)
             self.record_match_start(
                 user_id=caller_id,
                 match_id=started.id,

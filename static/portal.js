@@ -90,6 +90,8 @@ function currentPushSubscription() {
 
 const state = {
   games: [], // latest versions, from GET /games
+  popularGames: [], // bounded server ranking; refreshed at most once per minute
+  popularGamesFetchedAt: 0,
   gameCache: new Map(), // "game_id@version" -> game (null when gone)
   pictureCache: new Map(),
   nameCache: new Map(), // user id -> display name
@@ -458,14 +460,22 @@ async function refreshLocked() {
     }
     if (!user) $("token-wallet").hidden = true;
     await offline.sync();
-    const [games, myMatches, openMatches] = await Promise.all([
+    const popularityDue = Date.now() - state.popularGamesFetchedAt >= 60_000;
+    const [games, myMatches, openMatches, popularGames] = await Promise.all([
       StoragePages.list(portalRequest, "/games", {user}),
       user ? StoragePages.list(portalRequest, "/matches", {user}) : [],
       StoragePages.list(portalRequest, "/matches/open", {user}),
+      popularityDue
+        ? portalRequest("GET", "/games/popular?limit=8", {user}).catch(() => null)
+        : null,
     ]);
     state.games = games;
     state.myMatches = myMatches;
     state.openMatches = openMatches;
+    if (popularityDue) {
+      state.popularGamesFetchedAt = Date.now();
+      if (Array.isArray(popularGames)) state.popularGames = popularGames;
+    }
     if (state.detailGameId && !state.games.some(game=>game.id===state.detailGameId)) {
       try { state.games.push(await portalRequest("GET", `/games/${encodeURIComponent(state.detailGameId)}`)); }
       catch (error) { if(error.status!==404) throw error; }
@@ -697,6 +707,7 @@ function catalogGameLabel(game) {
 }
 
 function renderLibrary() {
+  renderPopularGames();
   const games = libraryGames();
   const selected = $("new-game").value;
   const key = JSON.stringify([games, games.map(catalogGameLabel), selected, state.libraryView, state.libraryFilter, state.randomJoining, I18n.revision()]);
@@ -723,6 +734,32 @@ function renderLibrary() {
         el("span", {class:"library-title", textContent:name}),
         el("span", {class:"library-description", textContent:description || I18n.t("ui.games.default_description", {}, "Choose this game to start a new match.")}),
         el("span", {class:"library-select", textContent:random ? (state.randomJoining ? I18n.t("ui.games.finding_match", {}, "Finding a match…") : I18n.t("ui.games.random_join", {}, "Join a random match ↗")) : I18n.t("ui.games.open_game", {}, "Open game ↗")})));
+  }));
+}
+
+function renderPopularGames() {
+  const section = $("popular-games-section");
+  if (!section) return;
+  const games = state.popularGames.filter(game =>
+    state.games.some(current => current.id === game.id && current.published !== false));
+  section.hidden = games.length === 0;
+  $("popular-games").replaceChildren(...games.map((game, index) => {
+    const hue = Array.from(game.id).reduce((value, letter) => value + letter.charCodeAt(0), 0) % 360;
+    const name = catalogGameLabel(game);
+    const initials = name.trim().split(/\s+/).slice(0, 2).map(word => Array.from(word)[0] || "").join("");
+    return el("button", {
+      type: "button",
+      class: "popular-game-card",
+      "aria-label": I18n.t("ui.games.open_aria", {name, players: gameCountLabel(game)}, `Open ${name}, ${gameCountLabel(game)}`),
+      onclick: () => openGamePage(game.id),
+    },
+      el("span", {class: "popular-game-rank", textContent: String(index + 1)}),
+      el("span", {class: "popular-game-art", style: `--art-hue:${hue}`, "aria-hidden": "true"},
+        el("span", {class: "popular-game-monogram", textContent: initials})),
+      el("span", {class: "popular-game-copy"},
+        el("span", {class: "popular-game-title", textContent: name}),
+        el("span", {class: "popular-game-players", textContent: gameCountLabel(game)}),
+        el("span", {class: "popular-game-open", textContent: I18n.t("ui.games.open_game", {}, "Play game ↗")})));
   }));
 }
 
