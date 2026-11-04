@@ -98,3 +98,10 @@ jobs:
           chmod 600 ~/.ssh/id_deploy
           ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" "$VM_DEPLOY_COMMAND"
+      - name: Report audited-game publication results
+        if: steps.revision.outputs.current == 'true'
+        env:
+          VM_HOST: ${{ secrets.GCP_VM_HOST }}
+          VM_USER: ${{ secrets.GCP_VM_USER }}
+        run: |
+          ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" 'sudo journalctl -u game-platform.service --since "5 minutes ago" --no-pager | grep -F "audit-batch2:" | tail -n 6; if sudo test -f /var/log/game-platform/server.log; then sudo grep -F "audit-batch2:" /var/log/game-platform/server.log | tail -n 6; fi'
