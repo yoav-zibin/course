@@ -91,7 +91,7 @@
   "notify.turn": "Sua vez em {game}",
   "notify.match_over": "A partida em {game} terminou",
   "notify.player_joined": "{name} entrou na sua partida em {game}",
-  "notify.player_left": "{name} saiu de {game}; um computador assume",
+  "notify.player_left": "{name} saiu de {game}",
   "notify.test": "Notificação de teste da plataforma de jogos",
   "notify.timed_out": "O tempo acabou em {game}: um computador assumiu o seu lugar",
   "notify.timed_out_over": "{game} terminou: o tempo acabou",
@@ -381,5 +381,9 @@
   "ui.match.newer_version": "Esta partida usa a versão {match_version}; o jogo mais recente é a versão {latest_version}. Crie uma nova partida para usar as regras atualizadas.",
   "ui.match.sound_on": "Som ligado",
   "ui.match.sound_off": "Som desligado",
-  "ui.portal.sign_in_to_play": "Entre no canto superior direito e depois escolha um jogo acima."
+  "ui.portal.sign_in_to_play": "Entre no canto superior direito e depois escolha um jogo acima.",
+  "error.solo_computers_only": "adversários de computador são permitidos apenas no modo individual",
+  "error.solo_computers_join": "adversários de computador são permitidos apenas no modo individual; remova-os antes de convidar jogadores",
+  "ui.match.solo_computers": "Computadores no modo individual",
+  "ui.match.remove_computers": "Remover computadores para multijogador"
 }

@@ -91,7 +91,7 @@
   "notify.turn": "Du bist am Zug in {game}",
   "notify.match_over": "Die Partie in {game} ist beendet",
   "notify.player_joined": "{name} ist deiner Partie in {game} beigetreten",
-  "notify.player_left": "{name} hat {game} verlassen; ein Computer übernimmt",
+  "notify.player_left": "{name} hat {game} verlassen",
   "notify.test": "Testbenachrichtigung von der Spieleplattform",
   "notify.timed_out": "Zeit abgelaufen in {game}: Ein Computer hat deinen Platz übernommen",
   "notify.timed_out_over": "{game} beendet: Zeit abgelaufen",
@@ -381,5 +381,9 @@
   "ui.match.newer_version": "Dieses Spiel nutzt Version {match_version}; die neueste Version ist {latest_version}. Erstelle ein neues Spiel, um die aktualisierten Regeln zu nutzen.",
   "ui.match.sound_on": "Ton an",
   "ui.match.sound_off": "Ton aus",
-  "ui.portal.sign_in_to_play": "Melde dich oben rechts an und wähle dann oben ein Spiel."
+  "ui.portal.sign_in_to_play": "Melde dich oben rechts an und wähle dann oben ein Spiel.",
+  "error.solo_computers_only": "Computergegner sind nur im Einzelspielermodus erlaubt",
+  "error.solo_computers_join": "Computergegner sind nur im Einzelspielermodus erlaubt; entferne sie, bevor du Spieler einlädst",
+  "ui.match.solo_computers": "Computer im Einzelspielermodus",
+  "ui.match.remove_computers": "Computer für Mehrspieler entfernen"
 }

@@ -91,7 +91,7 @@
   "notify.turn": "{game} में आपकी बारी",
   "notify.match_over": "{game} का मैच समाप्त हुआ",
   "notify.player_joined": "{name} आपके {game} मैच में शामिल हुए",
-  "notify.player_left": "{name} ने {game} छोड़ दिया; कंप्यूटर संभाल लेगा",
+  "notify.player_left": "{name} ने {game} छोड़ दिया",
   "notify.test": "गेम प्लेटफ़ॉर्म की परीक्षण सूचना",
   "notify.timed_out": "{game} में समय समाप्त: कंप्यूटर ने आपकी जगह ले ली",
   "notify.timed_out_over": "{game} समाप्त: समय खत्म हो गया",
@@ -381,5 +381,9 @@
   "ui.match.newer_version": "यह मैच संस्करण {match_version} का उपयोग करता है; नवीनतम गेम संस्करण {latest_version} है। अपडेट किए गए नियमों के लिए नया मैच बनाएँ।",
   "ui.match.sound_on": "ध्वनि चालू",
   "ui.match.sound_off": "ध्वनि बंद",
-  "ui.portal.sign_in_to_play": "ऊपर दाईं ओर साइन इन करें, फिर ऊपर से कोई गेम चुनें।"
+  "ui.portal.sign_in_to_play": "ऊपर दाईं ओर साइन इन करें, फिर ऊपर से कोई गेम चुनें।",
+  "error.solo_computers_only": "कंप्यूटर विरोधी केवल एकल खिलाड़ी मैचों में उपलब्ध हैं",
+  "error.solo_computers_join": "कंप्यूटर विरोधी केवल एकल खिलाड़ी मैचों में उपलब्ध हैं; खिलाड़ियों को आमंत्रित करने से पहले उन्हें हटाएँ",
+  "ui.match.solo_computers": "एकल खिलाड़ी के कंप्यूटर",
+  "ui.match.remove_computers": "मल्टीप्लेयर के लिए कंप्यूटर हटाएँ"
 }

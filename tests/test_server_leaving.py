@@ -197,24 +197,15 @@ def test_confirming_a_leave_applies_the_preview_and_settles_the_pot(api: Api):
     api.ok("POST", f"/matches/{match_id}/maybeLeave", as_user=bob)
 
     match = api.ok("POST", f"/matches/{match_id}/playerLeft", as_user=bob)
-    # Bob got the previewed 10; Alice, the last human, was settled the
-    # other 10, and the match plays on with nothing at stake.
-    assert _balance(api, bob) == 10
-    assert _balance(api, alice) == 10
-    assert match["status"] == "ongoing"
+    assert (_balance(api, bob), _balance(api, alice)) == (10, 10)
+    assert match["status"] == "over"
     assert match["token_pot"] == 0
     assert match["token_payouts"] == {"0": 10, "1": 10}
-    assert [player["kind"] for player in match["players"]] == ["human", "computer"]
+    assert [p["kind"] for p in match["players"]] == ["human", "human"]
+    assert match["players"][1]["active"] is False
     assert match["pending_leave_player_id"] is None
-    assert match["turn_of_player_indices"] == [0]
-
-    # The match really does play on: Alice moves, the computer in Bob's
-    # old seat answers, and the turn comes back to Alice.
-    response = _move(api, match_id, as_user=alice, add=3)
-    assert response.status_code == 201
-    after = response.json()
-    assert after["state"]["count"] == 6
-    assert after["turn_of_player_indices"] == [0]
+    assert match["turn_of_player_indices"] is None
+    assert _move(api, match_id, as_user=alice, add=3).status_code == 409
 
 
 def test_a_move_aborts_a_pending_leave(api: Api):
@@ -239,7 +230,7 @@ def test_leaving_directly_applies_player_left_without_a_preview(api: Api):
     match_id = _paid_match(api, alice, game_id, bob)
 
     match = api.ok("POST", f"/matches/{match_id}/leave", as_user=bob)
-    assert match["status"] == "ongoing"
+    assert match["status"] == "over"
     assert match["token_pot"] == 0
     assert _balance(api, bob) == 10
     assert _balance(api, alice) == 10
@@ -304,14 +295,8 @@ def test_estimate_win_chance_prices_the_leavers_payout(api: Api):
     match = api.ok("POST", f"/matches/{match_id}/playerLeft", as_user=alice)
     assert _balance(api, alice) == 20
     assert _balance(api, bob) == 0
-    assert match["status"] == "ongoing"
+    assert match["status"] == "over"
     assert match["token_pot"] == 0
-    assert match["token_payouts"] == {"0": 20}
-    assert match["turn_of_player_indices"] == [1]
-
-    # Bob plays the match out and wins a pot of nothing.
-    response = _move(api, match_id, as_user=bob, add=1)
-    assert response.status_code == 201
-    over = response.json()
-    assert over["status"] == "over"
-    assert over["token_payouts"] == {"0": 20, "1": 0}
+    assert match["token_payouts"] == {"0": 20, "1": 0}
+    assert match["turn_of_player_indices"] is None
+    assert _move(api, match_id, as_user=bob, add=1).status_code == 409

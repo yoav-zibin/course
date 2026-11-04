@@ -273,7 +273,7 @@ async function fetchGameVersion(gameId, version) {
 }
 
 function seatOf(match, userId) {
-  return match.players.find((player) => player.user_id === userId) ?? null;
+  return match.players.find((player) => player.user_id === userId && player.active !== false) ?? null;
 }
 
 /** The seat this viewer moves for now: their own turn, or — in a v1 game — a
@@ -293,6 +293,7 @@ function actingFor(match, userId) {
   if (turn.includes(seat.player_index)) return seat.player_index;
   const game = gameOf(match.game_id, match.game_version);
   if (game && game.server_code) return null;
+  if (match.players.filter(player => player.kind === "human" && player.active !== false).length !== 1) return null;
   const computer = turn
     .map((index) => match.players[index])
     .find((player) => player && player.kind === "computer");
@@ -305,17 +306,15 @@ function isYourTurn(match, userId) {
 }
 
 function isJoinable(match, userId) {
-  if (match.localMode || !userId || seatOf(match, userId)) return false;
+  if (match.localMode || !userId || match.players.some(player => player.user_id === userId)) return false;
+  if (match.players.some(player => player.kind === "computer")) return false;
   const game = gameMetaOf(match.game_id, match.game_version);
   if (!game) return false;
   if (game.published === false) return false;
   const max = Math.max(...game.allowed_player_counts);
   if (match.status === "waiting_for_players") return match.players.length < max;
   if (match.status === "ongoing" && game.allows_join_mid_match) {
-    return (
-      match.players.some((player) => player.kind === "computer") ||
-      match.players.length < max
-    );
+    return match.players.length < max;
   }
   return false;
 }
@@ -946,6 +945,8 @@ function renderMatch() {
         ? I18n.t("ui.match.ended_game", {}, "ended by the game")
         : match.end_reason === "timed_out"
           ? I18n.t("ui.speed.ended_meta", {}, "ended because time ran out")
+          : match.end_reason === "solo_computers_only"
+            ? I18n.t("error.solo_computers_only", {}, "Computer opponents are available in single-player matches only.")
           : I18n.t("ui.match.ended_left", {}, "ended because a player left"),
     );
   if (game && game.deleted) meta.push(I18n.t("ui.match.game_deleted", {}, "this game has been deleted"));
@@ -1047,21 +1048,24 @@ function renderMatch() {
       const computers = match.players.filter((player) => player.kind === "computer").length;
       const paidMatch = (match.bet_per_player ?? 0) > 0;
       const max = Math.max(...counts, 0);
-      if (!paidMatch) {
+      const humanCount = match.players.filter(player => player.kind === "human" && player.active !== false).length;
+      if (!paidMatch && humanCount === 1 && match.matchmaking_player_count == null) {
         const minus = actionButton("−", call("PATCH", "", {num_computer_opponents: computers - 1}), {disabled:computers === 0});
         const plus = actionButton("+", call("PATCH", "", {num_computer_opponents: computers + 1}), {disabled:match.players.length >= max});
         minus.setAttribute?.("aria-label", I18n.t("ui.match.remove_computer_aria", {}, "Remove computer opponent"));
         plus.setAttribute?.("aria-label", I18n.t("ui.match.add_computer_aria", {}, "Add computer opponent"));
         actions.push(el("div", {class:"computer-stepper", role:"group", "aria-label":I18n.t("ui.match.computer_opponents", {}, "Computer opponents")},
-          el("span", {class:"stepper-label", textContent:I18n.t("ui.match.computers", {}, "Computers")}), minus,
+          el("span", {class:"stepper-label", textContent:I18n.t("ui.match.solo_computers", {}, "Single-player computers")}), minus,
           el("span", {class:"stepper-count", textContent:String(computers), "aria-label":I18n.t("ui.match.computers_count_aria", {count: computers}, `${computers} computer opponents`)}), plus));
-      } else {
+      } else if (paidMatch) {
         actions.push(el("p", {class:"paid-lobby-hint", textContent: computers ?
           I18n.t("ui.match.paid_needs_humans", {}, "Paid matches need human opponents. Remove the computer to continue.") :
           I18n.t("ui.match.paid_invite_human", {}, "Invite a human player to join this token match.")}));
         if (computers > 0) actions.push(actionButton(I18n.t("ui.match.remove_computer", {}, "Remove computer"), call("PATCH", "", {num_computer_opponents: computers - 1})));
+      } else if (computers > 0) {
+        actions.push(actionButton(I18n.t("ui.match.remove_computers", {}, "Remove computers for multiplayer"), call("PATCH", "", {num_computer_opponents: 0})));
       }
-      const readyToStart = counts.includes(match.players.length) && (!paidMatch || computers === 0);
+      const readyToStart = counts.includes(match.players.length) && (!paidMatch || computers === 0) && (computers === 0 || humanCount === 1);
       actions.push(actionButton(I18n.t("ui.match.start_game", {}, "Start game"), call("POST", "/start"), {primary:true, disabled:!readyToStart}));
       secondaryActions.push(actionButton(I18n.t("ui.match.delete_match", {}, "Delete match"), call("DELETE"), {danger:true, confirm:I18n.t("ui.match.delete_confirm", {}, "Delete this match for everyone?")}));
     } else if (mySeat) {
@@ -1079,9 +1083,9 @@ function renderMatch() {
         actionButton(I18n.t("ui.action.leave", {}, "Leave"), async () => {
           const preview = await portalRequest("POST", `${path}/maybeLeave`, { user });
           const payout = preview.pending_leave_payout ?? 0;
-          const ends = game.allows_leave_mid_match
-            ? ""
-            : " " + I18n.t("ui.match.leave_ends_all", {}, "Leaving ends the match for everyone.");
+          const ends = preview.pending_leave_ends_match
+            ? " " + I18n.t("ui.match.leave_ends_all", {}, "Leaving ends the match for everyone.")
+            : "";
           if (!confirm(I18n.t("ui.match.leave_refund", {payout}, `You will get ${payout} tokens back — leave?`) + ends)) return;
           await portalRequest("POST", `${path}/playerLeft`, { user });
         }, { danger: true }),
@@ -1329,9 +1333,8 @@ async function syncGame() {
     })),
     turn: view.turn_of_player_indices,
     status: view.status,
-    // The Game API only knows "finished" and "player_left"; a speed match that ran
-    // out of time is, for the game, ended by a player leaving.
-    endReason: view.end_reason === "timed_out" ? "player_left" : view.end_reason,
+    // Old game clients understand only finished and player_left.
+    endReason: view.end_reason && view.end_reason !== "finished" ? "player_left" : view.end_reason,
     moveCount: view.move_count,
     mySeat: mySeat ? mySeat.player_index : null,
     actingFor: !replay && user && !match.conflict ? actingFor(match, user.id) : null,

@@ -543,7 +543,7 @@ class QueryStore:
                 )
             participants = sorted({match.owner_user_id, *match.human_user_ids})
             game = self.get_game_version(match.game_id, match.game_version)
-            joinable = not match.private and (
+            joinable = not match.private and not match.num_computer_opponents and (
                 match.status == "waiting_for_players"
                 or (
                     match.status == "ongoing"

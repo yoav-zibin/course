@@ -582,6 +582,13 @@ class EmulatorResetRequest(_Request):
     players: Annotated[list[EmulatorPlayerIn], Field(min_length=1, max_length=10)]
     seed: int = 0
 
+    @model_validator(mode="after")
+    def solo_computers(self):
+        humans = sum(p.kind == "human" for p in self.players)
+        if any(p.kind == "computer" for p in self.players) and humans != 1:
+            raise ValueError("computer opponents are only supported with one human")
+        return self
+
 
 class EmulatorActRequest(EmulatorResetRequest):
     """Applies one human move in an emulated match (POST /emulator/act),
@@ -746,12 +753,13 @@ class PlayerOut(BaseModel):
     # The v2 player id: the human's user id, or "computer-N" (see
     # [Match.player_id_of]). Empty only for a seat-less construction.
     id: str = ""
+    active: bool = True
 
     @classmethod
     def of(cls, seat: Seat, player_id: str = "") -> "PlayerOut":
         return cls(
             player_index=seat.player_index, kind=seat.kind,
-            user_id=seat.user_id, id=player_id,
+            user_id=seat.user_id, id=player_id, active=seat.active,
         )
 
 
@@ -778,6 +786,7 @@ class MatchOut(BaseModel):
     seed: int = 0
     pending_leave_player_id: str | None = None
     pending_leave_payout: int | None = None
+    pending_leave_ends_match: bool | None = None
     rematch_match_id: str | None
     created_at: dt.datetime
     updated_at: dt.datetime
@@ -832,6 +841,10 @@ class MatchOut(BaseModel):
                 match.pending_leave.get("payout")
                 if isinstance(match.pending_leave, dict)
                 else None
+            ),
+            pending_leave_ends_match=(
+                bool(match.pending_leave.get("end") or match.pending_leave.get("turn") is None)
+                if isinstance(match.pending_leave, dict) else None
             ),
             token_pot=match.token_pot,
             token_payouts=match.token_payouts,

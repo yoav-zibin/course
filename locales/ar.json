@@ -91,7 +91,7 @@
   "notify.turn": "دورك في {game}",
   "notify.match_over": "انتهت المباراة في {game}",
   "notify.player_joined": "انضم {name} إلى مباراتك في {game}",
-  "notify.player_left": "غادر {name} مباراة {game}؛ يتولى الحاسوب اللعب",
+  "notify.player_left": "غادر {name} لعبة {game}",
   "notify.test": "إشعار تجريبي من منصة الألعاب",
   "notify.timed_out": "انتهى الوقت في {game}: تولّى الكمبيوتر مكانك",
   "notify.timed_out_over": "انتهت {game}: نفد الوقت",
@@ -381,5 +381,9 @@
   "ui.match.newer_version": "تستخدم هذه المباراة الإصدار {match_version}؛ وأحدث إصدار للعبة هو {latest_version}. أنشئ مباراة جديدة لاستخدام قواعده المحدثة.",
   "ui.match.sound_on": "الصوت يعمل",
   "ui.match.sound_off": "الصوت متوقف",
-  "ui.portal.sign_in_to_play": "سجّل الدخول من أعلى اليمين، ثم اختر لعبة من الأعلى."
+  "ui.portal.sign_in_to_play": "سجّل الدخول من أعلى اليمين، ثم اختر لعبة من الأعلى.",
+  "error.solo_computers_only": "خصوم الكمبيوتر متاحون في اللعب الفردي فقط",
+  "error.solo_computers_join": "خصوم الكمبيوتر متاحون في اللعب الفردي فقط؛ أزلهم قبل دعوة اللاعبين",
+  "ui.match.solo_computers": "كمبيوتر اللعب الفردي",
+  "ui.match.remove_computers": "إزالة الكمبيوتر للعب الجماعي"
 }

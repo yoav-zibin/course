@@ -2,7 +2,8 @@
 
 This is the in-repo reference for the new server-side Game API, adapted from the
 professor's spec ("Game Platform: server-side Game API (v2)"). **Other teams:
-code against this document.** Changes after Phase 0 are additive only.
+code against this document.** November 6 changes: playerLeft shares the move
+result contract; bots are single-player only.
 
 Status: Phase 0/1 (contract + QuickJS runner) landed first; the REST changes
 below land phase by phase — each section says when.
@@ -56,7 +57,7 @@ const game = {
   playerJoined(state, playerId, ctx) { return { state, turn }; },
 
   // A player left mid-match. Required if the game allows leaving.
-  playerLeft(state, playerId, ctx) { return { state, turn, payout }; },
+  playerLeft(state, playerId, ctx) { return { state, turn, payouts }; },
 };
 ```
 
@@ -68,10 +69,9 @@ const game = {
 | `playerId` | A player's id string. In `viewFor`, `null` means a spectator |
 | `move` | Game-defined JSON from the client, e.g. `{"cell": 4}` |
 | `turn` | The ids of the players who may move next (any one of them), or `null` when the match is over. Never empty |
-| `payouts` | Required when `turn` is null: `{playerId: tokens}`, non-negative integers for humans only, adding up to the pot |
-| `payout` | The leaver's tokens from the pot: an integer from 0 to the pot |
+| `payouts` | `{playerId: tokens}`: non-negative integers for active humans only. Terminal results distribute exactly `ctx.pot`; ongoing results may distribute at most `ctx.pot`. Applies to both `applyMove` and `playerLeft`. |
 | `view` | Whatever the client needs for that player, including the result once the match is over |
-| `ctx.players` | `[{id, kind, display_name, picture_url, max_loss}]` in join order. In `playerJoined` it includes the joiner; in `playerLeft` it still includes the leaver |
+| `ctx.players` | `[{id, kind, display_name, picture_url, max_loss, active}]` in join order. In `playerJoined` it includes the joiner; in `playerLeft` it still includes the leaver |
 | `ctx.pot` | The tokens in the pot |
 | `ctx.random()` | A seeded random number in [0, 1). `Math.random` is replaced by the same generator |
 | `ctx.move_count` | How many moves were made so far |
@@ -97,22 +97,27 @@ const game = {
   back.
 - Leaving before the match starts refunds `max_loss`. Deleting a waiting
   match refunds everyone.
-- `playerLeft` decides a leaver's payout; `payouts` splits the whole pot when
-  the match ends. The pot can't be negative while the match is ongoing and
-  must be exactly 0 when it ends.
-- If a player leaves and at most one human remains, the platform settles the
-  pot: `playerLeft` pays the leaver, the rest of the pot goes to the one
-  remaining human, and they may keep playing against the computers with
-  nothing at stake. If no human is left, the match ends with
-  `end_reason: "player_left"` (any pot the game did not pay out goes to the
-  leaver, so the pot still ends at exactly 0). A game that does not allow
-  leaving, or defines no `playerLeft`, also ends the match that way — with
-  the pot split equally among the humans in the match, the leaver included.
-- Leave-with-tokens confirmation: `POST /matches/{id}/maybeLeave` previews
-  the payout and stores the `playerLeft` result on the match;
-  `POST /matches/{id}/playerLeft` applies it, exactly as previewed. Any
-  other move (or a join) aborts the pending leave. The portal shows the
-  payout in a confirmation dialog first.
+- `playerLeft` returns the same `{state, turn, payouts?}` result as `applyMove`.
+  With `turn: null`, its complete payout distribution is credited exactly once
+  and the match ends with `end_reason: "player_left"`. With an ongoing turn,
+  optional payouts are deducted from the pot and recorded cumulatively.
+- A leaving human is never replaced by a bot. Their seat retains its original
+  index and id, with `active: false` in `ctx.players` and REST `players`. The
+  game must ignore inactive seats in future turns and payouts. The departing
+  player is still active during `playerLeft`, so that call can pay them. End
+  the match if fewer than two active humans remain after a leave. Fixed-roster
+  games should end on departure; games supporting elimination may continue.
+- A game without `playerLeft` ends on departure and the platform divides its
+  remaining pot among active humans. Existing published handlers returning the
+  old scalar `payout` are adapted by the runner: the match ends, the quoted
+  amount goes to the leaver, and the rest goes to the other active humans. If
+  the last human leaves, they receive the full pot. This applies to old pinned
+  game versions as well; it does not rewrite stored code or history.
+- `POST /matches/{id}/maybeLeave` stores the entire validated result. The response
+  exposes `pending_leave_payout` and `pending_leave_ends_match`, never the private
+  resulting state. `POST /matches/{id}/playerLeft` applies that exact result.
+  A move, join, timeout, or another confirmed leave invalidates the preview.
+  Successful game-handled leaves appear in history as `{type: "player_left"}`.
 - `playerLeft` calls get a 2-second time budget instead of the usual
   100 ms, because `ctx.estimateWinChance`'s walks take about a second.
 
@@ -156,7 +161,7 @@ client-computed `new_state` / `next_turn_player_indices`, and
 | `POST /emulator/reset`, `POST /emulator/act` | — | Play unsaved server code the way a match would (the builder's test play): reset runs `newMatch`, act applies one human move; both advance computer players and return the full state, every player's view, and any game error verbatim |
 | `POST /matches` | `{game_id, num_computer_opponents, private?}` | Also `max_loss` (Phase 3) |
 | `POST /matches/{id}/join`, `POST /invites/{token}/accept` | Take a seat | Also deduct `max_loss` (409 if the balance is too low); mid-match the server calls `playerJoined` (Phase 3/4) |
-| `POST /matches/{id}/leave` | A computer takes over the seat, or the match ends | Before the start, a refund; mid-match, `playerLeft` |
+| `POST /matches/{id}/leave` | Ends legacy matches and settles outstanding tokens | Before the start, a refund; mid-match, `playerLeft` |
 | `POST /matches/{id}/maybeLeave`, `POST /matches/{id}/playerLeft` | — | Leave preview + confirm |
 | `POST /matches/{id}/start` | `{first_turn_player_indices, initial_state}` | `{}` — the server calls `newMatch` (Phase 3) |
 | `POST /matches/{id}/moves` | `{new_state, next_turn_player_indices, expected_move_count?}` | `{move, expected_move_count?}`, only from a human in `turn` (403 otherwise); 400 for `InvalidMove` (Phase 3) |
@@ -164,7 +169,18 @@ client-computed `new_state` / `next_turn_player_indices`, and
 | `GET /matches/{id}/moves` | Every `new_state` | Each move's player id, move and time (Phase 3) |
 | `GET /auth/me` | Your profile | Also your token balance (already present) |
 
-## Computer opponents on the server (Phase 3)
+## Computer opponents: single-player only
+
+Computer matches contain exactly one human. A second human cannot join a bot
+match through the API or an invite; remove all computers in the waiting room
+first. Multiplayer lobbies and random matchmaking cannot add bots. Bot matches
+are excluded from open-match listings. The emulator follows the same rule, and
+random walks cover either all humans or one human against computers.
+
+Timeouts end a match and refund its outstanding pot; they never create bots.
+Ongoing mixed rosters saved before this change end on their next read, move, or
+worker call with `end_reason: "solo_computers_only"`, refunding the remaining
+pot to active humans once. Waiting lobbies can remove their bots.
 
 After every change (start, a move, a player joining or leaving), while
 `turn` includes a computer and no human, the server calls `computerMove`
@@ -197,12 +213,12 @@ passing version can be published (draft publishing and `PATCH /games/{id}`
 run the gate; `POST /games/test` runs the same tests on unsaved code).
 The tests take at most 1 second: up to
 1000 random walks of up to 1000 moves each, stopping at whichever limit
-comes first. Each walk uses a random player count, a random human/computer
-mix, random `max_loss` values and a random seed; moves come from
+comes first. Each walk uses a random player count, either all humans or one human plus
+computers, random `max_loss` values and a random seed; moves come from
 `computerMove`/`randomMove`; `viewFor` is called for every player and a
 spectator after each move; joins/leaves happen occasionally if allowed
-(the platform's pot settlement when at most one human remains is modeled,
-so a game never owes payouts for a pot the platform settled); malformed
+(full and partial payout distributions are checked, and departed seats remain
+inactive at their original indices); malformed
 moves are fuzzed into `applyMove`. Every result is validated
 (turn, pot, payouts), and selected calls are run twice with identical
 arguments and seed to verify determinism. If not even one walk finishes in
@@ -265,10 +281,9 @@ v2 flow, or the migrated games uses it.
   `ctx.random`; `viewFor` hides the deck and other players' hole cards until
   showdown (it does publish `dealt_in` — which seats were dealt into the
   hand is public, and the client labels seats from it, never from the
-  hidden cards); `playerJoined` plays from the next hand — a seat taken
-  over from a computer mid-hand is folded out and its cards mucked, so
-  the new player sits the rest of the hand out; `playerLeft` pays in
-  proportion to chip share; `payouts` the rest to the best-placed human.
+  hidden cards); `playerJoined` plays from the next hand. `playerLeft` closes
+  the table and pays all active humans in proportion to chip share, including
+  committed chips, with integer remainder tokens assigned in seat order.
 - **Debug:** applies any move `{new_state, next_turn, payouts?}` as-is with
   validation; `computerMove`/`randomMove` pass the turn, and the passes
   are counted in `state.passes` — at 20 the match ends, so all-computer

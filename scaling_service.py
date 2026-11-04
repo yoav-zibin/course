@@ -121,6 +121,7 @@ class ScalablePlatform(GamePlatform):
                 if (
                     existing
                     and existing.status == "waiting_for_players"
+                    and not existing.num_computer_opponents
                     and existing.seat_of(caller_id) is not None
                 ):
                     return existing
@@ -132,10 +133,13 @@ class ScalablePlatform(GamePlatform):
                 ("private", "==", False),
             ]
             docs = self._store._query("matches", filters, limit=1)
-            if docs:
-                candidate = self._store._decode(
+            candidate = (
+                self._store._decode(
                     "matches", docs[0].to_dict(), docs[0].reference
                 )
+                if docs else None
+            )
+            if candidate and not candidate.num_computer_opponents:
                 result = (
                     candidate
                     if candidate.seat_of(caller_id) is not None
@@ -364,6 +368,7 @@ class ScalablePlatform(GamePlatform):
             game
             and game.server_code
             and match.status == "ongoing"
+            and len(match.active_human_user_ids) == 1
             and match.turn_of_player_indices
             and any(
                 match.seats[i].kind == "computer" for i in match.turn_of_player_indices

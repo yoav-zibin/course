@@ -1636,6 +1636,7 @@ class GamePlatform:
                 match
                 for match in map(self._enforce_clock, self._store.list_all_matches())
                 if not match.private
+                and not match.num_computer_opponents
                 and (game := self._store.get_game(match.game_id)) is not None
                 and game.published and not game.deleted
                 and (match.status == "waiting_for_players" or (
@@ -2132,6 +2133,10 @@ class GamePlatform:
                     "computer opponents can only be changed before the match starts"
                 )
             humans = match.human_user_ids
+            if num_computer_opponents and (len(humans) != 1 or match.matchmaking_player_count is not None):
+                raise ConflictError("computer opponents are only supported in single-player matches")
+            if num_computer_opponents and match.bet_per_player:
+                raise InvalidRequestError("paid matches with computer opponents are not supported")
             self._check_fits(
                 self._rules_of(match),
                 num_players=len(humans) + num_computer_opponents,
@@ -2164,6 +2169,8 @@ class GamePlatform:
             raise ConflictError("this game is no longer published")
         if match.status == "over":
             raise ConflictError("the match is over")
+        if match.num_computer_opponents:
+            raise ConflictError("computer opponents are only supported in single-player matches; remove them before inviting players")
         clock_restart = None
         if match.status == "ongoing":
             seats = self._take_seat_mid_match(match, user_id=caller_id)
@@ -2218,11 +2225,6 @@ class GamePlatform:
                         turn_of_player_indices=self._turn_indices(saved, result),
                     )
                 )
-                # playerJoined may have moved the turn onto a computer
-                # seat (e.g. a takeover that sits the seat out); in a v2
-                # match the server moves computer seats itself.
-                self._schedule_computer_moves(saved)
-                saved = self._store.get_match(saved.id) or saved
         joiner = self._store.get_user(caller_id)
         self._notify_match_event(
             "notify.player_joined",
@@ -2646,6 +2648,7 @@ class GamePlatform:
                         "display_name": user.display_name if user else "",
                         "picture_url": user.picture_url if user else "",
                         "max_loss": match.bet_per_player,
+                        "active": seat.active,
                     }
                 )
             else:
@@ -2657,6 +2660,7 @@ class GamePlatform:
                         "display_name": f"Computer {number}",
                         "picture_url": computer_avatar(player_id),
                         "max_loss": 0,
+                        "active": seat.active,
                     }
                 )
         return {
@@ -2863,22 +2867,7 @@ class GamePlatform:
         that produced it, the next turn, and — when the match ends — the
         token payouts the game returned, credited to the human players."""
         turn_indices = self._turn_indices(match, result)
-        payouts_by_index: dict[int, int] | None = None
-        if turn_indices is None:
-            raw_payouts = result.get("payouts")
-            if match.token_pot and not raw_payouts:
-                raise PlatformError(
-                    "the game's server code ended the match without saying "
-                    "how the token pot is paid out"
-                )
-            if raw_payouts:
-                payouts_by_index = {
-                    match.seat_of_player_id(player_id).player_index: amount
-                    for player_id, amount in raw_payouts.items()
-                }
-                for index, amount in payouts_by_index.items():
-                    seat = match.seats[index]
-                    self._credit_tokens(seat.user_id or "", amount)
+        pot, payouts_by_index = self._pay_logic_result(match, result)
         now = self._clock()
         record = Move(
             move_number=len(match.moves) + 1,
@@ -2898,20 +2887,23 @@ class GamePlatform:
                 turn_of_player_indices=turn_indices,
                 status="ongoing" if turn_indices is not None else "over",
                 end_reason=None if turn_indices is not None else "finished",
-                # The final payouts merge over any payouts already made
-                # while the match ran (leavers and settlements, Phase 4),
-                # so the record always covers the whole pot.
-                token_payouts=(
-                    {**(match.token_payouts or {}), **payouts_by_index}
-                    if payouts_by_index is not None
-                    else match.token_payouts
-                )
-                if turn_indices is None
-                else match.token_payouts,
+                token_pot=pot,
+                token_payouts=payouts_by_index,
                 pending_leave=None,
                 turn_started_at=now if match.turn_seconds else None,
             )
         )
+
+    def _pay_logic_result(self, match: Match, result: dict[str, Any]) -> tuple[int, dict[int, int] | None]:
+        """Validate the entire distribution before transferring any tokens."""
+        GameLogic._validate_result("applyMove", result, self._game_ctx(match))
+        payouts = dict(match.token_payouts or {})
+        raw = result.get("payouts") or {}
+        for player_id, amount in raw.items():
+            seat = match.seat_of_player_id(player_id)
+            self._credit_tokens(seat.user_id or "", amount)
+            payouts[seat.player_index] = payouts.get(seat.player_index, 0) + amount
+        return match.token_pot - sum(raw.values()), payouts if raw else match.token_payouts
 
     def _notify_after_move(
         self, *, before: Match, saved: Match, mover_user_id: str
@@ -2995,6 +2987,7 @@ class GamePlatform:
             game is None
             or not game.server_code
             or match.status != "ongoing"
+            or len(match.active_human_user_ids) != 1
             or not match.turn_of_player_indices
             or not any(
                 match.seats[index].kind == "computer"
@@ -3029,7 +3022,9 @@ class GamePlatform:
         logic fails is recorded and the match is left as it was."""
         with self._lock:
             match = self._store.get_match(match_id)
-            if match is None or match.status != "ongoing":
+            if match is not None:
+                match = self._enforce_clock(match)
+            if match is None or match.status != "ongoing" or len(match.active_human_user_ids) != 1:
                 return
             game = self._store.get_game_version(match.game_id, match.game_version)
             if game is None or not game.server_code:
@@ -3098,7 +3093,7 @@ class GamePlatform:
         if game is None or not game.server_code or match.state is None:
             return match.state
         seat = match.seat_of(caller_id) if caller_id else None
-        if seat is None:
+        if seat is None or (not seat.active and match.status == "ongoing"):
             # The game owner (when not playing) sees the full state: it is
             # their game to debug. Anyone else without a seat sees nothing.
             return match.state if caller_id == game.owner_user_id else None
@@ -3130,6 +3125,8 @@ class GamePlatform:
             match = self._get_owned_match(caller_id=caller_id, match_id=match_id)
             if match.status != "waiting_for_players":
                 raise ConflictError("the match has already started")
+            if match.num_computer_opponents and len(match.human_user_ids) != 1:
+                raise ConflictError("computer opponents are only supported in single-player matches")
             num_players = len(match.seats)
             allowed_player_counts = self._rules_of(match).allowed_player_counts
             if num_players not in allowed_player_counts:
@@ -3204,13 +3201,8 @@ class GamePlatform:
                         num_computer_opponents=match.num_computer_opponents,
                     ),
                 )
-            elif self._rules_of(match).allows_leave_mid_match:
-                updated = self._computer_takes_seat(match, seat)
-                if not updated.human_user_ids:
-                    # Nobody is left to submit moves.
-                    updated = self._ended_by_leaving(updated)
             else:
-                updated = self._ended_by_leaving(match)
+                return self._end_match_by_leave(match, caller_id=caller_id)
             saved = self._save(updated)
             others = [
                 user_id for user_id in saved.human_user_ids if user_id != caller_id
@@ -3277,9 +3269,7 @@ class GamePlatform:
                     pending_leave=None,
                 )
             )
-        if self._rules_of(match).allows_leave_mid_match and self._logic_for(
-            game
-        ).has("playerLeft"):
+        if self._logic_for(game).has("playerLeft"):
             preview = self._compute_leave_preview(match, game, caller_id)
             return self._apply_leave_preview(
                 match, seat=seat, caller_id=caller_id, preview=preview
@@ -3308,81 +3298,51 @@ class GamePlatform:
             raise InvalidRequestError(error.message) from error
         return {
             "player_id": caller_id,
-            "payout": result.get("payout") or 0,
+            "payout": (result.get("payouts") or {}).get(match.player_id_of(self._get_seat(match, caller_id)), 0),
+            "payouts": result.get("payouts") or {},
             "state": result.get("state"),
             "turn": result.get("turn"),
+            "move_count": len(match.moves),
         }
 
     def _apply_leave_preview(
         self, match: Match, *, seat: Seat, caller_id: str, preview: dict[str, Any]
     ) -> Match:
-        """Applies a playerLeft result (see [_compute_leave_preview]): the
-        leaver is paid their payout, a computer takes their seat, and the
-        match continues on the returned state and turn — unless the game
-        ended it or no human is left, in which case the pot is settled
-        and the match is over."""
-        turn_ids = preview.get("turn")
-        turn_indices: frozenset[int] | None = None
-        if turn_ids is not None:
-            turn_seats = []
-            for turn_id in turn_ids:
-                turn_seat = match.seat_of_player_id(turn_id)
-                if turn_seat is None:
-                    raise ConflictError(
-                        "the match changed since this leave was previewed"
-                    )
-                turn_seats.append(turn_seat)
-            turn_indices = frozenset(s.player_index for s in turn_seats)
-        payout = int(preview.get("payout") or 0)
-        remaining = [
-            s for s in match.seats if s.kind == "human" and s.user_id != caller_id
-        ]
-        updated = self._computer_takes_seat(match, seat)
-        self._credit_tokens(caller_id, payout)
-        pot = match.token_pot - payout
-        payouts = dict(match.token_payouts or {})
-        if match.token_pot:
-            payouts[seat.player_index] = payout
-        if turn_indices is None or not remaining:
-            # The game ended the match, or no human is left to play it:
-            # settle whatever is left of the pot and finish.
-            payouts = self._settle_pot(
-                pot,
-                payouts,
-                recipients=remaining,
-                fallback=(caller_id, seat.player_index),
-            )
-            updated = replace(
-                updated,
-                state=preview.get("state"),
-                status="over",
-                turn_of_player_indices=None,
-                end_reason="player_left",
-                token_pot=0,
-                token_payouts=payouts if match.token_pot else match.token_payouts,
-                pending_leave=None,
-            )
-        else:
-            if len(remaining) == 1:
-                # One human left: the pot is settled to them now, and
-                # they may keep playing the computers with nothing at
-                # stake.
-                payouts = self._settle_pot(pot, payouts, recipients=remaining)
-                pot = 0
-            updated = replace(
-                updated,
-                state=preview.get("state"),
-                turn_of_player_indices=turn_indices,
-                token_pot=pot,
-                token_payouts=payouts if match.token_pot else match.token_payouts,
-                pending_leave=None,
-                turn_started_at=self._clock() if match.turn_seconds else None,
-            )
-        saved = self._save(updated)
+        """Apply the complete quoted result once, without creating a bot."""
+        if preview.get("move_count", len(match.moves)) != len(match.moves):
+            raise ConflictError("the match changed since this leave was previewed")
+        result = {"state": preview.get("state"), "turn": preview.get("turn"),
+                  "payouts": preview.get("payouts", {})}
+        if "payouts" not in preview:
+            # A preview persisted before this release used the legacy contract.
+            GameLogic._validate_result("legacyPlayerLeft", {"payout": preview.get("payout", 0)}, self._game_ctx(match))
+            result = GameLogic._legacy_leave_result(
+                {**result, "payout": preview.get("payout", 0)},
+                match.player_id_of(seat), self._game_ctx(match))
+        try:
+            GameLogic._validate_result("playerLeft", result, self._game_ctx(match))
+        except GameLogicError as error:
+            raise PlatformError(str(error)) from error
+        turn = self._turn_indices(match, result)
+        if turn is not None and (seat.player_index in turn or len(match.active_human_user_ids) < 3):
+            raise PlatformError("playerLeft must exclude the leaver and end when fewer than two humans remain")
+        pot, payouts = self._pay_logic_result(match, result)
+        now = self._clock()
+        record = Move(move_number=len(match.moves) + 1, player_index=seat.player_index,
+                      made_by_user_id=caller_id, created_at=now,
+                      new_state=result["state"], next_turn_player_indices=turn,
+                      move={"type": "player_left"}, player_id=match.player_id_of(seat))
+        saved = self._save(replace(
+            match, state=result["state"],
+            seats=_replace_seat(match.seats, replace(seat, active=False)),
+            moves=append_move(match.moves, record),
+            status="over" if turn is None else "ongoing",
+            turn_of_player_indices=turn,
+            end_reason="player_left" if turn is None else None,
+            token_pot=pot, token_payouts=payouts, pending_leave=None,
+            turn_started_at=now if turn is not None and match.turn_seconds else None,
+        ))
         self._notify_leave(saved, caller_id=caller_id)
-        if saved.status == "ongoing":
-            self._schedule_computer_moves(saved)
-            return self._store.get_match(match.id) or saved
         return saved
 
     def _settle_pot(
@@ -3434,14 +3394,13 @@ class GamePlatform:
         self, match: Match, *, caller_id: str, leaver_share: int | None = None
     ) -> Match:
         """Ends a v2 match because a player left and the game does not
-        decide leaver payouts (it defines no playerLeft, or leaving
-        mid-match is not allowed): the pot is split equally among the
+        decide leaver payouts (it defines no playerLeft): the pot is split equally among the
         humans in the match, the leaver included, so no stake is
         stranded. [leaver_share] pays the leaver exactly that amount (a
         preview promised it) and splits the rest among the others."""
         payouts = dict(match.token_payouts or {})
         if match.token_pot:
-            humans = [s for s in match.seats if s.kind == "human"]
+            humans = [s for s in match.seats if s.kind == "human" and s.active]
             leaver_seat = match.seat_of(caller_id)
             fixed = (
                 {leaver_seat.player_index: leaver_share}
@@ -3504,14 +3463,12 @@ class GamePlatform:
                 raise ConflictError(
                     "only a server-side (v2) game has a leave preview"
                 )
-            if self._rules_of(match).allows_leave_mid_match and self._logic_for(
-                game
-            ).has("playerLeft"):
+            if self._logic_for(game).has("playerLeft"):
                 preview: dict[str, Any] = self._compute_leave_preview(
                     match, game, caller_id
                 )
             else:
-                humans = [s for s in match.seats if s.kind == "human"]
+                humans = [s for s in match.seats if s.kind == "human" and s.active]
                 preview = {
                     "player_id": caller_id,
                     "payout": match.token_pot // len(humans) if humans else 0,
@@ -3773,6 +3730,7 @@ class GamePlatform:
                 and match.matchmaking_player_count == target
                 and match.status == "waiting_for_players"
                 and not match.private
+                and not match.num_computer_opponents
             ]
             already_waiting = next(
                 (match for match in waiting if match.seat_of(caller_id) is not None),
@@ -4499,11 +4457,20 @@ class GamePlatform:
         return self._clock()
 
     def _enforce_clock(self, match: Match) -> Match:
-        """Speed matches: when the human seats with the turn ran out of time, a computer
-        takes each of them over if the game allows leaving mid-match and nothing is
-        bet; otherwise (or when no human is left) the match ends as "timed_out".
-        Checked lazily whenever a match is read, listed or moved in, so it works when
-        the slow player is gone; the caller holds the lock, so it happens once."""
+        """End unsupported legacy rosters or expired speed matches once.
+
+        Checked on reads and moves under the lock (a transaction in query mode).
+        Neither leaving nor timing out can introduce a computer opponent.
+        """
+        if (match.status == "ongoing" and match.num_computer_opponents
+                and len(match.active_human_user_ids) != 1):
+            payouts = self._settle_pot(
+                match.token_pot, dict(match.token_payouts or {}),
+                recipients=[s for s in match.seats if s.kind == "human" and s.active])
+            return self._save(replace(
+                match, status="over", turn_of_player_indices=None,
+                end_reason="solo_computers_only", token_pot=0,
+                token_payouts=payouts or match.token_payouts, pending_leave=None))
         deadline = match.turn_deadline
         if deadline is None:
             return match
@@ -4518,47 +4485,21 @@ class GamePlatform:
             if seat.user_id is not None
         )
         updated = replace(match, timeouts=(*match.timeouts, *timeouts))
-        if self._rules_of(match).allows_leave_mid_match and not match.bet_per_player:
-            for seat in late:
-                updated = self._computer_takes_seat(updated, seat)
-            updated = (
-                replace(updated, turn_started_at=now)
-                if updated.human_user_ids
-                # Nobody is left to submit the computers' moves.
-                else self._ended_by_timeout(updated)
-            )
-        else:
-            updated = self._ended_by_timeout(updated)
+        # Timeouts never turn a multiplayer seat into a bot. Refund any
+        # outstanding stake before ending; repeated reads cannot pay twice.
+        payouts = self._settle_pot(
+            updated.token_pot, dict(updated.token_payouts or {}),
+            recipients=[s for s in updated.seats if s.kind == "human" and s.active])
+        updated = replace(self._ended_by_timeout(updated), token_pot=0,
+                          token_payouts=payouts if updated.token_pot else updated.token_payouts,
+                          pending_leave=None)
         saved = self._save(updated)
-        timed_out_ids = [timeout.user_id for timeout in timeouts]
-        if saved.status == "over":
-            # Every human player: those still seated, and everyone who timed out
-            # (now or earlier in the match) and is watching.
-            self._notify_match_event(
-                "notify.timed_out_over",
-                match=saved,
-                recipient_ids=[*saved.human_user_ids, *(t.user_id for t in saved.timeouts)],
-                tag_suffix="timeout",
-            )
-        else:
-            self._notify_match_event(
-                "notify.timed_out",
-                match=saved,
-                recipient_ids=timed_out_ids,
-                tag_suffix="timeout",
-            )
-        if saved.status == "ongoing":
-            # A computer may hold the turn now — it took over a timed-out
-            # seat. In a v2 match the server moves it; nobody else will,
-            # so without this the match stalls on the computer's turn.
-            self._schedule_computer_moves(saved)
+        self._notify_match_event(
+            "notify.timed_out_over", match=saved,
+            recipient_ids=[*saved.human_user_ids, *(t.user_id for t in saved.timeouts)],
+            tag_suffix="timeout",
+        )
         return saved
-
-    def _computer_takes_seat(self, match: Match, seat: Seat) -> Match:
-        """[match] with a computer in [seat]'s place, including its turn if it had it
-        (a player leaving mid-match, or a speed-match timeout)."""
-        computer = Seat(player_index=seat.player_index, kind="computer", user_id=None)
-        return replace(match, seats=_replace_seat(match.seats, computer))
 
     def _ended_by_timeout(self, match: Match) -> Match:
         return replace(
@@ -4573,7 +4514,7 @@ class GamePlatform:
 
     def _get_seat(self, match: Match, user_id: str) -> Seat:
         seat = match.seat_of(user_id)
-        if seat is None:
+        if seat is None or not seat.active:
             raise ForbiddenError("you are not a player in this match")
         return seat
 
@@ -4613,13 +4554,6 @@ class GamePlatform:
         rules = self._rules_of(match)
         if not rules.allows_join_mid_match:
             raise ConflictError("this game does not allow joining a match in progress")
-        computer_seat = next(
-            (seat for seat in match.seats if seat.kind == "computer"), None
-        )
-        if computer_seat is not None:
-            return _replace_seat(
-                match.seats, replace(computer_seat, kind="human", user_id=user_id)
-            )
         if len(match.seats) < rules.max_players:
             new_seat = Seat(
                 player_index=len(match.seats), kind="human", user_id=user_id

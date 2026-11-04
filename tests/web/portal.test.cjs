@@ -66,6 +66,27 @@ test('a valid one-seat lobby says ready instead of waiting for another player',(
   assert.doesNotMatch(node('waiting').textContent,/wait for others/i);
 });
 
+test('multiplayer cannot join solo bots or reuse a departed identity',()=>{
+  const {run}=setup();
+  run('state.games[0].allowed_player_counts=[2,3,4];state.games[0].allows_join_mid_match=true;state.match={game_id:"game",game_version:2,status:"ongoing",players:[{player_index:0,kind:"human",user_id:"owner"},{player_index:1,kind:"computer"}]}');
+  assert.equal(run('isJoinable(state.match,"new")'),false);
+  run('state.match.players[1]={player_index:1,kind:"human",user_id:"departed",active:false}');
+  assert.equal(run('seatOf(state.match,"departed")'),null);
+  assert.equal(run('isJoinable(state.match,"departed")'),false);
+  assert.equal(run('isJoinable(state.match,"new")'),true);
+});
+
+test('computer controls appear only in solo lobbies and offer legacy cleanup',()=>{
+  const {node,run}=setup();
+  run('state.games[0].allowed_player_counts=[2,3,4];state.gameCache.set("game@2",state.games[0]);state.match={id:"match",game_id:"game",game_version:2,owner_user_id:"owner",status:"waiting_for_players",players:[{player_index:0,kind:"human",user_id:"owner"}],move_count:0};renderMatch()');
+  assert.ok(node('actions').children.some(child=>child.class==='computer-stepper'));
+  run('state.match.players.push({player_index:1,kind:"human",user_id:"other"});renderMatch()');
+  assert.ok(!node('actions').children.some(child=>child.class==='computer-stepper'));
+  run('state.match.players.push({player_index:2,kind:"computer"});renderMatch()');
+  assert.ok(node('actions').children.some(child=>child.textContent==='Remove computers for multiplayer'));
+  assert.ok(node('actions').children.find(child=>child.textContent==='Start game').disabled);
+});
+
 test('polling preserves collapsed groups and unchanged match buttons',()=>{
   const {node,run}=setup();run('renderLists()');
   const original=node('list-over').children;

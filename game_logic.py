@@ -395,7 +395,22 @@ class GameLogic:
         envelope = json.loads(envelope_text)
         if envelope.get("ok"):
             result = envelope.get("result")
+            if function == "playerLeft" and isinstance(result, dict) and "payout" in result:
+                # Old published versions used a scalar payout and expected a bot
+                # takeover. Settle them without changing their pinned source.
+                if "payouts" in result:
+                    raise GameLogicError("game.playerLeft cannot return both payout and payouts")
+                self._validate_result("legacyPlayerLeft", result, ctx or {})
+                result = self._legacy_leave_result(result, args[1], ctx or {})
             self._validate_result(function, result, ctx or {})
+            if function == "playerLeft" and isinstance(result, dict) and result.get("turn") is not None:
+                if args[1] in result["turn"]:
+                    raise GameLogicError("game.playerLeft returned a turn for the departing player")
+                remaining = [p for p in (ctx or {}).get("players", [])
+                             if p.get("kind") == "human" and p.get("active", True)
+                             and p.get("id") != args[1]]
+                if len(remaining) < 2:
+                    raise GameLogicError("game.playerLeft must end the match when fewer than two humans remain")
             return result
         if envelope.get("kind") == "invalid_move":
             raise InvalidMoveError(str(envelope.get("message", "invalid move")))
@@ -408,6 +423,20 @@ class GameLogic:
         if stack:
             detail += f"\n{stack}"
         raise GameLogicError(detail)
+
+    @staticmethod
+    def _legacy_leave_result(result: dict[str, Any], player_id: str, ctx: dict[str, Any]) -> dict[str, Any]:
+        """Compatibility for every old game version, including in-flight matches."""
+        pot = ctx.get("pot", 0)
+        payout = result.get("payout") or 0
+        humans = [p["id"] for p in ctx.get("players", [])
+                  if p.get("kind") == "human" and p.get("active", True)]
+        others = [pid for pid in humans if pid != player_id]
+        payouts = {player_id: payout if others else pot}
+        if others:
+            share, extra = divmod(pot - payout, len(others))
+            payouts.update({pid: share + (i < extra) for i, pid in enumerate(others)})
+        return {"state": result.get("state"), "turn": None, "payouts": payouts}
 
     @staticmethod
     def _validate_result(
@@ -425,22 +454,34 @@ class GameLogic:
             )
         players = ctx.get("players") or []
         player_ids = {player.get("id") for player in players}
+        active_ids = {p.get("id") for p in players if p.get("active", True)}
         human_ids = {
-            player.get("id") for player in players if player.get("kind") == "human"
+            player.get("id") for player in players
+            if player.get("kind") == "human" and player.get("active", True)
         }
         pot = ctx.get("pot")
+        if function in ("newMatch", "applyMove", "playerJoined", "playerLeft"):
+            if "state" not in result or "turn" not in result:
+                raise GameLogicError(f"game.{function} must return state and turn")
+            if "payout" in result:
+                raise GameLogicError(f"game.{function} must use payouts, not payout")
         if "turn" in result and result["turn"] is not None:
             turn = result["turn"]
             if not isinstance(turn, list) or not turn:
                 raise GameLogicError(
                     f"game.{function} returned an empty or non-list turn"
                 )
-            unknown = [player_id for player_id in turn if player_id not in player_ids]
+            if any(not isinstance(pid, str) for pid in turn) or len(set(turn)) != len(turn):
+                raise GameLogicError(f"game.{function} returned invalid or duplicate turn ids")
+            unknown = [player_id for player_id in turn if player_id not in active_ids]
             if player_ids and unknown:
                 raise GameLogicError(
                     f"game.{function} returned a turn naming non-players: {unknown}"
                 )
         payouts = result.get("payouts")
+        if (function in ("applyMove", "playerLeft") and result.get("turn") is None
+                and pot and payouts is None):
+            raise GameLogicError(f"game.{function} ended without payouts for the pot")
         if payouts is not None:
             if not isinstance(payouts, dict):
                 raise GameLogicError(
@@ -462,6 +503,8 @@ class GameLogic:
                         f"game.{function} payouts add up to "
                         f"{sum(payouts.values())}, not the pot of {pot}"
                     )
+            elif pot is not None and sum(payouts.values()) > pot:
+                raise GameLogicError(f"game.{function} payouts exceed the pot")
         payout = result.get("payout")
         if payout is not None:
             if not isinstance(payout, int) or isinstance(payout, bool) or payout < 0:

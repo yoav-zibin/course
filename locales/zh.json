@@ -91,7 +91,7 @@
   "notify.turn": "轮到你在{game}中行动",
   "notify.match_over": "{game}的对局已结束",
   "notify.player_joined": "{name}加入了你在{game}的对局",
-  "notify.player_left": "{name}离开了{game}；由电脑接管",
+  "notify.player_left": "{name}离开了{game}",
   "notify.test": "来自游戏平台的测试通知",
   "notify.timed_out": "{game} 中时间已用完：电脑接管了你的座位",
   "notify.timed_out_over": "{game} 已结束：时间用完",
@@ -381,5 +381,9 @@
   "ui.match.newer_version": "此对局使用版本 {match_version}；最新游戏版本为 {latest_version}。创建新对局即可使用更新后的规则。",
   "ui.match.sound_on": "声音开",
   "ui.match.sound_off": "声音关",
-  "ui.portal.sign_in_to_play": "请在右上角登录，然后在上方选择一个游戏。"
+  "ui.portal.sign_in_to_play": "请在右上角登录，然后在上方选择一个游戏。",
+  "error.solo_computers_only": "电脑对手仅支持单人模式",
+  "error.solo_computers_join": "电脑对手仅支持单人模式；邀请其他玩家前请先移除电脑对手",
+  "ui.match.solo_computers": "单人模式电脑对手",
+  "ui.match.remove_computers": "移除电脑以进行多人游戏"
 }

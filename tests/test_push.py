@@ -312,20 +312,21 @@ def test_ending_a_match_notifies_the_other_players() -> None:
     assert message.tag == f"match-{match_id}-over"
 
 
-def test_a_move_made_for_a_computer_notifies_the_next_human() -> None:
+def test_solo_client_does_not_notify_itself_after_a_computer_move() -> None:
     api, notifier = _api_with_notifier()
-    alice, bob = api.new_user("alice"), api.new_user("bob")
+    alice = api.new_user("alice")
+    bob = alice
     _subscribe_ok(api, bob, "https://push.example.com/s/bob")
     game_id = api.new_game(owner=alice, allowed_player_counts=(3,))
     match_id = api.new_match(
-        owner=alice, game_id=game_id, num_computer_opponents=1, joiners=[bob], start=True
+        owner=alice, game_id=game_id, num_computer_opponents=2, start=True
     )
 
     api.move(match_id, as_user=alice, next_turn=2)  # the computer's turn: no message
     assert notifier.messages == []
-    api.move(match_id, as_user=alice, next_turn=1)  # played for the computer
-    (message,) = _messages_to(notifier, bob)
-    assert message.body == "Your turn in Poker"
+    api.move(match_id, as_user=alice, next_turn=0)  # played for the computer
+    assert _messages_to(notifier, bob) == []
+    assert api.match_summary(match_id)["turn"] == [0]
 
 
 def test_every_subscription_of_a_user_is_notified() -> None:
@@ -376,7 +377,7 @@ def test_leaving_mid_match_notifies_the_remaining_players() -> None:
 
     api.ok("POST", f"/matches/{match_id}/leave", as_user=bob)
     (message,) = _messages_to(notifier, alice)
-    assert message.body == "bob left Poker; a computer takes over"
+    assert message.body == "The match in Poker is over"
 
 
 def test_leaving_that_ends_the_match_sends_match_over() -> None:

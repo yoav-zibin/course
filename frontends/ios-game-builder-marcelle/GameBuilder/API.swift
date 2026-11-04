@@ -169,6 +169,7 @@ struct Match: Codable, Identifiable, Equatable {
         let playerIndex: Int
         let kind: String        // "human" or "computer"
         let userId: String?
+        var active: Bool? = nil
     }
 
     let id: String
@@ -185,7 +186,7 @@ struct Match: Codable, Identifiable, Equatable {
     var isWaiting: Bool { status == "waiting_for_players" }
     var isOngoing: Bool { status == "ongoing" }
     var isOver: Bool { status == "over" }
-    func seat(of userId: String?) -> Seat? { players.first { $0.userId != nil && $0.userId == userId } }
+    func seat(of userId: String?) -> Seat? { players.first { $0.active != false && $0.userId != nil && $0.userId == userId } }
 }
 
 extension API {
@@ -232,8 +233,8 @@ extension API {
         _ = try await send("DELETE", "matches/\(id)", as: account)
     }
 
-    /// `POST /matches/{id}/leave`: in an ongoing match a computer takes the seat if the game
-    /// allows leaving, otherwise the match ends.
+    /// `POST /matches/{id}/leave`: the game settles the departure, potentially
+    /// ending the match. No computer takes the seat.
     static func leaveMatch(id: String, as account: Account) async throws {
         _ = try await send("POST", "matches/\(id)/leave", as: account)
     }

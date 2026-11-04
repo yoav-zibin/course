@@ -102,8 +102,8 @@ def test_player_left_payout():
     result = logic.call(
         "playerLeft", {"count": 4}, "u1", ctx=_ctx(), seed=1
     )
-    assert result["payout"] == 50
-    assert result["turn"] == ["computer-1"]
+    assert result["payouts"] == {"u1": 100}
+    assert result["turn"] is None
 
 
 def test_a_game_bug_is_not_an_invalid_move_and_the_runner_recovers():
