@@ -42,3 +42,11 @@ would not change these database-backed game versions.
 - Repeating that publication simulation produced six `unchanged` results.
 - Mini Golf, Blokus, Guandan and 3 Minute Chess were also checked against the
   normal one-second gate and 100 ms per-call QuickJS limit.
+
+Production follow-up: the VM rejected Golf, 3 Minute Chess and Guandan because
+no complete random walk fit within one second (confirmed in migration logs).
+Batch 2 now uses a five-second total publication-test budget through an internal
+admin-only option. All test logic, stored regression seeds, hash/version guards
+and the 100 ms per-function runtime limit remain in force. Normal builder
+publication and the public test API retain their one-second defaults. CI reports
+only the six audit migration result lines to make partial publication visible.
