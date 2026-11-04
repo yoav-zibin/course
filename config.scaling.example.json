@@ -1,0 +1,17 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8000,
+    "keep_alive_timeout_seconds": 3600,
+    "cors_allow_origins": ["http://localhost:8000"]
+  },
+  "firestore": {
+    "enabled": true,
+    "project_id": "project-c9ca4f0b-4e47-43ff-847",
+    "database": "game-platform-scaling",
+    "collection_prefix": "",
+    "save_interval_seconds": 1.0
+  },
+  "debug_tools": false,
+  "log_level": "INFO"
+}

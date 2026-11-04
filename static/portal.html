@@ -18,7 +18,7 @@
     <link rel="manifest" href="/static/portal.webmanifest" />
     <title>Game platform · Portal</title>
     <link rel="stylesheet" href="/static/common.css?v=12" />
-    <link rel="stylesheet" href="/static/portal.css?v=27" />
+    <link rel="stylesheet" href="/static/portal.css?v=28" />
     <link rel="stylesheet" href="/static/portal-match-layout.css?v=1" />
     <link rel="stylesheet" href="/static/portal-speed.css?v=2" />
     <link rel="stylesheet" href="/static/experiments.css?v=1" />
@@ -113,6 +113,11 @@
                 </div>
                 <p id="practice-offline-note" class="play-option-note" data-i18n="ui.portal.practice_offline_note">For offline play, open the game online first.</p>
               </section>
+              <section id="computer-match-option" class="play-option computer-match-option" aria-labelledby="computer-match-title" hidden>
+                <div class="play-option-heading"><span class="play-option-icon" aria-hidden="true">🤖</span><div><h3 id="computer-match-title">Play with computers</h3><p>Start a server match with a computer in every other seat.</p></div></div>
+                <div class="computer-match-controls"><button id="play-computers" type="button" class="primary">Play with computers ↗</button></div>
+                <p class="play-option-note" id="computer-match-hint">Uses the largest player count this game supports.</p>
+              </section>
             </div>
             <div id="create-message" class="message" role="status"></div>
           </div>
@@ -160,6 +165,6 @@
     <script src="/static/push-notifications.js?v=1"></script>
     <script src="/static/portal-feedback.js?v=2"></script>
     <script src="/static/storage-pages.js?v=2"></script>
-    <script src="/static/portal.js?v=61"></script>
+    <script src="/static/portal.js?v=62"></script>
   </body>
 </html>

@@ -145,21 +145,23 @@
 .portal-shell .result-neutral { color:#c9cfdc; background:#26304a; border-color:#44506b; }
 
 /* Match setup: two distinct choices with consistent labels and touch targets. */
-.play-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-top:24px; }
+.play-options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin-top:24px; }
 .play-option { display:flex; flex-direction:column; padding:22px; border:1px solid #343e55; border-radius:12px; background:#131a28; min-width:0; }
 .play-option-heading { display:flex; align-items:flex-start; gap:12px; margin-bottom:24px; }
 .play-option-icon { display:grid; place-items:center; flex:none; width:36px; height:36px; border-radius:10px; background:#29371c; color:#c6f432; font-size:22px; }
 .practice-option .play-option-icon { background:#302744; color:#c8b1ff; }
+.computer-match-option .play-option-icon { background:#203342; color:#5fd4ff; }
 .play-option-heading h3 { margin:0 0 5px; color:#eef0f5; font-size:17px; }
 .play-option-heading p { margin:0; color:#a5aec2; font-size:12px; line-height:1.6; }
 .play-option .create-controls,.practice-controls { display:flex; flex-direction:column; align-items:stretch; gap:16px; margin-top:0; }
+.computer-match-controls { display:flex; flex-direction:column; align-items:stretch; }
 .play-option .computer-setting,.practice-controls label { display:flex; flex-direction:column; align-items:stretch; gap:8px; color:#c9cfdc; font-size:12px; font-weight:600; }
 .play-option #computers,.play-option #practice-mode { width:100%; box-sizing:border-box; height:46px; padding:10px 12px; font-size:15px; }
-.play-option #create,.play-option #practice { width:100%; min-width:0; min-height:48px; margin:0; font-size:14px; }
+.play-option #create,.play-option #practice,.play-option #play-computers { width:100%; min-width:0; min-height:48px; margin:0; font-size:14px; }
 .play-option #practice { background:#2a223c; border-color:#8067ac; color:#e1d3ff; }
 .play-option #practice:hover:not(:disabled) { background:#382d50; border-color:#c8b1ff; }
 .play-option .play-option-note,.play-option #create-hint { margin:14px 0 0; color:#a5aec2; font-size:11px; line-height:1.6; }
-@media(max-width:1100px) and (min-width:861px), (max-width:600px) { .play-options { grid-template-columns:1fr; }.play-option { padding:18px; } }
+@media(max-width:1100px) { .play-options { grid-template-columns:1fr; }.play-option { padding:18px; } }
 /* Compact lobby actions; infrequent actions live in a native disclosure. */
 #actions { gap:10px; align-items:center; }
 .computer-stepper { display:flex; align-items:center; gap:4px; padding:3px; border:1px solid #343e55; border-radius:8px; }

@@ -9,7 +9,11 @@ An in-memory REST backend for a multiplayer turn-based games platform, built wit
   to a set of players (any of whom may move next) or ends the match.
 
 All data lives in process memory behind the `Store` interface (`store.py`), so it can later
-be swapped for a database. The server binary uses `JsonFileStore`
+be swapped for a database. The in-memory store maintains secondary indexes for
+user-linked login accounts, match participants, and match status, avoiding full user or
+match scans on common login, match-history, open-match, and quick-match candidate
+requests. These indexes are process-local and do not make snapshot-based persistence
+safe across multiple server processes. The server binary uses `JsonFileStore`
 (`json_file_store.py`), which also saves everything to a JSON file; see
 [Data file](#data-file).
 
@@ -586,9 +590,10 @@ process at a time (`firestore_store.py`).
 
 **Layout.** One document per record, named after the record: `users/<id>`,
 `game_versions/<game id>@<version>`, `matches/<id>`, `invites/<token>`, ... Each
-document holds the record as JSON text in its `json` field (game states are arbitrary
-JSON, and Firestore can't store all of it natively). A match's moves are one document
-each in `matches/<id>/moves`, and an agent conversation's entries in
+document holds the record as JSON. Large records that compress well are saved as
+level-1 zlib bytes; small and incompressible records stay as text to avoid spending
+CPU for little storage reduction. Readers accept both formats. A match's moves are
+one document each in `matches/<id>/moves`, and an agent conversation's entries in
 `agent_conversations/<game id>/entries`, so long matches never hit Firestore's 1 MiB
 document limit; text over ~900 KB is split into a `chunks` subcollection.
 `meta/format` holds the data format, so an older server refuses newer data. A save
@@ -631,6 +636,86 @@ skipped without it. Start the emulator (Java and Node.js needed) and point the t
 npx firebase-tools emulators:start --only firestore --project demo-game-platform
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 python -m pytest game_platform/tests
 ```
+
+### Staged HTTP benchmark
+
+`scale_benchmark.py` sends the same weighted HTTP request mix at increasing concurrency
+and reports requests per second, latency percentiles, status codes, and errors. Run it
+from a separate machine with Python 3.10 or newer so the load generator does not
+consume the server's CPU. The runner uses only the Python standard library.
+
+Create a dedicated benchmark user and save its credentials in a local JSON file that is
+not committed, such as `/tmp/benchmark-headers.json`:
+
+```json
+{
+  "X-User-Id": "BENCHMARK_USER_ID",
+  "X-User-Password": "BENCHMARK_USER_PASSWORD"
+}
+```
+
+Run the same dataset, request mix, and stages first against one VM, then against the
+load balancer:
+
+```bash
+python course/scale_benchmark.py \
+  --base-url http://SINGLE_VM_ADDRESS:8000 \
+  --requests course/benchmark.requests.example.json \
+  --headers-file /tmp/benchmark-headers.json \
+  --stages 1,2,4,8,16 \
+  --duration-seconds 60 \
+  --report /tmp/one-vm.json
+
+python course/scale_benchmark.py \
+  --base-url https://LOAD_BALANCER_ADDRESS \
+  --requests course/benchmark.requests.example.json \
+  --headers-file /tmp/benchmark-headers.json \
+  --stages 1,2,4,8,16 \
+  --duration-seconds 60 \
+  --report /tmp/two-vm.json
+```
+
+The sample weights are placeholders; edit them to match your expected request mix. The
+highest sustained stage that meets your latency and error objectives is the measured
+peak for that dataset and mix. `/health` alone measures health-check overhead, not
+application capacity. The runner is read-only by default; other methods require
+`--allow-write` and an isolated benchmark database.
+
+**Current limitation:** the existing snapshot-based Firestore store is single-process
+only, and several list routes are unpaginated. In-memory indexes reduce scans for
+login-account, per-user match-history, and open-match lookups, but do not change this
+consistency or memory limitation. Do not use two VMs or a target-sized dataset for a
+capacity claim until those backend paths have been changed. See the
+[backend scaling plan](docs/backend-scaling-plan.md).
+
+### Synthetic target-scale traffic and resource data
+
+`scale_traffic_simulation.py` generates 720 hourly records for a 30-day scenario using
+the 10M-user / 1B-match / 100K-game inventory. It writes
+`reports/scaling-traffic-30d.csv` and `reports/scaling-traffic-30d-summary.json`.
+Regenerate the deterministic sample with:
+
+```bash
+python course/scale_traffic_simulation.py
+```
+
+The current scenario assumes 20% monthly active users, 20% of those active daily, and
+40 HTTP requests per daily active user per day (480M requests/month). The hourly mix
+includes authentication/profile, catalog, match history/details, matchmaking, match
+creation/join, moves, invites, and health. CPU, memory, autoscaled instance count,
+latency, network, and Firestore document operations are model estimates, not measured
+benchmarks or GCE telemetry. The summary records the assumptions and warns that the
+current snapshot-based service cannot load the full target inventory into one VM.
+Generating the files makes no cloud calls; this model is not a capacity claim.
+
+Generate charts from the CSV with the standard-library-only renderer:
+
+```bash
+python course/reports/generate_graphs.py
+```
+
+Open `reports/graphs/index.html` for the dashboard or view the individual SVGs there.
+The images retain synthetic-data labels when viewed separately.
 
 ### Pages
 

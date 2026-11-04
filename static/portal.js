@@ -337,6 +337,8 @@ async function ensureDetails() {
   const openGameKeys = new Set(
     state.match ? [`${state.match.game_id}@${state.match.game_version}`] : [],
   );
+  const detailGame=state.games.find(game=>game.id===state.detailGameId);
+  if (detailGame) openGameKeys.add(`${detailGame.id}@${detailGame.version}`);
   for (const [cache, needed] of [[state.gameCache,openGameKeys],[state.nameCache,userIds],[state.pictureCache,userIds]]) {
     for (const key of cache.keys()) if (cache.size > 128 && !needed.has(key)) cache.delete(key);
   }
@@ -376,6 +378,16 @@ async function ensureDetails() {
       } catch {
         // A transient network error must not permanently poison this
         // version: it stays uncached and is retried on the next refresh.
+      }
+    })(),
+    (async () => {
+      if (!detailGame) return;
+      const key=`${detailGame.id}@${detailGame.version}`;
+      if (state.gameCache.get(key)?.code) return;
+      try {
+        await fetchGameVersion(detailGame.id,detailGame.version);
+      } catch {
+        // The focused game version is retried on the next refresh.
       }
     })(),
   ]);
@@ -829,6 +841,10 @@ function updateMatchSetup() {
   $("practice").disabled = !me() || !game;
   $("practice-mode").disabled = false;
   $("practice-offline-note").hidden = false;
+  const gameVersion=game && gameOf(game.id,game.version);
+  const supportsComputerMatch=Boolean(gameVersion?.server_code && game.allowed_player_counts.some(count=>count>1));
+  $("computer-match-option").hidden=!supportsComputerMatch;
+  $("play-computers").disabled=!me() || !game || state.creating || !navigator.onLine;
   const solo = game?.allowed_player_counts.length === 1 && maximum === 0;
   $("speed-choice").hidden = solo;
   updateStakePreview();
@@ -1412,17 +1428,55 @@ async function onMakeMove(move) {
 }
 
 async function practice() {
+  if (state.creating) return;
+  const user = me();
+  if (!user) {
+    $("create-message").textContent = "Log in first.";
+    $("create-message").className = "message error";
+    return;
+  }
+  let match;
+  state.creating = true;
+  $("practice").disabled = true;
+  const game = state.games.find((g) => g.id === $("new-game").value);
   try {
-    const game = state.games.find((g) => g.id === $("new-game").value);
+    if (!game) throw new Error("Choose a game from the search results first.");
     const full = await portalRequest(
       "GET",
       `/games/${game.id}/versions/${game.version}`,
     );
-    const match = await offline.practice(full, $("practice-mode").value);
+    if (full.server_code) {
+      if ($("practice-mode").value !== "computer") {
+        throw new Error("Pass and play isn't available for server-side games. Choose Against computer to start a match with a computer opponent.");
+      }
+      if (!game.allowed_player_counts.includes(2)) {
+        throw new Error("This server-side game doesn't support a two-player match against a computer.");
+      }
+      match = await portalRequest("POST", "/matches", {
+        user,
+        body: {game_id: full.id, num_computer_opponents: 1, bet_per_player: 0},
+      });
+      state.gameCache.set(`${full.id}@${full.version}`, full);
+      match = await portalRequest("POST", `/matches/${match.id}/start`, {
+        user,
+        body: {first_turn_player_indices: [0]},
+      });
+      $("create-message").textContent = "";
+      selectMatch(match.id);
+      return;
+    }
+    match = offline.practice(full, $("practice-mode").value);
     state.gameCache.set(`${full.id}@${full.version}`, full);
     selectMatch(match.id);
   } catch (error) {
-    $("create-message").textContent = error.message;
+    $("create-message").textContent = match
+      ? `Match created, but couldn't start automatically: ${error.message}. You can retry Start from the lobby.`
+      : error.message;
+    $("create-message").className = "message error";
+    if (match) selectMatch(match.id);
+  } finally {
+    state.creating = false;
+    renderLists();
   }
 }
 
@@ -1470,6 +1524,53 @@ async function createMatch() {
     $("create-message").className = "message error";
   } finally {
     state.creating = false;
+    renderLists();
+  }
+}
+
+async function playWithAllComputers() {
+  if (state.creating) return;
+  const user=me();
+  const game=state.games.find(item=>item.id===(state.detailGameId || $("new-game").value));
+  if (!user) {
+    $("create-message").textContent="Log in first.";
+    $("create-message").className="message error";
+    return;
+  }
+  if (!game) {
+    $("create-message").textContent="Choose a game first.";
+    $("create-message").className="message error";
+    return;
+  }
+  const playerCount=Math.max(...game.allowed_player_counts.filter(count=>count>1));
+  if (!Number.isFinite(playerCount)) {
+    $("create-message").textContent="This game needs at least two player seats.";
+    $("create-message").className="message error";
+    return;
+  }
+  let match;
+  state.creating=true;
+  $("play-computers").disabled=true;
+  $("play-computers").textContent="Starting match…";
+  $("create-message").textContent=`Starting a free match against ${playerCount-1} computer${playerCount===2?"":"s"}…`;
+  $("create-message").className="message";
+  try {
+    const cachedGame=gameOf(game.id,game.version);
+    const full=cachedGame?.code ? cachedGame : await fetchGameVersion(game.id,game.version);
+    if (!full.server_code) throw new Error("Play with computers is available for server-side games.");
+    match=await portalRequest("POST","/matches",{user,body:{game_id:game.id,num_computer_opponents:playerCount-1,bet_per_player:0}});
+    match=await portalRequest("POST",`/matches/${match.id}/start`,{user,body:{first_turn_player_indices:[0]}});
+    $("create-message").textContent="";
+    selectMatch(match.id);
+  } catch(error) {
+    $("create-message").textContent=match
+      ? `Match created, but couldn't start automatically: ${error.message}. Press Start to retry.`
+      : error.message;
+    $("create-message").className="message error";
+    if (match) selectMatch(match.id);
+  } finally {
+    state.creating=false;
+    $("play-computers").textContent="Play with computers ↗";
     renderLists();
   }
 }
@@ -1522,6 +1623,7 @@ async function main() {
     setupNotifications();
   });
   $("practice").addEventListener("click", practice);
+  $("play-computers").addEventListener("click", playWithAllComputers);
   $("retry-sync").addEventListener("click", () => {
     offline.retryAfter = 0;
     state.lastSent = null;
