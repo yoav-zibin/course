@@ -456,9 +456,11 @@ class GameLogic:
         turn is null or a non-empty set of current players, payouts go only
         to humans and — when the match ends — add up to the pot, and a
         leaver's payout is within the pot. Violations are game bugs."""
+        # Views and moves are game-defined JSON, including objects whose
+        # field names happen to overlap the platform's transition envelope.
+        if function in ("computerMove", "randomMove", "viewFor"):
+            return
         if not isinstance(result, dict):
-            if function in ("computerMove", "randomMove", "viewFor"):
-                return
             raise GameLogicError(
                 f"game.{function} must return an object, got {result!r}"
             )
