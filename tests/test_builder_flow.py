@@ -394,8 +394,16 @@ def test_platform_contract_is_shared_by_generation_and_review_prompts():
         assert phrase in PLATFORM_CONTRACT, phrase
     from game_platform.builder_checks import REVIEW_DISCIPLINE
     for phrase in ('do not invent stricter requirements', 'impossible inputs, not code defects',
-                   'still active, so paying them is not paying an inactive player'):
+                   'still active, so paying them is not paying an inactive player',
+                   'no difficulty field', 'state.difficulty is the approved channel'):
         assert phrase in REVIEW_DISCIPLINE, phrase
+    # The settlement algorithm, randomMove recipe and difficulty channel are
+    # stated exactly, because principle-level wording kept producing code
+    # that failed the deterministic walks (playerLeft sums, randomMove time).
+    for phrase in ('ONE settlement function', 'state.finalPayouts', 'the departing human',
+                   'complete legal move list once', 'No weighting between move types',
+                   'state.difficulty when the game state carries it'):
+        assert phrase in PLATFORM_CONTRACT, phrase
     import inspect
     from game_platform import builder_jobs
     assert 'REVIEW_DISCIPLINE' in inspect.getsource(builder_jobs.run_build)
