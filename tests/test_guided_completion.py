@@ -301,6 +301,37 @@ def test_test_proposal_requests_illustrations_one_case_at_a_time():
     flow.validate_artifact('tests',result.builder_workflow['artifacts']['tests']['value'])
 
 
+def test_logic_proposal_retries_once_after_output_limit():
+    from game_platform.builder_jobs import propose_step
+    from game_platform.model_api import ModelOutputLimitError
+    artifact = {'text':'Standard rules: race your pawn home; walls must leave a path.',
+                'allowed_player_counts':[2],'allows_join_mid_match':False,'allows_leave_mid_match':False}
+    class FlakyProvider:
+        calls = 0
+        def chat(self, messages, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                assert kwargs['max_tokens'] == 12000
+                raise ModelOutputLimitError('output limit')
+            assert kwargs['max_tokens'] == 24000
+            assert 'previous reply hit its output limit' in messages[-1]['content']
+            return json.dumps({'message':'Review the rules', 'artifact':artifact})
+    provider = FlakyProvider()
+    result = propose_step(provider, approved_draft(), 'logic', 'Use normal rules')
+    assert provider.calls == 2
+    assert result.builder_workflow['artifacts']['logic']['value'] == artifact
+
+
+def test_logic_proposal_fails_clearly_after_two_output_limits():
+    from game_platform.builder_jobs import propose_step
+    from game_platform.model_api import ModelOutputLimitError
+    class AlwaysLimited:
+        def chat(self, messages, **kwargs):
+            raise ModelOutputLimitError('output limit')
+    with pytest.raises(ModelOutputLimitError, match='output limit twice'):
+        propose_step(AlwaysLimited(), approved_draft(), 'logic', 'Use normal rules')
+
+
 @pytest.mark.parametrize('output_limit',[False, True])
 def test_incomplete_contract_and_svg_recover_without_restarting_draft(output_limit):
     from game_platform.model_api import ModelOutputLimitError
