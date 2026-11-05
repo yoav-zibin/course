@@ -102,7 +102,7 @@ def test_reject_visual_then_repair_and_publish(monkeypatch,tmp_path):
                     from game_platform.model_api import ModelOutputLimitError
                     raise ModelOutputLimitError('output limit')
                 if self.server_review_calls==2:
-                    assert kwargs['max_tokens']==8000
+                    assert kwargs['max_tokens']==16000
                     assert 'previous reply hit its output limit' in messages[-1]['content']
                 return '{"passed":true,"issues":[]}'
             if 'Now write only the client' in messages[-1]['content']: return json.dumps({'code':f['code']})
