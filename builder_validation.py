@@ -184,17 +184,33 @@ def probe_leaving(code, contract, *, allowed_player_counts, allows_leave_mid_mat
             return
         # Only still-active players can leave an ended match: the platform
         # marks the leaver inactive, and its own result validator rejects
-        # terminal payouts to inactive players, so a duplicate leave by
-        # the (now inactive) leaver is outside the call contract.
+        # terminal payouts naming inactive players (even a zero entry), so
+        # a duplicate leave by the (now inactive) leaver is outside the
+        # call contract. For the same reason the recorded payouts can only
+        # be re-reported verbatim when they name still-active players
+        # alone; when they also paid the departed player, that share was
+        # settled when the match ended and may only be folded into the
+        # remaining players' reported amounts, never reduce them.
         after = [dict(p, active=False) if p['id'] == leaver else dict(p) for p in players]
+        recorded = result.get('payouts') or {}
+        still_active = {p['id'] for p in after if p['kind'] == 'human' and p.get('active', True)}
         for other in players:
             if other['id'] == leaver:
                 continue
             again = leave(result['state'], other['id'], after, pot, label + ' (after the end)')
             if again is None:
                 continue
-            if again['turn'] is not None or again.get('payouts') != result.get('payouts') or again['state'] != result['state']:
-                failures.append(f'{label}: a leave after the match ended must return the recorded state and identical payouts; settlement is computed once and never recomputed')
+            if again['turn'] is not None or again['state'] != result['state']:
+                failures.append(f'{label}: a leave after the match ended must return the recorded state unchanged and a null turn; settlement is computed once and never recomputed')
+            elif set(recorded) <= still_active:
+                if again.get('payouts') != recorded:
+                    failures.append(f'{label}: a leave after the match ended must return the recorded payouts identically; settlement is computed once and never recomputed')
+            else:
+                reported = again.get('payouts') or {}
+                for pid, amount in recorded.items():
+                    if pid in still_active and reported.get(pid, 0) < amount:
+                        failures.append(f'{label}: a leave after the match ended reduced the recorded payout of still-active {pid}; recorded amounts for still-active players never decrease')
+                        break
 
     forfeit(two_humans, 10, 'human-1', 'two-human forfeit')
 

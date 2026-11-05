@@ -49,7 +49,17 @@ const game = {
     return {state: s, turn: [ctx.players[s.turnSeat].id]};
   },
   playerLeft(state, playerId, ctx) {
-    if (state.finalPayouts) return {state, turn: null, payouts: state.finalPayouts};
+    if (state.finalPayouts) {
+      const active = eligibleIds(ctx);
+      const out = {};
+      let folded = 0;
+      for (const id of Object.keys(state.finalPayouts)) {
+        if (active.includes(id)) out[id] = state.finalPayouts[id];
+        else folded += state.finalPayouts[id];
+      }
+      if (folded > 0 && active.length) out[active[0]] = (out[active[0]] || 0) + folded;
+      return {state, turn: null, payouts: out};
+    }
     const seat = ctx.players.find(p => p.id === playerId);
     if (!seat || seat.active === false) return {state, turn: [ctx.players[state.turnSeat].id]};
     const remaining = eligibleIds(ctx).filter(id => id !== playerId);
@@ -66,17 +76,28 @@ const game = {
 };
 '''
 
-# B1: re-settles on every leave, paying whoever just left — a leave after
-# the end therefore returns different payouts than the recorded ones.
-B1_RESETTLES = REFERENCE.replace(
-    "    if (state.finalPayouts) return {state, turn: null, payouts: state.finalPayouts};\n"
-    "    const seat = ctx.players.find(p => p.id === playerId);\n"
-    "    if (!seat || seat.active === false) return {state, turn: [ctx.players[state.turnSeat].id]};",
-    "    const seat = ctx.players.find(p => p.id === playerId);")
-# B1 also pays the leaver as 'winner' of their own forfeit.
-B1_RESETTLES = B1_RESETTLES.replace(
+# B1: a leave after the end mutates the recorded state.
+B1_MUTATES_AFTER_END = REFERENCE.replace(
+    "      if (folded > 0 && active.length) out[active[0]] = (out[active[0]] || 0) + folded;\n"
+    "      return {state, turn: null, payouts: out};",
+    "      if (folded > 0 && active.length) out[active[0]] = (out[active[0]] || 0) + folded;\n"
+    "      return {state: {...state, moves: state.moves + 1}, turn: null, payouts: out};")
+
+# Z: settle() records a zero entry for every eligible human, not only the
+# payee — legal when recorded (everyone is active then), but the recorded
+# object names the departed player afterwards, so a verbatim post-end
+# return would name an inactive player. Must still pass, via re-reporting.
+Z_ZERO_ENTRIES = REFERENCE.replace(
+    "  if (winnerId && elig.includes(winnerId)) return {[winnerId]: pot};",
+    "  if (winnerId && elig.includes(winnerId)) { const o = {}; for (const id of elig) o[id] = id === winnerId ? pot : 0; return o; }")
+
+# S: a forfeit is recorded as a draw, splitting the pot — including the
+# departed player's share. The probes cannot judge game-rules fidelity
+# (that is the settlement review's job); the platform invariants (state
+# frozen, conservation, still-active amounts never decrease) must hold.
+S_SPLIT_RECORDING = REFERENCE.replace(
     "      s.winner = others.length === 1 ? others[0].id : null;",
-    "      s.winner = playerId;")
+    "      s.winner = null;")
 
 # B2: a forfeit won by the computer pays nobody.
 B2_PAYS_NOBODY = REFERENCE.replace(
@@ -112,9 +133,17 @@ def test_game_without_player_left_is_skipped():
     assert probe(code) == []
 
 
-def test_resettling_after_the_end_is_caught():
-    failures = probe(B1_RESETTLES)
+def test_state_mutation_after_the_end_is_caught():
+    failures = probe(B1_MUTATES_AFTER_END)
     assert any('after the match ended' in failure for failure in failures), failures
+
+
+def test_zero_entry_recordings_pass_via_rereporting():
+    assert probe(Z_ZERO_ENTRIES) == []
+
+
+def test_split_recording_satisfies_platform_invariants():
+    assert probe(S_SPLIT_RECORDING) == []
 
 
 def test_forfeit_to_computer_paying_nobody_is_caught():
@@ -146,7 +175,8 @@ def test_check_is_registered_and_wraps_probes():
 
 def test_contract_states_the_recipe_and_performance_rules():
     for phrase in ('playerLeft recipe (implement in exactly this order)',
-                   'return the recorded state and state.finalPayouts unchanged',
+                   'the recorded payouts re-reported for this call',
+                   'even zero entries',
                    'the returned turn never contains the leaver',
                    'never call ctx.estimateWinChance from computerMove',
                    'must not clone the state'):
