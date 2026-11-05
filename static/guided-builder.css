@@ -53,9 +53,6 @@
 @media(max-width:1000px){#spec-panel{grid-template-columns:minmax(0,1fr)}.artifact-chat{border-inline-end:0;border-block-end:1px solid var(--color-border-2);padding-inline-end:0;padding-block-end:14px}}
 .chips{display:flex;gap:7px;flex-wrap:wrap;margin-block:8px}
 .cov{font-size:12.5px;border:1px solid var(--color-border-2);background:var(--color-bg-2);border-radius:999px;padding:4px 11px;color:var(--color-text-secondary)}
-.focus-btn{font-size:12.5px;padding:5px 10px}
 #spec-panel[data-step="images"],#spec-panel[data-step="tests"]{grid-template-columns:minmax(240px,300px) minmax(0,1fr)}
-#spec-panel.focus{grid-template-columns:minmax(0,1fr)}
-#spec-panel.focus .artifact-chat{display:none}
-@media(max-width:1000px){#spec-panel[data-step="images"],#spec-panel[data-step="tests"]{grid-template-columns:minmax(0,1fr)}#spec-panel.focus .artifact-chat{display:block}}
+@media(max-width:1000px){#spec-panel[data-step="images"],#spec-panel[data-step="tests"]{grid-template-columns:minmax(0,1fr)}}
 @media(prefers-reduced-motion:reduce){.workshop *,#workspace{animation:none!important;transition:none!important}}

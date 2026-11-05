@@ -243,7 +243,6 @@ $('cancel-name').onclick=()=>{editName=false;render();};
 $('name-form').onsubmit=e=>{e.preventDefault();act('edit-identity');};
 $('chat-form').onsubmit=e=>{e.preventDefault();act('propose');};
 for(const action of ['approve','reopen','refresh','build','cancel','final-approve','feedback'])$(action).onclick=()=>act(action);
-$('focus-toggle').onclick=()=>{const panel=$('spec-panel'),on=panel.classList.toggle('focus');$('focus-toggle').textContent=on?'Show chat':'Focus content';};
 $('publish').onclick=async()=>{try{const game=await request('POST',`/game-drafts/${draft.id}/publish`,{expected_revision:draft.revision});toast('Published '+game.name);await select(draft.id);}catch(e){error(e);}};
 document.addEventListener('auth-changed',()=>{clearTimeout(poll);draft=null;render();Auth.renderMenu($('account-menu'));loadDrafts().catch(error);});
 Auth.renderMenu($('account-menu'));loadDrafts().then(()=>{if(me()&&location.hash.length>1)return select(decodeURIComponent(location.hash.slice(1)));}).catch(error);
