@@ -447,7 +447,18 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
                 raise RuntimeError(purpose + ' reached the output limit twice. No review was approved; retry the build.') from exc
 
     def generate_source(messages, field):
-        raw = model_reply(messages, 16000, 'Writing server code' if field == 'server_code' else 'Writing client code').strip()
+        instruction = ('Return only the complete executable server JavaScript defining const game = {...};. '
+                       'Do not return client HTML, explanations, JSON, or Markdown. Fix the reported failures without changing the approved specification.'
+                       if field == 'server_code' else
+                       'Return only the complete client HTML document. Do not return server JavaScript, explanations, JSON, or Markdown.')
+        request = [dict(message) for message in messages]
+        # Restate the file on every repair: the preceding failures may concern
+        # client code, but this call still requests the server file first.
+        if request[-1]['role'] == 'user' and isinstance(request[-1]['content'], str):
+            request[-1]['content'] += '\nCURRENT OUTPUT REQUIRED: ' + instruction
+        else:
+            request.append({'role':'user', 'content':instruction})
+        raw = model_reply(request, 16000, 'Writing server code' if field == 'server_code' else 'Writing client code').strip()
         if raw.startswith('```') and raw.endswith('```'):
             raw = raw.partition('\n')[2][:-3].strip()
         if raw.startswith('{'):
@@ -574,9 +585,11 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
                 except RuntimeError as exc:
                     if 'UI verification failed' not in str(exc): raise
                     errors.append({'browser_verification':str(exc)[-2000:]})
+            if errors:
+                stage('Verification failures: ' + json.dumps(errors)[:2000])
             stage('Verification attempt complete', checks=checks, server_reviews=reviews)
             if not errors: break
-            messages.extend([{'role':'assistant','content':json.dumps(generated)}, {'role':'user','content':'Fix the implementation without changing approved tests. Failures: '+json.dumps(errors)}])
+            messages.extend([{'role':'assistant','content':server}, {'role':'user','content':'Fix the implementation without changing approved tests. Return the complete raw server JavaScript first; client HTML will be requested separately. Failures: '+json.dumps(errors)}])
         if errors: raise RuntimeError('Verification failed: '+json.dumps(errors)[:8000])
         # Persist verified code for the emulator before asking for final human approval.
         def ready(d):

@@ -107,11 +107,14 @@ def test_reject_visual_then_repair_and_publish(monkeypatch,tmp_path):
                 return '{"passed":true,"issues":[]}'
             if 'Now write only the client' in messages[-1]['content']: return json.dumps({'code':f['code']})
             self.generation+=1
+            assert 'CURRENT OUTPUT REQUIRED: Return only the complete executable server JavaScript' in messages[-1]['content']
             if self.generation==1:return 'const game = {}; unexpected prose'
             if self.generation==2:
                 assert 'SyntaxError' in messages[-1]['content']
                 assert messages[-2]['content']=='const game = {}; unexpected prose'
-            if self.generation==3:assert 'Missing counter' in messages[-1]['content']
+            if self.generation==3:
+                assert 'Missing counter' in messages[-1]['content']
+                assert messages[-2]['content']==f['server_code']
             return json.dumps({'code':f['code'],'server_code':f['server_code']})
     def render(*args,**kwargs):
         shots=[]
