@@ -97,10 +97,11 @@ pre {
 /* Top bar */
 
 .topbar {
-  /* Keep the bar's viewport-width background visible while the page scrolls
-     horizontally, even when the content below is wider than the window. */
+  /* Anchor the bar to horizontal scrolling and keep it at least as wide as
+     the viewport, even when its containing layout is narrower. */
   position: sticky;
   inset-inline-start: 0;
+  min-width: 100vw;
   z-index: 1;
   display: flex;
   align-items: center;

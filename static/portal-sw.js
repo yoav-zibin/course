@@ -5,7 +5,7 @@ const SHELL = [
   "/static/storage-pages.js?v=2",
   "/static/portal-feedback.js?v=2",
   "/static/portal.html",
-  "/static/common.css?v=13",
+  "/static/common.css?v=14",
   "/static/portal.css?v=29",
   "/static/common.js?v=18",
   "/static/i18n.js?v=3",
