@@ -46,6 +46,9 @@ class TwilioSender:
         self._from_number = from_number
 
     def send_login_code(self, destination: str, code: str) -> None:
+        self.send_message(destination, f"Your game platform login code is {code}. It expires in 10 minutes.")
+
+    def send_message(self, destination: str, body: str) -> None:
         try:
             response = httpx.post(
                 f"https://api.twilio.com/2010-04-01/Accounts/{self._account_sid}/Messages.json",
@@ -53,10 +56,7 @@ class TwilioSender:
                 data={
                     "From": self._from_number,
                     "To": destination,
-                    "Body": (
-                        f"Your game platform login code is {code}. "
-                        "It expires in 10 minutes."
-                    ),
+                    "Body": body,
                 },
                 timeout=10,
             )
@@ -191,14 +191,14 @@ class SmtpSender:
         self._use_tls = use_tls
 
     def send_login_code(self, destination: str, code: str) -> None:
+        self.send_message(destination, "Your game platform login code", f"Your game platform login code is {code}. It expires in 10 minutes.\n\nIf you didn't ask for this, just ignore this email.")
+
+    def send_message(self, destination: str, subject: str, body: str) -> None:
         message = EmailMessage()
-        message["Subject"] = "Your game platform login code"
+        message["Subject"] = subject
         message["From"] = self._from_address
         message["To"] = destination
-        message.set_content(
-            f"Your game platform login code is {code}. It expires in 10 minutes.\n\n"
-            "If you didn't ask for this, just ignore this email."
-        )
+        message.set_content(body)
         try:
             with smtplib.SMTP(self._host, self._port, timeout=10) as smtp:
                 if self._use_tls:

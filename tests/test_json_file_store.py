@@ -200,4 +200,4 @@ def test_an_unreadable_file_is_rejected_rather_than_overwritten(tmp_path: Path) 
     )
     with pytest.raises(ValueError) as error:
         JsonFileStore(path)
-    assert str(error.value) == f"{path} has format version 12, expected 11"
+    assert str(error.value) == f"{path} has format version 13, expected 12"

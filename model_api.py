@@ -1,7 +1,7 @@
 """Client for Meta's Model API (OpenAI-compatible) to call Muse Spark models.
 
-The API key is read from the ``MUSE_SPARK_API_KEY`` environment variable
-first, falling back to the ``[model_api]`` config section. An empty key means
+The client uses the configured API key when supplied, then falls back to the
+``MUSE_SPARK_API_KEY`` environment variable. An empty key means
 model features are disabled; the client raises if used without a key.
 
 Get a key at https://dev.meta.ai (developer console, API keys).
@@ -21,9 +21,14 @@ DEFAULT_MODEL = "muse-spark-1.3"
 class ModelApiError(Exception):
     """The model call failed or the reply was unusable."""
 
-    def __init__(self, message: str, *, retryable: bool = True) -> None:
+    def __init__(self, message: str, *, retryable: bool = True, usage=None) -> None:
         super().__init__(message)
         self.retryable = retryable
+        self.usage = usage
+
+
+class ModelOutputLimitError(ModelApiError):
+    """The provider stopped generation at its output token limit."""
 
 
 @dataclass
@@ -35,6 +40,8 @@ class ChatResult:
     # Muse Spark is a reasoning model; providers may surface this as
     # ``reasoning_content`` on the message (or similar fields).
     reasoning: str | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
 
 
 class ModelApiClient:
@@ -84,6 +91,13 @@ class ModelApiClient:
                 raise ModelApiError("Muse timed out. Please try again with a smaller change.", retryable=False) from exc
             status = getattr(exc, "status_code", None)
             retryable = status is None or status >= 500
+            response = getattr(exc, "response", None)
+            if response is not None and ('text/html' in response.headers.get('content-type', '').lower()
+                                         or '<html' in response.text[:1000].lower()):
+                hint = ('Check the API key and its model permissions.' if status in (401, 403)
+                        else 'The provider or an intervening gateway rejected the request; this is not a generated-game error.')
+                raise ModelApiError(f'Muse API returned HTTP {status} with an HTML error page. {hint}',
+                                    retryable=retryable) from exc
             raise ModelApiError(f"The model call failed: {exc}", retryable=retryable) from exc
 
     def chat(
@@ -125,8 +139,11 @@ class ModelApiClient:
         choice = response.choices[0] if response.choices else None
         message = getattr(choice, "message", None)
         content = getattr(message, "content", None)
+        if getattr(choice, "finish_reason", None) == "length":
+            raise ModelOutputLimitError("Muse reached the output limit before completing its reply.",
+                                        retryable=False, usage=getattr(response, "usage", None))
         if not content or not content.strip():
-            raise ModelApiError("The model returned an empty reply.")
+            raise ModelApiError("Muse returned an empty reply.", usage=getattr(response, "usage", None))
         reasoning: str | None = None
         for holder in (message, choice):
             if holder is None:
@@ -138,7 +155,8 @@ class ModelApiClient:
                     break
             if reasoning is not None:
                 break
-        return ChatResult(content=content, reasoning=reasoning)
+        usage = getattr(response, "usage", None)
+        return ChatResult(content=content, reasoning=reasoning, prompt_tokens=getattr(usage,"prompt_tokens",None), completion_tokens=getattr(usage,"completion_tokens",None))
 
 
     @staticmethod

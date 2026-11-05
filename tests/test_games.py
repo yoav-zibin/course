@@ -34,12 +34,14 @@ def test_create_and_get_a_game(api: Api) -> None:
         "server_code": None,
         "game_logic_rules": "",
         "game_ui_rules": "",
+        "tutorial_html": "",
         "translations": {},
         "created_at": "2026-01-01T00:02:00Z",
         "updated_at": "2026-01-01T00:02:00Z",
         "deleted": False,
         "published": True,
         "supports_local_practice": True,
+        "cover_url": "",
     }
     assert api.ok("GET", f"/games/{game['id']}") == game
 
@@ -284,6 +286,6 @@ def test_the_game_list_can_leave_out_the_code(api: Api) -> None:
     assert summary == {
         key: value
         for key, value in full.items()
-        if key not in ("code", "client_code", "server_code", "game_logic_rules", "game_ui_rules", "translations")
+        if key not in ("code", "client_code", "server_code", "game_logic_rules", "game_ui_rules", "tutorial_html", "translations")
     }
     assert summary["id"] == game_id

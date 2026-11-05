@@ -1645,6 +1645,18 @@ class GamePlatform:
         with self._lock:
             return self._owned_draft(caller_id=caller_id, draft_id=draft_id)
 
+    def open_builder_game(self, *, caller_id: str, game_id: str) -> GameDraft:
+        """Reuse an owner's working copy, or seed one from the current public version."""
+        with self._lock:
+            game = self._get_owned_game(caller_id=caller_id, game_id=game_id)
+            if game.deleted: raise NotFoundError("game not found")
+            draft = self._store.get_game_draft(game_id)
+            if draft is not None:
+                return self._owned_draft(caller_id=caller_id, draft_id=game_id)
+            return self.save_game_draft(caller_id=caller_id, draft_id=game.id, name=game.name,
+                description=game.description, rules=game.rules, code=game.code,
+                server_code=game.server_code, expected_revision=None)
+
     def save_game_draft(
         self, *, caller_id: str, draft_id: str | None, name: str,
         description: str, rules: GameRules, code: str,
@@ -1812,6 +1824,12 @@ class GamePlatform:
         except game_text.StringsError:
             table = None
         warnings = game_text.lint(game.code)
+        prepared = (game.builder_workflow or {}).get('translations', {}).get(i18n.normalize_locale(locale) or i18n.DEFAULT_LOCALE)
+        if prepared and isinstance(prepared.get('client_strings'), dict) and set(prepared['client_strings']) == set(table or {}):
+            return GameStrings(game_id=game.id, game_version=game.version,
+                locale=i18n.normalize_locale(locale) or i18n.DEFAULT_LOCALE, status='translated',
+                name=prepared['display_name'], description=prepared['short_description'],
+                strings=prepared['client_strings'], translatable=table is not None, warnings=warnings)
         # Not under the platform's lock: translating may wait for Google.
         translated = self._translation.translate(
             [game.name, game.description, *(table or {}).values()], locale
@@ -1891,6 +1909,30 @@ class GamePlatform:
                 )
             self._store.set_game_published(game_id, False)
             return self._get_game(game_id)
+
+    def published_games_for_guided_migration(self, game_ids=None):
+        """Read the public catalog in bounded pages, or fetch just the requested IDs."""
+        if game_ids is not None:
+            games = []
+            for game_id in dict.fromkeys(game_ids):
+                try:
+                    game = self.get_game(game_id)
+                except NotFoundError:
+                    continue
+                if game.published and not game.deleted:
+                    games.append(game)
+            return games
+        if not getattr(self._store, "scalable", False):
+            return self.list_games(owner_user_id=None)
+        games = []
+        cursor = None
+        while True:
+            page = self._store.page("games", filters=[("deleted", "==", False),
+                                    ("published", "==", True)], cursor=cursor, scope="public")
+            games.extend(page.items)
+            cursor = page.next_cursor
+            if not cursor:
+                return games
 
     def list_games(self, *, owner_user_id: str | None, query: str = "") -> list[Game]:
         """Published games, optionally one owner's. A [query] keeps the games whose

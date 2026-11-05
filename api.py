@@ -1562,7 +1562,12 @@ def refactor_all_games(
             detail="The game-building agent is not set up: no Model API key is "
             "configured on the server.",
         )
-    games = platform.list_games(owner_user_id=None)
+    if body.mode == 'guided_artifacts':
+        from game_platform.builder_budget import validate_tariffs
+        validate_tariffs(config)
+        games = platform.published_games_for_guided_migration(body.game_ids)
+    else:
+        games = platform.list_games(owner_user_id=None)
     missing: list[str] = []
     if body.game_ids is not None:
         by_id = {game.id: game for game in games}
@@ -1595,7 +1600,7 @@ def refactor_all_games(
         request.app.state.refactor_jobs[job["job_id"]] = job
     threading.Thread(
         target=_run_refactor_job,
-        args=(request.app.state, platform, client, job["job_id"], body.prompt, games),
+        args=(request.app.state, platform, client, job["job_id"], body.prompt, games, body.mode),
         daemon=True,
     ).start()
     return _refactor_job_out(job)
@@ -1622,11 +1627,22 @@ def _run_refactor_job(
     job_id: str,
     prompt: str,
     games: list[Game],
+    mode: str = "code",
 ) -> None:
     """The job thread: refactor each game in turn, recording every outcome.
     A game's failure never stops the run — its previous code stays live."""
     for game in games:
-        result = _refactor_one_game(app_state, platform, client, prompt, game)
+        if mode == "guided_artifacts":
+            from game_platform.builder_api import configured_client
+            from game_platform.builder_migration import prefill
+            result = {"game_id":game.id, "name":game.name, "version":game.version}
+            try:
+                changed = prefill(platform,game,lambda owner,draft:configured_client(app_state.model_api_config,platform,owner,draft))
+                result.update(outcome="ready_for_review" if changed else "unchanged",detail="Review the saved proposals in the guided builder")
+            except Exception as exc:
+                result.update(outcome="failed",detail=str(exc)[:500])
+        else:
+            result = _refactor_one_game(app_state, platform, client, prompt, game)
         with app_state.refactor_lock:
             app_state.refactor_jobs[job_id]["results"].append(result)
     with app_state.refactor_lock:
@@ -1910,6 +1926,7 @@ def create_app(
             allow_methods=["*"],
             allow_headers=["*"],
         )
+    app.state.builder_slots = threading.BoundedSemaphore(2)
     app.state.platform = platform if platform is not None else GamePlatform()
     app.state.master_password = master_password
     monitor = monitor if monitor is not None else observability.Monitor()

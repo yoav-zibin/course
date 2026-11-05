@@ -25,6 +25,10 @@ class ContractLogic(GameLogic):
         return result
 
 
+class _RandomExample(Exception):
+    """The illustrated outcome depends on a random draw."""
+
+
 def verify_examples(code, contract):
     logic = ContractLogic(code, contract)
     results = []
@@ -34,8 +38,10 @@ def verify_examples(code, contract):
             seed = case['ctx']['seed']
             def call(fn, *args):
                 first = logic.call(fn,*args,ctx=ctx,seed=seed)
+                random_draw = logic.last_call_used_random and fn in ('newMatch','applyMove')
                 second = logic.call(fn,*args,ctx=ctx,seed=seed)
                 if first != second: raise GameLogicError(f'{fn} is not deterministic')
+                if random_draw: raise _RandomExample(fn)
                 return first
             if case['kind'] == 'initial':
                 if call('newMatch')['state'] != case['state']: raise GameLogicError('Initial state differs')
@@ -49,6 +55,60 @@ def verify_examples(code, contract):
             for who, key in [('player_id','expected_view_of_mover'),('other_player_id','expected_view_of_other')]:
                 if call('viewFor',result['state'],case[who]) != case[key]: raise GameLogicError(f'{key} differs')
             results.append({'name':case['name'],'passed':True})
+        except _RandomExample as exc:
+            results.append({'name':case['name'],'passed':True,'random_outcome':str(exc),'detail':'Determinism checked; illustrated random outcome skipped'})
         except Exception as exc:
             results.append({'name':case['name'],'passed':False,'error':str(exc)})
     return results
+
+
+def sampled_positions(server, contract, rules):
+    """Use actual legal moves to obtain additional player and spectator views."""
+    logic = ContractLogic(server, contract)
+    samples = []
+    for index,count in enumerate(sorted(set([min(rules.allowed_player_counts),max(rules.allowed_player_counts)]))):
+        for mixed in ([False,True] if count>1 else [False]):
+            players = [{'id':f'p{n}', 'kind':'computer' if mixed and n else 'human',
+                        'max_loss':0,'display_name':f'Player {n+1}','picture_url':''} for n in range(count)]
+            ctx = {'players':players,'pot':0,'move_count':0}
+            seed = 716 + index + int(mixed)
+            current = logic.call('newMatch',ctx=ctx,seed=seed)
+            sample = None
+            for turn_number in range(4):
+                if not current['turn']: break
+                mover = current['turn'][0]
+                generator = 'randomMove' if logic.has('randomMove') else 'computerMove'
+                if not logic.has(generator): break
+                state = current['state']
+                move = logic.call(generator,state,mover,ctx=ctx,seed=seed+turn_number)
+                following = logic.call('applyMove',state,mover,move,ctx=ctx,seed=seed+turn_number)
+                next_ctx = {**ctx,'move_count':turn_number+1}
+                sample = {'name':f'Walk {count} players, {"mixed" if mixed else "human"} roster',
+                          'ctx':{**ctx,'seed':seed+turn_number},'state':state,'player_id':mover,'other_player_id':None,
+                          'expected_state':following['state'],'expected_turn':following['turn'], 'turn':current['turn']}
+                for who,label in ((mover,'mover'),(None,'other')):
+                    sample['view_of_'+label]=logic.call('viewFor',state,who,ctx=ctx,seed=seed)
+                    sample['expected_view_of_'+label]=logic.call('viewFor',following['state'],who,ctx=next_ctx,seed=seed)
+                current,ctx=following,next_ctx
+            if sample is not None: samples.append(sample)
+    return samples
+
+
+def verify_browser_moves(server, contract, cases, screenshots):
+    logic = ContractLogic(server, contract)
+    for shot in screenshots:
+        moves = shot.pop('emittedMoves', [])
+        if not moves: continue
+        case = cases[shot['caseIndex']]
+        after = shot['view'].startswith('expected')
+        who = case['other_player_id'] if 'other' in shot['view'] else case['player_id']
+        turn = case['expected_turn'] if after else case.get('turn',[case['player_id']])
+        if who is None or who not in (turn or []):
+            raise RuntimeError('UI verification failed: client submitted a move out of turn')
+        ctx = {k:v for k,v in case['ctx'].items() if k!='seed'}
+        ctx['move_count'] += int(after)
+        for move in moves:
+            try:
+                logic.call('applyMove',case['expected_state' if after else 'state'],who,move,ctx=ctx,seed=case['ctx']['seed'])
+            except (InvalidMoveError, GameLogicError) as exc:
+                raise RuntimeError('UI verification failed: client submitted an illegal move: '+str(exc)) from exc

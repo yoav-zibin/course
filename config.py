@@ -52,6 +52,11 @@ class ModelApiConfig(_Section):
     api_key: str = ""
     model: str = "muse-spark-1.3"
     base_url: str = "https://api.ai.meta.com/v1"
+    # Operator-verified upper tariffs (including multimodal inputs) and provider context bound.
+    builder_input_usd_per_million: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None = None
+    builder_output_usd_per_million: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None = None
+    builder_max_input_tokens: Annotated[int, Field(gt=0)] | None = None
+
 
 
 class GoogleAuthConfig(_Section):

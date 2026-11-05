@@ -1,118 +1,42 @@
-# Guided builder — local implementation status
+# Guided game builder
 
-This is an opt-in prototype at `/static/guided-builder.html`. The classic builder remains available. It is not a complete production implementation of the professor's proposal.
+Open `/static/guided-builder.html` on an isolated local server. Sign in and create a draft, or open one of your published games to work on a private revision. Publishing is a separate action.
 
+## Walk through a build
 
-## October 30 audit against the revised builder-flow v2 PDF
+1. Describe a small game. Review and approve the understanding, identity, logic rules, UI description, interactive tutorial, images, and schema-backed examples in order. Each example includes views before and after a move. The cover must be a text-free, widescreen SVG.
+2. Revise one rule and refresh the affected steps. A regenerated artifact that matches its approved content keeps its approval. A changed proposal waits for review.
+3. If test illustrations fail partway through, reopen the same draft and retry the same request. The builder reuses saved test data and completed illustrations when the prompt and approved inputs match.
+4. Start the build. The worker generates and checks the server code before generating the client. Checks include deterministic calls, illustrated examples, random walks, and separate reviews of rules, private information, computer moves and payouts. Examples that use randomness verify repeatability with a fixed seed and record the skipped exact outcome.
+5. Inspect the client screenshots, sampled moves and review findings. The worker can repair generated code and rerun checks. A proposed correction to an approved example needs human approval. Open the emulator and play the draft before final approval.
+6. Report emulator problems using the feedback box: the model proposes the earliest affected artifact, or a regression example when the existing rules are correct. Review the before/after comparison and approve the change before rebuilding. Approved artifact cards remain in the conversation.
+7. Give final approval to translate the spec, every client string and tutorial strings one language at a time. The publisher verifies complete keys and preserved placeholders; game string requests use these saved versioned translations. A retry resumes with the unfinished language. Publish to make the versioned cover, rules and tutorial available in the portal.
 
-Source: `New builder flow_ building a game step by step (1).pdf`, all ten pages.
-The new first page adds tutorial step 4.5, an extensible verification pipeline, and
-an i18n API that allows additional languages without changing generated game code.
+Closing the tab leaves the server job running. After an interruption, revisit the draft. An expired job can be retried with saved approvals and matching verified-code checkpoints. The ten-minute deadline and two concurrent builds apply per job and per server process respectively. Email and SMS completion notices require a selected channel, a verified contact and a configured sender.
 
-| Requirement | Current local implementation | Remaining |
-| --- | --- | --- |
-| 1 Understanding | Saved conversation, clarification proposals, explicit approval | Live-model quality and latency verification |
-| 2 Identity | Name/description proposal and approval | Live-model verification |
-| 3 Logic rules | Readable rules and extracted player/join/leave settings | Live-model verification and automatic routing of later corrections |
-| 4 UI rules | Readable responsive/RTL/UI specification | Live-model verification |
-| 4.5 Tutorial | Not implemented | Generate, approve, persist and preview a self-contained responsive tutorial iframe |
-| 5 Images | Validated SVG proposals and preview | Enforce cover constraints beyond prompting, connect published image artifacts to catalog, propagate visual corrections back to UI rules |
-| 6 Schemas/examples | Schema validation, saved examples, four previews per case, exact regression tests | Route corrections into affected specs; live-model verification |
-| 7 Build/verify | Three code attempts, example checks, schema-aware random walks, one server review, viewport renders, sampled visual review, final approval | Extensible stage runner, narrow reviewers, wider UI/interaction coverage, review-failure repair, approved-test correction/reapproval, actual cost cap |
-| Translation | Eight-language spec translation request; generated client tables requested | Integrate platform i18n API and verify client string coverage; avoid hard-coded language lists |
-| Resume/revise | Saved artifacts/history, stale flags, reload recovery | Reapprove only changed artifacts, robust restart recovery, published-game editing flow and admin bulk migration |
+## Local setup and verification
 
-The additional invariant generation, coverage-directed walks, third-party testing,
-and real-world bug reports on page 1 are examples of future pipeline stages. The
-immediate architectural requirement is to make adding stages straightforward; it
-does not establish that every example must ship now.
+Use the repository's standard Python setup, Node dependencies, and a Playwright Chromium installation. Set `PLAYWRIGHT_CHANNEL=chrome` to use an installed Chrome. Screenshots default to `.builder-artifacts/`. For multiple serving instances, configure `BUILDER_ARTIFACT_DIR` on shared persistent storage accessible to the workers and web servers.
 
-The PDF's randomness section still proposes successfully aborting examples that
-use ctx.random. The current implementation instead checks exact results with a
-fixed seed. This is an explicit unresolved specification difference, not completed
-compliance. SVG-based mockups are allowed by the PDF's image-generation discussion.
+The server takes its provider key from private `model_api.api_key` or the `MUSE_SPARK_API_KEY` environment variable. Proposals, code generation, reviewers, artifact migration and translations call the provider. Verify the selected model's billable limits and configure `builder_input_usd_per_million`, `builder_output_usd_per_million` and `builder_max_input_tokens` in the private `model_api` section. Include image inputs when verifying the upper bound. The builder reserves the maximum configured charge before each call against a cumulative $10 per draft. Reported usage settles the reservation. Missing usage or an interrupted call leaves the reservation in place.
 
-No completion percentage is claimed: the final build/review stage is much larger
-than the early proposal stages. Stages 1–4 have implemented paths, 5–7 are partial,
-and 4.5 is missing. No complete live Muse build has passed yet.
+With the backend test environment active and Chrome installed, run:
 
-### Repository state and next implementation order
+```sh
+GUIDED_BROWSER_BUILD=1 PLAYWRIGHT_CHANNEL=chrome python -m pytest -q tests/test_guided_completion.py
+npx playwright test e2e/guided-builder.spec.ts
+```
 
-Work is on local `codex/guided-builder-flow`, still uncommitted. Its base is
-`10902cb`; upstream main was `89c15f5` at audit time (80 intervening commits).
-Existing local iOS edits and previously shipped avatar / duplicate cache fixes
-remain in the workspace. Preserve these while isolating the builder patch and
-reconciling against current main before further integration testing. No builder
-code was pushed. The fully merged `codex/responsive-match-page` branch was deleted.
+The HTTP test supplies model responses for a counter game and uses a real browser renderer. It exercises the seven approvals, verified build, final approval, translation plumbing and publication to an isolated test database. A separate repair test supplies a failed visual review. A live provider run is needed to assess generated game quality, real billing telemetry and translations.
 
-Next: reconcile with main; add tutorial and integrate current game i18n support;
-refactor the worker into explicit stages and complete review/repair and budgets;
-finish artifact correction and publishing integration; run offline and live tests.
-Durable jobs/storage and deployment load controls are operational hardening beyond
-merely being able to close a browser tab, and should be tracked separately.
+## Existing games
 
-### Where the Muse key is used
+Administrators can POST to `/admin/refactor_all_games` with `{"mode":"guided_artifacts","game_ids":["game-id"]}` and poll the returned job ID. Omit `game_ids` for the entire published catalog. Start with one game to measure provider usage. This mode fills missing private proposals for the owner to review. Restarting the migration skips artifacts already saved. Batch progress is held in process memory.
 
-Browser -> authenticated workflow endpoint in builder_api.py -> server-side
-ModelApiClient -> Meta API. The browser never needs the key. Proposal calls happen
-in propose_step; generation and reviewer calls in run_build; final-approval calls
-translate specifications. Schema checks, unit tests and browser rendering are
-local computation and do not themselves use a model key.
+## Tutorial localization
 
-The client currently chooses a nonempty config api_key first, otherwise
-MUSE_SPARK_API_KEY from the server process environment. Its module docstring says
-the opposite precedence; the actual constructor is authoritative. Use a private
-local configuration with no inline key and an environment variable for testing.
-Do not put credentials in source control, draft artifacts, browser storage or chat.
-The VM check confirmed a nonempty config key, not its validity, quota, allowed use,
-or model override. Acquiring/testing that credential is deferred at the user's request.
+Interactive tutorials must declare all dynamic text in `i18n-strings`, use the platform `t`/`applyLocale` helper, and handle `tutorial_locale` messages by rerendering without resetting progress. The portal sends the saved translations and language direction into the sandboxed iframe. Static tutorial text is translated as well. An older interactive tutorial without this contract must be regenerated and approved before building; approved game rules remain intact. Adding a language does not change the game's logic.
 
-## Implemented
+## Completion checks (November 4, 2026)
 
-- Six saved, explicit approval stages: understanding, identity, logic rules, UI rules, SVG images, and schema-backed visual examples.
-- Owner-only draft access, optimistic revision checks, artifact history, and invalidation of later approvals after earlier changes.
-- Background generation with a ten-minute deadline, request-size/token reservation bound, and up to three code attempts. Closing the browser does not cancel a running server process.
-- Exact example tests, repeated deterministic calls with the same seed, JSON Schema checks, and schema-checked random walks. Randomized games do not silently bypass tests.
-- Independent server review and sandboxed client renders across six viewport sizes, LTR/RTL, and four views per example. Sampled AI screenshot comparison.
-- Human play/review approval followed by eight-language specification translation and an explicit publish action. Generated client localization is requested in the prompt, not independently guaranteed.
-- Publishing rejects changed approved metadata, rules, code, or specifications. `/games/test` also rechecks saved examples for guided games.
-- Readable game rules exposed in the portal; summary lists omit these heavier fields.
-
-## Validation and its limits
-
-`tests/test_builder_flow.py` tests approval ordering, stale artifacts, ownership, persistence, schema/image safety, missing model credentials, exact examples, cancellation, and publishing protections. The background-worker test uses a model stub and renderer stub: it does not prove live generation works.
-
-`e2e/guided-builder.spec.ts` checks draft creation/reload, approval gating, small-screen layout, and a simulated provider error. Existing play/avatar browser tests were also run.
-
-A known Count-to-three fixture was rendered by a real browser into 144 views (3 cases × 6 sizes × 2 directions × 4 views), plus 12 approved mockup PNGs. This demonstrates rendering infrastructure, not the quality of an AI-generated game. Browser checks detect JavaScript errors, horizontal overflow, blank output, and small targets; they do not establish full usability or visual equivalence.
-
-The backend suite exposed an existing timing-sensitive test: `test_a_call_can_raise_the_time_limit_for_itself` assumes a finite loop exceeds 100 ms, which is not true on this machine. Its failure is retained rather than reported as passing.
-
-No live model generation was run: the local server has no configured provider key. Never commit credentials or copy keys into chat.
-
-## Setup and manual walkthrough
-
-Install project Python dependencies (including jsonschema), Node dependencies and a Playwright Chromium browser. `PLAYWRIGHT_CHANNEL=chrome` selects an installed Chrome for local rendering. Use the existing server model configuration for provider access.
-
-1. Open the guided builder and sign in; create a new game.
-2. Describe a small game. Review and approve each proposal explicitly.
-3. Revise an earlier stage and confirm later stages become stale.
-4. Approve all six stages and build. Reload the page and inspect status.
-5. Inspect rendered screenshots, open the correct draft in the classic emulator, and play.
-6. Give final approval, review translation completion, and publish only when intended. Publishing changes the connected server's data.
-
-Use isolated local data for this walkthrough. Screenshots are written to `.builder-artifacts/` (gitignored); `BUILDER_ARTIFACT_DIR` overrides this location.
-
-## Remaining before claiming the full proposal
-
-- A real provider run of every stage, translation quality, client localization, and failure/repair handling.
-- Durable worker queue and recovery after server restart; current daemon jobs need cancellation/retry if interrupted.
-- Shared durable screenshot storage and deployment browser provisioning.
-- Actual provider-usage dollar accounting/enforcement; request reservation is not a $10 guarantee.
-- Full screenshot/state/roster coverage, narrow independent reviewer passes, and repair loops for visual/review failures (currently stop for correction).
-- Changed-only downstream regeneration and image revisions that propose corresponding UI-rule changes.
-- Existing published-game import/refactor UX and admin bulk generation/review of missing specifications.
-- Email/SMS completion delivery; only the existing web-push mechanism is used.
-- Production load/rate limits, malicious/expensive schema review, and operational monitoring.
-
-Do not deploy this prototype as a finished implementation without resolving the relevant gaps.
+The local checks use simulated provider responses: 38 focused Python tests, including a complete real-Chrome build, and eight desktop/mobile browser checks passed. The latter cover artifact history, before/after review, emulator-feedback UI, dynamic tutorial translation, RTL and switching back to the source language while preserving progress. All 176 JavaScript tests also passed. A live Muse run and human review of its generated game are still required.

@@ -643,7 +643,7 @@ function renderLibrary() {
       "aria-label":random ? `${name}. ${description}` : I18n.t("ui.games.open_aria", { name, players: gameCountLabel(game) }, `Open ${name}, ${gameCountLabel(game)}`),
       disabled:random && state.randomJoining,
       onclick:() => random ? joinRandomMatch() : openGamePage(game.id)},
-      el("span", {class:"library-art", style:`--art-hue:${hue}`, "aria-hidden":"true"},
+      game.cover_url ? el("img", {class:"library-art", src:game.cover_url, alt:"", loading:"lazy", style:"object-fit:cover;width:100%;aspect-ratio:16/9"}) : el("span", {class:"library-art", style:`--art-hue:${hue}`, "aria-hidden":"true"},
         el("span", {class:"library-monogram", textContent:initials}),
         el("span", {class:"library-art-label", textContent:"GAME PLATFORM"})),
       el("span", {class:"library-copy"}, el("span", {class:"library-mode", textContent:gameCountLabel(game)}),
@@ -863,8 +863,26 @@ function renderMatch() {
   updateMatchCurrency(match, user);
   const rulesText = game?.translations?.[I18n.locale()]?.game_logic_rules || game?.game_logic_rules || "";
   if ($("how-to-play")) {
-    $("how-to-play").hidden = !rulesText;
+    $("how-to-play").hidden = !rulesText && !game?.tutorial_html;
     $("game-rules-text").textContent = rulesText;
+    const tutorial = $("game-tutorial");
+    const tutorialKey = game?.tutorial_html ? JSON.stringify([game.id,game.version,I18n.locale(),game.tutorial_html]) : '';
+    if (tutorial && tutorial.dataset.source !== tutorialKey) {
+      tutorial.dataset.source = tutorialKey;
+      tutorial.replaceChildren();
+      if (game?.tutorial_html) {
+        const frame = document.createElement("iframe");
+        frame.title = "Game tutorial";
+        frame.setAttribute("sandbox", "allow-scripts");
+        frame.referrerPolicy = "no-referrer";
+        frame.loading = "lazy";
+        frame.style.cssText = "width:100%;height:480px;border:0;background:white";
+        frame.srcdoc = TutorialFrame.documentSource(game.tutorial_html,
+          game.translations?.[I18n.locale()]?.tutorial_strings || {},
+          I18n.locale(), I18n.locale()==='ar'?'rtl':'ltr');
+        tutorial.append(frame);
+      }
+    }
   }
   const counts = game ? game.allowed_player_counts : [];
   const ownerName = nameOf(match.owner_user_id);

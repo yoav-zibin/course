@@ -67,10 +67,13 @@ class InvalidMove extends Error {
 // same reproducible sequence for that call and no call can leak RNG
 // state into the next one.
 let __rngState = 0;
+let __usedRandom = false;
 function __seedRandom(seed) {
+  __usedRandom = false;
   __rngState = seed >>> 0;
 }
 function __random() {
+  __usedRandom = true;
   __rngState = (__rngState + 0x6D2B79F5) | 0;
   let t = __rngState;
   t = Math.imul(t ^ (t >>> 15), t | 1);
@@ -206,7 +209,7 @@ function __invoke(name, argsJson, ctxJson, seed, frozenMillis) {
       return JSON.stringify({ok: false, kind: "error",
         message: "game." + name + " returned a value that is not JSON", stack: ""});
     }
-    return JSON.stringify({ok: true, result: JSON.parse(text)});
+    return JSON.stringify({ok: true, used_random: __usedRandom, result: JSON.parse(text)});
   } catch (e) {
     if (e instanceof InvalidMove) {
       return JSON.stringify({ok: false, kind: "invalid_move",
@@ -394,6 +397,7 @@ class GameLogic:
                 self._context.set_time_limit(self._time_limit_seconds)
         envelope = json.loads(envelope_text)
         if envelope.get("ok"):
+            self.last_call_used_random = bool(envelope.get("used_random"))
             result = envelope.get("result")
             self._validate_result(function, result, ctx or {})
             return result

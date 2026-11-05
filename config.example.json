@@ -54,7 +54,10 @@
   "model_api": {
     "api_key": "",
     "model": "muse-spark-1.3",
-    "base_url": "https://api.ai.meta.com/v1"
+    "base_url": "https://api.ai.meta.com/v1",
+    "builder_input_usd_per_million": null,
+    "builder_output_usd_per_million": null,
+    "builder_max_input_tokens": null
   },
   "auth": {
     "google": {

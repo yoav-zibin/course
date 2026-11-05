@@ -463,6 +463,7 @@ class GameSummaryOut(BaseModel):
     deleted: bool
     published: bool
     supports_local_practice: bool = True
+    cover_url: str = ""
 
     @classmethod
     def of(cls, game: Game) -> "GameSummaryOut":
@@ -480,12 +481,14 @@ class GameSummaryOut(BaseModel):
             deleted=game.deleted,
             published=game.published,
             supports_local_practice=True,
+            cover_url=f"/games/{game.id}/versions/{game.version}/cover" if (game.builder_workflow or {}).get("artifacts", {}).get("images", {}).get("status") == "approved" else "",
         )
 
 
 class GameOut(GameSummaryOut):
     game_logic_rules: str = ""
     game_ui_rules: str = ""
+    tutorial_html: str = ""
     translations: dict[str, JsonValue] = {}
     code: str
     # The v2 names for the two parts of a game: [client_code] is the same code
@@ -499,6 +502,7 @@ class GameOut(GameSummaryOut):
             **GameSummaryOut.of(game).model_dump(),
             game_logic_rules=(game.builder_workflow or {}).get("artifacts", {}).get("logic", {}).get("value", {}).get("text", ""),
             game_ui_rules=(game.builder_workflow or {}).get("artifacts", {}).get("ui", {}).get("value", {}).get("text", ""),
+            tutorial_html=(game.builder_workflow or {}).get("artifacts", {}).get("tutorial", {}).get("value", {}).get("html", ""),
             translations=(game.builder_workflow or {}).get("translations", {}),
             code=game.code,
             client_code=game.code,
@@ -1061,7 +1065,15 @@ class RefactorAllGamesRequest(_Request):
     building agent applies to every published game, saving the code it
     returns back to each game as a new version."""
 
-    prompt: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    mode: Literal["code", "guided_artifacts"] = "code"
+    prompt: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] | None = None
+
+    @model_validator(mode="after")
+    def require_code_prompt(self):
+        if self.mode == "code" and not self.prompt:
+            raise ValueError("A prompt is required for a code refactor")
+        return self
+
     # Restrict the run to these games; null means every published game.
     game_ids: list[str] | None = None
 

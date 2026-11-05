@@ -84,7 +84,8 @@ def approved_draft():
       'identity':{'display_name':'Count to three','short_description':'Reach three by adding one.'},
       'logic':{'text':'One player adds one each turn, starting at zero. End at three. No stakes, joining or leaving.', 'allowed_player_counts':[1],'allows_join_mid_match':False,'allows_leave_mid_match':False},
       'ui':{'text':'A count and Add one button; readable on phones. Use a calm blue theme.'},
-      'images':{'images':fixture()['contract']['cases'][0]['images']},
+      'tutorial':{'text':'Add one until three.', 'html':'<meta name="viewport" content="width=device-width"><h1>How to play</h1><p>Add one each turn. Reach three to win.</p>'},
+      'images':{'images':[{'caption':'Cover','svg':'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90"><circle cx="80" cy="45" r="30"/></svg>'},*fixture()['contract']['cases'][0]['images'][:3]]},
       'tests':fixture()['contract']}
     for step in flow.STEPS:
         d=flow.approve(flow.propose(d,step,values[step],'Proposed'),step)
@@ -113,6 +114,7 @@ def test_build_job_persists_ready_code_and_does_not_publish(monkeypatch):
     class Model:
         def chat(self,messages,**kwargs):
             return json.dumps({'passed':True,'issues':[]}) if 'Review game server' in messages[0]['content'] or isinstance(messages[0]['content'],list) else json.dumps({'code':f['code'],'server_code':f['server_code']})
+    monkeypatch.setattr('game_platform.builder_visual.review_views',lambda *args:[])
     monkeypatch.setattr(builder_render,'render_game',lambda *args,**kwargs:[])
     run_build(platform,Model(),d.owner_user_id,d.id,d.builder_workflow['job']['id'])
     saved=platform.get_game_draft(caller_id=d.owner_user_id,draft_id=d.id)
@@ -150,3 +152,74 @@ def test_games_test_rechecks_saved_approved_examples():
     report=platform.test_game_code(server_code=broken,rules=d.rules,game_id=d.id)
     assert not report.passed
     assert report.failures[0].function=='approved_example'
+
+
+def test_tutorial_is_required_and_earlier_edits_invalidate_it():
+    d=approved_draft()
+    del d.builder_workflow['artifacts']['tutorial']
+    with pytest.raises(ConflictError):flow.begin_build(d)
+    with pytest.raises(ConflictError):flow.approve(d,'images')
+    d=approved_draft()
+    revised=flow.propose(d,'ui',{'text':'Use larger text and a different board layout.'},'Updated UI')
+    assert revised.builder_workflow['artifacts']['tutorial']['status']=='stale'
+    assert revised.builder_workflow['artifacts']['tests']['status']=='stale'
+
+
+def test_tutorial_validation_and_language_registry():
+    from game_platform.i18n import LOCALE_CODES
+    assert flow.LANGUAGES == LOCALE_CODES
+    with pytest.raises(InvalidRequestError):flow.validate_artifact('tutorial',{'text':'Help','html':'<h1>Help</h1>'})
+    flow.validate_artifact('tutorial',approved_draft().builder_workflow['artifacts']['tutorial']['value'])
+
+
+def test_guided_client_uses_platform_translation_api():
+    from game_platform import game_text
+    code=fixture()['code']
+    assert game_text.extract_strings(code)=={'title':'Count to three','add':'Add one'}
+    assert game_text.lint(code)==[]
+    assert 'applyLocale(m)' in code
+
+
+def test_verification_registry_accepts_additional_checks(monkeypatch):
+    from game_platform import builder_checks
+    seen=[]
+    def extra(code, server, spec, rules):
+        seen.append(code)
+        return {'passed':False, 'details':'Custom invariant failed'}
+    monkeypatch.setattr(builder_checks,'CHECKS',(('custom_invariant',extra),))
+    result=builder_checks.run_checks('client','server',{},None)
+    assert seen==['client']
+    assert result['custom_invariant']['passed'] is False
+
+
+def test_server_review_failure_repairs_code_before_ready(monkeypatch):
+    import json
+    from game_platform.builder_jobs import run_build
+    from game_platform import builder_render
+    f=fixture(); d=flow.begin_build(approved_draft()); store=InMemoryStore(); store.put_game_draft(d)
+    platform=GamePlatform(store=store)
+    user=platform.create_user(display_name='Builder');store.put_user(replace(user,id=d.owner_user_id))
+    class Model:
+        generations=0
+        reviews=0
+        def chat(self,messages,**kwargs):
+            if isinstance(messages[0]['content'],list): return json.dumps({'passed':True,'issues':[]})
+            if 'Review game server' in messages[0]['content']:
+                self.reviews+=1
+                return json.dumps({'passed': self.reviews != 1,'issues': ['Fix setup'] if self.reviews==1 else []})
+            if 'Now write only the client' in messages[-1]['content']: return json.dumps({'code':f['code']})
+            self.generations+=1
+            if self.generations==2: assert 'review_rules' in messages[-1]['content']
+            return json.dumps({'code':f['code'],'server_code':f['server_code']})
+    monkeypatch.setattr('game_platform.builder_visual.review_views',lambda *args:[])
+    model=Model();monkeypatch.setattr(builder_render,'render_game',lambda *args,**kwargs:[])
+    run_build(platform,model,d.owner_user_id,d.id,d.builder_workflow['job']['id'])
+    saved=platform.get_game_draft(caller_id=d.owner_user_id,draft_id=d.id)
+    assert saved.builder_workflow['job']['status']=='ready_for_review',saved.builder_workflow['job']
+    assert model.generations==2 and model.reviews==8
+    assert set(saved.builder_workflow['job']['server_reviews'])=={'rules','privacy','computers','settlement'}
+
+
+def test_old_workflow_missing_tutorial_has_actionable_conflict():
+    d=approved_draft();del d.builder_workflow['artifacts']['tutorial']
+    with pytest.raises(ConflictError,match='tutorial'):flow.spec_digest(d.builder_workflow)
