@@ -76,9 +76,10 @@ def test_updates_through_publish_gate_and_is_idempotent(patch_case, monkeypatch)
     assert len(calls) == 1
 
 
-def test_second_batch_uses_its_own_guarded_manifest(patch_case, monkeypatch):
+@pytest.mark.parametrize("batch", [2, 3])
+def test_later_batch_uses_its_own_guarded_manifest(patch_case, monkeypatch, batch):
     platform, store, original, client, server, directory, _ = patch_case
-    monkeypatch.setattr(migrations, "BATCH2_DIRECTORY", directory)
+    monkeypatch.setattr(migrations, f"BATCH{batch}_DIRECTORY", directory)
     gate = platform._gate_server_code
     budgets = []
 
@@ -87,12 +88,13 @@ def test_second_batch_uses_its_own_guarded_manifest(patch_case, monkeypatch):
         return gate(*args, **kwargs)
 
     monkeypatch.setattr(platform, "_gate_server_code", checked_gate)
-    result = migrations.apply_audit_batch2(platform)
+    apply_batch = getattr(migrations, f"apply_audit_batch{batch}")
+    result = apply_batch(platform)
     assert result[0]["status"] == "updated"
     updated = platform.get_game(original.id)
     assert (updated.version, updated.code, updated.server_code) == (10, client, server)
     assert store.get_game_version(original.id, 9) == original
-    assert migrations.apply_audit_batch2(platform)[0]["status"] == "unchanged"
+    assert apply_batch(platform)[0]["status"] == "unchanged"
     assert budgets == [5.0]
 
 
@@ -141,10 +143,11 @@ def test_missing_game_is_skipped(patch_case):
     assert migrations.apply_audit_batch1(platform)[0]["status"] == "skipped_missing_or_unpublished"
 
 
-@pytest.mark.parametrize("batch", [1, 2])
+@pytest.mark.parametrize("batch", [1, 2, 3])
 def test_gate_rejection_keeps_both_code_parts_and_continues(patch_case, monkeypatch, batch):
     platform, store, original, _, _, directory, entry = patch_case
     monkeypatch.setattr(migrations, "BATCH2_DIRECTORY", directory)
+    monkeypatch.setattr(migrations, "BATCH3_DIRECTORY", directory)
     following = replace(original, id="following-game")
     _seed_versions(store, following)
     (directory / "bad-server.js").write_text("const game = {newMatch(){ throw new Error('rejected candidate'); }};")
