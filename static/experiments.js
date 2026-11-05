@@ -5,18 +5,18 @@
   const CURRENT_KEY = "game-platform.current-account.v1";
   const SKIN_CACHE_PREFIX = "game-platform.experiment-skin.v1:";
   const PORTAL_SKIN_COOKIE = "game-platform.portal-skin.v1";
+  const PORTAL_SKIN_STORAGE_KEY = "game-platform.portal-skin-preference.v1";
   const PORTAL_SKIN_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
   const SKIN_KEY_PATTERN = /^[a-z0-9][a-z0-9-]{0,49}$/;
   const PORTAL_SKINS = new Set(["classic", "aurora", "sunset", "immersive"]);
   const PORTAL_LAYOUTS = new Set(["left", "hamburger", "top"]);
   let assignedSkin = "classic";
   let previewSkin = portalSkinFromUrl();
-  let cookieSkin = readPortalSkinCookie();
+  let savedSkin = readSavedPortalSkin();
   let previewLayout = portalLayoutFromUrl();
 
   if (previewSkin) {
-    cookieSkin = previewSkin;
-    writePortalSkinCookie(previewSkin);
+    savePortalSkinPreference(previewSkin);
   }
 
   function portalSkinFromUrl() {
@@ -37,6 +37,16 @@
     }
   }
 
+  function readSavedPortalSkin() {
+    try {
+      const key = localStorage.getItem(PORTAL_SKIN_STORAGE_KEY);
+      if (PORTAL_SKINS.has(key)) return key;
+    } catch (error) {
+      console.warn("Saved skin preference could not be read from browser storage.", error);
+    }
+    return readPortalSkinCookie();
+  }
+
   function writePortalSkinCookie(key) {
     if (!PORTAL_SKINS.has(key)) return;
     try {
@@ -54,6 +64,27 @@
     } catch (error) {
       console.warn("Saved skin preference could not be cleared.", error);
     }
+  }
+
+  function savePortalSkinPreference(key) {
+    if (!PORTAL_SKINS.has(key)) return;
+    savedSkin = key;
+    try {
+      localStorage.setItem(PORTAL_SKIN_STORAGE_KEY, key);
+    } catch (error) {
+      console.warn("Saved skin preference could not be stored in browser storage.", error);
+    }
+    writePortalSkinCookie(key);
+  }
+
+  function clearSavedPortalSkin() {
+    savedSkin = null;
+    try {
+      localStorage.removeItem(PORTAL_SKIN_STORAGE_KEY);
+    } catch (error) {
+      console.warn("Saved skin preference could not be cleared from browser storage.", error);
+    }
+    clearPortalSkinCookie();
   }
 
   function portalLayoutFromUrl() {
@@ -85,12 +116,12 @@
   }
 
   function activeSkin() {
-    return previewSkin || cookieSkin || assignedSkin || "classic";
+    return previewSkin || savedSkin || assignedSkin || "classic";
   }
 
   function syncSkinPicker() {
     const picker = document.getElementById("portal-skin-picker");
-    if (picker) picker.value = previewSkin || cookieSkin || "";
+    if (picker) picker.value = previewSkin || savedSkin || "";
   }
 
   function syncLayoutPicker() {
@@ -101,11 +132,9 @@
   function setPreviewSkin(key) {
     previewSkin = PORTAL_SKINS.has(key) ? key : null;
     if (previewSkin) {
-      cookieSkin = previewSkin;
-      writePortalSkinCookie(previewSkin);
+      savePortalSkinPreference(previewSkin);
     } else {
-      cookieSkin = null;
-      clearPortalSkinCookie();
+      clearSavedPortalSkin();
     }
     const url = new URL(location.href);
     if (previewSkin) url.searchParams.set("skin", previewSkin);
@@ -188,8 +217,8 @@
     setPreviewLayout(event.currentTarget.value);
   });
 
-  // Keep the selected skin in the URL across portal screens and in a cookie
-  // across visits; the server assignment remains the fallback when none is saved.
+  // Keep the selected skin in the URL across portal screens and in browser
+  // storage across visits; the server assignment remains the fallback when none is saved.
   syncSkinPicker();
   applyLayout();
   syncLayoutPicker();
