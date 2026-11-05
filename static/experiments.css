@@ -373,9 +373,15 @@
   padding: 8px;
   border-radius: 0;
 }
-@media(max-width:640px) {
+@media(max-width:900px) {
+  .topbar[data-app-page="portal"] { flex-wrap:wrap; gap:var(--space-sm); }
+  .topbar[data-app-page="portal"] nav { order:10; flex:1 0 100%; min-width:0; overflow-x:auto; }
   .portal-skin-picker > span,
-  .portal-layout-picker > span { display: none; }
+  .portal-layout-picker > span { display:none; }
+  .portal-skin-picker select,
+  .portal-layout-picker select { max-width:120px; padding-inline:6px; }
+}
+@media(max-width:640px) {
   .portal-skin-picker select,
   .portal-layout-picker select { max-width: 98px; padding-inline: 6px; }
 }
