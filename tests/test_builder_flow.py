@@ -385,3 +385,17 @@ def test_platform_contract_is_shared_by_generation_and_review_prompts():
     for phrase in ('Transcribe, do not invent', 'Place by coordinates', 'Recount before returning', 'covering exactly N units', 'xmlns="http://www.w3.org/2000/svg"'):
         assert phrase in ILLUSTRATION_ACCURACY, phrase
     assert ILLUSTRATION_ACCURACY in STEP_PROMPTS['images']
+    # The build failures these clauses prevent: illegal computer candidates,
+    # settlement recomputed on later leaves, spectator leaves ending games,
+    # weakened difficulties, and reviews demanding impossible behaviour.
+    for phrase in ('holds no seat', 'never recomputed', 'forfeit winner may be a computer seat',
+                   "requires that seat's remaining count > 0", 'branches on the requested difficulty',
+                   'runs no search, evaluation or minimax'):
+        assert phrase in PLATFORM_CONTRACT, phrase
+    from game_platform.builder_checks import REVIEW_DISCIPLINE
+    for phrase in ('do not invent stricter requirements', 'impossible inputs, not code defects',
+                   'still active, so paying them is not paying an inactive player'):
+        assert phrase in REVIEW_DISCIPLINE, phrase
+    import inspect
+    from game_platform import builder_jobs
+    assert 'REVIEW_DISCIPLINE' in inspect.getsource(builder_jobs.run_build)
