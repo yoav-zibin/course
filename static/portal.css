@@ -118,10 +118,14 @@
 .popular-period { color:#a5aec2; font-size:11px; text-align:right; }
 .popular-games-carousel { position:relative; min-width:0; }
 .popular-games-row { display:grid; grid-auto-columns:minmax(165px,1fr); grid-auto-flow:column; gap:12px; overflow-x:auto; padding:2px 2px 8px; scroll-snap-type:x mandatory; scroll-behavior:smooth; }
-.portal-shell .popular-games-scroll-button { position:absolute; z-index:2; top:50%; display:grid; place-items:center; width:42px; min-height:52px; padding:0; transform:translateY(-50%); border:1px solid #59617a; border-radius:10px; background:rgb(13 18 30 / 94%); color:#f1f3f8; box-shadow:0 3px 14px #0008; font-size:30px; line-height:1; }
+.portal-shell .popular-games-scroll-button { position:absolute; z-index:2; top:50%; display:grid; place-items:center; width:42px; min-height:52px; padding:0; transform:translateY(-50%); border:1px solid #59617a; border-radius:10px; background:rgb(13 18 30 / 94%); color:#f1f3f8; box-shadow:0 3px 14px #0008; font-size:30px; line-height:1; transition:transform 160ms ease,background-color 160ms ease,border-color 160ms ease,box-shadow 160ms ease; }
 .portal-shell .popular-games-scroll-button:hover:not(:disabled) { border-color:#b49bff; background:#25283b; }
 .portal-shell .popular-games-scroll-button.is-prev { left:8px; }
 .portal-shell .popular-games-scroll-button.is-next { right:8px; }
+.portal-shell .popular-games-scroll-button.is-prev:hover:not(:disabled) { transform:translate(-1px,-50%) scale(1.04); }
+.portal-shell .popular-games-scroll-button.is-next:hover:not(:disabled) { transform:translate(1px,-50%) scale(1.04); }
+.portal-shell .popular-games-scroll-button.is-prev:active:not(:disabled) { transform:translate(-3px,-50%) scale(.94); }
+.portal-shell .popular-games-scroll-button.is-next:active:not(:disabled) { transform:translate(3px,-50%) scale(.94); }
 .portal-shell .popular-game-card { position:relative; display:flex; flex-direction:column; align-items:stretch; min-width:0; padding:0; overflow:hidden; border:1px solid #343e55; border-radius:11px; background:#111827; color:#eef0f5; text-align:left; scroll-snap-align:start; transition:border-color .15s,transform .15s; }
 .portal-shell .popular-game-card:hover { border-color:#b49bff; transform:translateY(-2px); }
 .portal-shell .popular-game-card:focus-visible { outline:2px solid #c6f432; outline-offset:2px; }
@@ -156,7 +160,7 @@
 .portal-shell .is-list .library-card { flex-direction:row; align-items:stretch; }
 .is-list .library-art { width:150px; flex-shrink:0; aspect-ratio:auto; min-height:145px; }
 @media(max-width:500px) { .popular-games-section { padding:15px; }.popular-games-heading { align-items:start; flex-direction:column; gap:6px; }.popular-period { text-align:left; }.popular-games-row { grid-auto-columns:minmax(150px,44vw); }.library-views { margin-left:auto; }.is-list .library-art { width:96px; }.library-monogram { font-size:42px; }.library-copy { padding:14px; }.library-title { font-size:18px; } }
-@media(prefers-reduced-motion:reduce) { .portal-shell .library-card { transition:none; }.popular-games-row { scroll-behavior:auto; } }
+@media(prefers-reduced-motion:reduce) { .portal-shell .library-card,.portal-shell .popular-games-scroll-button { transition:none; }.popular-games-row { scroll-behavior:auto; } }
 .library-copy { width:100%; box-sizing:border-box; white-space:normal; }
 .library-description { width:100%; overflow-wrap:anywhere; }
 .match-result { margin:20px 0 0; padding:18px 20px; border:1px solid; border-radius:10px; font-size:22px; font-weight:700; }

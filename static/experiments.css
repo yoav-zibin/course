@@ -289,6 +289,37 @@
 :root[data-portal-layout="left"] .portal-app-menu,
 :root[data-portal-layout="hamburger"] .portal-app-menu { display:flex; }
 :root[data-portal-layout="top"] .topbar[data-app-page="portal"] nav { display:flex; }
+
+/* Keep the wallet aligned with the active portal skin. */
+:root[data-skin="aurora"] .topbar .token-wallet {
+  background:linear-gradient(135deg,#17434b,#102d3b);
+  border-color:#337d80;
+  color:#e1fff8;
+  box-shadow:0 4px 18px #030d1245;
+}
+:root[data-skin="aurora"] .topbar .token-wallet-coin {
+  background:#23615f;
+  border-color:#48a99b;
+  color:#a5f1df;
+}
+:root[data-skin="aurora"] .topbar .token-wallet-label { color:#9ecfc3; }
+:root[data-skin="aurora"] .topbar .token-wallet-number { color:#c1e3ee; }
+:root[data-skin="aurora"] .topbar .token-wallet-number strong { color:#f0fbff; }
+
+:root[data-skin="sunset"] .topbar .token-wallet {
+  background:linear-gradient(135deg,#fff3e8,#f8d7c3);
+  border-color:#d7a48a;
+  color:#61443a;
+  box-shadow:0 4px 18px #6d38251f;
+}
+:root[data-skin="sunset"] .topbar .token-wallet-coin {
+  background:#b94f35;
+  border-color:#963b29;
+  color:#fff3e8;
+}
+:root[data-skin="sunset"] .topbar .token-wallet-label { color:#765446; }
+:root[data-skin="sunset"] .topbar .token-wallet-number { color:#61443a; }
+:root[data-skin="sunset"] .topbar .token-wallet-number strong { color:#713b2b; }
 @media(min-width:900px) {
   :root[data-portal-layout="left"] .topbar .sidebar-toggle,
   :root[data-portal-layout="left"] .portal-sidebar .sidebar-close { display:none; }
