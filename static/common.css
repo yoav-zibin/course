@@ -812,7 +812,13 @@ body.sidebar-open .app .sidebar { display:flex; transform:none; visibility:visib
 .sidebar-toggle,.sidebar-close { display:block; min-width:44px; min-height:44px; }
 .sidebar-toggle { flex:none; padding:6px 12px; font-size:20px; }
 .sidebar-close { align-self:flex-start; margin-bottom:4px; }
-.sidebar-backdrop { position:fixed; inset:0; z-index:119; width:100%; height:100%; margin:0; border:0; border-radius:0; background:#0009; }
+.sidebar-backdrop {
+  position:fixed; inset:0; z-index:119; width:100%; height:100%; margin:0; border:0; border-radius:0;
+  background:rgb(0 0 0 / 22%); box-shadow:none;
+}
+.sidebar-backdrop:hover,
+.sidebar-backdrop:focus,
+.sidebar-backdrop:active { background:rgb(0 0 0 / 22%); border-color:transparent; box-shadow:none; }
 .sidebar-modal .sidebar-backdrop { display:block; }
 body.sidebar-modal { overflow:hidden; }
 body.sidebar-open.sidebar-docked .app { grid-template-columns:280px minmax(0,1fr); }
