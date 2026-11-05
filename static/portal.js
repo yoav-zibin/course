@@ -781,6 +781,8 @@ function renderLibrary() {
 function renderPopularGames() {
   const section = $("popular-games-section");
   if (!section) return;
+  const row = $("popular-games");
+  const previousScrollLeft = row.scrollLeft;
   const rankedGames = state.popularGames.filter(game =>
     state.games.some(current => current.id === game.id && current.published !== false));
   const hasRanking = rankedGames.length > 0;
@@ -796,7 +798,7 @@ function renderPopularGames() {
     : state.popularGamesStatus === "unavailable"
       ? I18n.t("ui.games.popularity_unavailable", {}, "Showing games while popularity data loads.")
       : I18n.t("ui.games.popularity_collecting", {}, "Popularity rankings will appear as matches start.");
-  $("popular-games").replaceChildren(...games.map((game, index) => {
+  row.replaceChildren(...games.map((game, index) => {
     const hue = Array.from(game.id).reduce((value, letter) => value + letter.charCodeAt(0), 0) % 360;
     const name = catalogGameLabel(game);
     const initials = name.trim().split(/\s+/).slice(0, 2).map(word => Array.from(word)[0] || "").join("");
@@ -814,6 +816,47 @@ function renderPopularGames() {
         el("span", {class: "popular-game-players", textContent: gameCountLabel(game)}),
         el("span", {class: "popular-game-open", textContent: I18n.t("ui.games.open_game", {}, "Play game ↗")})));
   }));
+  row.scrollLeft = previousScrollLeft;
+  schedulePopularGamesCarouselUpdate?.();
+}
+
+let schedulePopularGamesCarouselUpdate = null;
+
+function updatePopularGamesCarousel() {
+  const row = $("popular-games");
+  const previous = $("popular-games-prev");
+  const next = $("popular-games-next");
+  if (!row || !previous || !next) return;
+  const maxScroll = Math.max(0, row.scrollWidth - row.clientWidth);
+  const canScroll = maxScroll > 2;
+  previous.hidden = next.hidden = !canScroll;
+  previous.disabled = !canScroll || row.scrollLeft <= 2;
+  next.disabled = !canScroll || row.scrollLeft >= maxScroll - 2;
+}
+
+function setupPopularGamesCarousel() {
+  const row = $("popular-games");
+  const previous = $("popular-games-prev");
+  const next = $("popular-games-next");
+  if (!row || !previous || !next) return;
+  let updateFrame = 0;
+  schedulePopularGamesCarouselUpdate = () => {
+    if (updateFrame) return;
+    updateFrame = requestAnimationFrame(() => {
+      updateFrame = 0;
+      updatePopularGamesCarousel();
+    });
+  };
+  const scroll = direction => {
+    const distance = Math.max(row.clientWidth * 0.8, 180);
+    row.scrollBy({left: direction * distance, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"});
+  };
+  previous.addEventListener("click", () => scroll(-1));
+  next.addEventListener("click", () => scroll(1));
+  row.addEventListener("scroll", schedulePopularGamesCarouselUpdate, {passive: true});
+  window.addEventListener("resize", schedulePopularGamesCarouselUpdate, {passive: true});
+  if ("ResizeObserver" in window) new ResizeObserver(schedulePopularGamesCarouselUpdate).observe(row);
+  schedulePopularGamesCarouselUpdate();
 }
 
 function renderGameSearch() {
@@ -1679,6 +1722,7 @@ function shouldRestoreSavedMatch() {
 }
 
 async function main() {
+  setupPopularGamesCarousel();
   window.PortalMatchLayout?.init(() => {
     selectMatch(null);
     render();
