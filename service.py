@@ -3778,10 +3778,13 @@ class GamePlatform:
         return self._store.get_match(match.id) or saved
 
     def delete_match(self, *, caller_id: str, match_id: str) -> None:
-        """The owner deletes the match; other players can only hide an ended match."""
+        """A player in the match deletes it while it is not over; once it is
+        over, deleting only hides it from the caller's own list. Creating a
+        match gives no delete rights on its own: the caller must be one of
+        its players."""
         with self._lock:
             match = self._get_match(match_id)
-            if caller_id == match.owner_user_id:
+            if match.status != "over" and caller_id in match.active_human_user_ids:
                 game = self._store.get_game_version(
                     match.game_id, match.game_version
                 )
@@ -3801,7 +3804,7 @@ class GamePlatform:
                 return
             if match.status != "over":
                 raise ForbiddenError(
-                    "only the owner can delete a match that is not over"
+                    "only a player in the match can delete it"
                 )
             self._get_seat(match, caller_id)
             self._save(

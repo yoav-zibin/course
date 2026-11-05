@@ -1264,6 +1264,7 @@ function renderMatch() {
       actions.push(
         actionButton(I18n.t("ui.action.leave", {}, "Leave"), call("POST", "/leave"), { danger: true }),
       );
+      secondaryActions.push(actionButton(I18n.t("ui.match.delete_match", {}, "Delete match"), call("DELETE"), {danger:true, confirm:I18n.t("ui.match.delete_confirm", {}, "Delete this match for everyone?")}));
     }
   } else if (match.status === "ongoing" && mySeat && !match.localMode) {
     if (game && game.server_code) {
@@ -1313,17 +1314,10 @@ function renderMatch() {
         {primary:true},
       ));
     }
-    if (isOwner)
-      secondaryActions.push(
-        actionButton(I18n.t("ui.match.delete_match", {}, "Delete match"), call("DELETE"), {
-          danger: true,
-          confirm: I18n.t("ui.match.delete_confirm", {}, "Delete this match for everyone?"),
-        }),
-      );
-    else if (mySeat && !match.localMode)
+    if (mySeat && !match.localMode)
       actions.push(actionButton(I18n.t("ui.match.hide_from_list", {}, "Hide from my list"), call("DELETE")));
   }
-  if (isOwner && match.status === "ongoing") {
+  if (mySeat && !match.localMode && match.status === "ongoing") {
     secondaryActions.push(
       actionButton(I18n.t("ui.match.delete_match", {}, "Delete match"), call("DELETE"), {
         danger: true,

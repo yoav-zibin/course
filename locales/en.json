@@ -59,7 +59,7 @@
   "error.computers_locked": "computer opponents can only be changed before the match starts",
   "error.join_not_allowed": "this game does not allow joining a match in progress",
   "error.owner_cannot_leave": "the owner cannot leave a match that has not started; delete it instead",
-  "error.delete_not_over": "only the owner can delete a match that is not over",
+  "error.delete_not_over": "only a player in the match can delete it",
   "error.not_your_turn": "it is not your turn",
   "error.turn_time_ran_out": "your time to move ran out",
   "error.invalid_turn_seconds": "turn_seconds must be 60, 180 or 600 (or null for a regular match)",
