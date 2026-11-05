@@ -16,7 +16,7 @@ window.PortalMatchLayout = (() => {
   function render() {
     const active = Boolean(match);
     const waiting = match?.status === "waiting_for_players";
-    const immersive = document.documentElement.dataset.skin === "immersive";
+    const immersive = document.documentElement?.dataset?.skin === "immersive";
     const focused = active && !waiting && (manualFocus ?? (landscape.matches || immersive));
     const focusChanged = active && document.body.classList.contains("match-page") &&
       document.body.classList.contains("match-focus") !== focused;
