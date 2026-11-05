@@ -26,7 +26,9 @@ ILLUSTRATION_ACCURACY = '''Illustration accuracy (applies to every drawing):
 - Transcribe, do not invent: draw exactly the pieces, walls, counters and labels in the supplied state or view — the same counts, the same positions, the same values. Add no extra pieces, walls, numbers or decorations that look like game elements, and omit nothing that is in the data.
 - Place by coordinates: when the state gives rows/columns or any grid, compute each element's position from its coordinates on a uniform grid (x from the column, y from the row) instead of estimating freehand. Keep the row/column order and orientation the data states.
 - Recount before returning: count the drawn elements and compare with the state (pieces per side, walls placed, walls remaining, counters and scores) and fix any mismatch.
+- Match spans and sizes to the data: an element that covers N cells or units in the state (for example a wall covering exactly 2 cells) is drawn covering exactly N units — never longer or shorter — and every element uses the same cell size.
 - A before/after pair differs only by the described move; every other element stays in exactly the same place.
+- Technical: the root <svg> element must declare xmlns="http://www.w3.org/2000/svg" and a viewBox matching the drawing, so the file renders as a standalone image.
 '''
 
 

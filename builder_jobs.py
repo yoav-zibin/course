@@ -10,7 +10,7 @@ from dataclasses import replace
 from game_platform import builder_flow as flow
 from game_platform.agent import build_prompt_messages
 from game_platform.schemas import AgentChatRequest, AgentMessage
-from game_platform.model_api import ModelOutputLimitError
+from game_platform.model_api import ModelApiError, ModelOutputLimitError
 from game_platform.models import GameRules
 from game_platform.game_logic import GameLogic, GameLogicError
 from game_platform.game_testing import test_server_code
@@ -56,6 +56,14 @@ def validate_test_data(artifact):
     flow.validate_artifact('tests', structured, require_test_images=False)
 
 
+def _standalone_svg(svg):
+    """An SVG shown through an <img> only renders when its root declares the
+    SVG namespace; add it when the model omitted it."""
+    if isinstance(svg, str) and '<svg' in svg and 'xmlns' not in svg.split('>', 1)[0]:
+        return svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"', 1)
+    return svg
+
+
 def illustrate_test_cases(client, artifact, language, ui, save=None):
     cases = artifact['cases']
     if save:
@@ -72,6 +80,10 @@ def illustrate_test_cases(client, artifact, language, ui, save=None):
                     {'role':'user','content':json.dumps(payload,ensure_ascii=False)}
                 ], max_tokens=6000, temperature=1.0, reasoning_effort="low")
                 images = parse_json(raw).get('images')
+                if isinstance(images, list):
+                    for image in images:
+                        if isinstance(image, dict) and 'svg' in image:
+                            image['svg'] = _standalone_svg(image['svg'])
             except (json.JSONDecodeError, ModelOutputLimitError):
                 images = []
         if not isinstance(images, list) or len(images) != len(views):
@@ -96,7 +108,7 @@ def illustrate_test_cases(client, artifact, language, ui, save=None):
                     raise ValueError(f"Muse reached the output limit drawing {view} for {case['name']}") from exc
                 if svg.startswith('```') and svg.endswith('```'):
                     svg = svg.partition('\n')[2][:-3].strip()
-                image = {'caption':case['name'] + ' — ' + view.replace('_',' '), 'svg':svg}
+                image = {'caption':case['name'] + ' — ' + view.replace('_',' '), 'svg':_standalone_svg(svg)}
                 try:
                     flow.validate_image(image)
                 except InvalidRequestError as exc:
@@ -159,7 +171,7 @@ def propose_images(client, prompt, routing, key, pending):
             try:
                 if svg.startswith('```') and svg.endswith('```'):
                     svg = svg.partition('\n')[2][:-3].strip()
-                image = {'svg':svg, 'caption':caption}
+                image = {'svg':_standalone_svg(svg), 'caption':caption}
                 (flow.validate_image if index else flow.validate_cover)(image)
                 break
             except InvalidRequestError as exc:
@@ -275,16 +287,25 @@ def propose_step(client, draft, step, correction, *, feedback=False):
         # Validate before changing the draft. One bounded repair addresses generated
         # translation mistakes without asking the user to debug model output.
         for attempt in range(2):
-            html = client.chat(messages, max_tokens=20000, temperature=1.0,
-                               reasoning_effort='low').strip()
-            if html.startswith('```') and html.endswith('```'):
-                html = html.partition('\n')[2][:-3].strip()
-            # Accept older providers/fixtures that still return the previous valid envelope.
-            if html.startswith('{'):
-                reply = parse_json(html)
-            else:
-                if not html.lower().endswith('</html>'):
+            try:
+                html = client.chat(messages, max_tokens=20000, temperature=1.0,
+                                   reasoning_effort='low').strip()
+                if html.startswith('```') and html.endswith('```'):
+                    html = html.partition('\n')[2][:-3].strip()
+                # Accept older providers/fixtures that still return the previous valid envelope.
+                if html.startswith('{'):
+                    reply = parse_json(html)
+                elif not html.lower().endswith('</html>'):
                     raise ValueError('Muse returned an incomplete tutorial document; saved approvals are unchanged')
+            except (ModelApiError, ValueError) as exc:
+                if attempt:
+                    raise InvalidRequestError(f'Tutorial generation failed after one retry: {exc}. Nothing was saved; please try again.') from exc
+                messages = [*messages, {'role':'user','content':
+                    f'Your previous reply could not be used ({exc}). Return the entire tutorial as one complete raw HTML document, ending with </html>.'}]
+                continue
+            if html.startswith('{'):
+                pass
+            else:
                 from html.parser import HTMLParser
                 class Title(HTMLParser):
                     inside = False

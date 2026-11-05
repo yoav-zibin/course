@@ -382,6 +382,6 @@ def test_platform_contract_is_shared_by_generation_and_review_prompts():
     assert DRAFTING_CONTRACT in STEP_PROMPTS['logic']
     assert DRAFTING_CONTRACT in STEP_PROMPTS['tests']
     from game_platform.builder_checks import ILLUSTRATION_ACCURACY
-    for phrase in ('Transcribe, do not invent', 'Place by coordinates', 'Recount before returning'):
+    for phrase in ('Transcribe, do not invent', 'Place by coordinates', 'Recount before returning', 'covering exactly N units', 'xmlns="http://www.w3.org/2000/svg"'):
         assert phrase in ILLUSTRATION_ACCURACY, phrase
     assert ILLUSTRATION_ACCURACY in STEP_PROMPTS['images']

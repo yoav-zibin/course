@@ -79,7 +79,16 @@ async function act(action){
   }else error(e);
   try{draft=await request('GET','/game-drafts/'+draft.id);}catch{} }finally{working=false;$('busy').textContent='';render();schedule();}
 }
-function preview(image){return el('figure',{},el('img',{src:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(image.svg),alt:image.caption}),el('figcaption',{textContent:image.caption}));}
+function preview(image){
+ let svg=image.svg||'';
+ // An SVG shown through an <img> only renders when its root declares the SVG
+ // namespace; older generated images may omit it, so add it before encoding.
+ if(svg.includes('<svg')&&!svg.split('>',1)[0].includes('xmlns'))svg=svg.replace('<svg','<svg xmlns="http://www.w3.org/2000/svg"');
+ const img=el('img',{src:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg),alt:image.caption});
+ const figure=el('figure',{},img,el('figcaption',{textContent:image.caption}));
+ img.addEventListener('error',()=>{img.replaceWith(el('div',{class:'preview-missing',textContent:'Preview could not be displayed — reopen this step and regenerate to redraw it.'}));},{once:true});
+ return figure;
+}
 const kindLabels={initial:'Starting position',intermediate:'Mid-game',terminal:'Ending'};
 function testCard(test){
  const rejected=!!test.expected_error;

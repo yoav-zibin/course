@@ -342,9 +342,15 @@ def test_illustration_prompts_carry_the_accuracy_contract():
             assert 'Transcribe, do not invent' in messages[0]['content']
             assert 'Recount before returning' in messages[0]['content']
             name = json.loads(messages[1]['content'])['example']['name']
-            return json.dumps({'images': originals[name]})
+            # The model may omit the SVG namespace; stored images must regain it
+            # or browsers refuse to render them through an <img>.
+            images = [{**image, 'svg': image['svg'].replace(' xmlns="http://www.w3.org/2000/svg"', '')}
+                      for image in originals[name]]
+            return json.dumps({'images': images})
     illustrate_test_cases(Provider(), artifact, 'en', 'A count and a button.')
     assert all(len(case['images']) == 4 for case in artifact['cases'])
+    assert all('xmlns="http://www.w3.org/2000/svg"' in image['svg']
+               for case in artifact['cases'] for image in case['images'])
 
 
 @pytest.mark.parametrize('output_limit',[False, True])
@@ -584,6 +590,30 @@ def test_tutorial_failed_repair_preserves_approvals_and_stops():
         propose_step(provider, draft, 'tutorial', 'Teach the game')
     assert provider.calls == 2
     assert draft.builder_workflow == before
+
+
+def test_tutorial_generation_failure_retries_once_with_specific_error():
+    from game_platform.builder_jobs import propose_step
+    from game_platform.model_api import ModelApiError
+    draft = approved_draft()
+    valid = '<html><head><title>Practice</title><meta name="viewport"></head><body><script id="i18n-strings" type="application/json">{"ready":"Ready"}</script><script>const eventType="tutorial_locale"; label.textContent=t("ready");</script></body></html>'
+    class Flaky:
+        calls = 0
+        def chat(self, messages, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                raise ModelApiError('Muse returned an empty reply.')
+            assert 'could not be used' in messages[-1]['content']
+            return valid
+    provider = Flaky()
+    result = propose_step(provider, draft, 'tutorial', 'Teach the game')
+    assert provider.calls == 2
+    assert result.builder_workflow['artifacts']['tutorial']['value']['html'] == valid
+    class Down:
+        def chat(self, messages, **kwargs):
+            raise ModelApiError('Muse returned an empty reply.')
+    with pytest.raises(InvalidRequestError, match='Tutorial generation failed after one retry'):
+        propose_step(Down(), draft, 'tutorial', 'Teach the game')
 
 
 def test_conditional_tutorial_messages_and_joined_fragments():
