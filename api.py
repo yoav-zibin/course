@@ -1,10 +1,11 @@
 """FastAPI routes for the game platform."""
 
+import asyncio
+import html
 import io
 import logging
 import mimetypes
 import secrets
-import asyncio
 import threading
 import time
 import uuid
@@ -17,7 +18,7 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 import segno
@@ -1895,10 +1896,20 @@ async def _handle_platform_error(request: Request, exc: Exception) -> JSONRespon
     return JSONResponse(status_code=status, content=_error_body(request, str(exc)))
 
 
-async def _handle_unexpected_exception(request: Request, exc: Exception) -> JSONResponse:
+async def _handle_unexpected_exception(request: Request, exc: Exception) -> Response:
     """A bug: the request middleware has already logged it with its arguments and stack
     trace. The caller gets the request id to quote when reporting it."""
     request_id = getattr(request.state, "request_id", None)
+    if _is_html_navigation(request):
+        content = "" if request.method == "HEAD" else _error_page_content(HTTPStatus.INTERNAL_SERVER_ERROR)
+        return HTMLResponse(
+            content,
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            headers={
+                "Cache-Control": "no-store",
+                **({"X-Request-Id": request_id} if request_id else {}),
+            },
+        )
     return JSONResponse(
         status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
         content={"detail": "internal server error", "code": "internal_error", "request_id": request_id},
@@ -1914,6 +1925,118 @@ async def _handle_http_exception(request: Request, exc: Exception) -> Response:
     detail = exc.detail
     body = _error_body(request, detail) if isinstance(detail, str) else {"detail": detail}
     return JSONResponse(body, status_code=exc.status_code, headers=exc.headers)
+
+
+def _is_html_navigation(request: Request) -> bool:
+    """Only turn errors into pages when the caller asked to navigate to a page.
+
+    App API calls use the default */* or application/json Accept header and keep
+    their structured responses. Direct browser navigation asks for text/html.
+    """
+    accept = request.headers.get("accept", "").lower()
+    return request.method in {"GET", "HEAD"} and (
+        "text/html" in accept or request.headers.get("sec-fetch-dest") == "document"
+    )
+
+
+def _error_page_content(status_code: int) -> str:
+    if status_code == HTTPStatus.NOT_FOUND:
+        title = "We couldn't find that page"
+        message = (
+            "That page may have moved, or the link may be out of date. "
+            "There are plenty of games waiting back at the portal."
+        )
+        label = "404 · Page not found"
+    elif status_code in {HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN}:
+        title = "This page is unavailable"
+        message = (
+            "You may need permission to open this page. "
+            "You can return to the game portal and keep playing."
+        )
+        label = f"{status_code} · Access unavailable"
+    elif status_code == HTTPStatus.SERVICE_UNAVAILABLE:
+        title = "We'll be right back"
+        message = (
+            "This page is temporarily unavailable. Please try again in a little while, "
+            "or head back to the games."
+        )
+        label = f"{status_code} · Temporarily unavailable"
+    else:
+        title = "Something went wrong"
+        message = "We couldn't load this page just now. Please try again, or return to the game portal."
+        label = f"{status_code} · Page error"
+
+    return f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#10131d" />
+    <title>{html.escape(label)} · Game platform</title>
+    <link rel="stylesheet" href="/static/common.css?v=16" />
+    <link rel="stylesheet" href="/static/error.css?v=1" />
+  </head>
+  <body class="error-page-body">
+    <header class="topbar error-topbar">
+      <a class="app-home-link" href="/portal" aria-label="Game platform home">
+        <span class="app-brand-mark" aria-hidden="true">✳</span>
+        <h1>Game platform</h1>
+      </a>
+      <nav aria-label="Game platform">
+        <a href="/portal" aria-current="page">Play games</a>
+        <a href="/builder">Builder</a>
+      </nav>
+      <span class="spacer"></span>
+    </header>
+    <main class="error-main">
+      <section class="error-card" aria-labelledby="error-title">
+        <div class="error-art" aria-hidden="true">
+          <span class="error-orbit error-orbit-one"></span>
+          <span class="error-orbit error-orbit-two"></span>
+          <span class="error-spark error-spark-one">✦</span>
+          <span class="error-spark error-spark-two">✧</span>
+          <span class="error-game-mark">✳</span>
+          <span class="error-code">{status_code}</span>
+        </div>
+        <p class="error-eyebrow">{html.escape(label)}</p>
+        <h2 id="error-title">{html.escape(title)}</h2>
+        <p class="error-message">{html.escape(message)}</p>
+        <a class="error-home-button" href="/portal">Back to games <span aria-hidden="true">→</span></a>
+        <p class="error-footnote">Your next game is just one click away.</p>
+      </section>
+    </main>
+  </body>
+</html>"""
+
+
+async def _branded_browser_responses(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """Show a friendly HTML page instead of raw response data during navigation."""
+    response = await call_next(request)
+    if not _is_html_navigation(request):
+        return response
+
+    content_type = response.headers.get("content-type", "").lower()
+    headers = {
+        key: value
+        for key, value in response.headers.items()
+        if key.lower() in {"www-authenticate", "x-request-id", "retry-after"}
+    }
+    if response.status_code >= 400:
+        headers["Cache-Control"] = "no-store"
+        content = "" if request.method == "HEAD" else _error_page_content(response.status_code)
+        return HTMLResponse(content, status_code=response.status_code, headers=headers)
+
+    # JSON routes are for the app's fetch calls, not standalone web pages. When
+    # somebody opens one in the address bar, send them to the playable portal.
+    if "json" in content_type:
+        return RedirectResponse(
+            "/portal",
+            status_code=HTTPStatus.SEE_OTHER,
+            headers={"Cache-Control": "no-store"},
+        )
+    return response
 
 
 async def _choose_locale(
@@ -2067,6 +2190,7 @@ def create_app(
         static_files = StaticFiles(directory=_STATIC_DIR, follow_symlink=True)
         app.mount("/static", static_files, name="static")
         app.middleware("http")(_revalidate_pages)
+    app.middleware("http")(_branded_browser_responses)
     app.add_exception_handler(PlatformError, _handle_platform_error)
     app.add_exception_handler(StarletteHTTPException, _handle_http_exception)
     app.add_exception_handler(Exception, _handle_unexpected_exception)

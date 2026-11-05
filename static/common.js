@@ -412,7 +412,9 @@ function statusClass(status) {
 function syncPortalPreviewLinks() {
   const source = new URLSearchParams(location.search);
   const previewKeys = ['skin', 'layout'];
-  document.querySelectorAll('.topbar[data-app-page] nav a, .portal-app-menu a').forEach(link => {
+  document.querySelectorAll(
+    '.topbar[data-app-page] .app-home-link, .topbar[data-app-page] nav a, .portal-app-menu a, .app-brand[href]',
+  ).forEach(link => {
     const target = new URL(link.getAttribute('href') || '/', location.origin);
     for (const key of previewKeys) {
       target.searchParams.delete(key);
@@ -439,6 +441,22 @@ function setUpAppTopbar() {
   })));
   syncPortalPreviewLinks();
 }
+
+/** Treat the platform name in every page header as a home link. */
+function linkTopbarBrandToPortal() {
+  document.querySelectorAll(".topbar h1").forEach((heading) => {
+    if (heading.closest("a.app-home-link")) return;
+    const link = el("a", {
+      class: "app-home-link",
+      href: "/portal",
+      "aria-label": "Game platform home",
+      title: "Back to games",
+    });
+    heading.parentNode.insertBefore(link, heading);
+    link.append(heading);
+  });
+}
+linkTopbarBrandToPortal();
 setUpAppTopbar();
 
 /** Dock beside the page when 280px of navigation leaves at least 620px to work. */
