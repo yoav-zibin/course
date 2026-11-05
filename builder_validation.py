@@ -83,6 +83,159 @@ def verify_examples(code, contract):
     return results
 
 
+def probe_leaving(code, contract, *, allowed_player_counts, allows_leave_mid_match):
+    """Deterministic leaving/settlement scenarios for a generated server.
+
+    Random walks only ever leave with an active human in an ongoing match,
+    so whole classes of leaving bugs (a duplicate leave re-settling the
+    match, a spectator ending it, payouts recomputed after the end) were
+    previously gated only by AI review. These probes exercise them with
+    scripted rosters and pots and return failure strings; an empty list
+    means every scenario behaved as the platform contract requires."""
+    logic = ContractLogic(code, contract)
+    if not logic.has('playerLeft'):
+        return []
+    failures = []
+
+    def player(pid, kind, *, active=None):
+        entry = {'id': pid, 'kind': kind, 'display_name': pid, 'picture_url': '', 'max_loss': 0}
+        if active is not None:
+            entry['active'] = active
+        return entry
+
+    def make_ctx(players, pot, move_count=0):
+        return {'players': [dict(p) for p in players], 'pot': pot, 'move_count': move_count}
+
+    def paid(result):
+        return sum((result.get('payouts') or {}).values())
+
+    def start(players, pot, label):
+        try:
+            result = logic.call('newMatch', ctx=make_ctx(players, pot), seed=4242, time_limit_seconds=2.0)
+            return result['state'], result['turn']
+        except Exception as exc:
+            failures.append(f'{label}: newMatch failed: {exc}')
+            return None, None
+
+    def leave(state, who, players, pot, label, move_count=0):
+        try:
+            return logic.call('playerLeft', state, who, ctx=make_ctx(players, pot, move_count),
+                              seed=4243, time_limit_seconds=2.0)
+        except Exception as exc:
+            failures.append(f'{label}: playerLeft raised: {exc}')
+            return None
+
+    def advance(state, turn, players, pot):
+        """Best-effort walk to a mid-game state; None when unreachable."""
+        generator = 'randomMove' if logic.has('randomMove') else 'computerMove' if logic.has('computerMove') else None
+        if generator is None or not turn:
+            return None
+        current_state, current_turn = state, turn
+        for step in range(5):
+            if not current_turn:
+                return None
+            mover = current_turn[0]
+            ctx = make_ctx(players, pot, step)
+            try:
+                move = logic.call(generator, current_state, mover, ctx=ctx, seed=5000 + step)
+                following = logic.call('applyMove', current_state, mover, move, ctx=ctx, seed=5000 + step)
+            except Exception:
+                return None
+            current_state, current_turn = following['state'], following['turn']
+        return (current_state, current_turn) if current_turn else None
+
+    def expect_noop(label, result, state, turn):
+        if result is None:
+            return
+        if result['state'] != state:
+            failures.append(f'{label}: the leave changed the state; it must change nothing')
+        if result['turn'] != turn:
+            failures.append(f'{label}: the leave changed the turn; it must change nothing')
+        if paid(result) != 0:
+            failures.append(f'{label}: the leave paid out tokens; it must pay nothing')
+
+    two_humans = [player('human-1', 'human'), player('human-2', 'human')]
+
+    # A leave from an ID that holds no seat is a no-op, from the initial
+    # state and from a mid-game state alike.
+    state, turn = start(two_humans, 10, 'non-seat leave')
+    if state is not None:
+        expect_noop('non-seat leave', leave(state, 'spectator-1', two_humans, 10, 'non-seat leave'), state, turn)
+        mid = advance(state, turn, two_humans, 10)
+        if mid is not None:
+            expect_noop('non-seat leave (mid-game)', leave(mid[0], 'spectator-1', two_humans, 10, 'non-seat leave (mid-game)'), mid[0], mid[1])
+
+    # A leave that leaves fewer than two active humans ends the match and
+    # conserves the pot; afterwards every further leave — by the other
+    # player or a duplicate by the (now inactive) leaver — returns the
+    # recorded state and identical payouts instead of re-settling.
+    def forfeit(players, pot, leaver, label):
+        state, turn = start(players, pot, label)
+        if state is None:
+            return
+        result = leave(state, leaver, players, pot, label)
+        if result is None:
+            return
+        if result['turn'] is not None:
+            failures.append(f'{label}: the match must end when fewer than two active humans remain, but playerLeft returned a turn')
+            return
+        if paid(result) != pot:
+            failures.append(f'{label}: final payouts add up to {paid(result)}, not the pot of {pot}')
+            return
+        # Only still-active players can leave an ended match: the platform
+        # marks the leaver inactive, and its own result validator rejects
+        # terminal payouts to inactive players, so a duplicate leave by
+        # the (now inactive) leaver is outside the call contract.
+        after = [dict(p, active=False) if p['id'] == leaver else dict(p) for p in players]
+        for other in players:
+            if other['id'] == leaver:
+                continue
+            again = leave(result['state'], other['id'], after, pot, label + ' (after the end)')
+            if again is None:
+                continue
+            if again['turn'] is not None or again.get('payouts') != result.get('payouts') or again['state'] != result['state']:
+                failures.append(f'{label}: a leave after the match ended must return the recorded state and identical payouts; settlement is computed once and never recomputed')
+
+    forfeit(two_humans, 10, 'human-1', 'two-human forfeit')
+
+    # Against a computer the forfeit winner is the computer seat, which is
+    # never payable: the only eligible payee is the departing human, so the
+    # whole pot goes to them.
+    mixed = [player('human-1', 'human'), player('computer-1', 'computer')]
+    if logic.has('computerMove') or logic.has('randomMove'):
+        state, turn = start(mixed, 25, 'human-vs-computer forfeit')
+        if state is not None:
+            result = leave(state, 'human-1', mixed, 25, 'human-vs-computer forfeit')
+            if result is not None:
+                if result['turn'] is not None:
+                    failures.append('human-vs-computer forfeit: the match must end when the only human leaves, but playerLeft returned a turn')
+                elif result.get('payouts') != {'human-1': 25}:
+                    failures.append(f"human-vs-computer forfeit: payouts must be exactly {{'human-1': 25}} (the computer seat is never payable and the departing human is still active), got {result.get('payouts')}")
+
+    # A solo player leaving ends the match and, as the only eligible
+    # payee, receives the pot.
+    if 1 in allowed_player_counts:
+        forfeit([player('human-1', 'human')], 10, 'human-1', 'solo leave')
+
+    # With three or more humans a leave can continue the match: the turn
+    # must exclude the leaver, and a duplicate leave by the now-inactive
+    # leaver is then a no-op.
+    if allows_leave_mid_match and any(count >= 3 for count in allowed_player_counts):
+        trio = [player(f'human-{n}', 'human') for n in (1, 2, 3)]
+        state, turn = start(trio, 30, 'continuing leave')
+        if state is not None:
+            result = leave(state, 'human-1', trio, 30, 'continuing leave')
+            if result is not None:
+                if result['turn'] is None:
+                    failures.append('continuing leave: the match ended although two active humans remain and the game allows leaving mid-match')
+                elif 'human-1' in result['turn']:
+                    failures.append('continuing leave: the returned turn still contains the departing player')
+                else:
+                    after = [dict(p, active=False) if p['id'] == 'human-1' else dict(p) for p in trio]
+                    expect_noop('duplicate leave', leave(result['state'], 'human-1', after, 30, 'duplicate leave'), result['state'], result['turn'])
+    return failures
+
+
 def sampled_positions(server, contract, rules):
     """Use actual legal moves to obtain additional player and spectator views."""
     logic = ContractLogic(server, contract)

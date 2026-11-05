@@ -1,6 +1,6 @@
 """Named verification checks: extend CHECKS without changing the build worker."""
 from game_platform import game_text
-from game_platform.builder_validation import verify_examples
+from game_platform.builder_validation import probe_leaving, verify_examples
 from game_platform.game_testing import test_server_code
 
 
@@ -18,13 +18,15 @@ Game calls have a 100 ms execution limit. Bound computer search by deterministic
 Settlement algorithm (implement exactly, with ONE settlement function used by applyMove, playerLeft and every later call): eligible(ctx) is the players who are kind human and active at call time (the departing player is still active during playerLeft). settle(winnerId) returns {} when ctx.pot is 0; otherwise, if winnerId is eligible it returns {winnerId: ctx.pot}; otherwise it splits ctx.pot equally among eligible players (integer shares, remainder one each to the first eligible players in ctx.players order); if nobody is eligible it returns {} (reachable only when the pot is 0 in any real match). When a terminal applyMove or a match-ending playerLeft first ends the match, compute payouts with this one function, STORE a copy in the state (state.finalPayouts), and return it; every later playerLeft on the ended match returns the recorded state.finalPayouts with identical content. A forfeit win by a computer seat therefore pays the pot to the eligible humans (in a one-human match, the departing human) — never to the computer, and never {} while a pot and an eligible human exist.
 randomMove recipe: enumerate the complete legal move list once — step moves computed directly, plus every placement whose preconditions pass an allocation-light legality test (precompute the blocked-edge set once, test paths with an iterative search over a flat visited array, never deep-copy the state per candidate) — then return moves[Math.floor(ctx.random() * moves.length)]. No weighting between move types, no probability splits, no retry sampling.
 Difficulty channel: the platform ctx has no difficulty field. Read difficulty from state.difficulty when the game state carries it (the client sets it through the game's own setup move), branch explicitly on that value with the approved algorithm and budget per difficulty, and when it is absent use the difficulty the approved rules name as the default.
+playerLeft recipe (implement in exactly this order): 1) If the match has already ended (a result is recorded, e.g. state.finalPayouts is set), return the recorded state and state.finalPayouts unchanged. 2) Otherwise, if playerId holds no seat in ctx.players, or that seat's active flag is false, return {state, turn} unchanged with no payouts — before any ending or settlement logic. 3) Otherwise, if this leave ends the match (fewer than two active humans would remain, or the approved rules end the match on a leave), record the result in state exactly as the rules say, set state.finalPayouts with the one settlement function, and return {state, turn: null, payouts: state.finalPayouts}. 4) Otherwise the match continues: return the state with the leaver excluded from every future turn — the returned turn never contains the leaver — and payouts only as the approved rules provide for a continuing leave. These behaviours are verified by deterministic probes (non-seat and duplicate leaves, forfeits, post-end leaves), not by opinion.
+Performance rules that decide pass/fail: never call ctx.estimateWinChance from computerMove, randomMove or applyMove (one estimate plays about a hundred simulated games and takes about a second — always past the 100 ms limit). A candidate legality test must not clone the state, re-run applyMove, or rebuild the board per candidate: build the blocked-edge/wall set once per call, test each candidate against that set, and run the path search on a flat array with an integer queue. Enumerating every placement with one path search each is only a few milliseconds when done this way; the timeouts seen in practice come from per-candidate copying, not from the search itself.
 '''
 
 # Reviewers judge against the same contract the code was generated with.
 # Without this, a review can demand mutually impossible behaviour (e.g.
 # pot conservation with no legal payee AND never paying the departing
 # player, who is still active during playerLeft) and no code can pass.
-REVIEW_DISCIPLINE = '''Judge only against the approved rules and the platform contract below; do not invent stricter requirements. Combinations the platform forbids in production (for example a positive pot in a match with no human players, or paid matches against computers) are impossible inputs, not code defects: do not fail code for them. During playerLeft the departing player is still active, so paying them is not paying an inactive player. The platform ctx has no difficulty field: reading difficulty from state.difficulty is the approved channel — do not fail code for it, and do not demand ctx fields that do not exist. Allocation-light legality checks inside randomMove are the approved way to stay within the time limit; uniformity is judged on the enumerated legal list, not on re-validating through applyMove.'''
+REVIEW_DISCIPLINE = '''Judge only against the approved rules and the platform contract below; do not invent stricter requirements. Combinations the platform forbids in production (for example a positive pot in a match with no human players, or paid matches against computers) are impossible inputs, not code defects: do not fail code for them. During playerLeft the departing player is still active, so paying them is not paying an inactive player. The platform ctx has no difficulty field: reading difficulty from state.difficulty is the approved channel — do not fail code for it, and do not demand ctx fields that do not exist. Allocation-light legality checks inside randomMove are the approved way to stay within the time limit; uniformity is judged on the enumerated legal list, not on re-validating through applyMove. The deterministic checks (approved examples, settlement probes, random walks) run before reviews and have already verified their scenarios when you see this code: judge only what they cannot — fidelity to the game's own approved rules — and do not fail code for a leaving or settlement scenario the probes already verify, even if the code implements it differently than you would.'''
 
 DRAFTING_CONTRACT = '''Drafting contract (applies to rules and examples):
 - One ruling per situation: state each legality, ending and settlement rule exactly once. Before returning, re-read the artifact; if two statements could give different outcomes for the same situation, rewrite them into one rule.
@@ -48,6 +50,16 @@ def examples(code, server, spec, rules):
     return {'passed': all(item['passed'] for item in results), 'details': results}
 
 
+def settlement_probes(code, server, spec, rules):
+    try:
+        failures = probe_leaving(server, spec['tests'],
+                                 allowed_player_counts=rules.allowed_player_counts,
+                                 allows_leave_mid_match=rules.allows_leave_mid_match)
+    except Exception as exc:  # a probe crash is a failed check, never a crashed build
+        failures = [f'settlement probes could not run: {exc}']
+    return {'passed': not failures, 'details': failures}
+
+
 def localization(code, server, spec, rules):
     errors = game_text.lint(code)
     if 'applyLocale(' not in code:
@@ -60,7 +72,7 @@ def random_walks(code, server, spec, rules):
     return {'passed': report.passed, 'details': str(report.failures)}
 
 
-CHECKS = (('approved_examples', examples), ('localization', localization), ('random_walks', random_walks))
+CHECKS = (('approved_examples', examples), ('settlement_probes', settlement_probes), ('localization', localization), ('random_walks', random_walks))
 REVIEW_BRIEFS = (
     ('rules', 'Check setup, legal moves, turn order and terminal conditions against the approved rules.'),
     ('privacy', 'Check hidden information and spectator views; detect information leaks in viewFor.'),
