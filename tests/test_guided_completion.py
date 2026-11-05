@@ -133,6 +133,49 @@ def test_reject_visual_then_repair_and_publish(monkeypatch,tmp_path):
     assert GameOut.of(replace_game(saved)).cover_url.endswith('/versions/1/cover')
 
 
+def test_client_localization_failure_retries_only_the_client(monkeypatch,tmp_path):
+    from game_platform import builder_render, builder_jobs
+    p,d=setup_draft()
+    d=p.change_builder_workflow(caller_id=d.owner_user_id,draft_id=d.id,expected_revision=d.revision,change=flow.begin_build)
+    f=fixture(); job=d.builder_workflow['job']['id']
+    bad_client=f['code'].replace('applyLocale(','applyLocaleDisabled(')
+    assert bad_client!=f['code']
+    class Model:
+        server_generations=0
+        client_calls=0
+        def chat(self,messages,**kwargs):
+            first=messages[0]['content']
+            if isinstance(first,list):
+                return json.dumps({'passed':True,'issues':[]})
+            if 'Review game server' in first:
+                return '{"passed":true,"issues":[]}'
+            if any('Now write only the client' in m.get('content','') for m in messages if isinstance(m.get('content'),str)):
+                self.client_calls+=1
+                if self.client_calls==1: return json.dumps({'code':bad_client})
+                assert 'must not change' in messages[-1]['content']
+                assert 'Missing applyLocale' in messages[-1]['content']
+                return json.dumps({'code':f['code']})
+            self.server_generations+=1
+            return json.dumps({'code':f['code'],'server_code':f['server_code']})
+    def render(*args,**kwargs):
+        shots=[]
+        for case in f['contract']['cases']:
+            for view,width,direction in [('view_of_mover',390,'ltr'),('view_of_other',844,'rtl'),('expected_view_of_mover',820,'ltr'),('expected_view_of_other',1366,'rtl')]:
+                shots.append(dict(test=case['name'],view=view,width=width,direction=direction,approvedFile='test.png',file='test.png'))
+        return shots
+    (tmp_path/job).mkdir();(tmp_path/job/'test.png').write_bytes(b'test image')
+    monkeypatch.setattr(builder_render,'ARTIFACT_ROOT',tmp_path);monkeypatch.setattr(builder_render,'render_game',render)
+    model=Model();builder_jobs.run_build(p,model,d.owner_user_id,d.id,job)
+    saved=p.get_game_draft(caller_id=d.owner_user_id,draft_id=d.id)
+    assert saved.builder_workflow['job']['status']=='ready_for_review',saved.builder_workflow['job']
+    # The verified server was generated once; only the client was rewritten.
+    assert model.server_generations==1 and model.client_calls==2
+    assert 'Rewriting the client · try 2' in [entry for entry in saved.builder_workflow['job']['log']]
+    # Visual-review entries score as the final stage for progress purposes.
+    from game_platform.builder_jobs import _verification_progress
+    assert _verification_progress([{'visual_review':'Case','issues':['a','b']}])==(3,-2)
+
+
 def replace_game(draft):
     from game_platform.models import Game
     return Game(id=draft.id,version=1,owner_user_id=draft.owner_user_id,name=draft.name,description=draft.description,

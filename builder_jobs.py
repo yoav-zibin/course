@@ -478,6 +478,10 @@ def _verification_progress(errors):
     phase = 0
     failures = 0
     for entry in errors:
+        if 'visual_review' in entry:  # screenshot-review failures: final stage
+            phase = max(phase, 3)
+            failures += len(entry.get('issues') or [1])
+            continue
         for name, details in entry.items():
             if name.startswith('review_'):
                 phase = max(phase, 2)
@@ -660,21 +664,40 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
                 if not errors:
                     from game_platform.builder_checks import localization
                     stage('Writing the client for the verified server')
-                    client_request = [*messages, {'role':'user','content':'The verified server is below. Now write only the client HTML/JS as one raw HTML document. Follow the approved UI, views, images and translation API.\n'+server}]
-                    try:
-                        code = generate_source(client_request, 'code')
-                    except (ValueError, ModelOutputLimitError) as exc:
-                        errors = [{'client_generation':str(exc)}]
-                        messages.append({'role':'user','content':'Client generation failed: '+str(exc)+'. Keep the implementation concise.'})
-                        continue
-                    generated = {'code':code, 'server_code':server}
-                    checks['localization'] = localization(code,server,spec,rules)
-                    if not checks['localization']['passed']: errors.append({'localization':checks['localization']['details']})
-                if not errors:
-                    def checkpoint_code(d):
-                        d.builder_workflow['job'].update(verified_code_digest=flow.digest([code,server]),checks=checks,server_reviews=reviews)
-                        return replace(d,code=code,server_code=server)
-                    update(checkpoint_code)
+                    # The server is verified at this point, so failures to
+                    # generate the client, or in the deterministic client
+                    # localization check, retry ONLY the client against the
+                    # same server instead of discarding the server and
+                    # restarting the whole attempt. (Browser verification
+                    # below also exercises the server, so its failures still
+                    # escalate to a full attempt failure.)
+                    client_errors = []
+                    client_feedback = []
+                    for client_try in range(3):
+                        if client_try: stage(f'Rewriting the client · try {client_try+1}')
+                        client_request = [*messages,
+                                          {'role':'user','content':'The verified server is below. Now write only the client HTML/JS as one raw HTML document. Follow the approved UI, views, images and translation API.\n'+server},
+                                          *client_feedback]
+                        try:
+                            code = generate_source(client_request, 'code')
+                        except (ValueError, ModelOutputLimitError) as exc:
+                            client_errors = [{'client_generation':str(exc)}]
+                            client_feedback = [{'role':'user','content':'Client generation failed: '+str(exc)+'. Keep the implementation concise and return the complete client HTML only.'}]
+                            continue
+                        generated = {'code':code, 'server_code':server}
+                        checks['localization'] = localization(code,server,spec,rules)
+                        if not checks['localization']['passed']:
+                            client_errors = [{'localization':checks['localization']['details']}]
+                            client_feedback = [{'role':'assistant','content':code},
+                                                 {'role':'user','content':'The server above is verified and must not change. Fix ONLY the client so every displayed string comes from the strings block via t(): remove strings the code never shows, move hard-coded text into the strings block, and write each sentence as one string with {placeholders} instead of joining pieces. Return the complete corrected client HTML only. Failures: '+json.dumps(client_errors)}]
+                            continue
+                        def checkpoint_code(d):
+                            d.builder_workflow['job'].update(verified_code_digest=flow.digest([code,server]),checks=checks,server_reviews=reviews)
+                            return replace(d,code=code,server_code=server)
+                        update(checkpoint_code)
+                        client_errors = []
+                        break
+                    errors = client_errors
             if not errors:
                 try:
                     stage('Rendering client test views at phone, tablet and desktop sizes')
