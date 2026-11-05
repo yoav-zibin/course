@@ -15,6 +15,13 @@ ctx.players uses stable platform IDs; map game labels to those IDs. A player lea
 Game calls have a 100 ms execution limit. Bound computer search by deterministic node/depth limits, use efficient pathfinding, and use ctx.random for randomness; never use wall-clock search deadlines. Do not weaken an approved strategy requirement silently: report if it cannot be satisfied within the limit.
 '''
 
+DRAFTING_CONTRACT = '''Drafting contract (applies to rules and examples):
+- One ruling per situation: state each legality, ending and settlement rule exactly once. Before returning, re-read the artifact; if two statements could give different outcomes for the same situation, rewrite them into one rule.
+- Exceptions carry their condition in the same sentence ('only when ...', 'unless ...'). Never call the same action both legal and illegal in different places, and never let a summary sentence soften or broaden the operative rule it summarizes.
+- Define moves operationally: the exact cells or fields involved, the check applied, and the result. For any rule with a blocked or edge case, give one concrete worked example with coordinates.
+- Every example outcome must follow from exactly one stated rule; never invent an outcome that no stated rule produces.
+'''
+
 
 def examples(code, server, spec, rules):
     results = verify_examples(server, spec['tests'])

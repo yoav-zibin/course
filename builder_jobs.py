@@ -15,7 +15,7 @@ from game_platform.models import GameRules
 from game_platform.game_logic import GameLogic, GameLogicError
 from game_platform.game_testing import test_server_code
 from game_platform.builder_validation import verify_examples
-from game_platform.builder_checks import PLATFORM_CONTRACT
+from game_platform.builder_checks import DRAFTING_CONTRACT, PLATFORM_CONTRACT
 from game_platform.service import ConflictError, InvalidRequestError
 
 STEP_PROMPTS = {
@@ -31,8 +31,8 @@ STEP_PROMPTS = {
 # Every agent that proposes logic or examples, generates code, diagnoses a
 # failure or reviews code gets the same platform rules (seats, settlement,
 # execution limits), so repairs are not steered by conflicting expectations.
-STEP_PROMPTS['logic'] += '\n' + PLATFORM_CONTRACT
-STEP_PROMPTS['tests'] += ('\n' + PLATFORM_CONTRACT +
+STEP_PROMPTS['logic'] += '\n' + PLATFORM_CONTRACT + '\n' + DRAFTING_CONTRACT
+STEP_PROMPTS['tests'] += ('\n' + PLATFORM_CONTRACT + '\n' + DRAFTING_CONTRACT +
     'A case may instead be a negative example: set expected_error:"InvalidMove", include turn (the nonempty array of player IDs '
     'who may move before the move), set expected_turn to that same turn, expected_state to state, the expected views to the '
     'before views, and omit expected_payouts. Use negative examples for moves the rules must reject (for example a move that '

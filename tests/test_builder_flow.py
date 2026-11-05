@@ -370,10 +370,14 @@ def test_roster_seat_counts_are_total_seats_not_humans():
 
 
 def test_platform_contract_is_shared_by_generation_and_review_prompts():
-    from game_platform.builder_checks import PLATFORM_CONTRACT
+    from game_platform.builder_checks import DRAFTING_CONTRACT, PLATFORM_CONTRACT
     from game_platform.builder_jobs import STEP_PROMPTS
     for phrase in ('total seats, not humans', 'expected_error', 'ctx.pot', 'never pay computers', '100 ms', 'ctx.random'):
         assert phrase in PLATFORM_CONTRACT, phrase
     assert PLATFORM_CONTRACT in STEP_PROMPTS['logic']
     assert PLATFORM_CONTRACT in STEP_PROMPTS['tests']
     assert 'expected_error' in STEP_PROMPTS['tests']
+    for phrase in ('One ruling per situation', 'only when', 'worked example'):
+        assert phrase in DRAFTING_CONTRACT, phrase
+    assert DRAFTING_CONTRACT in STEP_PROMPTS['logic']
+    assert DRAFTING_CONTRACT in STEP_PROMPTS['tests']
