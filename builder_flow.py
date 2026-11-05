@@ -161,6 +161,14 @@ def validate_image(image):
         for key, value in element.attrib.items():
             if key.lower().startswith('on') or key.split('}')[-1] in ('href','style') or 'url(' in value and not value.startswith('url(#'):
                 raise InvalidRequestError('SVG cannot load external resources or execute code')
+    if root.tag == 'svg':
+        # Inline HTML tolerates a missing namespace; standalone SVG <img>
+        # documents do not. Normalize accepted model output before saving it.
+        import re
+        def namespace(match):
+            attrs = re.sub(r'\sxmlns\s*=\s*([\"\'])\1', '', match.group(1))
+            return '<svg xmlns="http://www.w3.org/2000/svg"' + attrs + '>'
+        image['svg'] = re.sub(r'<svg\b([^>]*)>', namespace, svg, count=1)
 
 
 def validate_cover(image):

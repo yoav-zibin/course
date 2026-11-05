@@ -232,3 +232,16 @@ def test_approved_identity_renames_draft_and_marks_previous_dependents_stale():
     assert proposed.builder_workflow['artifacts']['logic']['status']=='stale'
     result = flow.approve(proposed,'identity')
     assert (result.name,result.description)==('Race to six','Reach six first.')
+
+
+@pytest.mark.parametrize('opening', ['<svg', '<svg xmlns=""', "<svg xmlns=''", '<svg xmlns="http://www.w3.org/2000/svg"'])
+def test_image_normalizes_standalone_svg_namespace(opening):
+    import xml.etree.ElementTree as ET
+    image={'caption':'Board', 'svg':opening+' viewBox="0 0 100 100"><rect width="100" height="100" fill="blue"/></svg>'}
+    flow.validate_image(image)
+    root=ET.fromstring(image['svg'])
+    assert root.tag=='{http://www.w3.org/2000/svg}svg'
+    assert root[0].tag=='{http://www.w3.org/2000/svg}rect'
+    normalized=image['svg']
+    flow.validate_image(image)
+    assert image['svg']==normalized

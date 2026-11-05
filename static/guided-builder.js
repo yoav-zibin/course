@@ -79,7 +79,18 @@ async function act(action){
   }else error(e);
   try{draft=await request('GET','/game-drafts/'+draft.id);}catch{} }finally{working=false;$('busy').textContent='';render();schedule();}
 }
-function preview(image){return el('figure',{},el('img',{src:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(image.svg),alt:image.caption}),el('figcaption',{textContent:image.caption}));}
+function preview(image){
+ let svg=image.svg;
+ // Older drafts may contain XML-valid SVG without the namespace required by <img>.
+ const root=new DOMParser().parseFromString(svg,'image/svg+xml').documentElement;
+ if(root.localName==='svg'&&!root.namespaceURI){
+  svg=svg.replace(/<svg\b([^>]*)>/,(_,attrs)=>'<svg xmlns="http://www.w3.org/2000/svg"'+attrs.replace(/\sxmlns\s*=\s*(["'])\1/,'')+'>');
+ }
+ const img=el('img',{src:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg),alt:image.caption});
+ const figure=el('figure',{},img,el('figcaption',{textContent:image.caption}));
+ img.addEventListener('error',()=>{img.hidden=true;figure.append(el('p',{textContent:'Preview could not be displayed. Request a corrected image.'}));},{once:true});
+ return figure;
+}
 function artifactCard(value){
  const card=el('div',{class:'artifact-summary'});
  if(value.display_name)card.append(el('h4',{textContent:value.display_name}),el('p',{textContent:value.short_description}));

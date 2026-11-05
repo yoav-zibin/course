@@ -169,3 +169,18 @@ test('build panel explains notification failure and lets the user build without 
  await expect(page.locator('#build-error')).toBeEmpty();
  await expect(page.locator('#emulator')).toHaveAttribute('href','/static/builder.html#'+id);
 });
+
+test('saved SVG previews without namespaces still decode as images',async({page})=>{
+ await page.goto('/static/guided-builder.html');
+ const sizes=await page.evaluate(async()=>{
+  const result=[];
+  for(const opening of ['<svg','<svg xmlns=""','<svg xmlns="http://www.w3.org/2000/svg"']){
+   const figure=(window as any).preview({caption:'Saved board',svg:opening+' viewBox="0 0 100 100"><rect width="100" height="100" fill="blue"/></svg>'});
+   document.body.append(figure);
+   const img=figure.querySelector('img');await img.decode();
+   result.push(img.naturalWidth);figure.remove();
+  }
+  return result;
+ });
+ expect(sizes.every(width=>width>0)).toBe(true);
+});
