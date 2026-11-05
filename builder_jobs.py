@@ -15,7 +15,7 @@ from game_platform.models import GameRules
 from game_platform.game_logic import GameLogic, GameLogicError
 from game_platform.game_testing import test_server_code
 from game_platform.builder_validation import verify_examples
-from game_platform.builder_checks import DRAFTING_CONTRACT, PLATFORM_CONTRACT
+from game_platform.builder_checks import DRAFTING_CONTRACT, ILLUSTRATION_ACCURACY, PLATFORM_CONTRACT
 from game_platform.service import ConflictError, InvalidRequestError
 
 STEP_PROMPTS = {
@@ -32,6 +32,7 @@ STEP_PROMPTS = {
 # failure or reviews code gets the same platform rules (seats, settlement,
 # execution limits), so repairs are not steered by conflicting expectations.
 STEP_PROMPTS['logic'] += '\n' + PLATFORM_CONTRACT + '\n' + DRAFTING_CONTRACT
+STEP_PROMPTS['images'] += '\n' + ILLUSTRATION_ACCURACY
 STEP_PROMPTS['tests'] += ('\n' + PLATFORM_CONTRACT + '\n' + DRAFTING_CONTRACT +
     'A case may instead be a negative example: set expected_error:"InvalidMove", include turn (the nonempty array of player IDs '
     'who may move before the move), set expected_turn to that same turn, expected_state to state, the expected views to the '
@@ -67,7 +68,7 @@ def illustrate_test_cases(client, artifact, language, ui, save=None):
         if not images:
             try:
                 raw = client.chat([
-                    {'role':'system','content':'Illustrate only this one approved game example. Return JSON {images:[{caption,svg}]} with four compact SVG mockups in order: mover before, other before, mover after, other after. Use the corresponding view payload, show the move and visible outcome, and respect private information. Use only svg,g,rect,circle,line,path,text; inline presentation attributes, no style or href. Keep each SVG under 1500 characters.'},
+                    {'role':'system','content':'Illustrate only this one approved game example. Return JSON {images:[{caption,svg}]} with four compact SVG mockups in order: mover before, other before, mover after, other after. Use the corresponding view payload, show the move and visible outcome, and respect private information. Use only svg,g,rect,circle,line,path,text; inline presentation attributes, no style or href. Keep each SVG under 1500 characters. ' + ILLUSTRATION_ACCURACY},
                     {'role':'user','content':json.dumps(payload,ensure_ascii=False)}
                 ], max_tokens=6000, temperature=1.0, reasoning_effort="low")
                 images = parse_json(raw).get('images')
@@ -88,7 +89,7 @@ def illustrate_test_cases(client, artifact, language, ui, save=None):
                     save()
                 try:
                     svg = client.chat([
-                        {'role':'system','content':'Draw one compact SVG mockup of the supplied player view. Return only raw SVG without Markdown. No scripts, external resources or style attributes. Show the visible state and mark the move.'},
+                        {'role':'system','content':'Draw one compact SVG mockup of the supplied player view. Return only raw SVG without Markdown. No scripts, external resources or style attributes. Show the visible state and mark the move. ' + ILLUSTRATION_ACCURACY},
                         {'role':'user','content':json.dumps({'ui':ui,'language':language,'description':case['description'],'view':view,'visible_state':case[view],'move':case['move']}, ensure_ascii=False)}
                     ], max_tokens=6000, temperature=1.0, reasoning_effort="low").strip()
                 except ModelOutputLimitError as exc:
@@ -144,7 +145,7 @@ def propose_images(client, prompt, routing, key, pending):
         messages = [
             {'role':'system','content':f'Draw only one {kind}. Return raw SVG only. Keep under 3000 characters. '
              'Use simple svg,g,rect,circle,ellipse,line,path,text elements, inline presentation attributes, '
-             'no styles, scripts or external resources. Escape XML text. Preserve the described game state.'},
+             'no styles, scripts or external resources. Escape XML text. Preserve the described game state. ' + ILLUSTRATION_ACCURACY},
             {'role':'user','content':json.dumps({**brief, 'sequence':progress['captions'], 'draw':caption}, ensure_ascii=False)}
         ]
         for attempt in range(2):

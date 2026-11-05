@@ -332,6 +332,21 @@ def test_logic_proposal_fails_clearly_after_two_output_limits():
         propose_step(AlwaysLimited(), approved_draft(), 'logic', 'Use normal rules')
 
 
+def test_illustration_prompts_carry_the_accuracy_contract():
+    from copy import deepcopy
+    from game_platform.builder_jobs import illustrate_test_cases
+    artifact = deepcopy(fixture()['contract'])
+    originals = {case['name']: case.pop('images') for case in artifact['cases']}
+    class Provider:
+        def chat(self, messages, **kwargs):
+            assert 'Transcribe, do not invent' in messages[0]['content']
+            assert 'Recount before returning' in messages[0]['content']
+            name = json.loads(messages[1]['content'])['example']['name']
+            return json.dumps({'images': originals[name]})
+    illustrate_test_cases(Provider(), artifact, 'en', 'A count and a button.')
+    assert all(len(case['images']) == 4 for case in artifact['cases'])
+
+
 @pytest.mark.parametrize('output_limit',[False, True])
 def test_incomplete_contract_and_svg_recover_without_restarting_draft(output_limit):
     from game_platform.model_api import ModelOutputLimitError

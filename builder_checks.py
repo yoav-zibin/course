@@ -22,6 +22,13 @@ DRAFTING_CONTRACT = '''Drafting contract (applies to rules and examples):
 - Every example outcome must follow from exactly one stated rule; never invent an outcome that no stated rule produces.
 '''
 
+ILLUSTRATION_ACCURACY = '''Illustration accuracy (applies to every drawing):
+- Transcribe, do not invent: draw exactly the pieces, walls, counters and labels in the supplied state or view — the same counts, the same positions, the same values. Add no extra pieces, walls, numbers or decorations that look like game elements, and omit nothing that is in the data.
+- Place by coordinates: when the state gives rows/columns or any grid, compute each element's position from its coordinates on a uniform grid (x from the column, y from the row) instead of estimating freehand. Keep the row/column order and orientation the data states.
+- Recount before returning: count the drawn elements and compare with the state (pieces per side, walls placed, walls remaining, counters and scores) and fix any mismatch.
+- A before/after pair differs only by the described move; every other element stays in exactly the same place.
+'''
+
 
 def examples(code, server, spec, rules):
     results = verify_examples(server, spec['tests'])
