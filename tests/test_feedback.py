@@ -196,7 +196,8 @@ def test_nobody_else_can_list_feedback() -> None:
     client = TestClient(create_app(platform, master_password="s3cret"))
     headers = {"X-User-Id": ann, "X-User-Password": platform._store.get_user(ann).password}
     feedback(platform, ann, "user", bob, text="bad name")
-    # A logged-in user (even the sender) can't list feedback.
+    # A logged-in user (even the sender) gets neither the admin page nor its data.
+    assert client.get("/feedback", headers=headers).status_code == 401
     assert client.get("/admin/feedback", headers=headers).status_code == 401
     # And there's no public way to list feedback.
     body = {"kind": "problem", "target_type": "user", "target_id": bob, "text": "bad name again"}

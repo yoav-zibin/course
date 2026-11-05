@@ -1334,6 +1334,11 @@ def invites_page() -> FileResponse:
     return FileResponse(_STATIC_DIR / "invites.html")
 
 
+@debug_router.get("/feedback", dependencies=[MasterPassword])
+def feedback_page() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "feedback.html")
+
+
 @debug_router.get("/admin", dependencies=[MasterPassword])
 def admin() -> FileResponse:
     """Hub page for the super-admin tools (API console, data browser,

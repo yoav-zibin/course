@@ -501,7 +501,18 @@ const Auth = (() => {
               .writeText(inviteLink(current() ?? account))
               .then(() => toast(I18n.t("ui.auth.invite_copied", {}, "Copied your invite link")));
           },
-        })
+        }),
+        // Feedback about the website, on pages that load the feedback dialog (the portal).
+        window.FeedbackDialog ? el("button", {
+          type: "button",
+          class: "feedback-menu-item",
+          textContent: I18n.t("ui.feedback.send_feedback", {}, "Send feedback"),
+          onclick: () => {
+            hidePanel();
+            window.FeedbackDialog.open({ target: { type: "platform", id: "", name: "" }, chooseKind: true,
+              user: current() ?? account, page: location.pathname + location.hash });
+          },
+        }) : null
       );
     }
     if (all.length > 1 || (all.length === 1 && !account)) {

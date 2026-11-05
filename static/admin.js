@@ -7,7 +7,7 @@
 
 const $ = (id) => document.getElementById(id);
 
-const TABS = ["console", "browse", "stats", "invites", "docs"];
+const TABS = ["console", "browse", "stats", "invites", "feedback", "docs"];
 const loaded = new Set();
 
 function showTab(name) {
