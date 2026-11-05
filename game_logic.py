@@ -291,6 +291,12 @@ class GameLogic:
             )
         return context
 
+    def load(self) -> None:
+        """Load the server script under the usual limits, without starting a match."""
+        with self._lock:
+            if self._context is None:
+                self._context = self._new_context()
+
     def _drop_context(self) -> None:
         self._context = None
 

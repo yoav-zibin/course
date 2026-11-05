@@ -12,6 +12,7 @@ from game_platform.agent import build_prompt_messages
 from game_platform.schemas import AgentChatRequest, AgentMessage
 from game_platform.model_api import ModelOutputLimitError
 from game_platform.models import GameRules
+from game_platform.game_logic import GameLogic, GameLogicError
 from game_platform.game_testing import test_server_code
 from game_platform.builder_validation import verify_examples
 from game_platform.service import ConflictError, InvalidRequestError
@@ -442,7 +443,19 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
         if raw.startswith('```') and raw.endswith('```'):
             raw = raw.partition('\n')[2][:-3].strip()
         if raw.startswith('{'):
-            raw = parse_json(raw).get(field)
+            try:
+                envelope = json.loads(raw)
+            except json.JSONDecodeError:
+                pass  # A JavaScript file may begin with a block or a comment.
+            else:
+                raw = envelope.get(field)
+        elif raw.startswith('"'):
+            try:
+                literal = json.loads(raw)
+            except json.JSONDecodeError:
+                pass  # Keep raw JS starting with a directive such as "use strict".
+            else:
+                raw = literal
         if not isinstance(raw, str) or not raw.strip():
             raise ValueError(f'Missing generated {field}')
         return raw
@@ -458,7 +471,7 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
             allows_leave_mid_match=rules.allows_leave_mid_match, messages=[AgentMessage(role='user',content='Implement the approved specification exactly. First write only server_code. Return raw server JavaScript. Client code will be requested after verification. Never change the approved tests or rules. Use the platform i18n-strings vocabulary and t()/applyLocale() API from the supplied translation instructions. Do not embed fixed per-language tables; the platform supplies translations independently of game code.\n'+json.dumps(spec,ensure_ascii=False))])
         messages, _ = build_prompt_messages(request)
         api_instructions = messages[0]['content'].partition('\nRESPONSE FORMAT:')[0]
-        messages[0]['content'] = api_instructions + '\nFor this guided build return only the requested source file without Markdown or a JSON wrapper.'
+        messages[0]['content'] = api_instructions + '\nGenerate one file per request in this guided build. For server_code, return executable plain JavaScript defining the global game object (const game = {...};). For client code, return a complete HTML document. Omit prose, Markdown, module exports and JSON wrappers.'
 
         errors=[]; generated=None
         for attempt in range(3):
@@ -477,6 +490,18 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
                 except (ValueError, ModelOutputLimitError) as exc:
                     errors = [{'server_generation':str(exc)}]
                     messages.append({'role':'user','content':'Return a concise complete raw server JavaScript file. '+str(exc)})
+                    continue
+                stage('Loading generated server JavaScript')
+                try:
+                    GameLogic(server).load()
+                except GameLogicError as exc:
+                    problem = str(exc)[:1000]
+                    errors = [{'server_load': problem}]
+                    stage(f'Server JavaScript rejected on attempt {attempt+1}: {problem}')
+                    messages.extend([
+                        {'role':'assistant','content':server},
+                        {'role':'user','content':f'The server script failed to load before any test ran. QuickJS reported: {problem}\nReturn the complete corrected server JavaScript only. Define the global game object; omit prose, Markdown and module exports.'},
+                    ])
                     continue
                 generated = {'server_code':server}
                 from game_platform.builder_checks import run_checks, REVIEW_BRIEFS

@@ -98,7 +98,11 @@ def test_reject_visual_then_repair_and_publish(monkeypatch,tmp_path):
             if 'Review game server' in first:return '{"passed":true,"issues":[]}'
             if 'Now write only the client' in messages[-1]['content']: return json.dumps({'code':f['code']})
             self.generation+=1
-            if self.generation==2:assert 'Missing counter' in messages[-1]['content']
+            if self.generation==1:return 'const game = {}; unexpected prose'
+            if self.generation==2:
+                assert 'SyntaxError' in messages[-1]['content']
+                assert messages[-2]['content']=='const game = {}; unexpected prose'
+            if self.generation==3:assert 'Missing counter' in messages[-1]['content']
             return json.dumps({'code':f['code'],'server_code':f['server_code']})
     def render(*args,**kwargs):
         shots=[]
@@ -111,7 +115,9 @@ def test_reject_visual_then_repair_and_publish(monkeypatch,tmp_path):
     model=Model();builder_jobs.run_build(p,model,d.owner_user_id,d.id,job)
     saved=p.get_game_draft(caller_id=d.owner_user_id,draft_id=d.id)
     assert saved.builder_workflow['job']['status']=='ready_for_review',saved.builder_workflow['job']
-    assert model.generation==2 and model.reviewed==6
+    assert model.generation==3 and model.reviewed==6
+    log=saved.builder_workflow['job']['log']
+    assert 'Checking approved_examples' not in log[:log.index('Writing code · attempt 2')]
     assert GameOut.of(replace_game(saved)).cover_url.endswith('/versions/1/cover')
 
 
