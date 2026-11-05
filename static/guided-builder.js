@@ -92,6 +92,7 @@ function render(){
  const allowed=steps.slice(0,selected).every(s=>f.artifacts[s]?.status==='approved');
  const count=steps.filter(s=>f.artifacts[s]?.status==='approved').length;
  $('draft-title').textContent=draftName(draft);
+ $('delete-draft').disabled=working||active;
  $('edit-title').disabled=working||active||f.artifacts.understanding?.status!=='approved';
  $('step-position').textContent='Step '+(selected+1)+' of '+steps.length;
  $('step-count').textContent=count+' of '+steps.length+' approved';
@@ -158,6 +159,20 @@ function render(){
  }})));
 }
 $('new-draft').onclick=async()=>{if(!me()){Auth.openDialog('login');return;}try{const d=await request('POST','/game-drafts',{name:'',description:'',allowed_player_counts:[2],code:''});await select(d.id);await loadDrafts();}catch(e){error(e);}};
+$('delete-draft').onclick=async()=>{
+ const target=draft;
+ if(!target || working || !window.confirm('Delete the draft “'+draftName(target)+'”? This cannot be undone.'))return;
+ working=true;render();
+ try{
+  await request('DELETE','/game-drafts/'+encodeURIComponent(target.id));
+  if(draft?.id===target.id){
+   clearTimeout(poll);draft=null;
+   history.replaceState(history.state,'',location.pathname+location.search);
+   showPageError('');render();$('new-draft').focus();
+  }
+  await loadDrafts();
+ }catch(e){error(e);}finally{working=false;render();}
+};
 $('edit-title').onclick=()=>{
  selected=steps.indexOf('identity');editName=true;
  const value=draft.builder_workflow.artifacts.identity?.value;

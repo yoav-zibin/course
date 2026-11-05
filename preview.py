@@ -53,7 +53,7 @@ def create_preview(backend: str, *, transport=None) -> FastAPI:
 
     def preview_html(html: str, *, redirect_to_static: bool = False) -> HTMLResponse:
         redirect = (
-            "location.replace('/static/portal.html'+location.hash);"
+            "location.replace('/static/portal.html'+location.search+location.hash);"
             if redirect_to_static
             else ""
         )
@@ -91,8 +91,8 @@ void (async () => {{
 
     @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
     async def preview(path: str, request: Request):
-        if request.method == "GET" and path in ("", "builder", "portal", "privacy"):
-            page = path or "builder"
+        if request.method == "GET" and path in ("", "builder", "new-builder", "portal", "privacy"):
+            page = "guided-builder" if path == "new-builder" else path or "builder"
             if page == "privacy":
                 return FileResponse(STATIC / "privacy.html")
             html = (STATIC / f"{page}.html").read_text(encoding="utf-8")
@@ -100,7 +100,7 @@ void (async () => {{
             if '<div class="sidebar-footer">' in html:
                 html = html.replace('<div class="sidebar-footer">', '<div class="sidebar-footer">' + notice, 1)
             else:
-                html = html.replace("<body>", "<body>" + notice, 1)
+                html = html.replace("</header>", "</header>" + notice, 1)
             return preview_html(html, redirect_to_static=page == "portal")
         if path.startswith("preview/jobs/") and request.method == "GET":
             job = jobs.get(path.rsplit("/", 1)[-1])
@@ -110,7 +110,8 @@ void (async () => {{
             if not job["task"].done():
                 return JSONResponse({"preview_job_id": job["id"]}, status_code=202)
             return job["task"].result()
-        if path.split("/", 1)[0] not in {"auth", "users", "games", "game-drafts", "matches", "agent", "builder"}:
+        guided_reads = {"i18n/locales", "storage/capabilities", "v2/game-drafts", "v2/builder/games"}
+        if not (request.method == "GET" and path in guided_reads) and path.split("/", 1)[0] not in {"auth", "users", "games", "game-drafts", "matches", "agent", "builder"}:
             return Response("This page is not available in the local preview.", status_code=404)
         # Forward only product API headers; the model key never enters the browser.
         headers = {key: request.headers[key] for key in ("content-type", "x-user-id", "x-user-password") if key in request.headers}

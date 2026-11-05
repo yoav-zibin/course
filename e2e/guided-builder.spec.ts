@@ -117,3 +117,22 @@ test('guided steps explain outstanding questions and follow skin previews',async
    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  }
 });
+
+test('skinned Builder opens New Builder and only deletes a confirmed draft',async({page,request})=>{
+ const user=await createUser(request,uniqueName('Draft owner'));await loginAs(page,user);
+ await page.goto('/builder?skin=sunset');
+ await expect(page.locator('html')).toHaveAttribute('data-skin','sunset');
+ await page.locator('header nav').getByRole('link',{name:'New Builder',exact:true}).click();
+ await expect(page).toHaveURL(/new-builder\?skin=sunset$/);
+ await expect(page.locator('html')).toHaveAttribute('data-skin','sunset');
+ await page.locator('#new-draft').click();
+ await expect(page.locator('#workspace')).toBeVisible();
+ page.once('dialog',dialog=>dialog.dismiss());await page.locator('#delete-draft').click();
+ await expect(page.locator('#workspace')).toBeVisible();
+ page.once('dialog',dialog=>dialog.accept());await page.locator('#delete-draft').click();
+ await expect(page.locator('#intro')).toContainText('What would you like to build?');
+ await expect(page.locator('#workspace')).toBeHidden();
+ await page.reload();
+ await expect(page.locator('#draft-list button')).toHaveCount(0);
+ await expect(page).toHaveURL(/new-builder\?skin=sunset$/);
+});
