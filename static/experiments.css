@@ -290,6 +290,15 @@
 :root[data-portal-layout="hamburger"] .portal-app-menu { display:flex; }
 :root[data-portal-layout="top"] .topbar[data-app-page="portal"] nav { display:flex; }
 
+/* The modal drawer backdrop is a button; keep generic button states translucent. */
+:root[data-portal-layout="hamburger"] body.sidebar-modal .sidebar-backdrop,
+:root[data-portal-layout="hamburger"] body.sidebar-modal .sidebar-backdrop:hover,
+:root[data-portal-layout="hamburger"] body.sidebar-modal .sidebar-backdrop:focus,
+:root[data-portal-layout="hamburger"] body.sidebar-modal .sidebar-backdrop:active {
+  background:rgb(0 0 0 / 32%);
+  box-shadow:none;
+}
+
 /* Keep the wallet aligned with the active portal skin. */
 :root[data-skin="aurora"] .topbar .token-wallet {
   background:linear-gradient(135deg,#17434b,#102d3b);
