@@ -44,6 +44,12 @@ ILLUSTRATION_ACCURACY = '''Illustration accuracy (applies to every drawing):
 - Technical: the root <svg> element must declare xmlns="http://www.w3.org/2000/svg" and a viewBox matching the drawing, so the file renders as a standalone image.
 '''
 
+COVER_FIDELITY = '''Cover fidelity (applies to the catalog cover only):
+- The cover depicts the game's real board, not an invented one: use the board's exact shape and dimensions from the approved rules, drawn flat (top-down or straight-on) on a uniform grid so every row and column can be counted in the finished drawing. A perspective or angled view that merges, hides or adds rows or columns is not allowed.
+- Pieces and walls form a plausible position from the game (for example its starting position): every piece sits inside exactly one cell, and every wall lies in a groove spanning exactly 2 cells — never scattered, floating or stretched.
+- Drama comes from color, lighting, background and framing only, never from bending the board's geometry. Recount the rows and columns before returning and fix any mismatch with the approved rules.
+'''
+
 
 def examples(code, server, spec, rules):
     results = verify_examples(server, spec['tests'])

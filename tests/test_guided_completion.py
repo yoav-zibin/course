@@ -671,12 +671,14 @@ def test_image_step_resumes_at_failed_drawing():
     from game_platform.builder_jobs import propose_step
     platform, draft = setup_draft()
     calls = []
+    systems = {}
     captions = ['Cover', 'Start', 'Middle', 'End']
     class Provider:
         def chat_with_reasoning(self, messages, **options):
             payload = json.loads(messages[1]['content'])
             label = payload.get('draw', 'plan')
             calls.append(label)
+            systems[label] = messages[0]['content']
             if label == 'Middle' and calls.count(label) == 1:
                 raise TimeoutError()
             if label == 'plan':
@@ -698,6 +700,12 @@ def test_image_step_resumes_at_failed_drawing():
     assert images['status'] == 'draft'
     assert [i['caption'] for i in images['value']['images']] == captions
     assert 'pending_generation' not in result.builder_workflow
+    # The cover brief is planned faithfully (flat board, exact grid) and only
+    # the cover drawing carries the cover-fidelity clause, not screenshots.
+    assert 'top-down or straight-on' in systems['plan']
+    assert 'never scattered pieces' in systems['plan']
+    assert 'Recount the rows and columns' in systems['Cover']
+    assert 'Recount the rows and columns' not in systems['Start']
 
 
 def test_review_output_limit_is_bounded_and_names_failed_stage():

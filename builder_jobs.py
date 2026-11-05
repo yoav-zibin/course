@@ -15,7 +15,7 @@ from game_platform.models import GameRules
 from game_platform.game_logic import GameLogic, GameLogicError
 from game_platform.game_testing import test_server_code
 from game_platform.builder_validation import verify_examples
-from game_platform.builder_checks import DRAFTING_CONTRACT, ILLUSTRATION_ACCURACY, PLATFORM_CONTRACT, REVIEW_DISCIPLINE
+from game_platform.builder_checks import COVER_FIDELITY, DRAFTING_CONTRACT, ILLUSTRATION_ACCURACY, PLATFORM_CONTRACT, REVIEW_DISCIPLINE
 from game_platform.service import ConflictError, InvalidRequestError
 
 STEP_PROMPTS = {
@@ -32,7 +32,7 @@ STEP_PROMPTS = {
 # failure or reviews code gets the same platform rules (seats, settlement,
 # execution limits), so repairs are not steered by conflicting expectations.
 STEP_PROMPTS['logic'] += '\n' + PLATFORM_CONTRACT + '\n' + DRAFTING_CONTRACT
-STEP_PROMPTS['images'] += '\n' + ILLUSTRATION_ACCURACY
+STEP_PROMPTS['images'] += '\n' + ILLUSTRATION_ACCURACY + '\n' + COVER_FIDELITY
 STEP_PROMPTS['tests'] += ('\n' + PLATFORM_CONTRACT + '\n' + DRAFTING_CONTRACT +
     'A case may instead be a negative example: set expected_error:"InvalidMove", include turn (the nonempty array of player IDs '
     'who may move before the move), set expected_turn to that same turn, expected_state to state, the expected views to the '
@@ -133,7 +133,10 @@ def propose_images(client, prompt, routing, key, pending):
         raw = client.chat([
             {'role':'system','content':'Plan the catalog artwork. Return JSON {message,captions:[strings]}, without markup. '
              'Write a short descriptive caption in the requested language for each drawing: one text-free '
-             '16:9 cover first, then 3–5 screenshot mockups showing concrete consistent states, turns and views. '+routing},
+             '16:9 cover first, then 3–5 screenshot mockups showing concrete consistent states, turns and views. '
+             'The cover caption must describe the game board from the approved rules faithfully: flat '
+             '(top-down or straight-on), the exact grid dimensions, a plausible actual position; put the drama '
+             'in color, lighting and background — never a perspective or angled board, never scattered pieces. '+routing},
             {'role':'user','content':json.dumps(brief, ensure_ascii=False)}
         ], max_tokens=3500, temperature=1.0, reasoning_effort='low')
         plan = parse_json(raw)
@@ -157,7 +160,7 @@ def propose_images(client, prompt, routing, key, pending):
         messages = [
             {'role':'system','content':f'Draw only one {kind}. Return raw SVG only. Keep under 3000 characters. '
              'Use simple svg,g,rect,circle,ellipse,line,path,text elements, inline presentation attributes, '
-             'no styles, scripts or external resources. Escape XML text. Preserve the described game state. ' + ILLUSTRATION_ACCURACY},
+             'no styles, scripts or external resources. Escape XML text. Preserve the described game state. ' + ILLUSTRATION_ACCURACY + (COVER_FIDELITY if index == 0 else '')},
             {'role':'user','content':json.dumps({**brief, 'sequence':progress['captions'], 'draw':caption}, ensure_ascii=False)}
         ]
         for attempt in range(2):

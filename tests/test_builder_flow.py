@@ -385,6 +385,12 @@ def test_platform_contract_is_shared_by_generation_and_review_prompts():
     for phrase in ('Transcribe, do not invent', 'Place by coordinates', 'Recount before returning', 'covering exactly N units', 'xmlns="http://www.w3.org/2000/svg"'):
         assert phrase in ILLUSTRATION_ACCURACY, phrase
     assert ILLUSTRATION_ACCURACY in STEP_PROMPTS['images']
+    # The cover has no supplied state to transcribe, so it gets its own
+    # fidelity rule anchored to the approved board geometry instead.
+    from game_platform.builder_checks import COVER_FIDELITY
+    for phrase in ("game's real board", 'top-down or straight-on', 'spanning exactly 2 cells', 'Recount the rows and columns'):
+        assert phrase in COVER_FIDELITY, phrase
+    assert COVER_FIDELITY in STEP_PROMPTS['images']
     # The build failures these clauses prevent: illegal computer candidates,
     # settlement recomputed on later leaves, spectator leaves ending games,
     # weakened difficulties, and reviews demanding impossible behaviour.
