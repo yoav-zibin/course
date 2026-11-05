@@ -89,13 +89,22 @@ def test_reject_visual_then_repair_and_publish(monkeypatch,tmp_path):
     class Model:
         generation=0
         reviewed=0
+        server_review_calls=0
         def chat(self,messages,**kwargs):
             first=messages[0]['content']
             if isinstance(first,list):
                 assert sum(item['type']=='image_url' for item in first)==8
                 self.reviewed+=1
                 return json.dumps({'passed':self.reviewed!=1,'issues':['Missing counter'] if self.reviewed==1 else []})
-            if 'Review game server' in first:return '{"passed":true,"issues":[]}'
+            if 'Review game server' in first:
+                self.server_review_calls+=1
+                if self.server_review_calls==1:
+                    from game_platform.model_api import ModelOutputLimitError
+                    raise ModelOutputLimitError('output limit')
+                if self.server_review_calls==2:
+                    assert kwargs['max_tokens']==8000
+                    assert 'previous reply hit its output limit' in messages[-1]['content']
+                return '{"passed":true,"issues":[]}'
             if 'Now write only the client' in messages[-1]['content']: return json.dumps({'code':f['code']})
             self.generation+=1
             if self.generation==1:return 'const game = {}; unexpected prose'
@@ -536,3 +545,27 @@ def test_image_step_resumes_at_failed_drawing():
     assert images['status'] == 'draft'
     assert [i['caption'] for i in images['value']['images']] == captions
     assert 'pending_generation' not in result.builder_workflow
+
+
+def test_review_output_limit_is_bounded_and_names_failed_stage():
+    from game_platform import builder_jobs
+    from game_platform.model_api import ModelOutputLimitError
+    p,d=setup_draft()
+    d=p.change_builder_workflow(caller_id=d.owner_user_id,draft_id=d.id,expected_revision=d.revision,change=flow.begin_build)
+    f=fixture()
+    class Model:
+        reviews=0
+        def chat(self,messages,**kwargs):
+            if 'Review game server' in messages[0]['content']:
+                self.reviews+=1
+                raise ModelOutputLimitError('output limit')
+            return f['server_code']
+    model=Model()
+    builder_jobs.run_build(p,model,d.owner_user_id,d.id,d.builder_workflow['job']['id'])
+    saved=p.get_game_draft(caller_id=d.owner_user_id,draft_id=d.id)
+    job=saved.builder_workflow['job']
+    assert model.reviews==2
+    assert job['status']=='failed'
+    assert 'Reviewing server:' in job['error']
+    assert 'output limit twice' in job['error']
+    assert 'code_digest' not in job
