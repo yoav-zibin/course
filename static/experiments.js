@@ -4,16 +4,56 @@
   const ACCOUNTS_KEY = "game-platform.accounts.v1";
   const CURRENT_KEY = "game-platform.current-account.v1";
   const SKIN_CACHE_PREFIX = "game-platform.experiment-skin.v1:";
+  const PORTAL_SKIN_COOKIE = "game-platform.portal-skin.v1";
+  const PORTAL_SKIN_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
   const SKIN_KEY_PATTERN = /^[a-z0-9][a-z0-9-]{0,49}$/;
   const PORTAL_SKINS = new Set(["classic", "aurora", "sunset", "immersive"]);
   const PORTAL_LAYOUTS = new Set(["left", "hamburger", "top"]);
   let assignedSkin = "classic";
   let previewSkin = portalSkinFromUrl();
+  let cookieSkin = readPortalSkinCookie();
   let previewLayout = portalLayoutFromUrl();
+
+  if (previewSkin) {
+    cookieSkin = previewSkin;
+    writePortalSkinCookie(previewSkin);
+  }
 
   function portalSkinFromUrl() {
     const key = new URLSearchParams(location.search).get("skin");
     return PORTAL_SKINS.has(key) ? key : null;
+  }
+
+  function readPortalSkinCookie() {
+    try {
+      const prefix = `${PORTAL_SKIN_COOKIE}=`;
+      const entry = document.cookie.split(";").map((part) => part.trim()).find((part) => part.startsWith(prefix));
+      if (!entry) return null;
+      const key = decodeURIComponent(entry.slice(prefix.length));
+      return PORTAL_SKINS.has(key) ? key : null;
+    } catch (error) {
+      console.warn("Saved skin preference could not be read.", error);
+      return null;
+    }
+  }
+
+  function writePortalSkinCookie(key) {
+    if (!PORTAL_SKINS.has(key)) return;
+    try {
+      const secure = location.protocol === "https:" ? "; Secure" : "";
+      document.cookie = `${PORTAL_SKIN_COOKIE}=${encodeURIComponent(key)}; Path=/; Max-Age=${PORTAL_SKIN_COOKIE_MAX_AGE}; SameSite=Lax${secure}`;
+    } catch (error) {
+      console.warn("Saved skin preference could not be stored.", error);
+    }
+  }
+
+  function clearPortalSkinCookie() {
+    try {
+      const secure = location.protocol === "https:" ? "; Secure" : "";
+      document.cookie = `${PORTAL_SKIN_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
+    } catch (error) {
+      console.warn("Saved skin preference could not be cleared.", error);
+    }
   }
 
   function portalLayoutFromUrl() {
@@ -45,12 +85,12 @@
   }
 
   function activeSkin() {
-    return previewSkin || assignedSkin || "classic";
+    return previewSkin || cookieSkin || assignedSkin || "classic";
   }
 
   function syncSkinPicker() {
     const picker = document.getElementById("portal-skin-picker");
-    if (picker) picker.value = previewSkin || "";
+    if (picker) picker.value = previewSkin || cookieSkin || "";
   }
 
   function syncLayoutPicker() {
@@ -60,6 +100,13 @@
 
   function setPreviewSkin(key) {
     previewSkin = PORTAL_SKINS.has(key) ? key : null;
+    if (previewSkin) {
+      cookieSkin = previewSkin;
+      writePortalSkinCookie(previewSkin);
+    } else {
+      cookieSkin = null;
+      clearPortalSkinCookie();
+    }
     const url = new URL(location.href);
     if (previewSkin) url.searchParams.set("skin", previewSkin);
     else url.searchParams.delete("skin");
@@ -141,8 +188,8 @@
     setPreviewLayout(event.currentTarget.value);
   });
 
-  // Keep a visitor's selected preview in the URL across portal screens, not in
-  // browser storage or in the server-side experiment assignment.
+  // Keep the selected skin in the URL across portal screens and in a cookie
+  // across visits; the server assignment remains the fallback when none is saved.
   syncSkinPicker();
   applyLayout();
   syncLayoutPicker();
