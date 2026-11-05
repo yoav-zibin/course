@@ -16,7 +16,7 @@
 .artifact,#build-panel,.history{border:1px solid var(--color-border-2);border-radius:var(--radius-md);background:var(--color-bg-1);padding:clamp(14px,3vw,26px);min-width:0}
 .artifact h2{margin-block:0}.actions{margin-block-start:10px}.history{margin-block:14px;padding-block:6px}
 #chat-form,#name-form{margin-block-start:16px}#questions{border-inline-start:3px solid var(--color-accent);padding:10px 32px;background:var(--color-bg-2)}
-.studio textarea,.studio input{box-sizing:border-box;width:100%;margin-block:6px 12px;font:inherit}
+.studio textarea,.studio input:not([type=checkbox]){box-sizing:border-box;width:100%;margin-block:6px 12px;font:inherit}
 .studio textarea{resize:vertical}.studio label,.studio summary{font-weight:600}.studio p:empty{display:none}
 .chat-message{white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;border-block-start:1px solid var(--color-border-2)}.chat-message small{display:block;color:var(--color-text-secondary)}
 #conversation{max-height:45vh;overflow:auto}.studio :focus-visible{outline:2px solid var(--color-focus-ring);outline-offset:2px}

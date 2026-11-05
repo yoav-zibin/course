@@ -432,7 +432,7 @@ function setUpAppTopbar() {
   nav.replaceChildren(...[
     ['portal', 'Portal'], ['builder', 'Builder'], ['new_builder', 'New Builder'], ['admin', 'Admin'],
   ].map(([page, label]) => el('a', {
-    href: page === 'new_builder' ? '/new-builder' : '/' + page,
+    href: page === 'new_builder' ? '/static/guided-builder.html' : '/' + page,
     'data-i18n': 'ui.nav.' + page,
     'aria-current': page === current ? 'page' : null,
     textContent: label,

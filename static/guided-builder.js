@@ -33,10 +33,14 @@ async function loadDrafts(){
  }})));
  StoragePages.controls('/builder/games',user,$('published-games'),loadDrafts);
 }
+function nextStep(){
+ const pending=steps.findIndex(s=>draft.builder_workflow.artifacts[s]?.status!=='approved');
+ return pending===-1?steps.length:pending;
+}
 async function select(id){
- editName=false;clearTimeout(poll);draft=await request('GET','/game-drafts/'+encodeURIComponent(id));
+ $('build-error').textContent='';editName=false;clearTimeout(poll);draft=await request('GET','/game-drafts/'+encodeURIComponent(id));
  if(!draft.builder_workflow)draft=await request('POST',`/game-drafts/${id}/workflow/initialize`,{expected_revision:draft.revision,language:$('language').value});
- await recover();location.hash=id;selected=Math.max(0,steps.findIndex(s=>draft.builder_workflow.artifacts[s]?.status!=='approved'));
+ await recover();location.hash=id;selected=nextStep();
  const pending=draft.builder_workflow.pending_generation?.progress;
  $('correction').value=pending?.request_mode==='feedback'?'':pending?.request_text || '';
  $('emulator-feedback').value=pending?.request_mode==='feedback'?pending.request_text:'';
@@ -56,15 +60,24 @@ async function act(action){
  const input=action==='feedback'?$('emulator-feedback').value:typed || (suggested?guidance[step][4]:'');
  const identityEdit=action==='edit-identity'?{display_name:$('game-name').value,short_description:$('game-description').value}:{};
  working=true;render();showPageError('');$('busy').textContent=action==='propose'?'Preparing a proposal…':action==='final-approve'?'Translating approved specifications…':'Saving…';
+ if(action==='build'){
+  $('build-error').textContent='';
+  $('build-status').textContent='Requesting build…';
+ }
  try{
   draft=await request('POST',`/game-drafts/${draft.id}/workflow/${action}`,{expected_revision:draft.revision,step:steps[selected],text:input,...identityEdit,channels:action==='build'?['sms','email'].filter(c=>$('notify-'+c).checked):[]});
   if(action==='edit-identity'){editName=false;$('correction').value='';}
   if(action==='approve'){$('correction').value='';editName=false;}
-  if(action==='refresh')selected=Math.max(0,steps.findIndex(s=>draft.builder_workflow.artifacts[s]?.status!=='approved'));
-  if(action==='approve')selected=Math.min(steps.length-1,selected+1);
-  if(action==='propose'||action==='feedback'){selected=steps.indexOf(draft.builder_workflow.review_step || steps[selected]);$('correction').value='';if(action==='feedback')$('emulator-feedback').value='';}
+  if(action==='refresh')selected=nextStep();
+  if(action==='approve')selected=Math.min(steps.length,selected+1);
+  if(action==='propose'||action==='feedback'){const review=steps.indexOf(draft.builder_workflow.review_step);if(review>=0)selected=review;$('correction').value='';if(action==='feedback')$('emulator-feedback').value='';}
   await loadDrafts();
- }catch(e){error(e);try{draft=await request('GET','/game-drafts/'+draft.id);}catch{} }finally{working=false;$('busy').textContent='';render();schedule();}
+ }catch(e){
+  if(action==='build'){
+   const hint=/delivery and link/i.test(e.message)?' Uncheck the notification and press Build again to continue without it.':'';
+   $('build-error').textContent=e.message+hint;
+  }else error(e);
+  try{draft=await request('GET','/game-drafts/'+draft.id);}catch{} }finally{working=false;$('busy').textContent='';render();schedule();}
 }
 function preview(image){return el('figure',{},el('img',{src:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(image.svg),alt:image.caption}),el('figcaption',{textContent:image.caption}));}
 function artifactCard(value){
@@ -83,23 +96,9 @@ function changeReview(f,step,artifact){
    el('section',{},el('h3',{textContent:'Before — approved'}),artifactCard(previous.value)),
    el('section',{},el('h3',{textContent:'After — proposed'}),artifactCard(artifact.value))));
 }
-function render(){
- $('intro').hidden=!!draft;$('workspace').hidden=!draft;if(!draft)return;
- const f=draft.builder_workflow, active=['queued','running'].includes(f.job?.status);
- $('budget').textContent='AI budget used or reserved: $'+((f.charged_microdollars || 0)/1000000).toFixed(2)+' of $10';
- document.documentElement.dir=f.language==='ar'?'rtl':'ltr';
+function renderArtifact(f,active){
  const step=steps[selected],artifact=f.artifacts[step], guide=guidance[step], questions=artifact?.value?.questions||[];
  const allowed=steps.slice(0,selected).every(s=>f.artifacts[s]?.status==='approved');
- const count=steps.filter(s=>f.artifacts[s]?.status==='approved').length;
- $('draft-title').textContent=draftName(draft);
- $('delete-draft').disabled=working||active;
- $('edit-title').disabled=working||active||f.artifacts.understanding?.status!=='approved';
- $('step-position').textContent='Step '+(selected+1)+' of '+steps.length;
- $('step-count').textContent=count+' of '+steps.length+' approved';
- $('progress').value=count;
- $('steps').replaceChildren(...steps.map((s,i)=>el('button',{'aria-current':i===selected?'step':null,disabled:working,
-   title:titles[i]+' · '+(f.artifacts[s]?.status||'Not started'),textContent:(f.artifacts[s]?.status==='approved'?'✓ ':'')+['Idea','Name','Rules','Layout','Tutorial','Images','Tests'][i],
-   onclick:()=>{if(i!==selected){$('correction').value='';editName=false;}selected=i;render();}})));
  $('step-guide').textContent=artifact?'':guide[1];
  $('prompt-label').textContent=questions.length?'Answer the questions below':artifact?'What would you like to change?':guide[0];
  $('questions').replaceChildren(...questions.map(q=>el('li',{textContent:q})));
@@ -133,6 +132,34 @@ function render(){
  $('reopen').hidden=artifact?.status!=='approved';
  $('reopen').disabled=working||active||!artifact||artifact.status!=='approved';
  $('propose').disabled=working||active||!allowed;
+}
+function render(){
+ $('intro').hidden=!!draft;$('workspace').hidden=!draft;if(!draft)return;
+ const f=draft.builder_workflow, active=['queued','running'].includes(f.job?.status);
+ $('budget').textContent='AI budget used or reserved: $'+((f.charged_microdollars || 0)/1000000).toFixed(2)+' of $10';
+ document.documentElement.dir=f.language==='ar'?'rtl':'ltr';
+ const count=steps.filter(s=>f.artifacts[s]?.status==='approved').length;
+ $('draft-title').textContent=draftName(draft);
+ $('delete-draft').disabled=working||active;
+ $('edit-title').disabled=working||active||f.artifacts.understanding?.status!=='approved';
+ const labels=['Idea','Name','Rules','Layout','Tutorial','Images','Tests','Build & verify'];
+ const buildView=selected===steps.length;
+ const all=count===steps.length;
+ const completed=count+Number(f.job?.status==='ready');
+ $('step-position').textContent='Step '+(selected+1)+' of '+labels.length;
+ $('step-count').textContent=completed+' of '+labels.length+' complete';
+ $('progress').max=labels.length;
+ $('progress').value=completed;
+ $('steps').replaceChildren(...labels.map((label,i)=>{
+  const build=i===steps.length;
+  const done=build?f.job?.status==='ready':f.artifacts[steps[i]]?.status==='approved';
+  return el('button',{'aria-current':i===selected?'step':null,disabled:working||(build&&!all&&!f.job),
+   title:build&&!all?'Approve the specifications to unlock Build & verify':label,
+   textContent:(done?'✓ ':'')+label,onclick:()=>{if(i!==selected){$('correction').value='';editName=false;}selected=i;render();}});
+ }));
+ $('spec-panel').hidden=buildView;
+ $('build-panel').hidden=!buildView;
+ if(!buildView)renderArtifact(f,active);
  if(renderedRevision!==draft.revision){
   $('conversation').replaceChildren(...f.conversation.map(m=>{
    const message=el('div',{class:'chat-message '+m.role},el('small',{textContent:m.role==='user'?'You':'Game assistant'}),m.text);
@@ -145,13 +172,15 @@ function render(){
   }));
   renderedRevision=draft.revision;
  }
- const all=steps.every(s=>f.artifacts[s]?.status==='approved');
- $('build-panel').hidden=!all&&!f.job;
+
  $('feedback').disabled=working||active||!all||!f.job;
  $('build').disabled=working||active||!all;$('cancel').disabled=working||!active;
  $('final-approve').disabled=working||f.job?.status!=='ready_for_review';$('publish').disabled=working||f.job?.status!=='ready';
- $('emulator').href='/builder#'+draft.id;
- $('build-status').textContent=f.job?`${f.job.stage}${f.job.error?' — '+f.job.error:''}`:'All specifications approved. Ready to build.';
+ const playable=['ready_for_review','ready'].includes(f.job?.status);
+ $('emulator').hidden=!playable;
+ if(playable)$('emulator').href='/static/builder.html'+location.search+'#'+encodeURIComponent(draft.id);
+ else $('emulator').removeAttribute('href');
+ $('build-status').textContent=f.job?`${f.job.stage}${f.job.error?' — '+f.job.error:''}`:$('build-error').textContent?'':'All specifications approved. Ready to build.';
  $('build-log').textContent=(f.job?.log||[]).join('\n');
  const shots=f.job?.screenshots||[];
  $('screenshots').replaceChildren(...shots.map(shot=>el('button',{textContent:`${shot.test} · ${shot.width}×${shot.height} · ${shot.direction} · ${shot.view}`,onclick:async()=>{

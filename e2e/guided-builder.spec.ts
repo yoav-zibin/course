@@ -5,7 +5,7 @@ test('guided builder saves a draft, restores it, and never approves an empty ste
  await page.goto('/static/guided-builder.html');
  await page.getByRole('button',{name:'+ New game',exact:true}).click();
  await expect(page.locator('#workspace')).toBeVisible();
- await expect(page.locator('#steps button')).toHaveCount(7);
+ await expect(page.locator('#steps button')).toHaveCount(8);
  await expect(page.locator('#approve')).toBeDisabled();
  const url=page.url();await page.reload();
  await expect(page.locator('#workspace')).toBeVisible();expect(page.url()).toBe(url);
@@ -123,7 +123,7 @@ test('skinned Builder opens New Builder and only deletes a confirmed draft',asyn
  await page.goto('/builder?skin=sunset');
  await expect(page.locator('html')).toHaveAttribute('data-skin','sunset');
  await page.locator('header nav').getByRole('link',{name:'New Builder',exact:true}).click();
- await expect(page).toHaveURL(/new-builder\?skin=sunset$/);
+ await expect(page).toHaveURL(/\/static\/guided-builder\.html\?skin=sunset$/);
  await expect(page.locator('html')).toHaveAttribute('data-skin','sunset');
  await page.locator('#new-draft').click();
  await expect(page.locator('#workspace')).toBeVisible();
@@ -134,5 +134,38 @@ test('skinned Builder opens New Builder and only deletes a confirmed draft',asyn
  await expect(page.locator('#workspace')).toBeHidden();
  await page.reload();
  await expect(page.locator('#draft-list button')).toHaveCount(0);
- await expect(page).toHaveURL(/new-builder\?skin=sunset$/);
+ await expect(page).toHaveURL(/\/static\/guided-builder\.html\?skin=sunset$/);
+});
+
+test('build panel explains notification failure and lets the user build without alerts',async({page,request})=>{
+ const user=await createUser(request,uniqueName('Build alerts'));await loginAs(page,user);
+ await page.goto('/static/guided-builder.html');await page.locator('#new-draft').click();
+ await expect(page.locator('#workspace')).toBeVisible();
+ const id=new URL(page.url()).hash.slice(1);
+ let current:any;
+ await page.route('**/game-drafts/'+id,async route=>{
+  current=await (await route.fetch()).json();
+  for(const step of ['understanding','identity','logic','ui','tutorial','images','tests'])
+   current.builder_workflow.artifacts[step]={status:'approved',revision:1,value:{text:'Approved'}};
+  await route.fulfill({json:current});
+ });
+ await page.reload();
+ await expect(page.locator('#step-position')).toHaveText('Step 8 of 8');
+ await expect(page.locator('#spec-panel')).toBeHidden();
+ await page.locator('#steps button').nth(6).click();
+ await expect(page.locator('#build-panel')).toBeHidden();
+ await page.getByRole('button',{name:'Build & verify'}).click();
+ await expect(page.locator('#emulator')).toBeHidden();
+ await page.route('**/workflow/build',async route=>{
+  if(route.request().postDataJSON().channels.includes('sms'))
+   return route.fulfill({status:400,json:{detail:'Enable sms delivery and link a verified address first'}});
+  current.builder_workflow.job={status:'ready_for_review',stage:'Ready to play',log:[]};
+  await route.fulfill({json:current});
+ });
+ await page.locator('#notify-sms').check();await page.locator('#build').click();
+ await expect(page.locator('#build-error')).toContainText('Uncheck the notification');
+ await page.locator('#notify-sms').uncheck();await page.locator('#build').click();
+ await expect(page.locator('#build-status')).toHaveText('Ready to play');
+ await expect(page.locator('#build-error')).toBeEmpty();
+ await expect(page.locator('#emulator')).toHaveAttribute('href','/static/builder.html#'+id);
 });
