@@ -32,17 +32,19 @@
 
 #intro{text-align:center;padding-block:clamp(18px,5vh,44px)}
 #intro h2{margin-block-end:6px}
-#spec-panel{display:grid;grid-template-columns:minmax(0,1fr) minmax(250px,330px);gap:22px;align-items:start}
+#spec-panel{display:grid;grid-template-columns:minmax(250px,330px) minmax(0,1fr);gap:22px;align-items:start}
 .artifact-main,.artifact-chat{min-width:0}
-.artifact-chat{border-inline-start:1px solid var(--color-border-2);padding-inline-start:18px}
+.artifact-chat{border-inline-end:1px solid var(--color-border-2);padding-inline-end:18px}
 .artifact-chat #chat-form{margin-block-start:0}
-#chat-form #propose{width:100%}
-#spec-panel .actions #approve{margin-inline-start:auto}
+.artifact-footer{grid-column:1/-1;border-block-start:1px solid var(--color-border-2);padding-block-start:12px}
+.artifact-footer .actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.artifact-footer #approve{margin-inline:auto}
+.action-utils{display:flex;gap:10px}
 .workshop button{transition:background-color .15s ease,color .15s ease,border-color .15s ease,opacity .15s ease,transform .1s ease}
 .workshop button:active{transform:scale(.98)}
 #steps button{transition:background-color .15s ease,color .15s ease,border-color .15s ease}
 @keyframes gb-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 #artifact-content>*,#artifact-changes>*,#build-panel{animation:gb-in .28s ease both}
 #workspace{animation:gb-in .25s ease both}
-@media(max-width:1000px){#spec-panel{grid-template-columns:minmax(0,1fr)}.artifact-chat{border-inline-start:0;border-block-start:1px solid var(--color-border-2);padding-inline-start:0;padding-block-start:14px}}
+@media(max-width:1000px){#spec-panel{grid-template-columns:minmax(0,1fr)}.artifact-chat{border-inline-end:0;border-block-end:1px solid var(--color-border-2);padding-inline-end:0;padding-block-end:14px}}
 @media(prefers-reduced-motion:reduce){.workshop *,#workspace{animation:none!important;transition:none!important}}
