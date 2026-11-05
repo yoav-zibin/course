@@ -74,6 +74,8 @@ from game_platform.schemas import (
     InviteOut,
     InviteViewOut,
     MatchCreate,
+    FeedbackCreate,
+    FeedbackOut,
     MatchOut,
     MatchSummaryOut,
     MatchHistoryOut,
@@ -109,6 +111,7 @@ from game_platform.service import (
     InvalidRequestError,
     NotFoundError,
     PlatformError,
+    TooManyRequestsError,
     UnauthorizedError,
 )
 from game_platform.agent import GENERATION_BUDGET_SECONDS, AgentError, chat_with_agent
@@ -125,6 +128,7 @@ _STATUS_OF_ERROR: Final[tuple[tuple[type[PlatformError], HTTPStatus], ...]] = (
     (NotFoundError, HTTPStatus.NOT_FOUND),
     (InvalidRequestError, HTTPStatus.BAD_REQUEST),
     (ConflictError, HTTPStatus.CONFLICT),
+    (TooManyRequestsError, HTTPStatus.TOO_MANY_REQUESTS),
 )
 
 
@@ -811,6 +815,32 @@ def delete_game(platform: Platform, caller_id: CallerId, game_id: str) -> None:
 # Matches
 
 
+# Feedback
+
+
+@router.post("/feedback", status_code=HTTPStatus.CREATED)
+def send_feedback(
+    platform: Platform, caller_id: CallerId, body: FeedbackCreate, response: Response
+) -> FeedbackOut:
+    """Sends feedback on a user, a game, a match or the platform: a bug, a suggestion
+    (or feature request) or a problem (problematic content), in your own words (5 to
+    1000 characters). Any logged-in user, guests included; not on yourself or your own
+    game. At most 20 a day (then 429); sending the same kind of feedback on the same
+    target within 24 hours replaces your earlier text (200 instead of 201). Feedback is
+    private: only admins see it."""
+    feedback, created = platform.send_feedback(
+        caller_id=caller_id,
+        kind=body.kind,
+        target_type=body.target_type,
+        target_id=body.target_id,
+        text=body.text,
+        page=body.page,
+    )
+    if not created:
+        response.status_code = HTTPStatus.OK
+    return FeedbackOut.of(feedback)
+
+
 @router.post("/matches", status_code=HTTPStatus.CREATED)
 def create_match(
     platform: Platform, caller_id: CallerId, body: MatchCreate
@@ -1479,6 +1509,25 @@ def admin_invites(platform: Platform) -> dict[str, JsonValue]:
     """The invite tree: who brought whom, with direct and total (transitive)
     invites per user (the backoffice's invites page)."""
     return platform.invite_stats()
+
+
+@debug_router.get("/admin/feedback", dependencies=[MasterPassword])
+def admin_feedback(
+    platform: Platform,
+    kind: str | None = None,
+    target_type: str | None = None,
+    target_id: str | None = None,
+    status: str | None = None,
+) -> dict[str, JsonValue]:
+    """Users' feedback, newest first, and the targets with the most "problem" reports.
+    Filters: kind (bug, suggestion, problem), target_type (user, game, match, platform)
+    with an optional target_id, and status."""
+    return platform.admin_feedback(
+        kind=kind or None,
+        target_type=target_type or None,
+        target_id=target_id or None,
+        status=status or None,
+    )
 
 
 @debug_router.delete(

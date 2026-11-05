@@ -1246,3 +1246,161 @@ def test_merged_translation_memory_works_in_query_mode_and_survives_rollback(sto
         == 204
     )
     assert second.get_translations("es", [added["source_hash"]]) == {}
+
+
+
+def _counting_firestore_reads():
+    """Patches the Firestore client so every read round trip is counted: a document
+    get, a query, or a batched get."""
+    import contextlib
+
+    from google.cloud.firestore_v1.client import Client
+    from google.cloud.firestore_v1.document import DocumentReference
+    from google.cloud.firestore_v1.query import Query
+
+    reads = []
+
+    @contextlib.contextmanager
+    def counting():
+        patches = []
+        for cls, name in ((DocumentReference, "get"), (Query, "stream"), (Client, "get_all")):
+            original = getattr(cls, name)
+
+            def counted(self, *args, _original=original, _name=name, **kwargs):
+                reads.append(_name)
+                return _original(self, *args, **kwargs)
+
+            patches.append(patch.object(cls, name, counted))
+        with contextlib.ExitStack() as stack:
+            for p in patches:
+                stack.enter_context(p)
+            yield
+
+    return reads, counting
+
+
+def test_every_feedback_call_reads_firestore_at_most_twice_and_is_fast(store):
+    import time
+
+    api = api_for(store)
+    ann, bob = api.new_user("ann"), api.new_user("bob")
+    game = api.new_game(owner=bob)
+    match = api.new_match(owner=bob, game_id=game, joiners=[ann], start=True)
+    reads, counting = _counting_firestore_reads()
+    calls = [
+        ("POST", "/feedback", {"kind": "problem", "target_type": "user", "target_id": bob, "text": "bad name"}),
+        ("POST", "/feedback", {"kind": "bug", "target_type": "game", "target_id": game, "text": "it flickers"}),
+        ("POST", "/feedback", {"kind": "suggestion", "target_type": "match", "target_id": match, "text": "an undo"}),
+        ("POST", "/feedback", {"kind": "bug", "target_type": "platform", "text": "the menu is slow"}),
+        # A repeat (an update) and a refusal cost the same.
+        ("POST", "/feedback", {"kind": "bug", "target_type": "game", "target_id": game, "text": "it still flickers"}),
+        ("POST", "/feedback", {"kind": "bug", "target_type": "user", "target_id": ann, "text": "me, myself"}),
+        ("GET", "/admin/feedback", None),
+        ("GET", "/admin/feedback", {"kind": "bug", "target_type": "game"}),
+    ]
+    for method, path, body in calls:
+        reads.clear()
+        with counting():
+            started = time.perf_counter()
+            if method == "POST":
+                response = api.request(method, path, as_user=ann, json=body)
+            else:
+                response = api.request(method, path, params=body)
+            took = time.perf_counter() - started
+        assert response.status_code in (200, 201, 400), response.text
+        # A POST is the login check plus one batch; the admin listing is two queries.
+        assert len(reads) <= 2, (method, path, body, reads)
+        assert took < 1, (method, path, took)
+    assert api.ok("GET", "/admin/feedback")["count"] == 4
+
+
+def test_feedback_is_saved_listed_and_limited_in_query_mode(store):
+    from game_platform.scaling_cutover import rollback_snapshot
+
+    api = api_for(store)
+    platform = api.client.app.state.platform
+    ann, bob = api.new_user("ann"), api.new_user("bob")
+    game = api.new_game(owner=bob)
+    match = api.new_match(owner=bob, game_id=game, joiners=[ann], start=True)
+    made = {}
+    for kind, target_type, target in (
+        ("problem", "user", bob), ("bug", "game", game), ("suggestion", "match", match), ("bug", "platform", "")
+    ):
+        response = api.request(
+            "POST",
+            "/feedback",
+            as_user=ann,
+            json={"kind": kind, "target_type": target_type, "target_id": target, "text": "This is wrong"},
+        )
+        assert response.status_code == 201, response.text
+        made[target_type] = response.json()["id"]
+    # Saved in Firestore: a restarted server (a new store) lists them.
+    restarted = ScalablePlatform(store=QueryStore(store.client, namespace=store.namespace))
+    listing = restarted.admin_feedback()
+    assert {r["target_type"]: r["id"] for r in listing["feedback"]} == made
+    assert {r["target_name"] for r in listing["feedback"]} == {"bob", "Poker", "", "Platform"}
+    assert [r["context"]["game_id"] for r in listing["feedback"] if r["target_type"] == "match"] == [game]
+    # A repeat of the same kind within 24 hours updates the same message, at the top.
+    again = api.request(
+        "POST",
+        "/feedback",
+        as_user=ann,
+        json={"kind": "problem", "target_type": "user", "target_id": bob, "text": "Their name is offensive"},
+    )
+    assert again.status_code == 200 and again.json()["id"] == made["user"]
+    listing = api.ok("GET", "/admin/feedback")
+    assert listing["count"] == 4 and listing["feedback"][0]["text"] == "Their name is offensive"
+    assert api.ok("GET", "/admin/feedback", params={"kind": "bug"})["count"] == 2
+    assert api.ok("GET", "/admin/feedback", params={"target_type": "game"})["count"] == 1
+    # Lots of feedback: the listing shows the newest 200, Most reported counts problems,
+    # and the daily limit still reads only the sender's own limit document.
+    targets = [platform.create_user(display_name=f"target {n}").id for n in range(20)]
+    reporters = [api.new_user(f"reporter {n}") for n in range(12)]
+    for n, reporter in enumerate(reporters):
+        for target in targets[: 18 if n else 20]:
+            platform.send_feedback(
+                caller_id=reporter, kind="problem", target_type="user", target_id=target, text="spam account"
+            )
+    listing = platform.admin_feedback()
+    assert (listing["count"], listing["more"]) == (200, True)
+    assert listing["most_reported"][0]["reports"] == 12
+    assert listing["most_reported"][0]["target_name"].startswith("target ")
+    response = api.request(
+        "POST",
+        "/feedback",
+        as_user=reporters[0],
+        json={"kind": "bug", "target_type": "platform", "text": "one too many"},
+    )
+    assert response.status_code == 429
+    # A rollback keeps the feedback.
+    assert len(rollback_snapshot(store).feedback) == 4 + 20 + 11 * 18
+
+
+def test_the_daily_feedback_limit_spans_midnight_in_query_mode(store):
+    import datetime as dt
+
+    from game_platform.service import TooManyRequestsError
+
+    now = [dt.datetime(2026, 1, 1, 23, 0, tzinfo=dt.timezone.utc)]
+    platform = ScalablePlatform(store=store, clock=lambda: now[0], computer_move_delay_seconds=0)
+    ann = platform.create_user(display_name="ann").id
+    targets = [platform.create_user(display_name=f"user {n}").id for n in range(21)]
+
+    def send(target, text="spam account"):
+        return platform.send_feedback(
+            caller_id=ann, kind="problem", target_type="user", target_id=target, text=text
+        )
+
+    for target in targets[:20]:
+        send(target)
+        now[0] += dt.timedelta(minutes=1)
+    now[0] = dt.datetime(2026, 1, 2, 2, 0, tzinfo=dt.timezone.utc)  # the next day
+    with pytest.raises(TooManyRequestsError):
+        send(targets[20])
+    updated, created = send(targets[0], "still spam")
+    assert not created and updated.text == "still spam"
+    now[0] = dt.datetime(2026, 1, 2, 23, 0, tzinfo=dt.timezone.utc)  # 24 hours after the first
+    assert send(targets[20])[1]
+    # The limit document keeps only the last 24 hours.
+    entries = store.raw_get(store.ref("feedback_limits", ann))["entries"]
+    assert len(entries) == 20

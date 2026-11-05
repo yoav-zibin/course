@@ -157,6 +157,7 @@ def migrate(source, destination, *, source_prefix="", batch_records=None):
                     "invites": "put_invite",
                     "game_version_errors": "add_game_version_error",
                     "game_test_seeds": "put_game_test_seeds",
+                    "feedback": "put_feedback",
                 }[kind.field]
                 if kind.field == "users" and not record.referral_code:
                     record = replace(
