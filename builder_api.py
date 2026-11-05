@@ -21,6 +21,8 @@ class Action(BaseModel):
     expected_revision: int = Field(ge=1)
     step: Literal['understanding','identity','logic','ui','tutorial','images','tests'] = 'understanding'
     text: str = Field(default='',max_length=20000)
+    display_name: str = Field(default='', max_length=200)
+    short_description: str = Field(default='', max_length=2000)
     language: str = Field(default='en', max_length=16)
 
 
@@ -83,6 +85,9 @@ def make_router(platform_dependency, caller_dependency):
                 body.expected_revision = model.revision
                 result = save(lambda d: replace(d,builder_workflow=proposal.builder_workflow))
                 if result.builder_workflow['artifacts'][step]['status']!='approved': break
+        elif action=='edit-identity':
+            value = {'display_name':body.display_name.strip(), 'short_description':body.short_description.strip()}
+            result=save(lambda d:flow.propose(d,'identity',value,'Review the edited name and description.','Edit name and description'))
         elif action=='approve': result=save(lambda d:flow.approve(d,body.step))
         elif action=='reopen':
             def reopen(d):

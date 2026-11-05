@@ -218,6 +218,8 @@ def approve(draft, step):
     artifact['status'] = 'approved'
     artifact['approved_digest'] = digest(artifact['value'])
     flow['conversation'].append({'role':'user','step':step,'text':'Approved', 'artifact_revision':artifact['revision']})
+    if step == 'identity':
+        return replace(draft, name=artifact['value']['display_name'], description=artifact['value']['short_description'], builder_workflow=flow)
     return replace(draft, builder_workflow=flow)
 
 

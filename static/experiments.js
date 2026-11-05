@@ -12,7 +12,7 @@
   let previewLayout = portalLayoutFromUrl();
 
   function portalSkinFromUrl() {
-    if (!document.querySelector(".portal-shell")) return null;
+    if (!document.querySelector(".portal-shell") && !document.body?.hasAttribute?.("data-skin-preview")) return null;
     const key = new URLSearchParams(location.search).get("skin");
     return PORTAL_SKINS.has(key) ? key : null;
   }

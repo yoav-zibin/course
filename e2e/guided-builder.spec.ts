@@ -57,7 +57,7 @@ test('approved cards, changed artifact comparison and emulator feedback stay rev
   f.job={status:'ready_for_review',stage:'Play the game',log:[]};
   await route.fulfill({response,json:current});
  });
- await page.reload();await page.getByText('Game rules · approved version 1',{exact:true}).click();
+ await page.reload();await page.locator('.history summary').first().click();await page.getByText('Game rules · approved version 1',{exact:true}).click();
  await expect(page.locator('#conversation')).toContainText('Original rules');
  await page.route('**/workflow/feedback',async route=>{
   expect(route.request().postDataJSON().text).toBe('The winning total is wrong');
@@ -95,4 +95,25 @@ test('tutorial translates interactive feedback and preserves progress in RTL',as
  await page.locator('#test-tutorial').evaluate((frame:any)=>frame.contentWindow.postMessage({type:'tutorial_locale',locale:'en',direction:'ltr'},'*'));
  await expect(tutorial.locator('#total')).toHaveText('Total: 1');
  await expect(tutorial.locator('html')).toHaveAttribute('dir','ltr');
+});
+
+test('guided steps explain outstanding questions and follow skin previews',async({page,request})=>{
+ const user=await createUser(request,uniqueName('Guide'));await loginAs(page,user);
+ await page.goto('/new-builder?skin=sunset');await page.locator('#new-draft').click();
+ await expect(page.locator('#workspace')).toBeVisible();
+ const id=new URL(page.url()).hash.slice(1);
+ await page.route('**/game-drafts/'+id,async route=>{
+   const response=await route.fetch(), d=await response.json();
+   d.builder_workflow.artifacts.understanding={status:'draft',value:{text:'Add numbers to six.',questions:['Who goes first?']}};
+   await route.fulfill({response,json:d});
+ });
+ for(const skin of ['sunset','aurora','immersive','classic']){
+   await page.goto('/new-builder?skin='+skin+'#'+id);await page.reload();
+   await expect(page.locator('#questions')).toContainText('Who goes first?');
+   await expect(page.locator('#next-action')).toContainText('Submit your answers');
+   await expect(page.locator('#approve')).toBeDisabled();
+   await expect(page.getByRole('button',{name:'Submit answers'})).toBeVisible();
+   if(skin!=='classic')await expect(page.locator('html')).toHaveAttribute('data-skin',skin);
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ }
 });

@@ -9,8 +9,16 @@ LIMIT = 10_000_000
 
 
 def validate_tariffs(config):
-    if None in (config.builder_input_usd_per_million, config.builder_output_usd_per_million, config.builder_max_input_tokens):
-        raise InvalidRequestError('Set verified model input/output tariffs and maximum billable input tokens before guided generation')
+    rates = (config.builder_input_usd_per_million, config.builder_output_usd_per_million, config.builder_max_input_tokens)
+    if None not in rates:
+        return rates
+    if config.model == 'muse-spark-1.3' and config.base_url.rstrip('/') in (
+        'https://api.meta.ai/v1', 'https://api.ai.meta.com/v1',
+    ):
+        # Standard pricing and context window: dev.meta.ai/docs/pricing-rate-limits and /docs/models.
+        defaults = (1.25, 4.25, 1_048_576)
+        return tuple(default if rate is None else rate for rate, default in zip(rates, defaults))
+    raise InvalidRequestError('Set verified model input/output tariffs and maximum billable input tokens before guided generation')
 
 
 class BudgetedModel:
@@ -22,10 +30,7 @@ class BudgetedModel:
         self.revision = draft.revision
         self.charged = (draft.builder_workflow or {}).get("charged_microdollars", 0)
         self.job_id = job_id
-        self.input_rate = config.builder_input_usd_per_million
-        self.output_rate = config.builder_output_usd_per_million
-        self.input_limit = config.builder_max_input_tokens
-        validate_tariffs(config)
+        self.input_rate, self.output_rate, self.input_limit = validate_tariffs(config)
 
     def cost(self, inputs, outputs):
         amount = Decimal(str(self.input_rate)) * inputs + Decimal(str(self.output_rate)) * outputs

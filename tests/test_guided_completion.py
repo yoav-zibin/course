@@ -20,6 +20,18 @@ def setup_draft():
     return platform,d
 
 
+def test_hosted_spark_budget_defaults_and_operator_overrides():
+    from game_platform.builder_budget import validate_tariffs
+    from game_platform.config import ModelApiConfig
+
+    assert validate_tariffs(ModelApiConfig()) == (1.25, 4.25, 1_048_576)
+    config = ModelApiConfig(base_url="https://api.meta.ai/v1/", builder_input_usd_per_million=0)
+    assert validate_tariffs(config) == (0, 4.25, 1_048_576)
+    for settings in ({"model": "different"}, {"base_url": "https://example.com/v1"}):
+        with pytest.raises(InvalidRequestError, match="verified model"):
+            validate_tariffs(ModelApiConfig(**settings))
+
+
 def test_budget_reserves_before_call_and_retains_unknown_charges():
     p,d=setup_draft()
     config=SimpleNamespace(builder_input_usd_per_million=5,builder_output_usd_per_million=10,builder_max_input_tokens=1000)

@@ -223,3 +223,12 @@ def test_server_review_failure_repairs_code_before_ready(monkeypatch):
 def test_old_workflow_missing_tutorial_has_actionable_conflict():
     d=approved_draft();del d.builder_workflow['artifacts']['tutorial']
     with pytest.raises(ConflictError,match='tutorial'):flow.spec_digest(d.builder_workflow)
+
+
+def test_approved_identity_renames_draft_and_marks_previous_dependents_stale():
+    draft = approved_draft()
+    value = {'display_name':'Race to six', 'short_description':'Reach six first.'}
+    proposed = flow.propose(draft,'identity',value,'Review the edited name.')
+    assert proposed.builder_workflow['artifacts']['logic']['status']=='stale'
+    result = flow.approve(proposed,'identity')
+    assert (result.name,result.description)==('Race to six','Reach six first.')
