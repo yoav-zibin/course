@@ -168,6 +168,8 @@
   "ui.games.find_next": "अपना अगला गेम खोजें",
   "ui.games.most_popular": "सबसे लोकप्रिय",
   "ui.games.popularity_metric": "शुरू हुए मैचों के खिलाड़ियों के आधार पर क्रमित",
+  "ui.games.popularity_collecting": "मैच शुरू होने पर लोकप्रियता रैंकिंग दिखाई देगी।",
+  "ui.games.popularity_unavailable": "लोकप्रियता डेटा लोड होने तक गेम दिखाए जा रहे हैं।",
   "ui.games.no_games": "कोई गेम नहीं मिला",
   "ui.games.grid": "ग्रिड",
   "ui.games.list": "सूची",

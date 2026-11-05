@@ -92,6 +92,7 @@ const state = {
   games: [], // latest versions, from GET /games
   popularGames: [], // bounded server ranking; refreshed at most once per minute
   popularGamesFetchedAt: 0,
+  popularGamesStatus: "loading",
   gameCache: new Map(), // "game_id@version" -> game (null when gone)
   pictureCache: new Map(),
   nameCache: new Map(), // user id -> display name
@@ -505,7 +506,12 @@ async function refreshLocked() {
     state.openMatches = openMatches;
     if (popularityDue) {
       state.popularGamesFetchedAt = Date.now();
-      if (Array.isArray(popularGames)) state.popularGames = popularGames;
+      if (Array.isArray(popularGames)) {
+        state.popularGames = popularGames;
+        state.popularGamesStatus = popularGames.length ? "ranked" : "collecting";
+      } else {
+        state.popularGamesStatus = "unavailable";
+      }
     }
     if (state.detailGameId && !state.games.some(game=>game.id===state.detailGameId)) {
       try { state.games.push(await portalRequest("GET", `/games/${encodeURIComponent(state.detailGameId)}`)); }
@@ -774,20 +780,32 @@ function renderLibrary() {
 function renderPopularGames() {
   const section = $("popular-games-section");
   if (!section) return;
-  const games = state.popularGames.filter(game =>
+  const rankedGames = state.popularGames.filter(game =>
     state.games.some(current => current.id === game.id && current.published !== false));
+  const hasRanking = rankedGames.length > 0;
+  // The aggregate is intentionally populated from match starts. Before its first
+  // score arrives, keep this row useful with catalog games and explain the state.
+  const games = hasRanking
+    ? rankedGames
+    : state.games.filter(game => game.published !== false).slice(0, 8);
   section.hidden = games.length === 0;
+  $("popular-games-eyebrow").hidden = !hasRanking;
+  $("popular-games-metric").textContent = hasRanking
+    ? I18n.t("ui.games.popularity_metric", {}, "Ranked by players in started matches")
+    : state.popularGamesStatus === "unavailable"
+      ? I18n.t("ui.games.popularity_unavailable", {}, "Showing games while popularity data loads.")
+      : I18n.t("ui.games.popularity_collecting", {}, "Popularity rankings will appear as matches start.");
   $("popular-games").replaceChildren(...games.map((game, index) => {
     const hue = Array.from(game.id).reduce((value, letter) => value + letter.charCodeAt(0), 0) % 360;
     const name = catalogGameLabel(game);
     const initials = name.trim().split(/\s+/).slice(0, 2).map(word => Array.from(word)[0] || "").join("");
     return el("button", {
       type: "button",
-      class: "popular-game-card",
+      class: `popular-game-card${hasRanking ? "" : " is-unranked"}`,
       "aria-label": I18n.t("ui.games.open_aria", {name, players: gameCountLabel(game)}, `Open ${name}, ${gameCountLabel(game)}`),
       onclick: () => openGamePage(game.id),
     },
-      el("span", {class: "popular-game-rank", textContent: String(index + 1)}),
+      ...(hasRanking ? [el("span", {class: "popular-game-rank", textContent: String(index + 1)})] : []),
       el("span", {class: "popular-game-art", style: `--art-hue:${hue}`, "aria-hidden": "true"},
         el("span", {class: "popular-game-monogram", textContent: initials})),
       el("span", {class: "popular-game-copy"},

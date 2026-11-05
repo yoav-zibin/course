@@ -168,6 +168,8 @@
   "ui.games.find_next": "Find your next game",
   "ui.games.most_popular": "Most popular",
   "ui.games.popularity_metric": "Ranked by players in started matches",
+  "ui.games.popularity_collecting": "Popularity rankings will appear as matches start.",
+  "ui.games.popularity_unavailable": "Showing games while popularity data loads.",
   "ui.games.no_games": "No games found",
   "ui.games.grid": "Grid",
   "ui.games.list": "List",

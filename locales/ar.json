@@ -168,6 +168,8 @@
   "ui.games.find_next": "اعثر على لعبتك التالية",
   "ui.games.most_popular": "الأكثر شعبية",
   "ui.games.popularity_metric": "مرتبة حسب عدد اللاعبين في المباريات التي بدأت",
+  "ui.games.popularity_collecting": "ستظهر قائمة الشعبية مع بدء المباريات.",
+  "ui.games.popularity_unavailable": "تظهر الألعاب أثناء تحميل بيانات الشعبية.",
   "ui.games.no_games": "لم يتم العثور على ألعاب",
   "ui.games.grid": "شبكة",
   "ui.games.list": "قائمة",

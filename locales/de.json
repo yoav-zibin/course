@@ -168,6 +168,8 @@
   "ui.games.find_next": "Finde dein nächstes Spiel",
   "ui.games.most_popular": "Am beliebtesten",
   "ui.games.popularity_metric": "Sortiert nach Spielern in gestarteten Partien",
+  "ui.games.popularity_collecting": "Die Rangliste füllt sich, sobald Partien gestartet werden.",
+  "ui.games.popularity_unavailable": "Spiele werden angezeigt, während die Beliebtheitsdaten laden.",
   "ui.games.no_games": "Keine Spiele gefunden",
   "ui.games.grid": "Raster",
   "ui.games.list": "Liste",
