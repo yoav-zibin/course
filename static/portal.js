@@ -90,8 +90,10 @@ function currentPushSubscription() {
 
 const state = {
   games: [], // latest versions, from GET /games
-  popularGames: [], // bounded server ranking; refreshed at most once per minute
+  popularGames: [], // bounded server ranking; refreshes after starts and at most once per minute otherwise
   popularGamesFetchedAt: 0,
+  popularGamesRequestVersion: 0,
+  popularGamesForceRefresh: false,
   popularGamesStatus: "loading",
   gameCache: new Map(), // "game_id@version" -> game (null when gone)
   pictureCache: new Map(),
@@ -462,6 +464,13 @@ function refresh() {
   return refreshPending;
 }
 
+function invalidatePopularGames() {
+  state.popularGamesFetchedAt = 0;
+  state.popularGamesForceRefresh = true;
+  state.popularGamesRequestVersion += 1;
+  if (state.refreshing) state.refreshAgain = true;
+}
+
 async function refreshLocked() {
   if (state.refreshing) {
     // Refresh again once the current one finishes, so it sees the latest changes.
@@ -493,7 +502,8 @@ async function refreshLocked() {
     }
     if (!user) $("token-wallet").hidden = true;
     await offline.sync();
-    const popularityDue = Date.now() - state.popularGamesFetchedAt >= 60_000;
+    const popularityDue = state.popularGamesForceRefresh || Date.now() - state.popularGamesFetchedAt >= 60_000;
+    const popularityRequestVersion = state.popularGamesRequestVersion;
     const [games, myMatches, openMatches, popularGames] = await Promise.all([
       StoragePages.list(portalRequest, "/games", {user}),
       user ? StoragePages.list(portalRequest, "/matches", {user}) : [],
@@ -505,9 +515,13 @@ async function refreshLocked() {
     state.games = games;
     state.myMatches = myMatches;
     state.openMatches = openMatches;
-    if (popularityDue) {
+    if (popularityDue && popularityRequestVersion === state.popularGamesRequestVersion) {
       state.popularGamesFetchedAt = Date.now();
+      state.popularGamesForceRefresh = false;
       if (Array.isArray(popularGames)) {
+        const oldRanking = state.popularGames.map(game => game.id).join("\u0000");
+        const nextRanking = popularGames.map(game => game.id).join("\u0000");
+        if (oldRanking !== nextRanking) $("popular-games").scrollLeft = 0;
         state.popularGames = popularGames;
         state.popularGamesStatus = popularGames.length ? "ranked" : "collecting";
       } else {
@@ -690,7 +704,8 @@ async function joinRandomMatch() {
     }
     for (const match of candidates) {
       try {
-        await portalRequest("POST", `/matches/${match.id}/join`, {user});
+        const joined = await portalRequest("POST", `/matches/${match.id}/join`, {user});
+        if (joined?.status === "ongoing") invalidatePopularGames();
         selectMatch(match.id);
         return;
       } catch (error) {
@@ -783,6 +798,8 @@ function renderPopularGames() {
   if (!section) return;
   const row = $("popular-games");
   const previousScrollLeft = row.scrollLeft;
+  // The API returns Firestore's descending score order. Keep it intact so
+  // rank 1 is always the first card in the carousel.
   const rankedGames = state.popularGames.filter(game =>
     state.games.some(current => current.id === game.id && current.published !== false));
   const hasRanking = rankedGames.length > 0;
@@ -1199,6 +1216,9 @@ function renderMatch() {
     (method, suffix = "", body = undefined) =>
     async () => {
       const result = await portalRequest(method, path + suffix, {user, body});
+      if ((method === "POST" && suffix === "/start") ||
+          (method === "POST" && suffix === "/join" && result?.status === "ongoing"))
+        invalidatePopularGames();
       if (method === "DELETE") selectMatch(null);
       return result;
     };
@@ -1652,6 +1672,7 @@ async function createMatch() {
     // version returned by the server; if the catalog changed, leave Start available.
     if (game && game.version === match.game_version && game.allowed_player_counts.length === 1 && game.allowed_player_counts[0] === 1 && match.players.length === 1) {
       match = await portalRequest("POST", `/matches/${match.id}/start`, {user, body: {first_turn_player_indices: [0]}});
+      invalidatePopularGames();
     }
     $("create-message").textContent = "";
     selectMatch(match.id);
@@ -1697,6 +1718,7 @@ async function playWithAllComputers() {
     if (!full.server_code) throw new Error("Play with computers is available for server-side games.");
     match=await portalRequest("POST","/matches",{user,body:{game_id:game.id,num_computer_opponents:playerCount-1,bet_per_player:0}});
     match=await portalRequest("POST",`/matches/${match.id}/start`,{user,body:{first_turn_player_indices:[0]}});
+    invalidatePopularGames();
     $("create-message").textContent="";
     selectMatch(match.id);
   } catch(error) {
