@@ -22,9 +22,9 @@ def test_create_a_match_with_computer_opponents(api: Api) -> None:
         "status": "waiting_for_players",
         "end_reason": None,
         "players": [
-            {"player_index": 0, "kind": "human", "user_id": alice, "id": alice},
+            {"player_index": 0, "kind": "human", "user_id": alice, "id": alice, "active": True},
             {"player_index": 1, "kind": "computer", "user_id": None,
-             "id": "computer-1"},
+             "id": "computer-1", "active": True},
         ],
         "turn_of_player_indices": None,
         "state": None,
@@ -34,6 +34,7 @@ def test_create_a_match_with_computer_opponents(api: Api) -> None:
         "seed": match["seed"],
         "pending_leave_player_id": None,
         "pending_leave_payout": None,
+        "pending_leave_ends_match": None,
         "token_pot": 0,
         "token_payouts": None,
         "rematch_match_id": None,
@@ -157,25 +158,14 @@ def test_create_match_checks_the_game(api: Api) -> None:
     )
 
 
-def test_joining_seats_humans_before_computers(api: Api) -> None:
-    alice, bob, carol = (
-        api.new_user("alice"),
-        api.new_user("bob"),
-        api.new_user("carol"),
-    )
-    game_id = api.new_game(owner=alice, allowed_player_counts=[2, 3, 4])
-    match_id = api.new_match(owner=alice, game_id=game_id, num_computer_opponents=1)
-
-    api.ok("POST", f"/matches/{match_id}/join", as_user=bob)
-    assert api.match_summary(match_id)["players"] == ["alice", "bob", "computer"]
-
-    api.ok("POST", f"/matches/{match_id}/join", as_user=carol)
-    assert api.match_summary(match_id)["players"] == [
-        "alice",
-        "bob",
-        "carol",
-        "computer",
-    ]
+def test_remove_solo_computers_before_joining_human_opponents(api: Api) -> None:
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game = api.new_game(owner=alice, allowed_player_counts=[2, 3])
+    mid = api.new_match(owner=alice, game_id=game, num_computer_opponents=1)
+    assert api.request("POST", f"/matches/{mid}/join", as_user=bob).status_code == 409
+    api.ok("PATCH", f"/matches/{mid}", as_user=alice, json={"num_computer_opponents": 0})
+    api.ok("POST", f"/matches/{mid}/join", as_user=bob)
+    assert api.match_summary(mid)["players"] == ["alice", "bob"]
 
 
 def test_cannot_join_twice_or_join_a_full_match(api: Api) -> None:
@@ -197,7 +187,7 @@ def test_cannot_join_twice_or_join_a_full_match(api: Api) -> None:
 def test_owner_configures_computer_opponents_while_waiting(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game_id = api.new_game(owner=alice, allowed_player_counts=[2, 3])
-    match_id = api.new_match(owner=alice, game_id=game_id, joiners=[bob])
+    match_id = api.new_match(owner=alice, game_id=game_id, num_computer_opponents=0)
 
     def set_computers(count: int, *, as_user: str = alice) -> httpx.Response:
         return api.request(
@@ -208,8 +198,8 @@ def test_owner_configures_computer_opponents_while_waiting(api: Api) -> None:
         )
 
     assert set_computers(1).status_code == 200
-    assert api.match_summary(match_id)["players"] == ["alice", "bob", "computer"]
-    assert error(set_computers(2)) == (
+    assert api.match_summary(match_id)["players"] == ["alice", "computer"]
+    assert error(set_computers(3)) == (
         400,
         "4 players is more than the game's maximum of 3",
     )

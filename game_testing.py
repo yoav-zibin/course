@@ -184,15 +184,14 @@ class _Walk:
         self._last_moves: list[JsonValue] = []
         self._next_human = 1
         self._next_computer = 1
-        self._players = [
-            self._random_player()
-            for _ in range(self._rng.choice(rules.allowed_player_counts))
-        ]
+        count = self._rng.choice(rules.allowed_player_counts)
+        solo = self._rng.random() < 0.5
+        self._players = [self._random_player(computer=solo and i > 0) for i in range(count)]
         self._player_count = len(self._players)
         self._pot = sum(player["max_loss"] for player in self._players)
 
-    def _random_player(self) -> dict[str, Any]:
-        if self._rng.random() < 0.5:
+    def _random_player(self, *, computer: bool = False) -> dict[str, Any]:
+        if computer:
             number = self._next_computer
             self._next_computer += 1
             return {
@@ -348,7 +347,7 @@ class _Walk:
         (failed, state, turn) when one happened, else None."""
         if self._rng.random() >= _EVENT_CHANCE or len(self._players) < 2:
             return None
-        humans = [p for p in self._players if p["kind"] == "human"]
+        humans = [p for p in self._players if p["kind"] == "human" and p.get("active", True)]
         if (
             self._rules.allows_leave_mid_match
             and humans
@@ -357,6 +356,7 @@ class _Walk:
             return self._leave(state)
         if (
             self._rules.allows_join_mid_match
+            and not any(p["kind"] == "computer" for p in self._players)
             and len(self._players) < max(self._rules.allowed_player_counts)
             and self._logic.has("playerJoined")
         ):
@@ -366,7 +366,7 @@ class _Walk:
     def _leave(
         self, state: JsonValue
     ) -> tuple[bool, JsonValue, list[str] | None]:
-        humans = [p for p in self._players if p["kind"] == "human"]
+        humans = [p for p in self._players if p["kind"] == "human" and p.get("active", True)]
         leaver = self._rng.choice(humans)
         ok, result = self._call_or_fail(
             "playerLeft",
@@ -378,43 +378,22 @@ class _Walk:
         )
         if not ok:
             return True, state, None
-        self._pot -= result.get("payout") or 0
-        # As on the platform, the leaver's seat does not vanish: a
-        # computer takes it over (keeping the roster's size and order, so
-        # seat-indexed games stay aligned), and computer ids are
-        # renumbered in seat order, as the platform numbers them. The
-        # turn playerLeft returned is remapped to the new ids (the
-        # platform does the same by resolving it to seats first).
-        old_ids = [player["id"] for player in self._players]
-        self._players = [
-            {**player, "kind": "computer", "max_loss": 0}
-            if player["id"] == leaver["id"]
-            else player
-            for player in self._players
-        ]
-        computers = 0
-        for player in self._players:
-            if player["kind"] == "computer":
-                computers += 1
-                player["id"] = f"computer-{computers}"
-        id_map = dict(zip(old_ids, (p["id"] for p in self._players)))
-        self._last_moves.append(
-            {"player_id": leaver["id"], "move": {"left": True}}
-        )
-        new_state: JsonValue = result.get("state")
-        new_turn: list[str] | None = result.get("turn")
-        if new_turn is not None:
-            new_turn = [id_map.get(pid, pid) for pid in new_turn]
-        humans_left = [p for p in self._players if p["kind"] == "human"]
-        if not humans_left:
-            # The platform ends the match when the last human leaves and
-            # settles the pot itself; the game owes no payouts for it.
-            return False, new_state, None
-        if len(humans_left) == 1:
-            # The platform settles the rest of the pot to the one human
-            # remaining; the match plays on with nothing at stake.
-            self._pot = 0
-        if new_turn is not None and not self._check_views(new_state):
+        # Compare the full leave result using the same budget and seed.
+        self._call_number -= 1
+        ok, again = self._call_or_fail("playerLeft", state, leaver["id"], state=state,
+                                     player_id=leaver["id"],
+                                     time_limit_seconds=_PLAYER_LEFT_TIME_LIMIT_SECONDS)
+        if not ok or again != result:
+            if ok:
+                self._fail("playerLeft", "non-deterministic leave result", state=state)
+            return True, state, None
+        self._pot -= sum((result.get("payouts") or {}).values())
+        leaver["active"] = False
+        self.move_count += 1
+        self._last_moves.append({"player_id": leaver["id"], "move": {"type": "player_left"}})
+        new_state = result.get("state")
+        new_turn = result.get("turn")
+        if not self._check_views(new_state):
             return True, state, None
         return False, new_state, new_turn
 
@@ -491,6 +470,7 @@ class _Walk:
             "applyMove", result, state, mover, move, state=state
         ):
             return False, state, turn
+        self._pot -= sum((result.get("payouts") or {}).values())
         self.move_count += 1
         self._last_moves.append({"player_id": mover, "move": move})
         new_state: JsonValue = result.get("state")

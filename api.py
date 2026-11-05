@@ -22,8 +22,10 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 import segno
 from starlette.concurrency import run_in_threadpool
-from starlette.datastructures import State
+from starlette.datastructures import MutableHeaders, State
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.gzip import GZipMiddleware
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from pydantic import JsonValue
 
 from game_platform.invariants import InvariantRequest, InvariantReport, check_invariants
@@ -72,6 +74,7 @@ from game_platform.schemas import (
     InviteViewOut,
     MatchCreate,
     MatchOut,
+    MatchSummaryOut,
     MatchHistoryOut,
     MatchStart,
     MatchUpdate,
@@ -201,6 +204,12 @@ def _match_out(
     )
 
 
+def _match_summary_out(platform: GamePlatform, match: Match) -> MatchSummaryOut:
+    """A match for a list: no state, so no per-match view work — see
+    [MatchSummaryOut]."""
+    return MatchSummaryOut.of(match, now=platform.now())
+
+
 # Users
 
 
@@ -284,6 +293,28 @@ def referrals(platform: Platform, request: Request, caller_id: CallerId) -> Refe
         referred_users=[UserOut.of(user) for user in referred],
         invites=[InviteOut.of_invite(i, base_url=base_url) for i in invites],
     )
+
+
+@router.get("/users")
+def list_users(
+    platform: Platform, caller_id: OptionalCallerId, ids: str = ""
+) -> list[UserOut]:
+    """Public profiles for the comma-separated [ids] query parameter, in request
+    order. The portal loads every visible player this way in a single call;
+    fetching them one by one was the platform's worst slow-request offender
+    under load, as dozens of near-instant calls queued behind each other.
+    Unknown ids are skipped rather than failing the whole batch, and duplicate
+    ids collapse. Includes [referral_code] only for the caller's own profile.
+    """
+    wanted = list(
+        dict.fromkeys(part.strip() for part in ids.split(",") if part.strip())
+    )
+    if len(wanted) > 200:
+        raise InvalidRequestError("at most 200 user ids per request")
+    return [
+        UserOut.of(user, own=caller_id is not None and caller_id == user.id)
+        for user in platform.get_users(wanted)
+    ]
 
 
 @router.get("/users/{user_id}")
@@ -663,20 +694,57 @@ def list_games(
     platform: Platform,
     owner_user_id: str | None = None,
     q: str = "",
-    include_code: bool = True,
-) -> list[GameOut] | list[GameSummaryOut]:
+) -> list[GameSummaryOut]:
     """Published games, oldest first. `q` searches names and descriptions (every word
-    must match, ignoring case). `include_code=false` leaves out each game's code, which
-    is most of the response; load it per game from /games/{id}/versions/{version}."""
+    must match, ignoring case). The list never includes code: with every game's
+    client and server code included, it was over a megabyte, and nobody reads
+    code from a list. Load one game in full from /games/{id}/versions/{version}."""
     games = platform.list_games(owner_user_id=owner_user_id, query=q)
-    if include_code:
-        return [GameOut.of(game) for game in games]
     return [GameSummaryOut.of(game) for game in games]
+
+
+@router.get("/games/popular", include_in_schema=False)
+def list_popular_games(platform: Platform, limit: int = 8) -> list[GameSummaryOut]:
+    """The bounded top games by cumulative players in started matches."""
+    return [GameSummaryOut.of(game) for game in platform.list_popular_games(limit=limit)]
 
 
 @router.get("/builder/games")
 def list_owned_games(platform: Platform, caller_id: CallerId) -> list[GameOut]:
     return [GameOut.of(g) for g in platform.list_owned_games(caller_id=caller_id)]
+
+
+@router.get("/games/versions")
+def list_game_versions(
+    platform: Platform, caller_id: OptionalCallerId, refs: str = ""
+) -> list[GameOut]:
+    """Full games for the comma-separated [refs] query parameter, each ref of the
+    form `game_id@version`, in request order. The portal loads every visible
+    match's game this way in a single call; fetching them one by one was a top
+    slow-request pattern under load (some 250 slow calls on 2026-10-30).
+    Unknown, malformed, or not-visible refs are skipped rather than failing the
+    whole batch, and duplicates collapse. Declared before /games/{game_id} so
+    "versions" is not taken for a game id.
+    """
+    wanted: list[tuple[str, int]] = []
+    seen: set[tuple[str, int]] = set()
+    for part in refs.split(","):
+        game_id, at, version_text = part.strip().rpartition("@")
+        if not at or not game_id:
+            continue
+        try:
+            ref = (game_id, int(version_text))
+        except ValueError:
+            continue
+        if ref not in seen:
+            seen.add(ref)
+            wanted.append(ref)
+    if len(wanted) > 200:
+        raise InvalidRequestError("at most 200 game versions per request")
+    return [
+        GameOut.of(game)
+        for game in platform.get_game_versions(wanted, caller_id=caller_id)
+    ]
 
 
 @router.post("/games/{game_id}/unpublish")
@@ -781,16 +849,16 @@ def list_matches(
     caller_id: CallerId,
     status: MatchStatus | None = None,
     game_id: str | None = None,
-) -> list[MatchOut]:
+) -> list[MatchSummaryOut]:
     matches = platform.list_matches(caller_id=caller_id, status=status, game_id=game_id)
-    return [_match_out(platform, match, caller_id=caller_id) for match in matches]
+    return [_match_summary_out(platform, match) for match in matches]
 
 
 @router.get("/matches/open")
-def list_open_matches(platform: Platform) -> list[MatchOut]:
+def list_open_matches(platform: Platform) -> list[MatchSummaryOut]:
     """Matches anyone may join: waiting for players, or ongoing with mid-match joins
     allowed. Public, like match details themselves."""
-    return [_match_out(platform, match) for match in platform.list_open_matches()]
+    return [_match_summary_out(platform, match) for match in platform.list_open_matches()]
 
 
 @router.get("/matches/{match_id}")
@@ -1196,6 +1264,11 @@ def console() -> FileResponse:
     return FileResponse(_STATIC_DIR / "console.html")
 
 
+@debug_router.get("/new-builder")
+def new_builder_page() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "guided-builder.html")
+
+
 @debug_router.get("/builder")
 def builder() -> FileResponse:
     return FileResponse(_STATIC_DIR / "builder.html")
@@ -1434,7 +1507,7 @@ def admin_delete_match(platform: Platform, match_id: str) -> None:
     platform.admin_delete_match(match_id)
 
 
-@debug_router.post("/agent/chat")
+@router.post("/agent/chat", include_in_schema=False)
 async def agent_chat(
     request: Request, platform: Platform, caller_id: CallerId, body: AgentChatRequest
 ) -> AgentChatResponse:
@@ -1867,6 +1940,36 @@ async def _choose_locale(
     return response
 
 
+class _VersionedStaticCacheMiddleware:
+    """Immutable caching for versioned static files.
+
+    The pages reference their scripts and styles with a ?v= version in the
+    URL, so a changed file is a changed URL: a browser may keep a versioned
+    response for a year and never revalidate it. Unversioned static files
+    keep the default revalidation behaviour (see [_revalidate_pages]).
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if (
+            scope["type"] != "http"
+            or not scope["path"].startswith("/static/")
+            or b"v=" not in scope.get("query_string", b"")
+        ):
+            await self.app(scope, receive, send)
+            return
+
+        async def send_immutable(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            await send(message)
+
+        await self.app(scope, receive, send_immutable)
+
+
 async def _revalidate_pages(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
@@ -1967,6 +2070,16 @@ def create_app(
     app.add_exception_handler(PlatformError, _handle_platform_error)
     app.add_exception_handler(StarletteHTTPException, _handle_http_exception)
     app.add_exception_handler(Exception, _handle_unexpected_exception)
-    # Last added, so outermost: it times everything, including the other middleware.
+    # Added after the other middleware, so it wraps and times them.
     app.add_middleware(observability.RequestLogMiddleware, monitor=lambda: monitor)
+    # Compression and static caching wrap the logged response on its way
+    # out, so the request log above keeps recording readable bodies at
+    # their full size while browsers receive gzipped bytes and may keep
+    # versioned static files without revalidating them. (The locale
+    # middleware streams responses without a content length, so every
+    # response a client accepts gzip for is compressed; a small body
+    # grows by a few bytes of gzip framing, which the large payloads —
+    # game lists, match lists, the portal script — repay many times over.)
+    app.add_middleware(_VersionedStaticCacheMiddleware)
+    app.add_middleware(GZipMiddleware, compresslevel=6)
     return app

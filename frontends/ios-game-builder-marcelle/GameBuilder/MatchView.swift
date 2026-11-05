@@ -139,7 +139,7 @@ struct MatchView: View {
         let open = max(0, planned - friendsIn)
         let computers = match.players.filter { $0.kind == "computer" }
         let counts = game?.allowedPlayerCounts ?? []
-        let ready = open == 0 && counts.contains(match.players.count)
+        let ready = open == 0 && computers.isEmpty && counts.contains(match.players.count)
         let url = API.shareURL(matchId: match.id)
         return ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -177,7 +177,7 @@ struct MatchView: View {
                             Text("the game plays it").font(Theme.mono(12)).foregroundStyle(Theme.muted)
                         }
                     }
-                    Text("The server seats people in the order they join, then the computers.")
+                    Text("Friends are seated in the order they join. All opponents are human.")
                         .font(Theme.font(12)).foregroundStyle(Theme.muted)
                 }
                 .themeCard()
@@ -245,7 +245,8 @@ struct MatchView: View {
         let isOwner = match.ownerUserId == app.account?.id
         let computers = match.players.filter { $0.kind == "computer" }.count
         let counts = game?.allowedPlayerCounts ?? []
-        let canStart = counts.contains(match.players.count)
+        let humans = match.players.filter { $0.kind == "human" }.count
+        let canStart = counts.contains(match.players.count) && (computers == 0 || humans == 1)
         return ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -266,9 +267,9 @@ struct MatchView: View {
                             Text(seat.kind).font(Theme.mono(12)).foregroundStyle(Theme.muted)
                         }
                     }
-                    if isOwner {
+                    if isOwner && match.players.filter({ $0.kind == "human" }).count == 1 {
                         HStack {
-                            Text("computers").font(Theme.mono(12)).foregroundStyle(Theme.muted)
+                            Text("single-player computers").font(Theme.mono(12)).foregroundStyle(Theme.muted)
                             Spacer()
                             Stepper("\(computers)", value: Binding(get: { computers }, set: { n in
                                 run { try await model.setComputers(matchId: match.id, n) }
@@ -278,6 +279,10 @@ struct MatchView: View {
                             .disabled(busy || app.isOffline)
                             .accessibilityIdentifier("computers")
                         }
+                    } else if isOwner && computers > 0 {
+                        Button("Remove computers for multiplayer") {
+                            run { try await model.setComputers(matchId: match.id, 0) }
+                        }.disabled(busy || app.isOffline)
                     }
                 }
                 .themeCard()
@@ -332,7 +337,7 @@ struct MatchView: View {
     private func joinButton(_ match: Match) -> some View {
         Button("+ join this match") { run { _ = try await model.join(matchId: match.id) } }
             .buttonStyle(.primary)
-            .disabled(busy || app.isOffline)
+            .disabled(busy || app.isOffline || match.players.contains { $0.kind == "computer" || $0.userId == app.account?.id })
             .accessibilityIdentifier("join-match")
     }
 

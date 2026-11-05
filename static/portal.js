@@ -90,6 +90,9 @@ function currentPushSubscription() {
 
 const state = {
   games: [], // latest versions, from GET /games
+  popularGames: [], // bounded server ranking; refreshed at most once per minute
+  popularGamesFetchedAt: 0,
+  popularGamesStatus: "loading",
   gameCache: new Map(), // "game_id@version" -> game (null when gone)
   pictureCache: new Map(),
   nameCache: new Map(), // user id -> display name
@@ -176,7 +179,7 @@ async function updateTokenWallet(user) {
     state.pictureCache.set(user.id, record.picture_url);
     state.nameCache.set(user.id, record.display_name);
     if (record.referral_code) Auth.setReferralCode?.(user.id, record.referral_code);
-    if (Auth.setPicture?.(user.id, record.picture_url)) Auth.renderMenu($("account-menu"));
+    if (Auth.setPicture?.(user.id, record.picture_url)) renderPortalAccountMenu();
     if (!Number.isSafeInteger(record.token_balance) || record.token_balance < 0) {
       wallet.hidden = true; walletBalance = null; updateStakePreview(); return;
     }
@@ -231,6 +234,38 @@ function me() {
   return Auth.current();
 }
 
+function renderPortalAccountMenu() {
+  const container = $("account-menu");
+  Auth.renderMenu(container);
+  const panel = container.querySelector(".auth-menu-panel");
+  panel?.querySelector(".portal-immersive-menu")?.remove();
+  if (!panel || document.documentElement.dataset.skin !== "immersive" || document.documentElement.dataset.portalLayout) return;
+
+  const menu = el("div", { class: "portal-immersive-menu" },
+    el("button", {
+      type: "button",
+      textContent: I18n.t("ui.portal.my_matches", {}, "My matches"),
+      onclick: () => {
+        container._hideAuthMenu?.();
+        document.querySelector(".topbar .sidebar-toggle")?.click();
+      },
+    }),
+    el("a", {
+      href: "/builder",
+      textContent: I18n.t("ui.builder.create_title", {}, "Create a game"),
+    }),
+  );
+  panel.prepend(menu);
+}
+
+function syncPortalRoutes() {
+  const params = new URLSearchParams(location.search);
+  const back = document.querySelector(".back-to-games");
+  const query = params.toString();
+  if (back)
+    back.href = "/static/portal.html" + (query ? `?${query}` : "");
+}
+
 /** A display name from the cache, or a short id while it loads. */
 function nameOf(userId) {
   return state.nameCache.get(userId) ?? shortId(userId);
@@ -248,8 +283,32 @@ function gameOf(gameId, version) {
   return state.gameCache.get(`${gameId}@${version}`) ?? null;
 }
 
+/** Display metadata for a game: its full record when that version is cached,
+ * otherwise the slim catalog entry. The catalog carries names and join rules
+ * (but no code), which is all match lists need; the server still enforces the
+ * pinned version's exact rules when someone actually joins. */
+function gameMetaOf(gameId, version) {
+  return (
+    gameOf(gameId, version) ??
+    state.games.find((game) => game.id === gameId) ??
+    null
+  );
+}
+
+/** Fetches one full game version (code included) into the cache. Loading the
+ * whole catalog's code on every page load made one enormous response; a
+ * single game's call stays small. */
+async function fetchGameVersion(gameId, version) {
+  const game = await portalRequest(
+    "GET",
+    `/games/${gameId}/versions/${version}`,
+  );
+  state.gameCache.set(`${gameId}@${version}`, game);
+  return game;
+}
+
 function seatOf(match, userId) {
-  return match.players.find((player) => player.user_id === userId) ?? null;
+  return match.players.find((player) => player.user_id === userId && player.active !== false) ?? null;
 }
 
 /** The seat this viewer moves for now: their own turn, or — in a v1 game — a
@@ -269,6 +328,7 @@ function actingFor(match, userId) {
   if (turn.includes(seat.player_index)) return seat.player_index;
   const game = gameOf(match.game_id, match.game_version);
   if (game && game.server_code) return null;
+  if (match.players.filter(player => player.kind === "human" && player.active !== false).length !== 1) return null;
   const computer = turn
     .map((index) => match.players[index])
     .find((player) => player && player.kind === "computer");
@@ -281,67 +341,114 @@ function isYourTurn(match, userId) {
 }
 
 function isJoinable(match, userId) {
-  if (match.localMode || !userId || seatOf(match, userId)) return false;
-  const game = gameOf(match.game_id, match.game_version);
+  if (match.localMode || !userId || match.players.some(player => player.user_id === userId)) return false;
+  if (match.players.some(player => player.kind === "computer")) return false;
+  const game = gameMetaOf(match.game_id, match.game_version);
   if (!game) return false;
   if (game.published === false) return false;
   const max = Math.max(...game.allowed_player_counts);
   if (match.status === "waiting_for_players") return match.players.length < max;
   if (match.status === "ongoing" && game.allows_join_mid_match) {
-    return (
-      match.players.some((player) => player.kind === "computer") ||
-      match.players.length < max
-    );
+    return match.players.length < max;
   }
   return false;
 }
 
-/** Fetches the names and game versions for everything on screen. */
+/** Fetches the player names for everything on screen, plus the full version
+ * of the open match's game. Match lists render names and joinability from
+ * the slim catalog (gameMetaOf), so their games' code is not fetched here;
+ * the rest of the catalog warms lazily in the background (warmGameCache). */
 async function ensureDetails() {
   const userIds = new Set();
-  const gameKeys = new Set();
   const collect = (match) => {
     userIds.add(match.owner_user_id);
     for (const player of match.players)
       if (player.user_id) userIds.add(player.user_id);
-    gameKeys.add(`${match.game_id}@${match.game_version}`);
   };
   state.myMatches.forEach(collect);
   state.openMatches.forEach(collect);
   if (state.match) collect(state.match);
   // Keep only visible data plus a small recent cache as users traverse pages.
-  for (const [cache, needed] of [[state.gameCache,gameKeys],[state.nameCache,userIds],[state.pictureCache,userIds]]) {
+  const openGameKeys = new Set(
+    state.match ? [`${state.match.game_id}@${state.match.game_version}`] : [],
+  );
+  const detailGame=state.games.find(game=>game.id===state.detailGameId);
+  if (detailGame) openGameKeys.add(`${detailGame.id}@${detailGame.version}`);
+  for (const [cache, needed] of [[state.gameCache,openGameKeys],[state.nameCache,userIds],[state.pictureCache,userIds]]) {
     for (const key of cache.keys()) if (cache.size > 128 && !needed.has(key)) cache.delete(key);
   }
+  // One batched request for every missing profile: fetching them one by one
+  // was the portal's worst slow-request offender under load.
+  const missingUserIds = [...userIds].filter(
+    (id) => !state.nameCache.has(id) || !state.pictureCache.get(id),
+  );
   await Promise.all([
-    ...[...userIds]
-      .filter((id) => !state.nameCache.has(id) || !state.pictureCache.get(id))
-      .map(async (id) => {
-        try {
-          const profile = await portalRequest("GET", `/users/${id}`);
-          state.nameCache.set(id, profile.display_name);
-          state.pictureCache.set(id, profile.picture_url);
-        } catch {
-          state.nameCache.set(id, shortId(id));
+    (async () => {
+      if (!missingUserIds.length) return;
+      try {
+        const profiles = await portalRequest(
+          "GET",
+          `/users?ids=${missingUserIds.map(encodeURIComponent).join(",")}`,
+        );
+        const found = new Set();
+        for (const profile of profiles) {
+          found.add(profile.id);
+          state.nameCache.set(profile.id, profile.display_name);
+          state.pictureCache.set(profile.id, profile.picture_url);
         }
-      }),
-    ...[...gameKeys]
-      .filter((key) => !state.gameCache.has(key))
-      .map(async (key) => {
-        const at = key.lastIndexOf("@");
-        try {
-          state.gameCache.set(
-            key,
-            await portalRequest(
-              "GET",
-              `/games/${key.slice(0, at)}/versions/${key.slice(at + 1)}`,
-            ),
-          );
-        } catch {
-          // A transient network error must not permanently poison this version.
-        }
-      }),
+        for (const id of missingUserIds)
+          if (!found.has(id)) state.nameCache.set(id, shortId(id));
+      } catch {
+        for (const id of missingUserIds) state.nameCache.set(id, shortId(id));
+      }
+    })(),
+    // Only the open match needs its game's full version (code) right now,
+    // and that is a single small request.
+    (async () => {
+      if (!state.match) return;
+      const key = `${state.match.game_id}@${state.match.game_version}`;
+      if (state.gameCache.get(key)?.code) return;
+      try {
+        await fetchGameVersion(state.match.game_id, state.match.game_version);
+      } catch {
+        // A transient network error must not permanently poison this
+        // version: it stays uncached and is retried on the next refresh.
+      }
+    })(),
+    (async () => {
+      if (!detailGame) return;
+      const key=`${detailGame.id}@${detailGame.version}`;
+      if (state.gameCache.get(key)?.code) return;
+      try {
+        await fetchGameVersion(detailGame.id,detailGame.version);
+      } catch {
+        // The focused game version is retried on the next refresh.
+      }
+    })(),
   ]);
+}
+
+let gameWarmupRunning = false;
+/** Fills the game cache with the rest of the catalog, one game at a time in
+ * the background, so games are ready (and saved for offline play) without a
+ * giant up-front download. Page loads never wait on this. */
+async function warmGameCache() {
+  if (gameWarmupRunning || typeof setTimeout !== "function") return;
+  gameWarmupRunning = true;
+  try {
+    for (const game of state.games) {
+      if (state.gameCache.get(`${game.id}@${game.version}`)?.code) continue;
+      if (!navigator.onLine || document.hidden) break;
+      try {
+        await fetchGameVersion(game.id, game.version);
+      } catch {
+        // Skip this game; a later refresh starts the warm-up again.
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+  } finally {
+    gameWarmupRunning = false;
+  }
 }
 
 // Coalesce polls before they enter Web Locks, so slow requests cannot build an
@@ -386,14 +493,27 @@ async function refreshLocked() {
     }
     if (!user) $("token-wallet").hidden = true;
     await offline.sync();
-    const [games, myMatches, openMatches] = await Promise.all([
+    const popularityDue = Date.now() - state.popularGamesFetchedAt >= 60_000;
+    const [games, myMatches, openMatches, popularGames] = await Promise.all([
       StoragePages.list(portalRequest, "/games", {user}),
       user ? StoragePages.list(portalRequest, "/matches", {user}) : [],
       StoragePages.list(portalRequest, "/matches/open", {user}),
+      popularityDue
+        ? portalRequest("GET", "/games/popular?limit=8", {user}).catch(() => null)
+        : null,
     ]);
     state.games = games;
     state.myMatches = myMatches;
     state.openMatches = openMatches;
+    if (popularityDue) {
+      state.popularGamesFetchedAt = Date.now();
+      if (Array.isArray(popularGames)) {
+        state.popularGames = popularGames;
+        state.popularGamesStatus = popularGames.length ? "ranked" : "collecting";
+      } else {
+        state.popularGamesStatus = "unavailable";
+      }
+    }
     if (state.detailGameId && !state.games.some(game=>game.id===state.detailGameId)) {
       try { state.games.push(await portalRequest("GET", `/games/${encodeURIComponent(state.detailGameId)}`)); }
       catch (error) { if(error.status!==404) throw error; }
@@ -422,6 +542,7 @@ async function refreshLocked() {
       outcome: state.match ? matchOutcome(state.match, user?.id)?.kind : null,
     });
     await syncGame();
+    warmGameCache();
     showPageError("");
     offlineStatus();
   } catch (error) {
@@ -442,7 +563,7 @@ function matchOutcome(match, userId) {
   if (match.status !== "over") return null;
   if (match.end_reason && match.end_reason !== "finished")
     return {label:I18n.t("ui.match.ended_early", {}, "Ended early"), kind:"neutral"};
-  const result = match.state;
+  const result = match.state ?? match.result;
   const seat = seatOf(match, userId);
   let outcome = {label:I18n.t("ui.match.result_unavailable", {}, "Result unavailable"), kind:"neutral"};
   if (result && typeof result === "object") {
@@ -459,7 +580,7 @@ function matchOutcome(match, userId) {
 }
 
 function matchItem(match) {
-  const game = gameOf(match.game_id, match.game_version);
+  const game = gameMetaOf(match.game_id, match.game_version);
   const user = me();
   const yourTurn = user && isYourTurn(match, user.id);
   const badges = [el("span", { class: `badge ${match.status}`, textContent: I18n.t(`status.${match.status}`, {}, match.status.replaceAll("_", " ")) })];
@@ -534,7 +655,10 @@ function renderLists() {
 
 function openGamePage(id) {
   if (!state.games.some((game) => game.id === id)) return;
-  location.assign(`/static/portal.html?game=${encodeURIComponent(id)}`);
+  const route = new URLSearchParams({ game: id });
+  const skin = new URLSearchParams(location.search).get("skin");
+  if (skin) route.set("skin", skin);
+  location.assign(`/static/portal.html?${route}`);
 }
 
 async function joinRandomMatch() {
@@ -624,6 +748,7 @@ function catalogGameLabel(game) {
 }
 
 function renderLibrary() {
+  renderPopularGames();
   const games = libraryGames();
   const selected = $("new-game").value;
   const key = JSON.stringify([games, games.map(catalogGameLabel), selected, state.libraryView, state.libraryFilter, state.randomJoining, I18n.revision()]);
@@ -650,6 +775,44 @@ function renderLibrary() {
         el("span", {class:"library-title", textContent:name}),
         el("span", {class:"library-description", textContent:description || I18n.t("ui.games.default_description", {}, "Choose this game to start a new match.")}),
         el("span", {class:"library-select", textContent:random ? (state.randomJoining ? I18n.t("ui.games.finding_match", {}, "Finding a match…") : I18n.t("ui.games.random_join", {}, "Join a random match ↗")) : I18n.t("ui.games.open_game", {}, "Open game ↗")})));
+  }));
+}
+
+function renderPopularGames() {
+  const section = $("popular-games-section");
+  if (!section) return;
+  const rankedGames = state.popularGames.filter(game =>
+    state.games.some(current => current.id === game.id && current.published !== false));
+  const hasRanking = rankedGames.length > 0;
+  // The aggregate is intentionally populated from match starts. Before its first
+  // score arrives, keep this row useful with catalog games and explain the state.
+  const games = hasRanking
+    ? rankedGames
+    : state.games.filter(game => game.published !== false).slice(0, 8);
+  section.hidden = games.length === 0;
+  $("popular-games-eyebrow").hidden = !hasRanking;
+  $("popular-games-metric").textContent = hasRanking
+    ? I18n.t("ui.games.popularity_metric", {}, "Ranked by players in started matches")
+    : state.popularGamesStatus === "unavailable"
+      ? I18n.t("ui.games.popularity_unavailable", {}, "Showing games while popularity data loads.")
+      : I18n.t("ui.games.popularity_collecting", {}, "Popularity rankings will appear as matches start.");
+  $("popular-games").replaceChildren(...games.map((game, index) => {
+    const hue = Array.from(game.id).reduce((value, letter) => value + letter.charCodeAt(0), 0) % 360;
+    const name = catalogGameLabel(game);
+    const initials = name.trim().split(/\s+/).slice(0, 2).map(word => Array.from(word)[0] || "").join("");
+    return el("button", {
+      type: "button",
+      class: `popular-game-card${hasRanking ? "" : " is-unranked"}`,
+      "aria-label": I18n.t("ui.games.open_aria", {name, players: gameCountLabel(game)}, `Open ${name}, ${gameCountLabel(game)}`),
+      onclick: () => openGamePage(game.id),
+    },
+      ...(hasRanking ? [el("span", {class: "popular-game-rank", textContent: String(index + 1)})] : []),
+      el("span", {class: "popular-game-art", style: `--art-hue:${hue}`, "aria-hidden": "true"},
+        el("span", {class: "popular-game-monogram", textContent: initials})),
+      el("span", {class: "popular-game-copy"},
+        el("span", {class: "popular-game-title", textContent: name}),
+        el("span", {class: "popular-game-players", textContent: gameCountLabel(game)}),
+        el("span", {class: "popular-game-open", textContent: I18n.t("ui.games.open_game", {}, "Play game ↗")})));
   }));
 }
 
@@ -740,7 +903,7 @@ function renderMatchList(node, matches) {
   // Keep the native details/summary nodes stable: polling must not reopen groups,
   // move keyboard focus, or replace unchanged buttons while someone is clicking.
   const key = JSON.stringify([matches, state.selectedId, [...state.nameCache],
-    matches.map((m) => gameOf(m.game_id, m.game_version)?.name)]);
+    matches.map((m) => gameMetaOf(m.game_id, m.game_version)?.name)]);
   if (node.dataset.key === key) return;
   node.dataset.key = key;
   node.replaceChildren(...(matches.length ? matches.map(matchItem)
@@ -768,6 +931,10 @@ function updateMatchSetup() {
   $("practice").disabled = !me() || !game;
   $("practice-mode").disabled = false;
   $("practice-offline-note").hidden = false;
+  const gameVersion=game && gameOf(game.id,game.version);
+  const supportsComputerMatch=Boolean(gameVersion?.server_code && game.allowed_player_counts.some(count=>count>1));
+  $("computer-match-option").hidden=!supportsComputerMatch;
+  $("play-computers").disabled=!me() || !game || state.creating || !navigator.onLine;
   const solo = game?.allowed_player_counts.length === 1 && maximum === 0;
   $("speed-choice").hidden = solo;
   updateStakePreview();
@@ -907,6 +1074,8 @@ function renderMatch() {
         ? I18n.t("ui.match.ended_game", {}, "ended by the game")
         : match.end_reason === "timed_out"
           ? I18n.t("ui.speed.ended_meta", {}, "ended because time ran out")
+          : match.end_reason === "solo_computers_only"
+            ? I18n.t("error.solo_computers_only", {}, "Computer opponents are available in single-player matches only.")
           : I18n.t("ui.match.ended_left", {}, "ended because a player left"),
     );
   if (game && game.deleted) meta.push(I18n.t("ui.match.game_deleted", {}, "this game has been deleted"));
@@ -1008,21 +1177,24 @@ function renderMatch() {
       const computers = match.players.filter((player) => player.kind === "computer").length;
       const paidMatch = (match.bet_per_player ?? 0) > 0;
       const max = Math.max(...counts, 0);
-      if (!paidMatch) {
+      const humanCount = match.players.filter(player => player.kind === "human" && player.active !== false).length;
+      if (!paidMatch && humanCount === 1 && match.matchmaking_player_count == null) {
         const minus = actionButton("−", call("PATCH", "", {num_computer_opponents: computers - 1}), {disabled:computers === 0});
         const plus = actionButton("+", call("PATCH", "", {num_computer_opponents: computers + 1}), {disabled:match.players.length >= max});
         minus.setAttribute?.("aria-label", I18n.t("ui.match.remove_computer_aria", {}, "Remove computer opponent"));
         plus.setAttribute?.("aria-label", I18n.t("ui.match.add_computer_aria", {}, "Add computer opponent"));
         actions.push(el("div", {class:"computer-stepper", role:"group", "aria-label":I18n.t("ui.match.computer_opponents", {}, "Computer opponents")},
-          el("span", {class:"stepper-label", textContent:I18n.t("ui.match.computers", {}, "Computers")}), minus,
+          el("span", {class:"stepper-label", textContent:I18n.t("ui.match.solo_computers", {}, "Single-player computers")}), minus,
           el("span", {class:"stepper-count", textContent:String(computers), "aria-label":I18n.t("ui.match.computers_count_aria", {count: computers}, `${computers} computer opponents`)}), plus));
-      } else {
+      } else if (paidMatch) {
         actions.push(el("p", {class:"paid-lobby-hint", textContent: computers ?
           I18n.t("ui.match.paid_needs_humans", {}, "Paid matches need human opponents. Remove the computer to continue.") :
           I18n.t("ui.match.paid_invite_human", {}, "Invite a human player to join this token match.")}));
         if (computers > 0) actions.push(actionButton(I18n.t("ui.match.remove_computer", {}, "Remove computer"), call("PATCH", "", {num_computer_opponents: computers - 1})));
+      } else if (computers > 0) {
+        actions.push(actionButton(I18n.t("ui.match.remove_computers", {}, "Remove computers for multiplayer"), call("PATCH", "", {num_computer_opponents: 0})));
       }
-      const readyToStart = counts.includes(match.players.length) && (!paidMatch || computers === 0);
+      const readyToStart = counts.includes(match.players.length) && (!paidMatch || computers === 0) && (computers === 0 || humanCount === 1);
       actions.push(actionButton(I18n.t("ui.match.start_game", {}, "Start game"), call("POST", "/start"), {primary:true, disabled:!readyToStart}));
       secondaryActions.push(actionButton(I18n.t("ui.match.delete_match", {}, "Delete match"), call("DELETE"), {danger:true, confirm:I18n.t("ui.match.delete_confirm", {}, "Delete this match for everyone?")}));
     } else if (mySeat) {
@@ -1040,9 +1212,9 @@ function renderMatch() {
         actionButton(I18n.t("ui.action.leave", {}, "Leave"), async () => {
           const preview = await portalRequest("POST", `${path}/maybeLeave`, { user });
           const payout = preview.pending_leave_payout ?? 0;
-          const ends = game.allows_leave_mid_match
-            ? ""
-            : " " + I18n.t("ui.match.leave_ends_all", {}, "Leaving ends the match for everyone.");
+          const ends = preview.pending_leave_ends_match
+            ? " " + I18n.t("ui.match.leave_ends_all", {}, "Leaving ends the match for everyone.")
+            : "";
           if (!confirm(I18n.t("ui.match.leave_refund", {payout}, `You will get ${payout} tokens back — leave?`) + ends)) return;
           await portalRequest("POST", `${path}/playerLeft`, { user });
         }, { danger: true }),
@@ -1204,13 +1376,7 @@ function render() {
 async function gameCode(match) {
   const key = `${match.game_id}@${match.game_version}`;
   let game = state.gameCache.get(key);
-  if (!game?.code) {
-    game = await portalRequest(
-      "GET",
-      `/games/${match.game_id}/versions/${match.game_version}`,
-    );
-    state.gameCache.set(key, game);
-  }
+  if (!game?.code) game = await fetchGameVersion(match.game_id, match.game_version);
   return game.code;
 }
 
@@ -1296,9 +1462,8 @@ async function syncGame() {
     })),
     turn: view.turn_of_player_indices,
     status: view.status,
-    // The Game API only knows "finished" and "player_left"; a speed match that ran
-    // out of time is, for the game, ended by a player leaving.
-    endReason: view.end_reason === "timed_out" ? "player_left" : view.end_reason,
+    // Old game clients understand only finished and player_left.
+    endReason: view.end_reason && view.end_reason !== "finished" ? "player_left" : view.end_reason,
     moveCount: view.move_count,
     mySeat: mySeat ? mySeat.player_index : null,
     actingFor: !replay && user && !match.conflict ? actingFor(match, user.id) : null,
@@ -1376,17 +1541,36 @@ async function onMakeMove(move) {
 }
 
 async function practice() {
+  if (state.creating) return;
+  const user = me();
+  if (!user) {
+    $("create-message").textContent = "Log in first.";
+    $("create-message").className = "message error";
+    return;
+  }
+  let match;
+  state.creating = true;
+  $("practice").disabled = true;
+  const game = state.games.find((g) => g.id === $("new-game").value);
   try {
-    const game = state.games.find((g) => g.id === $("new-game").value);
+    if (!game) throw new Error("Choose a game from the search results first.");
     const full = await portalRequest(
       "GET",
       `/games/${game.id}/versions/${game.version}`,
     );
-    const match = await offline.practice(full, $("practice-mode").value);
+    match = await offline.practice(full, $("practice-mode").value);
     state.gameCache.set(`${full.id}@${full.version}`, full);
+    $("create-message").textContent = "";
     selectMatch(match.id);
   } catch (error) {
-    $("create-message").textContent = error.message;
+    $("create-message").textContent = match
+      ? `Match created, but couldn't start automatically: ${error.message}. You can retry Start from the lobby.`
+      : error.message;
+    $("create-message").className = "message error";
+    if (match) selectMatch(match.id);
+  } finally {
+    state.creating = false;
+    renderLists();
   }
 }
 
@@ -1438,6 +1622,53 @@ async function createMatch() {
   }
 }
 
+async function playWithAllComputers() {
+  if (state.creating) return;
+  const user=me();
+  const game=state.games.find(item=>item.id===(state.detailGameId || $("new-game").value));
+  if (!user) {
+    $("create-message").textContent="Log in first.";
+    $("create-message").className="message error";
+    return;
+  }
+  if (!game) {
+    $("create-message").textContent="Choose a game first.";
+    $("create-message").className="message error";
+    return;
+  }
+  const playerCount=Math.max(...game.allowed_player_counts.filter(count=>count>1));
+  if (!Number.isFinite(playerCount)) {
+    $("create-message").textContent="This game needs at least two player seats.";
+    $("create-message").className="message error";
+    return;
+  }
+  let match;
+  state.creating=true;
+  $("play-computers").disabled=true;
+  $("play-computers").textContent="Starting match…";
+  $("create-message").textContent=`Starting a free match against ${playerCount-1} computer${playerCount===2?"":"s"}…`;
+  $("create-message").className="message";
+  try {
+    const cachedGame=gameOf(game.id,game.version);
+    const full=cachedGame?.code ? cachedGame : await fetchGameVersion(game.id,game.version);
+    if (!full.server_code) throw new Error("Play with computers is available for server-side games.");
+    match=await portalRequest("POST","/matches",{user,body:{game_id:game.id,num_computer_opponents:playerCount-1,bet_per_player:0}});
+    match=await portalRequest("POST",`/matches/${match.id}/start`,{user,body:{first_turn_player_indices:[0]}});
+    $("create-message").textContent="";
+    selectMatch(match.id);
+  } catch(error) {
+    $("create-message").textContent=match
+      ? `Match created, but couldn't start automatically: ${error.message}. Press Start to retry.`
+      : error.message;
+    $("create-message").className="message error";
+    if (match) selectMatch(match.id);
+  } finally {
+    state.creating=false;
+    $("play-computers").textContent="Play with computers ↗";
+    renderLists();
+  }
+}
+
 function selectFromHash() {
   const id = new URLSearchParams(location.hash.slice(1)).get("match");
   if (id && id !== state.selectedId) selectMatch(id);
@@ -1455,12 +1686,18 @@ async function main() {
     if (!state.detailGameId) $("match-creator").open = true;
     (state.detailGameId ? document.querySelector(".back-to-games") : $("game-search"))?.focus({preventScroll: true});
   });
-  Auth.renderMenu($("account-menu"));
+  renderPortalAccountMenu();
+  syncPortalRoutes();
+  document.addEventListener("portal-skin-change", () => {
+    renderPortalAccountMenu();
+    syncPortalRoutes();
+  });
+  document.addEventListener("portal-layout-change", syncPortalRoutes);
   $("notify-toggle").addEventListener("click", toggleNotifications);
   document.addEventListener("i18n-changed", () => {
     // Texts the script built (badges, buttons, lists) are redrawn in the new language.
     try {
-      Auth.renderMenu($("account-menu"));
+      renderPortalAccountMenu();
       render();
       renderLibrary();
       updateMatchSetup();
@@ -1469,7 +1706,7 @@ async function main() {
     }
   });
   document.addEventListener("auth-changed", () => {
-    Auth.renderMenu($("account-menu"));
+    renderPortalAccountMenu();
     state.armed = null;
     state.lastSent = null;
     state.selectedId = null;
@@ -1486,6 +1723,7 @@ async function main() {
     setupNotifications();
   });
   $("practice").addEventListener("click", practice);
+  $("play-computers").addEventListener("click", playWithAllComputers);
   $("retry-sync").addEventListener("click", () => {
     offline.retryAfter = 0;
     state.lastSent = null;

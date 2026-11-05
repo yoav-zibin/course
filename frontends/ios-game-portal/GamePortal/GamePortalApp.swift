@@ -454,12 +454,13 @@ private struct OnlineMatch: Identifiable {
             try self.recordResponse(response, matchID: id)
         }
     }
-    var mySeat: Int? { selected?.players.first { $0["user_id"] as? String == identity?.id }?["player_index"] as? Int }
+    var mySeat: Int? { selected?.players.first { $0["user_id"] as? String == identity?.id && $0["active"] as? Bool != false }?["player_index"] as? Int }
     var acting: Int? {
         guard !resolving, cache != nil, cacheError == nil, let match = selected, conflicts[match.id] == nil,
               match.status == "ongoing", let seat = mySeat else { return nil }
         let turns = match.json["turn_of_player_indices"] as? [Int] ?? []
         if turns.contains(seat) { return seat }
+        guard match.players.filter({ $0["kind"] as? String == "human" && $0["active"] as? Bool != false }).count == 1 else { return nil }
         return turns.first { i in match.players.contains { ($0["player_index"] as? Int) == i && ($0["kind"] as? String) == "computer" } }
     }
     var payload: [String: Any] {

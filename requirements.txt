@@ -18,3 +18,6 @@ google-cloud-firestore>=2.34,<3
 
 # Guided builder game contracts.
 jsonschema>=4.23,<5
+# Reports API call counts to Google Cloud Monitoring when
+# monitoring.cloud_metrics_enabled is set (metrics.py).
+google-cloud-monitoring>=2.0,<3

@@ -16,7 +16,7 @@ MAX_PLAYERS: Final = 10
 MatchStatus = Literal["waiting_for_players", "ongoing", "over"]
 SeatKind = Literal["human", "computer"]
 # "timed_out": a speed match ended because a player ran out of time to move.
-EndReason = Literal["finished", "player_left", "timed_out"]
+EndReason = Literal["finished", "player_left", "timed_out", "solo_computers_only"]
 
 
 LinkedAccountKind = Literal["google", "phone", "email"]
@@ -266,6 +266,8 @@ class Seat:
     # Account ownership can change on merge; a game's opaque state may still
     # contain the original player ID. Keep that game identity stable.
     logic_player_id: str | None = None
+    # Preserve the seat's index/identity after leaving; no bot takes it over.
+    active: bool = True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -392,6 +394,10 @@ class Match:
     @property
     def human_user_ids(self) -> tuple[str, ...]:
         return tuple(seat.user_id for seat in self.seats if seat.user_id is not None)
+
+    @property
+    def active_human_user_ids(self) -> tuple[str, ...]:
+        return tuple(s.user_id for s in self.seats if s.kind == "human" and s.active)
 
     @property
     def num_computer_opponents(self) -> int:

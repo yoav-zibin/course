@@ -35,6 +35,7 @@ from game_platform.models import (
     Translation,
 )
 from game_platform.move_history import MoveHistory
+from game_platform.observability import timed_external
 from game_platform.scaling_library import LibraryEntry
 from game_platform.paging import Page, decode_cursor, encode_cursor, page_size
 
@@ -74,6 +75,7 @@ INTERNAL_COLLECTIONS = frozenset(
         "seed_runs",
         "token_ledger",
         "dashboard_runs",
+        "game_popularity",
     }
 )
 COLLECTIONS = frozenset(TYPES) | INTERNAL_COLLECTIONS
@@ -198,9 +200,11 @@ class QueryStore:
             if ref.path in uow["writes"]:
                 return uow["writes"][ref.path][1]
             if ref.path not in uow["reads"]:
-                uow["reads"][ref.path] = ref.get(transaction=uow["tx"]).to_dict()
+                with timed_external("firestore"):
+                    uow["reads"][ref.path] = ref.get(transaction=uow["tx"]).to_dict()
             return uow["reads"][ref.path]
-        return ref.get().to_dict()
+        with timed_external("firestore"):
+            return ref.get().to_dict()
 
     def raw_put(self, ref, data):
         if getattr(self._local, "uow", None) is None:
@@ -231,6 +235,42 @@ class QueryStore:
 
     def delete_translation(self, locale, source_hash):
         self._delete("translations", json.dumps([locale, source_hash]))
+
+    def record_game_match_start(self, game_id, player_count):
+        """Adds one started match's player count to its durable popularity score.
+
+        Called inside the match-start unit of work, so a match transition and its
+        score update commit together. One small aggregate document per game keeps
+        the browse query bounded regardless of match history size.
+        """
+        if type(player_count) is not int or player_count < 1:
+            raise ValueError("player_count must be a positive integer")
+        ref = self.collection("game_popularity").document(key(game_id))
+        current = self.raw_get(ref) or {
+            "game_id": game_id,
+            "matches_started": 0,
+            "score": 0,
+        }
+        self.raw_put(
+            ref,
+            {
+                "game_id": game_id,
+                "matches_started": current.get("matches_started", 0) + 1,
+                "score": current.get("score", 0) + player_count,
+            },
+        )
+
+    def list_popular_game_ids(self, limit):
+        query = self.collection("game_popularity").order_by(
+            "score", direction="DESCENDING"
+        ).limit(limit)
+        with timed_external("firestore"):
+            rows = list(query.stream())
+        return [
+            (data["game_id"], data["score"])
+            for row in rows
+            if (data := row.to_dict()) and data.get("score", 0) > 0
+        ]
 
     def list_translations(self, locale=None):
         return self._list("translations", [("locale", "==", locale)] if locale else ())
@@ -290,7 +330,8 @@ class QueryStore:
                 {"__name__": self.collection(kind).document(after)}
             )
         uow = getattr(self._local, "uow", None)
-        return list(query.limit(limit).stream(transaction=uow["tx"] if uow else None))
+        with timed_external("firestore"):
+            return list(query.limit(limit).stream(transaction=uow["tx"] if uow else None))
 
     def page(self, kind, *, filters=(), limit=50, cursor=None, scope=None):
         page_size(limit)
@@ -539,7 +580,7 @@ class QueryStore:
                 )
             participants = sorted({match.owner_user_id, *match.human_user_ids})
             game = self.get_game_version(match.game_id, match.game_version)
-            joinable = not match.private and (
+            joinable = not match.private and not match.num_computer_opponents and (
                 match.status == "waiting_for_players"
                 or (
                     match.status == "ongoing"
@@ -575,6 +616,10 @@ class QueryStore:
 
     def list_matches_involving(self, user_id):
         return self._list("matches", [("participants", "array_contains", user_id)])
+
+    def list_matches_by_status(self, status):
+        """Legacy bounded status listing; scalable clients use the paged v2 API."""
+        return self._list("matches", [("status", "==", status)])
 
     def list_all_matches(self):
         return self._list("matches")

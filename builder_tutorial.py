@@ -45,4 +45,3 @@ def validate_translations(source, translated):
             raise ValueError('Translation must contain nonempty text: ' + key)
         if sorted(re.findall(r'\{\w+\}', text)) != sorted(re.findall(r'\{\w+\}', value)):
             raise ValueError('Translation changed placeholders: ' + key)
-

@@ -37,6 +37,31 @@ def store():
     )
 
 
+def test_leave_payout_contract_is_atomic_and_survives_restart(store):
+    from game_platform.tests.test_leave_result_contract import test_leave_uses_game_distribution_and_pays_exactly_once
+    api = api_for(store)
+    test_leave_uses_game_distribution_and_pays_exactly_once(api)
+    second = QueryStore(store.client, namespace=store.namespace)
+    records = list(store._query("matches", [], limit=10))
+    assert len(records) == 1
+    match = store._decode("matches", records[0].to_dict(), records[0].reference)
+    saved = second.get_match(match.id)
+    assert saved.status == "over" and saved.token_pot == 0
+    assert saved.seats[1].active is False
+    assert sum(saved.token_payouts.values()) == 20
+    assert saved.moves[-1].move == {"type": "player_left"}
+
+
+def test_query_multiplayer_rejects_computers(store):
+    from game_platform.tests.test_leave_result_contract import test_bots_cannot_be_added_to_multiplayer_or_joined_via_invite
+    test_bots_cannot_be_added_to_multiplayer_or_joined_via_invite(api_for(store))
+
+
+def test_query_legacy_roster_refund_is_idempotent(store):
+    from game_platform.tests.test_leave_result_contract import test_legacy_mixed_match_ends_and_refunds_once
+    test_legacy_mixed_match_ends_and_refunds_once(api_for(store))
+
+
 def test_restart_and_second_instance_read_committed_move_without_loading_history(store):
     api = api_for(store)
     alice, bob = api.new_user("alice"), api.new_user("bob")

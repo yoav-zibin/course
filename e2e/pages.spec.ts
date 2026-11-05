@@ -18,13 +18,18 @@ test('app navigation and language controls stay consistent across Portal, Builde
   for (const name of ['portal', 'builder', 'admin']) {
     await page.goto(`/static/${name}.html`);
     const header = page.locator('header.topbar');
-    await expect(header.locator('nav a')).toHaveText(['Portal', 'Builder', 'Admin']);
+    await expect(header.locator('nav a')).toHaveText(['Portal', 'Builder', 'New Builder', 'Admin']);
+    await expect(header.getByRole('link', {name:'New Builder', exact:true})).toHaveAttribute('href', '/new-builder');
     await expect(header.locator('nav a[aria-current="page"]')).toHaveAttribute('href', '/' + name);
     await expect(header.getByRole('combobox', { name: 'Language' })).toBeVisible();
     await expect(header.locator('#account-menu')).toBeVisible();
     expect(await header.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     await header.screenshot({ path: testInfo.outputPath(`${name}-header.png`) });
   }
+  await page.locator('header.topbar nav').getByRole('link', { name: 'New Builder', exact: true }).click();
+  await expect(page).toHaveURL(/\/new-builder$/);
+  await expect(page.locator('#new-draft')).toBeVisible();
+  await expect(page.locator('header nav a[aria-current="page"]')).toHaveText('New Builder');
   await page.locator('header.topbar nav').getByRole('link', { name: 'Portal', exact: true }).click();
   await expect(page).toHaveURL(/portal(?:\.html)?$/);
 });

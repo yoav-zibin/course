@@ -496,18 +496,20 @@ const game = {
   },
 
   playerLeft(state, playerId, ctx) {
-    const seat = seatOf(ctx, playerId);
-    const totalChips = sum(state.chips) + sum(state.contributed);
-    const stack = state.chips[seat] + state.contributed[seat];
-    const payout =
-      totalChips > 0 ? Math.floor((ctx.pot * stack) / totalChips) : 0;
+    // Cash out the entire table; no computer replaces a departing human.
     const s = clone(state);
-    let next = s;
-    if (s.in_hand[seat]) {
-      s.in_hand[seat] = false;
-      log(s, `${namesOf(ctx)[seat]} leaves.`);
-      if (s.to_act === seat) next = advance(s, seat, ctx.random, namesOf(ctx));
-    }
-    return { state: next, turn: turnOf(next, ctx), payout };
+    log(s, `${namesOf(ctx)[seatOf(ctx, playerId)]} leaves. The table is closed.`);
+    const humans = ctx.players.filter(p => p.kind === "human" && p.active !== false);
+    const weights = humans.map(p => {
+      const index = seatOf(ctx, p.id);
+      return state.chips[index] + state.contributed[index];
+    });
+    const total = sum(weights);
+    const payouts = {};
+    humans.forEach((p, i) => { payouts[p.id] = total > 0
+      ? Math.floor(ctx.pot * weights[i] / total) : Math.floor(ctx.pot / humans.length); });
+    let remainder = ctx.pot - sum(Object.values(payouts));
+    for (let i = 0; remainder > 0; i++, remainder--) payouts[humans[i % humans.length].id]++;
+    return { state: s, turn: null, payouts };
   },
 };

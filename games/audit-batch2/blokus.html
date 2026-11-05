@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blokus Classic</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0b1220;color:#e8efff;font:14px system-ui,Arial;padding:12px}
+h1{margin:0;color:#9dc4ff;letter-spacing:2px}
+header{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.muted{color:#9baccc}
+#status{margin:10px 0;font-weight:700}
+#layout{display:grid;grid-template-columns:minmax(260px,600px) minmax(220px,1fr);gap:14px;align-items:start}
+#board{display:grid;grid-template-columns:repeat(20,1fr);aspect-ratio:1;width:100%;max-width:600px;border:2px solid #7c8ba7;background:#263348;touch-action:manipulation}
+.cell{border:1px solid #43516a;min-width:0;min-height:0;cursor:pointer;padding:0;border-radius:0}
+.cell.preview{outline:2px solid #fff;outline-offset:-2px}
+aside{background:#172238;border-radius:12px;padding:12px}
+#pieces{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:7px;max-height:360px;overflow:auto}
+.piece{background:#263650;border:2px solid transparent;border-radius:8px;padding:5px;min-height:68px;cursor:pointer;color:#dbe7ff}
+.piece.active{border-color:#fff}
+.piece:disabled{opacity:.25;cursor:default}
+.mini{display:grid;grid-template-columns:repeat(5,9px);grid-template-rows:repeat(5,9px);justify-content:center;gap:1px;margin:auto}
+.mini span{width:9px;height:9px}
+.controls{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
+button{font:inherit}
+button.ctrl{background:#345b94;color:white;border:0;border-radius:7px;padding:9px 12px;cursor:pointer}
+button.ctrl:disabled{opacity:.35}
+.note{font-size:12px;color:#9eafcb;line-height:1.5}
+#scores{line-height:1.9}
+#message{color:#ffd389;min-height:22px;margin:8px 0}
+@media(max-width:750px){#layout{grid-template-columns:1fr}#pieces{max-height:230px}body{padding:8px}}
+</style>
+</head>
+<body>
+<header><h1>BLOKUS CLASSIC</h1><span class="muted">20 × 20 · 21 pieces per color</span></header>
+<div id="status">Waiting for BuildPlay...</div>
+<div id="layout">
+<div><div id="board"></div><div id="message"></div></div>
+<aside>
+<div id="scores"></div>
+<h3>Pieces <span id="colorName"></span></h3>
+<div id="pieces"></div>
+<div class="controls">
+<button class="ctrl" id="rotate">Rotate ↻</button>
+<button class="ctrl" id="flip">Flip ⇋</button>
+<button class="ctrl" id="pass">Pass</button>
+</div>
+<div class="note">Select a piece, rotate or flip it, then click the board at its top-left position. First piece must cover your color's corner. Later pieces must touch your own pieces at a corner, never along an edge. Other colors may touch edges. For two players, each controls two colors.</div>
+</aside>
+</div>
+<script>
+var SIZE=20;
+var COLORS=["#3285f5","#f4c542","#e94f64","#42bc80"];
+var COLOR_NAMES=["Blue","Yellow","Red","Green"];
+var SHAPES=[[[0,0]],[[0,0],[0,1]],[[0,0],[0,1],[0,2]],[[0,0],[0,1],[1,0]],[[0,0],[0,1],[0,2],[0,3]],[[0,0],[0,1],[1,0],[1,1]],[[0,0],[1,0],[2,0],[2,1]],[[0,0],[0,1],[0,2],[1,1]],[[0,0],[0,1],[1,1],[1,2]],[[0,1],[0,2],[1,0],[1,1],[2,1]],[[0,0],[0,1],[0,2],[0,3],[0,4]],[[0,0],[1,0],[2,0],[3,0],[3,1]],[[0,0],[0,1],[1,0],[1,1],[2,0]],[[0,0],[1,0],[1,1],[2,1],[3,1]],[[0,0],[0,1],[0,2],[1,1],[2,1]],[[0,0],[0,2],[1,0],[1,1],[1,2]],[[0,0],[1,0],[2,0],[2,1],[2,2]],[[0,0],[1,0],[1,1],[2,1],[2,2]],[[0,1],[1,0],[1,1],[1,2],[2,1]],[[0,0],[1,0],[2,0],[3,0],[2,1]],[[0,0],[0,1],[1,1],[2,1],[2,2]]];
+function norm(c){var mr=Math.min.apply(null,c.map(function(x){return x[0]})),mc=Math.min.apply(null,c.map(function(x){return x[1]}));return c.map(function(x){return [x[0]-mr,x[1]-mc]}).sort(function(a,b){return a[0]-b[0]||a[1]-b[1]})} 
+function rot(c){return norm(c.map(function(x){return [x[1],-x[0]]}))}
+function flip(c){return norm(c.map(function(x){return [x[0],-x[1]]}))}
+function orisOf(s){var out=[],seen={},f,r,cur,key;for(f=0;f<2;f++){cur=f===0?norm(s):flip(s);for(r=0;r<4;r++){key=JSON.stringify(cur);if(!seen[key]){seen[key]=1;out.push(cur)}cur=rot(cur)}}return out}
+var ORIENTS=SHAPES.map(orisOf);
+function curOri(){var o=ORIENTS[selPiece];return o[selOri%o.length]}
+var boardEl=document.getElementById("board"),piecesEl=document.getElementById("pieces"),statusEl=document.getElementById("status"),scoresEl=document.getElementById("scores"),msgEl=document.getElementById("message"),colorNameEl=document.getElementById("colorName"),rotBtn=document.getElementById("rotate"),flipBtn=document.getElementById("flip"),passBtn=document.getElementById("pass");
+var latest=null,view=null,sentFor=-1;
+var selColor=0,selPiece=1,selOri=0,prevR=-1,prevC=-1;
+function actor(){if(!latest)return null;var a=latest.acting_for_player_index;return (typeof a==="number")?a:null}
+function canAct(){return view&&latest&&latest.status==="ongoing"&&!view.finished&&actor()!==null&&sentFor!==latest.move_count}
+function myColors(){if(!view)return [];var out=[];for(var c=0;c<4;c++){if(view.colorOwners[c]===view.currentPlayer)out.push(c)}return out}
+function ensureSel(){if(!view)return;var cols=[];for(var c=0;c<4;c++){if(view.colorOwners[c]===view.currentPlayer)cols.push(c)}if(cols.indexOf(selColor)<0){selColor=(cols[0]!==undefined?cols[0]:0);selPiece=0;selOri=0}if(view.available&&view.available[selColor]&&!view.available[selColor][selPiece]){var f=view.available[selColor].indexOf(true);selPiece=f>=0?f:0;selOri=0}var n=ORIENTS[selPiece].length;if(selOri>=n)selOri=0}
+function canPlace(r,c){
+ if(!canAct()||!Number.isInteger(r)||!Number.isInteger(c)||view.colorOwners[selColor]!==view.currentPlayer||!view.available[selColor][selPiece])return false;
+ var first=true,touch=false,corner=false,shape=curOri(),b=view.board,corners=[[0,0],[0,19],[19,19],[19,0]];
+ for(var rr=0;rr<SIZE;rr++)for(var cc=0;cc<SIZE;cc++)if(b[rr][cc]===selColor)first=false;
+ for(var i=0;i<shape.length;i++){
+  var y=r+shape[i][0],x=c+shape[i][1];
+  if(y<0||y>=SIZE||x<0||x>=SIZE||b[y][x]!==-1)return false;
+  if(y===corners[selColor][0]&&x===corners[selColor][1])corner=true;
+  if((y>0&&b[y-1][x]===selColor)||(y+1<SIZE&&b[y+1][x]===selColor)||(x>0&&b[y][x-1]===selColor)||(x+1<SIZE&&b[y][x+1]===selColor))return false;
+  if((y>0&&x>0&&b[y-1][x-1]===selColor)||(y>0&&x+1<SIZE&&b[y-1][x+1]===selColor)||(y+1<SIZE&&x>0&&b[y+1][x-1]===selColor)||(y+1<SIZE&&x+1<SIZE&&b[y+1][x+1]===selColor))touch=true;
+ }
+ return first?corner:touch;
+}
+function submit(move){if(!canAct())return;sentFor=latest.move_count;parent.postMessage({type:"make_move",move:move},"*");render();}
+function previewCells(){if(prevR<0||!view||!canPlace(prevR,prevC))return [];return curOri().map(function(x){return [x[0]+prevR,x[1]+prevC]})}
+function renderBoard(){boardEl.innerHTML="";if(!view)return;var pv=previewCells(),set={};pv.forEach(function(x){set[x[0]+","+x[1]]=1});for(var r=0;r<SIZE;r++){for(var c=0;c<SIZE;c++)(function(r,c){var b=document.createElement("button");b.className="cell";var v=view.board[r][c];if(v>=0){b.style.background=COLORS[v]}else{b.style.background=((r+c)%2===0)?"#263650":"#30415b";if(set[r+","+c]&&canAct()){b.classList.add("preview");b.style.background=COLORS[selColor]+"aa"}}
+b.addEventListener("mouseenter",function(){if(!canAct())return;prevR=r;prevC=c;paintPreview()});
+b.disabled=!canPlace(r,c);b.addEventListener("click",function(){onBoard(r,c)});boardEl.appendChild(b)})(r,c)}}
+function paintPreview(){var cells=boardEl.children;if(!view||cells.length!==SIZE*SIZE)return;var pv=previewCells(),set={};pv.forEach(function(x){set[x[0]+","+x[1]]=1});for(var r=0;r<SIZE;r++)for(var c=0;c<SIZE;c++){var i=r*SIZE+c,el=cells[i];if(view.board[r][c]>=0)continue;el.classList.remove("preview");el.style.background=((r+c)%2===0)?"#263650":"#30415b";if(set[r+","+c]&&canAct()&&prevR>=0){el.classList.add("preview");el.style.background=COLORS[selColor]+"aa"}}}
+function onBoard(r,c){if(!canPlace(r,c))return;submit({color:selColor,piece:selPiece,ori:selOri,row:r,col:c});}
+function renderPieces(){piecesEl.innerHTML="";if(!view)return;var cols=[];for(var c=0;c<4;c++){if(view.colorOwners[c]===view.currentPlayer)cols.push(c)}colorNameEl.textContent=COLOR_NAMES[selColor]||"";cols.forEach(function(color){var h=document.createElement("div");h.style.gridColumn="1 / -1";h.style.fontWeight="bold";h.style.color=COLORS[color];h.textContent=COLOR_NAMES[color];piecesEl.appendChild(h);
+for(var p=0;p<SHAPES.length;p++)(function(p){var b=document.createElement("button");b.className="piece";b.disabled=!canAct()||!view.available[color][p];if(color===selColor&&p===selPiece)b.classList.add("active");var shape=(color===selColor&&p===selPiece)?curOri():SHAPES[p];var set={};shape.forEach(function(x){set[x[0]+","+x[1]]=1});var m=document.createElement("div");m.className="mini";for(var rr=0;rr<5;rr++)for(var cc=0;cc<5;cc++){var s=document.createElement("span");if(set[rr+","+cc])s.style.background=COLORS[color];m.appendChild(s)}b.appendChild(m);var lb=document.createElement("div");lb.textContent="#"+(p+1);lb.style.fontSize="10px";b.appendChild(lb);b.addEventListener("click",function(){if(!canAct())return;selColor=color;selPiece=p;selOri=0;render()});piecesEl.appendChild(b)})(p)})}
+function renderScores(){scoresEl.innerHTML="";if(!view)return;var n=view.playerCount||(latest.players?latest.players.length:2);for(var i=0;i<n;i++){var d=document.createElement("div");var cols=[];for(var c=0;c<4;c++){if(view.colorOwners[c]===i)cols.push(COLOR_NAMES[c])}var sc=(view.scores&&view.scores[i]!==undefined)?view.scores[i]:"?";var nm=(latest.players&&latest.players[i])?latest.players[i].name:("Player "+(i+1));d.textContent=nm+" ("+cols.join(" + ")+"): "+sc;if(!view.finished&&i===view.currentPlayer){d.style.fontWeight="bold";d.style.color="#fff"}if(view.winners&&view.winners.indexOf(i)>=0&&view.finished){d.style.color="#8dff9d"}scoresEl.appendChild(d)}}
+function render(){if(!view){statusEl.textContent="Waiting for BuildPlay...";return}ensureSel();var turnName="";if(latest.players&&latest.players[view.currentPlayer])turnName=latest.players[view.currentPlayer].name;if(view.finished){if(view.winners&&view.winners.length>1)statusEl.textContent="Game over — Draw!";else if(view.winners&&view.winners.length===1){var w=latest.players?latest.players[view.winners[0]].name:("Player "+(view.winners[0]+1));statusEl.textContent="Game over — "+w+" wins!"}else statusEl.textContent="Game over"}else{if(actor()!==null)statusEl.textContent="Your turn ("+turnName+") — place a "+COLOR_NAMES[selColor]+" piece";else{var a=latest.turn_of_player_indices;statusEl.textContent="Waiting for "+turnName+" (Player "+(view.currentPlayer+1)+")..."}}renderScores();renderBoard();renderPieces();rotBtn.disabled=!canAct();flipBtn.disabled=!canAct();passBtn.disabled=!canAct()}
+function showMsg(t){msgEl.textContent=t}
+rotBtn.addEventListener("click",function(){if(!canAct())return;var o=ORIENTS[selPiece];var cur=curOri();var r2=rot(cur);for(var i=0;i<o.length;i++){if(JSON.stringify(o[i])===JSON.stringify(r2)){selOri=i;break}}render()});
+flipBtn.addEventListener("click",function(){if(!canAct())return;var o=ORIENTS[selPiece];var f2=flip(curOri());for(var i=0;i<o.length;i++){if(JSON.stringify(o[i])===JSON.stringify(f2)){selOri=i;break}}render()});
+passBtn.addEventListener("click",function(){if(!canAct())return;submit({pass:true})});
+window.addEventListener("message",function(e){if(e.source!==parent)return;var d=e.data;if(!d||typeof d!=="object")return;if(d.type!=="state_changed")return;latest=d;sentFor=-1;view=d.view||null;prevR=-1;prevC=-1;showMsg("");render()});
+statusEl.textContent="Waiting for BuildPlay game state...";
+</script>
+</body>
+</html>

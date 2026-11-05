@@ -16,7 +16,8 @@ window.PortalMatchLayout = (() => {
   function render() {
     const active = Boolean(match);
     const waiting = match?.status === "waiting_for_players";
-    const focused = active && !waiting && (manualFocus ?? landscape.matches);
+    const immersive = document.documentElement?.dataset?.skin === "immersive";
+    const focused = active && !waiting && (manualFocus ?? (landscape.matches || immersive));
     const focusChanged = active && document.body.classList.contains("match-page") &&
       document.body.classList.contains("match-focus") !== focused;
     document.body.classList.toggle("match-page", active);
@@ -78,6 +79,7 @@ window.PortalMatchLayout = (() => {
       render();
     });
     document.addEventListener("i18n-changed", render);
+    document.addEventListener("portal-skin-change", render);
     document.addEventListener("keydown", event => {
       if (event.key !== "Escape" || !match) return;
       if (controlsOpen && match.status !== "waiting_for_players") {

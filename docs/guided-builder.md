@@ -1,6 +1,6 @@
 # Guided game builder
 
-Open `/static/guided-builder.html` on an isolated local server. Sign in and create a draft, or open one of your published games to work on a private revision. Publishing is a separate action.
+Select **New Builder** in the shared navigation, or open `/new-builder`. **Builder** opens the existing editor at `/builder`. For local testing, use an isolated server. Sign in and create a draft, or open one of your published games to work on a private revision. Publishing is a separate action.
 
 ## Walk through a build
 
