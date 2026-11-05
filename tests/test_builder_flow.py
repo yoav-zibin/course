@@ -407,3 +407,27 @@ def test_platform_contract_is_shared_by_generation_and_review_prompts():
     import inspect
     from game_platform import builder_jobs
     assert 'REVIEW_DISCIPLINE' in inspect.getsource(builder_jobs.run_build)
+    # Conditional illegality needs a condition-present negative example, or
+    # the only gate for it is an AI review (a wall-between-pawns jump case
+    # was caught that way, one attempt too late).
+    assert 'with the condition present' in STEP_PROMPTS['tests']
+
+
+def test_verification_progress_rewards_converging_attempts():
+    from game_platform.builder_jobs import _verification_progress
+    # The shape of a real converging build: deterministic failures, then
+    # several review issues, then a single review issue.
+    attempt1 = [{'settlement_probes': ['one failure']}, {'random_walks': '(TestFailure...)'}]
+    attempt2 = [{'review_rules': {'passed': False, 'issues': ['a', 'b']}},
+                {'review_computers': {'passed': False, 'issues': ['a', 'b']}},
+                {'review_settlement': {'passed': False, 'issues': ['a', 'b']}}]
+    attempt3 = [{'review_rules': {'passed': False, 'issues': ['a']}}]
+    assert _verification_progress(attempt1) == (1, -2)
+    assert _verification_progress(attempt2) == (2, -6)
+    assert _verification_progress(attempt3) == (2, -1)
+    assert _verification_progress(attempt1) < _verification_progress(attempt2) < _verification_progress(attempt3)
+    # No progress: identical failures, or a stage regression.
+    assert _verification_progress(attempt3) == _verification_progress(attempt3)
+    assert _verification_progress([{'server_load': 'boom'}]) == (0, -1)
+    assert _verification_progress(attempt1) < _verification_progress(attempt2)
+    assert _verification_progress([{'approved_examples': [{'passed': True}, {'passed': False}]}]) == (1, -1)

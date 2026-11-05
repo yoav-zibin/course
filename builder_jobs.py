@@ -25,7 +25,7 @@ STEP_PROMPTS = {
  'ui': 'Return artifact {text: precise UI specification}. Cover input, feedback, player pictures, phone/tablet/desktop portrait/landscape, RTL, theme and accessibility.',
  'tutorial': 'Return artifact {text: short tutorial summary, html: complete self-contained responsive tutorial document}. Teach setup, turns, legal moves, winning and hidden information using the approved rules. Include a viewport meta tag. Work on phone portrait/landscape, tablet and desktop. Inline CSS and optional inline JavaScript only; no external scripts, network, forms, navigation or storage. This tutorial runs in a sandboxed iframe. Use the conversation language. All dynamic text must be declared in a script type="application/json" id="i18n-strings" table using {placeholders}. Include the platform t(key, params) and applyLocale(message) helper. Handle a parent message of type tutorial_locale by calling applyLocale and rerendering all text without resetting tutorial progress. Render initial text from the source table. No hard-coded dynamic display strings.',
  'images': 'Return artifact {images:[{caption, svg}]}. Exactly one text-free catalog cover with 16:9 viewBox, then 3-5 supporting screenshot mockups for start/middle/end and different player views. SVG only: svg,g,path,rect,circle,ellipse,line,polyline,polygon,text,tspan,defs,gradients,stop,clipPath,title,desc. No style attributes, href, scripts or external resources. Follow approved UI rules. Include clear captions in user language.',
- 'tests': '''Return artifact {state_schema,view_schema,move_schema,cases:[...]}. JSON Schema 2020-12, only local references. Provide 3-10 concrete examples: 1-2 initial, 1-4 intermediate, 1-4 terminal. Each case has name,description,kind,ctx:{players:[{id,kind,display_name,picture_url,max_loss}],pot,move_count,seed},state,view_of_mover,view_of_other,player_id,other_player_id (null for spectator),move,expected_state,expected_turn (array of player IDs or null),expected_payouts when terminal,expected_view_of_mover,expected_view_of_other,images:[{caption,svg} x4]. Images depict the mover and other player's before/after views; mark the move. Use the same safe SVG subset as the images step. For initial cases state equals newMatch with ctx and seed. State, move and views must match schemas. Precisely follow the approved rules. Provide reproducible seeds. The runner records examples whose exact outcome depends on a random draw.''',
+ 'tests': '''Return artifact {state_schema,view_schema,move_schema,cases:[...]}. JSON Schema 2020-12, only local references. Provide 3-10 concrete examples: 1-2 initial, 1-4 intermediate, 1-4 terminal. Each case has name,description,kind,ctx:{players:[{id,kind,display_name,picture_url,max_loss}],pot,move_count,seed},state,view_of_mover,view_of_other,player_id,other_player_id (null for spectator),move,expected_state,expected_turn (array of player IDs or null),expected_payouts when terminal,expected_view_of_mover,expected_view_of_other,images:[{caption,svg} x4]. Images depict the mover and other player's before/after views; mark the move. Use the same safe SVG subset as the images step. For initial cases state equals newMatch with ctx and seed. State, move and views must match schemas. Precisely follow the approved rules. Provide reproducible seeds. The runner records examples whose exact outcome depends on a random draw. For every rule that makes a move illegal under a condition (a blocking wall or piece, an exhausted resource, a path that must stay open), include one expected_error:"InvalidMove" example that attempts exactly that move with the condition present — for example the jump that is legal only when the straight path is blocked needs its blocked-by-a-wall twin — not only the legal version of the move.''',
 }
 
 # Every agent that proposes logic or examples, generates code, diagnoses a
@@ -467,6 +467,36 @@ def notification_callback(user, channels, email_sender, sms_sender):
     return deliver
 
 
+def _verification_progress(errors):
+    """Score one build attempt as (stage reached, -failure count).
+
+    Stages: 0 = server code did not generate/load, 1 = deterministic
+    checks failed, 2 = AI reviews failed, 3 = client/browser stage
+    failed. A repair loop that is converging (reaching a later stage,
+    or failing with fewer distinct failures at the same stage) earns
+    extra attempts; one that is flip-flopping does not."""
+    phase = 0
+    failures = 0
+    for entry in errors:
+        for name, details in entry.items():
+            if name.startswith('review_'):
+                phase = max(phase, 2)
+                failures += len(details.get('issues') or [1]) if isinstance(details, dict) else 1
+            elif name in ('client_generation', 'localization', 'browser_verification'):
+                phase = max(phase, 3)
+                failures += len(details) if isinstance(details, list) else 1
+            elif name in ('approved_examples', 'settlement_probes', 'random_walks'):
+                phase = max(phase, 1)
+                if isinstance(details, list):
+                    failures += sum(1 for item in details
+                                    if not (isinstance(item, dict) and item.get('passed')))
+                else:
+                    failures += 1
+            else:  # server_generation / server_load
+                failures += 1
+    return (phase, -failures)
+
+
 def run_build(platform, client, owner, draft_id, job_id, deliver=None):
     def announce(message):
         if deliver: deliver(message)
@@ -556,7 +586,16 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
         messages[0]['content'] = api_instructions + '\n' + PLATFORM_CONTRACT + '\nGenerate one file per request in this guided build. For server_code, return executable plain JavaScript defining the global game object (const game = {...};). For client code, return a complete HTML document. Omit prose, Markdown, module exports and JSON wrappers.'
 
         errors=[]; generated=None
-        for attempt in range(3):
+        attempt = 0
+        scores = []
+        while attempt < 5:
+            if attempt >= 3:
+                # Attempts 4-5 are earned only by measurable progress (see
+                # _verification_progress) and only with enough of the build
+                # deadline left for a full attempt; the draft budget and
+                # the deadline still bound the whole build.
+                if scores[-1] <= scores[-2]: break
+                if draft.builder_workflow['job']['deadline'] - time.time() < 120: break
             stage(f'Writing code · attempt {attempt+1}')
             checkpoint = draft.builder_workflow['job']
             if attempt == 0 and checkpoint.get('verified_code_digest') == flow.digest([draft.code,draft.server_code]):
@@ -572,6 +611,7 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
                 except (ValueError, ModelOutputLimitError) as exc:
                     errors = [{'server_generation':str(exc)}]
                     messages.append({'role':'user','content':'Return a concise complete raw server JavaScript file. '+str(exc)})
+                    scores.append(_verification_progress(errors)); attempt += 1
                     continue
                 stage('Loading generated server JavaScript')
                 try:
@@ -584,6 +624,7 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
                         {'role':'assistant','content':server},
                         {'role':'user','content':f'The server script failed to load before any test ran. QuickJS reported: {problem}\nReturn the complete corrected server JavaScript only. Define the global game object; omit prose, Markdown and module exports.'},
                     ])
+                    scores.append(_verification_progress(errors)); attempt += 1
                     continue
                 generated = {'server_code':server}
                 from game_platform.builder_checks import run_checks, REVIEW_BRIEFS
@@ -653,6 +694,7 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
             stage('Verification attempt complete', checks=checks, server_reviews=reviews)
             if not errors: break
             messages.extend([{'role':'assistant','content':server}, {'role':'user','content':'Fix the implementation without changing approved tests. Address every listed failure in the platform contract terms given above; do not resubmit code that still has a listed defect. Return the complete raw server JavaScript first; client HTML will be requested separately. Failures: '+json.dumps(errors)}])
+            scores.append(_verification_progress(errors)); attempt += 1
         if errors: raise RuntimeError('Verification failed: '+json.dumps(errors)[:8000])
         # Persist verified code for the emulator before asking for final human approval.
         def ready(d):
