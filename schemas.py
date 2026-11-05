@@ -31,6 +31,7 @@ from game_platform.models import (
     InviteAcceptance,
     LinkedAccount,
     Match,
+    Feedback,
     MatchStatus,
     Move,
     Seat,
@@ -670,6 +671,50 @@ class GameDraftOut(GameDraftContent):
             builder_workflow=draft.builder_workflow,
             revision=draft.revision, base_version=draft.base_version,
             created_at=draft.created_at, updated_at=draft.updated_at,
+        )
+
+
+class FeedbackCreate(_Request):
+    model_config = _example(
+        {"kind": "bug", "target_type": "game", "target_id": "", "text": "The board doesn't show on my phone"}
+    )
+
+    # A bug, a suggestion (or feature request), or a problem (problematic content).
+    kind: Literal["bug", "suggestion", "problem"]
+    # What it's about: a user, a game or a match by id, or the platform itself
+    # (with target_id left out or empty).
+    target_type: Literal["user", "game", "match", "platform"]
+    target_id: str = ""
+    # The feedback in the sender's words: 5 to 1000 characters after trimming
+    # (checked by the server, which answers 400 otherwise).
+    text: str
+    # The page it came from (for admins); optional.
+    page: str | None = None
+
+
+class FeedbackOut(BaseModel):
+    """Feedback as its own sender sees it."""
+
+    id: str
+    kind: str
+    target_type: str
+    target_id: str
+    text: str
+    status: str
+    created_at: dt.datetime
+    updated_at: dt.datetime
+
+    @classmethod
+    def of(cls, feedback: "Feedback") -> "FeedbackOut":
+        return cls(
+            id=feedback.id,
+            kind=feedback.kind,
+            target_type=feedback.target_type,
+            target_id=feedback.target_id,
+            text=feedback.text,
+            status=feedback.status,
+            created_at=feedback.created_at,
+            updated_at=feedback.updated_at,
         )
 
 

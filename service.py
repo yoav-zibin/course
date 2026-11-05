@@ -45,6 +45,7 @@ from game_platform.models import (
     LinkedAccount,
     LinkedAccountKind,
     Match,
+    Feedback,
     MatchStatus,
     Move,
     SeatTimeout,
@@ -136,6 +137,34 @@ class InvalidRequestError(PlatformError):
 
 class ConflictError(PlatformError):
     """The resource's current state doesn't allow this transition."""
+
+
+class TooManyRequestsError(PlatformError):
+    """The caller did this too often; trying again later works."""
+
+
+# Feedback: the text's length after trimming, and how many messages one person can
+# send in a rolling 24 hours (sending the same kind of feedback on the same target
+# again within 24 hours updates it instead), and how many the admin listing shows.
+FEEDBACK_TEXT_MIN: Final = 5
+FEEDBACK_TEXT_MAX: Final = 1000
+FEEDBACK_PER_DAY: Final = 20
+FEEDBACK_WINDOW: Final = dt.timedelta(hours=24)
+FEEDBACK_ADMIN_LIMIT: Final = 200
+FEEDBACK_KINDS: Final = ("bug", "suggestion", "problem")
+FEEDBACK_TARGET_TYPES: Final = ("user", "game", "match", "platform")
+
+
+@dataclass(frozen=True, kw_only=True)
+class RecentFeedback:
+    """One of a person's feedback messages in the last 24 hours: enough to apply the
+    daily limit and to find a repeat, without loading the message itself."""
+
+    id: str
+    target_type: str
+    target_id: str
+    kind: str
+    created_at: dt.datetime
 
 
 def _utc_now() -> dt.datetime:
@@ -4470,6 +4499,211 @@ class GamePlatform:
         }
 
     # Administration (the caller has the master password, not a user's credentials)
+
+    # Feedback: users' bugs, suggestions and reports of problems, about users, games,
+    # matches or the platform
+
+    def send_feedback(
+        self,
+        *,
+        caller_id: str,
+        kind: str,
+        target_type: str,
+        target_id: str,
+        text: str,
+        page: str | None = None,
+    ) -> tuple[Feedback, bool]:
+        """Records [caller_id]'s feedback; returns it and whether it's new. Sending the
+        same kind of feedback on the same target again within 24 hours replaces the
+        earlier text instead. Feedback is private: only admins list it."""
+        text = self._feedback_text(kind, text)
+        with self._lock:
+            caller = self._resolve_replaced(self._require_user(caller_id))
+            record = self._feedback_target_record(target_type, target_id)
+            target_id, target_name, context = self._feedback_target(caller, target_type, target_id, record)
+            now = self._clock()
+            recent = [
+                RecentFeedback(
+                    id=f.id, target_type=f.target_type, target_id=f.target_id, kind=f.kind, created_at=f.created_at
+                )
+                for f in self._store.list_recent_feedback(caller.id, since=now - FEEDBACK_WINDOW, until=now)
+            ]
+            feedback, repeat = self._new_feedback(
+                caller, kind, target_type, target_id, target_name, text, context, page, recent, now
+            )
+            self._store.put_feedback(feedback)
+            return feedback, repeat is None
+
+    @staticmethod
+    def _feedback_text(kind: str, text: str) -> str:
+        """The trimmed text; raises InvalidRequestError for a wrong kind or length."""
+        if kind not in FEEDBACK_KINDS:
+            raise InvalidRequestError("kind must be bug, suggestion or problem")
+        text = (text or "").strip()
+        if len(text) < FEEDBACK_TEXT_MIN:
+            raise InvalidRequestError("the feedback is too short: write at least 5 characters")
+        if len(text) > FEEDBACK_TEXT_MAX:
+            raise InvalidRequestError("the feedback is too long: use at most 1000 characters")
+        return text
+
+    def _feedback_target_record(self, target_type: str, target_id: str) -> User | Game | Match | None:
+        """The stored user, game or match that feedback is about (None for the platform
+        or when it doesn't exist). The caller holds the lock."""
+        if not target_id:
+            return None
+        if target_type == "user":
+            return self._store.get_user(target_id)
+        if target_type == "game":
+            return self._store.get_game(target_id)
+        if target_type == "match":
+            return self._store.get_match(target_id)
+        return None
+
+    def _feedback_target(
+        self, caller: User, target_type: str, target_id: str, record: User | Game | Match | None
+    ) -> tuple[str, str, dict]:
+        """The target's id (a merged-away user resolves to the survivor), its name and
+        the context to save; raises InvalidRequestError when it doesn't exist (for this
+        caller) or is the caller's own. [record] is what [_feedback_target_record] read."""
+        missing = InvalidRequestError("there is no such user, game or match")
+        if target_type == "platform":
+            return "", "Platform", {}
+        if target_type == "user":
+            if not isinstance(record, User):
+                raise missing
+            user = self._resolve_replaced(record)
+            if user.id == caller.id:
+                raise InvalidRequestError("you can't send feedback about yourself")
+            return user.id, user.display_name, {}
+        if target_type == "game":
+            if not isinstance(record, Game) or record.deleted or (
+                not record.published and record.owner_user_id != caller.id
+            ):
+                raise missing
+            if record.owner_user_id == caller.id:
+                raise InvalidRequestError("you can't send feedback about your own game")
+            return record.id, record.name, {"game_version": record.version}
+        if target_type == "match":
+            if not isinstance(record, Match) or (record.private and not record.involves(caller.id)):
+                raise missing
+            # A match's name needs its game: the admin page looks the games up, so
+            # sending feedback doesn't need another read.
+            return record.id, "", {
+                "game_id": record.game_id,
+                "game_version": record.game_version,
+                "move_count": len(record.moves),
+            }
+        raise InvalidRequestError("target_type must be user, game, match or platform")
+
+    def _new_feedback(
+        self,
+        caller: User,
+        kind: str,
+        target_type: str,
+        target_id: str,
+        target_name: str,
+        text: str,
+        context: dict,
+        page: str | None,
+        recent: list[RecentFeedback],
+        now: dt.datetime,
+    ) -> tuple[Feedback, RecentFeedback | None]:
+        """The feedback to save and the earlier message it replaces (None when it's new);
+        raises TooManyRequestsError past the daily limit. [recent] is the caller's
+        feedback from the last 24 hours."""
+        recent = [r for r in recent if now - r.created_at < FEEDBACK_WINDOW]
+        repeat = next(
+            (r for r in recent if (r.target_type, r.target_id, r.kind) == (target_type, target_id, kind)),
+            None,
+        )
+        if repeat is None and len(recent) >= FEEDBACK_PER_DAY:
+            raise TooManyRequestsError("you can send at most 20 feedback messages a day; try again tomorrow")
+        if page and page.strip():
+            context = {**context, "page": page.strip()[:300]}
+        feedback = Feedback(
+            id=repeat.id if repeat else self._new_id(),
+            reporter_user_id=caller.id,
+            target_type=target_type,
+            target_id=target_id,
+            kind=kind,
+            text=text,
+            created_at=repeat.created_at if repeat else now,
+            updated_at=now,
+            target_name=target_name,
+            reporter_name=caller.display_name,
+            context=context,
+        )
+        return feedback, repeat
+
+    def admin_feedback(
+        self,
+        *,
+        kind: str | None = None,
+        target_type: str | None = None,
+        target_id: str | None = None,
+        status: str | None = None,
+    ) -> dict:
+        """The newest feedback (up to 200) matching the filters (kind, target_type and
+        target_id, status), and the 20 targets with the most "problem" reports."""
+        with self._lock:
+            matching = sorted(
+                (
+                    f
+                    for f in self._store.list_feedback()
+                    if (kind is None or f.kind == kind)
+                    and (target_type is None or f.target_type == target_type)
+                    and (target_id is None or f.target_id == target_id)
+                    and (status is None or f.status == status)
+                ),
+                key=lambda f: (f.updated_at, f.id),
+                reverse=True,
+            )
+            stats: dict[tuple[str, str], dict] = {}
+            for f in sorted(self._store.list_feedback(), key=lambda f: f.created_at):
+                if f.kind != "problem":
+                    continue
+                entry = stats.setdefault(
+                    (f.target_type, f.target_id),
+                    {"target_type": f.target_type, "target_id": f.target_id, "reports": 0},
+                )
+                entry.update(reports=entry["reports"] + 1, target_name=f.target_name, last_reported_at=f.created_at)
+            return self._feedback_listing(
+                matching[:FEEDBACK_ADMIN_LIMIT], len(matching) > FEEDBACK_ADMIN_LIMIT, list(stats.values())
+            )
+
+    @staticmethod
+    def _feedback_listing(rows: list[Feedback], more: bool, stats: list[dict]) -> dict:
+        """The admin listing: [rows] newest first, whether there are [more], and the 20
+        most reported of [stats] (one {target_type, target_id, target_name, reports,
+        last_reported_at} per target)."""
+        most = sorted(
+            (s for s in stats if s["reports"] > 0),
+            key=lambda s: (-s["reports"], -s["last_reported_at"].timestamp()),
+        )[:20]
+        return {
+            "count": len(rows),
+            "more": more,
+            "most_reported": [
+                {**s, "last_reported_at": s["last_reported_at"].isoformat()} for s in most
+            ],
+            "feedback": [
+                {
+                    "id": f.id,
+                    "kind": f.kind,
+                    "target_type": f.target_type,
+                    "target_id": f.target_id,
+                    "target_name": f.target_name,
+                    "reporter_user_id": f.reporter_user_id,
+                    "reporter_name": f.reporter_name,
+                    "text": f.text,
+                    "status": f.status,
+                    "context": f.context,
+                    "created_at": f.created_at.isoformat(),
+                    "updated_at": f.updated_at.isoformat(),
+                }
+                for f in rows
+            ],
+        }
 
     def admin_delete_user(self, user_id: str) -> None:
         """Deletes a user, the matches they own and the games they own (soft-deleted,

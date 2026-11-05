@@ -7,6 +7,7 @@ pending changes; changes made less than [min_write_interval_seconds] before a cr
 can be lost. Subclasses decide where the data goes (a JSON file, Firestore).
 """
 
+import datetime as dt
 import logging
 import threading
 from collections.abc import Sequence
@@ -28,6 +29,7 @@ from game_platform.models import (
     LinkedAccountKind,
     Match,
     MatchStatus,
+    Feedback,
     User,
     WebPushSubscription,
 )
@@ -404,3 +406,22 @@ class SavingStore:
         with self._lock:
             self._inner.delete_experiment_event(event_id)
             self._set_dirty()
+
+    def put_feedback(self, feedback: Feedback) -> None:
+        with self._lock:
+            self._inner.put_feedback(feedback)
+            self._set_dirty()
+
+    def get_feedback(self, feedback_id: str) -> Feedback | None:
+        with self._lock:
+            return self._inner.get_feedback(feedback_id)
+
+    def list_feedback(self) -> list[Feedback]:
+        with self._lock:
+            return self._inner.list_feedback()
+
+    def list_recent_feedback(
+        self, reporter_user_id: str, *, since: dt.datetime, until: dt.datetime
+    ) -> list[Feedback]:
+        with self._lock:
+            return self._inner.list_recent_feedback(reporter_user_id, since=since, until=until)

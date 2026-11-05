@@ -5,7 +5,7 @@ writes them back to the store, so a store never shares mutable state with its ca
 """
 
 import datetime as dt
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Final, Literal
 
 from pydantic import JsonValue
@@ -441,6 +441,43 @@ class Invite:
     # How many times the link was opened (GET /invites/{token}), whether or not
     # anyone joined; the top of the referral funnel.
     views: int = 0
+
+
+# Feedback is a bug (in a game or the platform), a suggestion or feature request, or a
+# problem: problematic content, like a bad game or a bad user.
+FeedbackKind = Literal["bug", "suggestion", "problem"]
+# "platform" is the website itself, with no target id.
+FeedbackTargetType = Literal["user", "game", "match", "platform"]
+# "open" until an admin (or, later, an agent) looks at it.
+FeedbackStatus = Literal["open", "reviewed", "dismissed"]
+
+
+@dataclass(frozen=True, kw_only=True)
+class Feedback:
+    """Someone's feedback on a user, a game, a match or the platform, in their own words.
+    Private: only admins see feedback, and nobody is ever told who sent it."""
+
+    id: str
+    reporter_user_id: str
+    target_type: FeedbackTargetType
+    # Empty for the platform.
+    target_id: str
+    # Feedback saved before kinds existed was always a report of a problem.
+    kind: FeedbackKind = "problem"
+    # What it's about, in the sender's words (5 to 1000 characters, trimmed).
+    text: str
+    created_at: dt.datetime
+    # Sending feedback of the same kind on the same target within 24 hours replaces
+    # the text.
+    updated_at: dt.datetime
+    status: FeedbackStatus = "open"
+    # The target's and the sender's names when it was sent, so the admin listing
+    # doesn't look up every user and game.
+    target_name: str = ""
+    reporter_name: str = ""
+    # When it was sent: a game's version; a match's game_id, game_version and
+    # move_count; and the page it came from (as the website sent it).
+    context: dict[str, str | int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, kw_only=True)

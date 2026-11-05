@@ -282,6 +282,7 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `GET /games/{id}/versions/{version}` |  | Get a specific version of a game |
 | `PATCH /games/{id}` | yes | Update some fields of a game, creating a new version (creator only) |
 | `DELETE /games/{id}` | yes | Delete a game (creator only) |
+| `POST /feedback` | yes | Send a bug, a suggestion or a problem about a user, a game, a match or the platform `{kind, target_type, target_id?, text, page?}`; see [Feedback](#feedback) |
 | `POST /matches` | yes | Create a match `{game_id, num_computer_opponents, private?, turn_seconds?}` (`turn_seconds`: 60, 180 or 600 for a [speed match](#speed-matches)); the caller is player 0 |
 | `GET /matches?status=&game_id=` | yes | List the caller's matches (owned or seated, minus hidden ones) |
 | `GET /matches/{id}` |  | Get a match; anyone can view it, so it can be shared by URL. Speed matches include `turn_deadline` and `server_time` |
@@ -340,6 +341,32 @@ Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct
   also ends if its last human leaves.
 - Joining an ongoing match requires `allows_join_mid_match`; the joiner takes over the
   first computer seat, or adds a seat if the game's maximum player count allows it.
+
+### Feedback
+
+Any logged-in user (guests included) can send feedback in their own words:
+`POST /feedback {kind, target_type, target_id?, text, page?}`.
+
+- `kind` is `"bug"` (in a game or the platform), `"suggestion"` (an idea or a feature
+  request) or `"problem"` (problematic content, like a bad game or an offensive name).
+  Feedback saved before kinds existed counts as `"problem"`.
+- `target_type` is `"user"`, `"game"` or `"match"` with its `target_id`, or `"platform"`
+  (the website itself, with no `target_id`).
+- `text` is 5 to 1000 characters after trimming (400 otherwise). The target must exist and
+  be visible to the sender (a private match they're not in counts as missing), and nobody
+  can send feedback about themselves (merged accounts included) or their own game.
+- At most 20 messages per person in a rolling 24 hours (429 `feedback_daily_limit`).
+  Sending the same kind of feedback on the same target again within 24 hours replaces that
+  message's text (200) instead of adding one (201), and doesn't count again.
+- Each message keeps its sender, its `status` (`"open"`; later `"reviewed"` or
+  `"dismissed"`), when it was sent and last updated, the target's and sender's names at
+  that time, and context: a game's version, a match's game, version and move count, and
+  the page it came from.
+- Feedback is private: only admins list it (`GET /admin/feedback` and the Feedback tab of
+  `/admin`), and nobody is told who sent it. Nothing is hidden or removed because of it.
+- With the Firestore query store, sending feedback reads Firestore twice (the login check,
+  then one batch with the sender, their daily-limit document, the target and its
+  counters) and writes once; the admin listing is two queries.
 
 ### Speed matches
 
@@ -777,6 +804,7 @@ don't need a user's credentials:
 |----------|-------------|
 | `GET /admin/stats` | The statistics behind `/stats` |
 | `GET /admin/invites` | The invite tree behind `/invites`: a summary, and per user their inviter, direct and total (transitive) invites and depth, sorted by total |
+| `GET /admin/feedback?kind=&target_type=&target_id=&status=` | Users' [feedback](#feedback), newest first (up to 200), and the 20 targets with the most "problem" reports |
 | `DELETE /admin/users/{id}` | Delete a user and the matches they own; their games are marked deleted, and they leave the matches they're seated in |
 | `DELETE /admin/games/{id}` | Mark a game deleted (its versions are kept for existing matches) |
 | `DELETE /admin/matches/{id}` | Delete a match |

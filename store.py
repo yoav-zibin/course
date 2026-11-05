@@ -5,6 +5,7 @@ Python memory. A database-backed implementation can replace it later without tou
 the service or the HTTP layer.
 """
 
+import datetime as dt
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from typing import Protocol
@@ -24,6 +25,7 @@ from game_platform.models import (
     LinkedAccountKind,
     Match,
     MatchStatus,
+    Feedback,
     User,
     WebPushSubscription,
 )
@@ -195,6 +197,18 @@ class Store(Protocol):
 
     def list_popular_game_ids(self, limit: int) -> list[tuple[str, int]]: ...
 
+    def put_feedback(self, feedback: Feedback) -> None: ...
+
+    def get_feedback(self, feedback_id: str) -> Feedback | None: ...
+
+    def list_feedback(self) -> list[Feedback]: ...
+
+    def list_recent_feedback(
+        self, reporter_user_id: str, *, since: dt.datetime, until: dt.datetime
+    ) -> list[Feedback]:
+        """[reporter_user_id]'s feedback created from [since] through [until]."""
+        ...
+
 
 @dataclass(frozen=True, kw_only=True)
 class Snapshot:
@@ -228,6 +242,8 @@ class Snapshot:
     experiments: tuple[Experiment, ...] = ()
     experiment_assignments: tuple[ExperimentAssignment, ...] = ()
     experiment_events: tuple[ExperimentEvent, ...] = ()
+    # Optional so existing data files load without a migration. Admin-only data.
+    feedback: tuple[Feedback, ...] = ()
 
 
 class InMemoryStore:
@@ -263,6 +279,7 @@ class InMemoryStore:
         # Test/local fallback only. Production query mode keeps these aggregates
         # in the dedicated Firestore game_popularity collection.
         self._game_popularity: dict[str, tuple[int, int]] = {}
+        self._feedback: dict[str, Feedback] = {}
 
     @classmethod
     def of_snapshot(cls, snapshot: Snapshot) -> "InMemoryStore":
@@ -293,6 +310,8 @@ class InMemoryStore:
             store.put_experiment_assignment(assignment)
         for event in snapshot.experiment_events:
             store.put_experiment_event(event)
+        for feedback in snapshot.feedback:
+            store.put_feedback(feedback)
         return store
 
     def snapshot(self) -> Snapshot:
@@ -318,6 +337,7 @@ class InMemoryStore:
             experiments=tuple(self._experiments.values()),
             experiment_assignments=tuple(self._experiment_assignments.values()),
             experiment_events=tuple(self._experiment_events.values()),
+            feedback=tuple(self._feedback.values()),
         )
 
     def put_experiment(self, experiment: Experiment) -> None:
@@ -364,6 +384,24 @@ class InMemoryStore:
             ((game_id, score) for game_id, (_, score) in self._game_popularity.items()),
             key=lambda item: (-item[1], item[0]),
         )[:limit]
+
+    def put_feedback(self, feedback: Feedback) -> None:
+        self._feedback[feedback.id] = feedback
+
+    def get_feedback(self, feedback_id: str) -> Feedback | None:
+        return self._feedback.get(feedback_id)
+
+    def list_feedback(self) -> list[Feedback]:
+        return list(self._feedback.values())
+
+    def list_recent_feedback(
+        self, reporter_user_id: str, *, since: dt.datetime, until: dt.datetime
+    ) -> list[Feedback]:
+        return [
+            feedback
+            for feedback in self._feedback.values()
+            if feedback.reporter_user_id == reporter_user_id and since <= feedback.created_at <= until
+        ]
 
     def put_user(self, user: User) -> None:
         previous = self._users.get(user.id)

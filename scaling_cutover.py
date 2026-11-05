@@ -58,6 +58,7 @@ def rollback_snapshot(store, *, byte_limit=32 * 1024**2, record_limit=5000):
         "experiments",
         "experiment_assignments",
         "experiment_events",
+        "feedback",
     ):
         rows = []
         for row in pages(kind):

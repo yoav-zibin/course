@@ -102,6 +102,7 @@ _KINDS: Final = (
         key=lambda assignment: f"{assignment.user_id}@{assignment.experiment_id}",
     ),
     _Kind(field="experiment_events", key=lambda event: event.id),
+    _Kind(field="feedback", key=lambda feedback: feedback.id),
 )
 assert {kind.field for kind in _KINDS} == {
     field.name for field in dataclasses.fields(Snapshot)
@@ -134,6 +135,7 @@ def _sorted_like_in_memory_store(snapshot_fields: dict[str, list[Any]]) -> None:
         "game_drafts",
         "push_subscriptions",
         "experiments",
+        "feedback",
     ):
         snapshot_fields[field].sort(key=_created)
     snapshot_fields["experiment_assignments"].sort(

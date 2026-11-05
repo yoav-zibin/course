@@ -281,6 +281,17 @@ function playerName(player) {
     : I18n.t("ui.match.computer_name", { number: player.player_index + 1 }, `Computer ${player.player_index + 1}`);
 }
 
+/** Whether [user] may report [player] in [match]: another human in an online match. */
+function canReportPlayer(match, player, user) {
+  return Boolean(user && !match.localMode && player.kind === "human" && player.user_id && player.user_id !== user.id);
+}
+
+/** Opens the feedback dialog for [target] {type, id, name}: a fixed [kind], or the
+ * sender's choice of bug, suggestion or problem. */
+function openFeedback(target, {kind = "bug", chooseKind = true} = {}) {
+  window.FeedbackDialog?.open({target, kind, chooseKind, user: me(), page: location.pathname + location.hash});
+}
+
 function gameOf(gameId, version) {
   return state.gameCache.get(`${gameId}@${version}`) ?? null;
 }
@@ -1000,6 +1011,9 @@ function updateMatchSetup() {
   updateStakePreview();
   $("create").textContent = solo ? I18n.t("ui.portal.play_solo", {}, "Play solo ↗") : I18n.t("ui.portal.create_match", {}, "Create match ↗");
   $("selected-game-card").hidden = !game;
+  const canGiveFeedback = Boolean(game && me() && game.owner_user_id && game.owner_user_id !== me().id && !isRandomGame(game));
+  $("feedback-game").hidden = !canGiveFeedback;
+  $("feedback-game").onclick = canGiveFeedback ? () => openFeedback({type: "game", id: game.id, name: I18n.gameName(game.id, game.name)}) : null;
   $("selected-game-name").textContent = (game && I18n.gameName(game.id, game.name)) || I18n.t("ui.games.choose", {}, "Choose a game");
   $("selected-game-description").textContent = (game && I18n.gameDescription(game.id, game.description)) || "";
   $("selected-game-mode").textContent = solo ? "1 player · solo" : game ? `${game.allowed_player_counts.join(", ")} players` : "";
@@ -1152,7 +1166,12 @@ function renderMatch() {
         onerror: event => { event.target.hidden = true; }}), el("span", {textContent:
           `${playerName(player)}${player === mySeat ? " · " + I18n.t("ui.match.seat_you", {}, "You") : ""}` +
           `${turn.includes(player.player_index) ? " — " + I18n.t("ui.match.to_move", {}, "to move") : ""}`,
-      })),
+      }), canReportPlayer(match, player, user) ? el("button", {
+        type: "button", class: "feedback-report", textContent: I18n.t("ui.feedback.report_short", {}, "⚑ Report"),
+        title: I18n.t("ui.feedback.report_player", {}, "Report player"),
+        "aria-label": I18n.t("ui.feedback.report_player_named", {name: playerName(player)}, `Report player ${playerName(player)}`),
+        onclick: () => openFeedback({type: "user", id: player.user_id, name: playerName(player)}, {kind: "problem", chooseKind: false}),
+      }) : null),
     ),
   );
 
@@ -1345,6 +1364,14 @@ function renderMatch() {
             .then(() => toast(I18n.t("ui.match.invite_copied", {}, "✓ Invite link copied"))),
       }),
     );
+  if (user && !match.localMode) {
+    const gameName = game ? I18n.gameName(game.id, game.name) : I18n.t("ui.feedback.a_game", {}, "a game");
+    secondaryActions.push(el("button", {type: "button", class: "feedback-action", textContent: I18n.t("ui.feedback.match", {}, "Send feedback about this match"),
+      onclick: () => openFeedback({type: "match", id: match.id, name: gameName})}));
+    if (game && game.owner_user_id !== user.id)
+      secondaryActions.push(el("button", {type: "button", class: "feedback-action", textContent: I18n.t("ui.feedback.game", {}, "Feedback on this game"),
+        onclick: () => openFeedback({type: "game", id: match.game_id, name: gameName})}));
+  }
   if (secondaryActions.length) {
     const menu = el("details", {class:"match-more", open:state.moreActionsMatch === match.id},
       el("summary", {"aria-label":I18n.t("ui.match.more_actions", {}, "More match actions"), textContent:"⋯"}),
