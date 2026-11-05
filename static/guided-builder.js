@@ -122,9 +122,12 @@ function changeReview(f,step,artifact){
    el('section',{},el('h3',{textContent:'Before — approved'}),artifactCard(previous.value)),
    el('section',{},el('h3',{textContent:'After — proposed'}),artifactCard(artifact.value))));
 }
+const coverage={understanding:['Game goal','Who plays','What a player does on a turn'],identity:['Game name','One-sentence description'],logic:['Seats & players','Legal moves','How it ends','Computer play'],ui:['What players see','Controls','Phone layout'],tutorial:['The goal','A practiced move','How to win'],images:['1 cover','3–5 previews'],tests:['3–10 examples','Start, mid-game and end','Rejections as expected errors']};
 function renderArtifact(f,active){
  const step=steps[selected],artifact=f.artifacts[step], guide=guidance[step], questions=artifact?.value?.questions||[];
  const allowed=steps.slice(0,selected).every(s=>f.artifacts[s]?.status==='approved');
+ $('spec-panel').dataset.step=step;
+ $('coverage-chips').replaceChildren(...(coverage[step]||[]).map(t=>el('span',{class:'cov',textContent:t})));
  $('step-guide').textContent=artifact?'':guide[1];
  $('prompt-label').textContent=questions.length?'Answer the questions below':artifact?'What would you like to change?':guide[0];
  $('questions').replaceChildren(...questions.map(q=>el('li',{textContent:q})));
@@ -179,9 +182,9 @@ function render(){
  $('steps').replaceChildren(...labels.map((label,i)=>{
   const build=i===steps.length;
   const done=build?f.job?.status==='ready':f.artifacts[steps[i]]?.status==='approved';
-  return el('button',{'aria-current':i===selected?'step':null,disabled:working||(build&&!all&&!f.job),
+  return el('button',{'aria-current':i===selected?'step':null,class:done?'step-done':null,disabled:working||(build&&!all&&!f.job),
    title:build&&!all?'Approve the specifications to unlock Build & verify':label,
-   textContent:(done?'✓ ':'')+label,onclick:()=>{if(i!==selected){$('correction').value='';editName=false;}selected=i;render();}});
+   textContent:label,onclick:()=>{if(i!==selected){$('correction').value='';editName=false;}selected=i;render();}});
  }));
  $('spec-panel').hidden=buildView;
  $('build-panel').hidden=!buildView;
@@ -240,6 +243,7 @@ $('cancel-name').onclick=()=>{editName=false;render();};
 $('name-form').onsubmit=e=>{e.preventDefault();act('edit-identity');};
 $('chat-form').onsubmit=e=>{e.preventDefault();act('propose');};
 for(const action of ['approve','reopen','refresh','build','cancel','final-approve','feedback'])$(action).onclick=()=>act(action);
+$('focus-toggle').onclick=()=>{const panel=$('spec-panel'),on=panel.classList.toggle('focus');$('focus-toggle').textContent=on?'Show chat':'Focus content';};
 $('publish').onclick=async()=>{try{const game=await request('POST',`/game-drafts/${draft.id}/publish`,{expected_revision:draft.revision});toast('Published '+game.name);await select(draft.id);}catch(e){error(e);}};
 document.addEventListener('auth-changed',()=>{clearTimeout(poll);draft=null;render();Auth.renderMenu($('account-menu'));loadDrafts().catch(error);});
 Auth.renderMenu($('account-menu'));loadDrafts().then(()=>{if(me()&&location.hash.length>1)return select(decodeURIComponent(location.hash.slice(1)));}).catch(error);
