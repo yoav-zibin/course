@@ -4,6 +4,18 @@ from game_platform.builder_validation import verify_examples
 from game_platform.game_testing import test_server_code
 
 
+# One contract, given verbatim to every generation, repair, diagnosis and
+# review prompt, so agents do not steer each other with conflicting rules
+# for seats, settlement or execution limits.
+PLATFORM_CONTRACT = '''Platform contract (applies to generation and review):
+allowed_player_counts counts total seats, not humans. One human versus one computer requires two seats; [1] is a genuine solo game, never two opponents mapped to one ID. Match roster size is enforced by the platform.
+Illegal moves throw InvalidMove; an example with expected_error:"InvalidMove" must reject and leave state, turn and views unchanged.
+winner/result in game state records victory. payouts is NOT a score or a win probability: it maps active human roster IDs to nonnegative integer tokens. On ending, its sum must equal ctx.pot. At pot 0 use {} or zero-valued human entries, never award 1 for winning and never pay computers. Production disallows paid matches with computers; defensive settlement must still conserve any supplied pot. Do not call a defensive token-settlement branch an added betting UI or a game-rule violation merely because gameplay is described as free. An impossible production roster/pot combination must be identified as such.
+ctx.players uses stable platform IDs; map game labels to those IDs. A player leaving remains active during playerLeft; it is marked inactive afterwards. When fewer than two humans remain, end according to the platform settlement contract.
+Game calls have a 100 ms execution limit. Bound computer search by deterministic node/depth limits, use efficient pathfinding, and use ctx.random for randomness; never use wall-clock search deadlines. Do not weaken an approved strategy requirement silently: report if it cannot be satisfied within the limit.
+'''
+
+
 def examples(code, server, spec, rules):
     results = verify_examples(server, spec['tests'])
     return {'passed': all(item['passed'] for item in results), 'details': results}

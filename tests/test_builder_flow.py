@@ -232,3 +232,148 @@ def test_approved_identity_renames_draft_and_marks_previous_dependents_stale():
     assert proposed.builder_workflow['artifacts']['logic']['status']=='stale'
     result = flow.approve(proposed,'identity')
     assert (result.name,result.description)==('Race to six','Reach six first.')
+
+
+# --- Regression tests: negative examples, payouts, seat counts, contract ---
+
+WALL_GAME = """
+const game = {
+  newMatch(ctx) { return {state: {n: 0, walls: 1}, turn: [ctx.players[0].id]}; },
+  applyMove(state, id, move, ctx) {
+    if (move.wall) {
+      if (state.walls <= 0) throw new InvalidMove('No walls left');
+      return {state: {n: state.n, walls: state.walls - 1}, turn: [id]};
+    }
+    if (move.add !== 1) throw new InvalidMove('Add one');
+    const n = state.n + 1;
+    return {state: {n, walls: state.walls}, turn: [id]};
+  },
+  viewFor(state, id, ctx) { return {n: state.n, walls: state.walls}; },
+  computerMove() { return {add: 1}; },
+  randomMove() { return {add: 1}; }
+};
+"""
+
+WALL_CONTRACT = {
+    'state_schema': {'type': 'object', 'required': ['n', 'walls'], 'additionalProperties': False,
+                     'properties': {'n': {'type': 'integer', 'minimum': 0, 'maximum': 3},
+                                    'walls': {'type': 'integer', 'minimum': 0, 'maximum': 1}}},
+    'view_schema': {'type': 'object', 'required': ['n', 'walls'], 'additionalProperties': False,
+                    'properties': {'n': {'type': 'integer', 'minimum': 0, 'maximum': 3},
+                                   'walls': {'type': 'integer', 'minimum': 0, 'maximum': 1}}},
+    'move_schema': {'type': 'object', 'additionalProperties': False,
+                    'properties': {'add': {'const': 1}, 'wall': {'type': 'boolean'}}},
+}
+
+
+def wall_case(**overrides):
+    case = {'name': 'No walls left', 'description': 'Placing a wall with none left is rejected.',
+            'kind': 'intermediate',
+            'ctx': {'players': [{'id': 'u1', 'kind': 'human', 'display_name': 'Alice', 'picture_url': '', 'max_loss': 0},
+                                {'id': 'computer-1', 'kind': 'computer', 'display_name': 'Computer', 'picture_url': '', 'max_loss': 0}],
+                    'pot': 0, 'move_count': 1, 'seed': 1},
+            'state': {'n': 1, 'walls': 0}, 'view_of_mover': {'n': 1, 'walls': 0}, 'view_of_other': {'n': 1, 'walls': 0},
+            'player_id': 'u1', 'other_player_id': 'computer-1', 'move': {'wall': True},
+            'turn': ['u1'], 'expected_error': 'InvalidMove',
+            'expected_state': {'n': 1, 'walls': 0}, 'expected_turn': ['u1'],
+            'expected_view_of_mover': {'n': 1, 'walls': 0}, 'expected_view_of_other': {'n': 1, 'walls': 0}}
+    case.update(overrides)
+    return case
+
+
+def test_expected_error_example_passes_only_on_typed_invalid_move():
+    from game_platform.builder_validation import verify_examples
+    contract = {**WALL_CONTRACT, 'cases': [wall_case()]}
+    results = verify_examples(WALL_GAME, contract)
+    assert results == [{'name': 'No walls left', 'passed': True, 'expected_error': 'InvalidMove'}], results
+    # The same move, accepted: a legal move mislabelled as a rejection fails.
+    accepted = wall_case(name='Legal move', move={'add': 1})
+    results = verify_examples(WALL_GAME, {**WALL_CONTRACT, 'cases': [accepted]})
+    assert not results[0]['passed'] and 'Expected InvalidMove' in results[0]['error'], results
+    # An arbitrary exception is a game bug, not a correct rejection.
+    buggy = WALL_GAME.replace("throw new InvalidMove('No walls left')", "throw new Error('boom')")
+    results = verify_examples(buggy, contract)
+    assert not results[0]['passed'], results
+
+
+def negative_fixture_contract():
+    contract = copy.deepcopy(fixture()['contract'])
+    case = contract['cases'][1]
+    case.update({'expected_error': 'InvalidMove', 'turn': ['u1'], 'expected_turn': ['u1'],
+                 'expected_state': case['state'], 'expected_view_of_mover': case['view_of_mover'],
+                 'expected_view_of_other': case['view_of_other']})
+    case.pop('expected_payouts', None)
+    return contract
+
+
+def test_negative_example_validation_preserves_state_turn_and_views():
+    flow.validate_artifact('tests', negative_fixture_contract())
+    changed_state = negative_fixture_contract()
+    changed_state['cases'][1]['expected_state'] = {'n': 2}
+    with pytest.raises(InvalidRequestError, match='preserve state and views'):
+        flow.validate_artifact('tests', changed_state)
+    missing_turn = negative_fixture_contract()
+    del missing_turn['cases'][1]['turn']
+    with pytest.raises(InvalidRequestError, match='preserve an explicit nonempty turn'):
+        flow.validate_artifact('tests', missing_turn)
+    paid = negative_fixture_contract()
+    paid['cases'][1]['expected_payouts'] = {'u1': 1}
+    with pytest.raises(InvalidRequestError, match='cannot pay tokens'):
+        flow.validate_artifact('tests', paid)
+    wrong_error = negative_fixture_contract()
+    wrong_error['cases'][1]['expected_error'] = 'GameOver'
+    with pytest.raises(InvalidRequestError, match='expected error must be InvalidMove'):
+        flow.validate_artifact('tests', wrong_error)
+
+
+def test_payouts_are_tokens_for_humans_only_and_conserve_the_pot():
+    contract = copy.deepcopy(fixture()['contract'])
+    terminal = contract['cases'][-1]
+    terminal['ctx']['pot'] = 20
+    terminal['expected_payouts'] = {'u1': 20}
+    flow.validate_artifact('tests', contract)
+    # Winning is not 1 token regardless of the pot.
+    one_token = copy.deepcopy(contract)
+    one_token['cases'][-1]['expected_payouts'] = {'u1': 1}
+    with pytest.raises(InvalidRequestError, match='conserve the pot'):
+        flow.validate_artifact('tests', one_token)
+    # Computers are never paid.
+    pays_computer = copy.deepcopy(contract)
+    pays_computer['cases'][-1]['ctx']['players'].append(
+        {'id': 'computer-1', 'kind': 'computer', 'display_name': 'Computer', 'picture_url': '', 'max_loss': 0})
+    pays_computer['cases'][-1]['expected_payouts'] = {'u1': 10, 'computer-1': 10}
+    with pytest.raises(InvalidRequestError, match='active humans only'):
+        flow.validate_artifact('tests', pays_computer)
+    # Ongoing payouts may not exceed the pot either.
+    over_pot = copy.deepcopy(contract)
+    over_pot['cases'][1]['expected_payouts'] = {'u1': 5}
+    with pytest.raises(InvalidRequestError, match='conserve the pot'):
+        flow.validate_artifact('tests', over_pot)
+
+
+def test_roster_seat_counts_are_total_seats_not_humans():
+    workflow = {'artifacts': {'logic': {'value': {'allowed_player_counts': [2]}}}}
+    two_seats = {'cases': [wall_case()]}
+    flow.validate_test_rosters(workflow, two_seats)
+    one_seat = {'cases': [{**wall_case(), 'ctx': {**wall_case()['ctx'], 'players': wall_case()['ctx']['players'][:1]}}]}
+    with pytest.raises(InvalidRequestError, match='two seats'):
+        flow.validate_test_rosters(workflow, one_seat)
+    # The same check fires on propose, before a tests artifact can be approved:
+    # the counter draft's approved logic allows [1], its examples use 1 seat.
+    d = approved_draft()
+    contract = copy.deepcopy(d.builder_workflow['artifacts']['tests']['value'])
+    for case in contract['cases']:
+        case['ctx']['players'].append(
+            {'id': 'u2', 'kind': 'human', 'display_name': 'Bob', 'picture_url': '', 'max_loss': 0})
+    with pytest.raises(InvalidRequestError, match='seat counts'):
+        flow.propose(d, 'tests', contract, 'Two seats against a one-seat game')
+
+
+def test_platform_contract_is_shared_by_generation_and_review_prompts():
+    from game_platform.builder_checks import PLATFORM_CONTRACT
+    from game_platform.builder_jobs import STEP_PROMPTS
+    for phrase in ('total seats, not humans', 'expected_error', 'ctx.pot', 'never pay computers', '100 ms', 'ctx.random'):
+        assert phrase in PLATFORM_CONTRACT, phrase
+    assert PLATFORM_CONTRACT in STEP_PROMPTS['logic']
+    assert PLATFORM_CONTRACT in STEP_PROMPTS['tests']
+    assert 'expected_error' in STEP_PROMPTS['tests']

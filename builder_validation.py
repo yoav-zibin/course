@@ -47,6 +47,27 @@ def verify_examples(code, contract):
                 if call('newMatch')['state'] != case['state']: raise GameLogicError('Initial state differs')
             for who, key in [('player_id','view_of_mover'),('other_player_id','view_of_other')]:
                 if call('viewFor',case['state'],case[who]) != case[key]: raise GameLogicError(f'{key} differs')
+            if 'expected_error' in case:
+                # A negative example passes only on the typed rejection, not
+                # on an arbitrary exception (a game bug) or a silently
+                # accepted move. Run it twice, like every other call, so a
+                # non-deterministic rejection also fails.
+                if case['expected_error'] != 'InvalidMove':
+                    raise GameLogicError(f"Unknown expected_error {case['expected_error']!r}")
+                for _ in range(2):
+                    try:
+                        logic.call('applyMove',case['state'],case['player_id'],case['move'],ctx=ctx,seed=seed)
+                    except InvalidMoveError:
+                        pass
+                    else:
+                        raise GameLogicError('Expected InvalidMove, but the move was accepted')
+                # The match did not advance: every player's view of the
+                # unchanged state must still be the before/expected view.
+                for who, key in [('player_id','view_of_mover'),('other_player_id','view_of_other')]:
+                    if call('viewFor',case['state'],case[who]) != case[key]:
+                        raise GameLogicError('Rejected move changed the player view')
+                results.append({'name':case['name'],'passed':True,'expected_error':'InvalidMove'})
+                continue
             result = call('applyMove',case['state'],case['player_id'],case['move'])
             for actual, expected in [('state','expected_state'),('turn','expected_turn')]:
                 if result.get(actual) != case[expected]: raise GameLogicError(f'{expected} differs')
@@ -106,7 +127,9 @@ def verify_browser_moves(server, contract, cases, screenshots):
         if who is None or who not in (turn or []):
             raise RuntimeError('UI verification failed: client submitted a move out of turn')
         ctx = {k:v for k,v in case['ctx'].items() if k!='seed'}
-        ctx['move_count'] += int(after)
+        # A rejected move does not advance the match, so its "expected"
+        # view is still at the before move_count.
+        ctx['move_count'] += int(after and not case.get('expected_error'))
         for move in moves:
             try:
                 logic.call('applyMove',case['expected_state' if after else 'state'],who,move,ctx=ctx,seed=case['ctx']['seed'])

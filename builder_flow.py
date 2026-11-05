@@ -133,6 +133,29 @@ def validate_artifact(step, value, *, require_test_images=True):
                 raise InvalidRequestError(f"{case['name']}: a terminal example must end the match")
             if type(case['ctx'].get('pot')) is not int or case['ctx']['pot'] < 0:
                 raise InvalidRequestError(f"{case['name']}: supply a nonnegative integer pot (0 for a free match)")
+            if 'expected_error' in case:
+                # A negative example: the move is legal in shape (it matches
+                # move_schema below) but the game rules must reject it. The
+                # match does not advance, so nothing about it may change.
+                if case['expected_error'] != 'InvalidMove':
+                    raise InvalidRequestError(f"{case['name']}: expected error must be InvalidMove")
+                if not isinstance(case.get('turn'), list) or not case['turn'] or any(pid not in ids for pid in case['turn']) or case['turn'] != turn:
+                    raise InvalidRequestError(f"{case['name']}: rejected moves must preserve an explicit nonempty turn")
+                if case['expected_state'] != case['state'] or case['expected_view_of_mover'] != case['view_of_mover'] or case['expected_view_of_other'] != case['view_of_other']:
+                    raise InvalidRequestError(f"{case['name']}: rejected moves must preserve state and views")
+                if case.get('expected_payouts'):
+                    raise InvalidRequestError(f"{case['name']}: rejected moves cannot pay tokens")
+            if 'expected_payouts' in case:
+                # Payouts are token settlement, not a win score: on a terminal
+                # move they must distribute exactly the pot, on an ongoing
+                # move at most the pot, and only to active humans.
+                payouts = case['expected_payouts']
+                humans = {p['id'] for p in players if p.get('kind') == 'human' and p.get('active', True)}
+                if not isinstance(payouts, dict) or any(pid not in humans or type(amount) is not int or amount < 0 for pid, amount in payouts.items()):
+                    raise InvalidRequestError(f"{case['name']}: payouts must be nonnegative integer tokens for active humans only")
+                total = sum(payouts.values())
+                if total > case['ctx']['pot'] or (turn is None and total != case['ctx']['pot']):
+                    raise InvalidRequestError(f"{case['name']}: expected payouts must conserve the pot; payouts are tokens, not win scores")
             if require_test_images or case.get('images'):
                 if len(case.get('images', [])) != 4: raise InvalidRequestError('Every test needs four view images')
                 for image in case['images']: validate_image(image)
@@ -141,6 +164,24 @@ def validate_artifact(step, value, *, require_test_images=True):
                                   ('expected_view_of_mover','view_schema'),('expected_view_of_other','view_schema')]:
                 error = next(Draft202012Validator(value[schema]).iter_errors(case[field]), None)
                 if error: raise InvalidRequestError(f'{case["name"]}: {field}: {error.message}')
+
+
+def validate_test_rosters(workflow, value):
+    """Every example's roster must be a seat count the approved logic allows.
+
+    allowed_player_counts counts total seats, not humans: one human versus
+    one computer is two seats. A one-seat roster with two pawns can never
+    take turns correctly, so it is rejected before approval, not repaired
+    later by steering code generation with contradictory examples.
+    """
+    logic = (workflow.get('artifacts') or {}).get('logic', {}).get('value') or {}
+    counts = logic.get('allowed_player_counts')
+    if not counts:
+        return
+    for case in value.get('cases', []):
+        players = (case.get('ctx') or {}).get('players') or []
+        if len(players) not in counts:
+            raise InvalidRequestError(f"{case.get('name')}: roster must match approved total seat counts; a human plus a computer uses two seats")
 
 
 def validate_image(image):
@@ -195,6 +236,7 @@ def propose(draft, step, value, message, correction=''):
     old = flow['artifacts'].get(step)
     # Keep unanswered clarification proposals visible, but unapprovable.
     if not (step == 'understanding' and value.get('questions')): validate_artifact(step, value)
+    if step == 'tests': validate_test_rosters(flow, value)
     if old and old['value'] == value:
         if old['status'] == 'stale':
             old['status'] = 'approved' if old.get('approved_digest') == digest(value) else 'draft'
@@ -215,6 +257,7 @@ def approve(draft, step):
     artifact = flow['artifacts'].get(step)
     if not artifact or artifact['status'] == 'stale': raise ConflictError('Revise this artifact before approving it')
     validate_artifact(step, artifact['value'])
+    if step == 'tests': validate_test_rosters(flow, artifact['value'])
     artifact['status'] = 'approved'
     artifact['approved_digest'] = digest(artifact['value'])
     flow['conversation'].append({'role':'user','step':step,'text':'Approved', 'artifact_revision':artifact['revision']})
@@ -236,6 +279,8 @@ def begin_build(draft):
         raise ConflictError('Approve every step, including the tutorial, before building')
     validate_artifact('images', flow['artifacts']['images']['value'])
     validate_artifact('tutorial', flow['artifacts']['tutorial']['value'])
+    validate_artifact('tests', flow['artifacts']['tests']['value'])
+    validate_test_rosters(flow, flow['artifacts']['tests']['value'])
     previous = flow.get('job') or {}
     verified = previous.get('verified_code_digest')
     reusable = verified and verified == digest([draft.code,draft.server_code]) and previous.get('spec_digest') == spec_digest(flow)
