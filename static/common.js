@@ -409,6 +409,19 @@ function statusClass(status) {
 }
 
 /** Common app navigation; page-specific wallet/notification controls stay in place. */
+function syncPortalPreviewLinks() {
+  const source = new URLSearchParams(location.search);
+  const previewKeys = ['skin', 'layout'];
+  document.querySelectorAll('.topbar[data-app-page] nav a, .portal-app-menu a').forEach(link => {
+    const target = new URL(link.getAttribute('href') || '/', location.origin);
+    for (const key of previewKeys) {
+      target.searchParams.delete(key);
+      if (source.has(key)) target.searchParams.set(key, source.get(key));
+    }
+    link.href = target.pathname + target.search + target.hash;
+  });
+}
+window.syncPortalPreviewLinks = syncPortalPreviewLinks;
 function setUpAppTopbar() {
   const bar = document.querySelector?.('.topbar[data-app-page]');
   const current = bar?.dataset?.appPage;
@@ -424,6 +437,7 @@ function setUpAppTopbar() {
     'aria-current': page === current ? 'page' : null,
     textContent: label,
   })));
+  syncPortalPreviewLinks();
 }
 setUpAppTopbar();
 
@@ -434,30 +448,35 @@ function setUpSidebarDrawer() {
   const main=document.querySelector('.work'), openers=[];
   const wide=window.matchMedia('(min-width: 900px)');
   let opened=false, returnFocus=null;
+  const pinned=()=>sidebar.matches('.portal-shell .portal-sidebar')&&document.documentElement.dataset.portalLayout==='left'&&wide.matches;
   sidebar.id ||= 'app-sidebar';
   const close=el('button',{type:'button',class:'sidebar-close','aria-label':'Close sidebar',textContent:'← Close sidebar',onclick:()=>setOpen(false)});
   sidebar.prepend(close);
   const backdrop=el('button',{type:'button',class:'sidebar-backdrop',tabIndex:-1,'aria-label':'Close sidebar',onclick:()=>setOpen(false)});
   document.body.append(backdrop);
   function render() {
-    const modal=opened && !wide.matches;
-    document.body.classList.toggle('sidebar-open',opened);
+    const visible=opened||pinned();
+    const modal=visible && !wide.matches;
+    document.body.classList.toggle('sidebar-open',visible);
     document.body.classList.toggle('sidebar-docked',wide.matches);
     document.body.classList.toggle('sidebar-modal',modal);
-    sidebar.inert=!opened;
-    sidebar.setAttribute('aria-hidden',String(!opened));
+    sidebar.inert=!visible;
+    sidebar.setAttribute('aria-hidden',String(!visible));
     sidebar.setAttribute('role',wide.matches?'complementary':'dialog');
-    sidebar.setAttribute('aria-label',document.querySelector('.builder-shell')?'Your games':'Your matches');
+    const layout=document.documentElement.dataset.portalLayout;
+    sidebar.setAttribute('aria-label',document.querySelector('.builder-shell')?'Your games':['left','hamburger'].includes(layout)?'Portal navigation and your matches':'Your matches');
     if (modal) sidebar.setAttribute('aria-modal','true');
     else sidebar.removeAttribute('aria-modal');
     main.inert=modal;
-    for (const button of openers) button.setAttribute('aria-expanded',String(opened));
+    for (const button of openers) button.setAttribute('aria-expanded',String(visible));
   }
   function setOpen(value,opener) {
-    const changed = opened !== Boolean(value);
+    if (pinned() && !value) return;
+    const wasVisible = opened || pinned();
     const rect = sidebar.animate ? sidebar.getBoundingClientRect() : null;
     sidebar.getAnimations?.().forEach(animation => animation.cancel());
     opened=Boolean(value);
+    const changed = wasVisible !== (opened || pinned());
     if (opened) returnFocus=opener || document.activeElement;
     render();
     if (changed && rect && document.querySelector('.portal-shell') && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -476,7 +495,7 @@ function setUpSidebarDrawer() {
     toolbar.prepend(button);openers.push(button);
   }
   sidebar.addEventListener('click',event=>{
-    if (!wide.matches && event.target.closest('.list-item, #new-game, #show-creator')) setOpen(false);
+    if (!wide.matches && event.target.closest('.list-item, #new-game, #show-creator, .portal-app-menu a')) setOpen(false);
   });
   document.addEventListener('keydown',event=>{
     if (!opened) return;
@@ -489,6 +508,7 @@ function setUpSidebarDrawer() {
     }
   });
   wide.addEventListener('change',()=>{render();if(opened && !wide.matches)close.focus();});
+  document.addEventListener('portal-layout-change',render);
   setOpen(false);
 }
 if (document.readyState==='complete'||document.readyState==='interactive') setUpSidebarDrawer();

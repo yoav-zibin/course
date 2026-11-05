@@ -239,7 +239,7 @@ function renderPortalAccountMenu() {
   Auth.renderMenu(container);
   const panel = container.querySelector(".auth-menu-panel");
   panel?.querySelector(".portal-immersive-menu")?.remove();
-  if (!panel || document.documentElement.dataset.skin !== "immersive") return;
+  if (!panel || document.documentElement.dataset.skin !== "immersive" || document.documentElement.dataset.portalLayout) return;
 
   const menu = el("div", { class: "portal-immersive-menu" },
     el("button", {
@@ -258,11 +258,12 @@ function renderPortalAccountMenu() {
   panel.prepend(menu);
 }
 
-function syncSkinRoutes() {
-  const skin = new URLSearchParams(location.search).get("skin");
+function syncPortalRoutes() {
+  const params = new URLSearchParams(location.search);
   const back = document.querySelector(".back-to-games");
+  const query = params.toString();
   if (back)
-    back.href = "/static/portal.html" + (skin ? `?skin=${encodeURIComponent(skin)}` : "");
+    back.href = "/static/portal.html" + (query ? `?${query}` : "");
 }
 
 /** A display name from the cache, or a short id while it loads. */
@@ -1663,11 +1664,12 @@ async function main() {
     (state.detailGameId ? document.querySelector(".back-to-games") : $("game-search"))?.focus({preventScroll: true});
   });
   renderPortalAccountMenu();
-  syncSkinRoutes();
+  syncPortalRoutes();
   document.addEventListener("portal-skin-change", () => {
     renderPortalAccountMenu();
-    syncSkinRoutes();
+    syncPortalRoutes();
   });
+  document.addEventListener("portal-layout-change", syncPortalRoutes);
   $("notify-toggle").addEventListener("click", toggleNotifications);
   document.addEventListener("i18n-changed", () => {
     // Texts the script built (badges, buttons, lists) are redrawn in the new language.
