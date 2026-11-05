@@ -448,7 +448,7 @@ function setUpSidebarDrawer() {
   const main=document.querySelector('.work'), openers=[];
   const wide=window.matchMedia('(min-width: 900px)');
   let opened=false, returnFocus=null;
-  const pinned=()=>sidebar.matches('.portal-shell .portal-sidebar')&&document.documentElement.dataset.portalLayout==='left'&&wide.matches;
+  const pinned=()=>Boolean(document.querySelector('.portal-shell'))&&document.documentElement?.dataset.portalLayout==='left'&&wide.matches;
   sidebar.id ||= 'app-sidebar';
   const close=el('button',{type:'button',class:'sidebar-close','aria-label':'Close sidebar',textContent:'← Close sidebar',onclick:()=>setOpen(false)});
   sidebar.prepend(close);
