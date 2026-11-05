@@ -444,6 +444,7 @@ function setUpAppTopbar() {
 
 /** Treat the platform name in every page header as a home link. */
 function linkTopbarBrandToPortal() {
+  if (typeof document === "undefined" || typeof document.querySelectorAll !== "function") return;
   document.querySelectorAll(".topbar h1").forEach((heading) => {
     if (heading.closest("a.app-home-link")) return;
     const link = el("a", {
