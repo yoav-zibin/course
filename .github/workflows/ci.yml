@@ -104,4 +104,4 @@ jobs:
           VM_HOST: ${{ secrets.GCP_VM_HOST }}
           VM_USER: ${{ secrets.GCP_VM_USER }}
         run: |
-          ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" 'sudo journalctl -u game-platform.service --since "5 minutes ago" --no-pager | grep -F "audit-batch2:" | tail -n 6; if sudo test -f /var/log/game-platform/server.log; then sudo grep -F "audit-batch2:" /var/log/game-platform/server.log | tail -n 6; fi'
+          ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" 'sudo journalctl -u game-platform.service --since "5 minutes ago" --no-pager | grep -F "audit-batch3:" | tail -n 6; if sudo test -f /var/log/game-platform/server.log; then sudo grep -F "audit-batch3:" /var/log/game-platform/server.log | tail -n 6; fi'
