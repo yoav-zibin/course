@@ -703,7 +703,7 @@ def list_games(
     return [GameSummaryOut.of(game) for game in games]
 
 
-@router.get("/games/popular")
+@router.get("/games/popular", include_in_schema=False)
 def list_popular_games(platform: Platform, limit: int = 8) -> list[GameSummaryOut]:
     """The bounded top games by cumulative players in started matches."""
     return [GameSummaryOut.of(game) for game in platform.list_popular_games(limit=limit)]

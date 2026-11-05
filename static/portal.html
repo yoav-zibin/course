@@ -21,7 +21,7 @@
     <link rel="stylesheet" href="/static/portal.css?v=29" />
     <link rel="stylesheet" href="/static/portal-match-layout.css?v=1" />
     <link rel="stylesheet" href="/static/portal-speed.css?v=2" />
-    <link rel="stylesheet" href="/static/experiments.css?v=1" />
+    <link rel="stylesheet" href="/static/experiments.css?v=2" />
   </head>
   <body>
     <header class="topbar" data-app-page="portal">
@@ -32,6 +32,7 @@
       </nav>
       <span class="spacer"></span>
       <span id="token-wallet" class="token-wallet" role="status" aria-live="polite" title="Your virtual tokens" data-i18n-title="ui.portal.wallet_title" hidden><span class="token-wallet-coin" aria-hidden="true">✦</span><span class="token-wallet-copy"><span class="token-wallet-label" data-i18n="ui.portal.wallet_label">MY WALLET</span><span class="token-wallet-number"><strong id="token-balance">0</strong> <span data-i18n="ui.portal.wallet_tokens">tokens</span></span></span></span>
+      <label class="portal-skin-picker" for="portal-skin-picker"><span data-i18n="ui.portal.skin">Skin</span><select id="portal-skin-picker" data-i18n-aria-label="ui.portal.skin" aria-label="Portal skin"><option value="" data-i18n="ui.portal.skin_assigned">Assigned</option><option value="classic">Classic</option><option value="aurora">Aurora</option><option value="sunset">Sunset</option><option value="immersive" data-i18n="ui.portal.skin_immersive">Immersive</option></select></label>
        <span id="account-menu"></span>
     </header>
     <div class="app portal-shell">
@@ -65,7 +66,7 @@
               <label class="game-label" for="game-search" data-i18n="ui.portal.choose_your_game">Choose your game</label>
               <div id="game-chooser" class="game-chooser">
                 <input id="new-game" type="hidden" />
-                <div class="game-search-controls"><input id="game-search" type="search" role="combobox" aria-label="Search games" data-i18n-aria-label="ui.action.search" aria-autocomplete="list" aria-controls="game-results" aria-expanded="false" autocomplete="off" placeholder="Search by name or description…" data-i18n-placeholder="ui.portal.search_placeholder" /><button id="browse-games" type="button" data-i18n="ui.games.browse_all">Browse all games</button></div>
+                <div class="game-search-controls"><input id="game-search" type="search" role="combobox" aria-label="Search games" data-i18n-aria-label="ui.action.search" aria-autocomplete="list" aria-controls="game-results" aria-expanded="false" autocomplete="off" placeholder="Search by name or description…" data-i18n-placeholder="ui.portal.search_placeholder" /><button id="browse-games" type="button" data-i18n="ui.games.browse_all">Browse all games</button><a id="immersive-build-link" class="immersive-build-link" href="/builder" data-i18n="ui.builder.create_title">Create a game</a></div>
                 <div id="game-search-popup" class="game-search-popup" hidden><div id="game-results" role="listbox" aria-label="Matching games"></div><div id="game-results-note" class="search-note" role="status"></div></div>
               </div>
               <section class="game-library" aria-label="Browse games">
@@ -162,13 +163,13 @@
     <script src="/static/auth.js?v=7"></script>
 <script src="/static/portal-practice.js?v=1"></script>
 <script src="/static/portal-offline.js?v=9"></script>
-<script src="/static/experiments.js?v=1"></script>
+    <script src="/static/experiments.js?v=2"></script>
     <script src="/static/portal-install.js?v=1"></script>
-    <script src="/static/portal-match-layout.js?v=4"></script>
+    <script src="/static/portal-match-layout.js?v=5"></script>
     <script src="/static/portal-speed.js?v=2"></script>
     <script src="/static/push-notifications.js?v=1"></script>
     <script src="/static/portal-feedback.js?v=2"></script>
     <script src="/static/storage-pages.js?v=2"></script>
-    <script src="/static/portal.js?v=63"></script>
+    <script src="/static/portal.js?v=64"></script>
   </body>
 </html>

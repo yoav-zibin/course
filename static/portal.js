@@ -178,7 +178,7 @@ async function updateTokenWallet(user) {
     state.pictureCache.set(user.id, record.picture_url);
     state.nameCache.set(user.id, record.display_name);
     if (record.referral_code) Auth.setReferralCode?.(user.id, record.referral_code);
-    if (Auth.setPicture?.(user.id, record.picture_url)) Auth.renderMenu($("account-menu"));
+    if (Auth.setPicture?.(user.id, record.picture_url)) renderPortalAccountMenu();
     if (!Number.isSafeInteger(record.token_balance) || record.token_balance < 0) {
       wallet.hidden = true; walletBalance = null; updateStakePreview(); return;
     }
@@ -231,6 +231,37 @@ function updateMatchCurrency(match, user) {
 
 function me() {
   return Auth.current();
+}
+
+function renderPortalAccountMenu() {
+  const container = $("account-menu");
+  Auth.renderMenu(container);
+  const panel = container.querySelector(".auth-menu-panel");
+  panel?.querySelector(".portal-immersive-menu")?.remove();
+  if (!panel || document.documentElement.dataset.skin !== "immersive") return;
+
+  const menu = el("div", { class: "portal-immersive-menu" },
+    el("button", {
+      type: "button",
+      textContent: I18n.t("ui.portal.my_matches", {}, "My matches"),
+      onclick: () => {
+        container._hideAuthMenu?.();
+        document.querySelector(".topbar .sidebar-toggle")?.click();
+      },
+    }),
+    el("a", {
+      href: "/builder",
+      textContent: I18n.t("ui.builder.create_title", {}, "Create a game"),
+    }),
+  );
+  panel.prepend(menu);
+}
+
+function syncSkinRoutes() {
+  const skin = new URLSearchParams(location.search).get("skin");
+  const back = document.querySelector(".back-to-games");
+  if (back)
+    back.href = "/static/portal.html" + (skin ? `?skin=${encodeURIComponent(skin)}` : "");
 }
 
 /** A display name from the cache, or a short id while it loads. */
@@ -617,7 +648,10 @@ function renderLists() {
 
 function openGamePage(id) {
   if (!state.games.some((game) => game.id === id)) return;
-  location.assign(`/static/portal.html?game=${encodeURIComponent(id)}`);
+  const route = new URLSearchParams({ game: id });
+  const skin = new URLSearchParams(location.search).get("skin");
+  if (skin) route.set("skin", skin);
+  location.assign(`/static/portal.html?${route}`);
 }
 
 async function joinRandomMatch() {
@@ -1629,12 +1663,17 @@ async function main() {
     if (!state.detailGameId) $("match-creator").open = true;
     (state.detailGameId ? document.querySelector(".back-to-games") : $("game-search"))?.focus({preventScroll: true});
   });
-  Auth.renderMenu($("account-menu"));
+  renderPortalAccountMenu();
+  syncSkinRoutes();
+  document.addEventListener("portal-skin-change", () => {
+    renderPortalAccountMenu();
+    syncSkinRoutes();
+  });
   $("notify-toggle").addEventListener("click", toggleNotifications);
   document.addEventListener("i18n-changed", () => {
     // Texts the script built (badges, buttons, lists) are redrawn in the new language.
     try {
-      Auth.renderMenu($("account-menu"));
+      renderPortalAccountMenu();
       render();
       renderLibrary();
       updateMatchSetup();
@@ -1643,7 +1682,7 @@ async function main() {
     }
   });
   document.addEventListener("auth-changed", () => {
-    Auth.renderMenu($("account-menu"));
+    renderPortalAccountMenu();
     state.armed = null;
     state.lastSent = null;
     state.selectedId = null;

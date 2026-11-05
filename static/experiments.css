@@ -43,3 +43,314 @@
   --radius-md: 9px;
   --font-sans: Georgia, serif;
 }
+
+:root[data-skin="immersive"] {
+  color-scheme: dark;
+  --color-bg-0: #100c1d;
+  --color-bg-1: #19132b;
+  --color-bg-2: #211a38;
+  --color-bg-3: #30244e;
+  --color-bg-4: #403064;
+  --color-text-primary: #f6f1ff;
+  --color-text-secondary: #d7cdef;
+  --color-text-tertiary: #aa9bc9;
+  --color-text-quaternary: #81739e;
+  --color-border-1: #2a2141;
+  --color-border-2: #3c305c;
+  --color-border-3: #554578;
+  --color-border-4: #75629b;
+  --color-accent: #c6f432;
+  --color-accent-hover: #d9ff62;
+  --color-focus-ring: #e3aaff;
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --font-sans: "Trebuchet MS", sans-serif;
+}
+
+/* The Portal has a richer component palette than the shared app shell. */
+:root[data-skin="aurora"] .portal-shell {
+  --color-bg-0: #071321;
+  --color-bg-1: #0e2032;
+  --color-bg-2: #132a40;
+  --color-bg-3: #1b3852;
+  --color-bg-4: #264968;
+  --color-text-primary: #f0fbff;
+  --color-text-secondary: #c1e3ee;
+  --color-text-tertiary: #89b7ca;
+  --color-border-2: #24465b;
+  --color-border-3: #38617a;
+  --color-accent: #34c6b5;
+  --color-accent-hover: #69e1d1;
+  --color-focus-ring: #69e1d1;
+  background: var(--color-bg-0);
+  color: var(--color-text-primary);
+}
+:root[data-skin="sunset"] .portal-shell {
+  --color-bg-0: #fff8f1;
+  --color-bg-1: #ffede0;
+  --color-bg-2: #ffe3d1;
+  --color-bg-3: #ffd3b8;
+  --color-bg-4: #ffc19c;
+  --color-text-primary: #38251f;
+  --color-text-secondary: #61443a;
+  --color-text-tertiary: #8b6759;
+  --color-border-2: #e8c2ad;
+  --color-border-3: #d7a48a;
+  --color-accent: #b94f35;
+  --color-accent-hover: #963b29;
+  --color-focus-ring: #963b29;
+  background: var(--color-bg-0);
+  color: var(--color-text-primary);
+}
+:root[data-skin="immersive"] .portal-shell {
+  --color-bg-0: #100c1d;
+  --color-bg-1: #19132b;
+  --color-bg-2: #211a38;
+  --color-bg-3: #30244e;
+  --color-bg-4: #403064;
+  --color-text-primary: #f6f1ff;
+  --color-text-secondary: #d7cdef;
+  --color-text-tertiary: #aa9bc9;
+  --color-border-2: #3c305c;
+  --color-border-3: #554578;
+  --color-accent: #c6f432;
+  --color-accent-hover: #d9ff62;
+  --color-focus-ring: #e3aaff;
+  background: var(--color-bg-0);
+  color: var(--color-text-primary);
+}
+
+:root[data-skin="aurora"] .portal-sidebar,
+:root[data-skin="aurora"] .match-creator,
+:root[data-skin="aurora"] .game-detail-page,
+:root[data-skin="aurora"] .match-stage,
+:root[data-skin="aurora"] .portal-shell .game-search-popup,
+:root[data-skin="aurora"] .portal-shell .match-tools {
+  background: #0e2032;
+  border-color: #24465b;
+  color: #f0fbff;
+}
+:root[data-skin="aurora"] .popular-games-section,
+:root[data-skin="aurora"] .play-option,
+:root[data-skin="aurora"] .portal-shell .library-card,
+:root[data-skin="aurora"] .selected-game-card {
+  background: #132a40;
+  border-color: #24465b;
+  color: #f0fbff;
+}
+:root[data-skin="aurora"] .portal-shell input,
+:root[data-skin="aurora"] .portal-shell select {
+  background: #071321;
+  border-color: #38617a;
+  color: #f0fbff;
+}
+:root[data-skin="aurora"] .portal-shell button.primary,
+:root[data-skin="aurora"] .portal-shell .library-toolbar button[aria-pressed="true"] {
+  background: #34c6b5;
+  border-color: #34c6b5;
+  color: #071b22;
+}
+:root[data-skin="aurora"] .portal-shell button.primary:hover:not(:disabled) { background:#69e1d1; border-color:#69e1d1; }
+:root[data-skin="aurora"] .portal-shell button:focus-visible,
+:root[data-skin="aurora"] .portal-shell summary:focus-visible,
+:root[data-skin="aurora"] .portal-shell .popular-game-card:focus-visible {
+  outline-color: #69e1d1;
+}
+:root[data-skin="aurora"] .creator-title,
+:root[data-skin="aurora"] .popular-games-heading h2,
+:root[data-skin="aurora"] .play-option-heading h3,
+:root[data-skin="aurora"] .selected-game-card h2 {
+  color: #f0fbff;
+}
+:root[data-skin="aurora"] .creator-description,
+:root[data-skin="aurora"] .popular-period,
+:root[data-skin="aurora"] .play-option-heading p,
+:root[data-skin="aurora"] .play-option .play-option-note,
+:root[data-skin="aurora"] .library-description {
+  color: #89b7ca;
+}
+
+:root[data-skin="sunset"] .portal-sidebar,
+:root[data-skin="sunset"] .match-creator,
+:root[data-skin="sunset"] .game-detail-page,
+:root[data-skin="sunset"] .match-stage,
+:root[data-skin="sunset"] .portal-shell .game-search-popup,
+:root[data-skin="sunset"] .portal-shell .match-tools {
+  background: #ffede0;
+  border-color: #e8c2ad;
+  color: #38251f;
+}
+:root[data-skin="sunset"] .popular-games-section,
+:root[data-skin="sunset"] .play-option,
+:root[data-skin="sunset"] .portal-shell .library-card,
+:root[data-skin="sunset"] .selected-game-card {
+  background: #ffe3d1;
+  border-color: #e8c2ad;
+  color: #38251f;
+}
+:root[data-skin="sunset"] .portal-shell input,
+:root[data-skin="sunset"] .portal-shell select {
+  background: #fffaf6;
+  border-color: #d7a48a;
+  color: #38251f;
+}
+:root[data-skin="sunset"] .portal-shell button.primary,
+:root[data-skin="sunset"] .portal-shell .library-toolbar button[aria-pressed="true"] {
+  background: #b94f35;
+  border-color: #b94f35;
+  color: #fffaf6;
+}
+:root[data-skin="sunset"] .portal-shell button.primary:hover:not(:disabled) { background:#963b29; border-color:#963b29; }
+:root[data-skin="sunset"] .portal-shell button:focus-visible,
+:root[data-skin="sunset"] .portal-shell summary:focus-visible,
+:root[data-skin="sunset"] .portal-shell .popular-game-card:focus-visible {
+  outline-color: #963b29;
+}
+:root[data-skin="sunset"] .creator-title,
+:root[data-skin="sunset"] .popular-games-heading h2,
+:root[data-skin="sunset"] .play-option-heading h3,
+:root[data-skin="sunset"] .selected-game-card h2,
+:root[data-skin="sunset"] .portal-shell .game-option {
+  color: #38251f;
+}
+:root[data-skin="sunset"] .creator-description,
+:root[data-skin="sunset"] .game-label,
+:root[data-skin="sunset"] .popular-period,
+:root[data-skin="sunset"] .popular-eyebrow,
+:root[data-skin="sunset"] .play-option-heading p,
+:root[data-skin="sunset"] .play-option .play-option-note,
+:root[data-skin="sunset"] .library-description,
+:root[data-skin="sunset"] .library-count,
+:root[data-skin="sunset"] .library-empty,
+:root[data-skin="sunset"] .search-note,
+:root[data-skin="sunset"] .stake-help,
+:root[data-skin="sunset"] .offline-controls,
+:root[data-skin="sunset"] .selected-game-card p {
+  color: #765446;
+}
+:root[data-skin="sunset"] .creator-toggle { color:#873e2b; }
+:root[data-skin="sunset"] .portal-shell .library-toolbar button { color:#765446; }
+:root[data-skin="sunset"] .portal-sidebar .list-item:hover,
+:root[data-skin="sunset"] .portal-sidebar .list-item[aria-selected="true"] { background:#ffd3b8; }
+:root[data-skin="sunset"] #group-turn > summary { color:#34501c; }
+:root[data-skin="sunset"] .open-group > summary { color:#145169; }
+:root[data-skin="sunset"] .portal-shell .game-option:hover,
+:root[data-skin="sunset"] .portal-shell .game-option[aria-selected="true"] {
+  background: #ffd3b8;
+  color: #713b2b;
+}
+:root[data-skin="sunset"] .portal-shell .popular-game-card {
+  background: #ffe3d1;
+  border-color: #e8c2ad;
+  color: #38251f;
+}
+:root[data-skin="sunset"] .popular-game-title { color: #38251f; }
+:root[data-skin="sunset"] .popular-game-players,
+:root[data-skin="sunset"] .popular-game-open,
+:root[data-skin="sunset"] .library-mode,
+:root[data-skin="sunset"] .library-select,
+:root[data-skin="sunset"] .back-to-games { color: #873e2b; }
+:root[data-skin="sunset"] .mode-label { color:#713b2b; background:#ffede0; border-color:#d7a48a; }
+:root[data-skin="sunset"] .portal-shell .result-win { color:#34501c; background:#e6f0d1; border-color:#9ab36a; }
+:root[data-skin="sunset"] .portal-shell .result-loss { color:#812f47; background:#f5dce4; border-color:#d59aae; }
+:root[data-skin="sunset"] .portal-shell .result-draw { color:#145169; background:#d9eff7; border-color:#8abbd0; }
+:root[data-skin="sunset"] .portal-shell .result-neutral { color:#53473e; background:#eee2d8; border-color:#cbb6a8; }
+
+.portal-skin-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+.portal-skin-picker select {
+  min-height: 36px;
+  max-width: 125px;
+  padding: 6px 9px;
+  color: var(--color-text-primary);
+  background: var(--color-bg-0);
+  border: 1px solid var(--color-border-3);
+  border-radius: var(--radius-sm);
+}
+.portal-immersive-menu { display:flex; flex-direction:column; gap:2px; margin-bottom:4px; }
+.portal-immersive-menu a {
+  display:block;
+  padding:var(--space-xs) var(--space-sm);
+  border-radius:var(--radius-sm);
+  color:var(--color-text-primary);
+  font-size:var(--font-size-md);
+  text-decoration:none;
+}
+.portal-immersive-menu a:hover { background:var(--color-bg-2); }
+.immersive-build-link { display: none; }
+:root[data-skin="immersive"] .topbar[data-app-page="portal"] nav { display: none; }
+:root[data-skin="immersive"] .portal-main { padding-top: clamp(22px, 5vh, 56px); }
+:root[data-skin="immersive"] .portal-shell .immersive-build-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 15px;
+  border: 1px solid #75629b;
+  border-radius: 999px;
+  background: #211a38;
+  color: #e3aaff;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+:root[data-skin="immersive"] .portal-sidebar,
+:root[data-skin="immersive"] .match-creator,
+:root[data-skin="immersive"] .game-detail-page,
+:root[data-skin="immersive"] .match-stage,
+:root[data-skin="immersive"] .portal-shell .game-search-popup,
+:root[data-skin="immersive"] .portal-shell .match-tools {
+  background: #19132b;
+  border-color: #3c305c;
+  color: #f6f1ff;
+}
+:root[data-skin="immersive"] .popular-games-section,
+:root[data-skin="immersive"] .play-option,
+:root[data-skin="immersive"] .portal-shell .library-card,
+:root[data-skin="immersive"] .selected-game-card {
+  background: #211a38;
+  border-color: #3c305c;
+  color: #f6f1ff;
+}
+:root[data-skin="immersive"] .portal-shell input,
+:root[data-skin="immersive"] .portal-shell select {
+  background: #100c1d;
+  border-color: #554578;
+  color: #f6f1ff;
+}
+:root[data-skin="immersive"] .portal-shell button.primary,
+:root[data-skin="immersive"] .portal-shell .library-toolbar button[aria-pressed="true"] {
+  background: #c6f432;
+  border-color: #c6f432;
+  color: #100c1d;
+}
+:root[data-skin="immersive"] body.match-focus > .topbar {
+  display: flex;
+  position: relative;
+  z-index: 5;
+  padding-top: max(6px, env(safe-area-inset-top));
+}
+:root[data-skin="immersive"] body.match-focus > .topbar h1 { display: none; }
+:root[data-skin="immersive"] body.match-focus .portal-shell {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+}
+:root[data-skin="immersive"] body.match-focus .portal-main {
+  overflow: hidden;
+  padding: 0 max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+}
+:root[data-skin="immersive"] body.match-focus .match-stage {
+  min-height: 0;
+  flex: 1;
+  padding: 8px;
+  border-radius: 0;
+}
+@media(max-width:640px) {
+  .portal-skin-picker > span { display: none; }
+  .portal-skin-picker select { max-width: 98px; padding-inline: 6px; }
+}
