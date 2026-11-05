@@ -373,6 +373,8 @@
   "ui.match.add_computer_aria": "Add computer opponent",
   "ui.match.computers_count_aria": "{count} computer opponents",
   "ui.match.paid_needs_humans": "Paid matches need human opponents. Remove the computer to continue.",
+  "ui.match.computers_single_player": "With computer opponents this match is single-player: friends can't join it. Remove the computers to play with other people.",
+  "ui.match.computers_no_join": "This match has computer opponents, so it can't be joined. A match is played either against computers or against other people.",
   "ui.match.paid_invite_human": "Invite a human player to join this token match.",
   "ui.match.remove_computer": "Remove computer",
   "ui.match.start_game": "Start game",

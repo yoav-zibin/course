@@ -373,6 +373,8 @@
   "ui.match.add_computer_aria": "Ajouter un adversaire ordinateur",
   "ui.match.computers_count_aria": "{count} adversaires ordinateur",
   "ui.match.paid_needs_humans": "Les parties payantes nécessitent des adversaires humains. Retirez l'ordinateur pour continuer.",
+  "ui.match.computers_single_player": "Avec des adversaires ordinateurs, cette partie est en solo : vos amis ne peuvent pas la rejoindre. Retirez les ordinateurs pour jouer avec d'autres personnes.",
+  "ui.match.computers_no_join": "Cette partie a des adversaires ordinateurs, elle ne peut donc pas être rejointe. Une partie se joue soit contre des ordinateurs, soit contre d'autres personnes.",
   "ui.match.paid_invite_human": "Invitez un joueur humain à rejoindre cette partie à jetons.",
   "ui.match.remove_computer": "Retirer l'ordinateur",
   "ui.match.start_game": "Démarrer la partie",

@@ -373,6 +373,8 @@
   "ui.match.add_computer_aria": "添加电脑对手",
   "ui.match.computers_count_aria": "{count} 个电脑对手",
   "ui.match.paid_needs_humans": "有赌注的对局需要真人对手。请移除电脑后继续。",
+  "ui.match.computers_single_player": "有电脑对手时，这场对局为单人模式：好友无法加入。移除电脑即可与其他玩家对战。",
+  "ui.match.computers_no_join": "这场对局有电脑对手，因此无法加入。对局只能选择与电脑对战或与其他玩家对战。",
   "ui.match.paid_invite_human": "邀请真人玩家加入这场代币对局。",
   "ui.match.remove_computer": "移除电脑",
   "ui.match.start_game": "开始游戏",

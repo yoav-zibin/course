@@ -373,6 +373,8 @@
   "ui.match.add_computer_aria": "Computergegner hinzufügen",
   "ui.match.computers_count_aria": "{count} Computergegner",
   "ui.match.paid_needs_humans": "Spiele mit Einsatz brauchen menschliche Gegner. Entferne den Computer, um fortzufahren.",
+  "ui.match.computers_single_player": "Mit Computergegnern ist diese Partie ein Einzelspieler-Spiel: Freunde können nicht beitreten. Entferne die Computer, um mit anderen zu spielen.",
+  "ui.match.computers_no_join": "Diese Partie hat Computergegner und kann daher nicht betreten werden. Eine Partie wird entweder gegen Computer oder gegen andere Personen gespielt.",
   "ui.match.paid_invite_human": "Lade einen menschlichen Spieler zu diesem Chip-Spiel ein.",
   "ui.match.remove_computer": "Computer entfernen",
   "ui.match.start_game": "Spiel starten",

@@ -373,6 +373,8 @@
   "ui.match.add_computer_aria": "Adicionar oponente computador",
   "ui.match.computers_count_aria": "{count} oponentes computador",
   "ui.match.paid_needs_humans": "Partidas com aposta precisam de oponentes humanos. Remova o computador para continuar.",
+  "ui.match.computers_single_player": "Com oponentes de computador, esta partida é para um jogador: amigos não podem entrar. Remova os computadores para jogar com outras pessoas.",
+  "ui.match.computers_no_join": "Esta partida tem oponentes de computador, por isso não é possível entrar. Uma partida é jogada contra computadores ou contra outras pessoas.",
   "ui.match.paid_invite_human": "Convide um jogador humano para esta partida com fichas.",
   "ui.match.remove_computer": "Remover computador",
   "ui.match.start_game": "Iniciar partida",

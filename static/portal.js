@@ -1257,6 +1257,9 @@ function renderMatch() {
       } else if (computers > 0) {
         actions.push(actionButton(I18n.t("ui.match.remove_computers", {}, "Remove computers for multiplayer"), call("PATCH", "", {num_computer_opponents: 0})));
       }
+      if (computers > 0 && !paidMatch) {
+        actions.push(el("p", {class:"paid-lobby-hint", textContent:I18n.t("ui.match.computers_single_player", {}, "With computer opponents this match is single-player: friends can't join it. Remove the computers to play with other people.")}));
+      }
       const readyToStart = counts.includes(match.players.length) && (!paidMatch || computers === 0) && (computers === 0 || humanCount === 1);
       actions.push(actionButton(I18n.t("ui.match.start_game", {}, "Start game"), call("POST", "/start"), {primary:true, disabled:!readyToStart}));
       secondaryActions.push(actionButton(I18n.t("ui.match.delete_match", {}, "Delete match"), call("DELETE"), {danger:true, confirm:I18n.t("ui.match.delete_confirm", {}, "Delete this match for everyone?")}));
@@ -1388,7 +1391,14 @@ function renderMatch() {
   window.PortalSpeed?.observe(match);
   updateSpeedClock();
   const speedNotice = window.PortalSpeed?.notice(match, user?.id, nameOf);
-  window.PortalMatchLayout?.update(speedNotice ? {...match, speedNotice} : match);
+  const joinNotice = user && !mySeat && !match.localMode && match.status !== "over" &&
+      match.players.some((player) => player.kind === "computer")
+    ? I18n.t("ui.match.computers_no_join", {}, "This match has computer opponents, so it can't be joined. A match is played either against computers or against other people.")
+    : null;
+  window.PortalMatchLayout?.update(
+    speedNotice || joinNotice
+      ? {...match, ...(speedNotice ? {speedNotice} : {}), ...(joinNotice ? {joinNotice} : {})}
+      : match);
 }
 
 // The 10-second alert for the player to move (sound, vibration, tab title, notification).
