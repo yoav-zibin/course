@@ -3,13 +3,13 @@ const $=id=>document.getElementById(id);
 const steps=['understanding','identity','logic','ui','tutorial','images','tests'];
 const titles=['Understand the game','Name & description','Game rules','Look & interaction','Tutorial','Images','Test examples'];
 const guidance={
- understanding:['What game do you want to make?','Describe the goal, who plays and what a player does on a turn.','For example: Two players take turns adding 1 or 2. The first to reach exactly 6 wins.','Draft game idea',''],
- identity:['Name your game and describe it in one sentence.','Use a suggested name or enter your own below.','For example: Race to 6 — take turns adding numbers to reach exactly six.','Suggest a name and description','Suggest a name and short description based on the approved game idea.'],
- logic:['Which rules should the game follow?','For a familiar game, use the usual rules. Add any house rules you want to change.','For example: Use normal rules, except the youngest player goes first.','Draft rules','Use the normal rules for this game, following the approved game idea and any agreed changes.'],
- ui:['How should the game look and feel?','Describe what players see and tap, or generate a layout from your rules.','For example: Show the total above two large move buttons.','Suggest a layout','Suggest a responsive layout and controls based on the approved rules.'],
- tutorial:['What should a new player practice?','Generate a short playable lesson from your rules, or describe a turn you want it to teach.','For example: Start one move before a win and let the learner try both choices.','Generate tutorial','Teach the goal and turn order with a short interactive exercise that demonstrates a legal move and how to win.'],
- images:['Which moments should the pictures show?','Generate a cover and game previews, or describe a scene to include.','For example: Show the first turn, a tricky move and the winning screen.','Generate images','Create a cover and start, middle and ending previews using the approved rules and layout.'],
- tests:['Which moves should we check?','Generate examples from the rules, or describe a move and the result you expect.','For example: At 5, only +1 is legal. Playing it ends the match.','Generate test examples','Create reproducible initial, intermediate and terminal examples using the approved rules.']
+ understanding:['What game do you want to make? Describe the goal, who plays, and what a player does on a turn.','','For example: Two players take turns adding 1 or 2. The first to reach exactly 6 wins.','Draft game idea',''],
+ identity:['Name your game and describe it in one sentence. You can use a suggestion or enter your own below.','','For example: Race to 6 — take turns adding numbers to reach exactly six.','Suggest a name and description','Suggest a name and short description based on the approved game idea.'],
+ logic:['Which rules should the game follow? For a familiar game, say “normal rules” and add any house rules you want changed.','','For example: Use normal rules, except the youngest player goes first.','Draft rules','Use the normal rules for this game, following the approved game idea and any agreed changes.'],
+ ui:['How should the game look and feel? Describe what players see and tap, or generate a layout from your rules.','','For example: Show the total above two large move buttons.','Suggest a layout','Suggest a responsive layout and controls based on the approved rules.'],
+ tutorial:['What should a new player practice? Generate a short playable lesson from your rules, or describe a turn you want it to teach.','','For example: Start one move before a win and let the learner try both choices.','Generate tutorial','Teach the goal and turn order with a short interactive exercise that demonstrates a legal move and how to win.'],
+ images:['Which moments should the pictures show? Describe a scene to include, or generate the set from your rules and layout.','You need 1 cover plus 3–5 preview images.','For example: Show the first turn, a tricky move and the winning screen.','Generate images','Create a cover and start, middle and ending previews using the approved rules and layout.'],
+ tests:['Which moves should we check? Describe a move and the result you expect, or generate examples from the rules.','You need 3–10 examples, covering starting, mid-game and ending positions.','For example: At 5, only +1 is legal. Playing it ends the match.','Generate test examples','Create reproducible initial, intermediate and terminal examples using the approved rules.']
 };
 const draftName=d=>d.builder_workflow?.artifacts?.identity?.value?.display_name || d.name || 'Untitled game';
 let editName=false;
@@ -80,12 +80,29 @@ async function act(action){
   try{draft=await request('GET','/game-drafts/'+draft.id);}catch{} }finally{working=false;$('busy').textContent='';render();schedule();}
 }
 function preview(image){return el('figure',{},el('img',{src:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(image.svg),alt:image.caption}),el('figcaption',{textContent:image.caption}));}
+const kindLabels={initial:'Starting position',intermediate:'Mid-game',terminal:'Ending'};
+function testCard(test){
+ const rejected=!!test.expected_error;
+ const badge=rejected?'Must be rejected':(kindLabels[test.kind]||test.kind||'Example');
+ const head=el('div',{class:'test-head'},el('h3',{textContent:test.name}),el('span',{class:'test-kind',textContent:badge}));
+ const players=(test.ctx?.players||[]).map(p=>p.display_name||p.id).join(' vs ');
+ const meta=el('dl',{class:'test-meta'});
+ const row=(label,value)=>{if(value!==undefined&&value!==null&&value!=='')meta.append(el('dt',{textContent:label}),el('dd',{textContent:String(value)}));};
+ row('Players',players);
+ row('Move number',test.ctx?.move_count);
+ if(test.ctx?.pot)row('Pot',test.ctx.pot+' tokens');
+ row('Move',test.move?JSON.stringify(test.move):'');
+ row('Expected result',rejected?('Rejected as '+test.expected_error+' — the position, turn and views stay unchanged'):(test.expected_turn?'Play continues; next to move: '+test.expected_turn.join(', '):'The game ends'));
+ if(test.expected_payouts&&Object.keys(test.expected_payouts).length)row('Expected payouts',Object.entries(test.expected_payouts).map(([id,n])=>id+': '+n).join(', '));
+ const full=el('details',{class:'test-full'},el('summary',{textContent:'Full example data (JSON)'}),el('pre',{textContent:JSON.stringify(test,null,1)}));
+ return el('article',{class:'test-card'},head,el('p',{class:'test-desc'},el('strong',{textContent:'What this checks: '}),test.description||''),meta,el('div',{class:'preview-grid'},(test.images||[]).map(preview)),full);
+}
 function artifactCard(value){
  const card=el('div',{class:'artifact-summary'});
  if(value.display_name)card.append(el('h4',{textContent:value.display_name}),el('p',{textContent:value.short_description}));
  if(value.text)card.append(el('p',{textContent:value.text,style:'white-space:pre-wrap'}));
  if(value.images)card.append(el('div',{class:'preview-grid'},value.images.map(preview)));
- if(value.cases)for(const test of value.cases)card.append(el('article',{},el('h4',{textContent:test.name}),el('p',{textContent:test.description}),el('div',{class:'preview-grid'},(test.images||[]).map(preview))));
+ if(value.cases)for(const test of value.cases)card.append(testCard(test));
  return card;
 }
 function changeReview(f,step,artifact){
@@ -106,7 +123,7 @@ function renderArtifact(f,active){
  $('correction').placeholder=questions.length?'Type your answers here…':artifact?'Describe your change…':guide[2];
  $('correction').required=!!questions.length||!!artifact||!guide[4];
  $('propose').textContent=questions.length?'Submit answers':artifact?'Request changes':guide[3];
- $('next-action').textContent=!allowed?'Approve '+titles[steps.findIndex(s=>f.artifacts[s]?.status!=='approved')]+' first.':questions.length?'Submit your answers to unlock approval.':artifact?.status==='stale'?'Refresh this step to check it against your changes.':artifact?.status==='draft'?'Review the proposal, then approve it or request changes.':'';
+ $('next-action').textContent=!allowed?'Approve '+titles[steps.findIndex(s=>f.artifacts[s]?.status!=='approved')]+' first.':questions.length?'Submit your answers to unlock approval.':artifact?.status==='stale'?'Refresh this step to check it against your changes.':artifact?.status==='draft'?'Review the proposal: use “Approve and continue” if it looks right, or describe a change in the chat and press “Request changes”.':artifact?.status==='approved'?'This step is approved. “Reopen this step” is only for changing it — later steps will need a fresh review afterwards.':'';
  $('manual-name').hidden=step!=='identity'||editName; $('manual-name').disabled=working||active||!allowed;
  $('name-form').hidden=!(step==='identity'&&allowed&&editName);
  $('name-form').querySelector('button').disabled=working||active;
@@ -124,7 +141,7 @@ function renderArtifact(f,active){
    content.append(el('p',{textContent:'Preview at the selected width; scroll inside the preview for wider screens.'}),el('div',{class:'actions'},[360,820,1180].map(width=>el('button',{textContent:width+' px',onclick:()=>{frame.style.width=width+'px';frame.style.maxWidth='none';}}))),el('div',{style:'max-width:100%;overflow:auto'},frame));
   }
   if(v.images)content.append(el('div',{class:'preview-grid'},v.images.map(preview)));
-  if(v.cases)for(const test of v.cases)content.append(el('article',{class:'test-card'},el('h3',{textContent:test.name}),el('p',{textContent:test.description}),el('div',{class:'preview-grid'},test.images.map(preview))));
+  if(v.cases)for(const test of v.cases)content.append(testCard(test));
  }
  changeReview(f,step,artifact);
  $('refresh').hidden=artifact?.status!=='stale'||!allowed; $('refresh').disabled=working||active;

@@ -1,4 +1,11 @@
-.artifact-heading{display:flex;justify-content:space-between;gap:12px;align-items:center}#artifact-status{font-size:12px;color:var(--color-text-secondary)}#artifact-content p{white-space:pre-wrap;line-height:1.65}.preview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.preview-grid figure{margin:0}.preview-grid img{width:100%;border-radius:10px;background:white}.preview-grid figcaption{font-size:13px;line-height:1.5;margin-top:8px}.test-card{padding:15px 0;border-bottom:1px solid var(--color-border-2)}#build-panel{margin-top:24px}#build-log{white-space:pre-wrap;max-height:260px;overflow:auto}button{min-height:44px}button:disabled{opacity:.45}#screenshots{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}#screenshots img{width:100%}.error{color:var(--color-error)}
+.artifact-heading{display:flex;justify-content:space-between;gap:12px;align-items:center}#artifact-status{font-size:12px;color:var(--color-text-secondary)}#artifact-content p{white-space:pre-wrap;line-height:1.65}.preview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.preview-grid figure{margin:0}.preview-grid img{width:100%;border-radius:10px;background:white}.preview-grid figcaption{font-size:13px;line-height:1.5;margin-top:8px}.test-card{border:1px solid var(--color-border-2);border-radius:var(--radius-md);background:var(--color-bg-2);padding:14px 16px;margin-block:12px}
+.test-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.test-head h3,.test-head h4{margin:0}
+.test-kind{font-size:12px;font-weight:700;border:1px solid var(--color-accent);border-radius:999px;padding:2px 9px;color:var(--color-text-primary);white-space:nowrap}
+.test-desc{margin-block:8px}
+.test-meta{display:grid;grid-template-columns:auto minmax(0,1fr);gap:3px 12px;margin-block:8px;font-size:14px}
+.test-meta dt{font-weight:600;color:var(--color-text-secondary)}.test-meta dd{margin:0;overflow-wrap:anywhere}
+.test-full summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--color-text-secondary)}
+.test-full pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto;font-size:12px}#build-panel{margin-top:24px}#build-log{white-space:pre-wrap;max-height:260px;overflow:auto}button{min-height:44px}button:disabled{opacity:.45}#screenshots{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}#screenshots img{width:100%}.error{color:var(--color-error)}
 
 .workshop{display:grid;grid-template-columns:minmax(180px,235px) minmax(0,1fr);min-height:calc(100dvh - 70px);background:var(--color-bg-0);color:var(--color-text-primary)}
 .drafts{padding:20px;border-inline-end:1px solid var(--color-border-2);background:var(--color-bg-1)}
@@ -21,3 +28,20 @@
 .chat-message{white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;border-block-start:1px solid var(--color-border-2)}.chat-message small{display:block;color:var(--color-text-secondary)}
 #conversation{max-height:45vh;overflow:auto}.studio :focus-visible{outline:2px solid var(--color-focus-ring);outline-offset:2px}
 @media(max-width:850px){.workshop{grid-template-columns:minmax(0,1fr)}.drafts{border-inline-end:0;border-block-end:1px solid var(--color-border-2);padding:10px 16px}.drafts details{margin-block:6px}.preview-grid{grid-template-columns:1fr}#budget{margin-inline-start:0}}
+
+#intro{text-align:center;padding-block:clamp(18px,5vh,44px)}
+#intro h2{margin-block-end:6px}
+#spec-panel{display:grid;grid-template-columns:minmax(0,1fr) minmax(250px,330px);gap:22px;align-items:start}
+.artifact-main,.artifact-chat{min-width:0}
+.artifact-chat{border-inline-start:1px solid var(--color-border-2);padding-inline-start:18px}
+.artifact-chat #chat-form{margin-block-start:0}
+#chat-form #propose{width:100%}
+#spec-panel .actions #approve{margin-inline-start:auto}
+.workshop button{transition:background-color .15s ease,color .15s ease,border-color .15s ease,opacity .15s ease,transform .1s ease}
+.workshop button:active{transform:scale(.98)}
+#steps button{transition:background-color .15s ease,color .15s ease,border-color .15s ease}
+@keyframes gb-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+#artifact-content>*,#artifact-changes>*,#build-panel{animation:gb-in .28s ease both}
+#workspace{animation:gb-in .25s ease both}
+@media(max-width:1000px){#spec-panel{grid-template-columns:minmax(0,1fr)}.artifact-chat{border-inline-start:0;border-block-start:1px solid var(--color-border-2);padding-inline-start:0;padding-block-start:14px}}
+@media(prefers-reduced-motion:reduce){.workshop *,#workspace{animation:none!important;transition:none!important}}

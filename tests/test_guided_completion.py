@@ -389,6 +389,37 @@ def test_incomplete_contract_and_svg_recover_without_restarting_draft(output_lim
     assert all(len(case['images'])==4 for case in artifact['cases'])
 
 
+def test_short_test_plan_is_repaired_instead_of_failing():
+    import copy
+    from game_platform.builder_jobs import propose_step
+    draft = approved_draft()
+    contract = copy.deepcopy(draft.builder_workflow['artifacts']['tests']['value'])
+    cases = contract.pop('cases')
+    originals = {case['name']: case.pop('images') for case in cases}
+    outlines = [{k: c[k] for k in ('name', 'kind', 'description')} for c in cases]
+    plan_calls = []
+    class Provider:
+        def chat(self, messages, **options):
+            instruction = messages[0]['content']
+            if instruction.startswith('Plan the requested tests'):
+                plan_calls.append(messages)
+                chosen = outlines[:2] if len(plan_calls) == 1 else outlines
+                return json.dumps(dict(contract, cases=chosen, message='Review the examples'))
+            if instruction.startswith('Write only the single'):
+                name = json.loads(messages[1]['content'])['outline']['name']
+                return json.dumps(next(c for c in cases if c['name'] == name))
+            if instruction.startswith('Illustrate only this one'):
+                name = json.loads(messages[1]['content'])['example']['name']
+                return json.dumps({'images': originals[name]})
+            return '{"broken":"'
+    result = propose_step(Provider(), draft, 'tests', 'Check these moves')
+    assert len(plan_calls) == 2
+    assert 'must contain 3–10' in plan_calls[1][-1]['content']
+    artifact = result.builder_workflow['artifacts']['tests']['value']
+    flow.validate_artifact('tests', artifact)
+    assert [c['name'] for c in artifact['cases']] == [o['name'] for o in outlines]
+
+
 @pytest.mark.parametrize('inline', [True, False])
 def test_repair_only_malformed_test_view(inline):
     import copy

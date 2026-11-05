@@ -345,19 +345,33 @@ def propose_step(client, draft, step, correction, *, feedback=False):
             else:
                 # Recover the contract without asking for another long serialized artifact.
                 plan_messages = [
-                    {'role':'system','content':'Plan the requested tests. Return JSON {message,state_schema,view_schema,move_schema,cases:[{name,kind,description}]}. Give only short case outlines; include initial, intermediate and terminal examples. No images or full states. If the correction changes approved rules, return {message,target_step,artifact} per the routing instructions. '+routing},
+                    {'role':'system','content':'Plan the requested tests. Return JSON {message,state_schema,view_schema,move_schema,cases:[{name,kind,description}]}. Give only short case outlines; the plan must contain 3–10 case outlines, including initial, intermediate and terminal examples. No images or full states. If the correction changes approved rules, return {message,target_step,artifact} per the routing instructions. '+routing},
                     {'role':'user','content':json.dumps(prompt,ensure_ascii=False)}
                 ]
-                try:
-                    plan = parse_json(client.chat(plan_messages,max_tokens=8000,temperature=1.0,reasoning_effort="low"))
-                except ModelOutputLimitError as exc:
-                    raise ValueError('Muse reached the output limit generating the compact test plan') from exc
-                except json.JSONDecodeError as plan_error:
-                    raise ValueError('Muse returned malformed JSON for the test plan before illustrations were requested') from plan_error
+                def request_plan(messages):
+                    try:
+                        return parse_json(client.chat(messages,max_tokens=8000,temperature=1.0,reasoning_effort="low"))
+                    except ModelOutputLimitError as exc:
+                        raise ValueError('Muse reached the output limit generating the compact test plan') from exc
+                    except json.JSONDecodeError as plan_error:
+                        raise ValueError('Muse returned malformed JSON for the test plan before illustrations were requested') from plan_error
+                plan = request_plan(plan_messages)
                 if 'target_step' in plan and plan['target_step'] != 'tests':
                     reply = plan
                 else:
-                    reply = expand_test_plan(client, plan, [], prompt, key, feedback)
+                    outlines = plan.get('cases')
+                    if not isinstance(outlines, list) or not 3 <= len(outlines) <= 10:
+                        # The count is a hard requirement, so repair the plan once
+                        # instead of failing a request the user phrased correctly.
+                        found = len(outlines) if isinstance(outlines, list) else 0
+                        plan = request_plan([*plan_messages, {'role':'user','content':
+                            f'Your plan had {found} case outlines; the plan must contain 3–10. Return the complete plan again: '
+                            'keep every example the user asked for as its own outline, and add or merge outlines so the total is '
+                            'between 3 and 10, covering initial, intermediate and terminal examples.'}])
+                    if 'target_step' in plan and plan['target_step'] != 'tests':
+                        reply = plan
+                    else:
+                        reply = expand_test_plan(client, plan, [], prompt, key, feedback)
     if not isinstance(reply.get('message'),str) or not isinstance(reply.get('artifact'),dict): raise ValueError('Missing artifact or message')
     target = reply.get('target_step', step)
     if feedback and reply.get('artifact') == state['artifacts'].get(target, {}).get('value'):
