@@ -35,6 +35,14 @@ STEP_PROMPTS = {
 # execution limits), so repairs are not steered by conflicting expectations.
 STEP_PROMPTS['logic'] += '\n' + PLATFORM_CONTRACT + '\n' + DRAFTING_CONTRACT
 STEP_PROMPTS['images'] += '\n' + ILLUSTRATION_ACCURACY + '\n' + COVER_FIDELITY
+# The screenshot verification measures real elements, so the specification
+# gets the same numbers the checker enforces instead of leaving the
+# generator to invent sizes the client cannot satisfy.
+STEP_PROMPTS['ui'] += ('\nPlatform constraint: the finished client is screenshot-verified at phone portrait, '
+                       'phone landscape (844x390) and desktop sizes, and every interactive element '
+                       '(button, input, select, or role=button element) must measure at least 30px in '
+                       'both dimensions at 844x390. Specify layouts, board sizing and hit areas that '
+                       'respect that floor; state larger targets as guidelines where space allows.')
 STEP_PROMPTS['tests'] += ('\n' + PLATFORM_CONTRACT + '\n' + DRAFTING_CONTRACT +
     'A case may instead be a negative example: set expected_error:"InvalidMove", include turn (the nonempty array of player IDs '
     'who may move before the move), set expected_turn to that same turn, expected_state to state, the expected views to the '
@@ -302,6 +310,121 @@ def _standalone_svg(svg):
     if isinstance(svg, str) and '<svg' in svg and 'xmlns' not in svg.split('>', 1)[0]:
         return svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"', 1)
     return svg
+
+
+# Prose proposals (logic, ui) are audited by one cheap model call before
+# the user is asked to approve them. Structural validation can only check
+# that a draft is shaped right; generated prose can be fluent, well-formed
+# and wrong — a worked example whose outcome does not follow from the
+# stated rules, a size that contradicts another section, a fact restated
+# differently than the approved step it came from. The build stage has
+# four reviews for generated code; this is the same idea one stage
+# earlier, for the text the code is built from.
+AUDITED_STEPS = ('logic', 'ui')
+
+_AUDIT_INSTRUCTION = (
+    'You audit a game specification draft before its author sees it. You do not rewrite it, '
+    'and you do not judge taste, style or whether the game is fun. Return only JSON '
+    '{"findings":[{"where","claim","expected","severity"}]}. severity is "mechanical" when '
+    'the draft contradicts a rule or fact stated in the draft itself or in the supplied '
+    'approved sources, and "decision" when only the author can settle it. Checks: '
+    '(1) Recompute every worked example from the rules as stated, step by step; flag any '
+    'whose stated outcome differs. (2) Every concrete value stated more than once — numbers, '
+    'sizes, coordinates, counts, names — must agree everywhere it appears, including the '
+    'approved sources; flag disagreements. (3) Load-bearing facts restated from the sources '
+    '(goal rows, starting positions, move names and payload shapes, geometry rules, '
+    'difficulty rules) must match the sources; flag mismatches. (4) If two passages govern '
+    'the same situation differently, flag the pair. Report each problem once: "where" names '
+    'the section, "claim" quotes the draft, "expected" states what the draft\'s own rules or '
+    'the sources require. Return {"findings":[]} when nothing is wrong.')
+
+_AUDIT_UI_CONSTRAINTS = (
+    ' The platform constraints the draft must also respect: interactive elements measure '
+    'at least 30px in both dimensions at 844x390; a size or hit area stated anywhere in '
+    'the draft must not fall below the minimums the draft itself states.')
+
+
+def _audit_proposal(client, step, artifact, sources):
+    """The audit call. Returns the findings list, or None when the audit
+    itself could not run — an unavailable audit must never become a new
+    way for a proposal to die."""
+    instruction = _AUDIT_INSTRUCTION + (_AUDIT_UI_CONSTRAINTS if step == 'ui' else '')
+    messages = [
+        {'role': 'system', 'content': instruction},
+        {'role': 'user', 'content': json.dumps({'step': step, 'artifact': artifact,
+                                                'approved_sources': sources}, ensure_ascii=False)},
+    ]
+    try:
+        reply = parse_json(client.chat(messages, max_tokens=4000, temperature=0.3, reasoning_effort='low'))
+    except (ModelApiError, ModelOutputLimitError, ValueError):
+        return None
+    findings = reply.get('findings') if isinstance(reply, dict) else None
+    if not isinstance(findings, list):
+        return None
+    return [f for f in findings if isinstance(f, dict) and isinstance(f.get('claim'), str)]
+
+
+def _apply_audit_fix(client, step, artifact, findings, sources):
+    """One bounded regeneration fixing the audit's mechanical findings.
+
+    Returns the corrected artifact when it parses and validates, else
+    None — the original proposal then goes to the user with the findings
+    attached as warnings instead of being silently swapped or lost."""
+    messages = [
+        {'role': 'system', 'content': 'Apply these audit corrections to the game specification artifact. '
+         'Return only JSON {message, artifact} with the complete corrected artifact, preserving '
+         'everything the corrections do not mention. ' + STEP_PROMPTS[step]},
+        {'role': 'user', 'content': json.dumps({'artifact': artifact, 'corrections': findings,
+                                                'approved_sources': sources}, ensure_ascii=False)},
+    ]
+    try:
+        reply = parse_json(client.chat(messages, max_tokens=12000, temperature=0.3, reasoning_effort='low'))
+        fixed = reply.get('artifact') if isinstance(reply, dict) else None
+        if not isinstance(fixed, dict):
+            return None
+        flow.validate_artifact(step, fixed)
+        return fixed
+    except (ModelApiError, ModelOutputLimitError, ValueError, InvalidRequestError):
+        return None
+
+
+def _audit_and_repair(client, step, reply, state):
+    """Audit a structurally valid prose proposal and absorb what it finds.
+
+    Mechanical findings earn one fix regeneration; decision findings and
+    anything the fix could not resolve ride the proposal message as notes
+    for the user, whose approval gate is unchanged."""
+    artifact = reply['artifact']
+    try:
+        flow.validate_artifact(step, artifact)
+    except InvalidRequestError:
+        return reply
+    values = {name: entry.get('value') for name, entry in state['artifacts'].items()
+              if isinstance(entry, dict)}
+    sources = ({'logic': values['logic']} if step == 'ui' and values.get('logic') is not None
+               else {name: values[name] for name in ('understanding', 'identity') if values.get(name) is not None})
+    findings = _audit_proposal(client, step, artifact, sources)
+    if findings is None:
+        return {**reply, 'message': reply['message'] + ' (The automatic audit was unavailable for this draft.)'}
+    mechanical = [f for f in findings if f.get('severity') == 'mechanical']
+    decisions = [f for f in findings if f.get('severity') != 'mechanical']
+    notes = []
+    if mechanical:
+        fixed = _apply_audit_fix(client, step, artifact, mechanical, sources)
+        if fixed is not None:
+            artifact = fixed
+            notes.append('An automatic audit corrected this draft: ' + '; '.join(
+                f"{f.get('where', 'draft')}: {f.get('expected', '')}" for f in mechanical) + '.')
+        else:
+            notes.append('An automatic audit found possible problems: ' + '; '.join(
+                f"{f.get('where', 'draft')}: {f.get('claim', '')}" for f in mechanical) +
+                ' — please check them before approving.')
+    if decisions:
+        notes.append('Worth a look before approving: ' + '; '.join(
+            f"{f.get('where', 'draft')}: {f.get('claim', '')}" for f in decisions))
+    if not notes:
+        return reply
+    return {**reply, 'artifact': artifact, 'message': reply['message'] + ' ' + ' '.join(notes)}
 
 
 def illustrate_test_cases(client, artifact, language, ui, save=None):
@@ -836,6 +959,8 @@ def propose_step(client, draft, step, correction, *, feedback=False):
         checkpoint = getattr(client, 'checkpoint', None)
         illustrate_test_cases(client, reply['artifact'], state['language'], state['artifacts']['ui']['value']['text'],
                               (lambda: checkpoint(key, _stamp({**reply, 'request_text':correction, 'request_mode':'feedback' if feedback else 'propose'}))) if checkpoint else None)
+    if target in AUDITED_STEPS and isinstance(reply.get('artifact'), dict):
+        reply = _audit_and_repair(client, target, reply, state)
     result = flow.propose(draft,target,reply['artifact'],reply['message'],correction)
     result.builder_workflow.pop('pending_generation', None)
     result.builder_workflow['review_step'] = target

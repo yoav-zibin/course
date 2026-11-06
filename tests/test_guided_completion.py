@@ -381,6 +381,8 @@ def test_logic_proposal_retries_once_after_output_limit():
     class FlakyProvider:
         calls = 0
         def chat(self, messages, **kwargs):
+            if messages[0]['content'].startswith('You audit a game specification'):
+                return '{"findings":[]}'
             self.calls += 1
             if self.calls == 1:
                 assert kwargs['max_tokens'] == 12000
@@ -954,6 +956,8 @@ def test_feedback_routes_to_spec_and_requires_reapproval():
     original=d.builder_workflow['artifacts']['logic']['value']
     class Model:
         def chat(self,messages,**kwargs):
+            if messages[0]['content'].startswith('You audit a game specification'):
+                return '{"findings":[]}'
             assert 'earliest artifact' in messages[0]['content']
             return json.dumps({'target_step':'logic','message':'Clarify the winning total',
                 'artifact':{**original,'text':'Reach exactly four to win.'}})
@@ -1358,3 +1362,131 @@ def test_divergent_difficulty_opening_is_canonicalized_end_to_end():
     assert by_name['Set difficulty first']['state'] == by_name['Initial move']['state'] == {'n': 0}
     assert repair_calls == []
     flow.validate_artifact('tests', artifact)
+
+
+def _audit_provider(generated, audit_reply, fix_artifact=None, calls=None):
+    """A provider for prose proposals: generation, then the audit pass."""
+    import copy
+    calls = calls if calls is not None else {'generation': 0, 'audit': 0, 'fix': 0, 'audit_payloads': []}
+    class Provider:
+        def chat(self, messages, **options):
+            instruction = messages[0]['content']
+            if instruction.startswith('You audit a game specification'):
+                calls['audit'] += 1
+                calls['audit_payloads'].append(messages)
+                if isinstance(audit_reply, Exception):
+                    raise audit_reply
+                return audit_reply
+            if instruction.startswith('Apply these audit corrections'):
+                calls['fix'] += 1
+                return json.dumps({'message': 'Fixed', 'artifact': fix_artifact})
+            if instruction.startswith('You help a person specify'):
+                calls['generation'] += 1
+                return json.dumps({'message': 'Review this draft', 'artifact': copy.deepcopy(generated)})
+            return '{"broken":"'
+    return Provider(), calls
+
+
+def test_audit_corrects_mechanical_finding_before_review():
+    # A worked example that contradicts the stated rules is the audit's
+    # home case: the finding is mechanical, so one fix regeneration runs
+    # and the corrected artifact — not the flawed one — reaches the user.
+    import copy
+    from game_platform.builder_jobs import propose_step
+    draft = approved_draft()
+    logic = copy.deepcopy(draft.builder_workflow['artifacts']['logic']['value'])
+    flawed = {**logic, 'text': 'RULES with a wrong example'}
+    fixed = {**logic, 'text': 'RULES with the example corrected'}
+    finding = {'where': 'Section 7', 'claim': 'h at (2,3) overlaps h at (2,2)',
+               'expected': 'h at (3,2) overlaps h at (2,2)', 'severity': 'mechanical'}
+    provider, calls = _audit_provider(flawed, json.dumps({'findings': [finding]}), fix_artifact=fixed)
+    result = propose_step(provider, draft, 'logic', '')
+    artifact = result.builder_workflow['artifacts']['logic']['value']
+    assert artifact['text'] == 'RULES with the example corrected'
+    assert calls == {'generation': 1, 'audit': 1, 'fix': 1, 'audit_payloads': calls['audit_payloads']}
+    message = result.builder_workflow['conversation'][-1]['text']
+    assert 'automatic audit corrected' in message and 'Section 7' in message
+
+
+def test_audit_clean_draft_passes_through_untouched():
+    import copy
+    from game_platform.builder_jobs import propose_step
+    draft = approved_draft()
+    logic = copy.deepcopy(draft.builder_workflow['artifacts']['logic']['value'])
+    generated = {**logic, 'text': 'RULES, lightly revised and clean'}
+    provider, calls = _audit_provider(generated, '{"findings":[]}')
+    result = propose_step(provider, draft, 'logic', '')
+    assert result.builder_workflow['artifacts']['logic']['value'] == generated
+    assert calls['audit'] == 1 and calls['fix'] == 0
+    assert result.builder_workflow['conversation'][-1]['text'] == 'Review this draft'
+
+
+def test_audit_unavailable_never_blocks_the_proposal():
+    import copy
+    from game_platform.builder_jobs import propose_step
+    draft = approved_draft()
+    logic = copy.deepcopy(draft.builder_workflow['artifacts']['logic']['value'])
+    generated = {**logic, 'text': 'RULES, revised while the audit is down'}
+    provider, calls = _audit_provider(generated, ModelApiError('audit service down'))
+    result = propose_step(provider, draft, 'logic', '')
+    assert result.builder_workflow['artifacts']['logic']['value'] == generated
+    assert 'audit was unavailable' in result.builder_workflow['conversation'][-1]['text']
+
+
+def test_audit_decision_findings_are_notes_not_fixes():
+    import copy
+    from game_platform.builder_jobs import propose_step
+    draft = approved_draft()
+    logic = copy.deepcopy(draft.builder_workflow['artifacts']['logic']['value'])
+    finding = {'where': 'Section 5', 'claim': 'the default difficulty is ambiguous',
+               'expected': 'the author decides', 'severity': 'decision'}
+    generated = {**logic, 'text': 'RULES with an ambiguous default'}
+    provider, calls = _audit_provider(generated, json.dumps({'findings': [finding]}))
+    result = propose_step(provider, draft, 'logic', '')
+    assert result.builder_workflow['artifacts']['logic']['value'] == generated
+    assert calls['fix'] == 0
+    message = result.builder_workflow['conversation'][-1]['text']
+    assert 'Worth a look before approving' in message and 'Section 5' in message
+
+
+def test_audit_failed_fix_keeps_original_and_warns():
+    import copy
+    from game_platform.builder_jobs import propose_step
+    draft = approved_draft()
+    logic = copy.deepcopy(draft.builder_workflow['artifacts']['logic']['value'])
+    finding = {'where': 'Section 7', 'claim': 'wrong example', 'expected': 'right example',
+               'severity': 'mechanical'}
+    generated = {**logic, 'text': 'RULES with a wrong example'}
+    provider, calls = _audit_provider(generated, json.dumps({'findings': [finding]}), fix_artifact={})
+    result = propose_step(provider, draft, 'logic', '')
+    assert result.builder_workflow['artifacts']['logic']['value'] == generated
+    assert calls['fix'] == 1
+    assert 'found possible problems' in result.builder_workflow['conversation'][-1]['text']
+
+
+def test_ui_audit_sees_logic_source_and_platform_constraints():
+    # The ui audit cross-checks against the approved rules and carries the
+    # platform's client constraints; the ui generation prompt states the
+    # 30px floor too, so the generator hears the number the checker uses.
+    import copy
+    from game_platform.builder_jobs import propose_step
+    draft = approved_draft()
+    logic = copy.deepcopy(draft.builder_workflow['artifacts']['logic']['value'])
+    generation_instructions = []
+    class Provider:
+        def chat(self, messages, **options):
+            instruction = messages[0]['content']
+            if instruction.startswith('You audit a game specification'):
+                Provider.audit_messages = messages
+                return '{"findings":[]}'
+            if instruction.startswith('You help a person specify'):
+                generation_instructions.append(instruction)
+                return json.dumps({'message': 'Review the layout', 'artifact': {'text': 'UI SPEC'}})
+            return '{"broken":"'
+    result = propose_step(Provider(), draft, 'ui', '')
+    assert result.builder_workflow['artifacts']['ui']['value'] == {'text': 'UI SPEC'}
+    audit_system, audit_user = Provider.audit_messages
+    assert '30px' in audit_system['content'] and '844x390' in audit_system['content']
+    payload = json.loads(audit_user['content'])
+    assert payload['approved_sources']['logic'] == logic
+    assert '30px' in generation_instructions[0] and '844x390' in generation_instructions[0]
