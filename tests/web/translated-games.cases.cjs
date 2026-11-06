@@ -283,5 +283,51 @@ const CASES = {
       ],
     };
   })(),
+
+  'audit-batch5/chess.html': (() => {
+    const bd = [-4, -2, -3, -5, -6, -3, -2, -4, ...Array(8).fill(-1), ...Array(32).fill(0), ...Array(8).fill(1), 4, 2, 3, 5, 6, 3, 2, 4];
+    const view = { bd, toMove: 'w', castling: { K: true, Q: true, k: true, q: true }, ep: null, half: 0, full: 1, winner: null, reason: null, history: ['e4', 'e5', 'Nf3'], lastMove: { fr: 6, fc: 4, tr: 4, tc: 4 } };
+    return {
+      messages: [
+        { ...base, view },
+        { ...base, my_player_index: 1, acting_for_player_index: 1, view: { ...view, toMove: 'b' } },
+        { ...base, players: [{ name: 'Ann' }, { name: 'Bob', kind: 'computer' }], my_player_index: 0, acting_for_player_index: 1, view: { ...view, toMove: 'b' } },
+        { ...base, acting_for_player_index: null, view },
+        { ...base, status: 'over', view: { ...view, winner: 1, reason: 'R1' } },
+        { ...base, status: 'over', view: { ...view, winner: -1, reason: 'R1' } },
+        { ...base, status: 'over', view: { ...view, winner: null } },
+      ],
+    };
+  })(),
+  'audit-batch5/spades.html': (() => {
+    const players = [{ name: 'Ann' }, { name: 'Bob' }, { name: 'Dee' }, { name: 'Eve' }];
+    const view = { tricksWon: [1, 2, 0, 3], aiMode: 'smart', trick: [{ seat: 1, card: '10S' }, { seat: 2, card: '3H' }], pendingWin: null, lastWin: 3, over: false, hand: ['10S', '3H', '14D'], counts: [3, 4, 5, 6] };
+    return {
+      messages: [
+        { ...base, players, view },
+        { ...base, players, acting_for_player_index: 2, view: { ...view, aiMode: 'random', trick: [] } },
+        { ...base, players, view: { ...view, pendingWin: 1 } },
+        { ...base, players, my_player_index: null, acting_for_player_index: null, view: { ...view, lastWin: null } },
+        { ...base, players, status: 'over', view: { ...view, over: true, tricksWon: [3, 9, 0, 1] } },
+        { ...base, players, status: 'over', view: { ...view, over: true, tricksWon: [6, 6, 0, 1] } },
+      ],
+    };
+  })(),
+  'audit-batch5/guess-who.html': (() => {
+    const view = { hist: [{ by: 0, q: 0, ans: true }, { by: 1, q: 3, ans: false }, { by: 0, guess: 3, correct: false }, { by: 1, guess: 4, correct: true }], mySecret: 2, oppSecret: 5, winner: null };
+    return {
+      // The 24 characters' first names are names, like the players' (not translated).
+      allowed: ['Ava', 'Ben', 'Cleo', 'Dan', 'Eli', 'Fay', 'Gus', 'Hana', 'Ivan', 'Jade', 'Kai', 'Lena', 'Max', 'Nora', 'Omar', 'Pia', 'Quinn', 'Rosa', 'Sam', 'Tara', 'Umar', 'Vera', 'Will', 'Yuki'],
+      messages: [
+        { ...base, view: { ...view, hist: [] } },
+        { ...base, view },
+        { ...base, my_player_index: null, acting_for_player_index: null, view },
+        { ...base, acting_for_player_index: null, view },
+        { ...base, status: 'over', view: { ...view, winner: 0, reveal: [2, 5] } },
+        { ...base, status: 'over', view: { ...view, winner: 1 } },
+        { ...base, status: 'over', view: { ...view, winner: null, oppSecret: undefined } },
+      ],
+    };
+  })(),
 };
 module.exports = { CASES, players2, base, grid };
