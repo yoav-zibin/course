@@ -127,8 +127,8 @@ def probe_move_agreement(code, contract, *, samples=24):
     played-out position matters: preconditions that only bite later —
     a setup move offered mid-game, a resource-gated move offered with
     none left — are invisible from the early approved states. Sampling
-    also calls computerMove at every difficulty the state can carry
-    (walks never change difficulty, so the easy/hard branches are
+    also calls computerMove at every difficulty the game's state schema
+    admits (walks never change difficulty, so those branches are
     otherwise exercised only by review), calls each generator twice
     with one seed to prove seeded determinism, and times generator
     calls at the platform's own 100 ms limit. Returns failure strings;
@@ -137,6 +137,17 @@ def probe_move_agreement(code, contract, *, samples=24):
     if not logic.has('randomMove') and not logic.has('computerMove'):
         return []
     failures = []
+    # The difficulty branches worth sweeping are the ones the game's own
+    # state schema admits. Inventing values the schema forbids — a game
+    # with only easy/hard has no 'medium' — makes the probe manufacture
+    # invalid states and fail sound code on every attempt. Without a
+    # declared enum, fall back to the platform's usual levels.
+    difficulty_field = ((contract.get('state_schema') or {}).get('properties') or {}).get('difficulty')
+    declared = difficulty_field.get('enum') if isinstance(difficulty_field, dict) else None
+    if isinstance(declared, list) and declared and all(isinstance(level, str) for level in declared):
+        difficulty_levels = tuple(declared)
+    else:
+        difficulty_levels = ('easy', 'medium', 'hard')
 
     def accepted(state, mover, move, ctx, seed):
         try:
@@ -179,15 +190,19 @@ def probe_move_agreement(code, contract, *, samples=24):
             variants = [(state, label)]
             if isinstance(state, dict) and 'difficulty' in state:
                 variants += [({**state, 'difficulty': level}, f'{label} (difficulty {level})')
-                             for level in ('easy', 'medium', 'hard')
+                             for level in difficulty_levels
                              if level != state.get('difficulty')]
-            for variant, variant_label in variants:
+            for variant_index, (variant, variant_label) in enumerate(variants):
                 try:
                     move = logic.call('computerMove', variant, mover, ctx=ctx, seed=7500,
                                       time_limit_seconds=0.1)
                     again = logic.call('computerMove', variant, mover, ctx=ctx, seed=7500,
                                        time_limit_seconds=0.1)
                 except Exception as exc:
+                    # A synthetic variant the game's own schema rejects says
+                    # nothing about the game — the probe invented that state.
+                    if variant_index and 'state_schema' in str(exc):
+                        continue
                     failures.append(f'{variant_label}: computerMove raised instead of returning a legal move: {exc}')
                     continue
                 if move != again:

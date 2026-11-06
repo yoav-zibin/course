@@ -316,3 +316,36 @@ NONDETERMINISTIC_RANDOM = 'let probeCounter = 0;\n' + REFERENCE.replace(
 def test_move_agreement_catches_unseeded_randomness():
     failures = probe_move_agreement(NONDETERMINISTIC_RANDOM, AGREEMENT_CONTRACT)
     assert any('randomMove is not deterministic' in failure for failure in failures), failures
+
+
+# A game whose schema admits only easy/hard difficulty. The sweep must
+# use the schema's levels: inventing 'medium' manufactures a state the
+# game's own schema rejects, which failed sound code on every attempt
+# of a real build (Cat vs Dog Tic Tac Toe, 2026-11-06).
+TWO_LEVEL_CONTRACT = {
+    'state_schema': {'type': 'object',
+                     'properties': {'difficulty': {'enum': ['easy', 'hard']}}},
+    'view_schema': {'type': 'object'},
+    'move_schema': {'type': 'object'},
+    'cases': [{
+        **AGREEMENT_CONTRACT['cases'][0],
+        'state': {**AGREEMENT_CONTRACT['cases'][0]['state'], 'difficulty': 'hard'},
+    }],
+}
+
+EASY_DIVERGENT = REFERENCE.replace(
+    "computerMove(state, playerId, ctx) { return {type: 'pass'}; }",
+    "computerMove(state, playerId, ctx) { return state.difficulty === 'easy' ? {type: 'cheat'} : {type: 'pass'}; }",
+).replace(
+    "const s = {...state, moves: state.moves + 1, left: [...state.left]};",
+    "if (move.type === 'cheat') throw new Error('InvalidMove: cheat');\n"
+    "    const s = {...state, moves: state.moves + 1, left: [...state.left]};",
+)
+
+
+def test_move_agreement_sweeps_only_schema_difficulty_levels():
+    assert probe_move_agreement(REFERENCE, TWO_LEVEL_CONTRACT) == []
+    failures = probe_move_agreement(EASY_DIVERGENT, TWO_LEVEL_CONTRACT)
+    assert any('difficulty easy' in failure and 'computerMove returned a move applyMove rejects' in failure
+               for failure in failures), failures
+    assert not any('state_schema' in failure for failure in failures), failures
