@@ -178,3 +178,26 @@ def test_already_desired_code_is_unchanged_even_after_later_version(patch_case):
         store.add_game_version(replace(current, version=version))
     assert migrations.apply_audit_batch1(platform)[0]["status"] == "unchanged"
     assert store.get_game(original.id) == current
+
+
+def test_reviewed_schema_backfills_only_new_version_when_original_lacks_one(patch_case):
+    platform, store, original, _, _, directory, entry = patch_case
+    legacy = replace(original, game_schemas=None)
+    store.put_game_version(legacy)
+    reviewed = original.game_schemas
+    (directory / "reviewed.schema.json").write_text(json.dumps(reviewed))
+    entry["schemas"] = "reviewed.schema.json"
+    (directory / "manifest.json").write_text(json.dumps([entry]))
+    result = migrations.apply_audit_batch1(platform)
+    assert result[0]["status"] == "updated"
+    assert platform.get_game(original.id).game_schemas == reviewed
+    assert store.get_game_version(original.id, original.version) == legacy
+
+
+def test_reviewed_schema_does_not_override_existing_author_schema(patch_case):
+    platform, _, original, _, _, directory, entry = patch_case
+    (directory / "reviewed.schema.json").write_text("not read when schema exists")
+    entry["schemas"] = "reviewed.schema.json"
+    (directory / "manifest.json").write_text(json.dumps([entry]))
+    assert migrations.apply_audit_batch1(platform)[0]["status"] == "updated"
+    assert platform.get_game(original.id).game_schemas == original.game_schemas
