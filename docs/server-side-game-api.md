@@ -234,6 +234,18 @@ supports the configured JSON-file or Firestore store. Back up the database
 before running it; schemas are versioned with the game and should describe
 that version's actual inputs and outputs, not merely allow all JSON values.
 
+To gather exact code and rules for affected versions without exporting user
+records, run `export_game_schema_inventory.py` with the production config and
+the server's read-only Firestore credentials. By default, it finds every
+server-side version missing schemas and writes only each version's name, rules,
+server code, and existing schemas:
+
+```powershell
+python export_game_schema_inventory.py --config C:\path\to\config.json --output C:\path\to\game-schema-inventory.json
+```
+
+Use the optional `--refs` text file only when exporting a specific subset.
+
 ## Computer opponents on the server (Phase 3)
 
 After every change (start, a move, a player joining or leaving), while
