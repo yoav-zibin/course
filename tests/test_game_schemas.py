@@ -22,6 +22,32 @@ from game_platform.service import GamePlatform
 from game_platform.store import InMemoryStore
 from game_platform.tests.helpers import Api
 
+
+def test_schema_checks_are_reused_by_content_without_masking_changes(monkeypatch):
+    from jsonschema import Draft202012Validator, SchemaError
+    from game_platform.game_schemas import _check_schema_once, compile_game_schemas
+
+    _check_schema_once.cache_clear()
+    original = Draft202012Validator.check_schema.__func__
+    checked = []
+
+    def check(cls, schema, *args, **kwargs):
+        checked.append(schema)
+        return original(cls, schema, *args, **kwargs)
+
+    monkeypatch.setattr(Draft202012Validator, "check_schema", classmethod(check))
+    schema = {"state": {"type": "object"}, "move": True, "view": True}
+    first = compile_game_schemas(schema)
+    compile_game_schemas({"view": True, "move": True, "state": {"type": "object"}})
+    assert len(checked) == 2
+    assert first["state"].is_valid({}) and not first["state"].is_valid([])
+    schema["state"]["type"] = "not-a-json-schema-type"
+    for _ in range(2):
+        with pytest.raises(SchemaError):
+            compile_game_schemas(schema)
+    assert len(checked) == 4
+    _check_schema_once.cache_clear()
+
 SCHEMAS = {
     "state": {
         "type": "object",

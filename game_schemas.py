@@ -1,11 +1,19 @@
 """JSON Schema helpers for the v2 server-side game contract."""
 
 from collections.abc import Mapping
+from functools import lru_cache
+import json
 from typing import Any
 
 from jsonschema import Draft202012Validator, ValidationError
 
 SCHEMA_KEYS = frozenset({"state", "move", "view"})
+
+
+@lru_cache(maxsize=512)
+def _check_schema_once(encoded_schema: str) -> None:
+    """Validate unchanged schema content once, never cache failures."""
+    Draft202012Validator.check_schema(json.loads(encoded_schema))
 
 
 def compile_game_schemas(game_schemas: Mapping[str, Any]) -> dict[str, Draft202012Validator]:
@@ -21,7 +29,7 @@ def compile_game_schemas(game_schemas: Mapping[str, Any]) -> dict[str, Draft2020
 
     validators: dict[str, Draft202012Validator] = {}
     for key, schema in game_schemas.items():
-        Draft202012Validator.check_schema(schema)
+        _check_schema_once(json.dumps(schema, sort_keys=True, separators=(",", ":"), allow_nan=False))
         validators[key] = Draft202012Validator(schema)
     return validators
 
