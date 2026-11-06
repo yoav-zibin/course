@@ -477,3 +477,18 @@ test('a failing redraw does not stop the others from being asked, and a failing 
   run('redrawAfterLanguageChange()');await new Promise(resolve=>setImmediate(resolve));
   assert.deepEqual(Array.from(run('calls')),['menu','warned']);
 });
+test('the match lists are redrawn when only the language changed',()=>{
+  const {run,node}=setup();
+  const list=node('list-test');
+  let drawn=0;
+  list.replaceChildren=function(...children){drawn++;this.children=children;};
+  list.dataset={};
+  run('globalThis.matches=[{id:"m",game_id:"game",game_version:2,status:"ongoing",move_count:3,players:[{kind:"human",user_id:"owner",player_index:0}],turn_of_player_indices:[0]}]');
+  try{
+    run('I18n.revision=()=>1;renderMatchList(globalThis.__list,matches)'.replace('globalThis.__list','document.getElementById("list-test")'));
+    run('renderMatchList(document.getElementById("list-test"),matches)');
+    assert.equal(drawn,1); // nothing changed: not redrawn
+    run('I18n.revision=()=>2;renderMatchList(document.getElementById("list-test"),matches)');
+    assert.equal(drawn,2); // the language (its revision) changed: redrawn
+  }finally{run('I18n.revision=()=>0');}
+});
