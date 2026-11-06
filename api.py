@@ -89,6 +89,7 @@ from game_platform.schemas import (
     MatchUpdate,
     MergeRequest,
     MoveCreate,
+    PayoutAgreement,
     MoveOut,
     PhoneStart,
     PushConfigOut,
@@ -1077,6 +1078,19 @@ def make_move(
         expected_move_count=body.expected_move_count,
         payout_player_indices=body.payout_player_indices,
         move=body.move,
+    )
+    return _match_out(platform, match, caller_id=caller_id)
+
+
+@router.post("/matches/{match_id}/payouts")
+def agree_to_payouts(
+    platform: Platform, caller_id: CallerId, match_id: str, body: PayoutAgreement
+) -> MatchOut:
+    """Agree to (or dispute) the pot split a v1 paid match's final move proposed.
+    Tokens move only once every human seat agrees; one dispute refunds every
+    stake, as does no agreement by the match's payout_deadline."""
+    match = platform.agree_to_payouts(
+        caller_id=caller_id, match_id=match_id, agree=body.agree
     )
     return _match_out(platform, match, caller_id=caller_id)
 

@@ -817,6 +817,15 @@ class MatchStart(_Request):
     initial_state: JsonValue = None
 
 
+class PayoutAgreement(_Request):
+    """A human's answer to the pot split a v1 paid match's final move proposed."""
+
+    model_config = _example({"agree": True})
+
+    # true accepts the proposed split; false disputes it, which refunds every stake.
+    agree: bool
+
+
 class MoveCreate(_Request):
     model_config = _example(
         {
@@ -899,6 +908,15 @@ class MatchOut(BaseModel):
     pending_leave_player_id: str | None = None
     pending_leave_payout: int | None = None
     pending_leave_ends_match: bool | None = None
+    # v1 paid matches: the pot split the final move proposed, which pays out only
+    # once every human seat agrees (POST /matches/{id}/payouts). Until then
+    # [token_payouts] is None. A dispute, or no agreement by [payout_deadline],
+    # refunds every stake. [payout_outcome] is "agreed", "disputed" or "expired"
+    # once settled, None while waiting.
+    proposed_payouts: dict[int, int] | None = None
+    payout_agreed_player_indices: list[int] = []
+    payout_deadline: dt.datetime | None = None
+    payout_outcome: str | None = None
     rematch_match_id: str | None
     created_at: dt.datetime
     updated_at: dt.datetime
@@ -960,6 +978,10 @@ class MatchOut(BaseModel):
             ),
             token_pot=match.token_pot,
             token_payouts=match.token_payouts,
+            proposed_payouts=match.proposed_payouts,
+            payout_agreed_player_indices=sorted(match.payout_agreed_indices),
+            payout_deadline=match.payout_deadline,
+            payout_outcome=match.payout_outcome,
             rematch_match_id=match.rematch_match_id,
             created_at=match.created_at,
             updated_at=match.updated_at,

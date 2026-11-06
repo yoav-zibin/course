@@ -89,7 +89,7 @@ def test_seeded_merge_chains_flatten_and_preserve_ownership(seed: int) -> None:
     survivor = users[0]
     replaced = []
     for target in users[1:]:
-        api.ok("POST", f"/users/{survivor}/merge", as_user=survivor, json={"into_user_id": target})
+        api.ok("POST", f"/users/{survivor}/merge", as_user=survivor, json={"into_user_id": target, "into_password": api.passwords_by_user_id[target]})
         replaced.append(survivor)
         survivor = target
         assert_store_valid(store, f"merge seed={seed}")

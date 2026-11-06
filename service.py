@@ -48,6 +48,7 @@ from game_platform.models import (
     Feedback,
     MatchStatus,
     Move,
+    PayoutOutcome,
     SeatTimeout,
     Seat,
     Translation,
@@ -244,6 +245,9 @@ def _new_verification_code() -> str:
 # Speed matches: the allowed seconds per move (1, 3 or 10 minutes). None is a regular
 # match with no clock. Kept as a list so more choices can be added later.
 SPEED_TURN_SECONDS: Final = (60, 180, 600)
+# How long the other humans in a v1 paid match have to agree to the pot split the
+# final move proposed. Without every agreement by then, every stake is refunded.
+PAYOUT_AGREEMENT_SECONDS: Final = 3600
 
 # playerLeft calls get a longer time budget than other game functions:
 # a playerLeft may price its payout with ctx.estimateWinChance, whose
@@ -4141,11 +4145,14 @@ class GamePlatform:
                         raise InvalidRequestError("payouts must total the token pot")
                 elif payout_player_indices is not None and any(payout_player_indices.values()):
                     raise InvalidRequestError("no tokens available for payout")
-            if next_turn_player_indices is None and match.token_pot:
-                for index, amount in payout_player_indices.items():
-                    uid = match.seats[index].user_id
-                    user = self._store.get_user(uid)
-                    self._store.put_user(replace(user, token_balance=user.token_balance + amount))
+            # A v1 client's claimed result can't be checked (the server runs no
+            # game code), so a paid final move only proposes the split: no tokens
+            # move until every other human agrees (agree_to_payouts).
+            proposal = (
+                dict(payout_player_indices)
+                if next_turn_player_indices is None and match.token_pot
+                else None
+            )
             now = self._clock()
             move = Move(
                 move_number=len(match.moves) + 1,
@@ -4167,12 +4174,26 @@ class GamePlatform:
                     end_reason=None
                     if next_turn_player_indices is not None
                     else "finished",
-                    token_payouts=payout_player_indices if next_turn_player_indices is None else None,
+                    token_payouts=payout_player_indices
+                    if next_turn_player_indices is None and proposal is None
+                    else None,
+                    proposed_payouts=proposal,
+                    payout_agreed_indices=frozenset({seat.player_index})
+                    if proposal is not None
+                    else frozenset(),
+                    payout_deadline=now
+                    + dt.timedelta(seconds=PAYOUT_AGREEMENT_SECONDS)
+                    if proposal is not None
+                    else None,
+                    payout_outcome=None,
                     # Every accepted move restarts the clock, also when the same
                     # player moves again (a raise and its answer, chained jumps).
                     turn_started_at=now if match.turn_seconds else None,
                 )
             )
+            if proposal is not None and self._payout_agreed_by_all(saved):
+                # Only one human seat: nobody else has to agree.
+                saved = self._settle_proposed_payouts(saved, outcome="agreed")
             if saved.status == "over":
                 self._notify_match_event(
                     "notify.match_over",
@@ -4203,6 +4224,65 @@ class GamePlatform:
                     tag_suffix="turn",
                 )
             return saved
+
+    def agree_to_payouts(
+        self, *, caller_id: str, match_id: str, agree: bool
+    ) -> Match:
+        """A human in a finished v1 paid match answers the pot split its final
+        move proposed. Agreeing records the caller's seat, and once every human
+        seat has agreed the pot is paid as proposed. Disputing refunds every
+        stake at once. Either answer is final for that seat."""
+        with self._lock:
+            # Reading the match applies an expired agreement deadline first.
+            match = self._get_match(match_id)
+            seat = match.seat_of(caller_id)
+            if seat is None or seat.kind != "human":
+                raise ForbiddenError("you are not a player in this match")
+            if not match.payout_pending:
+                raise ConflictError("this match has no payouts waiting for agreement")
+            if seat.player_index in match.payout_agreed_indices:
+                raise ConflictError("you already agreed to these payouts")
+            if not agree:
+                return self._settle_proposed_payouts(match, outcome="disputed")
+            saved = self._save(
+                replace(
+                    match,
+                    payout_agreed_indices=match.payout_agreed_indices
+                    | {seat.player_index},
+                )
+            )
+            if self._payout_agreed_by_all(saved):
+                saved = self._settle_proposed_payouts(saved, outcome="agreed")
+            return saved
+
+    @staticmethod
+    def _payout_human_indices(match: Match) -> frozenset[int]:
+        """The seats that must agree to a proposed split: every human seat, the
+        same seats the proposal has to pay (see make_move)."""
+        return frozenset(s.player_index for s in match.seats if s.kind == "human")
+
+    def _payout_agreed_by_all(self, match: Match) -> bool:
+        return self._payout_human_indices(match) <= match.payout_agreed_indices
+
+    def _settle_proposed_payouts(self, match: Match, *, outcome: PayoutOutcome) -> Match:
+        """Ends a pending v1 pot split: "agreed" pays it as proposed; "disputed"
+        or "expired" refunds every human's stake (an equal split of the pot).
+        Clears the pending state, so it can never pay twice. The caller holds
+        the lock."""
+        assert match.proposed_payouts is not None and match.payout_outcome is None
+        if outcome == "agreed":
+            payouts = dict(match.proposed_payouts)
+            for index, amount in payouts.items():
+                self._credit_tokens(match.seats[index].user_id or "", amount)
+        else:
+            payouts = self._settle_pot(
+                match.token_pot,
+                {},
+                recipients=[s for s in match.seats if s.kind == "human"],
+            )
+        return self._save(
+            replace(match, token_payouts=payouts, payout_outcome=outcome)
+        )
 
     def _make_move_v2(
         self,
@@ -5250,6 +5330,13 @@ class GamePlatform:
                 match, status="over", turn_of_player_indices=None,
                 end_reason="solo_computers_only", token_pot=0,
                 token_payouts=payouts or match.token_payouts, pending_leave=None))
+        if (
+            match.payout_pending
+            and match.payout_deadline is not None
+            and self._clock() >= match.payout_deadline
+        ):
+            # Not everyone agreed to the v1 pot split in time: refund the stakes.
+            return self._settle_proposed_payouts(match, outcome="expired")
         deadline = match.turn_deadline
         if deadline is None:
             return match

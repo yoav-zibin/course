@@ -294,6 +294,7 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `POST /matches/{id}/start` | yes | Start `{first_turn_player_indices, initial_state}`, both optional (owner only) |
 | `POST /matches/{id}/leave` | yes | Leave the match |
 | `POST /matches/{id}/moves` | yes | Make a move `{new_state, next_turn_player_indices, expected_move_count?}` |
+| `POST /matches/{id}/payouts` | yes | Agree to (`{agree: true}`) or dispute (`{agree: false}`) a v1 paid match's proposed pot split |
 | `GET /matches/{id}/moves` |  | Full move history |
 | `DELETE /matches/{id}` | yes | Owner: delete the match. Other players: hide an ended match from their list |
 | `GET /users/me/saved-games` | yes | The caller's saved games, most recently saved first |
@@ -338,6 +339,15 @@ Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct
   (`end_reason: "finished"`). When a computer seat has the turn, any human player in
   the match computes and submits the computer's move.
   `expected_move_count` optionally guards against two clients submitting the same move.
+- **Token stakes in games without server code (v1).** The server can't check a v1
+  client's claimed result, so the final move of a paid match only *proposes* how the pot
+  is split (`payout_player_indices`, which must pay every human seat and total the pot).
+  No tokens move yet: the match is over with `proposed_payouts` set and `token_payouts`
+  null. Every other human answers with `POST /matches/{id}/payouts {agree}` (the portal
+  shows Agree / Dispute buttons). Once every human seat has agreed, the pot is paid as
+  proposed (`payout_outcome: "agreed"`). One dispute (`"disputed"`), or no full agreement
+  within an hour (`payout_deadline`, `"expired"`), refunds every stake instead. v2 games
+  are unaffected: their server code computes the payouts.
 - Leaving a waiting match frees the seat (the owner must delete the match instead). Leaving
   an ongoing match replaces the leaver with a computer (which keeps the turn) if the game
   `allows_leave_mid_match`, and otherwise ends it (`end_reason: "player_left"`). The match

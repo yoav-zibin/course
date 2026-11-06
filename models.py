@@ -17,6 +17,8 @@ MatchStatus = Literal["waiting_for_players", "ongoing", "over"]
 SeatKind = Literal["human", "computer"]
 # "timed_out": a speed match ended because a player ran out of time to move.
 EndReason = Literal["finished", "player_left", "timed_out", "solo_computers_only"]
+# How a v1 match's proposed pot split ended (see Match.proposed_payouts).
+PayoutOutcome = Literal["agreed", "disputed", "expired"]
 
 
 LinkedAccountKind = Literal["google", "phone", "email"]
@@ -358,6 +360,23 @@ class Match:
     # Cleared by any move; applied by POST /matches/{id}/playerLeft.
     # The state inside is server-only and is never sent to clients.
     pending_leave: JsonValue = None
+    # v1 paid matches (no server code): the server can't check a client's claimed
+    # result, so the final move only *proposes* how the pot is split. Tokens move
+    # once every human seat agrees; a dispute, or no agreement by
+    # [payout_deadline], refunds every stake instead. [proposed_payouts] is kept
+    # after settling, as a record of what was proposed.
+    proposed_payouts: dict[int, int] | None = None
+    # The human seats that agreed so far (the proposer agrees by proposing).
+    payout_agreed_indices: frozenset[int] = frozenset()
+    payout_deadline: dt.datetime | None = None
+    # How a proposal ended: "agreed" (paid as proposed), "disputed" or "expired"
+    # (stakes refunded). None while it waits, or when nothing was proposed.
+    payout_outcome: PayoutOutcome | None = None
+
+    @property
+    def payout_pending(self) -> bool:
+        """Whether a v1 pot is waiting for every human to agree to its split."""
+        return self.proposed_payouts is not None and self.payout_outcome is None
 
     @property
     def turn_deadline(self) -> dt.datetime | None:
