@@ -1166,7 +1166,7 @@ function updateMatchSetup() {
     state.detailCreatorInitialized = false;
   }
   const game = state.games.find((game) => game.id === (detailPage ? state.detailGameId : $("new-game").value));
-  updateGamePopularity(game);
+  updateGamePopularity(detailPage && !state.selectedId ? game : null);
   const browsingGames = detailPage && $("match-creator").open;
   document.body?.classList.toggle("game-detail-mode", detailPage);
   $("game-catalog").hidden = detailPage && !browsingGames;
