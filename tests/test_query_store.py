@@ -767,7 +767,7 @@ def test_online_merge_preserves_signin_balances_library_and_logic_ids_without_gl
         patch.object(store, "list_users", side_effect=AssertionError("global users")),
     ):
         merged = api.ok(
-            "POST", f"/users/{alice}/merge", json={"into_user_id": bob}, as_user=alice
+            "POST", f"/users/{alice}/merge", json={"into_user_id": bob, "into_password": api.passwords_by_user_id[bob]}, as_user=alice
         )
     assert merged["id"] == bob
     assert store.get_user(bob).token_balance == 28
@@ -789,7 +789,7 @@ def test_online_merge_waits_for_shared_live_match_before_any_changes(store):
     game = api.new_game(owner=alice)
     api.new_match(owner=alice, game_id=game, joiners=[bob], start=True)
     response = api.request(
-        "POST", f"/users/{alice}/merge", json={"into_user_id": bob}, as_user=alice
+        "POST", f"/users/{alice}/merge", json={"into_user_id": bob, "into_password": api.passwords_by_user_id[bob]}, as_user=alice
     )
     assert response.status_code == 409
     assert "wait until shared matches end" in response.json()["detail"]

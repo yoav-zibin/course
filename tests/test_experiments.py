@@ -101,7 +101,7 @@ def test_skin_assignment_merge_keeps_survivor_then_inherits_source() -> None:
         "POST",
         f"/users/{source}/merge",
         as_user=source,
-        json={"into_user_id": target},
+        json={"into_user_id": target, "into_password": api.passwords_by_user_id[target]},
     )
     assert (
         api.ok("GET", "/users/me/experiments/skin", as_user=source)["key"]
@@ -118,7 +118,7 @@ def test_skin_assignment_merge_keeps_survivor_then_inherits_source() -> None:
         "POST",
         f"/users/{inherited_source}/merge",
         as_user=inherited_source,
-        json={"into_user_id": inherited_target},
+        json={"into_user_id": inherited_target, "into_password": api.passwords_by_user_id[inherited_target]},
     )
     assert (
         api.ok("GET", "/users/me/experiments/skin", as_user=inherited_source)["key"]

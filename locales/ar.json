@@ -6,6 +6,7 @@
   "error.users_only_change_themselves": "لا يمكن للمستخدمين تعديل غير حساباتهم",
   "error.merge_into_self": "لا يمكن دمج مستخدم مع نفسه",
   "error.merge_wrong_user": "المستخدم الذي سيتم دمجه فقط يمكنه طلب الدمج",
+  "error.merge_wrong_password": "into_password ليست كلمة مرور الحساب الهدف",
   "error.unknown_verification_kind": "نوع التحقق غير معروف: {kind}",
   "error.invalid_phone": "يجب أن يكون phone_number بصيغة E.164، مثل +15551234567",
   "error.invalid_email": "البريد الإلكتروني غير صالح",

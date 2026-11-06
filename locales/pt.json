@@ -6,6 +6,7 @@
   "error.users_only_change_themselves": "os usuários só podem alterar a si mesmos",
   "error.merge_into_self": "não é possível mesclar um usuário com ele mesmo",
   "error.merge_wrong_user": "somente o usuário que será mesclado pode solicitar a mesclagem",
+  "error.merge_wrong_password": "into_password não é a senha da conta de destino",
   "error.unknown_verification_kind": "tipo de verificação desconhecido: {kind}",
   "error.invalid_phone": "phone_number deve estar no formato E.164, por ex. +15551234567",
   "error.invalid_email": "o e-mail não parece válido",

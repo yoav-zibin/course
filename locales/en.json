@@ -6,6 +6,7 @@
   "error.users_only_change_themselves": "users can only change themselves",
   "error.merge_into_self": "cannot merge a user into itself",
   "error.merge_wrong_user": "only the merged-away user can request the merge",
+  "error.merge_wrong_password": "into_password is not the target account's password",
   "error.unknown_verification_kind": "unknown verification kind: {kind}",
   "error.invalid_phone": "phone_number must be in E.164 format, e.g. +15551234567",
   "error.invalid_email": "email doesn't look like an email address",

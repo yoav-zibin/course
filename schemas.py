@@ -273,10 +273,15 @@ class VerifyCode(_Request):
 
 
 class MergeRequest(_Request):
-    model_config = _example({"into_user_id": "<user id>"})
+    model_config = _example(
+        {"into_user_id": "<user id>", "into_password": "<that user's password>"}
+    )
 
     # The account that survives. Everything of the URL's user moves into it.
     into_user_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    # The surviving account's password (its X-User-Password), proving the caller
+    # controls it too. Without it anyone could merge into any public user id.
+    into_password: Annotated[str, StringConstraints(min_length=1)]
 
 
 class AuthConfigOut(BaseModel):

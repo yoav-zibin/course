@@ -393,7 +393,7 @@ def test_merge_moves_everything_and_marks_the_source_replaced(
     bob_game_id = api.new_game(owner=bob)
     # Bob is a guest, so he is the one merged away (into Ann), whatever the URL.
     merged = api.ok(
-        "POST", f"/users/{bob}/merge", json={"into_user_id": ann}, as_user=bob
+        "POST", f"/users/{bob}/merge", json={"into_user_id": ann, "into_password": api.passwords_by_user_id[ann]}, as_user=bob
     )
     assert merged["id"] == ann
     # Bob's account was not deleted: it resolves to Ann and his stuff moved over.
@@ -419,24 +419,24 @@ def test_merge_requires_authenticating_as_the_source(
     # Bob can't absorb Ann's account.
     assert error(
         api.request(
-            "POST", f"/users/{ann}/merge", json={"into_user_id": bob}, as_user=bob
+            "POST", f"/users/{ann}/merge", json={"into_user_id": bob, "into_password": api.passwords_by_user_id[bob]}, as_user=bob
         )
     ) == (403, "only the merged-away user can request the merge")
     # Nobody can merge a user into itself.
     assert error(
         api.request(
-            "POST", f"/users/{ann}/merge", json={"into_user_id": ann}, as_user=ann
+            "POST", f"/users/{ann}/merge", json={"into_user_id": ann, "into_password": api.passwords_by_user_id[ann]}, as_user=ann
         )
     ) == (400, "cannot merge a user into itself")
     # The target has to exist.
     assert error(
         api.request(
-            "POST", f"/users/{ann}/merge", json={"into_user_id": "nobody"}, as_user=ann
+            "POST", f"/users/{ann}/merge", json={"into_user_id": "nobody", "into_password": "x"}, as_user=ann
         )
     ) == (404, "user not found")
     # Anonymous callers can't merge at all.
     assert (
-        error(api.request("POST", f"/users/{ann}/merge", json={"into_user_id": bob}))[0]
+        error(api.request("POST", f"/users/{ann}/merge", json={"into_user_id": bob, "into_password": api.passwords_by_user_id[bob]}))[0]
         == 401
     )
     # The rank rule decides who is merged away: Ann's Google login outranks guest
@@ -445,9 +445,33 @@ def test_merge_requires_authenticating_as_the_source(
     api.ok("POST", "/auth/google", json={"id_token": "token"}, as_user=ann)
     assert error(
         api.request(
-            "POST", f"/users/{ann}/merge", json={"into_user_id": bob}, as_user=ann
+            "POST", f"/users/{ann}/merge", json={"into_user_id": bob, "into_password": api.passwords_by_user_id[bob]}, as_user=ann
         )
     ) == (403, "only the merged-away user can request the merge")
+
+
+def test_merge_into_someone_elses_account_needs_their_password() -> None:
+    # Regression: a fresh guest used to merge itself into any public user id and
+    # then act as that user (and read its password from /auth/me).
+    api = Api()
+    victim = api.new_user("victim")
+    attacker = api.new_user("attacker")
+    for body in (
+        {"into_user_id": victim, "into_password": api.passwords_by_user_id[attacker]},
+        {"into_user_id": victim, "into_password": "guess"},
+    ):
+        assert error(
+            api.request("POST", f"/users/{attacker}/merge", json=body, as_user=attacker)
+        ) == (403, "into_password is not the target account's password")
+    # Leaving the password out is a validation error.
+    assert api.request(
+        "POST", f"/users/{attacker}/merge", json={"into_user_id": victim}, as_user=attacker
+    ).status_code == 422
+    # Nothing was merged: the attacker is still only themselves.
+    me = api.ok("GET", "/auth/me", as_user=attacker)
+    assert me["user_id"] == attacker
+    assert me["password"] != api.passwords_by_user_id[victim]
+    assert api.ok("GET", f"/users/{attacker}")["replaced_by_user_id"] is None
 
 
 def test_merge_rewrites_match_seats_and_hidden_flags() -> None:
@@ -461,7 +485,7 @@ def test_merge_rewrites_match_seats_and_hidden_flags() -> None:
     turn = api.match_summary(match_id)["turn"]
     api.move(match_id, as_user=carol if 0 in turn else ann, next_turn=None)
     api.ok("DELETE", f"/matches/{match_id}", as_user=ann)
-    api.ok("POST", f"/users/{ann}/merge", json={"into_user_id": bob}, as_user=ann)
+    api.ok("POST", f"/users/{ann}/merge", json={"into_user_id": bob, "into_password": api.passwords_by_user_id[bob]}, as_user=ann)
     match = api.ok("GET", f"/matches/{match_id}")
     assert match["players"][1]["user_id"] == bob
     # Bob's own list hides it now; Ann's old credentials keep working as Bob.
@@ -486,7 +510,7 @@ def test_merge_does_not_duplicate_an_already_linked_login(
     )
     api.ok("POST", "/auth/google", json={"id_token": "token"}, as_user=bob)
     # Merge Ann into Bob: Bob keeps both logins, no duplicates; Ann is replaced.
-    api.ok("POST", f"/users/{ann}/merge", json={"into_user_id": bob}, as_user=ann)
+    api.ok("POST", f"/users/{ann}/merge", json={"into_user_id": bob, "into_password": api.passwords_by_user_id[bob]}, as_user=ann)
     kinds = [
         (account["kind"], account["identifier"])
         for account in api.ok("GET", "/auth/me", as_user=bob)["linked_accounts"]
@@ -515,7 +539,8 @@ def test_merge_works_through_the_file_backed_store(tmp_path: Path) -> None:
             code="<div/>",
         )
         merged = platform.merge_users(
-            caller_id=ann.id, from_user_id=ann.id, into_user_id=bob.id
+            caller_id=ann.id, from_user_id=ann.id, into_user_id=bob.id,
+        into_password=bob.password
         )
         assert merged.id == bob.id
         assert store.get_game(game.id).owner_user_id == bob.id  # type: ignore[union-attr]
@@ -538,7 +563,7 @@ def test_authenticate_as_replaced_user_returns_the_survivor() -> None:
     api = Api()
     ann = api.new_user("ann")
     bob = api.new_user("bob")
-    api.ok("POST", f"/users/{ann}/merge", json={"into_user_id": bob}, as_user=ann)
+    api.ok("POST", f"/users/{ann}/merge", json={"into_user_id": bob, "into_password": api.passwords_by_user_id[bob]}, as_user=ann)
     # Ann's old credentials still work, acting as Bob everywhere.
     me = api.ok("GET", "/auth/me", as_user=ann)
     assert me["user_id"] == bob
@@ -555,7 +580,7 @@ def test_merge_preserves_server_game_player_identity_and_private_view() -> None:
     match = _start(api, source, _create_game(api, source), joiner=opponent)
     before = api.ok("GET", f"/matches/{match}", as_user=source)["state"]
     api.ok(
-        "POST", f"/users/{source}/merge", as_user=source, json={"into_user_id": target}
+        "POST", f"/users/{source}/merge", as_user=source, json={"into_user_id": target, "into_password": api.passwords_by_user_id[target]}
     )
     assert api.ok("GET", f"/matches/{match}", as_user=target)["state"] == before
     assert _move(api, match, as_user=target, add=1).status_code == 201
@@ -569,7 +594,7 @@ def test_merge_waits_for_shared_active_match_without_changing_accounts() -> None
     source, target = api.new_user("source"), api.new_user("target")
     _start(api, source, _create_game(api, source), joiner=target)
     response = api.request(
-        "POST", f"/users/{source}/merge", as_user=source, json={"into_user_id": target}
+        "POST", f"/users/{source}/merge", as_user=source, json={"into_user_id": target, "into_password": api.passwords_by_user_id[target]}
     )
     assert response.status_code == 409
     assert api.ok("GET", f"/users/{source}")["id"] == source
@@ -581,8 +606,10 @@ def test_replacement_is_flattened_to_one_hop() -> None:
     bob = platform.create_user(display_name="bob")
     cat = platform.create_user(display_name="cat")
     ann_password = ann.password
-    platform.merge_users(caller_id=ann.id, from_user_id=ann.id, into_user_id=bob.id)
-    platform.merge_users(caller_id=bob.id, from_user_id=bob.id, into_user_id=cat.id)
+    platform.merge_users(caller_id=ann.id, from_user_id=ann.id, into_user_id=bob.id,
+        into_password=bob.password)
+    platform.merge_users(caller_id=bob.id, from_user_id=bob.id, into_user_id=cat.id,
+        into_password=cat.password)
     # No chain: Ann points directly at Cat in one hop, and Cat lists both.
     raw_ann = platform._store.get_user(ann.id)
     raw_bob = platform._store.get_user(bob.id)
@@ -597,7 +624,8 @@ def test_replacement_is_flattened_to_one_hop() -> None:
     # must authenticate as that survivor (the replaced party).
     dan = platform.create_user(display_name="dan")
     merged = platform.merge_users(
-        caller_id=cat.id, from_user_id=ann.id, into_user_id=dan.id
+        caller_id=cat.id, from_user_id=ann.id, into_user_id=dan.id,
+        into_password=dan.password
     )
     assert merged.id == dan.id
     assert platform.get_user(ann.id).id == dan.id
@@ -608,7 +636,8 @@ def test_replacement_is_flattened_to_one_hop() -> None:
     assert raw_dan.replaced_user_ids == (cat.id, bob.id, ann.id)
     # Once everything resolves to the same user, merging is a self-merge (400).
     with pytest.raises(InvalidRequestError):
-        platform.merge_users(caller_id=dan.id, from_user_id=ann.id, into_user_id=bob.id)
+        platform.merge_users(caller_id=dan.id, from_user_id=ann.id, into_user_id=bob.id,
+        into_password=bob.password)
 
 
 def test_replaced_user_holds_no_data_but_keeps_working_credentials() -> None:
@@ -616,7 +645,8 @@ def test_replaced_user_holds_no_data_but_keeps_working_credentials() -> None:
     ann = platform.create_user(display_name="ann")
     bob = platform.create_user(display_name="bob")
     ann_password, ann_name = ann.password, ann.display_name
-    platform.merge_users(caller_id=ann.id, from_user_id=ann.id, into_user_id=bob.id)
+    platform.merge_users(caller_id=ann.id, from_user_id=ann.id, into_user_id=bob.id,
+        into_password=bob.password)
     raw = platform._store.get_user(ann.id)
     assert raw is not None
     assert raw.replaced_by_user_id == bob.id
@@ -643,7 +673,7 @@ def test_guest_merging_with_google_user_always_replaces_the_guest(
     guest = api.new_user("guest")
     # Explicit merge, Google user named first: the rank rule still replaces the guest.
     merged = api.ok(
-        "POST", f"/users/{gina}/merge", json={"into_user_id": guest}, as_user=guest
+        "POST", f"/users/{gina}/merge", json={"into_user_id": guest, "into_password": api.passwords_by_user_id[guest]}, as_user=guest
     )
     assert merged["id"] == gina
     assert api.ok("GET", f"/users/{guest}")["id"] == gina
@@ -679,7 +709,8 @@ def test_equal_rank_merge_keeps_the_requested_direction() -> None:
     ann = platform.create_user(display_name="ann")
     bob = platform.create_user(display_name="bob")
     merged = platform.merge_users(
-        caller_id=ann.id, from_user_id=ann.id, into_user_id=bob.id
+        caller_id=ann.id, from_user_id=ann.id, into_user_id=bob.id,
+        into_password=bob.password
     )
     assert merged.id == bob.id
     assert platform.get_user(ann.id).id == bob.id

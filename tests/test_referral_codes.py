@@ -179,7 +179,7 @@ def test_a_short_link_redirects_to_the_portal_with_the_code() -> None:
 def test_a_code_keeps_crediting_the_survivor_after_a_merge(api: Api) -> None:
     ann, ann_old = api.new_user("ann"), api.new_user("ann (old)")
     old_code, ann_code = code_of(api, ann_old), code_of(api, ann)
-    api.ok("POST", f"/users/{ann_old}/merge", json={"into_user_id": ann}, as_user=ann_old)
+    api.ok("POST", f"/users/{ann_old}/merge", json={"into_user_id": ann, "into_password": api.passwords_by_user_id[ann]}, as_user=ann_old)
     invited(api, "bob", by=old_code)
     assert inviter_of(api, "bob") == ann
     # The survivor keeps its own code.

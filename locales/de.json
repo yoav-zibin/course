@@ -6,6 +6,7 @@
   "error.users_only_change_themselves": "Benutzer können nur sich selbst ändern",
   "error.merge_into_self": "ein Benutzer kann nicht mit sich selbst zusammengeführt werden",
   "error.merge_wrong_user": "nur der zusammenzuführende Benutzer kann die Zusammenführung beantragen",
+  "error.merge_wrong_password": "into_password ist nicht das Passwort des Zielkontos",
   "error.unknown_verification_kind": "unbekannte Verifizierungsart: {kind}",
   "error.invalid_phone": "phone_number muss im E.164-Format sein, z. B. +15551234567",
   "error.invalid_email": "die E-Mail-Adresse ist ungültig",

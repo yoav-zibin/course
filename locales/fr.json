@@ -6,6 +6,7 @@
   "error.users_only_change_themselves": "les utilisateurs ne peuvent modifier que leur propre compte",
   "error.merge_into_self": "impossible de fusionner un utilisateur avec lui-même",
   "error.merge_wrong_user": "seul l'utilisateur fusionné peut demander la fusion",
+  "error.merge_wrong_password": "into_password n'est pas le mot de passe du compte cible",
   "error.unknown_verification_kind": "type de vérification inconnu : {kind}",
   "error.invalid_phone": "phone_number doit être au format E.164, par ex. +15551234567",
   "error.invalid_email": "l'adresse e-mail n'est pas valide",

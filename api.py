@@ -302,9 +302,14 @@ def merge_users(
     logins move over, then it is marked as replaced by the surviving user (never
     deleted, so its old credentials keep working as an alias of the survivor).
     The stronger login method always survives (google > phone > email > guest);
-    on ties the requested direction is kept. Authenticate as the merged-away user."""
+    on ties the requested direction is kept. Authenticate as the merged-away user,
+    and pass the surviving user's password as [body.into_password]: the caller
+    must control both accounts."""
     user = platform.merge_users(
-        caller_id=caller_id, from_user_id=user_id, into_user_id=body.into_user_id
+        caller_id=caller_id,
+        from_user_id=user_id,
+        into_user_id=body.into_user_id,
+        into_password=body.into_password,
     )
     return UserOut.of(user, own=True)
 

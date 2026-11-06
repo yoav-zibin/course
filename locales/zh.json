@@ -6,6 +6,7 @@
   "error.users_only_change_themselves": "用户只能修改自己的信息",
   "error.merge_into_self": "不能将用户合并到自己",
   "error.merge_wrong_user": "只有被合并的用户才能发起合并",
+  "error.merge_wrong_password": "into_password 不是目标账户的密码",
   "error.unknown_verification_kind": "未知的验证类型：{kind}",
   "error.invalid_phone": "phone_number 必须为 E.164 格式，例如 +15551234567",
   "error.invalid_email": "电子邮件地址无效",

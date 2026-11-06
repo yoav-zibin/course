@@ -6,6 +6,7 @@
   "error.users_only_change_themselves": "उपयोगकर्ता केवल स्वयं को बदल सकते हैं",
   "error.merge_into_self": "किसी उपयोगकर्ता को स्वयं में मर्ज नहीं किया जा सकता",
   "error.merge_wrong_user": "केवल मर्ज किया जाने वाला उपयोगकर्ता ही मर्ज का अनुरोध कर सकता है",
+  "error.merge_wrong_password": "into_password लक्ष्य खाते का पासवर्ड नहीं है",
   "error.unknown_verification_kind": "अज्ञात सत्यापन प्रकार: {kind}",
   "error.invalid_phone": "phone_number E.164 प्रारूप में होना चाहिए, जैसे +15551234567",
   "error.invalid_email": "ईमेल पता मान्य नहीं लगता",

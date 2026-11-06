@@ -1386,24 +1386,39 @@ class GamePlatform:
             return self._merge_locked(source=source, into=into), merged_from
 
     def merge_users(
-        self, *, caller_id: str, from_user_id: str, into_user_id: str
+        self,
+        *,
+        caller_id: str,
+        from_user_id: str,
+        into_user_id: str,
+        into_password: str,
     ) -> User:
         """Merges [from_user_id] into [into_user_id]: games (all versions), matches
         (owner, seats, hidden flags and move authors), and linked accounts move over,
         then the source user is marked as replaced by the surviving user instead of
         being deleted, so its old credentials keep working as an alias of the
         survivor. The stronger login method always survives (google > phone >
-        email > guest); on ties the requested direction is kept. The caller must
-        authenticate as the merged-away (replaced) user, so nobody can absorb
-        someone else's account. Returns the surviving user.
+        email > guest); on ties the requested direction is kept.
+
+        The caller must prove control of BOTH accounts: they authenticate as the
+        merged-away (replaced) user, and [into_password] must be the target's
+        password. Otherwise anyone could merge their own account into a victim's
+        public user id and, since the replaced account's credentials then resolve
+        to the survivor, act as the victim. Returns the surviving user.
         """
         with self._lock:
             if from_user_id == into_user_id:
                 raise InvalidRequestError("cannot merge a user into itself")
+            source = self._require_user(from_user_id)
+            target = self._require_user(into_user_id)
+            if not hmac.compare_digest(
+                into_password.encode(), target.password.encode()
+            ):
+                raise ForbiddenError(
+                    "into_password is not the target account's password"
+                )
             source, target = self._merge_pair(
-                self._require_user(from_user_id),
-                self._require_user(into_user_id),
-                prefer_first_as_source=True,
+                source, target, prefer_first_as_source=True
             )
             if source.id != caller_id:
                 raise ForbiddenError(

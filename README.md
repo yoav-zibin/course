@@ -181,11 +181,14 @@ which is fine for development and useless for real users.
 
 #### Merging accounts
 
-`POST /users/{id}/merge` `{into_user_id}` merges one account into another: every game
-(all versions), match (owner, seats, hidden flags, and move authors), and linked login
-of the URL's user moves to `into_user_id`, then the URL's user is deleted. Authenticate
-as the merged-away user, so nobody can absorb someone else's account; merging a user
-into itself is a 400. The website uses this when you link a login that belongs to
+`POST /users/{id}/merge` `{into_user_id, into_password}` merges one account into
+another: every game (all versions), match (owner, seats, hidden flags, and move authors),
+and linked login of the URL's user moves to `into_user_id`, then the URL's user is marked
+as replaced (its old credentials keep working as an alias of the survivor). The caller
+must control both accounts: authenticate as the merged-away user, and send the surviving
+account's password as `into_password` (a wrong one is a 403). Otherwise anyone could
+merge their own account into someone else's public user id and act as them. Merging a
+user into itself is a 400. The website uses this when you link a login that belongs to
 another of your accounts.
 
 #### Invite links (referrals)
@@ -270,7 +273,7 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `PATCH /users/{id}` | yes | Change your own `display_name` and/or `locale` (403 for other users) |
 | `GET /i18n/locales` |  | The supported languages (see [Languages](#languages)) |
 | `GET /i18n/{locale}` |  | Every text in one language: UI labels, status labels, error messages |
-| `POST /users/{id}/merge` | yes | Merge this account into `into_user_id` and delete it (authenticate as this user) |
+| `POST /users/{id}/merge` | yes | Merge this account into `into_user_id` (authenticate as this user and send `into_password`, the target's password) |
 | `GET /matches/open` |  | Matches anyone may join (waiting, or ongoing with mid-match joins) |
 | `POST /games` | yes | Create a game |
 | `GET /games?owner_user_id=&q=&include_code=` |  | List published games that aren't deleted, optionally by owner. `q` searches names and descriptions (every word must match, ignoring case); `include_code=false` leaves out each game's code, which is most of the response |
