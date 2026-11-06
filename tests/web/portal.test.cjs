@@ -462,3 +462,18 @@ test('background polls coalesce before entering the shared move lock',async()=>{
  const third=t.run('originalRefresh()');assert.equal(t.run('lockCalls'),2);
  t.run('releaseRefresh()');await third;
 });
+test('a language change redraws the offline line and re-sends the open game its texts at once',async()=>{
+  const {run}=setup();
+  run('globalThis.calls=[];renderPortalAccountMenu=()=>calls.push("menu");render=()=>calls.push("render");renderLibrary=()=>calls.push("library");updateMatchSetup=()=>calls.push("setup");offlineStatus=()=>calls.push("offline");syncGame=async()=>{calls.push("game")}');
+  run('redrawAfterLanguageChange()');await Promise.resolve();
+  assert.deepEqual(Array.from(run('calls')),['menu','render','library','setup','offline','game']);
+});
+test('a failing redraw does not stop the others from being asked, and a failing game sync is only logged',async()=>{
+  const {run}=setup();
+  run('globalThis.calls=[];renderPortalAccountMenu=()=>calls.push("menu");render=()=>{throw new Error("boom")};console={warn:(...a)=>calls.push("warned")};syncGame=async()=>{throw new Error("late")}');
+  run('redrawAfterLanguageChange()');await Promise.resolve();
+  assert.deepEqual(Array.from(run('calls')),['menu','warned']);
+  run('calls.length=0;render=()=>{};renderLibrary=()=>{};updateMatchSetup=()=>{};offlineStatus=()=>{}');
+  run('redrawAfterLanguageChange()');await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(Array.from(run('calls')),['menu','warned']);
+});
