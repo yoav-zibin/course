@@ -335,12 +335,17 @@ def test_a_rejected_move_of_tictactoe_is_answered_in_the_viewers_language() -> N
     current = api.ok("POST", f"/matches/{match['id']}/start", as_user=owner, json={})
     current = api.ok("POST", f"/matches/{match['id']}/moves", as_user=owner,
                      json={"move": {"cell": 0}, "expected_move_count": current["move_count"]})
-    response = api.request("POST", f"/matches/{match['id']}/moves", as_user=guest, headers={"Accept-Language": "es"},
-                           json={"move": {"cell": 0}, "expected_move_count": current["move_count"]})
+    def post_move(language=None):
+        headers = {"X-User-Id": guest, "X-User-Password": api.passwords_by_user_id[guest]}
+        if language:
+            headers["Accept-Language"] = language
+        return api.client.post(f"/matches/{match['id']}/moves", headers=headers,
+                               json={"move": {"cell": 0}, "expected_move_count": current["move_count"]})
+
+    response = post_move("es")
     assert response.status_code == 400
     assert response.json()["detail"] == "[es] that cell is taken"
     assert response.json()["code"] == "game_message"
     assert response.json()["message_key"] == "server_that_cell_is_taken"
-    in_english = api.request("POST", f"/matches/{match['id']}/moves", as_user=guest,
-                             json={"move": {"cell": 0}, "expected_move_count": current["move_count"]})
+    in_english = post_move()
     assert in_english.json()["detail"] == "that cell is taken"
