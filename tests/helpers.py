@@ -97,6 +97,7 @@ class Api:
             headers["X-User-Password"] = password
         if (
             isinstance(json, dict)
+            and path != "/agent/games"  # imports derive schemas from their test contract
             and json.get("server_code")
             and "game_schemas" not in json
         ):
