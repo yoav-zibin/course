@@ -587,7 +587,7 @@ class GameLogic:
                 function,
                 input_json,
                 int(seed) & 0xFFFFFFFF,
-                frozen_millis,
+                float(frozen_millis),
             )
         except quickjs.JSException as error:
             # Nothing came back: the call was interrupted (timeout/memory)
