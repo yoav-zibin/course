@@ -1446,17 +1446,8 @@ function renderMatch() {
       }
       const computers = match.players.filter((player) => player.kind === "computer").length;
       const paidMatch = (match.bet_per_player ?? 0) > 0;
-      const max = Math.max(...counts, 0);
       const humanCount = match.players.filter(player => player.kind === "human" && player.active !== false).length;
-      if (!paidMatch && humanCount === 1 && match.matchmaking_player_count == null) {
-        const minus = actionButton("−", call("PATCH", "", {num_computer_opponents: computers - 1}), {disabled:computers === 0});
-        const plus = actionButton("+", call("PATCH", "", {num_computer_opponents: computers + 1}), {disabled:match.players.length >= max});
-        minus.setAttribute?.("aria-label", I18n.t("ui.match.remove_computer_aria", {}, "Remove computer opponent"));
-        plus.setAttribute?.("aria-label", I18n.t("ui.match.add_computer_aria", {}, "Add computer opponent"));
-        actions.push(el("div", {class:"computer-stepper", role:"group", "aria-label":I18n.t("ui.match.computer_opponents", {}, "Computer opponents")},
-          el("span", {class:"stepper-label", textContent:I18n.t("ui.match.solo_computers", {}, "Single-player computers")}), minus,
-          el("span", {class:"stepper-count", textContent:String(computers), "aria-label":I18n.t("ui.match.computers_count_aria", {count: computers}, `${computers} computer opponents`)}), plus));
-      } else if (paidMatch) {
+      if (paidMatch) {
         actions.push(el("p", {class:"paid-lobby-hint", textContent: computers ?
           I18n.t("ui.match.paid_needs_humans", {}, "Paid matches need human opponents. Remove the computer to continue.") :
           I18n.t("ui.match.paid_invite_human", {}, "Invite a human player to join this token match.")}));

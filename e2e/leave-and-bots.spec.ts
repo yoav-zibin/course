@@ -9,9 +9,11 @@ test('multiplayer lobby offers no computer opponents', async ({page, request}) =
   const auth = (u: typeof alice) => ({'X-User-Id':u.id,'X-User-Password':u.password});
   const game = await createGame(request, alice, uniqueName('Human duel'));
   const match = await (await request.post('/matches', {headers:auth(alice),data:{game_id:game}})).json();
-  expect((await request.post(`/matches/${match.id}/join`,{headers:auth(bob)})).ok()).toBeTruthy();
   await loginAs(page,alice);
   await page.goto(`/static/portal.html#match=${match.id}`);
+  await expect(page.getByRole('button',{name:'Start game',exact:true})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Add computer opponent'})).toHaveCount(0);
+  expect((await request.post(`/matches/${match.id}/join`,{headers:auth(bob)})).ok()).toBeTruthy();
   await expect(page.getByRole('button',{name:'Start game',exact:true})).toBeEnabled();
   await expect(page.getByRole('button',{name:'Add computer opponent'})).toHaveCount(0);
   const denied = await request.patch(`/matches/${match.id}`,{headers:auth(alice),data:{num_computer_opponents:1}});

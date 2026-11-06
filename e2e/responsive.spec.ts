@@ -51,11 +51,8 @@ test.describe('Layout at different screen sizes', () => {
     await page.goto('/static/portal.html');
     await page.getByRole('combobox', { name: 'Search games' }).fill(gameName);
     await page.getByRole('option', { name: new RegExp(gameName) }).click();
-    // A real match against a computer (server-side games have no local
-    // practice mode).
-    await page.getByRole('button', { name: /Create match/ }).click();
-    await page.getByRole('button', { name: 'Add computer opponent' }).click();
-    await page.getByRole('button', { name: 'Start game' }).click();
+    // Start a server match through the dedicated computer-play option.
+    await page.getByRole('button', { name: /Play with computers/ }).click();
 
     const frame = page.locator('#game-box iframe');
     const board = page.frameLocator('#game-box iframe').locator('#board button');

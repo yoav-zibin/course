@@ -15,10 +15,8 @@ test.describe('Choosing and playing a game (logged in, real server)', () => {
 
     await expect(page.locator('#selected-game-name')).toHaveText(gameName);
     // Online computer matches remain server-authoritative.
-    await page.getByRole('button', { name: /Create match/ }).click();
+    await page.getByRole('button', { name: /Play with computers/ }).click();
     await expect(page.locator('#match')).toBeVisible();
-    await page.getByRole('button', { name: 'Add computer opponent' }).click();
-    await page.getByRole('button', { name: 'Start game' }).click();
 
     const board = page.frameLocator('#game-box iframe').locator('#board button');
     await expect(board).toHaveCount(9);

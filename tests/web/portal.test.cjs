@@ -76,10 +76,10 @@ test('multiplayer cannot join solo bots or reuse a departed identity',()=>{
   assert.equal(run('isJoinable(state.match,"new")'),true);
 });
 
-test('computer controls appear only in solo lobbies and offer legacy cleanup',()=>{
+test('online lobbies offer no computer stepper, even while the host waits alone',()=>{
   const {node,run}=setup();
   run('state.games[0].allowed_player_counts=[2,3,4];state.gameCache.set("game@2",state.games[0]);state.match={id:"match",game_id:"game",game_version:2,owner_user_id:"owner",status:"waiting_for_players",players:[{player_index:0,kind:"human",user_id:"owner"}],move_count:0};renderMatch()');
-  assert.ok(node('actions').children.some(child=>child.class==='computer-stepper'));
+  assert.ok(!node('actions').children.some(child=>child.class==='computer-stepper'));
   run('state.match.players.push({player_index:1,kind:"human",user_id:"other"});renderMatch()');
   assert.ok(!node('actions').children.some(child=>child.class==='computer-stepper'));
   run('state.match.players.push({player_index:2,kind:"computer"});renderMatch()');
