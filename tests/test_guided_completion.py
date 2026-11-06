@@ -1559,3 +1559,16 @@ def test_tutorial_dead_strings_are_pruned_not_rejected():
     pruned, removed = absorb_unshown_strings(TUTORIAL_WITH_DEAD_STRING)
     assert removed == ['exercise_prompt2']
     flow.validate_artifact('tutorial', {'text': 'Learn the game', 'html': pruned})
+
+def test_standalone_svg_adds_namespace_and_viewbox():
+    from game_platform.builder_jobs import _standalone_svg
+    bare = '<svg width="900" height="600"><rect width="900" height="600" fill="white"/></svg>'
+    fixed = _standalone_svg(bare)
+    assert 'xmlns="http://www.w3.org/2000/svg"' in fixed
+    assert 'viewBox="0 0 900 600"' in fixed
+    complete = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90" width="160" height="90"></svg>'
+    assert _standalone_svg(complete) == complete
+    # Without width/height there is no extent to derive a viewBox from.
+    no_extent = '<svg><circle r="5"/></svg>'
+    assert 'viewBox' not in _standalone_svg(no_extent)
+    assert _standalone_svg('not an svg') == 'not an svg'

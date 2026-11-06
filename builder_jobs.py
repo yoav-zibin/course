@@ -315,9 +315,25 @@ def _apply_test_operations(artifact, operations, protected):
 
 def _standalone_svg(svg):
     """An SVG shown through an <img> only renders when its root declares the
-    SVG namespace; add it when the model omitted it."""
-    if isinstance(svg, str) and '<svg' in svg and 'xmlns' not in svg.split('>', 1)[0]:
-        return svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"', 1)
+    SVG namespace, and only scales to fit when it declares a viewBox; add
+    either when the model omitted it. Without a viewBox the browser shows a
+    fixed 300x150 corner of the drawing, which for a full-size mockup is
+    usually just its background — a white box. The viewBox is derived from
+    the root's width/height when those are present."""
+    if not (isinstance(svg, str) and '<svg' in svg):
+        return svg
+    opening = svg.split('>', 1)[0]
+    additions = ''
+    if 'xmlns' not in opening:
+        additions += ' xmlns="http://www.w3.org/2000/svg"'
+    if 'viewBox' not in opening:
+        import re
+        width = re.search(r'\bwidth="(\d+(?:\.\d+)?)"', opening)
+        height = re.search(r'\bheight="(\d+(?:\.\d+)?)"', opening)
+        if width and height:
+            additions += f' viewBox="0 0 {width.group(1)} {height.group(1)}"'
+    if additions:
+        return svg.replace('<svg', '<svg' + additions, 1)
     return svg
 
 

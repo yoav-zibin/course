@@ -86,8 +86,18 @@ async function act(action){
 function preview(image){
  let svg=image.svg||'';
  // An SVG shown through an <img> only renders when its root declares the SVG
- // namespace; older generated images may omit it, so add it before encoding.
- if(svg.includes('<svg')&&!svg.split('>',1)[0].includes('xmlns'))svg=svg.replace('<svg','<svg xmlns="http://www.w3.org/2000/svg"');
+ // namespace, and only scales to fit with a viewBox; older generated images
+ // may omit either, so add what is missing before encoding (the viewBox is
+ // derived from the root's width/height). Without a viewBox the browser
+ // shows a fixed corner of the drawing — usually just its background.
+ if(svg.includes('<svg')){
+  const opening=svg.split('>',1)[0];
+  if(!opening.includes('xmlns'))svg=svg.replace('<svg','<svg xmlns="http://www.w3.org/2000/svg"');
+  if(!opening.includes('viewBox')){
+   const w=/\bwidth="(\d+(?:\.\d+)?)"/.exec(opening),h=/\bheight="(\d+(?:\.\d+)?)"/.exec(opening);
+   if(w&&h)svg=svg.replace('<svg',`<svg viewBox="0 0 ${w[1]} ${h[1]}"`);
+  }
+ }
  const img=el('img',{src:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg),alt:image.caption});
  const figure=el('figure',{},img,el('figcaption',{textContent:image.caption}));
  img.addEventListener('error',()=>{img.replaceWith(el('div',{class:'preview-missing',textContent:I18n.t("ui.guided.preview_failed",{},"Preview could not be displayed — reopen this step and regenerate to redraw it.")}));},{once:true});
