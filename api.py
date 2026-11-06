@@ -714,7 +714,9 @@ def test_game(
     this before publishing, which is gated on the same tests."""
     report = platform.test_game_code(
         server_code=body.server_code,
-        game_schemas=body.game_schemas.model_dump(),
+        game_schemas=(
+            body.game_schemas.model_dump() if body.game_schemas is not None else None
+        ),
         rules=GameRules(
             allowed_player_counts=tuple(body.allowed_player_counts),
             allows_leave_mid_match=body.allows_leave_mid_match,
@@ -731,14 +733,15 @@ def emulator_reset(
 ) -> EmulatorOut:
     """Starts an emulated match on unsaved server code (the builder's test
     play): runs newMatch and advances any computer players."""
-    return EmulatorOut.model_validate(
-        platform.emulator_reset(
-            server_code=body.server_code,
-            game_schemas=body.game_schemas.model_dump(),
-            players=[player.model_dump() for player in body.players],
-            seed=body.seed,
-        )
+    game_schemas = body.game_schemas.model_dump()
+    result = platform.emulator_reset(
+        server_code=body.server_code,
+        game_schemas=game_schemas,
+        players=[player.model_dump() for player in body.players],
+        seed=body.seed,
     )
+    result["game_schemas"] = game_schemas
+    return EmulatorOut.model_validate(result)
 
 
 @router.post("/emulator/act")
@@ -1704,7 +1707,7 @@ async def agent_chat(
 
     def server_tester(
         server_code: str,
-        game_schemas: dict,
+        game_schemas: dict | None,
         allowed_player_counts: list[int],
         allows_leave_mid_match: bool,
         allows_join_mid_match: bool,
@@ -2092,12 +2095,18 @@ async def _handle_unexpected_exception(request: Request, exc: Exception) -> Resp
     trace. The caller gets the request id to quote when reporting it."""
     request_id = getattr(request.state, "request_id", None)
     if _is_html_navigation(request):
-        content = "" if request.method == "HEAD" else _error_page_content(HTTPStatus.INTERNAL_SERVER_ERROR)
+        content = (
+            ""
+            if request.method == "HEAD"
+            else _error_page_content(HTTPStatus.INTERNAL_SERVER_ERROR, _page_locale(request))
+        )
         return HTMLResponse(
             content,
             status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             headers={
                 "Cache-Control": "no-store",
+                "Content-Language": _page_locale(request),
+                "Vary": "Accept-Language, X-User-Id",
                 **({"X-Request-Id": request_id} if request_id else {}),
             },
         )
@@ -2146,52 +2155,58 @@ def _wants_raw_reply(request: Request) -> bool:
     )
 
 
-def _error_page_content(status_code: int) -> str:
+def _page_locale(request: Request) -> str:
+    """The language of a page the server builds: the one the request negotiated, else
+    (when the error happened before that ran) the browser's own preference."""
+    locale = getattr(request.state, "locale", None)
+    if locale:
+        return str(locale)
+    return i18n.negotiate(
+        explicit=request.query_params.get("lang"),
+        saved=None,
+        accept_language=request.headers.get("accept-language"),
+    )
+
+
+def _error_page_content(status_code: int, locale: str = i18n.DEFAULT_LOCALE) -> str:
+    """The branded error page, written in [locale]."""
+
+    def text(key: str, /, **params: object) -> str:
+        return i18n.translate(key, locale, **params)
+
     if status_code == HTTPStatus.NOT_FOUND:
-        title = "We couldn't find that page"
-        message = (
-            "That page may have moved, or the link may be out of date. "
-            "There are plenty of games waiting back at the portal."
-        )
-        label = "404 · Page not found"
+        kind = "not_found"
     elif status_code in {HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN}:
-        title = "This page is unavailable"
-        message = (
-            "You may need permission to open this page. "
-            "You can return to the game portal and keep playing."
-        )
-        label = f"{status_code} · Access unavailable"
+        kind = "denied"
     elif status_code == HTTPStatus.SERVICE_UNAVAILABLE:
-        title = "We'll be right back"
-        message = (
-            "This page is temporarily unavailable. Please try again in a little while, "
-            "or head back to the games."
-        )
-        label = f"{status_code} · Temporarily unavailable"
+        kind = "unavailable"
     else:
-        title = "Something went wrong"
-        message = "We couldn't load this page just now. Please try again, or return to the game portal."
-        label = f"{status_code} · Page error"
+        kind = "error"
+    title = text(f"ui.error_page.title_{kind}")
+    message = text(f"ui.error_page.message_{kind}")
+    label = text(f"ui.error_page.label_{kind}", code=status_code)
+    direction = i18n.get_locale(locale).direction
+    app_name = text("ui.app_name")
 
     return f"""<!doctype html>
-<html lang="en">
+<html lang="{locale}" dir="{direction}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#10131d" />
-    <title>{html.escape(label)} · Game platform</title>
+    <title>{html.escape(label)} · {html.escape(app_name)}</title>
     <link rel="stylesheet" href="/static/common.css?v=16" />
     <link rel="stylesheet" href="/static/error.css?v=1" />
   </head>
   <body class="error-page-body">
     <header class="topbar error-topbar">
-      <a class="app-home-link" href="/portal" aria-label="Game platform home">
+      <a class="app-home-link" href="/portal" aria-label="{html.escape(text("ui.portal.home_aria"))}">
         <span class="app-brand-mark" aria-hidden="true">✳</span>
-        <h1>Game platform</h1>
+        <h1>{html.escape(app_name)}</h1>
       </a>
-      <nav aria-label="Game platform">
-        <a href="/portal" aria-current="page">Play games</a>
-        <a href="/builder">Builder</a>
+      <nav aria-label="{html.escape(app_name)}">
+        <a href="/portal" aria-current="page">{html.escape(text("ui.error_page.play_games"))}</a>
+        <a href="/builder">{html.escape(text("ui.nav.builder"))}</a>
       </nav>
       <span class="spacer"></span>
     </header>
@@ -2208,8 +2223,8 @@ def _error_page_content(status_code: int) -> str:
         <p class="error-eyebrow">{html.escape(label)}</p>
         <h2 id="error-title">{html.escape(title)}</h2>
         <p class="error-message">{html.escape(message)}</p>
-        <a class="error-home-button" href="/portal">Back to games <span aria-hidden="true">→</span></a>
-        <p class="error-footnote">Your next game is just one click away.</p>
+        <a class="error-home-button" href="/portal">{html.escape(text("ui.error_page.back"))} <span aria-hidden="true">{"←" if direction == "rtl" else "→"}</span></a>
+        <p class="error-footnote">{html.escape(text("ui.error_page.footnote"))}</p>
       </section>
     </main>
   </body>
@@ -2232,7 +2247,10 @@ async def _branded_browser_responses(
     }
     if response.status_code >= 400:
         headers["Cache-Control"] = "no-store"
-        content = "" if request.method == "HEAD" else _error_page_content(response.status_code)
+        locale = _page_locale(request)
+        headers["Content-Language"] = locale
+        headers["Vary"] = "Accept-Language, X-User-Id"
+        content = "" if request.method == "HEAD" else _error_page_content(response.status_code, locale)
         return HTMLResponse(content, status_code=response.status_code, headers=headers)
 
     # JSON routes are for the app's fetch calls, not standalone web pages. When
@@ -2384,6 +2402,8 @@ def create_app(
     app.state.email_sender = email_sender if email_sender is not None else LogSender()
     from game_platform.builder_api import make_router
     app.include_router(make_router(_get_platform, _get_caller_id))
+    from game_platform.agent_import import make_router as make_import_router
+    app.include_router(make_import_router(_get_platform, _get_caller_id))
     app.include_router(router)
     from game_platform.scaling_api import install as install_scaling_api
     install_scaling_api(app, debug_tools=debug_tools)

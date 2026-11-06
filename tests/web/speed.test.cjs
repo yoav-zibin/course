@@ -7,7 +7,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 
 const read=name=>fs.readFileSync(path.join(__dirname,'../../static',name),'utf8');
-const I18n={t:(key,params,fallback)=>fallback??key,locale:()=>'en',revision:()=>0,gameName:(id,fallback)=>fallback,gameDescription:(id,fallback)=>fallback,gameText:async()=>({locale:'en',direction:'ltr'})};
+const I18n=require('./i18n-stub.cjs');
 
 function loadSpeed() {
   const window={};

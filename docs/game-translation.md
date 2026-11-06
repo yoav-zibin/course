@@ -60,6 +60,30 @@ Rules (the game-building agent is told the same ones, `game_text.PROMPT_RULES`):
 text written in the code, sentences joined from pieces, markup, text on a canvas); the endpoint below
 returns them as `warnings`. A game with no block still has its **name and description** translated.
 
+### Required for new games (`translation.require_strings`)
+
+A new game must carry a text table that passes `game_text.lint`. With `translation.require_strings`
+(config, default `true`; `config.example.json`), the server refuses client code that fails the
+checker with **HTTP 400** and the checker's problems in plain words (localized like other errors,
+code `game_texts_not_translatable`) when a non-admin:
+
+- creates a game (`POST /games`),
+- publishes a draft (`POST /game-drafts/{id}/publish`),
+- saves a new version whose client code changed (`PATCH /games/{id}`).
+
+Exempt: admin saves (`PUT /admin/games/{id}/code`, the refactor job), the guarded audit-batch
+publications (`game_patch_migrations.py`), example data, games with no client code, and edits that
+leave the client code unchanged (a game from before the rule can still change its description).
+Set `require_strings` to `false` to accept any code again.
+
+The game-building agent (`/agent/chat`) treats the checker like a failing test: the problems are
+fed back to the model and it retries within its normal attempts; when they run out the user gets
+an error naming the problems instead of a game with warnings. The guided builder requires the
+table in its client-code stage (the `localization` check, retried on the client only) and its
+final approval and publishing re-check it. The checker also catches `aria-label`/`placeholder`/
+`title`/`alt` attributes written as text, `alert`/`confirm`/`prompt`/`createTextNode` with literal
+text, and `fillText`/`strokeText` with anything but `t()`.
+
 ## Converting an existing game
 
 Games built before the rules above have no `i18n-strings` block, so only their name and description

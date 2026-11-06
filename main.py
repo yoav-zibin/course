@@ -159,6 +159,13 @@ def main() -> None:
     store = observability.TimedStore(store, monitor)
     push_notifier: PushNotifier | None = None
     try:
+        # Recover only reviewed frozen versions before logic is cached or old
+        # matches/computer turns resume. Unknown/author-edited records are skipped.
+        from game_platform.legacy_schema_migrations import apply_legacy_schema_recovery
+
+        recovery_results = apply_legacy_schema_recovery(store)
+        if any(result["status"] == "updated" for result in recovery_results):
+            store.flush()
         push_notifier = make_push_notifier(push_config, store=store)
         platform_class = GamePlatform
         if getattr(store, "scalable", False):
@@ -172,6 +179,7 @@ def main() -> None:
             computer_move_delay_seconds=config.computer_move_delay_seconds,
             translator=make_translator(config),
             translation_daily_character_limit=config.translation.daily_character_limit,
+            require_game_strings=config.translation.require_strings,
         )
         if args.purge_example_data:
             purge_example_data(platform)
@@ -180,15 +188,22 @@ def main() -> None:
         # These bounded release migrations only touch the audited originals;
         # hash/version guards preserve subsequent author edits and old matches.
         from game_platform.game_patch_migrations import (
-            apply_audit_batch1, apply_audit_batch2, apply_audit_batch3, apply_audit_batch4, apply_audit_batch5,
+            apply_audit_batch1, apply_audit_batch2, apply_audit_batch3, apply_audit_batch4, apply_audit_batch5, apply_audit_batch6,
         )
 
         patch_results = [
             *apply_audit_batch1(platform), *apply_audit_batch2(platform),
             *apply_audit_batch3(platform), *apply_audit_batch4(platform),
-            *apply_audit_batch5(platform),
+            *apply_audit_batch5(platform), *apply_audit_batch6(platform),
         ]
         if any(result["status"] == "updated" for result in patch_results):
+            store.flush()
+        # Retire only the three reviewed duplicate catalog entries. This keeps
+        # drafts/history and journals completion so an author can republish.
+        from game_platform.catalog_deduplication import apply_catalog_deduplication
+
+        catalog_results = apply_catalog_deduplication(platform)
+        if any(result["status"] == "unpublished" for result in catalog_results):
             store.flush()
         platform.resume_computer_moves()
         warn_about_insecure_setup(config, platform)

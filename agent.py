@@ -9,7 +9,7 @@ authoritatively: the rules, the state, computer opponents).
 
 The model is instructed to answer with a single JSON object:
 {"message": "<chat reply>", "code": "<full HTML or null>",
- "server_code": "<full JS or null>", "game_schemas": "<schemas or null>",
+ "server_code": "<full JS or null>", "game_schemas": null,
  "name": "<suggested name or null>", "description": "<suggested description or null>",
  "allowed_player_counts": [1]}.
 
@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from pydantic import TypeAdapter, ValidationError
 
 from game_platform.game_testing import GameTestReport
+from game_platform import game_text
 from game_platform.game_text import PROMPT_RULES
 from game_platform.model_api import ModelApiClient, ModelApiError
 from game_platform.schemas import (
@@ -45,7 +46,7 @@ GENERATION_BUDGET_SECONDS = 120.0
 # Runs the platform's random-walk tests on server code: (server_code,
 # game_schemas, allowed_player_counts, allows_leave_mid_match,
 # allows_join_mid_match).
-ServerTester = Callable[[str, dict, list[int], bool, bool], GameTestReport]
+ServerTester = Callable[[str, dict | None, list[int], bool, bool], GameTestReport]
 
 _BASE_PROMPT = """\
 You are a game-building assistant inside a turn-based solo and multiplayer platform's \
@@ -127,11 +128,10 @@ source of game randomness. All calls must be deterministic. \
 using randomMove; if used to price a departure, pay the remaining pot to \
 the other humans as well when ending the match.
 
-Every v2 game has `game_schemas`, containing Draft 2020-12 JSON Schemas named \
-`state`, `move`, and `view`. The state schema validates each state argument and \
-state result; move validates player moves plus `computerMove` and `randomMove` \
-results; view validates each `viewFor` result. Keep all three schemas in sync \
-with every value the server code can produce.
+The platform automatically generates each v2 game's `game_schemas` from \
+successful random-walk samples, then validates the code against them before \
+publication. Do not author schemas: return `"game_schemas": null` whenever \
+returning server code. Generated schemas validate state, move, and view values.
 
 Old games built before server code existed have no server part. When you \
 create a game or change a game's rules, always return BOTH parts (write the \
@@ -163,8 +163,8 @@ the game, or null when the client code is unchanged.
 - "server_code": the COMPLETE updated server JavaScript when you create or \
 change it, or null when the server code is unchanged. Required whenever the \
 game's rules change and for every new game.
-- "game_schemas": the complete {"state": <JSON Schema>, "move": <JSON Schema>, \
-  "view": <JSON Schema>} when returning server_code; otherwise null if unchanged.
+- "game_schemas": null; the platform generates schemas from successful \
+  random-walk samples whenever server_code is returned.
 - "name": a suggested game name, or null to keep the current one.
 - "description": a suggested one-line description, or null to keep it.
 - "allowed_player_counts": the supported seat counts (unique integers 1..10), \
@@ -320,13 +320,13 @@ def _parse_reply(raw: str) -> AgentChatResponse:
         if not isinstance(server_code, str) or not server_code.strip():
             raise AgentError("The agent's reply had no usable server code.")
     game_schemas = data.get("game_schemas")
-    if server_code is not None:
+    if server_code is not None and game_schemas is not None:
         try:
             game_schemas = GameSchemas.model_validate(game_schemas)
         except ValidationError as exc:
             raise AgentError(
-                "The agent must return valid state, move, and view JSON Schemas "
-                "with server_code."
+                "The agent returned malformed JSON Schemas; omit them and let "
+                "the platform generate schemas from the server code."
             ) from exc
     name = data.get("name")
     description = data.get("description")
@@ -382,6 +382,19 @@ def _format_test_report(report: GameTestReport) -> str:
             "The tests also timed out: no random walk finished in the time "
             "budget, so the code is too slow."
         )
+    return "\n".join(lines)
+
+
+def _format_text_problems(problems: list[str]) -> str:
+    """The checker's findings as feedback for the model."""
+    lines = [
+        "The platform rejected your client code because its texts cannot be translated. "
+        "Fix the client code and return the complete JSON response (the server code "
+        "unchanged). The game must contain ONE i18n-strings block listing every text, show "
+        "every text only through t(), and include the helper exactly as given in the "
+        "TRANSLATION rules. Problems:"
+    ]
+    lines.extend(f"- {problem}" for problem in problems[:10])
     return "\n".join(lines)
 
 
@@ -453,12 +466,29 @@ def chat_with_agent(
             messages.append({"role": "assistant", "content": result.content})
             messages.append({"role": "user", "content": f"Please correct the response: {exc} Return the complete JSON response including code and matching allowed_player_counts. Reply with the JSON object only — no prose before or after it, and no markdown fences."})
             continue
+        if response.code:
+            # The texts must be translatable: a game without a passing string table is a
+            # failure like a failing test, fixed by the model within the same retries.
+            problems = game_text.lint(response.code)
+            if problems:
+                last_error = AgentError(
+                    "The game's client code cannot be translated: " + "; ".join(problems[:5])
+                )
+                notes.append(f"attempt {attempt}: translation check failed ({len(problems)} problems)")
+                logger.warning("Builder attempt %d failed the translation check: %s", attempt, problems[:5])
+                messages.append({"role": "assistant", "content": result.content})
+                messages.append({"role": "user", "content": _format_text_problems(problems)})
+                continue
         if response.server_code and server_tester is not None:
             report = None
             try:
                 report = server_tester(
                     response.server_code,
-                    response.game_schemas.model_dump(),
+                    (
+                        response.game_schemas.model_dump()
+                        if response.game_schemas is not None
+                        else None
+                    ),
                     list(response.allowed_player_counts or request.allowed_player_counts),
                     response.allows_leave_mid_match
                     if response.allows_leave_mid_match is not None
@@ -471,6 +501,10 @@ def chat_with_agent(
                 logger.exception("Server code tester failed to run")
                 notes.append(f"attempt {attempt}: the server code tests could not run")
             if report is not None:
+                if response.game_schemas is None and report.game_schemas is not None:
+                    response.game_schemas = GameSchemas.model_validate(
+                        report.game_schemas
+                    )
                 if report.passed:
                     response.server_test_passed = True
                 else:

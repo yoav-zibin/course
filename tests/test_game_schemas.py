@@ -14,6 +14,7 @@ from game_platform.backfill_game_schemas import (
 from game_platform.game_input_metrics import game_input_metrics
 from game_platform.tests.helpers import UnrestrictedGameLogic as GameLogic
 from game_platform.game_logic import GameLogicError, InvalidMoveError
+from game_platform.game_testing import _infer_value_schema, infer_game_schemas
 from game_platform.tests.helpers import run_unrestricted_server_code as _test_server_code
 from game_platform.models import Game, GameRules
 from game_platform.service import GamePlatform
@@ -40,6 +41,9 @@ GAME_CODE = """
 const game = {
   newMatch(ctx) { return {state: {count: 0}, turn: [ctx.players[0].id]}; },
   applyMove(state, playerId, move, ctx) {
+    if (!move || typeof move.add !== "number") {
+      throw new InvalidMove("move must contain a numeric add value");
+    }
     return {state: {count: state.count + move.add}, turn: null,
             payouts: {[playerId]: ctx.pot}};
   },
@@ -142,7 +146,7 @@ def test_estimate_win_chance_does_not_swallow_invalid_generated_move():
         logic.call("viewFor", {"count": 0}, "u1", ctx=_ctx())
 
 
-def test_api_rejects_missing_or_malformed_game_schemas(api: Api):
+def test_api_generates_missing_and_rejects_malformed_game_schemas(api: Api):
     owner = api.new_user("owner")
     body = {
         "name": "Needs schemas",
@@ -155,8 +159,25 @@ def test_api_rejects_missing_or_malformed_game_schemas(api: Api):
     missing = api.request(
         "POST", "/games", as_user=owner, json={**body, "game_schemas": None}
     )
-    assert missing.status_code == 422
-    assert "game_schemas is required" in missing.text
+    assert missing.status_code == 201
+    generated_schemas = missing.json()["game_schemas"]
+    assert set(generated_schemas) == {"state", "move", "view"}
+    assert isinstance(generated_schemas["state"], dict), missing.json()
+    assert generated_schemas["state"]["properties"]["count"]["type"] == "integer"
+
+    tested = api.ok(
+        "POST",
+        "/games/test",
+        as_user=owner,
+        json={
+            "server_code": GAME_CODE,
+            "game_schemas": None,
+            "allowed_player_counts": [2],
+            "allows_leave_mid_match": False,
+            "allows_join_mid_match": False,
+        },
+    )
+    assert tested["game_schemas"] == missing.json()["game_schemas"]
 
     malformed = api.request(
         "POST",
@@ -165,6 +186,59 @@ def test_api_rejects_missing_or_malformed_game_schemas(api: Api):
         json={**body, "game_schemas": {"state": {"type": "invalid"}, "move": True, "view": True}},
     )
     assert malformed.status_code == 422
+
+
+def test_draft_publication_generates_schemas(api: Api):
+    owner = api.new_user("draft-owner")
+    draft = api.ok(
+        "POST",
+        "/game-drafts",
+        as_user=owner,
+        json={
+            "name": "Generated draft",
+            "allowed_player_counts": [2],
+            "allows_leave_mid_match": False,
+            "allows_join_mid_match": False,
+            "code": "<div></div>",
+            "server_code": GAME_CODE,
+            "game_schemas": None,
+        },
+    )
+    published = api.ok(
+        "POST",
+        f"/game-drafts/{draft['id']}/publish",
+        as_user=owner,
+        json={"expected_revision": draft["revision"]},
+    )
+    assert set(published["game_schemas"]) == {"state", "move", "view"}
+    stored_draft = api.ok(
+        "GET", f"/game-drafts/{draft['id']}", as_user=owner
+    )
+    assert stored_draft["game_schemas"] == published["game_schemas"]
+
+
+def test_random_walk_schema_inference_covers_generated_game_values():
+    schemas, report = infer_game_schemas(
+        GAME_CODE,
+        game_id="schema-inference-test",
+        rules=RULES,
+        budget_seconds=0.1,
+        run_seed=123,
+    )
+    assert report.walks_completed > 0
+    assert set(schemas) == {"state", "move", "view"}
+    assert schemas["state"]["properties"]["count"]["type"] == "integer"
+    assert schemas["move"]["properties"]["add"]["type"] == "integer"
+    assert schemas["view"]["type"] == "object"
+
+
+def test_schema_inference_keeps_nested_constraints_for_nullable_values():
+    schema = _infer_value_schema([None, {"count": 1}])
+    assert schema == {
+        "type": ["null", "object"],
+        "properties": {"count": {"type": "integer"}},
+        "additionalProperties": True,
+    }
 
 
 def test_game_schemas_round_trip_and_are_in_openapi(api: Api):

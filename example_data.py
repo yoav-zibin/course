@@ -127,6 +127,7 @@ def _apply(
                 if operation.get("schema_file")
                 else None
             ),
+            _check_strings=False,
         )
     elif kind == "update_game":
         platform.update_game(

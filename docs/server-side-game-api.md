@@ -184,13 +184,23 @@ pot to active humans once. Waiting lobbies can remove their bots.
 
 ## Game JSON Schemas
 
-Every v2 game version stores a `game_schemas` object with exactly three
-Draft 2020-12 JSON Schemas: `state`, `move`, and `view`. It is required
-alongside `server_code` when creating or updating a game, saving a draft,
-testing code, or using the emulator. It is returned with game and draft
-representations, included in the builder's autosave and AI-edit flows, and
-appears in the generated OpenAPI request/response definitions. V1 games do
-not use these schemas.
+Every published v2 game version stores a `game_schemas` object with exactly
+three Draft 2020-12 JSON Schemas: `state`, `move`, and `view`. The platform
+generates these from successful random-walk samples when a creator omits them.
+The builder runs generation as part of server-code testing and keeps the
+generated schemas with its autosaved draft; direct API create/update and draft
+publication use the same generator. Creators do not need to author JSON Schema.
+Explicit schemas remain accepted for integrations that already provide them.
+V1 games do not use these schemas.
+
+Generated schemas describe observed JSON value types, leave object properties
+optional, and allow additional object properties so unobserved game branches
+remain playable. Generation requires successful samples for state, move, and
+view, and publication still runs the schema-aware random-walk gate. Generation
+or validation errors block publication instead of falling back to an
+accept-everything schema. Since inference is sample-based, it is not a proof
+that every rare game branch has been observed; games with highly variable
+contracts should still be exercised thoroughly before publishing.
 
 The platform validates state arguments before calling game functions that
 receive state, and validates a human's `move` against the `move` schema before
@@ -211,9 +221,11 @@ Every persisted v2 version—including historical versions—must have schemas.
 V1 records are excluded. At startup, the server logs missing `game-id@version`
 entries and runs in degraded mode so non-game API functionality remains
 available. A v2 game version without schemas is still blocked from executing:
-there is no permissive runtime fallback. Create a JSON map containing the
-exact schemas for those entries, then run the backfill utility against the
-same server configuration:
+there is no permissive runtime fallback. Backfill historical versions with the
+exact schemas for those entries before restarting a strict server deployment.
+The automatic generator is used for
+new versions; the backfill utility intentionally requires an explicit,
+complete mapping because old matches may still rely on those versions:
 
 ```json
 {
@@ -233,6 +245,18 @@ The utility validates the complete mapping before writing any versions and
 supports the configured JSON-file or Firestore store. Back up the database
 before running it; schemas are versioned with the game and should describe
 that version's actual inputs and outputs, not merely allow all JSON values.
+
+To gather exact code and rules for affected versions without exporting user
+records, run `export_game_schema_inventory.py` with the production config and
+the server's read-only Firestore credentials. By default, it finds every
+server-side version missing schemas and writes only each version's name, rules,
+server code, and existing schemas:
+
+```powershell
+python export_game_schema_inventory.py --config C:\path\to\config.json --output C:\path\to\game-schema-inventory.json
+```
+
+Use the optional `--refs` text file only when exporting a specific subset.
 
 ## Computer opponents on the server (Phase 3)
 
