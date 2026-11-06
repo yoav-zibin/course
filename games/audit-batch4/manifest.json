@@ -1,0 +1,96 @@
+[
+  {
+    "id": "d66436fd-b19c-4fcb-8280-9ae7fb75daf6",
+    "name": "Hearts",
+    "expected_version": 2,
+    "client": "hearts.html",
+    "server": "hearts.server.js",
+    "original_client_sha256": "35f1189db95a580ba329a22594f51ea405c2d644fb11fb118465195712825edf",
+    "original_server_sha256": "030a16036a5fc1dc66b88992dbaa3e8b1c8a980b9071f95d53f18a1d8319e43d",
+    "allowed_player_counts": [
+      4
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false
+  },
+  {
+    "id": "d1e3d28c-cb11-4f91-91b5-f746c8440cf6",
+    "name": "Rummy 500",
+    "expected_version": 3,
+    "client": "rummy-500.html",
+    "server": "rummy-500.server.js",
+    "original_client_sha256": "4de3286849024221055c053dde0496188cf348d56b7656a95cbc119eefc20638",
+    "original_server_sha256": "2b08d2a2556368a027c9c1a0c485844c857f006626659c9a32eed652fb0a4ae6",
+    "allowed_player_counts": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "allows_leave_mid_match": true,
+    "allows_join_mid_match": false
+  },
+  {
+    "id": "9069ae35-61f3-4a38-8e5c-480e53f289b8",
+    "name": "Blackjack Table",
+    "expected_version": 3,
+    "client": "blackjack-table.html",
+    "server": "blackjack-table.server.js",
+    "original_client_sha256": "556eea2e44de1f3bae5c6ade2325bdec8d66de76be7a3dfabd4c458d11ef658d",
+    "original_server_sha256": "b110140a330d42b2b5da72df2d2fbaf661a3afcf8ee8968ae61fbde80bbc8859",
+    "allowed_player_counts": [
+      1,
+      2,
+      3
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false
+  },
+  {
+    "id": "8f692b3e-5f36-41b8-8942-38f5c7b3dc14",
+    "name": "Cheat (BS)",
+    "expected_version": 2,
+    "client": "cheat-bs.html",
+    "server": "cheat-bs.server.js",
+    "original_client_sha256": "65eb00015131a23873719feac7d572ec320e580ff611bcaf52e21839c3191aaa",
+    "original_server_sha256": "9ff4e3a89f8132b26a8a178e822849495254c1beeba7b01e15b948ddf2740f17",
+    "allowed_player_counts": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false
+  },
+  {
+    "id": "f4e55ca5-464e-4ad0-9aae-79f8cc3e7cad",
+    "name": "Checkers",
+    "expected_version": 3,
+    "client": "checkers.html",
+    "server": "checkers.server.js",
+    "original_client_sha256": "deb451d11ab795c22b1dd36650038b447d50cb4194dd50c24e71f2de9026e32a",
+    "original_server_sha256": "a1d81a4bb355803bc168b71bce632af0b0438b0919d5e75ec8c77046980cafd4",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false
+  },
+  {
+    "id": "affb52d8-f070-4600-bc10-580af8bc06e0",
+    "name": "Mancala",
+    "expected_version": 2,
+    "client": "mancala.html",
+    "server": "mancala.server.js",
+    "original_client_sha256": "83ae54e348f54af8ef3005a4b2e98c5b2e8d912e55ec808f8ef61f0231b93435",
+    "original_server_sha256": "d37c1d4ec5241889920ff8c49ea050188bc5146763059216d606ef7817b5352c",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false
+  }
+]

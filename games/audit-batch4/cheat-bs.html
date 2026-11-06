@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<style>*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}body{margin:0;font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif;background:#0b3d2e;color:#fff;min-height:100vh;display:flex;flex-direction:column}header{padding:10px 12px 6px;text-align:center}header h1{margin:0;font-size:20px;letter-spacing:.5px}#rankBadge{display:inline-block;margin-top:6px;background:#ffcf40;color:#222;font-weight:800;border-radius:999px;padding:6px 14px;font-size:15px}#table{position:relative;flex:1;min-height:300px;margin:8px 10px;background:#12714f;border:4px solid #7a4a21;border-radius:18px;box-shadow:inset 0 0 40px rgba(0,0,0,.35);overflow:hidden}#pileArea{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}.pileStack{width:64px;height:90px;background:linear-gradient(135deg,#1e3a8a,#0ea5e9);border:3px solid #fff;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;box-shadow:0 6px 16px rgba(0,0,0,.4)}#pileInfo{font-size:13px;background:rgba(0,0,0,.45);padding:4px 10px;border-radius:999px}#claimInfo{font-size:13px;background:rgba(0,0,0,.55);padding:6px 12px;border-radius:10px;max-width:90%;text-align:center}#reveal{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;max-width:95%}#reveal .mini{background:#fff;color:#111;border-radius:8px;padding:6px 8px;font-weight:800;font-size:15px}#reveal .mini.red{color:#c00}#resultBanner{font-weight:900;font-size:14px;padding:6px 14px;border-radius:10px;max-width:92%;text-align:center}#seats{position:absolute;inset:0;pointer-events:none}.seat{position:absolute;background:rgba(0,0,0,.55);border:2px solid transparent;border-radius:12px;padding:4px 8px;font-size:12px;text-align:center;min-width:74px;max-width:110px}.seat.cur{border-color:#ffcf40;box-shadow:0 0 10px #ffcf40}.seat .nm{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.seat .ct{background:#fff;color:#111;border-radius:99px;padding:0 8px;font-weight:800}#controls{padding:8px 10px 14px;background:#08281e}#status{font-size:13px;min-height:20px;text-align:center;margin:2px 0 6px;color:#ffe}#hand{display:flex;gap:6px;overflow-x:auto;padding:8px 2px;justify-content:flex-start}#card{flex:0 0 58px;height:82px;border-radius:10px;background:#fff;color:#111;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:900;font-size:18px;border:3px solid #fff;cursor:pointer;user-select:none}#card.red{color:#c00}#card.sel{border-color:#ffcf40;transform:translateY(-10px);box-shadow:0 6px 14px rgba(0,0,0,.5)}#card small{font-size:11px;font-weight:400}.btnrow{display:flex;gap:8px;margin-top:6px}button{flex:1;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:900;cursor:pointer}button:disabled{opacity:.4}#playBtn{background:#ffcf40;color:#222}#bsBtn{background:#e11d48;color:#fff;font-size:20px}#passBtn{background:#334155;color:#fff;flex:.7}#over{position:fixed;inset:0;background:rgba(0,0,0,.8);display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px;z-index:9;text-align:center;padding:20px}#over.show{display:flex}</style></head>
+<body><header><h1>🃏 CHEAT (BS)</h1><div id="rankBadge">Rank: …</div></header>
+<div id="table"><div id="seats"></div><div id="pileArea"><div class="pileStack" id="pileStack">—</div><div id="pileInfo">Pile: 0</div><div id="claimInfo">Waiting…</div><div id="resultBanner"></div><div id="reveal"></div></div></div>
+<div id="controls"><div id="status">Waiting…</div><div id="hand"></div><div class="btnrow"><button id="playBtn">Play</button><button id="bsBtn">🚨 CALL BS!</button><button id="passBtn">✓</button></div></div>
+<div id="over"><h2 id="winTxt" style="font-size:28px;margin:0"></h2><p id="winSub"></p><button onclick="location.reload()" style="max-width:240px;background:#ffcf40">Rematch / Reload</button></div>
+<script>
+let L=null, sel=new Set();
+const RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const SUITS=['♠','♥','♦','♣'];
+function cr(c){let r=Math.floor(c/4),s=c%4;return{t:RANKS[r]+SUITS[s],red:(s==1||s==2)};}
+function esc(x){return String(x).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function sendMove(m){parent.postMessage({type:'make_move',move:m},'*');}
+addEventListener('message',e=>{if(e.source!==parent||!e.data||e.data.type!=='state_changed')return;L=e.data;
+ if(L.view&&L.view.myHand)sel=new Set([...sel].filter(c=>L.view.myHand.includes(c)));
+ else sel=new Set();
+ render();
+});
+function render(){
+ let v=L.view,n=L.players.length;
+ if(!v){document.getElementById('status').textContent='Dealing…';return;}
+ let req=v.reqRank;
+ document.getElementById('rankBadge').textContent='Rank: '+RANKS[req]+'  •  '+L.players[v.current].name+"'s turn";
+ document.getElementById('pileInfo').textContent='Pile: '+v.pileCount+' cards';
+ let ci=document.getElementById('claimInfo');
+ if(v.phase==='challenge'&&v.pending)ci.textContent=L.players[v.pending.player].name+' played '+v.pending.count+' card(s) as '+RANKS[v.pending.claimed];
+ else if(v.lastResult)ci.textContent='Last: '+v.lastResult.text;
+ else ci.textContent='Play '+RANKS[req]+'s — select 1-4 cards';
+ let rb=document.getElementById('resultBanner'),rv=document.getElementById('reveal');rv.innerHTML='';rb.textContent='';rb.style.background='';
+ if(v.lastResult&&v.phase==='play'){rb.textContent=v.lastResult.text;rb.style.background=v.lastResult.bluff?'#e11d48':'#059669';
+  (v.lastResult.cards||[]).forEach(c=>{let o=cr(c);let d=document.createElement('div');d.className='mini'+(o.red?' red':'');d.textContent=o.t;rv.appendChild(d);});}
+ document.getElementById('pileStack').textContent=v.pileCount?('🂠×'+v.pileCount):'—';
+ let box=document.getElementById('seats');box.innerHTML='';
+ let pos=[['50%','2px'],['2px','40%'],['2px','2px'],['calc(100% - 86px)','2px'],['calc(100% - 86px)','40%']];
+ let oi=0,me=L.my_player_index;
+ for(let i=0;i<n;i++){if(i===me)continue;let d=document.createElement('div');
+  let isCur=(v.phase==='play'&&v.current===i)||(v.phase==='challenge'&&v.pending&&v.pending.player===i);
+  d.className='seat'+(isCur?' cur':'');let p=pos[oi%pos.length];d.style.left=p[0];d.style.top=p[1];
+  d.innerHTML='<div class=nm>'+esc(L.players[i].name)+'</div><div><span class=ct>'+v.counts[i]+'</span> 🂠</div>';box.appendChild(d);oi++;}
+ let hb=document.getElementById('hand');hb.innerHTML='';
+ let myHand=(me!==null&&v.myHand)?v.myHand.slice().sort((a,b)=>a-b):[];
+ myHand.forEach(c=>{let o=cr(c);let d=document.createElement('div');d.id='card';if(o.red)d.classList.add('red');if(sel.has(c))d.classList.add('sel');
+  d.innerHTML=o.t+'<small>'+SUITS[c%4]+'</small>';
+  d.onclick=()=>{if(L.acting_for_player_index!==me||v.phase!=='play'||v.current!==me)return;if(sel.has(c))sel.delete(c);else{if(sel.size>=4)return;sel.add(c);}render();};
+  hb.appendChild(d);});
+ let acting=L.status==='ongoing'?L.acting_for_player_index:null;
+ let canPlay=acting===me&&v.phase==='play'&&v.current===me&&sel.size>=1&&sel.size<=4;
+ let canBS=me!==null&&acting===me&&v.phase==='challenge'&&v.pending&&me!==v.pending.player;
+ let canPass=me!==null&&acting===me&&v.phase==='challenge'&&v.pending&&me!==v.pending.player;
+ document.getElementById('playBtn').disabled=!canPlay;
+ document.getElementById('playBtn').textContent='Play '+sel.size+' as '+RANKS[req];
+ document.getElementById('bsBtn').disabled=!canBS;
+ document.getElementById('passBtn').disabled=!canPass;document.getElementById('passBtn').textContent='✓ OK';
+ let st=document.getElementById('status');
+ if(L.status==='over'){let w=v.winner;st.textContent=w!==null&&w!==undefined?('🏆 '+L.players[w].name+' wins!'):'Game over';
+  document.getElementById('over').classList.add('show');document.getElementById('winTxt').textContent=w!=null?('🏆 '+L.players[w].name+' wins!'):'Over';document.getElementById('winSub').textContent=v.lastResult?v.lastResult.text:'';}
+ else{st.textContent=acting===null?'Waiting…':(L.players[acting].name+(v.phase==='challenge'?' — call BS or OK':'\'s turn — play '+RANKS[req]+'s'));}
+}
+document.getElementById('playBtn').onclick=()=>{if(!L||!L.view)return;let v=L.view,me=L.acting_for_player_index;if(me===null)return;if(sel.size<1||sel.size>4)return;sendMove({kind:'play',cards:[...sel]});};
+document.getElementById('bsBtn').onclick=()=>{if(!L||L.acting_for_player_index===null)return;sendMove({kind:'bs'});};
+document.getElementById('passBtn').onclick=()=>{if(!L||L.acting_for_player_index===null)return;sendMove({kind:'pass'});};
+</script></body></html>
