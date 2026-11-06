@@ -177,9 +177,14 @@ def main() -> None:
         # Published community games live in the data store, not in games/.
         # These bounded release migrations only touch the audited originals;
         # hash/version guards preserve subsequent author edits and old matches.
-        from game_platform.game_patch_migrations import apply_audit_batch1, apply_audit_batch2, apply_audit_batch3
+        from game_platform.game_patch_migrations import (
+            apply_audit_batch1, apply_audit_batch2, apply_audit_batch3, apply_audit_batch4,
+        )
 
-        patch_results = [*apply_audit_batch1(platform), *apply_audit_batch2(platform), *apply_audit_batch3(platform)]
+        patch_results = [
+            *apply_audit_batch1(platform), *apply_audit_batch2(platform),
+            *apply_audit_batch3(platform), *apply_audit_batch4(platform),
+        ]
         if any(result["status"] == "updated" for result in patch_results):
             store.flush()
         platform.resume_computer_moves()
