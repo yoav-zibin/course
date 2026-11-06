@@ -51,6 +51,7 @@
   "error.refactor_job_running": "Une tâche de refactorisation est déjà en cours ; attendez qu'elle se termine.",
   "error.refactor_job_not_found": "Aucune tâche de refactorisation de ce nom.",
   "error.match_not_ongoing": "la partie n'est pas en cours",
+  "error.rematch_seats_held": "les places restantes sont réservées aux joueurs d'origine",
   "error.removed_from_match": "vous avez été retiré de ce match",
   "error.not_a_player_in_match": "cet utilisateur n'est pas joueur dans ce match",
   "error.owner_cannot_remove_self": "le créateur ne peut pas se retirer lui-même ; supprimez plutôt le match",

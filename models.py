@@ -375,6 +375,15 @@ class Match:
     # Users the owner removed from the waiting room; they can't join this match
     # again (so they can't keep taking a seat to block its start).
     removed_user_ids: frozenset[str] = frozenset()
+    # A rematch: the original match's players. While it waits, a seat is held for
+    # each of them who hasn't joined yet, so a stranger can't take it.
+    reserved_for_user_ids: frozenset[str] = frozenset()
+
+    def held_seats(self) -> int:
+        """Seats a waiting rematch holds for original players not yet seated."""
+        if self.status != "waiting_for_players":
+            return 0
+        return len(self.reserved_for_user_ids - set(self.human_user_ids))
 
     @property
     def payout_pending(self) -> bool:

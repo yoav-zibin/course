@@ -362,6 +362,9 @@ Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct
 - Joining a paid match that hasn't started checks that the joiner can afford the stake
   (counting today's grant); it is taken when the match starts. The owner can remove a
   waiting player (the portal shows a Remove button), who then can't rejoin that match.
+- A rematch (`POST /matches/{id}/rematch`) is private if the original was, holds a seat
+  for each original player until they come back (others get 409 while only held seats are
+  free), and starts with no stake.
 
 ### Feedback
 

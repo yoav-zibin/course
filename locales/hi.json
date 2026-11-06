@@ -51,6 +51,7 @@
   "error.refactor_job_running": "एक रीफ़ैक्टर कार्य पहले से चल रहा है; इसके समाप्त होने की प्रतीक्षा करें।",
   "error.refactor_job_not_found": "ऐसा कोई रीफ़ैक्टर कार्य नहीं है।",
   "error.match_not_ongoing": "मैच चल नहीं रहा है",
+  "error.rematch_seats_held": "शेष सीटें मूल खिलाड़ियों के लिए आरक्षित हैं",
   "error.removed_from_match": "आपको इस मैच से हटा दिया गया था",
   "error.not_a_player_in_match": "वह उपयोगकर्ता इस मैच में खिलाड़ी नहीं है",
   "error.owner_cannot_remove_self": "मालिक खुद को नहीं हटा सकता; इसके बजाय मैच हटाएं",

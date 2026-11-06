@@ -51,6 +51,7 @@
   "error.refactor_job_running": "Já há um trabalho de refatoração em execução; aguarde o término.",
   "error.refactor_job_not_found": "Trabalho de refatoração não encontrado.",
   "error.match_not_ongoing": "a partida não está em andamento",
+  "error.rematch_seats_held": "os lugares restantes estão reservados para os jogadores originais",
   "error.removed_from_match": "você foi removido desta partida",
   "error.not_a_player_in_match": "esse usuário não é jogador desta partida",
   "error.owner_cannot_remove_self": "o criador não pode remover a si mesmo; exclua a partida",

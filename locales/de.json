@@ -51,6 +51,7 @@
   "error.refactor_job_running": "Ein Refactor-Auftrag läuft bereits; warten Sie, bis er abgeschlossen ist.",
   "error.refactor_job_not_found": "Kein solcher Refactor-Auftrag.",
   "error.match_not_ongoing": "die Partie läuft nicht",
+  "error.rematch_seats_held": "die übrigen Plätze sind für die ursprünglichen Spieler reserviert",
   "error.removed_from_match": "du wurdest aus diesem Spiel entfernt",
   "error.not_a_player_in_match": "dieser Benutzer ist kein Spieler in diesem Spiel",
   "error.owner_cannot_remove_self": "der Ersteller kann sich nicht selbst entfernen; lösche stattdessen das Spiel",

@@ -51,6 +51,7 @@
   "error.refactor_job_running": "A refactor job is already running; wait for it to finish.",
   "error.refactor_job_not_found": "No such refactor job.",
   "error.match_not_ongoing": "the match is not ongoing",
+  "error.rematch_seats_held": "the remaining seats are held for the original players",
   "error.removed_from_match": "you were removed from this match",
   "error.not_a_player_in_match": "that user is not a player in this match",
   "error.owner_cannot_remove_self": "the owner cannot remove themselves; delete the match instead",

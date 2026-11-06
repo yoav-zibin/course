@@ -51,6 +51,7 @@
   "error.refactor_job_running": "已有一个重构任务正在运行；请等待它完成。",
   "error.refactor_job_not_found": "没有这样的重构任务。",
   "error.match_not_ongoing": "对局尚未进行",
+  "error.rematch_seats_held": "剩余座位已为原玩家保留",
   "error.removed_from_match": "你已被移出此比赛",
   "error.not_a_player_in_match": "该用户不是此比赛的玩家",
   "error.owner_cannot_remove_self": "创建者不能移除自己；请改为删除比赛",

@@ -1774,6 +1774,13 @@ class GamePlatform:
                 )
                 if not match.private
                 and not match.num_computer_opponents
+                # A rematch whose free seats are all held for its original players
+                # has nothing to offer anyone else.
+                and not (
+                    match.held_seats()
+                    and len(match.seats) + match.held_seats()
+                    >= self._rules_of(match).max_players
+                )
                 and (game := self._store.get_game(match.game_id)) is not None
                 and game.published and not game.deleted
                 and (match.status == "waiting_for_players" or (
@@ -2628,6 +2635,13 @@ class GamePlatform:
             raise ConflictError("you are already a player in this match")
         if caller_id in match.removed_user_ids:
             raise ForbiddenError("you were removed from this match")
+        if (
+            caller_id not in match.reserved_for_user_ids
+            and match.held_seats()
+            and len(match.seats) + match.held_seats() >= self._rules_of(match).max_players
+        ):
+            # A rematch holds a seat for each original player who hasn't come back.
+            raise ConflictError("the remaining seats are held for the original players")
         if not self._get_game(match.game_id).published:
             raise ConflictError("this game is no longer published")
         if match.status == "over":
@@ -2756,7 +2770,9 @@ class GamePlatform:
                 if rematch is not None and rematch.status != "over":
                     if rematch.seat_of(caller_id) is not None:
                         return rematch
-                    return self.join_match(caller_id=caller_id, match_id=rematch.id)
+                    # An original player rejoins directly: a private match's
+                    # rematch is private too, and they need no invite for it.
+                    return self._join(rematch, caller_id=caller_id)
 
             game = self._get_game(match.game_id)
             game_version = self._store.get_game_version(
@@ -2789,6 +2805,13 @@ class GamePlatform:
                 created_at=now,
                 updated_at=now,
                 turn_seconds=match.turn_seconds,
+                # Same audience as the original: a private match's rematch stays
+                # private. The stake is not carried over: nobody's tokens are
+                # committed by someone else asking for a rematch.
+                private=match.private,
+                # Hold a seat for every original player, so a stranger can't take
+                # the last one before the opponent comes back.
+                reserved_for_user_ids=frozenset(match.human_user_ids),
             )
             self._store.put_match(rematch)
             if solo_bot_rematch:

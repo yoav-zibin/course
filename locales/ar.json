@@ -51,6 +51,7 @@
   "error.refactor_job_running": "توجد مهمة إعادة هيكلة قيد التشغيل بالفعل؛ انتظر حتى تنتهي.",
   "error.refactor_job_not_found": "لا توجد مهمة إعادة هيكلة كهذه.",
   "error.match_not_ongoing": "المباراة ليست جارية",
+  "error.rematch_seats_held": "المقاعد المتبقية محجوزة للاعبين الأصليين",
   "error.removed_from_match": "تمت إزالتك من هذه المباراة",
   "error.not_a_player_in_match": "هذا المستخدم ليس لاعبًا في هذه المباراة",
   "error.owner_cannot_remove_self": "لا يمكن للمالك إزالة نفسه؛ احذف المباراة بدلاً من ذلك",
