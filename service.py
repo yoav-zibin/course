@@ -1765,7 +1765,6 @@ class GamePlatform:
         expected_revision: int | None,
         server_code: str | None = None,
         game_schemas: dict[str, JsonValue] | None = None,
-        _initial_workflow: dict | None = None,
     ) -> GameDraft:
         server_code = server_code or None
         if server_code is not None and game_schemas is None:
@@ -1791,7 +1790,7 @@ class GamePlatform:
                 id=draft_id or self._new_id(), owner_user_id=caller_id,
                 name=name, description=description, rules=rules, code=code,
                 server_code=server_code,
-                builder_workflow=existing.builder_workflow if existing else game.builder_workflow if game else _initial_workflow,
+                builder_workflow=existing.builder_workflow if existing else game.builder_workflow if game else None,
                 game_schemas=game_schemas,
                 created_at=existing.created_at if existing else now, updated_at=now,
                 base_version=existing.base_version if existing else game.version if game else 0,
@@ -2167,6 +2166,7 @@ class GamePlatform:
                     caller_id=caller_id, draft_id=game_id, name=game.name,
                     description=game.description, code=game.code,
                     server_code=game.server_code,
+                    game_schemas=game.game_schemas,
                     rules=game.rules, expected_revision=None,
                 )
             self._store.set_game_published(game_id, False)
