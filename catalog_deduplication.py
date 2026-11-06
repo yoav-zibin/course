@@ -14,6 +14,7 @@ import re
 from weakref import WeakKeyDictionary
 
 from game_platform.store import InMemoryStore
+from game_platform.observability import TimedStore
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -71,18 +72,38 @@ def _marker_key(entry):
 
 
 def _journal(store, key):
+    # Production wraps both storage modes for metrics. Unwrap only that known
+    # transparent adapter; never mistake a persistent store's memory cache for RAM.
+    if isinstance(store, TimedStore):
+        store = store._inner
     # Production QueryStore already offers a transaction-aware internal migration
     # collection. No new collection/model/snapshot format or credentials needed.
     if getattr(store, 'scalable', False) and all(
         callable(getattr(store, name, None)) for name in ('collection', 'raw_get', 'raw_put')
     ):
         ref = store.collection('migration').document(key)
-        return lambda: store.raw_get(ref) is not None, lambda: store.raw_put(ref, {'applied': True})
+        return (lambda: store.raw_get(ref) is not None,
+                lambda: store.raw_put(ref, {'applied': True}), lambda: None)
+    # Legacy Firestore snapshot mode has a single process writer. Reserve the
+    # receipt BEFORE changing visibility, so even a crash never re-hides an
+    # author's later restoration. A claimed but incomplete operation is reported
+    # for manual review, rather than retried automatically on future startups.
+    from game_platform.firestore_store import FirestoreStore
+    if isinstance(store, FirestoreStore):
+        ref = store._collection('meta').document(key)
+        def claim():
+            ref.create({'claimed': True})
+        def mark():
+            store.flush()
+            if store.last_write_error:
+                raise RuntimeError('catalog retirement snapshot save failed')
+            ref.set({'claimed': True, 'applied': True})
+        return lambda: ref.get().exists, mark, claim
     if isinstance(store, InMemoryStore):
         keys = _MEMORY_APPLIED.setdefault(store, set())
-        return lambda: key in keys, lambda: keys.add(key)
+        return lambda: key in keys, lambda: keys.add(key), lambda: None
     # Do not promise durable operator overrides on an unsupported persistent
-    # adapter. This release targets the existing production QueryStore.
+    # adapter. Known Firestore modes are handled explicitly above.
     return None
 
 def apply_catalog_deduplication(platform: GamePlatform, manifest_path=None) -> list[dict[str, Any]]:
@@ -102,7 +123,7 @@ def apply_catalog_deduplication(platform: GamePlatform, manifest_path=None) -> l
                 if journal is None:
                     result['status'] = 'skipped_unsupported_store'
                 else:
-                    applied, mark = journal
+                    applied, mark, claim = journal
                     if applied():
                         result['status'] = 'unchanged'
                     else:
@@ -117,6 +138,7 @@ def apply_catalog_deduplication(platform: GamePlatform, manifest_path=None) -> l
                         elif not _guard(game, entry['remove']) or not _guard(keeper, entry['keep']):
                             result['status'] = 'skipped_guard'
                         else:
+                            claim()
                             platform.unpublish_game(caller_id=game.owner_user_id, game_id=game.id)
                             mark()
                             result['status'] = 'unpublished'
