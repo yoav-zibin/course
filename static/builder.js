@@ -304,7 +304,7 @@ function startTest() {
   if (!state.editor.code) return;
   const [countText,mode]=$("play-mode").value.split(":");const count=Number(countText);
   if (!state.editor.allowed_player_counts.includes(count)) return;
-  const players=Array.from({length:count},(_,seat)=>({player_index:seat,kind:mode==="computer"&&seat>0?"computer":"human",name:mode==="computer"&&seat>0?"Computer "+seat:"Player "+(seat+1)}));
+  const players=Array.from({length:count},(_,seat)=>({player_index:seat,kind:mode==="computer"&&seat>0?"computer":"human",name:mode==="computer"&&seat>0?I18n.t("ui.match.computer_name",{number:seat},"Computer "+seat):I18n.t("ui.match.player_n",{number:seat+1},"Player "+(seat+1))}));
   // A game with server code is test-played through the emulator: the
   // server runs its logic (see /emulator/reset and /emulator/act).
   if (state.editor.server_code) { startEmulatorTest(players, mode); return; }

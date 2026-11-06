@@ -47,6 +47,9 @@ PRIORITY = [
 
 # Not page text: the language library itself, the service worker, game-side helpers.
 LIBRARY_FILES = {"i18n.js", "portal-sw.js"}
+# Keyboard keys and similar names that look like words but are not page text.
+KEY_NAMES = {"Escape", "Enter", "Tab", "Shift", "Space", "Backspace", "Delete", "Home", "End", "Control", "Alt", "Meta",
+             "Arrow", "Google", "Notification", "Pointer", "Mouse", "Touch", "Click", "Error", "Object", "Array", "String", "Number", "Boolean"}
 TEXT_ATTRIBUTES = ("placeholder", "title", "aria-label", "alt", "value")
 SKIP_TAGS = {"script", "style", "svg", "code", "pre", "kbd", "samp", "noscript", "template"}
 LETTER = re.compile(r"[^\W\d_]", re.UNICODE)
@@ -270,7 +273,9 @@ def balanced_end(src: str, start: int, limit: int = 1500) -> int:
 
 def spans_of_i18n(src: str) -> list[tuple[int, int]]:
     spans = []
-    for m in re.finditer(r"\bI18n\s*\.\s*(?:t|plural)\s*\(", src):
+    # I18n.t(...), I18n.plural(...) and a local alias t("ui.some.key", ...)
+    pattern = r"\bI18n\s*\.\s*(?:t|plural)\s*\(|(?<![\w.$])t\(\s*[\"'](?:ui|error|status|seat|end_reason|notify)\."
+    for m in re.finditer(pattern, src):
         spans.append((m.start(), balanced_end(src, m.end())))
     return spans
 
@@ -374,7 +379,8 @@ def scan_js(source: str) -> list[tuple[int, str, str]]:
                 # the value ends at the first top-level comma
                 end = min(end, first_top_comma(source, m.end(), end))
             collect(m.end(), end, kind, strict)
-    # Anything that reads like a sentence, wherever it is used.
+    # Anything that reads like a sentence or a label, wherever it is used.
+    phrase = re.compile(r"^[A-Z][a-z]{2,}$")
     sentence = re.compile(r"^[A-Z][\w’'-]*(?:[ ,]+[\w’'\-.:/()…!?]+){1,}$")
     for token in tokens:
         _, text, a, b, line = token
@@ -383,6 +389,8 @@ def scan_js(source: str) -> list[tuple[int, str, str]]:
         piece = text.strip()
         if sentence.match(piece) and " " in piece and not code_like(piece, True):
             found[(a, piece)] = (line, "sentence", piece)
+        elif phrase.match(piece) and not code_like(piece, True) and piece not in KEY_NAMES:
+            found[(a, piece)] = (line, "phrase", piece)
     return sorted(found.values())
 
 
