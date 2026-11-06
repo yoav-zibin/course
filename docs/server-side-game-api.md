@@ -116,13 +116,21 @@ const game = {
   amount goes to the leaver, and the rest goes to the other active humans. If
   the last human leaves, they receive the full pot. This applies to old pinned
   game versions as well; it does not rewrite stored code or history.
+- All three cases (native result, adapted scalar payout, and no leave handler)
+  commit through the same result application as `applyMove`. They record the
+  departure and mark the seat inactive consistently. No game-specific API path
+  or republication of existing games is needed.
 - `POST /matches/{id}/maybeLeave` stores the entire validated result. The response
   exposes `pending_leave_payout` and `pending_leave_ends_match`, never the private
   resulting state. `POST /matches/{id}/playerLeft` applies that exact result.
   A move, join, timeout, or another confirmed leave invalidates the preview.
-  Successful game-handled leaves appear in history as `{type: "player_left"}`.
+  Every successful v2 leave appears in history as `{type: "player_left"}`.
 - `playerLeft` calls get a 2-second time budget instead of the usual
   100 ms, because `ctx.estimateWinChance`'s walks take about a second.
+  The estimator also has a deterministic 2,000 simulated-move-attempt budget
+  across its maximum 100 walks. Long games use fewer walks instead of timing out;
+  estimates are divided by the walks actually attempted, including unfinished
+  walks as losses. The budget does not depend on machine speed or elapsed time.
 
 ## Client code (iframe protocol v2)
 

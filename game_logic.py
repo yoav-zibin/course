@@ -125,6 +125,10 @@ Date = __FrozenDate;
 // not won.
 const __ESTIMATE_WALKS = 100;
 const __ESTIMATE_MAX_MOVES = 200;
+// Long games with large schemas otherwise perform 20,000 simulated moves
+// and can exceed playerLeft's time limit. Count work, never elapsed time,
+// so the same inputs still produce the same quote on every machine.
+const __ESTIMATE_MOVE_BUDGET = 2000;
 function __schemaTypeMatches(type, value) {
   switch (type) {
     case "null": return value === null;
@@ -261,7 +265,7 @@ function __schemaIsValid(schema, value, root, depth) {
 function __gameSchemaIsValid(name, value) {
   return __schemaIsValid(__gameSchemas[name], value, __gameSchemas[name], 0);
 }
-function __estimateWalk(ctx, moveFor, state, firstTurn) {
+function __estimateWalk(ctx, moveFor, state, firstTurn, budget) {
   // One walk: the final payouts object, or null when the walk fails or
   // the game does not end within the move cap.
   let current = JSON.parse(JSON.stringify(state === undefined ? null : state));
@@ -272,6 +276,7 @@ function __estimateWalk(ctx, moveFor, state, firstTurn) {
       // each player until one can actually move.
       let moved = false;
       for (const candidate of ctx.players) {
+        if (budget.remaining-- <= 0) return null;
         try {
           __assertEstimateSchema("state", current);
           const move = moveFor.call(game, current, candidate.id, ctx);
@@ -291,6 +296,7 @@ function __estimateWalk(ctx, moveFor, state, firstTurn) {
       continue;
     }
     if (turn.length === 0) return null;
+    if (budget.remaining-- <= 0) return null;
     const mover = turn[Math.floor(__random() * turn.length)];
     let result;
     try {
@@ -321,8 +327,11 @@ function __estimateWinChance(ctx, state, playerId, firstTurn) {
     : typeof game.computerMove === "function" ? game.computerMove : null;
   if (moveFor === null || typeof game.applyMove !== "function") return 0;
   let score = 0;
-  for (let walk = 0; walk < __ESTIMATE_WALKS; walk++) {
-    const payouts = __estimateWalk(ctx, moveFor, state, firstTurn);
+  let played = 0;
+  const budget = {remaining: __ESTIMATE_MOVE_BUDGET};
+  for (let walk = 0; walk < __ESTIMATE_WALKS && budget.remaining > 0; walk++) {
+    played++;
+    const payouts = __estimateWalk(ctx, moveFor, state, firstTurn, budget);
     if (payouts === null) continue;
     const mine = payouts[playerId] || 0;
     let best = 0;
@@ -333,7 +342,7 @@ function __estimateWinChance(ctx, state, playerId, firstTurn) {
     }
     if (mine > 0 && mine === best) score += 1 / tied;
   }
-  return score / __ESTIMATE_WALKS;
+  return played ? score / played : 0;
 }
 
 // Calls one game function and reports the outcome as a JSON envelope:

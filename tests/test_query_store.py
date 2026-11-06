@@ -61,10 +61,15 @@ def store():
     )
 
 
-def test_leave_payout_contract_is_atomic_and_survives_restart(store):
+@pytest.mark.parametrize("with_handler", [True, False])
+def test_leave_payout_contract_is_atomic_and_survives_restart(store, with_handler):
     from game_platform.tests.test_leave_result_contract import test_leave_uses_game_distribution_and_pays_exactly_once
     api = api_for(store)
-    test_leave_uses_game_distribution_and_pays_exactly_once(api)
+    if with_handler:
+        test_leave_uses_game_distribution_and_pays_exactly_once(api)
+    else:
+        from game_platform.tests.test_server_leaving import test_maybe_leave_previews_the_equal_split_without_player_left
+        test_maybe_leave_previews_the_equal_split_without_player_left(api)
     second = QueryStore(store.client, namespace=store.namespace)
     records = list(store._query("matches", [], limit=10))
     assert len(records) == 1
