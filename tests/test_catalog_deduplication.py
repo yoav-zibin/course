@@ -312,3 +312,93 @@ def test_unknown_persistent_adapter_is_not_hidden_without_a_durable_marker(case)
     assert run(case)[0]['status'] == 'skipped_unsupported_store'
     assert store.get_game(duplicate.id) == duplicate
     assert store.get_game_draft(duplicate.id) is None
+
+
+def _snapshot_platform(backing):
+    """Real SavingStore behavior and metrics wrapper; fake only remote persistence."""
+    import threading
+    from types import SimpleNamespace
+    from game_platform.firestore_store import FirestoreStore
+    from game_platform.saving_store import SavingStore
+    from game_platform.observability import TimedStore, current
+
+    class Ref:
+        def __init__(self, key): self.key = key
+        def get(self): return SimpleNamespace(exists=self.key in backing['receipts'])
+        def create(self, value):
+            if self.key in backing['receipts']: raise RuntimeError('receipt exists')
+            if backing.get('claim_error'): raise RuntimeError('receipt write failed')
+            backing['receipts'][self.key] = value
+        def set(self, value): backing['receipts'][self.key] = value
+
+    class SnapshotStore(FirestoreStore):
+        def __init__(self):
+            self._prefix = 'production_test_'
+            self._client = SimpleNamespace(collection=lambda name: SimpleNamespace(
+                document=lambda key: Ref(name+'/'+key)))
+            inner = InMemoryStore.of_snapshot(backing['snapshot'])
+            SavingStore.__init__(self, inner, min_write_interval_seconds=60, writer_name='test-catalog')
+        def _save(self, snapshot): backing['snapshot'] = snapshot
+
+    raw = SnapshotStore()
+    wrapped = TimedStore(raw, current())
+    platform = GamePlatform.__new__(GamePlatform)
+    platform._store = wrapped
+    platform._lock = threading.RLock()
+    platform._clock = lambda: NOW
+    platform._require_game_strings = True
+    return platform, raw
+
+
+def test_snapshot_metrics_wrapper_retirement_and_restart_preserve_author_restore(case):
+    _, store, keeper, duplicate, _, path, _ = case
+    backing = {'snapshot': store.snapshot(), 'receipts': {}}
+    platform, raw = _snapshot_platform(backing)
+    try:
+        assert apply_catalog_deduplication(platform, path)[0]['status'] == 'unpublished'
+        assert raw.get_game(keeper.id).published
+        assert not raw.get_game(duplicate.id).published
+        assert raw.get_game_draft(duplicate.id).game_schemas == duplicate.game_schemas
+        assert list(backing['receipts'].values()) == [{'claimed': True, 'applied': True}]
+        platform.publish_game_draft(caller_id='author', draft_id=duplicate.id, expected_revision=raw.get_game_draft(duplicate.id).revision)
+        raw.flush()
+    finally:
+        raw.close()
+    restarted, raw2 = _snapshot_platform(backing)
+    try:
+        assert apply_catalog_deduplication(restarted, path)[0]['status'] == 'unchanged'
+        assert raw2.get_game(duplicate.id).published
+    finally:
+        raw2.close()
+
+
+def test_snapshot_claim_failure_does_not_hide_or_create_draft(case):
+    _, store, _, duplicate, _, path, _ = case
+    backing = {'snapshot': store.snapshot(), 'receipts': {}, 'claim_error': True}
+    platform, raw = _snapshot_platform(backing)
+    try:
+        assert apply_catalog_deduplication(platform, path)[0]['status'] == 'error'
+        assert raw.get_game(duplicate.id).published
+        assert raw.get_game_draft(duplicate.id) is None
+    finally:
+        raw.close()
+
+
+def test_snapshot_crash_after_claim_never_rehides_a_restored_game(case, monkeypatch):
+    _, store, _, duplicate, _, path, _ = case
+    backing = {'snapshot': store.snapshot(), 'receipts': {}}
+    platform, raw = _snapshot_platform(backing)
+    try:
+        def interrupted(**kwargs): raise RuntimeError('interrupted after durable claim')
+        monkeypatch.setattr(platform, 'unpublish_game', interrupted)
+        assert apply_catalog_deduplication(platform, path)[0]['status'] == 'error'
+        assert raw.get_game(duplicate.id).published
+        assert list(backing['receipts'].values()) == [{'claimed': True}]
+    finally:
+        raw.close()
+    restarted, raw2 = _snapshot_platform(backing)
+    try:
+        assert apply_catalog_deduplication(restarted, path)[0]['status'] == 'unchanged'
+        assert raw2.get_game(duplicate.id).published
+    finally:
+        raw2.close()
