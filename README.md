@@ -356,6 +356,8 @@ Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct
   also ends if its last human leaves.
 - Joining an ongoing match requires `allows_join_mid_match`; the joiner takes over the
   first computer seat, or adds a seat if the game's maximum player count allows it.
+  In a paid match the joiner stakes `bet_per_player` like everyone else (it is added to
+  `token_pot`); a joiner who can't afford it is turned away (409).
 
 ### Feedback
 

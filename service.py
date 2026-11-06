@@ -2647,14 +2647,18 @@ class GamePlatform:
                 num_computer_opponents=match.num_computer_opponents,
             )
         game = self._store.get_game_version(match.game_id, match.game_version)
+        # A v2 match takes the joiner's stake as they join, in the waiting room
+        # and mid-match alike. A v1 match takes its players' stakes at the start
+        # (_fund_match_tokens), so only a mid-match joiner pays here. Either way
+        # the pot grows by the stake, so nobody holds a seat in a paid match (and
+        # a share of its pot, or of its refund) without having paid in.
         stake = (
             match.bet_per_player
-            if game is not None and game.server_code
+            if (game is not None and game.server_code) or match.status == "ongoing"
             else 0
         )
         if stake:
-            # A v2 match takes the joiner's stake as they join (the pot
-            # grows by it), in the waiting room and mid-match alike.
+            # Raises (before anything is saved) when the joiner can't afford it.
             self._deduct_stake(caller_id, stake)
         saved = self._save(
             replace(

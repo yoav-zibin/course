@@ -3,6 +3,7 @@ the pot is split, because the server can't check a client's claimed result.
 Tokens move once every human agrees; a dispute or the deadline refunds every
 stake."""
 
+import dataclasses
 import datetime as dt
 from typing import Any
 
@@ -175,3 +176,80 @@ def test_the_old_checks_on_the_proposal_still_apply() -> None:
             },
         )
         assert (response.status_code, response.json()["detail"]) == (400, detail)
+
+
+def match_open_to_joiners(api: Api) -> tuple[str, str, str]:
+    """A started v1 paid match between two players that a third may join mid-match."""
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game_id = api.new_game(
+        owner=alice, allowed_player_counts=(2, 3), allows_join_mid_match=True
+    )
+    match = api.ok(
+        "POST",
+        "/matches",
+        as_user=alice,
+        json={"game_id": game_id, "bet_per_player": STAKE},
+    )
+    api.ok("POST", f"/matches/{match['id']}/join", as_user=bob)
+    api.ok("POST", f"/matches/{match['id']}/start", as_user=alice)
+    return match["id"], alice, bob
+
+
+def test_a_mid_match_joiner_stakes_like_everyone_else() -> None:
+    # Regression: the joiner used to take a seat (and a share of the pot) free.
+    api = Api()
+    match_id, alice, bob = match_open_to_joiners(api)
+    zed = api.new_user("zed")
+    match = api.ok("POST", f"/matches/{match_id}/join", as_user=zed)
+    assert match["token_pot"] == 3 * STAKE
+    assert balance(api, zed) == 10 - STAKE  # today's grant, minus the stake
+    # Paying out only the starting stakes no longer adds up.
+    response = api.request(
+        "POST",
+        f"/matches/{match_id}/moves",
+        as_user=alice,
+        json={
+            "new_state": {},
+            "next_turn_player_indices": None,
+            "payout_player_indices": {"0": 0, "1": 0, "2": 2 * STAKE},
+        },
+    )
+    assert (response.status_code, response.json()["detail"]) == (
+        400,
+        "payouts must total the token pot",
+    )
+
+
+def test_a_refund_after_a_mid_match_join_gives_everyone_exactly_their_stake() -> None:
+    api = Api()
+    match_id, alice, bob = match_open_to_joiners(api)
+    zed = api.new_user("zed")
+    api.ok("POST", f"/matches/{match_id}/join", as_user=zed)
+    match = api.move(match_id, as_user=alice, next_turn=None).json()
+    assert match["token_payouts"] == {"0": STAKE, "1": STAKE, "2": STAKE}
+    assert (balance(api, alice), balance(api, bob), balance(api, zed)) == (10, 10, 10)
+
+
+def test_a_joiner_who_cannot_afford_the_stake_is_turned_away() -> None:
+    api = Api()
+    match_id, alice, _ = match_open_to_joiners(api)
+    zed = api.new_user("zed")
+    # Spend today's grant first, so Zed has nothing left to stake.
+    store = api.platform._store
+    user = store.get_user(zed)
+    assert user is not None
+    store.put_user(
+        dataclasses.replace(
+            user,
+            token_balance=0,
+            last_token_grant_day=api.platform.now().date().isoformat(),
+        )
+    )
+    response = api.request("POST", f"/matches/{match_id}/join", as_user=zed)
+    assert (response.status_code, response.json()["detail"]) == (
+        409,
+        "a player has insufficient tokens",
+    )
+    match = api.ok("GET", f"/matches/{match_id}", as_user=alice)
+    assert len(match["players"]) == 2
+    assert match["token_pot"] == 2 * STAKE
