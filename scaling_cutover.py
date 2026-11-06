@@ -8,7 +8,7 @@ from dataclasses import replace
 
 from pydantic import TypeAdapter
 
-from game_platform.models import AgentConversationEntry, Move
+from game_platform.models import AgentConversationEntry, GamePopularity, Move
 from game_platform.query_store import ADAPTERS
 from game_platform.scaling_tools import documents
 from game_platform.store import Snapshot
@@ -97,6 +97,17 @@ def rollback_snapshot(store, *, byte_limit=32 * 1024**2, record_limit=5000):
     games = list(pages("games"))
     fields["deleted_game_ids"] = tuple(g.id for g in games if g.deleted)
     fields["unpublished_game_ids"] = tuple(g.id for g in games if not g.published)
+    popularity = []
+    for document in documents(store.collection("game_popularity")):
+        records += 1
+        if records > record_limit:
+            raise ValueError("rollback snapshot exceeds its explicit record limit")
+        row = document.to_dict()
+        account(len(str(row).encode()))
+        popularity.append(GamePopularity(
+            game_id=row["game_id"], matches_started=row["matches_started"], score=row["score"],
+        ))
+    fields["game_popularity"] = tuple(sorted(popularity, key=lambda row: row.game_id))
     return Snapshot(**fields)
 
 

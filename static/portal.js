@@ -118,6 +118,7 @@ const state = {
   recentGamesForceRefresh: true,
   recentGamesUserId: null,
   gamePopularityScores: new Map(),
+  gamePopularityFetchedAt: new Map(),
   gamePopularityRequests: new Map(),
   gamePopularityVersions: new Map(),
   popularGames: [], // bounded server ranking; refreshes after starts and at most once per minute otherwise
@@ -555,6 +556,7 @@ function invalidateGamePopularity(gameId) {
     (state.gamePopularityVersions.get(gameId) || 0) + 1,
   );
   state.gamePopularityScores.delete(gameId);
+  state.gamePopularityFetchedAt.delete(gameId);
   state.gamePopularityRequests.delete(gameId);
 }
 
@@ -578,7 +580,8 @@ function updateGamePopularity(game) {
     label.hidden = true;
     return;
   }
-  if (state.gamePopularityScores.has(game.id)) {
+  const fetchedAt = state.gamePopularityFetchedAt.get(game.id) || 0;
+  if (state.gamePopularityScores.has(game.id) && Date.now() - fetchedAt < 60_000) {
     renderGamePopularity(game, state.gamePopularityScores.get(game.id));
     return;
   }
@@ -595,11 +598,13 @@ function updateGamePopularity(game) {
     if (state.gamePopularityVersions.get(game.id) !== version) return;
     const score = Number.isSafeInteger(result?.score) && result.score >= 0 ? result.score : 0;
     state.gamePopularityScores.set(game.id, score);
+    state.gamePopularityFetchedAt.set(game.id, Date.now());
     if (selectedSetupGame()?.id === game.id)
       renderGamePopularity(game, score);
   }).catch(() => {
     if (state.gamePopularityVersions.get(game.id) !== version) return;
     state.gamePopularityScores.set(game.id, null);
+    state.gamePopularityFetchedAt.set(game.id, Date.now());
     if (selectedSetupGame()?.id === game.id)
       renderGamePopularity(game, null);
   }).finally(() => {
@@ -827,7 +832,8 @@ function renderLists() {
 }
 
 function openGamePage(id) {
-  if (!state.games.some((game) => game.id === id)) return;
+  if (![state.games, state.popularGames, state.recentGames].some(games =>
+    games.some(game => game.id === id))) return;
   const route = new URLSearchParams({ game: id });
   const skin = new URLSearchParams(location.search).get("skin");
   if (skin) route.set("skin", skin);
@@ -965,8 +971,7 @@ function renderRecentGames() {
   if (!section) return;
   const row = $("recent-games");
   const games = me()
-    ? state.recentGames.filter(game =>
-        state.games.some(current => current.id === game.id && current.published !== false))
+    ? state.recentGames.filter(game => game.published !== false)
     : [];
   section.hidden = games.length === 0;
   const gameIds = games.map(game => game.id).join("\u0000");
@@ -1006,8 +1011,7 @@ function renderPopularGames() {
   const previousScrollLeft = row.scrollLeft;
   // The API returns Firestore's descending score order. Keep it intact so
   // rank 1 is always the first card in the carousel.
-  const rankedGames = state.popularGames.filter(game =>
-    state.games.some(current => current.id === game.id && current.published !== false));
+  const rankedGames = state.popularGames.filter(game => game.published !== false);
   const hasRanking = rankedGames.length > 0;
   // The aggregate is intentionally populated from match starts. Before its first
   // score arrives, keep this row useful with catalog games and explain the state.

@@ -29,6 +29,15 @@ ExperimentEventKind = Literal[
 
 
 @dataclass(frozen=True, kw_only=True)
+class GamePopularity:
+    """All-time started-match totals; score sums the seats present at each start."""
+
+    game_id: str
+    matches_started: int
+    score: int
+
+
+@dataclass(frozen=True, kw_only=True)
 class LinkedAccount:
     """A third-party login linked to a user: a Google subject, a verified
     phone number (E.164), or a verified email address (lowercased)."""

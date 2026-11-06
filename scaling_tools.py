@@ -11,7 +11,7 @@ import datetime as dt
 import hashlib
 import json
 import os
-from dataclasses import replace
+from dataclasses import asdict, replace
 
 from google.cloud import firestore
 from pydantic import TypeAdapter
@@ -74,7 +74,12 @@ def migrate(source, destination, *, source_prefix="", batch_records=None):
         for doc in documents(
             source.collection(source_prefix + kind.field), after=progress.get("last_id")
         ):
-            record = _RECORD_ADAPTERS[kind.field].validate_json(_read_text(doc))
+            adapter = _RECORD_ADAPTERS[kind.field]
+            record = (
+                adapter.validate_python(doc.to_dict())
+                if kind.field == "game_popularity"
+                else adapter.validate_json(_read_text(doc))
+            )
             if kind.field == "matches":
                 destination.ref("matches", record.id)
                 # The namespace must remain offline during migration. Clear any
@@ -112,6 +117,8 @@ def migrate(source, destination, *, source_prefix="", batch_records=None):
                     scheduler._schedule_match(destination.get_match(record.id))
             elif kind.field == "translations":
                 destination.put_translations([record])
+            elif kind.field == "game_popularity":
+                destination.raw_put(destination.ref("game_popularity", record.game_id), asdict(record))
             elif kind.field == "game_versions":
                 with destination.atomic():
                     destination._put(

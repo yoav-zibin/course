@@ -26,6 +26,22 @@ def api_for(store):
     return api
 
 
+def test_popularity_ranking_is_atomic_durable_and_preserved_in_rollback(store):
+    from game_platform.tests.test_popularity import exercise_popularity
+    from game_platform.scaling_cutover import rollback_snapshot
+
+    first, second = exercise_popularity(api_for(store))
+    with pytest.raises(RuntimeError):
+        with store.atomic():
+            store.record_game_match_start(first, 10)
+            raise RuntimeError("roll back the start")
+    restarted = QueryStore(store.client, namespace=store.namespace)
+    assert restarted.game_popularity_score(first) == 4
+    assert restarted.list_popular_game_ids(8) == [(first, 4), (second, 3)]
+    snapshot = rollback_snapshot(restarted)
+    assert {row.game_id: row.score for row in snapshot.game_popularity} == {first: 4, second: 3}
+
+
 def test_private_test_recording_survives_query_store_restart(store):
     from game_platform.tests.test_test_sessions import recording
 

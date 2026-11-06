@@ -57,6 +57,48 @@ def _all_data(api: "Api") -> dict:
     return api.ok("GET", "/debug/all-data")
 
 
+def test_popularity_uses_native_firestore_ranking_and_survives_restart(open_store):
+    from game_platform.tests.test_popularity import exercise_popularity
+
+    store = open_store()
+    first, second = exercise_popularity(Api(store=store))
+    rows = list(store._collection("game_popularity").order_by("score", direction="DESCENDING").stream())
+    assert [(row.to_dict()["game_id"], row.to_dict()["score"]) for row in rows] == [(first, 4), (second, 3)]
+    store.close()
+    restored = Api(store=open_store())
+    assert restored.ok("GET", f"/games/{first}/popularity")["score"] == 4
+    assert [row["id"] for row in restored.ok("GET", "/games/popular")] == [first, second]
+
+
+def test_native_popularity_documents_load_without_a_snapshot_json_field(client, prefix, open_store):
+    client.collection(prefix + "game_popularity").document("existing").set({
+        "game_id": "existing", "matches_started": 2, "score": 5,
+    })
+    store = open_store()
+    assert store.game_popularity_score("existing") == 5
+    assert store.list_popular_game_ids(8) == [("existing", 5)]
+
+
+def test_existing_firestore_history_seeds_popularity_once(client, prefix, open_store):
+    from dataclasses import replace
+    from game_platform.tests.helpers import Api
+
+    source = Api()
+    owner = source.new_user("historical player")
+    game = source.new_game(owner=owner, allowed_player_counts=[2])
+    source.new_match(owner=owner, game_id=game, num_computer_opponents=1, start=True)
+    source.new_match(owner=owner, game_id=game, num_computer_opponents=1)
+    snapshot = replace(source.platform._store.snapshot(), game_popularity=())
+    import_snapshot(client, snapshot, collection_prefix=prefix)
+    store = open_store()
+    assert store.game_popularity_score(game) == 2
+    assert store.list_popular_game_ids(8) == [(game, 2)]
+    store.close()
+    restarted = open_store()
+    assert restarted.game_popularity_score(game) == 2
+    assert restarted.list_popular_game_ids(8) == [(game, 2)]
+
+
 def test_everything_survives_a_restart(open_store) -> None:
     store = open_store()
     api = Api(store=store)
@@ -106,10 +148,15 @@ def test_moves_are_one_document_each_and_deleting_a_match_removes_them(
 
 
 def test_records_too_big_for_one_document_are_split(client, prefix, open_store) -> None:
+    import base64
+    import random
+
     store = open_store()
     api = Api(store=store)
     alice = api.new_user("alice")
-    huge_code = "<div>" + "é" * 600_000 + "</div>"  # ~1.2 MB in UTF-8
+    # Repeated characters now compress into one document; use deterministic
+    # high-entropy data to exercise chunking after compression as well.
+    huge_code = "<div>" + base64.b64encode(random.Random(1).randbytes(1_200_000)).decode() + "</div>"
     game = api.ok(
         "POST",
         "/games",

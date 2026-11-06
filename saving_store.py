@@ -138,6 +138,19 @@ class SavingStore:
 
     # [Store] interface: reads delegate; writes delegate and schedule a save.
 
+    def record_game_match_start(self, game_id: str, player_count: int) -> None:
+        with self._lock:
+            self._inner.record_game_match_start(game_id, player_count)
+            self._set_dirty()
+
+    def game_popularity_score(self, game_id: str) -> int:
+        with self._lock:
+            return self._inner.game_popularity_score(game_id)
+
+    def list_popular_game_ids(self, limit: int) -> list[tuple[str, int]]:
+        with self._lock:
+            return self._inner.list_popular_game_ids(limit)
+
     def put_user(self, user: User) -> None:
         with self._lock:
             self._inner.put_user(user)

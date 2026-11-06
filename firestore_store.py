@@ -46,6 +46,7 @@ from game_platform.observability import timed_external
 
 from game_platform.json_file_store import read_snapshot, write_snapshot
 from game_platform.saving_store import SavingStore
+from game_platform.models import GamePopularity
 from game_platform.store import InMemoryStore, Snapshot
 from game_platform.translation_bundle import pack, unpack
 
@@ -60,7 +61,7 @@ _CHUNK_BYTES: Final = 200_000
 _COMPRESS_MIN_BYTES: Final = 1_024
 _COMPRESS_MIN_SAVING: Final = 0.10
 # Firestore's stored representation evolves independently of exported JSON files.
-_FIRESTORE_FORMAT_VERSION: Final = 12
+_FIRESTORE_FORMAT_VERSION: Final = 13
 # Firestore batches hold at most 500 writes; keep requests well under 10 MiB.
 _MAX_BATCH_WRITES: Final = 500
 _MAX_BATCH_BYTES: Final = 8_000_000
@@ -112,6 +113,7 @@ _KINDS: Final = (
     ),
     _Kind(field="experiment_events", key=lambda event: event.id),
     _Kind(field="feedback", key=lambda feedback: feedback.id),
+    _Kind(field="game_popularity", key=lambda row: row.game_id),
 )
 assert {kind.field for kind in _KINDS} == {
     field.name for field in dataclasses.fields(Snapshot)
@@ -326,11 +328,35 @@ class FirestoreStore(SavingStore):
             kind.field: {kind.key(record): record for record in getattr(snapshot, kind.field)}
             for kind in _KINDS
         }
+        # Snapshot deployments already load retained matches. Seed older stores
+        # once from that loaded history, without a new database-wide scan.
+        seeded_popularity = False
+        if not snapshot.game_popularity:
+            totals: dict[str, tuple[int, int]] = {}
+            for match in snapshot.matches:
+                started = (
+                    match.status == "ongoing"
+                    or match.initial_turn_player_indices is not None
+                    or match.end_reason == "finished"
+                    or bool(match.moves)
+                )
+                if started and match.seats:
+                    count, score = totals.get(match.game_id, (0, 0))
+                    totals[match.game_id] = (count + 1, score + len(match.seats))
+            if totals:
+                snapshot = dataclasses.replace(snapshot, game_popularity=tuple(
+                    GamePopularity(game_id=game_id, matches_started=count, score=score)
+                    for game_id, (count, score) in sorted(totals.items())
+                ))
+                seeded_popularity = True
         super().__init__(
             InMemoryStore.of_snapshot(snapshot),
             min_write_interval_seconds=min_write_interval_seconds,
             writer_name=f"firestore-store-writer {client.project}/{self._prefix or '-'}",
         )
+        if seeded_popularity:
+            with self._lock:
+                self._set_dirty()
 
     @classmethod
     def connect(
@@ -353,6 +379,17 @@ class FirestoreStore(SavingStore):
 
     def _collection(self, name: str) -> Any:
         return self._client.collection(f"{self._prefix}{name}")
+
+    def list_popular_game_ids(self, limit: int) -> list[tuple[str, int]]:
+        # Commit accepted starts before reading the ranking, including a start
+        # immediately followed by a return to the catalog.
+        self.flush()
+        with timed_external("firestore"):
+            rows = list(self._collection("game_popularity").order_by(
+                "score", direction="DESCENDING"
+            ).limit(limit).stream())
+        return [(data["game_id"], data["score"]) for row in rows
+                if (data := row.to_dict()) and data.get("score", 0) > 0]
 
     def _format_ref(self) -> Any:
         return self._collection("meta").document("format")
@@ -396,7 +433,11 @@ class FirestoreStore(SavingStore):
             with timed_external("firestore"):
                 documents = list(self._collection(kind.field).stream())
             for document in documents:
-                record = adapter.validate_json(text_of(document))
+                record = (
+                    adapter.validate_python(document.to_dict())
+                    if kind.field == "game_popularity"
+                    else adapter.validate_json(text_of(document))
+                )
                 if kind.items_field is not None:
                     item_adapter = _ITEM_ADAPTERS[kind.field]
                     items = document.reference.collection(kind.items_field)
@@ -445,6 +486,11 @@ class FirestoreStore(SavingStore):
                 if before is record or before == record:
                     continue
                 ref = collection.document(_document_id(key))
+                if kind.field == "game_popularity":
+                    # Native numeric fields let the top-N query use the index;
+                    # no duplicate JSON or per-match popularity records are needed.
+                    writes.set(ref, dataclasses.asdict(record))
+                    continue
                 if kind.items_field is None:
                     put(ref, adapter.dump_json(record).decode())
                     continue

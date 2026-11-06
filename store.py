@@ -17,6 +17,7 @@ from game_platform.models import (
     ExperimentAssignment,
     ExperimentEvent,
     Game,
+    GamePopularity,
     GameDraft,
     GameTestSession,
     GameTestSeeds,
@@ -264,6 +265,7 @@ class Snapshot:
     experiment_events: tuple[ExperimentEvent, ...] = ()
     # Optional so existing data files load without a migration. Admin-only data.
     feedback: tuple[Feedback, ...] = ()
+    game_popularity: tuple[GamePopularity, ...] = ()
 
 
 class InMemoryStore:
@@ -300,8 +302,7 @@ class InMemoryStore:
         self._experiments: dict[str, Experiment] = {}
         self._experiment_assignments: dict[tuple[str, str], ExperimentAssignment] = {}
         self._experiment_events: dict[str, ExperimentEvent] = {}
-        # Test/local fallback only. Production query mode keeps these aggregates
-        # in the dedicated Firestore game_popularity collection.
+        # One small aggregate per game, also persisted by snapshot stores.
         self._game_popularity: dict[str, tuple[int, int]] = {}
         self._feedback: dict[str, Feedback] = {}
 
@@ -343,6 +344,10 @@ class InMemoryStore:
             store.put_experiment_event(event)
         for feedback in snapshot.feedback:
             store.put_feedback(feedback)
+        store._game_popularity = {
+            row.game_id: (row.matches_started, row.score)
+            for row in snapshot.game_popularity
+        }
         return store
 
     def snapshot(self) -> Snapshot:
@@ -373,6 +378,10 @@ class InMemoryStore:
             experiment_assignments=tuple(self._experiment_assignments.values()),
             experiment_events=tuple(self._experiment_events.values()),
             feedback=tuple(self._feedback.values()),
+            game_popularity=tuple(
+                GamePopularity(game_id=game_id, matches_started=matches, score=score)
+                for game_id, (matches, score) in sorted(self._game_popularity.items())
+            ),
         )
 
     def put_experiment(self, experiment: Experiment) -> None:

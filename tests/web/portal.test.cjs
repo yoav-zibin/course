@@ -41,6 +41,16 @@ test('creating a solo-only game starts one human immediately',async()=>{
   assert.equal(node('create').textContent,'Play solo ↗');
 });
 
+test('ranked games retain server order and open even outside the current catalog page',()=>{
+  const {node,run,navigations}=setup();
+  run('state.popularGames=[{id:"leader",name:"Most popular",version:1,allowed_player_counts:[2]}, {id:"runner-up",name:"Next game",version:1,allowed_player_counts:[2]}];renderPopularGames()');
+  const cards=node('popular-games').children;
+  assert.equal(cards.length,2);
+  assert.equal(cards[0].children[0].textContent,'1');
+  cards[0].onclick();
+  assert.equal(navigations[0],'/static/portal.html?game=leader');
+});
+
 test('multiplayer and mixed-mode games retain their lobby',async()=>{
   for(const counts of ['[2]','[1,2]']) {
     const calls=[];const {run}=setup(async(method,path)=>{if(method==='POST') calls.push(path);return {id:'match',game_version:2,players:[{}]};});
