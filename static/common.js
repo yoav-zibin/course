@@ -476,7 +476,8 @@ function setUpAppTopbar() {
   const brand = bar.querySelector('h1');
   brand.setAttribute('data-i18n', 'ui.app_name');
   const nav = bar.querySelector('nav');
-  nav.replaceChildren(...[
+  // Entry pages use the shared header without an app navigation menu.
+  nav?.replaceChildren(...[
     ['portal', 'Portal'], ['builder', 'Builder'], ['new_builder', 'New Builder'], ['admin', 'Admin'],
   ].map(([page, label]) => el('a', {
     href: page === 'new_builder' ? '/static/guided-builder.html' : '/' + page,
