@@ -383,6 +383,12 @@ def test_platform_contract_is_shared_by_generation_and_review_prompts():
     assert 'which cases you added and why' in STEP_PROMPTS['tests']
     for phrase in ('One ruling per situation', 'only when', 'worked example'):
         assert phrase in DRAFTING_CONTRACT, phrase
+    # The completeness checklist: omissions (a shared effect glued to one
+    # move type, an unanswered who-may-send, an unaccounted state field)
+    # are a different failure class from contradictions.
+    for phrase in ('Shared effects get their own sentence', 'who may send it',
+                   'Every state field has a complete story'):
+        assert phrase in DRAFTING_CONTRACT, phrase
     assert DRAFTING_CONTRACT in STEP_PROMPTS['logic']
     assert DRAFTING_CONTRACT in STEP_PROMPTS['tests']
     from game_platform.builder_checks import ILLUSTRATION_ACCURACY

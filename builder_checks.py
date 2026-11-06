@@ -33,6 +33,9 @@ DRAFTING_CONTRACT = '''Drafting contract (applies to rules and examples):
 - Exceptions carry their condition in the same sentence ('only when ...', 'unless ...'). Never call the same action both legal and illegal in different places, and never let a summary sentence soften or broaden the operative rule it summarizes.
 - Define moves operationally: the exact cells or fields involved, the check applied, and the result. For any rule with a blocked or edge case, give one concrete worked example with coordinates.
 - Every example outcome must follow from exactly one stated rule; never invent an outcome that no stated rule produces.
+- Shared effects get their own sentence: anything several move types do (passing the turn, incrementing the move count) is stated once, in a sentence naming every move type it applies to — never buried inside one move type's description, where the other move types silently lose it.
+- Every move type answers the same four questions: who may send it, when it is legal, every state field it changes, and whether it passes the turn.
+- Every state field has a complete story: before returning, go through the starting state field by field (move count, walls remaining, turn, winner, final payouts, difficulty) and make sure the rules say what can change each one.
 '''
 
 ILLUSTRATION_ACCURACY = '''Illustration accuracy (applies to every drawing):
