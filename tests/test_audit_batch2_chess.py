@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from game_platform.game_logic import GameLogic, InvalidMoveError
+from game_platform.tests.helpers import UnrestrictedGameLogic as GameLogic
+from game_platform.game_logic import InvalidMoveError
 
 SOURCE = Path(__file__).parents[1] / 'games' / 'audit-batch2' / '3-minute-chess.server.js'
 NOW = dt.datetime(2026, 11, 3, 21, tzinfo=dt.timezone.utc)

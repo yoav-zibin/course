@@ -3,7 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from game_platform.game_logic import GameLogic, InvalidMoveError
+from game_platform.tests.helpers import UnrestrictedGameLogic as GameLogic
+from game_platform.game_logic import InvalidMoveError
 
 
 ROOT = Path(__file__).resolve().parents[1] / "games" / "audit-batch1"

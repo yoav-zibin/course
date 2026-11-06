@@ -181,7 +181,17 @@ def test_games_test_rechecks_saved_approved_examples():
     platform=GamePlatform(store=store)
     broken=fixture()['server_code'].replace('n:0','n:1').replace('n: 0','n: 1')
     assert broken != fixture()['server_code']
-    report=platform.test_game_code(server_code=broken,rules=d.rules,game_id=d.id)
+    test_schemas = d.builder_workflow['artifacts']['tests']['value']
+    report=platform.test_game_code(
+        server_code=broken,
+        game_schemas={
+            'state': test_schemas['state_schema'],
+            'move': test_schemas['move_schema'],
+            'view': test_schemas['view_schema'],
+        },
+        rules=d.rules,
+        game_id=d.id,
+    )
     assert not report.passed
     assert report.failures[0].function=='approved_example'
 

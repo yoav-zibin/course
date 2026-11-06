@@ -341,4 +341,9 @@ def test_game_defined_views_and_moves_do_not_use_transition_validation(function,
 def test_match_transitions_still_reject_symbol_turns(function):
     logic = GameLogic('const game = {' + function + '() { return {state: {}, turn: "X"}; }};')
     with pytest.raises(GameLogicError, match='empty or non-list turn'):
-        logic.call(function, {}, 'u1', ctx=_ctx())
+        if function == 'newMatch':
+            logic.call(function, ctx=_ctx())
+        elif function == 'applyMove':
+            logic.call(function, {}, 'u1', {}, ctx=_ctx())
+        else:
+            logic.call(function, {}, 'u1', ctx=_ctx())

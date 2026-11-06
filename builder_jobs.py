@@ -840,7 +840,13 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
                     continue
                 stage('Loading generated server JavaScript')
                 try:
-                    GameLogic(server).load()
+                    test_contract = artifacts['tests']['value']
+                    game_schemas = {
+                        'state': test_contract['state_schema'],
+                        'move': test_contract['move_schema'],
+                        'view': test_contract['view_schema'],
+                    }
+                    GameLogic(server, game_schemas=game_schemas).load()
                 except GameLogicError as exc:
                     problem = str(exc)[:1000]
                     errors = [{'server_load': problem}]

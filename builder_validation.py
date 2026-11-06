@@ -185,14 +185,40 @@ def probe_leaving(code, contract, *, allowed_player_counts, allows_leave_mid_mat
 
     two_humans = [player('human-1', 'human'), player('human-2', 'human')]
 
-    # A leave from an ID that holds no seat is a no-op, from the initial
-    # state and from a mid-game state alike.
+    # The platform rejects leave requests from callers without a seat before
+    # invoking game code, so these IDs are invalid playerLeft inputs.
     state, turn = start(two_humans, 10, 'non-seat leave')
     if state is not None:
-        expect_noop('non-seat leave', leave(state, 'spectator-1', two_humans, 10, 'non-seat leave'), state, turn)
+        try:
+            logic.call(
+                'playerLeft',
+                state,
+                'spectator-1',
+                ctx=make_ctx(two_humans, 10),
+                seed=4243,
+                time_limit_seconds=2.0,
+            )
+        except GameLogicError as exc:
+            if 'playerId is not in ctx.players' not in str(exc):
+                failures.append(f'non-seat leave: unexpected rejection: {exc}')
+        else:
+            failures.append('non-seat leave: playerLeft accepted a caller without a seat')
         mid = advance(state, turn, two_humans, 10)
         if mid is not None:
-            expect_noop('non-seat leave (mid-game)', leave(mid[0], 'spectator-1', two_humans, 10, 'non-seat leave (mid-game)'), mid[0], mid[1])
+            try:
+                logic.call(
+                    'playerLeft',
+                    mid[0],
+                    'spectator-1',
+                    ctx=make_ctx(two_humans, 10, 5),
+                    seed=4243,
+                    time_limit_seconds=2.0,
+                )
+            except GameLogicError as exc:
+                if 'playerId is not in ctx.players' not in str(exc):
+                    failures.append(f'non-seat leave (mid-game): unexpected rejection: {exc}')
+            else:
+                failures.append('non-seat leave (mid-game): playerLeft accepted a caller without a seat')
 
     # A leave that leaves fewer than two active humans ends the match and
     # conserves the pot; afterwards every further leave — by the other

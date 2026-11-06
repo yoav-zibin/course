@@ -2161,17 +2161,18 @@ class GamePlatform:
             ):
                 # New or re-ruled server code must pass its tests before
                 # the new version is published (Phase 5 gate).
-                self._gate_server_code(
+                gate_args = (
                     game_id,
                     updated.server_code,
                     updated.rules,
                     updated.game_schemas,
-                    budget_seconds=(
-                        _test_budget_seconds
-                        if _admin and _test_budget_seconds != 1.0
-                        else 1.0
-                    ),
                 )
+                if _admin and _test_budget_seconds != 1.0:
+                    self._gate_server_code(
+                        *gate_args, budget_seconds=_test_budget_seconds
+                    )
+                else:
+                    self._gate_server_code(*gate_args)
             updated = replace(
                 updated, version=game.version + 1, updated_at=self._clock()
             )

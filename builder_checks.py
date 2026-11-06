@@ -78,7 +78,20 @@ def localization(code, server, spec, rules):
 
 
 def random_walks(code, server, spec, rules):
-    report = test_server_code(server, rules=rules, contract=spec['tests'], budget_seconds=3, max_walks=1000)
+    test_schemas = spec['tests']
+    game_schemas = {
+        'state': test_schemas['state_schema'],
+        'move': test_schemas['move_schema'],
+        'view': test_schemas['view_schema'],
+    }
+    report = test_server_code(
+        server,
+        game_schemas=game_schemas,
+        rules=rules,
+        contract=test_schemas,
+        budget_seconds=3,
+        max_walks=1000,
+    )
     return {'passed': report.passed, 'details': str(report.failures)}
 
 

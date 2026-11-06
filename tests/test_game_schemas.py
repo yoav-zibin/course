@@ -5,8 +5,9 @@ import pytest
 
 from game_platform.backfill_game_schemas import backfill_game_schemas
 from game_platform.game_input_metrics import game_input_metrics
-from game_platform.game_logic import GameLogic, GameLogicError, InvalidMoveError
-from game_platform.game_testing import test_server_code as _test_server_code
+from game_platform.tests.helpers import UnrestrictedGameLogic as GameLogic
+from game_platform.game_logic import GameLogicError, InvalidMoveError
+from game_platform.tests.helpers import run_unrestricted_server_code as _test_server_code
 from game_platform.models import Game, GameRules
 from game_platform.service import GamePlatform
 from game_platform.store import InMemoryStore

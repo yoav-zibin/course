@@ -13,8 +13,25 @@ from game_platform.push import PushNotifier
 from game_platform.senders import CodeSender
 from game_platform.service import GamePlatform
 from game_platform.store import Store
+from game_platform.game_logic import GameLogic
 
 TEST_GAME_SCHEMAS = {"state": True, "move": True, "view": True}
+
+
+class UnrestrictedGameLogic(GameLogic):
+    """Test game mechanics with explicit schemas that accept all JSON values."""
+
+    def __init__(self, server_code: str, **kwargs: Any) -> None:
+        kwargs.setdefault("game_schemas", TEST_GAME_SCHEMAS)
+        super().__init__(server_code, **kwargs)
+
+
+def run_unrestricted_server_code(*args: Any, **kwargs: Any) -> Any:
+    """Run mechanics-focused test games with explicit allow-any-JSON schemas."""
+    from game_platform.game_testing import test_server_code
+
+    kwargs.setdefault("game_schemas", TEST_GAME_SCHEMAS)
+    return test_server_code(*args, **kwargs)
 
 
 class FakeClock:

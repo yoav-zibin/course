@@ -12,7 +12,8 @@ import json
 
 import pytest
 
-from game_platform.game_logic import GameLogic, InvalidMoveError
+from game_platform.tests.helpers import UnrestrictedGameLogic as GameLogic
+from game_platform.game_logic import InvalidMoveError
 from game_platform.tests.helpers import Api, error
 
 GAMES_DIR = Path(__file__).parent.parent / "games"

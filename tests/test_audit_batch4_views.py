@@ -2,7 +2,7 @@
 from pathlib import Path
 
 import pytest
-from game_platform.game_logic import GameLogic
+from game_platform.tests.helpers import UnrestrictedGameLogic as GameLogic
 
 GAMES = Path(__file__).parent.parent / 'games' / 'audit-batch4'
 

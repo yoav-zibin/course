@@ -615,6 +615,7 @@ class GameLogic:
                 self._validate_result("legacyPlayerLeft", result, ctx or {})
                 result = self._legacy_leave_result(result, args[1], ctx or {})
             self._validate_result(function, result, ctx or {})
+            self._validate_schema_result(function, result)
             if function == "playerLeft" and isinstance(result, dict) and result.get("turn") is not None:
                 if args[1] in result["turn"]:
                     raise GameLogicError("game.playerLeft returned a turn for the departing player")
@@ -734,8 +735,26 @@ class GameLogic:
             return None
         return validation_message(self._schema_validators[schema_name], value)
 
+    def _validate_schema_result(self, function: str, result: Any) -> None:
+        if function in ("computerMove", "randomMove"):
+            schema_name, value = "move", result
+        elif function == "viewFor":
+            schema_name, value = "view", result
+        elif function in ("newMatch", "applyMove", "playerJoined", "playerLeft"):
+            if not isinstance(result, dict) or "state" not in result:
+                return
+            schema_name, value = "state", result["state"]
+        else:
+            return
+        message = self._schema_message(schema_name, value)
+        if message is not None:
+            raise GameLogicError(
+                f"game.{function} returned invalid {schema_name}: {message}"
+            )
+
+    @staticmethod
     def _validate_result(
-        self, function: str, result: Any, ctx: dict[str, Any]
+        function: str, result: Any, ctx: dict[str, Any]
     ) -> None:
         """The structural checks every result must pass, from the spec: a
         turn is null or a non-empty set of current players, payouts go only
@@ -743,37 +762,13 @@ class GameLogic:
         leaver's payout is within the pot. Violations are game bugs."""
         if not isinstance(result, dict):
             if function in ("computerMove", "randomMove", "viewFor"):
-                schema_name = "view" if function == "viewFor" else "move"
-                message = self._schema_message(schema_name, result)
-                if message is not None:
-                    raise GameLogicError(
-                        f"game.{function} returned invalid {schema_name}: {message}"
-                    )
                 return
             raise GameLogicError(
                 f"game.{function} must return an object, got {result!r}"
             )
-        if function in ("computerMove", "randomMove"):
-            message = self._schema_message("move", result)
-            if message is not None:
-                raise GameLogicError(
-                    f"game.{function} returned invalid move: {message}"
-                )
-            return
-        if function == "viewFor":
-            message = self._schema_message("view", result)
-            if message is not None:
-                raise GameLogicError(
-                    f"game.viewFor returned invalid view: {message}"
-                )
+        if function in ("computerMove", "randomMove", "viewFor"):
             return
 
-        if "state" in result:
-            message = self._schema_message("state", result["state"])
-            if message is not None:
-                raise GameLogicError(
-                    f"game.{function} returned invalid state: {message}"
-                )
         players = ctx.get("players") or []
         player_ids = {player.get("id") for player in players}
         active_ids = {p.get("id") for p in players if p.get("active", True)}

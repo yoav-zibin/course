@@ -34,7 +34,12 @@ def run(games):
                 for method in ('randomMove', 'computerMove'):
                     ctx = {'players': [{'id': f'p{i}', 'kind': 'human', 'max_loss': 10}
                                        for i in range(count)], 'pot': count * 10, 'move_count': 0}
-                    logic = GameLogic(game['server_code'])
+                    logic = GameLogic(
+                        game['server_code'],
+                        game_schemas=game['game_schemas'],
+                        game_id=game['id'],
+                        game_version=game['version'],
+                    )
                     row = {'id': game['id'], 'name': game['name'], 'players': count,
                            'seed': seed, 'method': method, 'calls': 0, 'fuzz_calls': 0,
                            'determinism_checks': 0, 'fuzz_errors': []}

@@ -9,7 +9,7 @@ time, as regression seeds.
 """
 
 import game_platform.game_testing as game_testing
-from game_platform.game_testing import test_server_code as _test_server_code
+from game_platform.tests.helpers import run_unrestricted_server_code as _test_server_code
 from game_platform.models import GameRules
 from game_platform.tests.helpers import Api, TEST_GAME_SCHEMAS
 
