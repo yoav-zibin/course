@@ -17,7 +17,7 @@ from game_platform.models import GameRules
 from game_platform.game_logic import GameLogic, GameLogicError
 from game_platform.game_testing import test_server_code
 from game_platform.builder_validation import verify_examples
-from game_platform.builder_checks import COVER_FIDELITY, DRAFTING_CONTRACT, ILLUSTRATION_ACCURACY, PLATFORM_CONTRACT, REVIEW_DISCIPLINE
+from game_platform.builder_checks import COVER_CREATIVE, COVER_FIDELITY, DRAFTING_CONTRACT, ILLUSTRATION_ACCURACY, PLATFORM_CONTRACT, REVIEW_DISCIPLINE
 from game_platform.service import ConflictError, InvalidRequestError
 
 STEP_PROMPTS = {
@@ -358,6 +358,24 @@ SERVER_PATCH_INSTRUCTION = (
     'working code, and do not change the approved specification or tests.')
 
 
+_COVER_BOARD_WORDS = ('board', 'gameplay', 'screenshot', 'mockup', 'grid',
+                      'in-game', 'in game', 'top-down', 'top down')
+
+
+def _cover_brief(request_text):
+    """The catalog cover follows the author's own ask. A request that
+    mentions the board or gameplay gets the faithful board cover
+    (COVER_FIDELITY: exact grid, a plausible position, drama only from
+    framing); any other request — a scene, the characters, a mood — gets
+    creative key art (COVER_CREATIVE) with no board to adhere to. The
+    supporting previews stay faithful screenshot mockups either way:
+    they are evidence for the test examples, not decoration."""
+    text = (request_text or '').lower()
+    if any(word in text for word in _COVER_BOARD_WORDS):
+        return COVER_FIDELITY
+    return COVER_CREATIVE
+
+
 def _standalone_svg(svg):
     """An SVG shown through an <img> only renders when its root declares the
     SVG namespace, and only scales to fit when it declares a viewBox; add
@@ -572,6 +590,15 @@ def propose_images(client, prompt, routing, key, pending):
     # Keep markup out of the planning request. Each drawing gets its own output budget.
     specs = {name: entry['value'] for name, entry in prompt['artifacts'].items()
              if name in ('understanding', 'identity', 'logic', 'ui')}
+    cover_brief = _cover_brief(prompt['correction'])
+    cover_sentence = (
+        'The cover caption must describe the game board from the approved rules faithfully: flat '
+        '(top-down or straight-on), the exact grid dimensions, a plausible actual position; put the drama '
+        'in color, lighting and background — never a perspective or angled board, never scattered pieces. '
+        if cover_brief is COVER_FIDELITY else
+        'The cover caption must describe text-free key art for this game — a scene, its characters or '
+        'its mood, drawn from the approved name, description and rules; the cover does not show the board, '
+        'a position or the interface, and must still be recognizably this game and no other. ')
     previous = prompt['artifacts'].get('images', {}).get('value', {}).get('images', [])
     brief = {'specs': specs, 'language': prompt['language'], 'request': prompt['correction'],
              'previous_captions': [image['caption'] for image in previous]}
@@ -582,9 +609,7 @@ def propose_images(client, prompt, routing, key, pending):
             {'role':'system','content':'Plan the catalog artwork. Return JSON {message,captions:[strings]}, without markup. '
              'Write a short descriptive caption in the requested language for each drawing: one text-free '
              '16:9 cover first, then 3–5 screenshot mockups showing concrete consistent states, turns and views. '
-             'The cover caption must describe the game board from the approved rules faithfully: flat '
-             '(top-down or straight-on), the exact grid dimensions, a plausible actual position; put the drama '
-             'in color, lighting and background — never a perspective or angled board, never scattered pieces. '+routing},
+             + cover_sentence + routing},
             {'role':'user','content':json.dumps(brief, ensure_ascii=False)}
         ], max_tokens=3500, temperature=1.0, reasoning_effort='low')
         plan = parse_json(raw)
@@ -608,7 +633,7 @@ def propose_images(client, prompt, routing, key, pending):
         messages = [
             {'role':'system','content':f'Draw only one {kind}. Return raw SVG only. Keep under 3000 characters. '
              'Use simple svg,g,rect,circle,ellipse,line,path,text elements, inline presentation attributes, '
-             'no styles, scripts or external resources. Escape XML text. Preserve the described game state. ' + ILLUSTRATION_ACCURACY + (COVER_FIDELITY if index == 0 else '')},
+             'no styles, scripts or external resources. Escape XML text. Preserve the described game state. ' + ILLUSTRATION_ACCURACY + (cover_brief if index == 0 else '')},
             {'role':'user','content':json.dumps({**brief, 'sequence':progress['captions'], 'draw':caption}, ensure_ascii=False)}
         ]
         for attempt in range(2):

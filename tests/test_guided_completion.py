@@ -1095,7 +1095,7 @@ def test_image_step_resumes_at_failed_drawing():
             return ChatResult(raw,prompt_tokens=12,completion_tokens=20)
     cfg = SimpleNamespace(builder_input_usd_per_million=1,builder_output_usd_per_million=1,builder_max_input_tokens=10000)
     def run(d):
-        return propose_step(BudgetedModel(Provider(),cfg,platform,d.owner_user_id,d),d,'images','Please draw the example')
+        return propose_step(BudgetedModel(Provider(),cfg,platform,d.owner_user_id,d),d,'images','Please draw the example board')
     with pytest.raises(TimeoutError):
         run(draft)
     reopened = platform.get_game_draft(caller_id=draft.owner_user_id, draft_id=draft.id)
@@ -1706,3 +1706,41 @@ def test_build_falls_back_to_full_generation_when_patch_does_not_apply(monkeypat
     # back to the full-file generation and the build proceeded as before.
     assert model.patch_calls == 1 and model.server_generations == 2
     assert saved.server_code == f['server_code']
+
+
+def test_cover_brief_follows_the_authors_ask():
+    from game_platform.builder_jobs import _cover_brief
+    from game_platform.builder_checks import COVER_CREATIVE, COVER_FIDELITY
+    assert _cover_brief('Show the board in its starting position') is COVER_FIDELITY
+    assert _cover_brief('A screenshot of the mid-game grid') is COVER_FIDELITY
+    assert _cover_brief('The two rivals facing off at sunset, dramatic') is COVER_CREATIVE
+    assert _cover_brief('') is COVER_CREATIVE
+    assert _cover_brief(None) is COVER_CREATIVE
+
+
+def test_image_step_creative_cover_when_board_not_mentioned():
+    from game_platform.builder_jobs import propose_step
+    platform, draft = setup_draft()
+    systems = {}
+    captions = ['Cover', 'Start', 'Middle', 'End']
+    class Provider:
+        def chat_with_reasoning(self, messages, **options):
+            payload = json.loads(messages[1]['content'])
+            label = payload.get('draw', 'plan')
+            systems[label] = messages[0]['content']
+            if label == 'plan':
+                raw = json.dumps({'message':'Review images', 'captions':captions})
+            else:
+                raw = '<svg viewBox="0 0 160 90"><circle r="4"/></svg>'
+            return ChatResult(raw,prompt_tokens=12,completion_tokens=20)
+    cfg = SimpleNamespace(builder_input_usd_per_million=1,builder_output_usd_per_million=1,builder_max_input_tokens=10000)
+    result = propose_step(BudgetedModel(Provider(),cfg,platform,draft.owner_user_id,draft),draft,'images','Draw the two rivals facing off at sunset')
+    assert result.builder_workflow['artifacts']['images']['status'] == 'draft'
+    # The plan asks for key art, and only the cover drawing carries the
+    # creative brief; screenshots get neither cover brief.
+    assert 'key art' in systems['plan']
+    assert 'top-down or straight-on' not in systems['plan']
+    assert 'Creative cover' in systems['Cover']
+    assert 'Recount the rows and columns' not in systems['Cover']
+    assert 'Creative cover' not in systems['Start']
+    assert 'Cover fidelity' not in systems['Start']

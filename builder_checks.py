@@ -56,6 +56,12 @@ COVER_FIDELITY = '''Cover fidelity (applies to the catalog cover only):
 - Drama comes from color, lighting, background and framing only, never from bending the board's geometry. Recount the rows and columns before returning and fix any mismatch with the approved rules.
 '''
 
+COVER_CREATIVE = '''Creative cover (applies to the catalog cover only, when the author did not ask for the board):
+- The cover is key art, not a depiction of play: it does not show the board, a position or the interface. Evoke the game's theme, characters and mood from the approved name, description and rules — a scene, a confrontation, a world.
+- It must still be recognizably THIS game: use its named characters, objects and setting, never another game's board, pieces or branding, and never a generic scene that could advertise any game.
+- Text-free, 16:9. Composition, color and lighting are unrestricted.
+The supporting previews are unaffected by this brief: they remain faithful mockups of real positions.'''
+
 
 def examples(code, server, spec, rules):
     results = verify_examples(server, spec['tests'])
