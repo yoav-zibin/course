@@ -17,6 +17,12 @@ TRANSLATABLE = [
     "audit-batch1/go-fish.html",
     "audit-batch1/lost-cities.html",
     "audit-batch1/president.html",
+    "audit-batch2/3-minute-chess.html",
+    "audit-batch2/4-player-chess.html",
+    "audit-batch2/blokus.html",
+    "audit-batch2/guandan.html",
+    "audit-batch2/mini-golf-duels.html",
+    "audit-batch2/quoridor.html",
 ]
 
 

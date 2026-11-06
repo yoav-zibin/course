@@ -25,7 +25,7 @@ def cards(ranks, suit=0):
 
 def engine(client=False, expression='detect(s.cards, s.tr)'):
     if client:
-        stubs = "const document={getElementById(){return {}}};const window={addEventListener(){}};const parent={postMessage(){}};"
+        stubs = "const document={getElementById(){return {textContent:'{}'}}};const window={addEventListener(){}};const parent={postMessage(){}};"
         return GameLogic(stubs + CLIENT + '\nconst game={randomMove(s,p,ctx){return ' + expression + ';}};')
     return GameLogic(SERVER + '\ngame.randomMove=function(s,p,ctx){return ' + expression + ';};')
 
