@@ -113,16 +113,16 @@ def validate_artifact(step, value, *, require_test_images=True):
                     'expected_turn','view_of_mover','view_of_other','expected_view_of_mover','expected_view_of_other')
         for case in cases:
             for key in required:
-                if key not in case: raise InvalidRequestError(f'Test is missing {key}')
+                if key not in case: raise InvalidRequestError(f"{case.get('name')}: Test is missing {key}")
             if case.get('expected_turn') is None and not isinstance(case.get('expected_payouts'),dict):
-                raise InvalidRequestError('Terminal examples must include expected payouts')
-            if not isinstance(case['ctx'],dict): raise InvalidRequestError('Each test needs a context object')
+                raise InvalidRequestError(f"{case.get('name')}: Terminal examples must include expected payouts")
+            if not isinstance(case['ctx'],dict): raise InvalidRequestError(f"{case.get('name')}: Each test needs a context object")
             if type(case['ctx'].get('move_count')) is not int or case['ctx']['move_count'] < 0:
-                raise InvalidRequestError('Each test needs a nonnegative integer move_count')
-            if type(case['ctx'].get('seed')) is not int: raise InvalidRequestError('Each test needs a fixed integer seed')
+                raise InvalidRequestError(f"{case.get('name')}: Each test needs a nonnegative integer move_count")
+            if type(case['ctx'].get('seed')) is not int: raise InvalidRequestError(f"{case.get('name')}: Each test needs a fixed integer seed")
             players = case['ctx'].get('players')
             if not isinstance(players, list) or not players or not all(isinstance(p,dict) and isinstance(p.get('id'),str) and p['id'] for p in players):
-                raise InvalidRequestError('Each test needs players with nonempty string IDs')
+                raise InvalidRequestError(f"{case.get('name')}: Each test needs players with nonempty string IDs")
             ids = [p['id'] for p in players]
             if len(set(ids)) != len(ids) or case['player_id'] not in ids or (case['other_player_id'] is not None and case['other_player_id'] not in ids):
                 raise InvalidRequestError(f"{case['name']}: player IDs must refer to unique seats in the roster")
@@ -157,7 +157,7 @@ def validate_artifact(step, value, *, require_test_images=True):
                 if total > case['ctx']['pot'] or (turn is None and total != case['ctx']['pot']):
                     raise InvalidRequestError(f"{case['name']}: expected payouts must conserve the pot; payouts are tokens, not win scores")
             if require_test_images or case.get('images'):
-                if len(case.get('images', [])) != 4: raise InvalidRequestError('Every test needs four view images')
+                if len(case.get('images', [])) != 4: raise InvalidRequestError(f"{case.get('name')}: Every test needs four view images")
                 for image in case['images']: validate_image(image)
             for field, schema in [('state','state_schema'), ('expected_state','state_schema'), ('move','move_schema'),
                                   ('view_of_mover','view_schema'),('view_of_other','view_schema'),

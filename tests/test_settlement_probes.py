@@ -128,6 +128,34 @@ def test_reference_server_passes_all_probes():
     assert probe(REFERENCE) == []
 
 
+def _leave_case(move, name='Forfeit example'):
+    players = [{'id': 'h1', 'kind': 'human', 'display_name': 'h1', 'picture_url': '', 'max_loss': 25},
+               {'id': 'h2', 'kind': 'human', 'display_name': 'h2', 'picture_url': '', 'max_loss': 25}]
+    before = {'moves': 0, 'turnSeat': 0, 'left': [], 'winner': None, 'finalPayouts': None}
+    after = {'moves': 0, 'turnSeat': 0, 'left': ['h1'], 'winner': 'h2', 'finalPayouts': {'h2': 10}}
+    return {'name': name, 'kind': 'terminal', 'description': 'h1 leaves and forfeits',
+            'ctx': {'players': players, 'pot': 10, 'move_count': 0, 'seed': 7},
+            'player_id': 'h1', 'other_player_id': 'h2', 'state': before, 'move': move,
+            'expected_state': after, 'expected_turn': None, 'expected_payouts': {'h2': 10},
+            'view_of_mover': before, 'view_of_other': before,
+            'expected_view_of_mover': after, 'expected_view_of_other': after}
+
+
+def test_leave_examples_run_through_player_left():
+    from game_platform.builder_validation import verify_examples
+    contract = {**CONTRACT, 'cases': [_leave_case({'type': 'leave'}),
+                                       _leave_case(None, 'Forfeit example (no move)')]}
+    results = verify_examples(REFERENCE, contract)
+    assert [r['passed'] for r in results] == [True, True]
+    # A server whose playerLeft never ends the match fails the same example.
+    broken = verify_examples(B5_NEVER_ENDS, contract)
+    assert [r['passed'] for r in broken] == [False, False]
+
+
+def test_contract_defines_the_leave_example_encoding():
+    assert 'executed through playerLeft, not applyMove' in PLATFORM_CONTRACT
+
+
 def test_game_without_player_left_is_skipped():
     code = "const game = { newMatch(ctx) { return {state: {}, turn: [ctx.players[0].id]}; } };"
     assert probe(code) == []

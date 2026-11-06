@@ -87,7 +87,17 @@ def verify_examples(code, contract):
                         raise GameLogicError('Rejected move changed the player view')
                 results.append({'name':case['name'],'passed':True,'expected_error':'InvalidMove'})
                 continue
-            result = call('applyMove',case['state'],case['player_id'],case['move'])
+            if case['move'] is None or case['move'] == {'type': 'leave'}:
+                # A leave example is executed through playerLeft, the same
+                # channel the settlement probes use. applyMove has no leave
+                # move, so routing the example there failed it with the
+                # generated code's generic rejection no matter how correct
+                # the code's leaving logic was.
+                if not logic.has('playerLeft'):
+                    raise GameLogicError('playerLeft is not implemented, so this leave example cannot be executed')
+                result = call('playerLeft',case['state'],case['player_id'])
+            else:
+                result = call('applyMove',case['state'],case['player_id'],case['move'])
             for actual, expected in [('state','expected_state'),('turn','expected_turn')]:
                 if result.get(actual) != case[expected]: raise GameLogicError(f'{expected} differs')
             if 'expected_payouts' in case and result.get('payouts') != case['expected_payouts']: raise GameLogicError('Payouts differ')
