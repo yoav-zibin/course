@@ -18,7 +18,7 @@
     <link rel="manifest" href="/static/portal.webmanifest" />
     <title data-i18n="ui.page.portal">Game platform · Portal</title>
     <link rel="stylesheet" href="/static/common.css?v=16" />
-    <link rel="stylesheet" href="/static/portal.css?v=32" />
+    <link rel="stylesheet" href="/static/portal.css?v=33" />
     <link rel="stylesheet" href="/static/portal-match-layout.css?v=1" />
     <link rel="stylesheet" href="/static/portal-speed.css?v=2" />
     <link rel="stylesheet" href="/static/feedback-dialog.css?v=1" />
@@ -68,6 +68,14 @@
           <div class="creator-content">
             <div id="game-catalog">
               <p class="creator-description" data-i18n="ui.portal.creator_description">A quick round or a new rivalry. Pick a game and make it yours.</p>
+              <section id="recent-games-section" class="popular-games-section" aria-labelledby="recent-games-title" hidden>
+                <div class="popular-games-heading"><div><p class="popular-eyebrow" data-i18n="ui.games.your_recent_games">YOUR RECENT GAMES</p><h2 id="recent-games-title" data-i18n="ui.games.recently_played">Recently played</h2></div><span class="popular-period" data-i18n="ui.games.recent_games_hint">Pick up where you left off</span></div>
+                <div class="popular-games-carousel">
+                  <button id="recent-games-prev" class="popular-games-scroll-button is-prev" type="button" aria-label="Scroll to previous recent games" data-i18n-aria-label="ui.portal.prev_games_aria" aria-controls="recent-games" title="Previous games" data-i18n-title="ui.portal.prev_games" hidden>‹</button>
+                  <div id="recent-games" class="popular-games-row"></div>
+                  <button id="recent-games-next" class="popular-games-scroll-button is-next" type="button" aria-label="Scroll to next recent games" data-i18n-aria-label="ui.portal.next_games_aria" aria-controls="recent-games" title="Next games" data-i18n-title="ui.portal.next_games" hidden>›</button>
+                </div>
+              </section>
               <section id="popular-games-section" class="popular-games-section" aria-labelledby="popular-games-title" hidden>
                 <div class="popular-games-heading"><div><p id="popular-games-eyebrow" class="popular-eyebrow" data-i18n="ui.games.community_picks">TOP PICKS FROM THE COMMUNITY</p><h2 id="popular-games-title" data-i18n="ui.games.most_popular">Most popular</h2></div><span id="popular-games-metric" class="popular-period" data-i18n="ui.games.popularity_metric">Ranked by players in started matches</span></div>
                 <div class="popular-games-carousel">
@@ -106,7 +114,7 @@
           <div id="game-detail-content">
             <div id="selected-game-card" class="selected-game-card">
               <div class="game-symbol" aria-hidden="true">✳</div>
-              <div><h2 id="selected-game-name" data-i18n-managed>Choose a game</h2><p id="selected-game-description"></p><span id="selected-game-mode" class="mode-label"></span>
+              <div><h2 id="selected-game-name" data-i18n-managed>Choose a game</h2><p id="selected-game-description"></p><span id="selected-game-mode" class="mode-label"></span><small id="selected-game-popularity" class="game-popularity-debug" data-i18n-managed hidden></small>
                 <button id="feedback-game" type="button" class="feedback-link" hidden data-i18n="ui.feedback.game">Feedback on this game</button></div>
             </div>
             <div class="play-options">
@@ -187,6 +195,6 @@
     <script src="/static/portal-feedback.js?v=3"></script>
     <script src="/static/storage-pages.js?v=3"></script>
     <script src="/static/tutorial-frame.js?v=1"></script>
-    <script src="/static/portal.js?v=77"></script>
+    <script src="/static/portal.js?v=78"></script>
   </body>
 </html>

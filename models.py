@@ -84,6 +84,9 @@ class User:
     # Games the user saved to their library, most recently saved last. Defaults to
     # empty so older data files load.
     saved_game_ids: tuple[str, ...] = ()
+    # Recently played games, most recent first, with each game appearing once.
+    # Defaults to empty so older account records load unchanged.
+    recent_game_ids: tuple[str, ...] = ()
     token_balance: int = 0
     last_token_grant_day: str | None = None
     created_at: dt.datetime

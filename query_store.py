@@ -319,6 +319,10 @@ class QueryStore:
             if (data := row.to_dict()) and data.get("score", 0) > 0
         ]
 
+    def game_popularity_score(self, game_id):
+        data = self.raw_get(self.collection("game_popularity").document(key(game_id)))
+        return int(data.get("score", 0)) if data else 0
+
     def list_translations(self, locale=None):
         return sorted(
             self.translation_memory.list(locale),

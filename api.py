@@ -320,6 +320,26 @@ def list_saved_games(platform: Platform, caller_id: CallerId) -> list[GameOut]:
     return [GameOut.of(g) for g in platform.list_saved_games(caller_id=caller_id)]
 
 
+@router.get("/users/me/recent-games")
+def list_recent_games(platform: Platform, caller_id: CallerId) -> list[GameSummaryOut]:
+    """The caller's recently played published games, most recent first."""
+    return [
+        GameSummaryOut.of(game)
+        for game in platform.list_recent_games(caller_id=caller_id)
+    ]
+
+
+@router.post("/users/me/recent-games/{game_id}")
+def record_recent_game(
+    platform: Platform, caller_id: CallerId, game_id: str
+) -> list[GameSummaryOut]:
+    """Records a local practice game and returns the updated recent-games row."""
+    return [
+        GameSummaryOut.of(game)
+        for game in platform.record_recent_game(caller_id=caller_id, game_id=game_id)
+    ]
+
+
 @router.get("/users/me/experiments/skin")
 def user_skin_assignment(
     platform: Platform, caller_id: CallerId
@@ -820,6 +840,19 @@ def list_games(
 def list_popular_games(platform: Platform, limit: int = 8) -> list[GameSummaryOut]:
     """The bounded top games by cumulative players in started matches."""
     return [GameSummaryOut.of(game) for game in platform.list_popular_games(limit=limit)]
+
+
+@router.get("/games/{game_id}/popularity", include_in_schema=False)
+def game_popularity_score(
+    platform: Platform, game_id: str, caller_id: OptionalCallerId
+) -> dict[str, int | str]:
+    """Small debugging read for a game's current aggregate popularity score."""
+    return {
+        "game_id": game_id,
+        "score": platform.game_popularity_score(
+            game_id=game_id, caller_id=caller_id
+        ),
+    }
 
 
 @router.get("/builder/games")

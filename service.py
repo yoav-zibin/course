@@ -442,6 +442,8 @@ def _replace_seat(seats: tuple[Seat, ...], new_seat: Seat) -> tuple[Seat, ...]:
 
 
 class GamePlatform:
+    RECENT_GAME_LIMIT = 8
+
     def __init__(
         self,
         *,
@@ -1728,6 +1730,9 @@ class GamePlatform:
             ),
             replaced_user_ids=replaced_ids,
             saved_game_ids=_dedupe((*into.saved_game_ids, *source.saved_game_ids)),
+            recent_game_ids=_dedupe(
+                (*into.recent_game_ids, *source.recent_game_ids)
+            )[: self.RECENT_GAME_LIMIT],
             invited_by_user_id=invited_by,
             invited_via_invite_token=into.invited_via_invite_token
             or source.invited_via_invite_token,
@@ -2338,11 +2343,33 @@ class GamePlatform:
                     games.append(game)
             return games
 
+    def game_popularity_score(
+        self, *, game_id: str, caller_id: str | None = None
+    ) -> int:
+        """Returns a visible game's cumulative player count in started matches."""
+        game = self.get_game(game_id, caller_id=caller_id)
+        reader = getattr(self._store, "game_popularity_score", None)
+        return int(reader(game.id)) if reader is not None else 0
+
     def _record_game_match_start(self, match: Match) -> None:
         """Adds this start once, in the same storage unit of work as the match."""
         recorder = getattr(self._store, "record_game_match_start", None)
         if recorder is not None:
             recorder(match.game_id, len(match.seats))
+        for user_id in match.human_user_ids:
+            self._record_recent_game_for_user(user_id, match.game_id)
+
+    def _record_recent_game_for_user(self, user_id: str, game_id: str) -> None:
+        """Moves [game_id] to the front of a user's bounded recent-game list."""
+        user = self._store.get_user(user_id)
+        if user is None:
+            return
+        user = self._resolve_replaced(user)
+        recent = _dedupe((game_id, *user.recent_game_ids))[: self.RECENT_GAME_LIMIT]
+        if recent != user.recent_game_ids:
+            self._store.put_user(
+                replace(user, recent_game_ids=recent, updated_at=self._clock())
+            )
 
     def update_game(
         self,
@@ -2699,6 +2726,7 @@ class GamePlatform:
                         turn_of_player_indices=self._turn_indices(saved, result),
                     )
                 )
+            self._record_recent_game_for_user(caller_id, saved.game_id)
         joiner = self._store.get_user(caller_id)
         self._notify_match_event(
             "notify.player_joined",
@@ -4643,6 +4671,30 @@ class GamePlatform:
     def list_saved_games(self, *, caller_id: str) -> list[Game]:
         with self._lock:
             return self._saved_games(self._require_user(caller_id))
+
+    def list_recent_games(self, *, caller_id: str) -> list[Game]:
+        """Returns the user's recently played, currently published games."""
+        with self._lock:
+            user = self._resolve_replaced(self._require_user(caller_id))
+            games = (
+                self._store.get_game(game_id)
+                for game_id in user.recent_game_ids[: self.RECENT_GAME_LIMIT]
+            )
+            return [
+                game
+                for game in games
+                if game is not None and game.published and not game.deleted
+            ]
+
+    def record_recent_game(self, *, caller_id: str, game_id: str) -> list[Game]:
+        """Records a local practice game in the user's server-side history."""
+        with self._lock:
+            game = self._get_live_game(game_id)
+            if not game.published and game.owner_user_id != caller_id:
+                raise NotFoundError("game not found")
+            self._require_user(caller_id)
+            self._record_recent_game_for_user(caller_id, game.id)
+            return self.list_recent_games(caller_id=caller_id)
 
     def _saved_games(self, user: User) -> list[Game]:
         """The user's saved games that can still be played, most recently saved

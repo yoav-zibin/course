@@ -204,6 +204,8 @@ class Store(Protocol):
 
     def record_game_match_start(self, game_id: str, player_count: int) -> None: ...
 
+    def game_popularity_score(self, game_id: str) -> int: ...
+
     def list_popular_game_ids(self, limit: int) -> list[tuple[str, int]]: ...
 
     def put_feedback(self, feedback: Feedback) -> None: ...
@@ -398,6 +400,9 @@ class InMemoryStore:
             ((game_id, score) for game_id, (_, score) in self._game_popularity.items()),
             key=lambda item: (-item[1], item[0]),
         )[:limit]
+
+    def game_popularity_score(self, game_id: str) -> int:
+        return self._game_popularity.get(game_id, (0, 0))[1]
 
     def put_feedback(self, feedback: Feedback) -> None:
         self._feedback[feedback.id] = feedback
