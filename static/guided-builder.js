@@ -179,11 +179,7 @@ function render(){
  const labels=[I18n.t("ui.guided.label.understanding",{},"Idea"),I18n.t("ui.guided.label.identity",{},"Name"),I18n.t("ui.guided.label.logic",{},"Rules"),I18n.t("ui.guided.label.ui",{},"Layout"),I18n.t("ui.guided.label.tutorial",{},"Tutorial"),I18n.t("ui.guided.label.images",{},"Images"),I18n.t("ui.guided.label.tests",{},"Tests"),I18n.t("ui.guided.label.build",{},"Build & verify")];
  const buildView=selected===steps.length;
  const all=count===steps.length;
- const completed=count+Number(f.job?.status==='ready');
  $('step-position').textContent=I18n.t("ui.guided.step_position",{step:selected+1,total:labels.length},"Step {step} of {total}");
- $('step-count').textContent=I18n.t("ui.guided.step_count",{done:completed,total:labels.length},"{done} of {total} complete");
- $('progress').max=labels.length;
- $('progress').value=completed;
  $('steps').replaceChildren(...labels.map((label,i)=>{
   const build=i===steps.length;
   const done=build?f.job?.status==='ready':f.artifacts[steps[i]]?.status==='approved';
