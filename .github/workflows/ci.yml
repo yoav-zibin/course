@@ -8,22 +8,6 @@ on:
   pull_request:
 
 jobs:
-  catalog-retirement-diagnostics:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Read bounded catalog retirement startup results
-        env:
-          VM_HOST: ${{ secrets.GCP_VM_HOST }}
-          VM_USER: ${{ secrets.GCP_VM_USER }}
-          VM_SSH_KEY: ${{ secrets.GCP_VM_SSH_KEY }}
-        run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_deploy
-          chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
-          ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" 'sudo journalctl -u game-platform.service --since "20 minutes ago" --no-pager | grep -F "catalog-deduplication:" | tail -n 12; if sudo test -f /var/log/game-platform/server.log; then sudo grep -F "catalog-deduplication:" /var/log/game-platform/server.log | tail -n 12; fi'
-
   production-runtime:
     runs-on: ubuntu-latest
     steps:
