@@ -104,6 +104,7 @@ function setup({
     navigator: {
       onLine: true,
       serviceWorker: {
+        addEventListener() {},
         register: async () => registration,
         getRegistration: async () => registration,
       },
@@ -220,4 +221,3 @@ test("a denied browser permission shows the blocked state", async () => {
   );
   assert.equal(node("notify-toggle").disabled, true);
 });
-

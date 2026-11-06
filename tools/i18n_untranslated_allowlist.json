@@ -16,7 +16,9 @@
     ],
     "portal-offline.js": [
       "Offline",
-      "Account changed"
+      "Account changed",
+      "Could not save cache access order:",
+      "Could not read cache access order:"
     ],
     "builder.html": [
       "{\"state\":{\"type\":\"object\"},\"move\":{\"type\":\"object\"},\"view\":true}"

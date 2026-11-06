@@ -80,7 +80,7 @@ function setupPortal(me) {
     return nodes.get(id);
   };
   const ctx=vm.createContext({console,Map,Set,URLSearchParams,Date,Math,Number,String,
-    navigator:{onLine:true},localStorage:{},PortalOffline:class {api(){return {};}read(){return {};}write(){}},
+    navigator:{onLine:true},localStorage:{},PortalOffline:class {async api(){return {};}read(){return {};}write(){}},
     document:{getElementById:node,body:{classList:{toggle(){}}}},window:{addEventListener(){}},
     location:{hash:'',search:'',assign(){}},history:{replaceState(){}},
     Auth:{current:()=>me},I18n,GameFrame:class{load(){}unload(){}send(){}},

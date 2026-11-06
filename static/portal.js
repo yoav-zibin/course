@@ -46,6 +46,10 @@ async function portalTransport(method, path, { body, user, requestId } = {}) {
 const offline = new PortalOffline(localStorage, portalTransport, () =>
   Auth.current(),
 );
+if ("serviceWorker" in navigator)
+  navigator.serviceWorker.addEventListener("message", event => {
+    if (event.data?.type === "portal-shell-updated") location.reload();
+  });
 const portalRequest = (method, path, options = {}) =>
   offline.api(method, path, { user: Auth.current(), ...options });
 const portalLock = (run) =>
@@ -75,6 +79,7 @@ function offlineStatus() {
   ];
   if (conflicts) parts.push(I18n.plural("ui.offline.conflicts", conflicts, {}, { one: "1 sync conflict", many: `${conflicts} sync conflicts` }));
   parts.push(shellReady ? I18n.t("ui.offline.saved", {}, "Portal saved for offline") : I18n.t("ui.offline.not_ready", {}, "Offline setup not ready"));
+  if (offline.notice) parts.push(offline.notice);
   $("offline-status").textContent = parts.join(" · ");
 }
 
@@ -1202,7 +1207,7 @@ function selectMatch(id) {
   if (id) $("game-box").textContent = I18n.t("ui.portal.loading_game", {}, "Loading game…");
   const saved = offline.read();
   saved.selectedId = id;
-  offline.write(saved);
+  offline.writeCache(saved);
   state.replay = null;
   state.match = null;
   state.armed = null;
@@ -1815,12 +1820,11 @@ async function onMakeMove(move) {
           await offline.sync({ force: true });
           return;
         }
-        state.match = offline.enqueue(match, {
+        state.match = await offline.submitMove(match, {
           move: move.move,
           expected_move_count: match.move_count,
         });
         state.lastSent = null;
-        await offline.sync({ force: true });
         return;
       }
       const next = move.next_turn_player_indices;
@@ -1829,12 +1833,11 @@ async function onMakeMove(move) {
         throw new Error(I18n.t("ui.portal.invalid_next_player", {}, "The game sent an invalid next player. Your move was not queued. Restart or repair this game in Builder."));
       if (!match || !user || actingFor(match, user.id) === null)
         throw new Error(I18n.t("ui.error.not_your_turn", {}, "It isn't your turn."));
-      state.match = offline.enqueue(match, {
+      state.match = await offline.submitMove(match, {
         ...move,
         expected_move_count: match.move_count,
       });
       state.lastSent = null;
-      await offline.sync({ force: true });
     });
   } catch (error) {
     showMessage(error.message, "error");
@@ -2047,6 +2050,31 @@ async function main() {
     offline.retryAfter = 0;
     state.lastSent = null;
     refresh();
+  });
+  const storageDetails = async () => {
+    try {
+      const info = offline.storageInfo();
+      const estimate = navigator.storage?.estimate ? await navigator.storage.estimate() : null;
+      const kb = bytes => `${(bytes / 1024).toFixed(1)} KiB`;
+      const {total, cache, queued, practice, archives} = Object.fromEntries(
+        ["total", "cache", "queued", "practice", "archives"].map(key => [key, kb(info[key])]),
+      );
+      $("storage-details").textContent = I18n.t("ui.offline.storage_breakdown", {total, cache, queued, practice, archives, entries:info.entries},
+        `This account: ${total}; cached responses ${cache} (${info.entries} entries); queued moves ${queued}; practice ${practice}; archives ${archives}.`) +
+        (estimate?.quota
+          ? I18n.t("ui.offline.storage_origin", {usage:kb(estimate.usage || 0), quota:kb(estimate.quota)}, ` Browser origin: ${kb(estimate.usage || 0)} of ${kb(estimate.quota)} (estimated, includes other site data).`)
+          : I18n.t("ui.offline.storage_estimate_unavailable", {}, " Browser-wide estimate unavailable."));
+    } catch (error) {
+      $("storage-details").textContent = I18n.t("ui.offline.storage_inspection_failed", {message:error.message}, `Storage inspection failed: ${error.message}`);
+    }
+  };
+  $("storage-refresh").addEventListener("click", storageDetails);
+  $("storage-clear-cache").addEventListener("click", () => portalLock(async () => {
+    offline.clearCache();
+    await storageDetails();
+  }).catch(error => { $("storage-details").textContent = I18n.t("ui.offline.storage_clear_failed", {message:error.message}, `Could not clear cache: ${error.message}`); }));
+  document.querySelector(".offline-storage").addEventListener("toggle", event => {
+    if (event.currentTarget.open) storageDetails();
   });
   window.addEventListener("online", () => {
     offline.retryAfter = 0;

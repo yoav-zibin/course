@@ -37,16 +37,40 @@ competitive card service. No API change is proposed here.
   neither game JavaScript nor the worker receives credentials.
 - Local practice starts a separate device-only match against computers or in
   pass-and-play mode. It never creates a cloud match or uploads practice moves.
-- Real match moves are persisted before submission, with `expected_move_count`.
+- Real match moves normally are persisted before submission, with `expected_move_count`.
   Only the user's current turn, or a computer turn they can act for, is available.
   Other remote humans' turns cannot be played offline.
+- If a new move cannot be saved because storage is full, the portal can submit it
+  directly while online only if the match has no saved queue or conflict. A lost
+  acknowledgement is reported as an unknown outcome; refresh the match before
+  trying again. A move made offline still needs durable storage and is rejected
+  if it cannot be saved. Existing unsynced work is never evicted to make room.
 - Reconnection checks authoritative state and move history. A lost acknowledgement
   is matched against the same author's state and turn set, avoiding duplicate moves.
   Conflicts preserve the local branch and require explicit resolution. Download
   queued moves before choosing **Use server version**; an archive also remains
   in device storage.
 - Web Locks serialize portal mutations between tabs. Network requests time out
-  and retry with backoff. A storage quota error rejects an unsaved move.
+  and queued moves retry with backoff.
+- Open **Device storage** in the sidebar for per-account JSON size estimates,
+  cached-response, queue, practice and archive sizes, and the browser's estimated
+  total origin usage and quota when available. **Clear recoverable cache** removes
+  only that account's refetchable responses; queued-match snapshots, local practice
+  game code, queues and archives remain. It does not clear other accounts, service
+  worker assets, or other site data.
+- Recoverable responses are evicted by recorded recency at a nominal
+  one-million-character response limit or on quota failure. Read recency is
+  tracked separately for up to 1,000 entries, on a best-effort basis, so the
+  order is approximate if that metadata cannot be saved or across concurrent tabs.
+  The protected data
+  can exceed this limit. The service worker retains at most 50 recently used
+  avatars and will return successful network responses even if caching fails.
+  The account store is still a single JSON value, so parsing and rewriting large
+  protected queues or practice histories can still consume substantial memory.
+- Browsers that deny reads from localStorage entirely are not yet supported by
+  the online fallback; do not clear site data to work around this if it contains
+  unsynced moves. Browser eviction or clearing site data can still remove all
+  local work; offline durability cannot be guaranteed in those circumstances.
 - The portal alone accepts legacy null end-turn messages, fixing the old
   TicTacToe end-move compatibility issue without altering shared GameFrame code.
 

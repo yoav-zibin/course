@@ -14,7 +14,7 @@ function setup(request=async()=>{}, hash='', search='') {
   const navigations=[];
   const pageErrors=[];
   const ctx=vm.createContext({StoragePages:{enabled:async()=>false,list:(request,path,options)=>request("GET",path,options),controls(){},search(){return false;}},console,Map,Set,URLSearchParams,
-    navigator:{onLine:true},localStorage:{},PortalOffline:class {api(...args){return request(...args);}read(){return {};}write(){}} ,
+    navigator:{onLine:true},localStorage:{},PortalOffline:class {api(...args){return request(...args);}read(){return {};}write(){} writeCache(data){this.write(data);} async submitMove(match,body){const result=this.enqueue(match,body);await this.sync({force:true});return result;}} ,
     document:{getElementById:node,body:{classList:{toggle(){}}}},window:{addEventListener(){}},
     location:{hash,search,assign(url){navigations.push(url);}},history:{replaceState(){}},
     Auth:{current:()=>({id:'owner'})},I18n:require('./i18n-stub.cjs'),GameFrame:class{load(){}unload(){}send(){}},
@@ -29,7 +29,7 @@ function setup(request=async()=>{}, hash='', search='') {
 test('creating a solo-only game starts one human immediately',async()=>{
   const calls=[];
   const {node,run}=setup(async(method,path,opts)=>{
-    calls.push([method,path,opts.body]);
+    if(method==='POST') calls.push([method,path,opts.body]);
     return {id:'match',game_version:2,players:[{kind:'human',user_id:'owner'}]};
   });
   await run('createMatch()');
@@ -43,7 +43,7 @@ test('creating a solo-only game starts one human immediately',async()=>{
 
 test('multiplayer and mixed-mode games retain their lobby',async()=>{
   for(const counts of ['[2]','[1,2]']) {
-    const calls=[];const {run}=setup(async(method,path)=>{calls.push(path);return {id:'match',game_version:2,players:[{}]};});
+    const calls=[];const {run}=setup(async(method,path)=>{if(method==='POST') calls.push(path);return {id:'match',game_version:2,players:[{}]};});
     run(`state.games[0].allowed_player_counts=${counts}`);await run('createMatch()');
     assert.deepEqual(calls,['/matches']);
   }

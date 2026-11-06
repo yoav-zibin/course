@@ -37,6 +37,36 @@ test('worker serves saved shell offline and leaves APIs and other students pages
     handlers.fetch({request:{method,url:'https://example.test'+url},respondWith(){assert.fail('request intercepted')}});
   }
 });
+test('worker returns successful network responses when cache writes or opening fail',async()=>{
+  const {context,handlers}=worker();
+  context.console={warn(){}};
+  const network={ok:true,clone(){return this;}};
+  context.fetch=async()=>network;
+  context.caches={open:async()=>({match:async()=>undefined,keys:async()=>[],put:async()=>{throw Error('quota');}})};
+  for(const url of ['/static/portal.html','/static/avatars/computers/example.png']) {
+    let response;
+    handlers.fetch({request:{method:'GET',url:'https://example.test'+url},respondWith:p=>response=p});
+    assert.equal(await response,network);
+  }
+  context.caches.open=async()=>{throw Error('unavailable')};
+  let response;
+  handlers.fetch({request:{method:'GET',url:'https://example.test/static/portal.html'},respondWith:p=>response=p});
+  assert.equal(await response,network);
+});
+test('worker activation signals portal reload without awaiting navigation',async()=>{
+  const {context,handlers}=worker();
+  const messages=[], deleted=[];
+  context.caches={keys:async()=>['playroom-portal-shell-v1'],delete:async key=>deleted.push(key)};
+  context.self.clients={claim:async()=>{},matchAll:async()=>[
+    {url:'https://example.test/static/portal.html',postMessage:message=>messages.push(message.type)},
+    {url:'https://example.test/static/builder.html',postMessage:()=>assert.fail('wrong page')}
+  ]};
+  let activation;
+  handlers.activate({waitUntil:promise=>activation=promise});
+  await activation;
+  assert.deepEqual(deleted,['playroom-portal-shell-v1']);
+  assert.deepEqual(messages,['portal-shell-updated']);
+});
 function install(standalone=false) {
   const events={},nodes={};
   for(const id of ['install-portal','install-help','install-message']) nodes[id]={hidden:id==='install-portal',addEventListener:(event,fn)=>events[id+event]=fn};

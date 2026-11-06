@@ -1,6 +1,6 @@
 "use strict";
 // Scope deliberately stays /static/: no backend route or Service-Worker-Allowed change.
-const CACHE = "playroom-portal-shell-v109";
+const CACHE = "playroom-portal-shell-v110";
 const SHELL = [
   "/static/storage-pages.js?v=3",
   "/static/portal-feedback.js?v=3",
@@ -14,14 +14,14 @@ const SHELL = [
   "/static/experiments.css?v=6",
   "/static/push-notifications.js?v=2",
   "/static/tutorial-frame.js?v=1",
-  "/static/portal.js?v=78",
+  "/static/portal.js?v=79",
   "/static/portal-match-layout.js?v=8",
   "/static/portal-speed.js?v=2",
   "/static/feedback-dialog.js?v=1",
   "/static/portal-match-layout.css?v=1",
   "/static/portal-speed.css?v=2",
   "/static/portal-practice.js?v=3",
-  "/static/portal-offline.js?v=11",
+  "/static/portal-offline.js?v=13",
   "/static/feedback-dialog.css?v=1",
   "/static/portal.webmanifest",
   "/static/portal-icon.svg",
@@ -38,8 +38,7 @@ self.addEventListener("install", (event) =>
       .then(() => self.skipWaiting()),
   ),
 );
-// An update: delete the older shells' caches, take over open portal pages and reload
-// them once, so nobody keeps running the old portal. (A first install reloads nothing.)
+// An update deletes older shells and asks open portal pages to reload.
 self.addEventListener("activate", (event) =>
   event.waitUntil(
     (async () => {
@@ -50,11 +49,9 @@ self.addEventListener("activate", (event) =>
       await self.clients.claim();
       if (!old.length) return;
       const pages = await self.clients.matchAll({ type: "window" });
-      await Promise.all(
-        pages
-          .filter((page) => new URL(page.url).pathname === "/static/portal.html")
-          .map((page) => page.navigate(page.url).catch(() => {})),
-      );
+      pages
+        .filter((page) => new URL(page.url).pathname === "/static/portal.html")
+        .forEach((page) => page.postMessage({type:"portal-shell-updated"}));
     })(),
   ),
 );
@@ -72,30 +69,51 @@ self.addEventListener("fetch", (event) => {
   // (?v=N), so their saved copies never go stale.
   if (url.pathname === "/static/portal.html") {
     event.respondWith(
-      caches.open(CACHE).then(async (cache) => {
+      (async () => {
+        let response;
         try {
-          const response = await fetch(event.request, { cache: "no-cache" });
-          if (response.ok) await cache.put("/static/portal.html", response.clone());
-          return response;
+          response = await fetch(event.request, { cache: "no-cache" });
         } catch (error) {
+          const cache = await caches.open(CACHE);
           const saved = await cache.match("/static/portal.html");
           if (saved) return saved;
           throw error;
         }
-      }),
+        if (response.ok) {
+          try {
+            const cache = await caches.open(CACHE);
+            await cache.put("/static/portal.html", response.clone());
+          } catch (error) { console.warn("Could not cache portal page:", error); }
+        }
+        return response;
+      })(),
     );
     return;
   }
   event.respondWith(
-    caches
-      .open(CACHE)
-      .then(
-        async (cache) =>
-          (await cache.match(event.request)) || fetch(event.request).then(response => {
-            if (response.ok && url.pathname.startsWith("/static/avatars/")) cache.put(event.request, response.clone());
-            return response;
-          }),
-      ),
+    (async () => {
+      let cache;
+      try {
+        cache = await caches.open(CACHE);
+        const saved = await cache.match(event.request);
+        if (saved) {
+          if (url.pathname.startsWith("/static/avatars/")) {
+            try { await cache.delete(event.request); await cache.put(event.request, saved.clone()); }
+            catch (error) { console.warn("Could not update avatar cache:", error); }
+          }
+          return saved;
+        }
+      } catch (error) { console.warn("Could not read portal cache:", error); }
+      const response = await fetch(event.request);
+      if (cache && response.ok && url.pathname.startsWith("/static/avatars/")) {
+        try {
+          const avatars = (await cache.keys()).filter(request => new URL(request.url).pathname.startsWith("/static/avatars/"));
+          while (avatars.length >= 50) await cache.delete(avatars.shift());
+          await cache.put(event.request, response.clone());
+        } catch (error) { console.warn("Could not cache avatar:", error); }
+      }
+      return response;
+    })(),
   );
 });
 

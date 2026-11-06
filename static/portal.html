@@ -57,6 +57,7 @@
         </div>
         <details id="group-open" class="match-group open-group"><summary><span data-i18n="ui.section.open_matches">Open matches you can join</span> <span id="count-open" class="group-count">0</span></summary><div id="open-matches"></div></details>
         <div class="sidebar-footer"><div class="offline-controls" role="status"><span id="offline-status" data-i18n-managed>Preparing offline storage…</span><button id="retry-sync" type="button" data-i18n="ui.state.retry_sync">Retry sync</button><button id="notify-toggle" type="button" aria-pressed="false" hidden data-i18n-managed>Enable notifications</button></div></div>
+        <details class="offline-storage"><summary data-i18n="ui.offline.storage_title">Device storage</summary><p id="storage-details" role="status" data-i18n-managed>Open to inspect cached and unsynced data.</p><button id="storage-refresh" type="button" data-i18n="ui.offline.storage_refresh">Refresh storage usage</button><button id="storage-clear-cache" type="button" data-i18n="ui.offline.storage_clear">Clear recoverable cache</button></details>
         <div class="install-controls">
           <button id="install-portal" type="button" hidden data-i18n="ui.install.button">Install Playroom</button>
           <details id="install-help"><summary data-i18n="ui.install.summary">Add to Home Screen</summary><p data-i18n="ui.install.help_1">On iPhone or iPad, open this page in Safari, tap Share, then Add to Home Screen. On Android or desktop, use Install Playroom or your browser’s install menu.</p><p data-i18n="ui.install.help_2">Open games and matches online first. Wait for “Portal saved for offline” before disconnecting. Offline moves sync when you reconnect.</p><p id="install-message" role="status"></p></details>
@@ -185,7 +186,7 @@
     <script src="/static/i18n.js?v=5"></script>
     <script src="/static/auth.js?v=9"></script>
 <script src="/static/portal-practice.js?v=3"></script>
-<script src="/static/portal-offline.js?v=11"></script>
+<script src="/static/portal-offline.js?v=13"></script>
     <script src="/static/experiments.js?v=7"></script>
     <script src="/static/portal-install.js?v=2"></script>
     <script src="/static/portal-match-layout.js?v=8"></script>
@@ -195,6 +196,6 @@
     <script src="/static/portal-feedback.js?v=3"></script>
     <script src="/static/storage-pages.js?v=3"></script>
     <script src="/static/tutorial-frame.js?v=1"></script>
-    <script src="/static/portal.js?v=78"></script>
+    <script src="/static/portal.js?v=79"></script>
   </body>
 </html>

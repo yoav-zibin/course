@@ -20,7 +20,51 @@ class PortalOffline {
       ? JSON.parse(raw)
       : { responses: {}, queues: {}, conflicts: {}, local: {} };
   }
-  write(data) {
+  cacheTouch(data, path) {
+    data.cacheAccess ||= {};
+    data.cacheClock = Math.max(Date.now(), (data.cacheClock || 0) + 1);
+    data.cacheAccess[path] = data.cacheClock;
+  }
+  recordCacheAccess(path, clock) {
+    try {
+      const key = `${this.key()}.lru`;
+      const access = JSON.parse(this.storage.getItem(key) || "{}");
+      access[path] = Math.max(Date.now(), (clock || 0) + 1, ...Object.values(access).map(value => value + 1));
+      const entries = Object.entries(access).sort((a, b) => b[1] - a[1]).slice(0, 1000);
+      this.storage.setItem(key, JSON.stringify(Object.fromEntries(entries)));
+    } catch (error) {
+      console.warn("Could not save cache access order:", error);
+    }
+  }
+  storageInfo() {
+    const data = this.read();
+    const size = value => new TextEncoder().encode(JSON.stringify(value)).length;
+    return {
+      total: size(data),
+      cache: size(data.responses || {}),
+      queued: size(data.queues || {}),
+      practice: size(data.local || {}),
+      archives: size({archives:data.archives || [], archivedMatches:data.archivedMatches || []}),
+      entries: Object.keys(data.responses || {}).length,
+    };
+  }
+  protectedCache(data, path) {
+    const id = /^\/matches\/([^/]+)$/.exec(path)?.[1];
+    return (id !== undefined && data.queues?.[id]?.length > 0) ||
+      Object.values(data.local || {}).some(match =>
+        path === `/games/${match.game_id}/versions/${match.game_version}`);
+  }
+  clearCache() {
+    const data = this.read();
+    for (const path of Object.keys(data.responses || {})) {
+      if (!this.protectedCache(data, path)) {
+        delete data.responses[path];
+        if (data.cacheAccess) delete data.cacheAccess[path];
+      }
+    }
+    this.write(data);
+  }
+  write(data, {cacheOnly = false} = {}) {
     const attempt = () => {
       try {
         this.storage.setItem(this.key(), JSON.stringify(data));
@@ -29,35 +73,62 @@ class PortalOffline {
         return false;
       }
     };
-    if (attempt()) return;
-    // The saved server answers (game lists, every version's code...) are only a cache and
-    // grow without limit; queued moves and local practice matches cannot be re-fetched.
-    // Drop the oldest cached answers, half at a time, until what must be kept fits. An
-    // answer a queued move is built on stays.
-    const keep = (path) => {
-      const id = /^\/matches\/([^/]+)$/.exec(path)?.[1];
-      return id !== undefined && data.queues?.[id]?.length > 0;
+    data.responses ||= {};
+    data.cacheAccess ||= {};
+    try {
+      const recent = JSON.parse(this.storage.getItem(`${this.key()}.lru`) || "{}");
+      for (const [path, timestamp] of Object.entries(recent))
+        if (Object.hasOwn(data.responses, path)) {
+          data.cacheAccess[path] = Math.max(data.cacheAccess[path] || 0, timestamp);
+          data.cacheClock = Math.max(data.cacheClock || 0, timestamp);
+        }
+    } catch (error) {
+      console.warn("Could not read cache access order:", error);
+    }
+    for (const path of Object.keys(data.cacheAccess))
+      if (!Object.hasOwn(data.responses, path)) delete data.cacheAccess[path];
+    // Queued moves and local practice must keep their required snapshots.
+    const droppable = Object.keys(data.responses).filter(path => !this.protectedCache(data, path))
+      .sort((a, b) => (data.cacheAccess[a] || 0) - (data.cacheAccess[b] || 0));
+    let responseSize = JSON.stringify(data.responses).length;
+    const evict = () => {
+      const path = droppable.shift();
+      responseSize -= JSON.stringify(path).length + JSON.stringify(data.responses[path]).length + 2;
+      delete data.responses[path];
+      delete data.cacheAccess[path];
     };
-    let droppable = Object.keys(data.responses || {}).filter((path) => !keep(path));
+    while (droppable.length && responseSize > 1_000_000) evict();
+    if (attempt()) return;
     while (droppable.length) {
-      const dropped = droppable.slice(0, Math.max(1, Math.ceil(droppable.length / 2)));
-      for (const path of dropped) delete data.responses[path];
-      droppable = droppable.slice(dropped.length);
+      evict();
       if (attempt()) return;
     }
     const message =
       "Device storage is full or unavailable. This move was not saved; free space and retry.";
     // The server can't see this otherwise: tell its log (common.js).
-    globalThis.reportClientError?.("storage_full", message);
+    if (!cacheOnly) globalThis.reportClientError?.("storage_full", message);
     throw Object.assign(new Error(message), { storageFailure: true });
   }
   cached(path) {
-    return this.read().responses[path];
+    const data = this.read();
+    const value = data.responses[path];
+    if (value !== undefined) {
+      this.recordCacheAccess(path, data.cacheClock);
+    }
+    return value;
+  }
+  writeCache(data) {
+    try { this.write(data, {cacheOnly:true}); }
+    catch (error) {
+      if (!error.storageFailure) throw error;
+      this.notice = I18n.t("ui.offline.cache_unavailable", {}, "Device cache unavailable; online play still works.");
+    }
   }
   save(path, value) {
     const data = this.read();
     data.responses[path] = value;
-    this.write(data);
+    this.cacheTouch(data, path);
+    this.writeCache(data);
     return value;
   }
   decorate(match) {
@@ -113,7 +184,10 @@ class PortalOffline {
         // Cache only the most recent page per list. Preserve the old aliases
         // used to restore the offline shell and queued local moves.
         for (const key of Object.keys(d.responses)) {
-          if(key.startsWith("/v2"+paged[1]+"?") && key!==path) delete d.responses[key];
+          if(key.startsWith("/v2"+paged[1]+"?") && key!==path) {
+            delete d.responses[key];
+            if (d.cacheAccess) delete d.cacheAccess[key];
+          }
         }
         d.responses[paged[1]]=value.items;
         if(paged[1]==="/matches") for(const match of value.items) {
@@ -126,12 +200,8 @@ class PortalOffline {
         for (const match of value)
           if (!d.queues[match.id]?.length && "state" in match)
             d.responses[`/matches/${match.id}`] = match;
-      try {
-        this.write(d);
-      } catch (cacheError) {
-        // Not being able to remember an answer is not an error for the page asking for it.
-        if (!cacheError.storageFailure) throw cacheError;
-      }
+      this.cacheTouch(d, path);
+      this.writeCache(d);
     } catch (error) {
       if (error.storageFailure) throw error;
       if (
@@ -215,7 +285,7 @@ class PortalOffline {
       this.save(`/matches/${result.id}`, result);
     return result;
   }
-  enqueue(match, body) {
+  enqueue(match, body, {reportFailure = true} = {}) {
     const data = this.read(),
       id = match.id;
     if (data.conflicts[id])
@@ -228,7 +298,7 @@ class PortalOffline {
       const previous = data.local[id];
       data.local[id] = this.apply(previous, body);
       data.local[id].moves = [...(previous.moves || []), {new_state: body.new_state, next_turn_player_indices: body.next_turn_player_indices}];
-      this.write(data);
+      this.write(data, {cacheOnly: !reportFailure});
       return data.local[id];
     }
     const base = data.responses[`/matches/${id}`] || match;
@@ -247,6 +317,32 @@ class PortalOffline {
     data.queues[id] = queue;
     this.write(data);
     return this.decorate(base);
+  }
+  async submitMove(match, body) {
+    let pending;
+    try {
+      pending = this.enqueue(match, body, {reportFailure: !this.online()});
+    } catch (error) {
+      if (!error.storageFailure || !this.online() || match.id.startsWith("local-")) throw error;
+      const data = this.read();
+      if (data.queues[match.id]?.length || data.conflicts[match.id]) throw error;
+      const account = this.user(), identity = this.key();
+      let result;
+      try {
+        result = await this.request("POST", `/matches/${match.id}/moves`, {
+          user:account, requestId:crypto.randomUUID(), body,
+        });
+      } catch (requestError) {
+        if (requestError.status && requestError.status < 500) throw requestError;
+        throw new Error(I18n.t("ui.offline.err_move_unknown", {}, "The server may have received this move. Refresh the match before trying again."));
+      }
+      if (identity !== this.key())
+        throw new Error(I18n.t("ui.offline.err_account_refresh", {}, "Account changed; refresh to see the result."));
+      this.notice = I18n.t("ui.offline.cache_unavailable", {}, "Device cache unavailable; online play still works.");
+      return result;
+    }
+    await this.sync({force:true});
+    return this.read().queues[match.id]?.length ? pending : this.cached(`/matches/${match.id}`) || pending;
   }
   async sync({ force = false } = {}) {
     // The retry backoff keeps background polls from hammering a dead
@@ -322,6 +418,11 @@ class PortalOffline {
           this.write(data);
         } catch (error) {
           guard();
+          if (error.storageFailure) {
+            this.retryAfter = Date.now() + 10000;
+            this.notice = I18n.t("ui.offline.err_queue_update", {}, "Could not update the saved queue. The move remains saved; retry sync after freeing storage.");
+            return;
+          }
           if (error.status === 409) {
             if (++retries < 3) continue;
             this.conflict(

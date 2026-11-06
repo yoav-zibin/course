@@ -160,6 +160,94 @@ test("caching a fetched answer never fails the page when storage is full", async
   const list = await o.get("/matches");
   assert.equal(list[0].id, "match");
 });
+test("least recently used recoverable entries are evicted before protected data", () => {
+  const { o, storage } = setup();
+  o.save("/old", "a".repeat(300));
+  o.save("/recent", "b".repeat(300));
+  o.cached("/old");
+  o.enqueue(base, body);
+  const before = o.read();
+  const original = storage.setItem;
+  const limit = JSON.stringify(before).length - 100;
+  storage.setItem = (key, value) => {
+    if (value.length > limit) throw Error("quota");
+    original(key, value);
+  };
+  o.write(before);
+  const after = o.read();
+  assert.equal(after.responses["/recent"], undefined);
+  assert.ok(after.responses["/old"]);
+  assert.ok(after.responses["/matches/match"]);
+  assert.equal(after.queues.match.length, 1);
+});
+test("clear cache preserves queued and local practice dependencies", () => {
+  const { o } = setup();
+  const data = o.read();
+  data.local["local-1"] = {game_id: "g", game_version: 2};
+  data.responses["/games/g/versions/2"] = {code: "game"};
+  data.responses["/other"] = "discard";
+  data.archives = [{moves: [body]}];
+  o.write(data);
+  o.enqueue(base, body);
+  o.clearCache();
+  const saved = o.read();
+  assert.ok(saved.responses["/matches/match"]);
+  assert.ok(saved.responses["/games/g/versions/2"]);
+  assert.equal(saved.responses["/other"], undefined);
+  assert.equal(saved.archives[0].moves.length, 1);
+  assert.equal(saved.queues.match.length, 1);
+  assert.ok(o.storageInfo().queued > 0);
+});
+test("online move is sent when queue storage is full", async () => {
+  let posts = 0;
+  const { o, storage, setOnline } = setup(async (method, path, options) => {
+    assert.equal(method, "POST");
+    assert.equal(path, "/matches/match/moves");
+    assert.ok(options.requestId);
+    posts++;
+    return {...base, move_count: 1};
+  });
+  storage.setItem = () => { throw Error("quota"); };
+  setOnline(true);
+  const result = await o.submitMove(base, {move: {type: "play"}, expected_move_count: 0});
+  assert.equal(result.move_count, 1);
+  assert.equal(posts, 1);
+  assert.deepEqual(o.read().queues, {});
+  assert.ok(o.notice);
+});
+test("storage failure never bypasses an existing pending queue", async () => {
+  let posts = 0;
+  const { o, storage, setOnline } = setup(async () => { posts++; });
+  o.enqueue(base, body);
+  storage.setItem = () => { throw Error("quota"); };
+  setOnline(true);
+  await assert.rejects(o.submitMove({...base, move_count: 1}, {...body, expected_move_count: 1}), /not saved/);
+  assert.equal(posts, 0);
+  assert.equal(o.read().queues.match.length, 1);
+});
+test("lost acknowledgement on direct online fallback is not retried automatically", async () => {
+  let posts = 0;
+  const { o, storage, setOnline } = setup(async () => { posts++; throw new TypeError("lost response"); });
+  storage.setItem = () => { throw Error("quota"); };
+  setOnline(true);
+  await assert.rejects(o.submitMove(base, {move:{type:"play"}, expected_move_count:0}), /may have received/);
+  assert.equal(posts, 1);
+});
+test("a committed move remains queued if updating storage fails", async () => {
+  let posts = 0;
+  const { o, storage, setOnline } = setup(async (method) => {
+    if (method === "GET") return base;
+    posts++;
+    storage.setItem = () => { throw Error("quota"); };
+    return {...base, move_count:1};
+  });
+  o.enqueue(base, {move:{type:"play"}, expected_move_count:0});
+  setOnline(true);
+  await o.sync();
+  assert.equal(posts, 1);
+  assert.equal(o.read().queues.match.length, 1);
+  assert.match(o.notice, /saved queue/);
+});
 test("all listed matches become available individually offline", async () => {
   const { o, setOnline } = setup(async () => [base, { ...base, id: "second" }]);
   setOnline(true);
