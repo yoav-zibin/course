@@ -1256,8 +1256,9 @@ MasterPassword = Depends(_check_master_password)
 
 
 @debug_router.get("/")
-def index() -> RedirectResponse:
-    return RedirectResponse("/portal")
+def index() -> FileResponse:
+    """Serve the welcome page; its browser-side account check forwards signed-in players."""
+    return FileResponse(_STATIC_DIR / "welcome.html")
 
 
 @debug_router.get("/console")
@@ -2125,7 +2126,7 @@ def create_app(
     ai_max_fix_attempts: int = 3,
     monitor: observability.Monitor | None = None,
 ) -> FastAPI:
-    """[debug_tools] adds the web pages (/portal, /builder, /admin, /console, /browse)
+    """[debug_tools] adds the web pages (/, /portal, /builder, /admin, /console, /browse)
     and /debug/all-data, which exposes everything (including users' passwords),
     and the backoffice's /stats and /admin/* endpoints. /admin, /browse, /stats,
     /debug/all-data and /admin/* need [master_password], unless it is empty.

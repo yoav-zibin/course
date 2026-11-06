@@ -21,6 +21,9 @@ DEBUG_PATHS = (
     "/console",
     "/builder",
     "/portal",
+    "/static/welcome.html",
+    "/static/welcome.css",
+    "/static/welcome.js",
     "/browse",
     "/static/common.css",
     "/static/common.js",
@@ -36,9 +39,10 @@ def test_debug_pages_are_served(api: Api, path: str) -> None:
     assert api.request("GET", path).status_code == 200
 
 
-def test_root_redirects_to_the_portal(api: Api) -> None:
+def test_root_serves_the_welcome_page(api: Api) -> None:
     response = api.client.get("/", follow_redirects=False)
-    assert (response.status_code, response.headers["location"]) == (307, "/portal")
+    assert response.status_code == 200
+    assert "Game platform · Welcome" in response.text
 
 
 def test_debug_tools_can_be_disabled() -> None:

@@ -405,19 +405,8 @@ const Auth = (() => {
     const input = el("input", { placeholder: I18n.t("ui.auth.guest_name", {}, "Guest name"), "aria-label": I18n.t("ui.auth.guest_name", {}, "Guest name") });
     const button = el("button", { type: "button", textContent: I18n.t("ui.auth.continue_as_guest", {}, "Continue as guest") });
     button.onclick = async () => {
-      const name = input.value.trim() || I18n.t("ui.auth.guest_default_name", { number: accounts().length + 1 }, `Guest ${accounts().length + 1}`);
       try {
-        const user = await apiRequest("POST", "/users", {
-          body: newAccountBody({ display_name: name }),
-        });
-        finishLogin(dialog, {
-          user_id: user.id,
-          display_name: user.display_name,
-          password: user.password,
-          referral_code: user.referral_code,
-          linked_accounts: [],
-          merged_from_user_id: null,
-        });
+        finishLogin(dialog, await createGuest(input.value));
       } catch (error) {
         dialogFailed(dialog, error);
       }
@@ -426,6 +415,21 @@ const Auth = (() => {
       el("label", { class: "inline" }, `${I18n.t("ui.auth.guest", {}, "Guest")} `, input),
       button
     );
+  }
+
+  async function createGuest(displayName = "") {
+    const name = displayName.trim() || I18n.t("ui.auth.guest_default_name", { number: accounts().length + 1 }, `Guest ${accounts().length + 1}`);
+    const user = await apiRequest("POST", "/users", {
+      body: newAccountBody({ display_name: name }),
+    });
+    return {
+      user_id: user.id,
+      display_name: user.display_name,
+      password: user.password,
+      referral_code: user.referral_code,
+      linked_accounts: [],
+      merged_from_user_id: null,
+    };
   }
 
   /** An <img> for a stored picture URL, or null when there is none. */
@@ -543,6 +547,7 @@ const Auth = (() => {
     setReferralCode,
     setPicture,
     newAccountBody,
+    createGuest,
     openDialog,
     closeDialog,
     renderMenu,
