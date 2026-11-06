@@ -627,28 +627,39 @@ def propose_step(client, draft, step, correction, *, feedback=False):
                          {k:v for k,v in case.items() if k!='images'} for case in original.get('cases',[]) if isinstance(case,dict)
                      ]} if isinstance(original.get('cases'),list) else original, 'error':problem},ensure_ascii=False)}
                 ]
+                # A repair reply that cannot even be parsed says nothing
+                # about the artifact: keep the real validation problem for
+                # the user-facing message and track the reply failure
+                # separately, instead of letting parse noise overwrite it.
+                repair_issue = None
                 for attempt in range(2):
                     try:
                         raw = client.chat(messages,max_tokens=12000,temperature=1.0,reasoning_effort='low')
                     except ModelOutputLimitError:
-                        problem = 'the reply exceeded its output limit'
+                        repair_issue = 'the reply exceeded its output limit'
                     else:
                         try:
                             fixed = parse_json(raw)
                             validate_test_data(fixed)
                             break
-                        except (ValueError, InvalidRequestError) as error:
+                        except InvalidRequestError as error:
                             problem = str(error)
+                            repair_issue = None
+                        except ValueError as error:
+                            repair_issue = f'the repair reply was not valid JSON ({error})'
                     if attempt:
                         # This checkpoint can never be repaired by resuming
                         # it; discard it so a retry starts over instead of
                         # resuming a corpse.
                         if checkpoint:
                             checkpoint(key, _stamp({'discarded':True, 'request_text':correction, 'request_mode':'feedback' if feedback else 'propose'}))
-                        raise ValueError(f'Test example repair failed: {problem}. Retry the same request to start over.') from None
+                        detail = f'Test example repair failed: {problem}.'
+                        if repair_issue:
+                            detail += f' The repair reply could not be used: {repair_issue}.'
+                        raise ValueError(detail + ' Retry the same request to start over.') from None
                     messages.append({'role':'user','content':'Return exactly ONE compact JSON object with state_schema, '
                                      'view_schema, move_schema and cases. No second object, explanation, or artwork. '
-                                     'Keep all requested examples together in the cases array. Last issue: '+problem})
+                                     'Keep all requested examples together in the cases array. Last issue: '+(repair_issue or problem)})
                 if isinstance(original.get('cases'),list):
                     previous = {flow.digest({k:v for k,v in c.items() if k!='images'}):c['images']
                                 for c in original['cases'] if isinstance(c,dict) and c.get('images')}

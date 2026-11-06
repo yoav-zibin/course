@@ -809,6 +809,38 @@ def test_terminally_failed_checkpoint_is_discarded():
     flow.validate_artifact('tests', result.builder_workflow['artifacts']['tests']['value'])
 
 
+def test_repair_parse_failure_reports_the_real_problem():
+    # When the whole-contract repair replies are malformed JSON, the
+    # error the user sees must still name the actual validation problem
+    # with the artifact, not the JSON parse noise that killed the repair.
+    import copy
+    from game_platform.builder_jobs import propose_step
+    draft = approved_draft()
+    contract = copy.deepcopy(draft.builder_workflow['artifacts']['tests']['value'])
+    cases = contract.pop('cases')
+    for case in cases:
+        case.pop('images')
+    outlines = [{k: c[k] for k in ('name', 'kind', 'description')} for c in cases]
+    duplicated = outlines + [dict(outlines[1])]
+    class Failing:
+        def chat(self, messages, **options):
+            instruction = messages[0]['content']
+            if instruction.startswith('Plan the requested tests'):
+                return json.dumps(dict(contract, cases=duplicated, message='Review the examples'))
+            if instruction.startswith('Write only the single'):
+                name = json.loads(messages[1]['content'])['outline']['name']
+                return json.dumps(next(c for c in cases if c['name'] == name))
+            return '{"broken":"'
+        def checkpoint(self, key, progress):
+            pass
+    with pytest.raises(ValueError) as excinfo:
+        propose_step(Failing(), draft, 'tests', 'Check these moves')
+    message = str(excinfo.value)
+    assert 'Test names must be unique' in message
+    assert 'not valid JSON' in message
+    assert message.index('Test names must be unique') < message.index('not valid JSON')
+
+
 def test_unversioned_checkpoint_is_ignored():
     import copy
     from game_platform.builder_jobs import propose_step
