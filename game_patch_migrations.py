@@ -19,6 +19,7 @@ BATCH2_DIRECTORY = Path(__file__).resolve().parent / "games" / "audit-batch2"
 BATCH3_DIRECTORY = Path(__file__).resolve().parent / "games" / "audit-batch3"
 BATCH4_DIRECTORY = Path(__file__).resolve().parent / "games" / "audit-batch4"
 BATCH5_DIRECTORY = Path(__file__).resolve().parent / "games" / "audit-batch5"
+BATCH6_DIRECTORY = Path(__file__).resolve().parent / "games" / "audit-batch6"
 
 
 def _sha256(code: str | None) -> str:
@@ -43,6 +44,10 @@ def apply_audit_batch4(platform: GamePlatform) -> list[dict[str, Any]]:
 
 def apply_audit_batch5(platform: GamePlatform) -> list[dict[str, Any]]:
     return _apply_audit_batch(platform, BATCH5_DIRECTORY, "audit-batch5")
+
+
+def apply_audit_batch6(platform: GamePlatform) -> list[dict[str, Any]]:
+    return _apply_audit_batch(platform, BATCH6_DIRECTORY, "audit-batch6")
 
 
 def _apply_audit_batch(
@@ -96,7 +101,13 @@ def _apply_audit_batch(
                         # Supply a reviewed schema only for this guarded update;
                         # never replace an existing author's schema or old version.
                         schema_update = {}
-                        if game.game_schemas is None and entry.get("schemas"):
+                        existing_schema_hash = _sha256(json.dumps(
+                            game.game_schemas, sort_keys=True, separators=(",", ":")
+                        ))
+                        if entry.get("schemas") and (
+                            game.game_schemas is None
+                            or entry.get("original_schema_sha256") == existing_schema_hash
+                        ):
                             schema_update["game_schemas"] = json.loads(
                                 (directory / entry["schemas"]).read_text(encoding="utf-8")
                             )
@@ -109,7 +120,7 @@ def _apply_audit_batch(
                             _admin=True,
                             # A slower production CPU still has to finish whole
                             # walks. Keep all checks and the 100ms call limit.
-                            _test_budget_seconds=5.0 if batch_name in {"audit-batch2", "audit-batch3", "audit-batch4", "audit-batch5"} else 1.0,
+                            _test_budget_seconds=5.0 if batch_name in {"audit-batch2", "audit-batch3", "audit-batch4", "audit-batch5", "audit-batch6"} else 1.0,
                         )
                         result.update(status="updated", version=updated.version)
         except Exception as error:

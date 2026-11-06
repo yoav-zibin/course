@@ -55,7 +55,8 @@
     "provider": "off",
     "google_api_key": "",
     "daily_character_limit": 200000,
-    "timeout_seconds": 10.0
+    "timeout_seconds": 10.0,
+    "require_strings": true
   },
   "model_api": {
     "api_key": "",

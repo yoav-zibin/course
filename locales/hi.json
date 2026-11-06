@@ -45,6 +45,7 @@
   "error.game_schemas_required": "server_code देने पर game_schemas आवश्यक है",
   "error.game_schemas_requires_server": "game_schemas के लिए server_code आवश्यक है",
   "error.game_schemas_required_for_server_code": "server_code के लिए game_schemas आवश्यक है",
+  "error.game_texts_not_translatable": "खेल के पाठ का अनुवाद नहीं किया जा सकता: {problems}",
   "error.refactor_job_running": "एक रीफ़ैक्टर कार्य पहले से चल रहा है; इसके समाप्त होने की प्रतीक्षा करें।",
   "error.refactor_job_not_found": "ऐसा कोई रीफ़ैक्टर कार्य नहीं है।",
   "error.match_not_ongoing": "मैच चल नहीं रहा है",
