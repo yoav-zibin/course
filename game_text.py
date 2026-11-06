@@ -130,12 +130,13 @@ def lint(code: str) -> list[str]:
         value = assignment.group(1)
         if re.match(r"\s*t\(", value) and not re.search(r"""["'`]\s*\+|\+\s*["'`]""", value):
             continue  # a plain t(...) call
-        literals = [m.group(2) for m in _LITERAL_WITH_WORDS.finditer(value)]
-        if not literals:
-            continue
-        if re.search(r"""["'`]\s*\+|\+\s*["'`]""", value):
+        # A conditional may choose between complete translated messages. Mask
+        # literal lookup keys before searching for untranslated display text.
+        display_value = _USED.sub("t(KEY", value)
+        literals = [m.group(2) for m in _LITERAL_WITH_WORDS.finditer(display_value)]
+        if (literals or _USED.search(value)) and re.search(r"""["'`]\s*\+|\+\s*["'`]""", value):
             joined.append(value.strip()[:70])
-        elif not value.lstrip().startswith("t("):
+        elif literals and not value.lstrip().startswith("t("):
             hard_coded.append(literals[0][:50])
     if hard_coded:
         shown = ", ".join(repr(text) for text in hard_coded[:3])

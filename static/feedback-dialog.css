@@ -1,0 +1,57 @@
+/* Feedback: the small, out-of-the-way entry points and the feedback dialog.
+   Colors and fonts come from the skin tokens (common.css, experiments.css), so the dialog
+   matches whichever skin the page has. The dialog is added to <body>, outside
+   .portal-shell, so it sets its own button colors from the same tokens. */
+:root { --feedback-on-accent: var(--color-text-primary, #eef0f5); }
+:root[data-skin="aurora"] { --feedback-on-accent: #071b22; }
+:root[data-skin="sunset"] { --feedback-on-accent: #fffaf6; }
+:root[data-skin="immersive"] { --feedback-on-accent: #100c1d; }
+
+/* "⚑ Report" on a seat: the seat chip's own text color (its background changes with the
+   turn and the skin). */
+.feedback-report { margin-left:6px; padding:2px 8px; min-height:28px; border:1px solid transparent; border-radius:999px;
+  background:none; box-shadow:none; color:inherit; opacity:.85; font-size:12px; cursor:pointer; white-space:nowrap; }
+.feedback-report:hover, .feedback-report:focus-visible { background:none; border-color:currentColor; opacity:1; }
+.feedback-link { display:block; margin-top:6px; padding:4px 0; min-height:32px; border:0; background:none; box-shadow:none;
+  color:var(--color-text-secondary, #c8cdd8); font-size:13px; text-decoration:underline; cursor:pointer; }
+.feedback-link:hover { background:none; color:var(--color-text-primary, #eef0f5); }
+.feedback-link[hidden] { display:none; }
+
+.feedback-backdrop { position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center;
+  padding:16px max(16px, env(safe-area-inset-left)); background:rgba(0, 0, 0, 0.6); }
+.feedback-dialog { width:min(440px, 100%); max-height:calc(100dvh - 32px); overflow:auto; display:flex; flex-direction:column; gap:10px;
+  padding:18px; border:1px solid var(--color-border-2, #2a3247); border-radius:8px; background:var(--color-bg-1, #171c2a);
+  color:var(--color-text-primary, #eef0f5); font-family:var(--font-sans, sans-serif); box-shadow:0 18px 40px rgba(0,0,0,.5); }
+.feedback-dialog h2 { margin:0; font-size:18px; }
+.feedback-body { display:flex; flex-direction:column; gap:8px; }
+.feedback-about { margin:0; color:var(--color-text-tertiary, #9aa3b8); font-size:13px; overflow-wrap:anywhere; }
+/* Bug / Suggestion / Problem: a row of equal choices. */
+.feedback-kinds { display:flex; gap:6px; margin:0; padding:0; border:0; min-width:0; }
+.feedback-kinds legend { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+.feedback-kind { flex:1; position:relative; }
+.feedback-kind input { position:absolute; opacity:0; inset:0; margin:0; cursor:pointer; }
+.feedback-kind span { display:flex; align-items:center; justify-content:center; min-height:40px; padding:0 8px; text-align:center;
+  border:1px solid var(--color-border-3, #3a4560); border-radius:6px; background:var(--color-bg-0, #10141f);
+  color:var(--color-text-secondary, #c8cdd8); font-size:14px; }
+.feedback-kind input:checked + span { background:var(--color-accent, #c6f432); border-color:var(--color-accent, #c6f432);
+  color:var(--feedback-on-accent); font-weight:600; }
+.feedback-kind input:focus-visible + span { outline:2px solid var(--color-focus-ring, #c6f432); outline-offset:2px; }
+.feedback-dialog textarea { width:100%; min-height:120px; resize:vertical; padding:10px; border:1px solid var(--color-border-3, #2a3247);
+  border-radius:6px; background:var(--color-bg-0, #10141f); color:var(--color-text-primary, #eef0f5); font:15px/1.4 var(--font-sans, sans-serif); }
+.feedback-dialog textarea::placeholder { color:var(--color-text-tertiary, #9aa3b8); }
+.feedback-dialog textarea:focus-visible { outline:2px solid var(--color-focus-ring, #c6f432); outline-offset:1px; }
+.feedback-meta { display:flex; justify-content:flex-end; }
+.feedback-counter { font:12px var(--font-mono, ui-monospace, Menlo, monospace); color:var(--color-text-tertiary, #9aa3b8);
+  font-variant-numeric:tabular-nums; }
+.feedback-message { margin:0; min-height:1.2em; color:var(--color-error, #ff9a9a); font-size:13px; }
+.feedback-message:empty { min-height:0; }
+.feedback-buttons { display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; }
+.feedback-thanks { margin:6px 0; font-size:16px; color:var(--color-text-primary, #eef0f5); }
+.feedback-dialog button { min-height:44px; padding:0 18px; border:1px solid var(--color-border-3, #3a4560); border-radius:6px;
+  background:var(--color-bg-2, #1c2233); color:var(--color-text-primary, #eef0f5); font:600 15px/1 var(--font-sans, sans-serif);
+  cursor:pointer; box-shadow:none; }
+.feedback-dialog button:hover:not(:disabled) { background:var(--color-bg-3, #232a3d); }
+.feedback-dialog button.primary { background:var(--color-accent, #c6f432); border-color:var(--color-accent, #c6f432); color:var(--feedback-on-accent); }
+.feedback-dialog button.primary:hover:not(:disabled) { background:var(--color-accent-hover, #d4f75c); border-color:var(--color-accent-hover, #d4f75c); }
+.feedback-dialog button:disabled { opacity:.45; cursor:default; }
+.feedback-dialog button:focus-visible { outline:2px solid var(--color-focus-ring, #c6f432); outline-offset:2px; }

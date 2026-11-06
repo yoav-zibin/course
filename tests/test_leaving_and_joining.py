@@ -11,12 +11,12 @@ def test_leaving_a_waiting_match_frees_the_seat(api: Api) -> None:
     )
     game_id = api.new_game(owner=alice)
     match_id = api.new_match(
-        owner=alice, game_id=game_id, num_computer_opponents=1, joiners=[bob, carol]
+        owner=alice, game_id=game_id, num_computer_opponents=0, joiners=[bob, carol]
     )
     match = api.ok("POST", f"/matches/{match_id}/leave", as_user=bob)
     assert api.summary(match) == {
         "status": "waiting_for_players",
-        "players": ["alice", "carol", "computer"],
+        "players": ["alice", "carol"],
         "turn": None,
         "state": None,
     }
@@ -51,28 +51,16 @@ def test_leaving_ends_the_match_when_the_game_disallows_leaving(api: Api) -> Non
     )
 
 
-def test_a_computer_replaces_the_leaver_when_the_game_allows_leaving(api: Api) -> None:
-    alice, bob, carol = (
-        api.new_user("alice"),
-        api.new_user("bob"),
-        api.new_user("carol"),
-    )
-    game_id = api.new_game(owner=alice, allows_leave_mid_match=True)
-    match_id = api.new_match(
-        owner=alice, game_id=game_id, joiners=[bob, carol], start=True
-    )
-    api.move(match_id, as_user=alice, next_turn=1)
-
-    # Bob had the turn, so the computer in his seat now has it.
-    match = api.ok("POST", f"/matches/{match_id}/leave", as_user=bob)
-    assert api.summary(match) == {
-        "status": "ongoing",
-        "players": ["alice", "computer", "carol"],
-        "turn": [1],
-        "state": None,
-    }
-    assert api.move(match_id, as_user=carol, next_turn=2).status_code == 201
-    assert api.ok("GET", "/matches", as_user=bob) == []
+def test_legacy_leave_ends_the_match_without_creating_a_bot(api: Api) -> None:
+    alice, bob, carol = [api.new_user(name) for name in ("alice", "bob", "carol")]
+    game = api.new_game(owner=alice, allows_leave_mid_match=True)
+    mid = api.new_match(owner=alice, game_id=game, joiners=[bob, carol], start=True)
+    api.move(mid, as_user=alice, next_turn=1)
+    result = api.ok("POST", f"/matches/{mid}/leave", as_user=bob)
+    assert result["status"] == "over"
+    assert result["turn_of_player_indices"] is None
+    assert all(p["kind"] == "human" for p in result["players"])
+    assert api.move(mid, as_user=carol, next_turn=2).status_code == 409
 
 
 def test_the_match_ends_when_the_last_human_leaves(api: Api) -> None:
@@ -84,7 +72,7 @@ def test_the_match_ends_when_the_last_human_leaves(api: Api) -> None:
     match = api.ok("POST", f"/matches/{match_id}/leave", as_user=alice)
     assert api.summary(match) == {
         "status": "over",
-        "players": ["computer", "computer"],
+        "players": ["alice", "computer"],
         "turn": None,
         "state": {"pot": 0},
     }
@@ -111,7 +99,7 @@ def test_joining_mid_match_requires_the_game_to_allow_it(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game_id = api.new_game(owner=alice, allows_join_mid_match=False)
     match_id = api.new_match(
-        owner=alice, game_id=game_id, num_computer_opponents=1, start=True
+        owner=alice, game_id=game_id, joiners=[api.new_user("carol")], start=True
     )
     assert error(api.request("POST", f"/matches/{match_id}/join", as_user=bob)) == (
         409,
@@ -119,27 +107,12 @@ def test_joining_mid_match_requires_the_game_to_allow_it(api: Api) -> None:
     )
 
 
-def test_joining_mid_match_takes_over_a_computer_seat_and_its_turn(api: Api) -> None:
+def test_joining_cannot_take_over_a_single_player_computer(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
-    game_id = api.new_game(owner=alice, allows_join_mid_match=True)
-    match_id = api.new_match(
-        owner=alice, game_id=game_id, num_computer_opponents=1, start=True
-    )
-    api.move(match_id, as_user=alice, next_turn=1)
-
-    match = api.ok("POST", f"/matches/{match_id}/join", as_user=bob)
-    assert api.summary(match) == {
-        "status": "ongoing",
-        "players": ["alice", "bob"],
-        "turn": [1],
-        "state": None,
-    }
-    # Now that the seat is bob's, alice can no longer move for it.
-    assert error(api.move(match_id, as_user=alice, next_turn=0)) == (
-        409,
-        "it is not your turn",
-    )
-    assert api.move(match_id, as_user=bob, next_turn=0).status_code == 201
+    game = api.new_game(owner=alice, allows_join_mid_match=True)
+    mid = api.new_match(owner=alice, game_id=game, num_computer_opponents=1, start=True)
+    assert api.request("POST", f"/matches/{mid}/join", as_user=bob).status_code == 409
+    assert api.match_summary(mid)["players"] == ["alice", "computer"]
 
 
 def test_joining_mid_match_adds_seats_up_to_the_games_maximum(api: Api) -> None:

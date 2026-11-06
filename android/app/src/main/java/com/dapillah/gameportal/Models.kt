@@ -21,6 +21,7 @@ val PortalJson = Json { ignoreUnknownKeys = true; encodeDefaults = true; explici
 @Serializable data class Player(
     @SerialName("player_index") val index: Int, val kind: String,
     @SerialName("user_id") val userId: String? = null,
+    val active: Boolean = true,
 )
 @Serializable data class Match(
     val id: String, @SerialName("game_id") val gameId: String,
@@ -33,11 +34,12 @@ val PortalJson = Json { ignoreUnknownKeys = true; encodeDefaults = true; explici
     @SerialName("end_reason") val endReason: String? = null,
 ) {
     val key get() = "$id@$gameId@$gameVersion"
-    fun seat(userId: String?) = players.firstOrNull { it.userId != null && it.userId == userId }
+    fun seat(userId: String?) = players.firstOrNull { it.active && it.userId != null && it.userId == userId }
     fun actingFor(userId: String?): Int? {
         if (status != "ongoing" || turn == null) return null
         val mine = seat(userId) ?: return null
         if (mine.index in turn) return mine.index
+        if (players.count { it.kind == "human" && it.active } != 1) return null
         return players.firstOrNull { it.kind == "computer" && it.index in turn }?.index
     }
 }

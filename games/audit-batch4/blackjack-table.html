@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Blackjack Table</title><style>body{margin:0;padding:16px;background:#101827;color:#edf2ff;font:16px system-ui}*{box-sizing:border-box}h1{font-size:23px;margin:0 0 8px}#status{font-weight:650;margin:12px 0;color:#8ee7cd}.seat{background:#1d2942;border-radius:10px;padding:10px;margin:8px 0}.seat.cur{outline:2px solid #fcd34d}.cards{display:flex;gap:5px;flex-wrap:wrap;margin:5px 0}.card{min-width:40px;padding:6px 4px;text-align:center;border-radius:6px;background:#f8fafc;color:#0f172a;font-weight:700;font-size:15px}.card.red{color:#dc2626}.card.hole{background:#475569;color:#e2e8f0}.meta{font-size:14px;color:#bec9dc}.row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}button{font:inherit;min-height:46px;padding:0 18px;border:1px solid #64748b;border-radius:8px;background:#25344e;color:white;cursor:pointer}button:disabled{opacity:.5;cursor:default}.rules{font-size:14px;color:#bec9dc;max-width:480px}</style></head><body><h1>Blackjack Table</h1><p class="rules">Everyone starts with 1,000 chips and plays against the dealer for up to 10 rounds — most chips at the end wins. Blackjack pays 3:2. The dealer's hole card stays hidden until all hands are done.</p><div id="status">Waiting for the platform…</div><div class="meta" id="fresh"></div><div id="table"></div><div class="row" id="actions"></div><script>
+"use strict";
+let latest=null,sentFor=-1,six=false;
+const $=id=>document.getElementById(id);
+const SUITS={C:"♣",D:"♦",H:"♥",S:"♠"};
+const RLBL={1:"A",11:"J",12:"Q",13:"K"};
+const lbl=c=>(RLBL[c.r]||String(c.r))+(SUITS[c.s]||c.s);
+const red=c=>c.s==="H"||c.s==="D";
+function val(cards){let t=0,a=0;for(const c of cards){t+=c.r===1?11:Math.min(c.r,10);if(c.r===1)a++;}while(t>21&&a>0){t-=10;a--;}return t;}
+function moveCount(){return latest?(latest.move_count??latest.moveCount??0):0;}
+function acting(){return latest&&latest.status==="ongoing"&&latest.acting_for_player_index!==null&&latest.acting_for_player_index!==undefined;}
+function mySeat(){return acting()?latest.acting_for_player_index:-1;}
+function send(move){if(!acting()||sentFor===moveCount())return;sentFor=moveCount();parent.postMessage({type:"make_move",move},"*");render();}
+function cardEl(c,hole){const d=document.createElement("span");d.className="card"+(hole?" hole":red(c)?" red":"");d.textContent=hole?"🂠":lbl(c);return d;}
+function render(){
+ if(!latest)return;
+ const v=latest.view,status=$("status"),table=$("table"),actions=$("actions");
+ const name=i=>((v.customNames&&v.customNames[i])||(latest.players&&latest.players[i]&&latest.players[i].name)||("Player "+(i+1)));
+ if(!v){status.textContent="Waiting…";return;}
+ $("fresh").textContent=(v.freshMsg||"")+(v.phase!=="setup"?" · Round "+v.round+" of 10 · deck: "+v.deckCount+" cards":"");
+ const over=latest.status==="over"||v.phase==="gameOver";
+ if(over)status.textContent="🏆 "+name(v.winners)+" ends with the most chips!";
+ else if(v.phase==="setup")status.textContent="Set up the table, then start.";
+ else if(v.phase==="betting")status.textContent=acting()?"Place your bet, "+name(v.curP)+".":"Waiting for bets…";
+ else if(v.phase==="play")status.textContent=acting()?name(v.curP)+"'s hand — hit, stand, double or split.":"Dealer and players are playing…";
+ else if(v.phase==="roundOver")status.textContent="Round "+v.round+" settled."+(acting()?" Start the next round when ready.":"");
+ else status.textContent="…";
+ table.replaceChildren();
+ const ds=document.createElement("div");ds.className="seat";
+ ds.innerHTML="<b>Dealer</b>"+(v.holeHidden?" (hole card hidden)":"")+(v.dealer&&v.dealer.length&&!v.holeHidden?" — "+val(v.dealer):"");
+ const dc=document.createElement("div");dc.className="cards";
+ (v.dealer||[]).forEach(c=>dc.append(cardEl(c)));
+ if(v.holeHidden)dc.append(cardEl(null,true));
+ ds.append(dc);table.append(ds);
+ (v.hands||[]).forEach((hs,i)=>{
+   const s=document.createElement("div");s.className="seat"+(v.phase==="play"&&v.curP===i?" cur":"");
+   let head="<b>"+name(i)+"</b> · "+v.chips[i]+" chips";
+   if(v.phase==="betting"&&(v.pendingBets[i]||v.pendingBets[String(i)]))head+=" · bet "+(v.pendingBets[i]||v.pendingBets[String(i)]);
+   if(v.phase==="betting"&&v.needBet[i])head+=" · to bet";
+   if(v.results[i])head+=" · "+v.results[i];
+   s.innerHTML=head;
+   hs.forEach((h,hi)=>{
+     const row=document.createElement("div");row.className="cards";
+     h.cards.forEach(c=>row.append(cardEl(c)));
+     const m=document.createElement("span");m.className="meta";
+     m.textContent=" "+val(h.cards)+(h.bet?" · bet "+h.bet:"")+(h.done?" · done":"")+(v.phase==="play"&&v.curP===i&&v.curH===hi?" · ← playing":"");
+     row.append(m);s.append(row);
+   });
+   if(!hs.length)s.innerHTML+="<div class='meta'>no hand this round</div>";
+   table.append(s);
+ });
+ actions.replaceChildren();
+ const can=acting()&&sentFor!==moveCount()&&!over;
+ const btn=(t,fn,dis)=>{const b=document.createElement("button");b.textContent=t;b.disabled=!!dis||!can;b.onclick=fn;actions.append(b);return b;};
+ if(v.phase==="setup"){
+   btn("Start the game",()=>send({kind:"start",names:[],six}));
+   const t=document.createElement("button");t.textContent="Shoe: "+(six?"6 decks":"1 deck");t.disabled=!can;t.onclick=()=>{six=!six;render();};actions.append(t);
+ }else if(v.phase==="betting"&&acting()){
+   if(v.chips[mySeat()]>0&&v.chips[mySeat()]<10)btn("Bet "+v.chips[mySeat()]+" (all in)",()=>send({kind:"bet",amount:v.chips[mySeat()]}));
+   for(const amt of [10,25,50,100])if(v.chips[mySeat()]>=amt)btn("Bet "+amt,()=>send({kind:"bet",amount:amt}));
+ }else if(v.phase==="play"&&acting()){
+   const h=(v.hands[mySeat()]||[])[v.curH];
+   btn("Hit",()=>send({kind:"hit"}));
+   btn("Stand",()=>send({kind:"stand"}));
+   if(h&&h.cards.length===2&&v.chips[mySeat()]>=h.bet)btn("Double",()=>send({kind:"double"}));
+   if(h&&h.cards.length===2&&h.cards[0].r===h.cards[1].r&&v.chips[mySeat()]>=h.bet&&(v.hands[mySeat()]||[]).length<4)btn("Split",()=>send({kind:"split"}));
+ }else if(v.phase==="roundOver"&&acting()){
+   btn("Next round",()=>send({kind:"next"}));
+ }
+}
+addEventListener("message",e=>{if(e.source!==parent||!e.data||e.data.type!=="state_changed")return;latest=e.data;sentFor=-1;render();});
+</script></body></html>

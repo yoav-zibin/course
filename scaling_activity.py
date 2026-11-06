@@ -80,7 +80,7 @@ def generate(store, *, run_id, users, games, matches, max_writes):
             new_invite_token=lambda: mid + "-invite",
         )
         people = rng.sample(range(users), rng.randint(1, 4))
-        computers = rng.randrange(5 - len(people))
+        computers = rng.randrange(4) if len(people) == 1 else 0
         # A complete service operation and checkpoint are one commit, so a
         # lost response or interrupted process cannot duplicate payouts.
         with store.atomic():

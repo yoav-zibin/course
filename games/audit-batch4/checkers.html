@@ -1,0 +1,146 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{box-sizing:border-box}
+body{font-family:system-ui,sans-serif;margin:0;padding:16px;background:#f3efe6;color:#222;display:flex;flex-direction:column;align-items:center}
+#wrap{width:100%;max-width:520px}
+h2{margin:4px 0 2px;text-align:center}
+#status{background:#fff;border-radius:10px;padding:10px 12px;text-align:center;min-height:44px;box-shadow:0 1px 4px rgba(0,0,0,.12);font-weight:600}
+#sub{font-weight:400;font-size:13px;color:#666;margin-top:4px}
+#board{width:100%;aspect-ratio:1;margin:12px 0;border:6px solid #6b4a2b;border-radius:8px;overflow:hidden;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);box-shadow:0 4px 14px rgba(0,0,0,.2)}
+.sq{position:relative;display:flex;align-items:center;justify-content:center;cursor:default;user-select:none}
+.light{background:#ecdcc0}
+.dark{background:#7a5a3a}
+.sq.playable.dark{cursor:pointer}
+.piece{width:82%;height:82%;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:clamp(14px,4vw,24px);box-shadow:0 2px 4px rgba(0,0,0,.4), inset 0 2px 3px rgba(255,255,255,.4);pointer-events:none}
+.p0{background:radial-gradient(circle at 30% 30%,#ff7b7b,#c81e1e);border:2px solid #7a0f0f}
+.p1{background:radial-gradient(circle at 30% 30%,#555,#111);border:2px solid #000;color:#fff}
+.sq.sel{outline:3px solid #ffd400;outline-offset:-3px}
+.dot{position:absolute;width:28%;height:28%;border-radius:50%;background:rgba(255,212,0,.9);box-shadow:0 0 0 3px rgba(0,0,0,.3);pointer-events:none}
+.dot.cap{background:#ff3b30;box-shadow:0 0 0 3px #fff}
+.sq.last{box-shadow:inset 0 0 0 4px rgba(255,212,0,.8)}
+#info{display:flex;gap:8px;justify-content:space-between;font-size:14px}
+.card{flex:1;background:#fff;border-radius:10px;padding:8px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+.card b{display:block}
+.card.active{outline:3px solid #2e9e44}
+button{margin-top:10px;padding:6px 12px;border-radius:8px;border:1px solid #ccc;background:#fff;cursor:pointer}
+.hint{font-size:13px;color:#666;text-align:center;margin-top:6px}
+</style>
+</head>
+<body>
+<div id="wrap">
+<h2>⚫ Checkers 🔴</h2>
+<div id="status">Waiting for platform…<div id="sub"></div></div>
+<div id="board"></div>
+<div id="info"><div class="card" id="c0"></div><div class="card" id="c1"></div></div>
+<div class="hint" id="hint"></div>
+</div>
+<script>
+let latest=null, selected=null, pending=false;
+function cur(){ return latest && latest.view ? latest.view : null; }
+function countPieces(b){ let a=[0,0]; if(!b) return a; for(let r=0;r<8;r++)for(let c=0;c<8;c++) if(b[r][c]) a[b[r][c].c]++; return a; }
+function esc(s){ return String(s==null?"":s).replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];}); }
+function render(){
+  if(!latest) return;
+  const st=cur();
+  if(!st) return;
+  const players=latest.players||[{name:"Red"},{name:"Black"}];
+  const acting=latest.status==="ongoing"?latest.acting_for_player_index:null;
+  const toMove=(st.toMove==null?st.turn:st.toMove);
+  const boardEl=document.getElementById("board");
+  boardEl.innerHTML="";
+  const my=latest.my_player_index;
+  const flip=my===1;
+  const disp=(r,c)=>flip?{r:7-r,c:7-c}:{r,c};
+  const moves=(st.moves||[]);
+  const destsForSel=selected?moves.filter(m=>m.from.r===selected.r&&m.from.c===selected.c):[];
+  const destSet=new Set(destsForSel.map(m=>m.to.r+","+m.to.c));
+  for(let dr=0;dr<8;dr++)for(let dc=0;dc<8;dc++){
+    const rc=disp(dr,dc); const r=rc.r, c=rc.c;
+    const d=document.createElement("div");
+    d.className="sq "+(((r+c)%2===1)?"dark":"light");
+    if((r+c)%2===1) d.classList.add("playable");
+    if(st.lastMove&&((st.lastMove.from.r===r&&st.lastMove.from.c===c)||(st.lastMove.to.r===r&&st.lastMove.to.c===c))) d.classList.add("last");
+    if(selected&&selected.r===r&&selected.c===c) d.classList.add("sel");
+    const p=st.board[r][c];
+    if(p){
+      const pe=document.createElement("div");
+      pe.className="piece "+(p.c===0?"p0":"p1");
+      pe.textContent=p.k?"\u265B":"";
+      pe.style.color=p.c===0?"#fff":"#ffd400";
+      d.appendChild(pe);
+    }
+    if(destSet.has(r+","+c)){
+      const dot=document.createElement("div");
+      const hit=destsForSel.find(m=>m.to.r===r&&m.to.c===c);
+      dot.className="dot"+((hit&&hit.cap)?" cap":"");
+      d.appendChild(dot);
+    }
+    d.onclick=()=>onSquare(r,c);
+    boardEl.appendChild(d);
+  }
+  const status=document.getElementById("status");
+  const sub=document.getElementById("sub");
+  const cnt=countPieces(st.board);
+  const n0=players[0]?players[0].name:"Red";
+  const n1=players[1]?players[1].name:"Black";
+  const over=(st.winner!==null&&st.winner!==undefined)||st.draw;
+  document.getElementById("c0").innerHTML="<b>\uD83D\uDD34 "+esc(n0)+"</b>"+cnt[0]+" pieces"+(toMove===0&&!over?" \u2022 to move":"");
+  document.getElementById("c1").innerHTML="<b>\u26AB "+esc(n1)+"</b>"+cnt[1]+" pieces"+(toMove===1&&!over?" \u2022 to move":"");
+  document.getElementById("c0").classList.toggle("active",toMove===0&&!over);
+  document.getElementById("c1").classList.toggle("active",toMove===1&&!over);
+  let msg="";
+  if(st.draw){ msg="Draw! \uD83E\uDD1D"; }
+  else if(st.winner!==null&&st.winner!==undefined){ const w=players[st.winner]?players[st.winner].name:"Player "+(st.winner+1); msg=w+" wins! \uD83C\uDFC6"; }
+  else if(latest.status==="over"){ msg="Game over."; }
+  else if(acting===null){
+    const t=(latest.turn_of_player_indices&&latest.turn_of_player_indices.length)?latest.turn_of_player_indices[0]:toMove;
+    const tn=players[t]?players[t].name:"Player "+(t+1);
+    msg="Waiting for "+tn+"\u2026";
+  }
+  else{ const n=players[acting]?players[acting].name:"Player "+(acting+1); msg=(acting===0?"\uD83D\uDD34 ":"\u26AB ")+n+"'s turn"+(st.chain?" \u2014 keep jumping!":""); }
+  status.childNodes[0].textContent=msg;
+  const mustJump=moves.length>0&&!!moves[0].cap;
+  sub.textContent=(!over&&mustJump)?"Capture is mandatory":"";
+  let hint="";
+  if(!over&&acting!==null){ hint=selected?"Tap a highlighted square to move.":"Tap one of your pieces."; }
+  document.getElementById("hint").textContent=hint;
+}
+function onSquare(r,c){
+  if(!latest||pending) return;
+  const acting=latest.status==="ongoing"?latest.acting_for_player_index:null;
+  if(acting===null) return;
+  const st=cur();
+  if(!st||st.winner!==null&&st.winner!==undefined||st.draw) return;
+  const toMove=(st.toMove==null?st.turn:st.toMove);
+  if(toMove!==acting) return;
+  const moves=(st.moves||[]);
+  if(selected){
+    const mv=moves.find(m=>m.from.r===selected.r&&m.from.c===selected.c&&m.to.r===r&&m.to.c===c);
+    if(mv){
+      const s=selected; selected=null; pending=true; render();
+      parent.postMessage({type:"make_move",move:{from:{r:s.r,c:s.c},to:{r:r,c:c}}},"*");
+      return;
+    }
+  }
+  const p=st.board[r]&&st.board[r][c];
+  if(p&&p.c===toMove){
+    if(st.chain&&(st.chain.r!==r||st.chain.c!==c)) return;
+    const avail=moves.filter(m=>m.from.r===r&&m.from.c===c);
+    if(avail.length){ selected={r,c}; render(); return; }
+  }
+  selected=null; render();
+}
+addEventListener("message",e=>{
+  if(e.source!==parent||!e.data||e.data.type!=="state_changed") return;
+  latest=e.data;
+  pending=false; // A parent update also acknowledges a rejected move at the same count.
+  selected=null;
+  render();
+});
+</script>
+</body>
+</html>

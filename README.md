@@ -9,7 +9,11 @@ An in-memory REST backend for a multiplayer turn-based games platform, built wit
   to a set of players (any of whom may move next) or ends the match.
 
 All data lives in process memory behind the `Store` interface (`store.py`), so it can later
-be swapped for a database. The server binary uses `JsonFileStore`
+be swapped for a database. The in-memory store maintains secondary indexes for
+user-linked login accounts, match participants, and match status, avoiding full user or
+match scans on common login, match-history, open-match, and quick-match candidate
+requests. These indexes are process-local and do not make snapshot-based persistence
+safe across multiple server processes. The server binary uses `JsonFileStore`
 (`json_file_store.py`), which also saves everything to a JSON file; see
 [Data file](#data-file).
 
@@ -273,11 +277,12 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `POST /users/{id}/merge` | yes | Merge this account into `into_user_id` and delete it (authenticate as this user) |
 | `GET /matches/open` |  | Matches anyone may join (waiting, or ongoing with mid-match joins) |
 | `POST /games` | yes | Create a game |
-| `GET /games?owner_user_id=&q=&include_code=` |  | List published games that aren't deleted, optionally by owner. `q` searches names and descriptions (every word must match, ignoring case); `include_code=false` leaves out each game's code, which is most of the response |
+| `GET /games?owner_user_id=&q=` |  | List published games that aren't deleted, optionally by owner. `q` searches names and descriptions (every word must match, ignoring case). The list never includes code, which is most of each game; load one game in full from `GET /games/{id}` |
 | `GET /games/{id}` |  | Get the latest version of a game |
 | `GET /games/{id}/versions/{version}` |  | Get a specific version of a game |
 | `PATCH /games/{id}` | yes | Update some fields of a game, creating a new version (creator only) |
 | `DELETE /games/{id}` | yes | Delete a game (creator only) |
+| `POST /feedback` | yes | Send a bug, a suggestion or a problem about a user, a game, a match or the platform `{kind, target_type, target_id?, text, page?}`; see [Feedback](#feedback) |
 | `POST /matches` | yes | Create a match `{game_id, num_computer_opponents, private?, turn_seconds?}` (`turn_seconds`: 60, 180 or 600 for a [speed match](#speed-matches)); the caller is player 0 |
 | `GET /matches?status=&game_id=` | yes | List the caller's matches (owned or seated, minus hidden ones) |
 | `GET /matches/{id}` |  | Get a match; anyone can view it, so it can be shared by URL. Speed matches include `turn_deadline` and `server_time` |
@@ -336,6 +341,32 @@ Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct
   also ends if its last human leaves.
 - Joining an ongoing match requires `allows_join_mid_match`; the joiner takes over the
   first computer seat, or adds a seat if the game's maximum player count allows it.
+
+### Feedback
+
+Any logged-in user (guests included) can send feedback in their own words:
+`POST /feedback {kind, target_type, target_id?, text, page?}`.
+
+- `kind` is `"bug"` (in a game or the platform), `"suggestion"` (an idea or a feature
+  request) or `"problem"` (problematic content, like a bad game or an offensive name).
+  Feedback saved before kinds existed counts as `"problem"`.
+- `target_type` is `"user"`, `"game"` or `"match"` with its `target_id`, or `"platform"`
+  (the website itself, with no `target_id`).
+- `text` is 5 to 1000 characters after trimming (400 otherwise). The target must exist and
+  be visible to the sender (a private match they're not in counts as missing), and nobody
+  can send feedback about themselves (merged accounts included) or their own game.
+- At most 20 messages per person in a rolling 24 hours (429 `feedback_daily_limit`).
+  Sending the same kind of feedback on the same target again within 24 hours replaces that
+  message's text (200) instead of adding one (201), and doesn't count again.
+- Each message keeps its sender, its `status` (`"open"`; later `"reviewed"` or
+  `"dismissed"`), when it was sent and last updated, the target's and sender's names at
+  that time, and context: a game's version, a match's game, version and move count, and
+  the page it came from.
+- Feedback is private: only admins list it (`GET /admin/feedback` and the Feedback tab of
+  `/admin`), and nobody is told who sent it. Nothing is hidden or removed because of it.
+- With the Firestore query store, sending feedback reads Firestore twice (the login check,
+  then one batch with the sender, their daily-limit document, the target and its
+  counters) and writes once; the admin listing is two queries.
 
 ### Speed matches
 
@@ -586,9 +617,10 @@ process at a time (`firestore_store.py`).
 
 **Layout.** One document per record, named after the record: `users/<id>`,
 `game_versions/<game id>@<version>`, `matches/<id>`, `invites/<token>`, ... Each
-document holds the record as JSON text in its `json` field (game states are arbitrary
-JSON, and Firestore can't store all of it natively). A match's moves are one document
-each in `matches/<id>/moves`, and an agent conversation's entries in
+document holds the record as JSON. Large records that compress well are saved as
+level-1 zlib bytes; small and incompressible records stay as text to avoid spending
+CPU for little storage reduction. Readers accept both formats. A match's moves are
+one document each in `matches/<id>/moves`, and an agent conversation's entries in
 `agent_conversations/<game id>/entries`, so long matches never hit Firestore's 1 MiB
 document limit; text over ~900 KB is split into a `chunks` subcollection.
 `meta/format` holds the data format, so an older server refuses newer data. A save
@@ -631,6 +663,86 @@ skipped without it. Start the emulator (Java and Node.js needed) and point the t
 npx firebase-tools emulators:start --only firestore --project demo-game-platform
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 python -m pytest game_platform/tests
 ```
+
+### Staged HTTP benchmark
+
+`scale_benchmark.py` sends the same weighted HTTP request mix at increasing concurrency
+and reports requests per second, latency percentiles, status codes, and errors. Run it
+from a separate machine with Python 3.10 or newer so the load generator does not
+consume the server's CPU. The runner uses only the Python standard library.
+
+Create a dedicated benchmark user and save its credentials in a local JSON file that is
+not committed, such as `/tmp/benchmark-headers.json`:
+
+```json
+{
+  "X-User-Id": "BENCHMARK_USER_ID",
+  "X-User-Password": "BENCHMARK_USER_PASSWORD"
+}
+```
+
+Run the same dataset, request mix, and stages first against one VM, then against the
+load balancer:
+
+```bash
+python course/scale_benchmark.py \
+  --base-url http://SINGLE_VM_ADDRESS:8000 \
+  --requests course/benchmark.requests.example.json \
+  --headers-file /tmp/benchmark-headers.json \
+  --stages 1,2,4,8,16 \
+  --duration-seconds 60 \
+  --report /tmp/one-vm.json
+
+python course/scale_benchmark.py \
+  --base-url https://LOAD_BALANCER_ADDRESS \
+  --requests course/benchmark.requests.example.json \
+  --headers-file /tmp/benchmark-headers.json \
+  --stages 1,2,4,8,16 \
+  --duration-seconds 60 \
+  --report /tmp/two-vm.json
+```
+
+The sample weights are placeholders; edit them to match your expected request mix. The
+highest sustained stage that meets your latency and error objectives is the measured
+peak for that dataset and mix. `/health` alone measures health-check overhead, not
+application capacity. The runner is read-only by default; other methods require
+`--allow-write` and an isolated benchmark database.
+
+**Current limitation:** the existing snapshot-based Firestore store is single-process
+only, and several list routes are unpaginated. In-memory indexes reduce scans for
+login-account, per-user match-history, and open-match lookups, but do not change this
+consistency or memory limitation. Do not use two VMs or a target-sized dataset for a
+capacity claim until those backend paths have been changed. See the
+[backend scaling plan](docs/backend-scaling-plan.md).
+
+### Synthetic target-scale traffic and resource data
+
+`scale_traffic_simulation.py` generates 720 hourly records for a 30-day scenario using
+the 10M-user / 1B-match / 100K-game inventory. It writes
+`reports/scaling-traffic-30d.csv` and `reports/scaling-traffic-30d-summary.json`.
+Regenerate the deterministic sample with:
+
+```bash
+python course/scale_traffic_simulation.py
+```
+
+The current scenario assumes 20% monthly active users, 20% of those active daily, and
+40 HTTP requests per daily active user per day (480M requests/month). The hourly mix
+includes authentication/profile, catalog, match history/details, matchmaking, match
+creation/join, moves, invites, and health. CPU, memory, autoscaled instance count,
+latency, network, and Firestore document operations are model estimates, not measured
+benchmarks or GCE telemetry. The summary records the assumptions and warns that the
+current snapshot-based service cannot load the full target inventory into one VM.
+Generating the files makes no cloud calls; this model is not a capacity claim.
+
+Generate charts from the CSV with the standard-library-only renderer:
+
+```bash
+python course/reports/generate_graphs.py
+```
+
+Open `reports/graphs/index.html` for the dashboard or view the individual SVGs there.
+The images retain synthetic-data labels when viewed separately.
 
 ### Pages
 
@@ -692,6 +804,7 @@ don't need a user's credentials:
 |----------|-------------|
 | `GET /admin/stats` | The statistics behind `/stats` |
 | `GET /admin/invites` | The invite tree behind `/invites`: a summary, and per user their inviter, direct and total (transitive) invites and depth, sorted by total |
+| `GET /admin/feedback?kind=&target_type=&target_id=&status=` | Users' [feedback](#feedback), newest first (up to 200), and the 20 targets with the most "problem" reports |
 | `DELETE /admin/users/{id}` | Delete a user and the matches they own; their games are marked deleted, and they leave the matches they're seated in |
 | `DELETE /admin/games/{id}` | Mark a game deleted (its versions are kept for existing matches) |
 | `DELETE /admin/matches/{id}` | Delete a match |

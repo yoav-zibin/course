@@ -72,7 +72,7 @@ struct MatchActionFlow: ViewModifier {
             let humans = match.players.filter { $0.kind == "human" }.count
             if humans <= 1 { return "You're the last person playing, so the match ends." }
             if model.game(for: match)?.allowsLeaveMidMatch == true {
-                return "A computer takes over your seat and keeps playing."
+                return "Leaving may end this match and settle its tokens. Your seat will not become a computer."
             }
             return "This game doesn't allow leaving, so the match ends for everyone."
         default:

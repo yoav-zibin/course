@@ -31,6 +31,7 @@ from game_platform.models import (
     InviteAcceptance,
     LinkedAccount,
     Match,
+    Feedback,
     MatchStatus,
     Move,
     Seat,
@@ -463,6 +464,7 @@ class GameSummaryOut(BaseModel):
     deleted: bool
     published: bool
     supports_local_practice: bool = True
+    cover_url: str = ""
 
     @classmethod
     def of(cls, game: Game) -> "GameSummaryOut":
@@ -480,10 +482,15 @@ class GameSummaryOut(BaseModel):
             deleted=game.deleted,
             published=game.published,
             supports_local_practice=True,
+            cover_url=f"/games/{game.id}/versions/{game.version}/cover" if (game.builder_workflow or {}).get("artifacts", {}).get("images", {}).get("status") == "approved" else "",
         )
 
 
 class GameOut(GameSummaryOut):
+    game_logic_rules: str = ""
+    game_ui_rules: str = ""
+    tutorial_html: str = ""
+    translations: dict[str, JsonValue] = {}
     code: str
     # The v2 names for the two parts of a game: [client_code] is the same code
     # as [code]; [server_code] is None for a v1 game.
@@ -494,6 +501,10 @@ class GameOut(GameSummaryOut):
     def of(cls, game: Game) -> "GameOut":
         return cls(
             **GameSummaryOut.of(game).model_dump(),
+            game_logic_rules=(game.builder_workflow or {}).get("artifacts", {}).get("logic", {}).get("value", {}).get("text", ""),
+            game_ui_rules=(game.builder_workflow or {}).get("artifacts", {}).get("ui", {}).get("value", {}).get("text", ""),
+            tutorial_html=(game.builder_workflow or {}).get("artifacts", {}).get("tutorial", {}).get("value", {}).get("html", ""),
+            translations=(game.builder_workflow or {}).get("translations", {}),
             code=game.code,
             client_code=game.code,
             server_code=game.server_code,
@@ -582,6 +593,13 @@ class EmulatorResetRequest(_Request):
     players: Annotated[list[EmulatorPlayerIn], Field(min_length=1, max_length=10)]
     seed: int = 0
 
+    @model_validator(mode="after")
+    def solo_computers(self):
+        humans = sum(p.kind == "human" for p in self.players)
+        if any(p.kind == "computer" for p in self.players) and humans != 1:
+            raise ValueError("computer opponents are only supported with one human")
+        return self
+
 
 class EmulatorActRequest(EmulatorResetRequest):
     """Applies one human move in an emulated match (POST /emulator/act),
@@ -633,6 +651,7 @@ class GameDraftPublish(_Request):
 
 
 class GameDraftOut(GameDraftContent):
+    builder_workflow: dict[str, JsonValue] | None = None
     id: str
     owner_user_id: str
     revision: int
@@ -649,8 +668,53 @@ class GameDraftOut(GameDraftContent):
             allowed_player_counts=list(draft.rules.allowed_player_counts),
             allows_leave_mid_match=draft.rules.allows_leave_mid_match,
             allows_join_mid_match=draft.rules.allows_join_mid_match,
+            builder_workflow=draft.builder_workflow,
             revision=draft.revision, base_version=draft.base_version,
             created_at=draft.created_at, updated_at=draft.updated_at,
+        )
+
+
+class FeedbackCreate(_Request):
+    model_config = _example(
+        {"kind": "bug", "target_type": "game", "target_id": "", "text": "The board doesn't show on my phone"}
+    )
+
+    # A bug, a suggestion (or feature request), or a problem (problematic content).
+    kind: Literal["bug", "suggestion", "problem"]
+    # What it's about: a user, a game or a match by id, or the platform itself
+    # (with target_id left out or empty).
+    target_type: Literal["user", "game", "match", "platform"]
+    target_id: str = ""
+    # The feedback in the sender's words: 5 to 1000 characters after trimming
+    # (checked by the server, which answers 400 otherwise).
+    text: str
+    # The page it came from (for admins); optional.
+    page: str | None = None
+
+
+class FeedbackOut(BaseModel):
+    """Feedback as its own sender sees it."""
+
+    id: str
+    kind: str
+    target_type: str
+    target_id: str
+    text: str
+    status: str
+    created_at: dt.datetime
+    updated_at: dt.datetime
+
+    @classmethod
+    def of(cls, feedback: "Feedback") -> "FeedbackOut":
+        return cls(
+            id=feedback.id,
+            kind=feedback.kind,
+            target_type=feedback.target_type,
+            target_id=feedback.target_id,
+            text=feedback.text,
+            status=feedback.status,
+            created_at=feedback.created_at,
+            updated_at=feedback.updated_at,
         )
 
 
@@ -746,12 +810,13 @@ class PlayerOut(BaseModel):
     # The v2 player id: the human's user id, or "computer-N" (see
     # [Match.player_id_of]). Empty only for a seat-less construction.
     id: str = ""
+    active: bool = True
 
     @classmethod
     def of(cls, seat: Seat, player_id: str = "") -> "PlayerOut":
         return cls(
             player_index=seat.player_index, kind=seat.kind,
-            user_id=seat.user_id, id=player_id,
+            user_id=seat.user_id, id=player_id, active=seat.active,
         )
 
 
@@ -778,6 +843,7 @@ class MatchOut(BaseModel):
     seed: int = 0
     pending_leave_player_id: str | None = None
     pending_leave_payout: int | None = None
+    pending_leave_ends_match: bool | None = None
     rematch_match_id: str | None
     created_at: dt.datetime
     updated_at: dt.datetime
@@ -833,6 +899,10 @@ class MatchOut(BaseModel):
                 if isinstance(match.pending_leave, dict)
                 else None
             ),
+            pending_leave_ends_match=(
+                bool(match.pending_leave.get("end") or match.pending_leave.get("turn") is None)
+                if isinstance(match.pending_leave, dict) else None
+            ),
             token_pot=match.token_pot,
             token_payouts=match.token_payouts,
             rematch_match_id=match.rematch_match_id,
@@ -841,6 +911,70 @@ class MatchOut(BaseModel):
             private=match.private,
             matchmaking_player_count=match.matchmaking_player_count,
         )
+
+
+class MatchResultOut(BaseModel):
+    """The outcome of a finished match, as the game reports it in its
+    state: the winning seat, or a draw. Small enough for list responses,
+    which show "you won / you lost / draw" badges without the state."""
+
+    winner: int | None = None
+    draw: bool = False
+    done: bool = False
+
+    @classmethod
+    def of(cls, match: Match) -> "MatchResultOut | None":
+        state = match.state
+        if not isinstance(state, dict):
+            return None
+        winner = state.get("winner")
+        if not isinstance(winner, int) or isinstance(winner, bool):
+            winner = None
+        result = cls(
+            winner=winner,
+            draw=state.get("draw") is True,
+            done=state.get("done") is True,
+        )
+        return result if winner is not None or result.draw or result.done else None
+
+
+class MatchSummaryOut(BaseModel):
+    """A match without its state: what match lists need, at a fraction of
+    the size — and building one never runs the game's view code, which a
+    full [MatchOut] needs once per match for server-side games. The one
+    thing lists did read from the state, who won, travels as [result]."""
+
+    id: str
+    game_id: str
+    game_version: int
+    owner_user_id: str
+    status: MatchStatus
+    end_reason: EndReason | None
+    players: list[PlayerOut]
+    turn_of_player_indices: list[int] | None
+    move_count: int
+    bet_per_player: int = 0
+    max_loss: int = 0
+    token_pot: int = 0
+    token_payouts: dict[int, int] | None = None
+    seed: int = 0
+    pending_leave_player_id: str | None = None
+    pending_leave_payout: int | None = None
+    rematch_match_id: str | None
+    created_at: dt.datetime
+    updated_at: dt.datetime
+    private: bool = False
+    matchmaking_player_count: int | None = None
+    turn_seconds: int | None = None
+    turn_deadline: dt.datetime | None = None
+    timeouts: list[SeatTimeoutOut] = []
+    server_time: dt.datetime | None = None
+    result: MatchResultOut | None = None
+
+    @classmethod
+    def of(cls, match: Match, now: dt.datetime | None = None) -> "MatchSummaryOut":
+        full = MatchOut.of(match, now=now).model_dump(exclude={"state"})
+        return cls(**full, result=MatchResultOut.of(match))
 
 
 class MoveOut(BaseModel):
@@ -1053,7 +1187,15 @@ class RefactorAllGamesRequest(_Request):
     building agent applies to every published game, saving the code it
     returns back to each game as a new version."""
 
-    prompt: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    mode: Literal["code", "guided_artifacts"] = "code"
+    prompt: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] | None = None
+
+    @model_validator(mode="after")
+    def require_code_prompt(self):
+        if self.mode == "code" and not self.prompt:
+            raise ValueError("A prompt is required for a code refactor")
+        return self
+
     # Restrict the run to these games; null means every published game.
     game_ids: list[str] | None = None
 

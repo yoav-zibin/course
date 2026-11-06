@@ -21,6 +21,9 @@ from game_platform.service import (
     VERIFICATION_MAX_STARTS_PER_HOUR,
     VERIFICATION_MAX_ATTEMPTS,
     VERIFICATION_TTL_SECONDS,
+    FEEDBACK_ADMIN_LIMIT,
+    FEEDBACK_WINDOW,
+    RecentFeedback,
 )
 
 logger = logging.getLogger(__name__)
@@ -121,6 +124,7 @@ class ScalablePlatform(GamePlatform):
                 if (
                     existing
                     and existing.status == "waiting_for_players"
+                    and not existing.num_computer_opponents
                     and existing.seat_of(caller_id) is not None
                 ):
                     return existing
@@ -132,10 +136,13 @@ class ScalablePlatform(GamePlatform):
                 ("private", "==", False),
             ]
             docs = self._store._query("matches", filters, limit=1)
-            if docs:
-                candidate = self._store._decode(
+            candidate = (
+                self._store._decode(
                     "matches", docs[0].to_dict(), docs[0].reference
                 )
+                if docs else None
+            )
+            if candidate and not candidate.num_computer_opponents:
                 result = (
                     candidate
                     if candidate.seat_of(caller_id) is not None
@@ -217,6 +224,87 @@ class ScalablePlatform(GamePlatform):
         with self._store.atomic():
             self.set_saved_game(caller_id=caller_id, game_id=game_id, saved=False)
             return self._saved_games(self._require_user(caller_id))
+
+    def send_feedback(self, *, caller_id, kind, target_type, target_id, text, page=None):
+        # Two Firestore reads in all: the login check, then one batch with the caller,
+        # their daily-limit document, the target and its counters. One commit writes.
+        text = self._feedback_text(kind, text)
+        if target_type == "platform":
+            target_id = ""
+        with self._store.atomic():
+            caller, record, entries, _ = self._store.feedback_inputs(
+                caller_id, target_type, target_id
+            )
+            if caller is None:
+                raise NotFoundError("user not found")
+            caller = self._resolve_replaced(caller)
+            target_id, name, context = self._feedback_target(
+                caller, target_type, target_id, record
+            )
+            now = self._clock()
+            recent = [
+                RecentFeedback(
+                    id=e["id"],
+                    target_type=e["target_type"],
+                    target_id=e["target_id"],
+                    kind=e["kind"],
+                    created_at=e["created_at"],
+                )
+                for e in entries
+            ]
+            feedback, repeat = self._new_feedback(
+                caller, kind, target_type, target_id, name, text, context, page, recent, now
+            )
+            kept = [
+                e
+                for e in entries
+                if now - e["created_at"] < FEEDBACK_WINDOW and e["id"] != feedback.id
+            ]
+            kept.append(
+                {
+                    "id": feedback.id,
+                    "target_type": target_type,
+                    "target_id": target_id,
+                    "kind": kind,
+                    "created_at": feedback.created_at,
+                    "doc": None,
+                }
+            )
+            self._store.save_feedback(
+                feedback,
+                entries=kept,
+                replaced_doc=next((e.get("doc") for e in entries if e["id"] == feedback.id), None),
+                new=repeat is None,
+            )
+        return feedback, repeat is None
+
+    def admin_feedback(self, *, kind=None, target_type=None, target_id=None, status=None):
+        # Two queries: the newest feedback, and the per-target counters.
+        filters = [
+            (field, "==", value)
+            for field, value in (
+                ("kind", kind),
+                ("target_type", target_type),
+                ("target_id", target_id),
+                ("status", status),
+            )
+            if value is not None
+        ]
+        rows = self._store.feedback_page(filters=filters, limit=FEEDBACK_ADMIN_LIMIT + 1)
+        stats = [
+            {
+                "target_type": s["target_type"],
+                "target_id": s["target_id"],
+                "target_name": s.get("target_name", ""),
+                "reports": s.get("problem", 0),
+                "last_reported_at": s["last_reported_at"],
+            }
+            for s in self._store.most_reported()
+            if s.get("problem")
+        ]
+        return self._feedback_listing(
+            rows[:FEEDBACK_ADMIN_LIMIT], len(rows) > FEEDBACK_ADMIN_LIMIT, stats
+        )
 
     def invite_stats(self):
         raise ConflictError(
@@ -364,6 +452,7 @@ class ScalablePlatform(GamePlatform):
             game
             and game.server_code
             and match.status == "ongoing"
+            and len(match.active_human_user_ids) == 1
             and match.turn_of_player_indices
             and any(
                 match.seats[i].kind == "computer" for i in match.turn_of_player_indices

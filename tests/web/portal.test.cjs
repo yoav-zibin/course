@@ -66,6 +66,27 @@ test('a valid one-seat lobby says ready instead of waiting for another player',(
   assert.doesNotMatch(node('waiting').textContent,/wait for others/i);
 });
 
+test('multiplayer cannot join solo bots or reuse a departed identity',()=>{
+  const {run}=setup();
+  run('state.games[0].allowed_player_counts=[2,3,4];state.games[0].allows_join_mid_match=true;state.match={game_id:"game",game_version:2,status:"ongoing",players:[{player_index:0,kind:"human",user_id:"owner"},{player_index:1,kind:"computer"}]}');
+  assert.equal(run('isJoinable(state.match,"new")'),false);
+  run('state.match.players[1]={player_index:1,kind:"human",user_id:"departed",active:false}');
+  assert.equal(run('seatOf(state.match,"departed")'),null);
+  assert.equal(run('isJoinable(state.match,"departed")'),false);
+  assert.equal(run('isJoinable(state.match,"new")'),true);
+});
+
+test('computer controls appear only in solo lobbies and offer legacy cleanup',()=>{
+  const {node,run}=setup();
+  run('state.games[0].allowed_player_counts=[2,3,4];state.gameCache.set("game@2",state.games[0]);state.match={id:"match",game_id:"game",game_version:2,owner_user_id:"owner",status:"waiting_for_players",players:[{player_index:0,kind:"human",user_id:"owner"}],move_count:0};renderMatch()');
+  assert.ok(node('actions').children.some(child=>child.class==='computer-stepper'));
+  run('state.match.players.push({player_index:1,kind:"human",user_id:"other"});renderMatch()');
+  assert.ok(!node('actions').children.some(child=>child.class==='computer-stepper'));
+  run('state.match.players.push({player_index:2,kind:"computer"});renderMatch()');
+  assert.ok(node('actions').children.some(child=>child.textContent==='Remove computers for multiplayer'));
+  assert.ok(node('actions').children.find(child=>child.textContent==='Start game').disabled);
+});
+
 test('polling preserves collapsed groups and unchanged match buttons',()=>{
   const {node,run}=setup();run('renderLists()');
   const original=node('list-over').children;
@@ -161,7 +182,6 @@ test('random game joins a randomly selected open multiplayer match',async()=>{
     calls.push([method,path,options?.body]);
     if(path==='/matches/open')return [match];
     if(path==='/games')return [{id:'party',version:1,name:'Party',allowed_player_counts:[2],published:true}];
-    if(path==='/games/party/versions/1')return {id:'party',version:1,name:'Party',allowed_player_counts:[2],published:true};
     if(path==='/matches/open-1/join')return {...match,players:[...match.players,{player_index:1,kind:'human',user_id:'owner'}]};
     throw new Error(`Unexpected request ${method} ${path}`);
   });
@@ -169,6 +189,35 @@ test('random game joins a randomly selected open multiplayer match',async()=>{
   assert.equal(run('state.selectedId'),'open-1');
   assert.ok(calls.some(([,path])=>path==='/matches/open-1/join'));
   assert.equal(calls.some(([,path])=>path==='/matches'),false);
+});
+
+test('match lists use the slim catalog and never fetch game code',async()=>{
+  const calls=[];
+  const {node,run}=setup(async(method,path)=>{
+    calls.push(path);
+    if(path==='/users?ids=other')return [{id:'other',display_name:'Other',picture_url:''}];
+    throw new Error(`Unexpected request ${method} ${path}`);
+  });
+  run('state.games[0].allowed_player_counts=[2];state.myMatches=[];state.openMatches=[{id:"open-1",game_id:"game",game_version:2,owner_user_id:"other",status:"waiting_for_players",players:[{player_index:0,kind:"human",user_id:"other"}],move_count:0}]');
+  await run('ensureDetails()');
+  assert.deepEqual(calls,['/users?ids=other']);
+  run('renderLists()');
+  assert.equal(node('count-open').textContent,'1');
+  assert.equal(node('open-matches').children[0].children[0].children[0],'Hanoi');
+});
+
+test('ensureDetails fetches only the open match game version',async()=>{
+  const calls=[];
+  const {run}=setup(async(method,path)=>{
+    calls.push(path);
+    if(path==='/users?ids=owner')return [{id:'owner',display_name:'Owner',picture_url:''}];
+    if(path==='/games/game/versions/2')return {id:'game',version:2,name:'Hanoi',code:'CODE',allowed_player_counts:[1]};
+    throw new Error(`Unexpected request ${method} ${path}`);
+  });
+  run('state.myMatches=[];state.openMatches=[];state.match={id:"m1",game_id:"game",game_version:2,owner_user_id:"owner",status:"ongoing",players:[{player_index:0,kind:"human",user_id:"owner"}],move_count:0,turn_of_player_indices:[0]}');
+  await run('ensureDetails()');
+  assert.deepEqual(calls.sort(),['/games/game/versions/2','/users?ids=owner']);
+  assert.equal(run('state.gameCache.get("game@2").code'),'CODE');
 });
 
 test('random game creates a multiplayer lobby when no open matches exist',async()=>{
@@ -283,6 +332,17 @@ test('finished results are personalized including seat zero, draws, and spectato
   assert.equal(run('matchOutcome(state.match,"owner").label'),'Draw');
   run('state.match.state={winner:null,done:true}');
   assert.equal(run('matchOutcome(state.match,"owner").label'),'Draw');
+});
+
+test('list summaries carry the outcome as result, without a state',()=>{
+  const {run}=setup();
+  run('state.match={status:"over",end_reason:"finished",players:[{player_index:0,user_id:"owner",kind:"human"},{player_index:1,user_id:"other",kind:"human"}],result:{winner:0,draw:false,done:false}}');
+  assert.equal(run('matchOutcome(state.match,"owner").label'),'You won');
+  assert.equal(run('matchOutcome(state.match,"other").label'),'You lost');
+  run('state.match.result={winner:null,draw:true,done:false}');
+  assert.equal(run('matchOutcome(state.match,"owner").label'),'Draw');
+  run('state.match.result=null');
+  assert.equal(run('matchOutcome(state.match,"owner").label'),'Result unavailable');
 });
 
 test('unfinished, abandoned, unknown and unsynced results are not false confirmed losses',()=>{

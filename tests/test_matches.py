@@ -22,9 +22,9 @@ def test_create_a_match_with_computer_opponents(api: Api) -> None:
         "status": "waiting_for_players",
         "end_reason": None,
         "players": [
-            {"player_index": 0, "kind": "human", "user_id": alice, "id": alice},
+            {"player_index": 0, "kind": "human", "user_id": alice, "id": alice, "active": True},
             {"player_index": 1, "kind": "computer", "user_id": None,
-             "id": "computer-1"},
+             "id": "computer-1", "active": True},
         ],
         "turn_of_player_indices": None,
         "state": None,
@@ -34,6 +34,7 @@ def test_create_a_match_with_computer_opponents(api: Api) -> None:
         "seed": match["seed"],
         "pending_leave_player_id": None,
         "pending_leave_payout": None,
+        "pending_leave_ends_match": None,
         "token_pot": 0,
         "token_payouts": None,
         "rematch_match_id": None,
@@ -157,25 +158,14 @@ def test_create_match_checks_the_game(api: Api) -> None:
     )
 
 
-def test_joining_seats_humans_before_computers(api: Api) -> None:
-    alice, bob, carol = (
-        api.new_user("alice"),
-        api.new_user("bob"),
-        api.new_user("carol"),
-    )
-    game_id = api.new_game(owner=alice, allowed_player_counts=[2, 3, 4])
-    match_id = api.new_match(owner=alice, game_id=game_id, num_computer_opponents=1)
-
-    api.ok("POST", f"/matches/{match_id}/join", as_user=bob)
-    assert api.match_summary(match_id)["players"] == ["alice", "bob", "computer"]
-
-    api.ok("POST", f"/matches/{match_id}/join", as_user=carol)
-    assert api.match_summary(match_id)["players"] == [
-        "alice",
-        "bob",
-        "carol",
-        "computer",
-    ]
+def test_remove_solo_computers_before_joining_human_opponents(api: Api) -> None:
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game = api.new_game(owner=alice, allowed_player_counts=[2, 3])
+    mid = api.new_match(owner=alice, game_id=game, num_computer_opponents=1)
+    assert api.request("POST", f"/matches/{mid}/join", as_user=bob).status_code == 409
+    api.ok("PATCH", f"/matches/{mid}", as_user=alice, json={"num_computer_opponents": 0})
+    api.ok("POST", f"/matches/{mid}/join", as_user=bob)
+    assert api.match_summary(mid)["players"] == ["alice", "bob"]
 
 
 def test_cannot_join_twice_or_join_a_full_match(api: Api) -> None:
@@ -197,7 +187,7 @@ def test_cannot_join_twice_or_join_a_full_match(api: Api) -> None:
 def test_owner_configures_computer_opponents_while_waiting(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game_id = api.new_game(owner=alice, allowed_player_counts=[2, 3])
-    match_id = api.new_match(owner=alice, game_id=game_id, joiners=[bob])
+    match_id = api.new_match(owner=alice, game_id=game_id, num_computer_opponents=0)
 
     def set_computers(count: int, *, as_user: str = alice) -> httpx.Response:
         return api.request(
@@ -208,8 +198,8 @@ def test_owner_configures_computer_opponents_while_waiting(api: Api) -> None:
         )
 
     assert set_computers(1).status_code == 200
-    assert api.match_summary(match_id)["players"] == ["alice", "bob", "computer"]
-    assert error(set_computers(2)) == (
+    assert api.match_summary(match_id)["players"] == ["alice", "computer"]
+    assert error(set_computers(3)) == (
         400,
         "4 players is more than the game's maximum of 3",
     )
@@ -394,7 +384,7 @@ def test_list_my_matches_with_filters(api: Api) -> None:
     )
 
 
-def test_owner_deletes_a_match_for_everyone(api: Api) -> None:
+def test_a_player_deletes_a_match_for_everyone(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game_id = api.new_game(owner=alice)
     match_id = api.new_match(owner=alice, game_id=game_id, joiners=[bob], start=True)
@@ -405,7 +395,7 @@ def test_owner_deletes_a_match_for_everyone(api: Api) -> None:
     assert api.ok("GET", "/matches", as_user=bob) == []
 
 
-def test_non_owner_can_only_hide_an_ended_match_from_their_own_list(api: Api) -> None:
+def test_only_players_delete_and_players_only_hide_an_ended_match(api: Api) -> None:
     alice, bob, carol = (
         api.new_user("alice"),
         api.new_user("bob"),
@@ -417,9 +407,9 @@ def test_non_owner_can_only_hide_an_ended_match_from_their_own_list(api: Api) ->
     def delete(as_user: str) -> httpx.Response:
         return api.request("DELETE", f"/matches/{match_id}", as_user=as_user)
 
-    assert error(delete(bob)) == (
+    assert error(delete(carol)) == (
         403,
-        "only the owner can delete a match that is not over",
+        "only a player in the match can delete it",
     )
 
     api.move(match_id, as_user=alice, next_turn=None)
@@ -431,3 +421,61 @@ def test_non_owner_can_only_hide_an_ended_match_from_their_own_list(api: Api) ->
 
     assert {"alice": listed(alice), "bob": listed(bob)} == {"alice": 1, "bob": 0}
     assert api.ok("GET", f"/matches/{match_id}")["status"] == "over"
+
+
+# A minimal v2 race game whose playerLeft hands the turn to another
+# player, so a leaver's seat is taken over and the match plays on.
+_LEAVE_AND_PLAY_ON_GAME = r"""
+const game = {
+  newMatch(ctx) {
+    return {state: {count: 0}, turn: [ctx.players[0].id]};
+  },
+  applyMove(state, playerId, move, ctx) {
+    const ids = ctx.players.map(p => p.id);
+    const next = ids[(ids.indexOf(playerId) + 1) % ids.length];
+    return {state: {count: state.count + 1}, turn: [next]};
+  },
+  computerMove(state, playerId, ctx) { return {}; },
+  randomMove(state, playerId, ctx) { return {}; },
+  viewFor(state, playerId, ctx) { return {count: state.count}; },
+  playerLeft(state, playerId, ctx) {
+    const others = ctx.players.map(p => p.id).filter(id => id !== playerId);
+    return {state: state, turn: [others[0]], payouts: {}};
+  },
+};
+"""
+
+
+def test_the_creator_who_left_cannot_delete_the_match(api: Api) -> None:
+    alice, bob, carol = (
+        api.new_user("alice"),
+        api.new_user("bob"),
+        api.new_user("carol"),
+    )
+    game = api.ok(
+        "POST",
+        "/games",
+        as_user=alice,
+        json={
+            "name": "Counter race",
+            "allowed_player_counts": [3],
+            "allows_leave_mid_match": True,
+            "code": "<div>counter</div>",
+            "server_code": _LEAVE_AND_PLAY_ON_GAME,
+        },
+    )
+    match_id = api.new_match(
+        owner=alice, game_id=game["id"], joiners=[bob, carol], start=True
+    )
+
+    api.ok("POST", f"/matches/{match_id}/maybeLeave", as_user=alice)
+    left = api.ok("POST", f"/matches/{match_id}/playerLeft", as_user=alice)
+    assert left["status"] == "ongoing"
+
+    assert error(api.request("DELETE", f"/matches/{match_id}", as_user=alice)) == (
+        403,
+        "only a player in the match can delete it",
+    )
+    assert api.ok("GET", f"/matches/{match_id}")["status"] == "ongoing"
+    assert api.request("DELETE", f"/matches/{match_id}", as_user=bob).status_code == 204
+    assert error(api.request("GET", f"/matches/{match_id}")) == (404, "match not found")

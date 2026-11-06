@@ -50,6 +50,7 @@ def index_config(namespace):
         "experiment_assignments": {"user_id": "order"},
         "experiment_events": {"user_id": "order"},
         "games": {"deleted": "order", "published": "order", "owner_user_id": "order"},
+        "game_popularity": {"score": "desc"},
         "game_versions": {"owner_user_id": "order"},
         "matches": {
             "joinable": "order",
@@ -65,6 +66,14 @@ def index_config(namespace):
             "participants": "array",
         },
         "users": {"invited_by_user_id": "order"},
+        # Equality filters, newest first by document name (merged single-field indexes).
+        "feedback": {
+            "kind": "order",
+            "target_type": "order",
+            "target_id": "order",
+            "status": "order",
+        },
+        "feedback_targets": {"problem": "desc"},
         "jobs": {"due_at": "order"},
         "outbox": {"due_at": "order"},
     }
@@ -77,7 +86,7 @@ def index_config(namespace):
             index.update(
                 {"arrayConfig": "CONTAINS"}
                 if mode == "array"
-                else {"order": "ASCENDING"}
+                else {"order": "DESCENDING" if mode == "desc" else "ASCENDING"}
             )
             overrides.append(
                 {"collectionGroup": group, "fieldPath": field, "indexes": [index]}
