@@ -9,15 +9,22 @@ time, as regression seeds.
 """
 
 import game_platform.game_testing as game_testing
-from game_platform.game_testing import test_server_code as run_game_tests
+from game_platform.tests.helpers import run_unrestricted_server_code as _test_server_code
 from game_platform.models import GameRules
-from game_platform.tests.helpers import Api
+from game_platform.tests.helpers import Api, TEST_GAME_SCHEMAS
 
 RULES = GameRules(
     allowed_player_counts=(2, 3),
     allows_leave_mid_match=True,
     allows_join_mid_match=True,
 )
+
+
+def run_game_tests(server_code, **kwargs):
+    return _test_server_code(
+        server_code, game_schemas=TEST_GAME_SCHEMAS, **kwargs
+    )
+
 
 GOOD_GAME = """
 const SPLIT = (ctx) => {
@@ -88,7 +95,10 @@ NONDETERMINISTIC_GAME = GOOD_GAME.replace(
 
 
 def test_a_correct_game_passes():
-    report = run_game_tests(GOOD_GAME, rules=RULES, run_seed=7)
+    # Keep this a coverage check rather than a machine-specific throughput test.
+    report = run_game_tests(
+        GOOD_GAME, rules=RULES, run_seed=7, budget_seconds=2.0
+    )
     assert report.passed
     assert report.failures == ()
     assert report.failed_seeds == ()

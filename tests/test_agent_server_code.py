@@ -20,6 +20,7 @@ def _request(**overrides) -> AgentChatRequest:
         "player_count_mode": "auto",
         "code": "<html><body>old</body></html>",
         "server_code": "const game = { /* old */ };",
+        "game_schemas": {"state": True, "move": True, "view": True},
         "messages": [{"role": "user", "content": "make the target 20"}],
     }
     body.update(overrides)
@@ -45,6 +46,9 @@ def _reply(server_code: str | None, message: str = "Done.") -> str:
             "message": message,
             "code": "<html><body>new</body></html>",
             "server_code": server_code,
+            "game_schemas": {"state": True, "move": True, "view": True}
+            if server_code is not None
+            else None,
             "name": None,
             "description": None,
             "allowed_player_counts": [2],
@@ -56,7 +60,9 @@ GOOD_CODE = "const game = { newMatch(ctx) { return {state: {}, turn: []}; } };"
 BROKEN_CODE = "const game = { /* BROKEN */ };"
 
 
-def _fake_tester(server_code, counts, allows_leave, allows_join):  # type: ignore[no-untyped-def]
+def _fake_tester(
+    server_code, game_schemas, counts, allows_leave, allows_join
+):  # type: ignore[no-untyped-def]
     if "BROKEN" in server_code:
         return GameTestReport(
             passed=False,

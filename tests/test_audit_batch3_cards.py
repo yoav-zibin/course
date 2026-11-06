@@ -2,8 +2,9 @@
 from copy import deepcopy
 from pathlib import Path
 import pytest
-from game_platform.game_logic import GameLogic, InvalidMoveError
-from game_platform.game_testing import test_server_code as run_gate
+from game_platform.tests.helpers import UnrestrictedGameLogic as GameLogic
+from game_platform.game_logic import InvalidMoveError
+from game_platform.tests.helpers import run_unrestricted_server_code as run_gate
 from game_platform.models import GameRules
 
 ROOT = Path(__file__).parent.parent / 'games' / 'audit-batch3'
@@ -14,7 +15,10 @@ def context(n=2):
             'pot': 10*n, 'move_count': 0}
 
 def logic(name):
-    return GameLogic((ROOT / (name + '.server.js')).read_text(), time_limit_seconds=.1)
+    return GameLogic(
+        (ROOT / (name + '.server.js')).read_text(encoding="utf-8"),
+        time_limit_seconds=.1,
+    )
 
 
 def test_ers_remaining_face_chances_stay_with_the_payer():
@@ -80,7 +84,7 @@ def test_complete_matches_views_and_typed_malformed_moves(name,n,seed):
 
 @pytest.mark.parametrize('name,counts,leave,join', [('ers',(2,3,4,5,6,7),True,True),('brazilian-truco',(2,4),True,True)])
 def test_publish_gate(name,counts,leave,join):
-    report = run_gate((ROOT/(name+'.server.js')).read_text(),
+    report = run_gate((ROOT/(name+'.server.js')).read_text(encoding="utf-8"),
                       rules=GameRules(allowed_player_counts=counts, allows_leave_mid_match=leave,
                                       allows_join_mid_match=join),
                       budget_seconds=5, max_walks=15, run_seed=20261105)

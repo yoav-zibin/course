@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { TICTACTOE, TICTACTOE_SERVER, createUser, loginAs, uniqueName } from './helpers';
+import { TICTACTOE, TICTACTOE_SCHEMAS, TICTACTOE_SERVER, createUser, loginAs, uniqueName } from './helpers';
 
 // A real 1-minute speed match: Alice never moves, the server's clock runs out, and a
 // match ends without replacing her with a computer. It waits the real 60 seconds (the
@@ -12,7 +12,11 @@ test('a 1-minute speed match: the player who doesn\'t move times out and the mat
   const auth = (u: typeof alice) => ({ 'X-User-Id': u.id, 'X-User-Password': u.password });
   const game = await request.post('/games', {
     headers: auth(alice),
-    data: { name: uniqueName('Speed duel'), description: 'UI test game', allowed_player_counts: [2], allows_leave_mid_match: true, code: TICTACTOE, server_code: TICTACTOE_SERVER },
+    data: {
+      name: uniqueName('Speed duel'), description: 'UI test game', allowed_player_counts: [2],
+      allows_leave_mid_match: true, code: TICTACTOE, server_code: TICTACTOE_SERVER,
+      game_schemas: TICTACTOE_SCHEMAS,
+    },
   });
   expect(game.ok(), await game.text()).toBeTruthy();
   const created = await request.post('/matches', { headers: auth(alice), data: { game_id: (await game.json()).id, turn_seconds: 60 } });

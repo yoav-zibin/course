@@ -22,11 +22,13 @@ def _seed_versions(store, game):
 @pytest.fixture
 def patch_case(tmp_path, monkeypatch):
     original_client = "<p>original</p>"
-    server = (Path(__file__).parents[1] / "games" / "tictactoe.server.js").read_text()
+    server = (Path(__file__).parents[1] / "games" / "tictactoe.server.js").read_text(
+        encoding="utf-8"
+    )
     desired_client = "<p>reviewed client</p>"
     desired_server = server + "\n// reviewed migration\n"
-    (tmp_path / "client.html").write_text(desired_client)
-    (tmp_path / "server.js").write_text(desired_server)
+    (tmp_path / "client.html").write_text(desired_client, encoding="utf-8")
+    (tmp_path / "server.js").write_text(desired_server, encoding="utf-8")
     entry = {
         "id": "reviewed-game",
         "name": "Reviewed manifest name",
@@ -42,6 +44,11 @@ def patch_case(tmp_path, monkeypatch):
     game = Game(
         id=entry["id"], version=9, owner_user_id="real-author", name="Author title",
         description="Author description", code=original_client, server_code=server,
+        game_schemas=json.loads(
+            (Path(__file__).parents[1] / "games" / "tictactoe.schema.json").read_text(
+                encoding="utf-8"
+            )
+        ),
         rules=GameRules(allowed_player_counts=(2,), allows_leave_mid_match=False,
                         allows_join_mid_match=False),
         created_at=now, updated_at=now,

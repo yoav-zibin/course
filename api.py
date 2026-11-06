@@ -31,6 +31,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from game_platform.invariants import InvariantRequest, InvariantReport, check_invariants
 from game_platform import i18n, observability
+from game_platform.game_input_metrics import game_input_metrics
 from game_platform.models import Game, GameRules, Match, MatchStatus
 from game_platform.schemas import (
     AdminGameCodeRequest,
@@ -63,6 +64,7 @@ from game_platform.schemas import (
     EmulatorOut,
     EmulatorResetRequest,
     GameOut,
+    GameSchemas,
     GameSummaryOut,
     GameTestOut,
     GameTestRequest,
@@ -642,6 +644,9 @@ def _save_draft(platform: GamePlatform, caller_id: str, draft_id: str | None, bo
         caller_id=caller_id, draft_id=draft_id, name=body.name,
         description=body.description, code=body.code,
         server_code=body.server_code,
+        game_schemas=(
+            body.game_schemas.model_dump() if body.game_schemas is not None else None
+        ),
         expected_revision=body.expected_revision,
         rules=GameRules(
             allowed_player_counts=tuple(body.allowed_player_counts),
@@ -689,6 +694,9 @@ def create_game(platform: Platform, caller_id: CallerId, body: GameCreate) -> Ga
         ),
         code=body.code,
         server_code=body.server_code,
+        game_schemas=(
+            body.game_schemas.model_dump() if body.game_schemas is not None else None
+        ),
     )
     return GameOut.of(game)
 
@@ -702,6 +710,7 @@ def test_game(
     this before publishing, which is gated on the same tests."""
     report = platform.test_game_code(
         server_code=body.server_code,
+        game_schemas=body.game_schemas.model_dump(),
         rules=GameRules(
             allowed_player_counts=tuple(body.allowed_player_counts),
             allows_leave_mid_match=body.allows_leave_mid_match,
@@ -721,6 +730,7 @@ def emulator_reset(
     return EmulatorOut.model_validate(
         platform.emulator_reset(
             server_code=body.server_code,
+            game_schemas=body.game_schemas.model_dump(),
             players=[player.model_dump() for player in body.players],
             seed=body.seed,
         )
@@ -737,6 +747,7 @@ def emulator_act(
     return EmulatorOut.model_validate(
         platform.emulator_act(
             server_code=body.server_code,
+            game_schemas=body.game_schemas.model_dump(),
             players=[player.model_dump() for player in body.players],
             seed=body.seed,
             state=body.state,
@@ -856,6 +867,9 @@ def update_game(
         code=body.client_code if body.client_code is not None else body.code,
         server_code=body.server_code
         if "server_code" in body.model_fields_set
+        else UNSET,
+        game_schemas=body.game_schemas.model_dump()
+        if body.game_schemas is not None
         else UNSET,
     )
     return GameOut.of(game)
@@ -1411,6 +1425,12 @@ def all_data(platform: Platform) -> AllDataOut:
     return AllDataOut.of(platform.all_data())
 
 
+@debug_router.get("/admin/game-input-metrics", dependencies=[MasterPassword])
+def admin_game_input_metrics() -> list[dict[str, str | int]]:
+    """Process-local counts of per-game JSON Schema input failures."""
+    return game_input_metrics()
+
+
 @debug_router.get("/admin/stats", dependencies=[MasterPassword])
 def admin_stats(platform: Platform) -> dict[str, JsonValue]:
     """Counts about users, games and matches (the backoffice's statistics page)."""
@@ -1636,6 +1656,7 @@ async def agent_chat(
 
     def server_tester(
         server_code: str,
+        game_schemas: dict,
         allowed_player_counts: list[int],
         allows_leave_mid_match: bool,
         allows_join_mid_match: bool,
@@ -1645,6 +1666,7 @@ async def agent_chat(
         built so its failed seeds are replayed first."""
         return platform.test_game_code(
             server_code=server_code,
+            game_schemas=game_schemas,
             rules=GameRules(
                 allowed_player_counts=tuple(allowed_player_counts),
                 allows_leave_mid_match=allows_leave_mid_match,
@@ -1852,12 +1874,14 @@ def _refactor_one_game(
 
     def server_tester(
         server_code: str,
+        game_schemas: dict,
         allowed_player_counts: list[int],
         allows_leave_mid_match: bool,
         allows_join_mid_match: bool,
     ):
         return platform.test_game_code(
             server_code=server_code,
+            game_schemas=game_schemas,
             rules=GameRules(
                 allowed_player_counts=tuple(allowed_player_counts),
                 allows_leave_mid_match=allows_leave_mid_match,
@@ -1878,6 +1902,7 @@ def _refactor_one_game(
                 allows_join_mid_match=game.rules.allows_join_mid_match,
                 code=game.code,
                 server_code=game.server_code or "",
+                game_schemas=game.game_schemas,
                 messages=[AgentMessage(role="user", content=prompt)],
                 game_id=game.id,
             ),
@@ -1926,6 +1951,11 @@ def _refactor_one_game(
             server_code=(
                 response.server_code if response.server_code is not None else UNSET
             ),
+            game_schemas=(
+                response.game_schemas.model_dump()
+                if response.game_schemas is not None
+                else UNSET
+            ),
             _admin=True,
         )
     except Exception as exc:
@@ -1965,6 +1995,11 @@ def admin_set_game_code(
             code=body.code,
             server_code=(
                 body.server_code if body.server_code is not None else UNSET
+            ),
+            game_schemas=(
+                body.game_schemas.model_dump()
+                if body.game_schemas is not None
+                else UNSET
             ),
             _admin=True,
         )

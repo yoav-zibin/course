@@ -179,9 +179,9 @@ def test_forfeit_to_computer_paying_nobody_is_caught():
     assert any('human-vs-computer forfeit' in failure for failure in failures), failures
 
 
-def test_unguarded_spectator_leave_is_caught():
+def test_spectator_leave_is_rejected_before_game_logic():
     failures = probe(B3_NO_GUARD)
-    assert any('non-seat leave' in failure for failure in failures), failures
+    assert not any('non-seat leave' in failure for failure in failures), failures
 
 
 def test_turn_still_containing_leaver_is_caught():

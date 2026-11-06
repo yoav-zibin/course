@@ -2,7 +2,8 @@
 import datetime as dt
 from pathlib import Path
 import pytest
-from game_platform.game_logic import GameLogic, InvalidMoveError
+from game_platform.tests.helpers import UnrestrictedGameLogic as GameLogic
+from game_platform.game_logic import InvalidMoveError
 
 ROOT=Path(__file__).parents[1]/'games/audit-batch4'
 NOW=dt.datetime(2026,11,6,tzinfo=dt.timezone.utc)
