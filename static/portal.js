@@ -1521,6 +1521,21 @@ function renderHistory() {
   $("history-live").disabled = !replay;
 }
 
+// Texts the script built (badges, buttons, lists, the offline line in the sidebar) are redrawn in
+// the new language, and the open game is sent its texts in it now, not at the next poll.
+function redrawAfterLanguageChange() {
+  try {
+    renderPortalAccountMenu();
+    render();
+    renderLibrary();
+    updateMatchSetup();
+    offlineStatus();
+    syncGame().catch((error) => console.warn("Couldn't send the game its new language:", error));
+  } catch (error) {
+    console.warn("Couldn't redraw after a language change:", error);
+  }
+}
+
 async function syncGame() {
   const match = state.match;
   if (!match || match.status === "waiting_for_players") {
@@ -1800,17 +1815,7 @@ async function main() {
   });
   document.addEventListener("portal-layout-change", syncPortalRoutes);
   $("notify-toggle").addEventListener("click", toggleNotifications);
-  document.addEventListener("i18n-changed", () => {
-    // Texts the script built (badges, buttons, lists) are redrawn in the new language.
-    try {
-      renderPortalAccountMenu();
-      render();
-      renderLibrary();
-      updateMatchSetup();
-    } catch (error) {
-      console.warn("Couldn't redraw after a language change:", error);
-    }
-  });
+  document.addEventListener("i18n-changed", redrawAfterLanguageChange);
   document.addEventListener("auth-changed", () => {
     renderPortalAccountMenu();
     state.armed = null;
