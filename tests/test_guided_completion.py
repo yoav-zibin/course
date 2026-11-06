@@ -1126,3 +1126,235 @@ def test_review_output_limit_is_bounded_and_names_failed_stage():
     assert 'Reviewing server:' in job['error']
     assert 'output limit twice' in job['error']
     assert 'code_digest' not in job
+
+
+def test_expansion_stamps_outline_name_and_kind():
+    # A case that re-decides its own kind during expansion silently breaks
+    # the composition the plan was checked against (the failure behind
+    # "Provide 1–4 intermediate test cases" on a correction). The outline's
+    # name and kind are determined values, so expansion stamps them.
+    import copy
+    from game_platform.builder_jobs import propose_step
+    draft = approved_draft()
+    contract = copy.deepcopy(draft.builder_workflow['artifacts']['tests']['value'])
+    cases = contract.pop('cases')
+    originals = {case['name']: case.pop('images') for case in cases}
+    outlines = [{k: c[k] for k in ('name', 'kind', 'description')} for c in cases]
+    repair_calls = []
+    class Provider:
+        def chat(self, messages, **options):
+            instruction = messages[0]['content']
+            if instruction.startswith('Plan the requested tests'):
+                return json.dumps(dict(contract, cases=outlines, message='Review the examples'))
+            if instruction.startswith('Write only the single'):
+                name = json.loads(messages[1]['content'])['outline']['name']
+                case = copy.deepcopy(next(c for c in cases if c['name'] == name))
+                if name == 'Terminal move':
+                    case['kind'] = 'intermediate'
+                return json.dumps(case)
+            if instruction.startswith('Illustrate only this one'):
+                name = json.loads(messages[1]['content'])['example']['name']
+                return json.dumps({'images': originals[name]})
+            if instruction.startswith('Repair the specific'):
+                repair_calls.append(messages)
+            return '{"broken":"'
+    result = propose_step(Provider(), draft, 'tests', 'Check these moves')
+    artifact = result.builder_workflow['artifacts']['tests']['value']
+    assert [c['kind'] for c in artifact['cases']] == ['initial', 'intermediate', 'terminal']
+    assert repair_calls == []
+    flow.validate_artifact('tests', artifact)
+
+
+def test_initial_cases_share_one_canonical_start():
+    # Two initial cases for the same match configuration recorded two
+    # different starting positions (the Pancakes vs Waffles "set difficulty
+    # before start" failure: "Initial state differs"). Validation completes
+    # the determined value from the first initial case instead of letting
+    # the set disagree with itself.
+    import copy
+    from game_platform.builder_jobs import validate_test_data
+    contract = copy.deepcopy(fixture()['contract'])
+    second = copy.deepcopy(contract['cases'][0])
+    second['name'] = 'Second opening'
+    second['state'] = {'n': 2}
+    contract['cases'].insert(1, second)
+    validate_test_data(contract)
+    initials = [c for c in contract['cases'] if c['kind'] == 'initial']
+    assert [c['state'] for c in initials] == [{'n': 0}, {'n': 0}]
+
+
+def test_canonical_start_leaves_other_configurations_alone():
+    # An initial case for a different match (different players) has its
+    # own starting position and must not be overwritten.
+    import copy
+    from game_platform.builder_jobs import _complete_determined_fields
+    contract = copy.deepcopy(fixture()['contract'])
+    other = copy.deepcopy(contract['cases'][0])
+    other['name'] = 'Two player opening'
+    other['ctx'] = copy.deepcopy(other['ctx'])
+    other['ctx']['players'] = [*other['ctx']['players'],
+                               {**other['ctx']['players'][0], 'id': 'u2'}]
+    other['state'] = {'n': 7}
+    contract['cases'].append(other)
+    _complete_determined_fields(contract)
+    assert other['state'] == {'n': 7}
+
+
+def test_named_case_correction_patches_only_that_case():
+    # A correction naming one existing case regenerates only that case on
+    # top of the current set; the whole-set plan path never runs, and the
+    # untouched cases keep their exact content, artwork included.
+    import copy
+    from game_platform.builder_jobs import propose_step
+    draft = approved_draft()
+    before = copy.deepcopy(draft.builder_workflow['artifacts']['tests']['value'])
+    calls = {'plan': 0, 'expand': 0, 'repair': 0, 'illustrate': []}
+    class Provider:
+        def chat(self, messages, **options):
+            instruction = messages[0]['content']
+            payload = json.loads(messages[1]['content'])
+            if instruction.startswith('Plan the requested tests'):
+                calls['plan'] += 1
+                return '{"broken":"'
+            if instruction.startswith('Write only the single'):
+                if 'validation_error' not in payload:
+                    calls['expand'] += 1
+                    return '{"broken":"'
+                case = copy.deepcopy(next(c for c in before['cases'] if c['name'] == 'Intermediate move'))
+                case.pop('images', None)
+                case['description'] = 'Patched description'
+                return json.dumps(case)
+            if instruction.startswith('Illustrate only this one'):
+                calls['illustrate'].append(payload['example']['name'])
+                images = next(c['images'] for c in before['cases'] if c['name'] == 'Intermediate move')
+                return json.dumps({'images': images})
+            if instruction.startswith('Repair the specific'):
+                calls['repair'] += 1
+            return '{"broken":"'
+    result = propose_step(Provider(), draft, 'tests',
+                          'In the "Intermediate move" example, describe the position after the first move more clearly')
+    artifact = result.builder_workflow['artifacts']['tests']['value']
+    assert calls['plan'] == 0 and calls['expand'] == 0 and calls['repair'] == 0
+    assert calls['illustrate'] == ['Intermediate move']
+    by_name = {c['name']: c for c in artifact['cases']}
+    original = {c['name']: c for c in before['cases']}
+    assert by_name['Initial move'] == original['Initial move']
+    assert by_name['Terminal move'] == original['Terminal move']
+    assert by_name['Intermediate move']['description'] == 'Patched description'
+    assert by_name['Intermediate move']['images'] == original['Intermediate move']['images']
+    flow.validate_artifact('tests', artifact)
+
+
+def test_repair_operations_patch_instead_of_redrafting():
+    # When regeneration cannot fix a case, the whole-set repair may answer
+    # with patch operations on the current contract. The named case is
+    # replaced; the others keep exactly the content expansion produced.
+    import copy
+    from game_platform.builder_jobs import propose_step
+    draft = approved_draft()
+    contract = copy.deepcopy(draft.builder_workflow['artifacts']['tests']['value'])
+    cases = contract.pop('cases')
+    originals = {case['name']: case.pop('images') for case in cases}
+    outlines = [{k: c[k] for k in ('name', 'kind', 'description')} for c in cases]
+    repair_calls = []
+    class Provider:
+        def chat(self, messages, **options):
+            instruction = messages[0]['content']
+            payload = json.loads(messages[1]['content'])
+            if instruction.startswith('Plan the requested tests'):
+                return json.dumps(dict(contract, cases=outlines, message='Review the examples'))
+            if instruction.startswith('Write only the single'):
+                name = payload['outline']['name']
+                case = copy.deepcopy(next(c for c in cases if c['name'] == name))
+                if 'validation_error' in payload:
+                    return 'not json at all'
+                if name == 'Intermediate move':
+                    case['expected_state'] = {'n': 'two'}
+                return json.dumps(case)
+            if instruction.startswith('Repair the specific'):
+                repair_calls.append(messages)
+                good = copy.deepcopy(next(c for c in cases if c['name'] == 'Intermediate move'))
+                return json.dumps({'message': 'Patched the broken case',
+                                    'operations': [{'op': 'replace_case', 'name': 'Intermediate move', 'case': good}]})
+            if instruction.startswith('Illustrate only this one'):
+                name = payload['example']['name']
+                return json.dumps({'images': originals[name]})
+            return '{"broken":"'
+    result = propose_step(Provider(), draft, 'tests', 'Check these moves')
+    artifact = result.builder_workflow['artifacts']['tests']['value']
+    assert len(repair_calls) == 1
+    assert 'operations' in repair_calls[0][0]['content']
+    by_name = {c['name']: c for c in artifact['cases']}
+    for name, images in originals.items():
+        expected = next(c for c in cases if c['name'] == name)
+        assert by_name[name] == {**expected, 'images': images}
+    flow.validate_artifact('tests', artifact)
+
+
+def test_apply_test_operations_guards():
+    import copy
+    import pytest as _pytest
+    from game_platform.builder_jobs import _apply_test_operations
+    contract = copy.deepcopy(fixture()['contract'])
+    replaced = _apply_test_operations(contract, [
+        {'op': 'replace_case', 'name': 'Initial move',
+         'case': {**contract['cases'][0], 'description': 'New text'}}], protected=[])
+    assert replaced['cases'][0]['description'] == 'New text'
+    assert contract['cases'][0]['description'] != 'New text'
+    with _pytest.raises(ValueError, match='may not drop'):
+        _apply_test_operations(contract, [{'op': 'remove_case', 'name': 'Initial move'}],
+                               protected=['Initial move'])
+    with _pytest.raises(ValueError, match='unknown case'):
+        _apply_test_operations(contract, [{'op': 'remove_case', 'name': 'Nope'}], protected=[])
+    with _pytest.raises(ValueError, match='duplicates'):
+        _apply_test_operations(contract, [{'op': 'add_case', 'case': contract['cases'][0]}], protected=[])
+    with _pytest.raises(ValueError, match='unknown operation'):
+        _apply_test_operations(contract, [{'op': 'rewrite_everything'}], protected=[])
+    reschemaed = _apply_test_operations(contract, [
+        {'op': 'set_schema', 'field': 'state_schema', 'schema': {'type': 'object'}}], protected=[])
+    assert reschemaed['state_schema'] == {'type': 'object'}
+
+
+def test_divergent_difficulty_opening_is_canonicalized_end_to_end():
+    # Replay of the local Pancakes vs Waffles failure: the plan adds a
+    # second initial case (a difficulty setup) whose expansion records a
+    # different starting position than the opening case. The proposal
+    # completes the determined start instead of shipping a set whose cases
+    # disagree — the build later failed exactly that case with
+    # "Initial state differs".
+    import copy
+    from game_platform.builder_jobs import propose_step
+    draft = approved_draft()
+    contract = copy.deepcopy(draft.builder_workflow['artifacts']['tests']['value'])
+    cases = contract.pop('cases')
+    originals = {case['name']: case.pop('images') for case in cases}
+    outlines = [{k: c[k] for k in ('name', 'kind', 'description')} for c in cases]
+    outlines.insert(1, {'name': 'Set difficulty first', 'kind': 'initial',
+                        'description': 'Set difficulty before the first move'})
+    repair_calls = []
+    class Provider:
+        def chat(self, messages, **options):
+            instruction = messages[0]['content']
+            payload = json.loads(messages[1]['content'])
+            if instruction.startswith('Plan the requested tests'):
+                return json.dumps(dict(contract, cases=outlines, message='Review the examples'))
+            if instruction.startswith('Write only the single'):
+                name = payload['outline']['name']
+                if name == 'Set difficulty first':
+                    case = copy.deepcopy(next(c for c in cases if c['name'] == 'Initial move'))
+                    case['name'] = name
+                    case['description'] = 'Set difficulty before the first move'
+                    case['state'] = {'n': 2}
+                    return json.dumps(case)
+                return json.dumps(copy.deepcopy(next(c for c in cases if c['name'] == name)))
+            if instruction.startswith('Illustrate only this one'):
+                return json.dumps({'images': originals['Initial move']})
+            if instruction.startswith('Repair the specific'):
+                repair_calls.append(messages)
+            return '{"broken":"'
+    result = propose_step(Provider(), draft, 'tests', 'Check these moves')
+    artifact = result.builder_workflow['artifacts']['tests']['value']
+    by_name = {c['name']: c for c in artifact['cases']}
+    assert by_name['Set difficulty first']['state'] == by_name['Initial move']['state'] == {'n': 0}
+    assert repair_calls == []
+    flow.validate_artifact('tests', artifact)
