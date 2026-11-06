@@ -115,16 +115,19 @@ def verify_examples(code, contract):
 
 
 def probe_move_agreement(code, contract, *, samples=24):
-    """Deterministic agreement between the move generators and applyMove,
-    sampled on the approved examples' states.
+    """Deterministic agreement between the move generators and applyMove.
 
     Random walks found these only by luck of the seed: a randomMove that
     returns moves its own applyMove rejects (a second, divergent legality
     implementation), and generators that throw or crawl on ordinary
-    positions. The approved states are the positions the user cares
-    about, so the probe samples randomMove there, calls computerMove
-    once per state, and requires every returned move to be accepted by
-    applyMove. Returns failure strings; an empty list means agreement."""
+    positions. The probe samples randomMove (and calls computerMove once)
+    on every approved example's before-state and on one played-out
+    mid-game position reached with the game's own generator, and
+    requires every returned move to be accepted by applyMove. The
+    played-out position matters: preconditions that only bite later —
+    a setup move offered mid-game, a resource-gated move offered with
+    none left — are invisible from the early approved states. Returns
+    failure strings; an empty list means agreement."""
     logic = ContractLogic(code, contract)
     if not logic.has('randomMove') and not logic.has('computerMove'):
         return []
@@ -137,19 +140,7 @@ def probe_move_agreement(code, contract, *, samples=24):
         except Exception:
             return False
 
-    seen = []
-    for case in contract['cases']:
-        if len(failures) >= 6:
-            break
-        if 'expected_error' in case:
-            continue
-        state = case['state']
-        if any(state == other for other in seen):
-            continue
-        seen.append(state)
-        ctx = {k: v for k, v in case['ctx'].items() if k != 'seed'}
-        mover = case['player_id']
-        label = f"example '{case['name']}'"
+    def sample_state(state, mover, ctx, label):
         if logic.has('randomMove'):
             distinct = []
             for i in range(samples):
@@ -181,6 +172,60 @@ def probe_move_agreement(code, contract, *, samples=24):
                 elif not accepted(state, mover, move, ctx, 7500):
                     failures.append(f'{label}: computerMove returned a move applyMove rejects: '
                                     f'{json.dumps(move, default=str)}')
+
+    seen = []
+    for case in contract['cases']:
+        if len(failures) >= 6:
+            break
+        if 'expected_error' in case:
+            continue
+        state = case['state']
+        if any(state == other for other in seen):
+            continue
+        seen.append(state)
+        ctx = {k: v for k, v in case['ctx'].items() if k != 'seed'}
+        sample_state(state, case['player_id'], ctx, f"example '{case['name']}'")
+
+    if contract['cases'] and len(failures) < 6:
+        # Play a short game with the game's own generator, keeping only
+        # moves applyMove accepts, then sample at the reached position.
+        generator = 'randomMove' if logic.has('randomMove') else 'computerMove'
+        ctx = {k: v for k, v in contract['cases'][0]['ctx'].items() if k != 'seed'}
+        try:
+            opening = logic.call('newMatch', ctx=ctx, seed=4242, time_limit_seconds=2.0)
+            state, turn = opening['state'], opening['turn']
+        except Exception:
+            state, turn = None, None
+        plies = 0
+        while state is not None and turn and plies < 8:
+            mover = turn[0]
+            move = None
+            for seed in range(7600, 7608):
+                try:
+                    candidate = logic.call(generator, state, mover, ctx=ctx, seed=seed,
+                                           time_limit_seconds=0.5)
+                except Exception:
+                    candidate = None
+                if candidate is None:
+                    continue
+                if accepted(state, mover, candidate, ctx, seed):
+                    move = candidate
+                    break
+                failures.append(f'played-out position (ply {plies}): {generator} returned a move '
+                                f'applyMove rejects: {json.dumps(candidate, default=str)} — the '
+                                'move generator and the validator disagree about legality')
+                break
+            if move is None:
+                break
+            try:
+                result = logic.call('applyMove', state, mover, move, ctx=ctx, seed=7700 + plies)
+            except Exception:
+                break
+            state, turn = result['state'], result['turn']
+            ctx = {**ctx, 'move_count': ctx.get('move_count', 0) + 1}
+            plies += 1
+        if state is not None and turn and plies >= 4 and len(failures) < 6:
+            sample_state(state, turn[0], ctx, f'played-out position after {plies} moves')
     return failures
 
 

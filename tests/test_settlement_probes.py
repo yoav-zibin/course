@@ -260,3 +260,21 @@ def test_move_agreement_catches_throwing_computer_move():
 
 def test_move_agreement_is_a_registered_check():
     assert 'move_agreement' in dict(CHECKS)
+
+
+# A setup move that is legal only before the first move, but the generator
+# keeps offering it once the game is under way — invisible from the
+# approved (opening) states, exactly what the played-out position is for.
+SETUP_MOVE_DIVERGENCE = REFERENCE.replace(
+    "randomMove(state, playerId, ctx) { return {type: 'pass'}; }",
+    "randomMove(state, playerId, ctx) { return state.moves >= 2 ? {type: 'setup'} : {type: 'pass'}; }",
+).replace(
+    "const s = {...state, moves: state.moves + 1, left: [...state.left]};",
+    "if (move.type === 'setup' && state.moves > 0) throw new Error('InvalidMove: locked after first move');\n"
+    "    const s = {...state, moves: state.moves + 1, left: [...state.left]};",
+)
+
+
+def test_move_agreement_catches_setup_move_offered_mid_game():
+    failures = probe_move_agreement(SETUP_MOVE_DIVERGENCE, AGREEMENT_CONTRACT)
+    assert any('applyMove rejects' in failure for failure in failures), failures
