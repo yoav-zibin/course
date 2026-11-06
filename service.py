@@ -402,6 +402,19 @@ class GamePlatform:
         translation_daily_character_limit: int = 200_000,
     ) -> None:
         self._store: Store = store if store is not None else InMemoryStore()
+        missing_game_schemas = sorted(
+            (game.id, game.version)
+            for game in self._store.list_all_game_versions()
+            if game.server_code is not None and game.game_schemas is None
+        )
+        if missing_game_schemas:
+            versions = ", ".join(
+                f"{game_id}@{version}" for game_id, version in missing_game_schemas
+            )
+            raise ValueError(
+                "server-side game versions are missing required game_schemas: "
+                f"{versions}. Backfill these versions before starting the server."
+            )
         self._clock = clock
         self._translation = TranslationService(
             self._store,
@@ -1708,7 +1721,15 @@ class GamePlatform:
         description: str, rules: GameRules, code: str,
         expected_revision: int | None,
         server_code: str | None = None,
+        game_schemas: dict[str, JsonValue] | None = None,
     ) -> GameDraft:
+        server_code = server_code or None
+        if server_code is not None and game_schemas is None:
+            raise InvalidRequestError(
+                "game_schemas is required when server_code is provided"
+            )
+        if server_code is None and game_schemas is not None:
+            raise InvalidRequestError("game_schemas requires server_code")
         with self._lock:
             existing = self._store.get_game_draft(draft_id) if draft_id else None
             game = self._store.get_game(draft_id) if draft_id else None
@@ -1727,6 +1748,7 @@ class GamePlatform:
                 name=name, description=description, rules=rules, code=code,
                 server_code=server_code,
                 builder_workflow=existing.builder_workflow if existing else game.builder_workflow if game else None,
+                game_schemas=game_schemas,
                 created_at=existing.created_at if existing else now, updated_at=now,
                 base_version=existing.base_version if existing else game.version if game else 0,
                 revision=existing.revision + 1 if existing else 1,
@@ -1774,13 +1796,16 @@ class GamePlatform:
                 if draft.server_code:
                     # A new game's server code must pass its tests before
                     # its first version can be published (Phase 5 gate).
-                    self._gate_server_code(draft.id, draft.server_code, draft.rules)
+                    self._gate_server_code(
+                        draft.id, draft.server_code, draft.rules, draft.game_schemas
+                    )
                 game = Game(
                     id=draft.id, version=1, owner_user_id=caller_id,
                     name=draft.name.strip(), description=draft.description,
                     rules=draft.rules, code=draft.code,
                     server_code=draft.server_code,
                     builder_workflow=draft.builder_workflow,
+                    game_schemas=draft.game_schemas,
                     created_at=self._clock(), updated_at=self._clock(),
                 )
                 self._store.add_game_version(game)
@@ -1793,6 +1818,7 @@ class GamePlatform:
                     caller_id=caller_id, game_id=draft_id, name=draft.name.strip(),
                     description=draft.description, code=draft.code,
                     server_code=draft.server_code,
+                    game_schemas=draft.game_schemas,
                     allowed_player_counts=draft.rules.allowed_player_counts,
                     allows_leave_mid_match=draft.rules.allows_leave_mid_match,
                     allows_join_mid_match=draft.rules.allows_join_mid_match,
@@ -1816,7 +1842,15 @@ class GamePlatform:
         rules: GameRules,
         code: str,
         server_code: str | None = None,
+        game_schemas: dict[str, JsonValue] | None = None,
     ) -> Game:
+        server_code = server_code or None
+        if server_code is not None and game_schemas is None:
+            raise InvalidRequestError(
+                "game_schemas is required when server_code is provided"
+            )
+        if server_code is None and game_schemas is not None:
+            raise InvalidRequestError("game_schemas requires server_code")
         with self._lock:
             now = self._clock()
             game = Game(
@@ -1828,6 +1862,7 @@ class GamePlatform:
                 rules=rules,
                 code=code,
                 server_code=server_code,
+                game_schemas=game_schemas,
                 created_at=now,
                 updated_at=now,
             )
@@ -2048,6 +2083,7 @@ class GamePlatform:
         allows_join_mid_match: bool | None = None,
         code: str | None = None,
         server_code: str | None | object = UNSET,
+        game_schemas: dict[str, JsonValue] | None | object = UNSET,
         _publishing: bool = False,
         _admin: bool = False,
         _builder_workflow: Any = UNSET,
@@ -2071,6 +2107,20 @@ class GamePlatform:
             )
             if not game.published and not _publishing:
                 raise ConflictError("game is unpublished; edit its private draft and Publish to share it")
+            server_code_value = (
+                game.server_code
+                if server_code is UNSET
+                else server_code or None
+            )
+            game_schemas_value = (
+                (
+                    None
+                    if server_code is not UNSET and server_code_value is None
+                    else game.game_schemas
+                )
+                if game_schemas is UNSET
+                else game_schemas
+            )
             rules = game.rules
             updated = replace(
                 game,
@@ -2091,27 +2141,37 @@ class GamePlatform:
                 ),
                 builder_workflow=game.builder_workflow if _builder_workflow is UNSET else _builder_workflow,
                 code=code if code is not None else game.code,
-                server_code=game.server_code
-                if server_code is UNSET
-                else server_code,
+                server_code=server_code_value,
+                game_schemas=game_schemas_value,
             )
+            if updated.server_code is not None and updated.game_schemas is None:
+                raise InvalidRequestError(
+                    "game_schemas is required when server_code is provided"
+                )
+            if updated.server_code is None and updated.game_schemas is not None:
+                raise InvalidRequestError("game_schemas requires server_code")
             if updated == game:
                 return game
             if game.builder_workflow and not _publishing:
                 raise ConflictError("This game has approved specifications; edit and verify it in the guided builder")
             if updated.server_code and (
                 updated.server_code != game.server_code
+                or updated.game_schemas != game.game_schemas
                 or updated.rules != game.rules
             ):
                 # New or re-ruled server code must pass its tests before
                 # the new version is published (Phase 5 gate).
-                if _admin and _test_budget_seconds != 1.0:
-                    self._gate_server_code(
-                        game_id, updated.server_code, updated.rules,
-                        budget_seconds=_test_budget_seconds,
-                    )
-                else:
-                    self._gate_server_code(game_id, updated.server_code, updated.rules)
+                self._gate_server_code(
+                    game_id,
+                    updated.server_code,
+                    updated.rules,
+                    updated.game_schemas,
+                    budget_seconds=(
+                        _test_budget_seconds
+                        if _admin and _test_budget_seconds != 1.0
+                        else 1.0
+                    ),
+                )
             updated = replace(
                 updated, version=game.version + 1, updated_at=self._clock()
             )
@@ -2509,6 +2569,7 @@ class GamePlatform:
         self,
         *,
         server_code: str,
+        game_schemas: dict[str, JsonValue],
         rules: GameRules,
         game_id: str | None = None,
     ) -> GameTestReport:
@@ -2518,11 +2579,19 @@ class GamePlatform:
         replayed first and the run's failed seeds replace them."""
         with self._lock:
             return self._run_game_tests(
-                server_code=server_code, rules=rules, game_id=game_id
+                server_code=server_code,
+                game_schemas=game_schemas,
+                rules=rules,
+                game_id=game_id,
             )
 
     def _run_game_tests(
-        self, *, server_code: str, rules: GameRules, game_id: str | None,
+        self,
+        *,
+        server_code: str,
+        game_schemas: dict[str, JsonValue],
+        rules: GameRules,
+        game_id: str | None,
         budget_seconds: float = 1.0,
     ) -> GameTestReport:
         stored = (
@@ -2541,6 +2610,8 @@ class GamePlatform:
                         seed=0, player_count=0, move_number=0) for result in failures))
         report = test_server_code(
             server_code,
+            game_schemas=game_schemas,
+            game_id=game_id or "unsaved",
             rules=rules,
             regression_seeds=stored.seeds if stored else (),
             contract=contract,
@@ -2556,14 +2627,24 @@ class GamePlatform:
         return report
 
     def _gate_server_code(
-        self, game_id: str, server_code: str, rules: GameRules,
-        *, budget_seconds: float = 1.0,
+        self,
+        game_id: str,
+        server_code: str,
+        rules: GameRules,
+        game_schemas: dict[str, JsonValue] | None,
+        *,
+        budget_seconds: float = 1.0,
     ) -> None:
         """The publish gate (Phase 5): server code about to be published
         must pass the random-walk tests, or publishing is refused and the
         version stays a draft the author can keep fixing."""
+        if game_schemas is None:
+            raise InvalidRequestError("game_schemas is required for server_code")
         report = self._run_game_tests(
-            server_code=server_code, rules=rules, game_id=game_id,
+            server_code=server_code,
+            game_schemas=game_schemas,
+            rules=rules,
+            game_id=game_id,
             budget_seconds=budget_seconds,
         )
         if report.passed:
@@ -2581,10 +2662,17 @@ class GamePlatform:
     # result's "error" field, verbatim, never as an exception.
 
     def emulator_reset(
-        self, *, server_code: str, players: list[dict[str, Any]], seed: int
+        self,
+        *,
+        server_code: str,
+        game_schemas: dict[str, JsonValue],
+        players: list[dict[str, Any]],
+        seed: int,
     ) -> dict[str, Any]:
         with self._lock:
-            logic = GameLogic(server_code)
+            logic = GameLogic(
+                server_code, game_schemas=game_schemas, game_id="emulator"
+            )
             roster = _emulator_roster(players)
             pot = sum(player["max_loss"] for player in roster)
             try:
@@ -2608,6 +2696,7 @@ class GamePlatform:
         self,
         *,
         server_code: str,
+        game_schemas: dict[str, JsonValue],
         players: list[dict[str, Any]],
         seed: int,
         state: Any,
@@ -2617,7 +2706,9 @@ class GamePlatform:
         move: Any,
     ) -> dict[str, Any]:
         with self._lock:
-            logic = GameLogic(server_code)
+            logic = GameLogic(
+                server_code, game_schemas=game_schemas, game_id="emulator"
+            )
             roster = _emulator_roster(players)
             pot = sum(player["max_loss"] for player in roster)
             if turn is None:
@@ -2762,12 +2853,28 @@ class GamePlatform:
         key = (game.id, game.version)
         logic = self._logic_cache.get(key)
         if logic is None:
+            if game.game_schemas is None:
+                raise GameLogicError(
+                    f"game {game.id} version {game.version} has no game_schemas; "
+                    "backfill it before enabling this game"
+                )
             contract = (game.builder_workflow or {}).get("artifacts", {}).get("tests", {}).get("value")
             if contract:
                 from game_platform.builder_validation import ContractLogic
-                logic = ContractLogic(game.server_code or "", contract)
+                logic = ContractLogic(
+                    game.server_code or "",
+                    contract,
+                    game_schemas=game.game_schemas,
+                    game_id=game.id,
+                    game_version=game.version,
+                )
             else:
-                logic = GameLogic(game.server_code or "")
+                logic = GameLogic(
+                    game.server_code or "",
+                    game_schemas=game.game_schemas,
+                    game_id=game.id,
+                    game_version=game.version,
+                )
             self._logic_cache[key] = logic
         return logic
 

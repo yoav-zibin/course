@@ -59,7 +59,8 @@
   "allows_leave_mid_match": false,
   "allows_join_mid_match": false,
   "code_file": "tictactoe.html",
-  "server_code_file": "tictactoe.server.js"
+  "server_code_file": "tictactoe.server.js",
+  "schema_file": "tictactoe.schema.json"
  },
  {
   "op": "create_game",
@@ -79,7 +80,8 @@
   "allows_leave_mid_match": true,
   "allows_join_mid_match": true,
   "code_file": "poker.html",
-  "server_code_file": "poker.server.js"
+  "server_code_file": "poker.server.js",
+  "schema_file": "poker.schema.json"
  },
  {
   "op": "create_game",
@@ -101,7 +103,8 @@
   "allows_leave_mid_match": true,
   "allows_join_mid_match": true,
   "code_file": "debug.html",
-  "server_code_file": "debug.server.js"
+  "server_code_file": "debug.server.js",
+  "schema_file": "debug.schema.json"
  },
  {
   "op": "create_match",

@@ -10,15 +10,19 @@ same frozen time returns exactly the same result.
 import datetime as dt
 import json
 import threading
+from functools import partial
 
 import pytest
 
 from game_platform.game_logic import (
-    GameLogic,
+    GameLogic as _GameLogic,
     GameLogicError,
     GameLogicTimeout,
     InvalidMoveError,
 )
+from game_platform.tests.helpers import TEST_GAME_SCHEMAS
+
+GameLogic = partial(_GameLogic, game_schemas=TEST_GAME_SCHEMAS)
 
 COUNTER_GAME = r"""
 const game = {

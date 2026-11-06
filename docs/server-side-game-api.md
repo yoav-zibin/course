@@ -182,6 +182,59 @@ Ongoing mixed rosters saved before this change end on their next read, move, or
 worker call with `end_reason: "solo_computers_only"`, refunding the remaining
 pot to active humans once. Waiting lobbies can remove their bots.
 
+## Game JSON Schemas
+
+Every v2 game version stores a `game_schemas` object with exactly three
+Draft 2020-12 JSON Schemas: `state`, `move`, and `view`. It is required
+alongside `server_code` when creating or updating a game, saving a draft,
+testing code, or using the emulator. It is returned with game and draft
+representations, included in the builder's autosave and AI-edit flows, and
+appears in the generated OpenAPI request/response definitions. V1 games do
+not use these schemas.
+
+The platform validates state arguments before calling game functions that
+receive state, and validates a human's `move` against the `move` schema before
+`applyMove` runs. `computerMove` and `randomMove` results use the same move
+schema; returned states and `viewFor` results use their respective schemas.
+An invalid human move is rejected with HTTP 400 without changing the match.
+Invalid game-generated values or results are game bugs: the call fails and
+the random-walk test report identifies the failing function and seed.
+
+Invalid game-defined inputs emit a warning log with the game id/version,
+function, input name, and validation message. Process-local counters are
+available at `GET /admin/game-input-metrics` (protected by the master
+password when configured); counters are grouped by game version, function,
+and input and reset when the process restarts. They are not aggregated across
+workers.
+
+Before deploying strict validation to a database that already contains v2
+games, every persisted v2 version—including historical versions—must have
+schemas. V1 records are excluded. The server refuses to start and lists any
+missing `game-id@version` entries rather than accepting a missing-schema
+fallback. Create a JSON map containing the exact schemas for those entries,
+then run the backfill utility against the same server configuration:
+
+```json
+{
+  "my-game@1": {
+    "state": {"type": "object"},
+    "move": {"type": "object"},
+    "view": {"type": "object"}
+  }
+}
+```
+
+```powershell
+python backfill_game_schemas.py --config C:\path\to\config.json --schemas C:\path\to\game-schema-backfill.json
+```
+
+The utility validates the complete mapping before writing any versions and
+supports the configured JSON-file or Firestore store. Back up the database
+before running it; schemas are versioned with the game and should describe
+that version's actual inputs and outputs, not merely allow all JSON values.
+
+## Computer opponents on the server (Phase 3)
+
 After every change (start, a move, a player joining or leaving), while
 `turn` includes a computer and no human, the server calls `computerMove`
 (first computer in join order) and applies it with `applyMove`, waiting

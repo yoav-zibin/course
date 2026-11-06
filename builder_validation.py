@@ -4,8 +4,27 @@ from game_platform.game_logic import GameLogic, GameLogicError, InvalidMoveError
 
 
 class ContractLogic(GameLogic):
-    def __init__(self, code, contract):
-        super().__init__(code)
+    def __init__(
+        self,
+        code,
+        contract,
+        *,
+        game_schemas=None,
+        game_id="unsaved",
+        game_version=0,
+    ):
+        if game_schemas is None:
+            game_schemas = {
+                "state": contract["state_schema"],
+                "move": contract["move_schema"],
+                "view": contract["view_schema"],
+            }
+        super().__init__(
+            code,
+            game_schemas=game_schemas,
+            game_id=game_id,
+            game_version=game_version,
+        )
         self.contract = contract
         self.validators = {key:Draft202012Validator(contract[key]) for key in ('state_schema','view_schema','move_schema')}
 

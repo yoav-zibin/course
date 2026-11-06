@@ -15,6 +15,8 @@ from pydantic import (
     StrictBool,
     model_validator,
 )
+from jsonschema.exceptions import SchemaError
+from game_platform.game_schemas import compile_game_schemas
 
 from game_platform.models import (
     Translation,
@@ -90,6 +92,22 @@ PlayerIndices = Annotated[
 
 class _Request(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class GameSchemas(_Request):
+    """Draft 2020-12 schemas for game-defined JSON values."""
+
+    state: JsonValue
+    move: JsonValue
+    view: JsonValue
+
+    @model_validator(mode="after")
+    def _check_schemas(self) -> "GameSchemas":
+        try:
+            compile_game_schemas(self.model_dump())
+        except (SchemaError, TypeError, ValueError) as error:
+            raise ValueError(f"invalid game JSON Schema: {error}") from error
+        return self
 
 
 def _example(example: dict[str, JsonValue]) -> ConfigDict:
@@ -416,6 +434,15 @@ class GameCreate(_Request):
     # The server code (v2 Game API, docs/server-side-game-api.md). Omit it (or
     # send null) for a v1 game whose client computes everything.
     server_code: str | None = None
+    game_schemas: GameSchemas | None = None
+
+    @model_validator(mode="after")
+    def _require_server_schemas(self) -> "GameCreate":
+        if self.server_code and self.game_schemas is None:
+            raise ValueError("game_schemas is required when server_code is provided")
+        if not self.server_code and self.game_schemas is not None:
+            raise ValueError("game_schemas requires server_code")
+        return self
 
     @model_validator(mode="before")
     @classmethod
@@ -439,12 +466,19 @@ class GameUpdate(_Request):
     # The v2 names for the two parts of a game; see [GameCreate].
     client_code: str | None = None
     server_code: str | None = None
+    game_schemas: GameSchemas | None = None
 
     @model_validator(mode="after")
     def _reject_explicit_nulls(self) -> "GameUpdate":
         for field in sorted(self.model_fields_set):
             if getattr(self, field) is None:
                 raise ValueError(f"{field} cannot be null")
+        if (
+            "server_code" in self.model_fields_set
+            and self.server_code
+            and self.game_schemas is None
+        ):
+            raise ValueError("game_schemas is required when server_code is provided")
         return self
 
 
@@ -459,6 +493,9 @@ class GameSummaryOut(BaseModel):
     allowed_player_counts: list[int]
     allows_leave_mid_match: bool
     allows_join_mid_match: bool
+    game_schemas: GameSchemas | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     created_at: dt.datetime
     updated_at: dt.datetime
     deleted: bool
@@ -477,6 +514,7 @@ class GameSummaryOut(BaseModel):
             allowed_player_counts=list(game.rules.allowed_player_counts),
             allows_leave_mid_match=game.rules.allows_leave_mid_match,
             allows_join_mid_match=game.rules.allows_join_mid_match,
+            game_schemas=game.game_schemas,
             created_at=game.created_at,
             updated_at=game.updated_at,
             deleted=game.deleted,
@@ -518,6 +556,7 @@ class GameTestRequest(_Request):
     and this run's failures are stored back on it."""
 
     server_code: str
+    game_schemas: GameSchemas
     allowed_player_counts: PlayerCounts
     allows_leave_mid_match: bool = False
     allows_join_mid_match: bool = False
@@ -590,6 +629,7 @@ class EmulatorResetRequest(_Request):
     """Starts an emulated match on unsaved server code (POST /emulator/reset)."""
 
     server_code: str
+    game_schemas: GameSchemas
     players: Annotated[list[EmulatorPlayerIn], Field(min_length=1, max_length=10)]
     seed: int = 0
 
@@ -640,6 +680,17 @@ class GameDraftContent(_Request):
     code: str
     # The draft's server code (v2 Game API); None while the draft is a v1 game.
     server_code: str | None = None
+    game_schemas: GameSchemas | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+
+    @model_validator(mode="after")
+    def _require_server_schemas(self) -> "GameDraftContent":
+        if self.server_code and self.game_schemas is None:
+            raise ValueError("game_schemas is required when server_code is provided")
+        if not self.server_code and self.game_schemas is not None:
+            raise ValueError("game_schemas requires server_code")
+        return self
 
 
 class GameDraftSave(GameDraftContent):
@@ -665,6 +716,7 @@ class GameDraftOut(GameDraftContent):
             id=draft.id, owner_user_id=draft.owner_user_id,
             name=draft.name, description=draft.description, code=draft.code,
             server_code=draft.server_code,
+            game_schemas=draft.game_schemas,
             allowed_player_counts=list(draft.rules.allowed_player_counts),
             allows_leave_mid_match=draft.rules.allows_leave_mid_match,
             allows_join_mid_match=draft.rules.allows_join_mid_match,
@@ -1148,11 +1200,18 @@ class AgentChatRequest(_Request):
     code: str = ""
     # The game's server code (v2 Game API); "" while the game has none.
     server_code: str = ""
+    game_schemas: GameSchemas | None = None
     messages: Annotated[list[AgentMessage], Field(min_length=1, max_length=50)]
     # The draft (or game) being edited, when the client knows it. The exchange
     # is recorded against this id so admins can review the conversation later;
     # clients that send no id simply stay unrecorded.
     game_id: str | None = None
+
+    @model_validator(mode="after")
+    def _require_server_schemas(self) -> "AgentChatRequest":
+        if self.server_code.strip() and self.game_schemas is None:
+            raise ValueError("game_schemas is required when server_code is provided")
+        return self
 
 
 class AgentChatResponse(BaseModel):
@@ -1161,6 +1220,9 @@ class AgentChatResponse(BaseModel):
     code: str | None = None
     # The complete updated server code (v2 Game API), or null when unchanged.
     server_code: str | None = None
+    game_schemas: GameSchemas | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     # Whether the returned server code passed its random-walk tests (the
     # agent retries with the failure report before giving up); null when no
     # server code was tested this turn.
@@ -1228,11 +1290,14 @@ class AdminGameCodeRequest(_Request):
 
     code: str | None = None
     server_code: str | None = None
+    game_schemas: GameSchemas | None = None
 
     @model_validator(mode="after")
     def _some_code(self) -> "AdminGameCodeRequest":
         if self.code is None and self.server_code is None:
             raise ValueError("provide code, server_code, or both")
+        if self.server_code is not None and self.game_schemas is None:
+            raise ValueError("game_schemas is required when server_code is provided")
         return self
 
 

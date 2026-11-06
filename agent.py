@@ -9,7 +9,7 @@ authoritatively: the rules, the state, computer opponents).
 
 The model is instructed to answer with a single JSON object:
 {"message": "<chat reply>", "code": "<full HTML or null>",
- "server_code": "<full JS or null>",
+ "server_code": "<full JS or null>", "game_schemas": "<schemas or null>",
  "name": "<suggested name or null>", "description": "<suggested description or null>",
  "allowed_player_counts": [1]}.
 
@@ -32,14 +32,20 @@ from pydantic import TypeAdapter, ValidationError
 from game_platform.game_testing import GameTestReport
 from game_platform.game_text import PROMPT_RULES
 from game_platform.model_api import ModelApiClient, ModelApiError
-from game_platform.schemas import AgentChatRequest, AgentChatResponse, PlayerCounts
+from game_platform.schemas import (
+    AgentChatRequest,
+    AgentChatResponse,
+    GameSchemas,
+    PlayerCounts,
+)
 
 logger = logging.getLogger(__name__)
 GENERATION_BUDGET_SECONDS = 120.0
 
 # Runs the platform's random-walk tests on server code: (server_code,
-# allowed_player_counts, allows_leave_mid_match, allows_join_mid_match).
-ServerTester = Callable[[str, list[int], bool, bool], GameTestReport]
+# game_schemas, allowed_player_counts, allows_leave_mid_match,
+# allows_join_mid_match).
+ServerTester = Callable[[str, dict, list[int], bool, bool], GameTestReport]
 
 _BASE_PROMPT = """\
 You are a game-building assistant inside a turn-based solo and multiplayer platform's \
@@ -121,10 +127,16 @@ source of game randomness. All calls must be deterministic. \
 using randomMove; if used to price a departure, pay the remaining pot to \
 the other humans as well when ending the match.
 
+Every v2 game has `game_schemas`, containing Draft 2020-12 JSON Schemas named \
+`state`, `move`, and `view`. The state schema validates each state argument and \
+state result; move validates player moves plus `computerMove` and `randomMove` \
+results; view validates each `viewFor` result. Keep all three schemas in sync \
+with every value the server code can produce.
+
 Old games built before server code existed have no server part. When you \
 create a game or change a game's rules, always return BOTH parts (write the \
 server code for an old game too). When a change only touches presentation, \
-return the client code with "server_code": null.
+return the client code with "server_code": null and "game_schemas": null.
 
 Rules you must follow in the code you write:
 - Choose allowed player counts that match the requested game and its code. In Auto \
@@ -151,6 +163,8 @@ the game, or null when the client code is unchanged.
 - "server_code": the COMPLETE updated server JavaScript when you create or \
 change it, or null when the server code is unchanged. Required whenever the \
 game's rules change and for every new game.
+- "game_schemas": the complete {"state": <JSON Schema>, "move": <JSON Schema>, \
+  "view": <JSON Schema>} when returning server_code; otherwise null if unchanged.
 - "name": a suggested game name, or null to keep the current one.
 - "description": a suggested one-line description, or null to keep it.
 - "allowed_player_counts": the supported seat counts (unique integers 1..10), \
@@ -164,7 +178,8 @@ game's rules change and for every new game.
   null for discussion without changes.
 
 Only return "code" when the user asked for a game or a change to it; for \
-questions and discussion, return "code": null, "server_code": null and answer \
+questions and discussion, return "code": null, "server_code": null, \
+"game_schemas": null and answer \
 in "message"."""
 
 # The translation rules go just before the response format, which must stay the last thing.
@@ -185,6 +200,7 @@ class _GameContext:
     allowed_player_counts: list[int]
     code: str
     server_code: str
+    game_schemas: dict | None
     player_count_mode: str
     allows_leave_mid_match: bool
     allows_join_mid_match: bool
@@ -210,6 +226,11 @@ def _context_block(context: _GameContext) -> str:
         lines.append(context.server_code)
     else:
         lines.append("- current server code: (none - this game has no server part yet)")
+    if context.game_schemas is not None:
+        lines.append("- current game schemas (Draft 2020-12):")
+        lines.append(json.dumps(context.game_schemas, indent=2))
+    else:
+        lines.append("- current game schemas: (none)")
     return "\n".join(lines)
 
 
@@ -223,6 +244,11 @@ def build_prompt_messages(
         allowed_player_counts=list(request.allowed_player_counts),
         code=request.code,
         server_code=request.server_code,
+        game_schemas=(
+            request.game_schemas.model_dump()
+            if request.game_schemas is not None
+            else None
+        ),
         player_count_mode=request.player_count_mode,
         allows_leave_mid_match=request.allows_leave_mid_match,
         allows_join_mid_match=request.allows_join_mid_match,
@@ -293,6 +319,15 @@ def _parse_reply(raw: str) -> AgentChatResponse:
     if server_code is not None:
         if not isinstance(server_code, str) or not server_code.strip():
             raise AgentError("The agent's reply had no usable server code.")
+    game_schemas = data.get("game_schemas")
+    if server_code is not None:
+        try:
+            game_schemas = GameSchemas.model_validate(game_schemas)
+        except ValidationError as exc:
+            raise AgentError(
+                "The agent must return valid state, move, and view JSON Schemas "
+                "with server_code."
+            ) from exc
     name = data.get("name")
     description = data.get("description")
     counts = data.get("allowed_player_counts")
@@ -308,6 +343,7 @@ def _parse_reply(raw: str) -> AgentChatResponse:
         message=message.strip(),
         code=code,
         server_code=server_code,
+        game_schemas=game_schemas,
         name=name if isinstance(name, str) and name.strip() else None,
         description=description
         if isinstance(description, str) and description.strip()
@@ -422,6 +458,7 @@ def chat_with_agent(
             try:
                 report = server_tester(
                     response.server_code,
+                    response.game_schemas.model_dump(),
                     list(response.allowed_player_counts or request.allowed_player_counts),
                     response.allows_leave_mid_match
                     if response.allows_leave_mid_match is not None

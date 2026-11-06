@@ -2,6 +2,7 @@
 read, listed or moved in. The tests set the clock by hand; nothing waits for real."""
 
 import datetime as dt
+import json
 import threading
 from collections.abc import Sequence
 
@@ -263,6 +264,7 @@ def test_a_v2_timeout_ends_without_running_a_computer() -> None:
         ),
         code=(games / "debug.html").read_text(),
         server_code=(games / "debug.server.js").read_text(),
+        game_schemas=json.loads((games / "debug.schema.json").read_text()),
     )
     match = platform.create_match(
         caller_id=ann, game_id=game.id, num_computer_opponents=0, turn_seconds=60

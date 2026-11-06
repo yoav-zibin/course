@@ -101,6 +101,8 @@ class GameTestReport:
 def test_server_code(
     server_code: str,
     *,
+    game_schemas: dict[str, JsonValue],
+    game_id: str = "unsaved",
     rules: GameRules,
     regression_seeds: tuple[int, ...] = (),
     budget_seconds: float = 1.0,
@@ -114,9 +116,18 @@ def test_server_code(
     bug becomes a failure in the report."""
     if contract:
         from game_platform.builder_validation import ContractLogic
-        logic = ContractLogic(server_code, contract)
+        logic = ContractLogic(
+            server_code,
+            contract,
+            game_schemas=game_schemas,
+            game_id=game_id,
+        )
     else:
-        logic = GameLogic(server_code)
+        logic = GameLogic(
+            server_code,
+            game_schemas=game_schemas,
+            game_id=game_id,
+        )
     master = random.Random(run_seed)
     deadline = time.monotonic() + budget_seconds
     walk_seeds = [
