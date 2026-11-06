@@ -76,3 +76,20 @@ test('SOS rules keep the S-O-S pattern bold wherever the translation puts it', (
   page.send({ type: 'state_changed', status: 'ongoing', players: [], strings: { rules: 'Keine Markierung.' }, locale: 'de' });
   assert.equal(page.doc.querySelector('.rules').textContent, 'Keine Markierung.');
 });
+
+const loadByPrefix = (prefix) => loadPage(path.join(DIR, fs.readdirSync(DIR).find((f) => f.startsWith(prefix) && !f.endsWith('.original.html'))));
+test('War counters keep their bold number wherever the translation puts it', () => {
+  const page = loadByPrefix('42d06892');
+  page.send({ type: 'state_changed', status: 'ongoing', players: [], locale: 'ja', strings: { round: '{value}ラウンド', pot: 'Pot: {value} cards', war: 'WAR {value}' } });
+  const pills = page.doc.querySelectorAll('.pill');
+  assert.deepEqual(pills.map((p) => p.textContent), ['1ラウンド', 'Pot: 0 cards', 'WAR 0']);
+  assert.equal(pills[0].children[0].attrs.id, 'round');
+  assert.equal(pills[1].children[0].attrs.id, 'pot');
+});
+test('Nine Stars legend keeps the bold bonus in place', () => {
+  const page = loadByPrefix('79830aee');
+  page.send({ type: 'state_changed', status: 'ongoing', players: [], locale: 'fr', strings: { legend_2: 'Pour {bonus} par ligne.' } });
+  const legend = page.doc.querySelector('.legend');
+  assert.match(legend.textContent, /Pour \+2 par ligne\./);
+  assert.equal(legend.querySelector('b').textContent, '+2');
+});

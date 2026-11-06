@@ -127,4 +127,32 @@ S['39a5e1f5'] = { names: ['Ana', 'Ben'], skipCoverage: ['waiting_platform'], sce
   [{ msg: over(gm({ winner: 0, winLine: [{ r: 7, c: 7 }, { r: 7, c: 8 }] })) }, { msg: over(gm({ winner: 1 })) }, { msg: over(gm({ winner: 4 })) }, { msg: over(gm({ draw: true })) }, { msg: over(gm()) }, { msg: msg({ view: null }) }],
 ] };
 
+// --- Solo Countdown
+S['569fac2e'] = { names: [], scenarios: [
+  [{ msg: msg() }, { msg: mine({ stars: 3 }) }, { msg: mine({ stars: 2 }) }, { msg: mine({ stars: 1 }) }, { msg: mine({ stars: 1 }), then: click('take') }],
+  [{ msg: over({ stars: 0, winner: 0 }) }, { msg: msg({ view: { stars: 0, winner: 0 }, status: 'ongoing' }) }],
+] };
+
+// --- Nine Stars (second version)
+const nineCells = (owners) => owners.map((o, i) => ({ o, v: (i % 3) + 1 }));
+const nine = (owners, extra = {}) => ({ cells: nineCells(owners), scores: [3, 2], lines: [0, 0], winner: null, ...extra });
+const noOwner = Array(9).fill(null);
+const robots = [{ name: 'Ana', player_index: 0, id: 'p0', kind: 'computer' }, { name: 'Robo', player_index: 1, id: 'p1', kind: 'computer' }];
+S['79830aee'] = { names: ['Ana', 'Ben', 'Robo'], skipCoverage: ['waiting_platform', 'legend_2'], data: ['each.'], scenarios: [
+  [{ msg: null }, { msg: msg({ view: null }) }, { msg: mine(nine(noOwner)) }, { msg: mine(nine([0, 1, null, null, null, null, null, null, null], { lines: [1, 0] })), then: (p) => p.$('board').children[3].click() }, { msg: mine(nine([0, 1, 0, 1, null, null, null, null, null], { lines: [0, 2] }), { move_count: 9 }) }],
+  [{ msg: theirs(nine(noOwner)) }, { msg: theirs(nine(noOwner), { turn_of_player_indices: [] }) }, { msg: theirs(nine(noOwner), { turn_of_player_indices: [1], players: robots }) }, { msg: theirs(nine(noOwner), { turn_of_player_indices: [5], players: [] }) }, { msg: spectator(nine(noOwner), { turn_of_player_indices: [0] }) }],
+  [{ msg: over(nine(Array(9).fill(0), { winner: -1, scores: [4, 4] })) }, { msg: over(nine(Array(9).fill(0), { winner: 0, scores: [6, 3] })) }, { msg: over(nine(Array(9).fill(1), { winner: 1, scores: [3, 6] })) }, { msg: over(nine(Array(9).fill(1), { winner: 5 })) }, { msg: over(nine(Array(9).fill(1)), { players: [] }) }],
+] };
+
+// --- War
+const card = (r, s) => ({ r, s });
+const war = (extra = {}) => ({ round: 3, potCount: 0, warDepth: 0, counts: [24, 28], revealed: [false, false], faceUp: [null, null], winner: null, log: 'Ana flipped K\u2660, Ben flipped 9\u2665', ...extra });
+S['42d06892'] = { names: ['Ana', 'Ben', 'Robo'], skipCoverage: ['waiting_platform', 'round', 'pot', 'war'], data: ['-', 'Ana flipped K\u2660, Ben flipped 9\u2665'], scenarios: [
+  [{ msg: msg() }, { msg: mine(war()) }, { msg: mine(war()), then: click('flipBtn') }, { msg: mine(war({ revealed: [true, false], faceUp: [card(13, '\u2660'), null] }), { move_count: 9 }) }, { msg: mine(war({ revealed: [true, true], faceUp: [card(13, '\u2660'), card(9, '\u2665')], potCount: 4 }), { move_count: 10 }) }],
+  [{ msg: theirs(war({ revealed: [true, false], faceUp: [card(14, '\u2666'), null] })) }, { msg: theirs(war({ revealed: [false, true], faceUp: [null, card(11, '\u2663')] }), { acting_for_player_index: 1, my_player_index: 0 }) }, { msg: theirs(war({ revealed: [false, false] }), { acting_for_player_index: null, turn_of_player_indices: [] }) }, { msg: theirs(war({ revealed: [true, true] }), { players: [], status: 'ongoing' }) }],
+  [{ msg: mine(war({ warDepth: 2, potCount: 8, counts: [10, 0], faceUp: [card(5, '\u2660'), null] }), { move_count: 20 }) }, { msg: mine(war({ warDepth: 1, revealed: [true, false], counts: [0, 3], faceUp: [null, null] }), { move_count: 21 }) }, { msg: mine(war({ warDepth: 1, revealed: [false, false], counts: [5, 3] }), { move_count: 22 }) }, { msg: theirs(war({ warDepth: 3, revealed: [true, true], counts: [5, 3], faceUp: [card(12, '\u2665'), card(12, '\u2660')] }), { acting_for_player_index: 1 }) }],
+  [{ msg: spectator(war()) }, { msg: spectator(war({ revealed: [true, true] }), { acting_for_player_index: 0 }) }, { msg: mine(war({ revealed: [true, false], faceUp: [card(2, '\u2660'), null] }), { players: robots }) }],
+  [{ msg: over(war({ winner: -1, counts: [0, 0] })) }, { msg: over(war({ winner: 0, counts: [52, 0], faceUp: [card(14, '\u2660'), card(2, '\u2665')], revealed: [true, true] })) }, { msg: over(war({ winner: 1 }), { players: [] }) }, { msg: over(war({ winner: 5 })) }, { msg: msg({ view: null }) }],
+] };
+
 module.exports = { S, msg, mine, theirs, over, spectator, PLAYERS, UNNAMED, click };

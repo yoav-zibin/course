@@ -14,6 +14,8 @@ const decode = (s) => s.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (m, e) => {
 });
 const escapeText = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+const kebab = (key) => (key === 'cssText' || key === 'setProperty' || key === 'removeProperty' ? key : key.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase()));
+
 class TextNode {
   constructor(text) { this.nodeType = 3; this.data = text; this.parentNode = null; }
   get textContent() { return this.data; }
@@ -39,12 +41,13 @@ class Element {
     const self = this;
     this.style = new Proxy(this._style, {
       get(target, key) {
+        if (typeof key === 'string') key = kebab(key);
         if (key === 'setProperty') return (k, v) => { target[k] = String(v); };
         if (key === 'removeProperty') return (k) => { delete target[k]; };
         if (key === 'cssText') return Object.entries(target).map(([k, v]) => `${k}:${v}`).join(';');
         return target[key] ?? '';
       },
-      set(target, key, value) { if (key === 'cssText') { for (const k of Object.keys(target)) delete target[k]; } else if (value === '' || value == null) delete target[key]; else target[key] = String(value); return true; },
+      set(target, key, value) { if (typeof key === 'string') key = kebab(key); if (key === 'cssText') { for (const k of Object.keys(target)) delete target[k]; } else if (value === '' || value == null) delete target[key]; else target[key] = String(value); return true; },
     });
     this.classList = {
       add: (...names) => { const set = this._classes(); names.forEach((n) => set.add(n)); this._setClasses(set); },

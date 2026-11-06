@@ -1,0 +1,216 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{font-family:system-ui,sans-serif;background:#0f5132;color:#fff;margin:0;padding:16px;display:flex;justify-content:center}
+.wrap{max-width:640px;width:100%;background:#146642;border-radius:14px;padding:16px;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+h1{margin:0 0 4px;font-size:26px;letter-spacing:1px}
+.sub{opacity:.85;margin:0 0 12px;font-size:13px}
+#status{background:#0b3d26;border-radius:10px;padding:10px 12px;min-height:20px;font-weight:600}
+.meta{display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;font-size:13px}
+.pill{background:#0b3d26;border-radius:999px;padding:5px 10px}
+.pill b{color:#ffd66e}
+.table{display:flex;gap:12px;margin:12px 0}
+.player{flex:1;background:#e9f5ec;color:#12351f;border-radius:12px;padding:10px;text-align:center}
+.player h3{margin:4px 0;font-size:15px}
+.count{font-size:28px;font-weight:800}
+.card{width:84px;height:118px;border-radius:10px;margin:8px auto;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:26px;font-weight:800;background:#fff;color:#111;box-shadow:0 3px 8px rgba(0,0,0,.3)}
+.card.red{color:#c81e2b}
+.card.back{background:repeating-linear-gradient(45deg,#1d4ed8,#1d4ed8 8px,#1e40af 8px,#1e40af 16px);color:#fff;font-size:32px}
+.center{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:90px}
+.vs{font-size:22px;font-weight:900;color:#ffd66e}
+#warBanner{display:none;background:#b91c1c;color:#fff;font-weight:900;text-align:center;border-radius:10px;padding:8px;margin:8px 0;letter-spacing:2px;animation:pulse 1s infinite alternate}
+@keyframes pulse{from{transform:scale(1)}to{transform:scale(1.03)}}
+#flipBtn{width:100%;padding:14px;font-size:18px;font-weight:800;border:0;border-radius:12px;background:#ffd66e;color:#3a2b00;cursor:pointer}
+#flipBtn:disabled{background:#6b7280;color:#e5e7eb;cursor:not-allowed}
+#log{margin-top:10px;font-size:13px;background:#0b3d26;border-radius:10px;padding:8px 10px;max-height:90px;overflow:auto}
+.hint{font-size:12px;opacity:.8;margin-top:8px;text-align:center}
+</style>
+</head>
+<body><script type="application/json" id="i18n-strings">
+{
+ "heading": "⚔️ WAR",
+ "sub": "First to win all 52 cards wins. Tie = War!",
+ "round": "Round {value}",
+ "pot": "Pot {value}",
+ "war": "War x{value}",
+ "war_banner": "⚔️ WAR! ⚔️",
+ "vs": "VS",
+ "cards": "cards",
+ "hint": "Flip at the same time — higher card takes the pot. Tie = 1 down + 1 up.",
+ "waiting_platform": "Waiting for platform…",
+ "dealing": "Dealing cards…",
+ "pot_cards": "🂠 pot: {count}",
+ "flipped": "✅ flipped",
+ "needs_war": "needs war cards",
+ "out": "out!",
+ "face_down": "face down",
+ "draw": "Draw! Both ran out on War.",
+ "wins": "🏆 {name} wins all 52 cards!",
+ "game_over": "Game Over",
+ "player_n": "Player {number}",
+ "both_flip": "Both players flip!",
+ "one_flip": "{name} to flip...",
+ "resolving": "Resolving...",
+ "with_war": "WAR x{depth} — {text}",
+ "with_your_turn": "{text} — your turn!",
+ "with_their_move": "{text} ({name}'s move)",
+ "status_log": "{text} | {log}",
+ "spectating": "Spectating…",
+ "place_war": "Place WAR cards (1 down + 1 up)",
+ "war_placed": "War card placed ✓",
+ "flipped_btn": "Flipped ✓",
+ "flip": "Flip Card"
+}
+</script>
+<div class="wrap">
+<h1>⚔️ WAR</h1>
+<p class="sub">First to win all 52 cards wins. Tie = War!</p>
+<div id="status">Waiting for the platform…</div>
+<div class="meta">
+<span class="pill">Round <b id="round">1</b></span>
+<span class="pill">Pot <b id="pot">0</b></span>
+<span class="pill">War x<b id="war">0</b></span>
+</div>
+<div id="warBanner">⚔️ WAR! ⚔️</div>
+<div class="table">
+<div class="player" id="p0box"><h3 id="p0name">Player 1</h3><div class="count" id="p0count">26</div><div style="font-size:12px">cards</div><div id="p0card"></div><div id="p0state" style="font-size:12px;font-weight:700"></div></div>
+<div class="center"><div class="vs">VS</div><div id="potCards" style="font-size:12px;opacity:.9"></div></div>
+<div class="player" id="p1box"><h3 id="p1name">Player 2</h3><div class="count" id="p1count">26</div><div style="font-size:12px">cards</div><div id="p1card"></div><div id="p1state" style="font-size:12px;font-weight:700"></div></div>
+</div>
+<button id="flipBtn" disabled>Flip Card</button>
+<div id="log"></div>
+<div class="hint">Flip at the same time — higher card takes the pot. Tie = 1 down + 1 up.</div>
+</div>
+<script>
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+let latest=null;
+function applyStaticTexts(noView){
+  document.querySelector('h1').textContent=t("heading");
+  document.querySelector('.sub').textContent=t("sub");
+  if(noView)document.getElementById('flipBtn').textContent=t("flip");
+  const marker='';
+  const labels=[t("round",{value:marker}),t("pot",{value:marker}),t("war",{value:marker})];
+  document.querySelectorAll('.pill').forEach((el,i)=>{
+    const bold=el.querySelector('b');
+    const parts=labels[i].split(marker);
+    const rest=parts.slice(1).join('');
+    el.replaceChildren();
+    if(parts[0])el.append(parts[0]);
+    el.append(bold);
+    if(rest)el.append(rest);
+  });
+  document.getElementById('warBanner').textContent=t("war_banner");
+  document.querySelector('.vs').textContent=t("vs");
+  document.querySelectorAll('.player').forEach(p=>{p.children[2].textContent=t("cards");});
+  document.querySelector('.hint').textContent=t("hint");
+}
+let sentFor=-1;
+function rankLabel(r){ if(r===14)return'A'; if(r===13)return'K'; if(r===12)return'Q'; if(r===11)return'J'; return String(r);}
+function cardEl(card, faceDown){
+  const el=document.createElement('div');
+  if(!card||faceDown){el.className='card back';el.textContent='🂠';return el;}
+  el.className='card'+((card.s==='♥'||card.s==='♦')?' red':'');
+  const rank=document.createElement('div');rank.textContent=rankLabel(card.r);
+  const suit=document.createElement('div');suit.textContent=card.s;
+  el.append(rank,suit);
+  return el;
+}
+function render(){
+  const stEl=document.getElementById('status');
+  const btn=document.getElementById('flipBtn');
+  if(!latest){ stEl.textContent=t("waiting_platform"); return; }
+  const players=latest.players||[];
+  const my=latest.my_player_index;
+  const acting=latest.status==='ongoing'?latest.acting_for_player_index:null;
+  const robot0=players[0]&&players[0].kind==='computer'?' 🤖':'';
+  const robot1=players[1]&&players[1].kind==='computer'?' 🤖':'';
+  document.getElementById('p0name').textContent=players[0]?players[0].name+robot0:'-';
+  document.getElementById('p1name').textContent=players[1]?players[1].name+robot1:'-';
+  const s=latest.view;
+  if(!s){
+    stEl.textContent=t("dealing");
+    btn.disabled=true; return;
+  }
+  document.getElementById('round').textContent=s.round;
+  document.getElementById('pot').textContent=s.potCount;
+  document.getElementById('war').textContent=s.warDepth;
+  document.getElementById('p0count').textContent=s.counts[0];
+  document.getElementById('p1count').textContent=s.counts[1];
+  document.getElementById('potCards').textContent=s.potCount?t("pot_cards",{count:s.potCount}):'';
+  document.getElementById('warBanner').style.display=(s.warDepth>0&&s.winner===null)?'block':'none';
+  for(let i=0;i<2;i++){
+    const cardDiv=document.getElementById('p'+i+'card');
+    const stateDiv=document.getElementById('p'+i+'state');
+    if(s.revealed[i]&&s.faceUp[i]){
+      cardDiv.replaceChildren(cardEl(s.faceUp[i],false));
+      stateDiv.textContent=t("flipped");
+    } else if(s.faceUp[i]){
+      cardDiv.replaceChildren(cardEl(s.faceUp[i],false));
+      stateDiv.textContent='';
+    } else {
+      const hasCards=s.counts[i]>0;
+      cardDiv.replaceChildren(...(hasCards?[cardEl(null,true)]:[]));
+      if(s.warDepth>0) stateDiv.textContent=hasCards?t("needs_war"):t("out");
+      else stateDiv.textContent=hasCards?t("face_down"):t("out");
+      if(s.revealed[i]) stateDiv.textContent=t("flipped");
+    }
+  }
+  document.getElementById('log').textContent=s.log||'';
+  if(latest.status==='over'||s.winner!==null){
+    if(s.winner===-1){ stEl.textContent=t("draw"); }
+    else { const w=players[s.winner]?players[s.winner].name:t("player_n",{number:s.winner+1}); stEl.textContent=t("wins",{name:w}); }
+    btn.disabled=true; btn.textContent=t("game_over");
+    return;
+  }
+  const need=[0,1].filter(i=>!s.revealed[i]);
+  let turnText;
+  if(need.length===2) turnText=t("both_flip");
+  else if(need.length===1) turnText=t("one_flip",{name:players[need[0]]?players[need[0]].name:t("player_n",{number:need[0]+1})});
+  else turnText=t("resolving");
+  if(s.warDepth>0) turnText=t("with_war",{depth:s.warDepth,text:turnText});
+  if(my!==null&&acting===my) turnText=t("with_your_turn",{text:turnText});
+  else if(acting!==null&&players[acting]) turnText=t("with_their_move",{text:turnText,name:players[acting].name});
+  stEl.textContent=t("status_log",{text:turnText,log:s.log||''});
+  const canFlip = acting!==null && my!==null && acting===my && !s.revealed[my];
+  btn.disabled=!canFlip;
+  if(my===null){ btn.disabled=true; btn.textContent=t("spectating"); }
+  else if(s.warDepth>0) btn.textContent=s.revealed[my]?t("war_placed"):t("place_war");
+  else btn.textContent=s.revealed[my]?t("flipped_btn"):t("flip");
+}
+addEventListener('message',(event)=>{
+  if(event.source!==parent||!event.data||event.data.type!=='state_changed') return;
+  applyLocale(event.data);
+  applyStaticTexts(!event.data.view&&!(latest&&latest.view));
+  latest=event.data;
+  render();
+});
+document.getElementById('flipBtn').onclick=()=>{
+  if(!latest||latest.status!=='ongoing') return;
+  const acting=latest.acting_for_player_index;
+  if(acting===null||acting===undefined) return;
+  if(sentFor===latest.move_count) return;
+  sentFor=latest.move_count;
+  parent.postMessage({type:'make_move',move:{flip:true}},'*');
+};
+</script>
+</body>
+</html>
