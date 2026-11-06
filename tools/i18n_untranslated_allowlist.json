@@ -11,7 +11,7 @@
     ],
     "portal.js": [
       "Join an open match of any game",
-      "Couldn't redraw after a language change:",
+      "Couldn't redraw after a language change:", "Couldn't send the game its new language:",
       "Random"
     ],
     "portal-offline.js": [
