@@ -52,7 +52,8 @@ const RS=['3','4','5','6','7','8','9','10','J','Q','K','A','2','\uD83C\uDCCF','\
 function mk(tag,text,cls,parent){const e=document.createElement(tag);if(text!==undefined&&text!==null)e.textContent=text;if(cls)e.className=cls;if(parent)parent.appendChild(e);return e}
 function isRed(c){return (c.s===1||c.s===2)&&c.r<13}
 function suitOf(c){return c.r>=13?'':['\u2660','\u2665','\u2666','\u2663'][c.s]}
-function mini(c,parent){if(!c)return;const s=mk('span',RS[c.r],'mini '+(isRed(c)?'red':''),parent);mk('br',null,null,s);s.appendChild(document.createTextNode(suitOf(c)))}
+function txt(parent,text){parent.appendChild(document.createTextNode(text))}
+function mini(c,parent){if(!c)return;const s=mk('span',RS[c.r],'mini '+(isRed(c)?'red':''),parent);mk('br',null,null,s);txt(s,suitOf(c))}
 function cardEl(c,i,s,parent){const d=mk('div',RS[c.r],'card '+(isRed(c)?'red':'')+' '+(s?'sel':''),parent);d.dataset.i=String(i);mk('br',null,null,d);mk('small',suitOf(c),null,d);return d}
 function seat(n){return t('seat',{n})}
 function sendMove(move){parent.postMessage({type:'make_move',move:move},'*')}
@@ -68,14 +69,14 @@ function render(){
  let ts=curSeat();
  const table=mk('div',null,'table');
  const bottom=mk('div',null,'bottomcards',table);
- bottom.appendChild(document.createTextNode(t('bottom')+' '));V.bot.forEach(c=>mini(c,bottom));
- if(V.landlord>=0)bottom.appendChild(document.createTextNode(' '+t('landlord_arrow',{seat:seat(V.landlord)})));
+ txt(bottom,t('bottom')+' ');V.bot.forEach(c=>mini(c,bottom));
+ if(V.landlord>=0)txt(bottom,' '+t('landlord_arrow',{seat:seat(V.landlord)}));
  for(let p=0;p<3;p++){let n=V.handCounts?V.handCounts[p]:0;let nm=PL[p]?PL[p].name:seat(p);let isTurn=(V.phase==='bid'&&V.bidTurn===p)||(V.phase==='play'&&ts===p);
   let cls='seat s'+((p-(ME===null?0:ME)+3)%3)+(p===ME?' me':'')+(isTurn?' turn':'');
   const s=mk('div',null,cls,table);
-  s.appendChild(document.createTextNode(role(p)+' '));mk('b',nm,null,s);s.appendChild(document.createTextNode(' \uD83C\uDCA0×'+n));mk('br',null,null,s);
-  if(V.phase==='bid'){const b=V.bids[p];s.appendChild(document.createTextNode(t('bid_label',{value:b===null?'–':b===0?t('pass'):b})))}
-  if(isTurn)s.appendChild(document.createTextNode(' ⏰'));}
+  txt(s,role(p)+' ');mk('b',nm,null,s);txt(s,' \uD83C\uDCA0×'+n);mk('br',null,null,s);
+  if(V.phase==='bid'){const b=V.bids[p];txt(s,t('bid_label',{value:b===null?'–':b===0?t('pass'):b}))}
+  if(isTurn)txt(s,' ⏰');}
  const center=mk('div',null,'center',table);
  if(V.phase==='bid')mk('div',t('bidding',{seat:seat(V.bidTurn),high:V.highBid}),'info',center);
  else if(V.phase==='play'){

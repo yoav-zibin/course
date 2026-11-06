@@ -115,6 +115,7 @@ function applyLocale(message) {
 
 
 let latest=null, sel=new Set(), selMeld=null, sortMode='rank', sentFor=-1;
+function txt(parent,text){ parent.appendChild(document.createTextNode(text)); }
 function el(tag,text,cls,parent){ const e=document.createElement(tag); if(text!==undefined&&text!==null) e.textContent=text; if(cls) e.className=cls; if(parent) parent.appendChild(e); return e; }
 document.getElementById('status').textContent=t('waiting_platform');
 const S={H:'\u2665',D:'\u2666',C:'\u2663',S:'\u2660'};
@@ -225,8 +226,9 @@ function render(){
   status=a===me?t('status_turn_you',q):t('status_turn',q);
   if(v.pending) status=t('with_must_meld',{text:status});
  }
- statusEl.replaceChildren(document.createTextNode(status),el('br'),el('span',v.log||'','small'));
- scEl.replaceChildren(el('b',t('scores_label')),document.createTextNode(' '+pls.map((p,i)=>p.kind==='computer'?t('score_cpu',{name:p.name,score:v.scores[i]||0}):t('score_item',{name:p.name,score:v.scores[i]||0})).join(' • ')));
+ statusEl.replaceChildren(el('span',status),el('br'),el('span',v.log||'','small'));
+ const scoreItems=pls.map((p,i)=>p.kind==='computer'?t('score_cpu',{name:p.name,score:v.scores[i]||0}):t('score_item',{name:p.name,score:v.scores[i]||0})).join(' • ');
+ scEl.replaceChildren(el('b',t('scores_label')),el('span',scoreItems));
  if(v.roundScores){ scEl.appendChild(el('br')); scEl.appendChild(el('span',t('last_round',{list:v.roundScores.map((n,i)=>t('round_score',{name:pls[i].name,score:(n>=0?'+':'')+n})).join(' • ')}),'small')); }
  tEl.replaceChildren();
  const bar=el('div',null,'bar',tEl);
@@ -238,7 +240,7 @@ function render(){
  if(!v.discard.length) el('span',t('empty'),'small',pile);
  const mh=el('div',null,null,tEl);
  v.melds.forEach(m=>{ const d=el('div',null,'meld'+(selMeld===m.id?' selM':''),mh); const owner=pls[m.owner]?pls[m.owner].name:t('owner_n',{n:m.owner});
-  el('b',m.id,null,d); d.appendChild(document.createTextNode(' '+t('meld_by',{owner:owner})+' ')); const span=el('span',null,null,d);
+  el('b',m.id,null,d); txt(d,' '+t('meld_by',{owner:owner})+' '); const span=el('span',null,null,d);
   const extIds={}; m.exts.forEach(e=>{ extIds[e.card.id]=e.by; });
   m.cards.concat(m.exts.map(e=>e.card)).forEach(c=>{ const cd=el('div',cStr(c),'card '+cColor(c),span); cd.style.width='44px';cd.style.height='60px';cd.style.fontSize='12px'; cd.title=extIds[c.id]!=null?t('laid_by',{name:pls[extIds[c.id]].name}):t('meld_title',{owner:owner}); });
   d.style.cursor='pointer'; d.onclick=()=>{ selMeld=(selMeld===m.id?null:m.id); render(); }; });
@@ -250,7 +252,7 @@ function render(){
   const kind=p.kind==='computer'?t('kind_computer'):p.kind==='human'?t('kind_human'):p.kind;
   let line=t('player_line',{name:nm,kind:kind,count:v.counts[i]||0});
   if(i===v.dealer) line=t('with_dealer',{text:line});
-  oppBar.appendChild(document.createTextNode((a===i?'▶ ':'')+line)); el('br',null,null,oppBar); });
+  txt(oppBar,(a===i?'▶ ':'')+line); el('br',null,null,oppBar); });
  cEl.replaceChildren();
  if(over){ el('b',t('match_winner',{name:pls[v.matchWinner].name,score:v.scores[v.matchWinner]}),null,cEl); }
  else if(v.phase==='roundOver'){ const b=el('button',t('start_next'),null,cEl); b.disabled=!canAct(); b.onclick=doNextRound; if(!canAct()) el('span',a!=null?t('wait_start',{name:pls[a].name}):t('wait_start_next'),'small',cEl); }
@@ -262,9 +264,9 @@ function render(){
   const bL=el('button',selMeld?t('lay_off_on',{id:selMeld}):t('lay_off'),null,cEl); bL.disabled=sel.size!==1||!selMeld; bL.onclick=()=>doLayoff([...sel][0],selMeld);
   const bD=el('button',t('discard_selected'),null,cEl); bD.disabled=sel.size!==1; bD.onclick=()=>doDiscard([...sel][0]);
   const bS=el('button',sortMode==='rank'?t('sort_rank'):t('sort_suit'),null,cEl); bS.onclick=()=>{ sortMode=sortMode==='rank'?'suit':'rank'; render(); };
-  const hint=el('div',null,'small',cEl); hint.appendChild(document.createTextNode(t('select_hint')));
-  if(v.pending){ const pc=v.hand.find(c=>c.id===v.pending); hint.appendChild(document.createTextNode(' '+t('must_meld_deep',{card:pc?cStr(pc):''}))); }
-  if(v.ban) hint.appendChild(document.createTextNode(' '+t('cannot_discard_taken')));
+  const hint=el('div',null,'small',cEl); txt(hint,t('select_hint'));
+  if(v.pending){ const pc=v.hand.find(c=>c.id===v.pending); txt(hint,' '+t('must_meld_deep',{card:pc?cStr(pc):''})); }
+  if(v.ban) txt(hint,' '+t('cannot_discard_taken'));
  }
  mEl.replaceChildren();
  if(me==null){ el('span',t('spectating'),'small',mEl); }
