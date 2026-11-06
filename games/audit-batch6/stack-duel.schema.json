@@ -1,0 +1,279 @@
+{
+  "state": {
+    "type": "object",
+    "required": [
+      "board",
+      "current",
+      "next",
+      "scores",
+      "lines",
+      "last_move",
+      "winners",
+      "turnSeat",
+      "over"
+    ],
+    "properties": {
+      "board": {
+        "type": "array",
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": -1,
+            "maximum": 3
+          },
+          "minItems": 8,
+          "maxItems": 8
+        },
+        "minItems": 10,
+        "maxItems": 10
+      },
+      "current": {
+        "enum": [
+          "I",
+          "O",
+          "T",
+          "S",
+          "Z",
+          "J",
+          "L"
+        ]
+      },
+      "next": {
+        "enum": [
+          "I",
+          "O",
+          "T",
+          "S",
+          "Z",
+          "J",
+          "L"
+        ]
+      },
+      "scores": {
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "minItems": 2,
+        "maxItems": 4
+      },
+      "lines": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "last_move": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "object",
+            "required": [
+              "seat",
+              "piece",
+              "cleared"
+            ],
+            "properties": {
+              "seat": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "piece": {
+                "enum": [
+                  "I",
+                  "O",
+                  "T",
+                  "S",
+                  "Z",
+                  "J",
+                  "L"
+                ]
+              },
+              "cleared": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "winners": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "minItems": 1,
+            "maxItems": 4,
+            "uniqueItems": true
+          }
+        ]
+      },
+      "turnSeat": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 3
+      },
+      "over": {
+        "type": "boolean"
+      }
+    },
+    "additionalProperties": false,
+    "$schema": "https://json-schema.org/draft/2020-12/schema"
+  },
+  "move": {
+    "type": "object",
+    "required": [
+      "rot",
+      "col"
+    ],
+    "properties": {
+      "rot": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 3
+      },
+      "col": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 7
+      }
+    },
+    "additionalProperties": false,
+    "$schema": "https://json-schema.org/draft/2020-12/schema"
+  },
+  "view": {
+    "type": "object",
+    "required": [
+      "board",
+      "current",
+      "next",
+      "scores",
+      "lines",
+      "last_move",
+      "winners"
+    ],
+    "properties": {
+      "board": {
+        "type": "array",
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": -1,
+            "maximum": 3
+          },
+          "minItems": 8,
+          "maxItems": 8
+        },
+        "minItems": 10,
+        "maxItems": 10
+      },
+      "current": {
+        "enum": [
+          "I",
+          "O",
+          "T",
+          "S",
+          "Z",
+          "J",
+          "L"
+        ]
+      },
+      "next": {
+        "enum": [
+          "I",
+          "O",
+          "T",
+          "S",
+          "Z",
+          "J",
+          "L"
+        ]
+      },
+      "scores": {
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "minItems": 2,
+        "maxItems": 4
+      },
+      "lines": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "last_move": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "object",
+            "required": [
+              "seat",
+              "piece",
+              "cleared"
+            ],
+            "properties": {
+              "seat": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "piece": {
+                "enum": [
+                  "I",
+                  "O",
+                  "T",
+                  "S",
+                  "Z",
+                  "J",
+                  "L"
+                ]
+              },
+              "cleared": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "winners": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "minItems": 1,
+            "maxItems": 4,
+            "uniqueItems": true
+          }
+        ]
+      }
+    },
+    "additionalProperties": false,
+    "$schema": "https://json-schema.org/draft/2020-12/schema"
+  }
+}
