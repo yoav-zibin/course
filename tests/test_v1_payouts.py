@@ -142,6 +142,21 @@ def test_free_matches_and_ongoing_matches_have_nothing_to_agree_to() -> None:
     assert answer(api, match_id, as_user=bob, agree=True).status_code == 409
 
 
+def test_a_game_that_sends_no_payouts_ends_the_match_and_refunds_every_stake() -> None:
+    # Regression: a game that knows nothing about tokens (the debug game, games
+    # from the builder, the native apps) used to get a 400 and could never end.
+    api = Api()
+    match_id, (alice, bob, carol) = paid_match(api, players=3)
+    response = api.move(match_id, as_user=alice, next_turn=None, state={"winner": 0})
+    assert response.status_code == 201, response.text
+    match = response.json()
+    assert (match["status"], match["end_reason"]) == ("over", "finished")
+    assert match["token_payouts"] == {"0": STAKE, "1": STAKE, "2": STAKE}
+    assert match["proposed_payouts"] is None  # nothing to agree to
+    assert (balance(api, alice), balance(api, bob), balance(api, carol)) == (10, 10, 10)
+    assert answer(api, match_id, as_user=bob, agree=True).status_code == 409
+
+
 def test_the_old_checks_on_the_proposal_still_apply() -> None:
     api = Api()
     match_id, (alice, _) = paid_match(api)

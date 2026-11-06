@@ -346,8 +346,10 @@ Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct
   null. Every other human answers with `POST /matches/{id}/payouts {agree}` (the portal
   shows Agree / Dispute buttons). Once every human seat has agreed, the pot is paid as
   proposed (`payout_outcome: "agreed"`). One dispute (`"disputed"`), or no full agreement
-  within an hour (`payout_deadline`, `"expired"`), refunds every stake instead. v2 games
-  are unaffected: their server code computes the payouts.
+  within an hour (`payout_deadline`, `"expired"`), refunds every stake instead. A final
+  move with no `payout_player_indices` (a game that knows nothing about tokens) ends the
+  match and refunds every stake, so any game can finish a paid match. v2 games are
+  unaffected: their server code computes the payouts.
 - Leaving a waiting match frees the seat (the owner must delete the match instead). Leaving
   an ongoing match replaces the leaver with a computer (which keeps the turn) if the game
   `allows_leave_mid_match`, and otherwise ends it (`end_reason: "player_left"`). The match
@@ -948,7 +950,10 @@ A v1 game sends the full result:
 
 `new_state` replaces the match's state. `next_turn_player_indices` lists the seats that
 may move next (more than one when several players move at once), or `null` to end the
-match. The portal submits it with
+match. In a match with a token pot, the final move may also carry
+`payout_player_indices` (seat index to tokens, paying every human seat and totaling
+`token_pot`): the split it proposes pays out once every other player agrees. Without
+it every stake is refunded (see [Match rules](#match-rules)). The portal submits it with
 `POST /matches/{id}/moves` (with `expected_move_count`, so a stale move is rejected) and
 then sends a fresh `state_changed`. Moves the server rejects (not your turn, a seat that
 doesn't exist) are shown to the player and followed by `state_changed` with the

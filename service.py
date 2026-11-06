@@ -4133,9 +4133,7 @@ class GamePlatform:
             if next_turn_player_indices is not None and payout_player_indices is not None:
                 raise InvalidRequestError("payouts only allowed on the final move")
             if next_turn_player_indices is None:
-                if match.token_pot:
-                    if payout_player_indices is None:
-                        raise InvalidRequestError("terminal move requires pot distribution")
+                if match.token_pot and payout_player_indices is not None:
                     human_seats = {s.player_index for s in match.seats if s.kind == "human"}
                     if set(payout_player_indices) != human_seats:
                         raise InvalidRequestError("payouts must include every human seat")
@@ -4150,9 +4148,24 @@ class GamePlatform:
             # move until every other human agrees (agree_to_payouts).
             proposal = (
                 dict(payout_player_indices)
-                if next_turn_player_indices is None and match.token_pot
+                if next_turn_player_indices is None
+                and match.token_pot
+                and payout_player_indices is not None
                 else None
             )
+            if (
+                next_turn_player_indices is None
+                and match.token_pot
+                and payout_player_indices is None
+            ):
+                # A game that knows nothing about tokens ended a paid match: there
+                # is no result to pay out, so every human gets their stake back
+                # (an equal split of the pot) instead of the match never ending.
+                payout_player_indices = self._settle_pot(
+                    match.token_pot,
+                    {},
+                    recipients=[s for s in match.seats if s.kind == "human"],
+                )
             now = self._clock()
             move = Move(
                 move_number=len(match.moves) + 1,
