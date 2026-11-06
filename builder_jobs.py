@@ -1022,7 +1022,7 @@ def _verification_progress(errors):
             elif name in ('client_generation', 'localization', 'browser_verification'):
                 phase = max(phase, 3)
                 failures += len(details) if isinstance(details, list) else 1
-            elif name in ('approved_examples', 'settlement_probes', 'random_walks'):
+            elif name in ('approved_examples', 'settlement_probes', 'move_agreement', 'random_walks'):
                 phase = max(phase, 1)
                 if isinstance(details, list):
                     failures += sum(1 for item in details
@@ -1032,6 +1032,30 @@ def _verification_progress(errors):
             else:  # server_generation / server_load
                 failures += 1
     return (phase, -failures)
+
+
+def _summarize_failures(errors):
+    """Flatten one attempt's verification failures into short strings.
+
+    A failed build stores this summary on its job; begin_build carries it
+    into the next build of the same approved specification, whose first
+    generation is warned with it — otherwise every build rediscovers the
+    same defects from zero (one draft's last two builds died on the same
+    three computerMove fallback lines)."""
+    summary = []
+    for entry in errors:
+        for name, details in entry.items():
+            if isinstance(details, dict) and isinstance(details.get('issues'), list):
+                summary.extend(f'{name}: {issue}' for issue in details['issues'])
+            elif isinstance(details, list):
+                for item in details:
+                    if isinstance(item, str):
+                        summary.append(f'{name}: {item}')
+                    elif isinstance(item, dict) and not item.get('passed', True):
+                        summary.append(f"{name}: {item.get('name')}: {item.get('error')}")
+            else:
+                summary.append(f'{name}: {details}')
+    return [item[:240] for item in summary[:8]]
 
 
 def run_build(platform, client, owner, draft_id, job_id, deliver=None):
@@ -1138,6 +1162,9 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
         messages, _ = build_prompt_messages(request)
         api_instructions = messages[0]['content'].partition('\nRESPONSE FORMAT:')[0]
         messages[0]['content'] = api_instructions + '\n' + PLATFORM_CONTRACT + '\nGenerate one file per request in this guided build. For server_code, return executable plain JavaScript defining the global game object (const game = {...};). For client code, return a complete HTML document. Omit prose, Markdown, module exports and JSON wrappers.'
+        prior_failures = draft.builder_workflow['job'].get('failure_summary')
+        if prior_failures:
+            messages.append({'role':'user','content':'A previous build of this same approved specification failed with the findings below. Treat them as defects to avoid from the first line of code, not as feedback to rediscover after generating: '+json.dumps(prior_failures)})
 
         errors=[]; generated=None
         attempt = 0
@@ -1357,9 +1384,16 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
                 stage('Verification failures: ' + json.dumps(errors)[:2000])
             stage('Verification attempt complete', checks=checks, server_reviews=reviews)
             if not errors: break
-            messages.extend([{'role':'assistant','content':server}, {'role':'user','content':'Fix the implementation without changing approved tests. Address every listed failure in the platform contract terms given above; do not resubmit code that still has a listed defect. Return the complete raw server JavaScript first; client HTML will be requested separately. Failures: '+json.dumps(errors)}])
+            messages.extend([{'role':'assistant','content':server}, {'role':'user','content':'Fix the implementation without changing approved tests. The previous code is above: change only what the failures require and preserve every behavior that already passed — the checks and reviews that passed must still pass. Do not restructure working functions or rewrite a working strategy; a rewrite that trades one listed defect for another wastes the attempt. Address every listed failure in the platform contract terms given above; do not resubmit code that still has a listed defect. Return the complete raw server JavaScript first; client HTML will be requested separately. Failures: '+json.dumps(errors)}])
             scores.append(_verification_progress(errors)); attempt += 1
-        if errors: raise RuntimeError('Verification failed: '+json.dumps(errors)[:8000])
+        if errors:
+            summary = _summarize_failures(errors)
+            def remember(d):
+                if (d.builder_workflow.get('job') or {}).get('id') == job_id:
+                    d.builder_workflow['job']['failure_summary'] = summary
+                return d
+            update(remember)
+            raise RuntimeError('Verification failed: '+json.dumps(errors)[:8000])
         # Persist verified code for the emulator before asking for final human approval.
         def ready(d):
             f=d.builder_workflow; f['job'].update(status='ready_for_review',stage='Play the game and review the screenshots',

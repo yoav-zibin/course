@@ -1502,3 +1502,41 @@ def test_prose_prompts_carry_length_budget_and_audit_checks_completeness():
     assert 'Cut words, never rulings' in STEP_PROMPTS['logic']
     assert 'about one page' in STEP_PROMPTS['ui']
     assert 'Completeness' in _AUDIT_INSTRUCTION
+
+
+def test_summarize_failures_flattens_reviews_checks_and_examples():
+    from game_platform.builder_jobs import _summarize_failures
+    errors = [
+        {'review_computers': {'passed': False, 'issues': ['fallback returns a hardcoded move',
+                                                          'randomMove unguarded']}},
+        {'move_agreement': ["example 'opening': randomMove returned a move applyMove rejects"]},
+        {'approved_examples': [{'name': 'goal win', 'passed': False, 'error': 'Payouts differ'},
+                               {'name': 'opening', 'passed': True}]},
+        {'random_walks': 'seed 123 failed'},
+    ]
+    summary = _summarize_failures(errors)
+    assert summary[0] == 'review_computers: fallback returns a hardcoded move'
+    assert any(item.startswith('move_agreement:') for item in summary)
+    assert 'approved_examples: goal win: Payouts differ' in summary
+    assert not any(item.startswith('approved_examples: opening') for item in summary)
+    assert summary[-1] == 'random_walks: seed 123 failed'
+    assert len(summary) == 5
+
+
+def test_begin_build_carries_failure_summary_only_for_the_same_spec():
+    import copy
+    from dataclasses import replace
+    from game_platform import builder_flow as flow
+    draft = approved_draft()
+    workflow = copy.deepcopy(draft.builder_workflow)
+    workflow['job'] = {'id': 'old-job', 'status': 'failed',
+                       'spec_digest': flow.spec_digest(workflow),
+                       'failure_summary': ['review_computers: fallback returns a hardcoded move']}
+    draft = replace(draft, builder_workflow=workflow)
+    rebuilt = flow.begin_build(draft)
+    assert rebuilt.builder_workflow['job']['failure_summary'] == [
+        'review_computers: fallback returns a hardcoded move']
+    workflow['job']['spec_digest'] = 'a-different-spec'
+    draft = replace(draft, builder_workflow=workflow)
+    rebuilt = flow.begin_build(draft)
+    assert 'failure_summary' not in rebuilt.builder_workflow['job']
