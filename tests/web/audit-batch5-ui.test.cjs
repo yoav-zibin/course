@@ -1,6 +1,7 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+const {pageScriptOf}=require('./page-helper.cjs');
 const ROOT=path.join(__dirname,'../../games/audit-batch5');
 function setup(name,n=2){
  const nodes=new Map(),sent=[],timers=new Map();let receive,timerId=0;
@@ -9,15 +10,18 @@ function setup(name,n=2){
   set id(v){this._id=v;nodes.set(v,this)} get id(){return this._id}
   set value(v){this._value=String(v)} get value(){return this._value??(this.children[0]?.value??'')}
   set innerHTML(v){this._html=v;this.children=[]}get innerHTML(){return this._html||''}
-  appendChild(x){x.parentNode=this;this.children.push(x)}
+  appendChild(x){x.parentNode=this;this.children.push(x);return x}
+  append(...xs){xs.forEach(x=>this.appendChild(x))}
+  replaceChildren(...xs){this.children=[];xs.forEach(x=>this.appendChild(x))}
+  setAttribute(k,v){this['_'+k]=v}
   querySelectorAll(q){return this.children.filter(x=>q==='button'||q==='.'+x.className)}
   remove(){if(this.parentNode)this.parentNode.children=this.parentNode.children.filter(x=>x!==this)}
  }
- const document={getElementById(id){if(!nodes.has(id))nodes.set(id,new El());return nodes.get(id)},createElement:()=>new El()};
+ const document={getElementById(id){if(!nodes.has(id))nodes.set(id,new El());return nodes.get(id)},createElement:()=>new El(),createTextNode:(text)=>({textContent:text})};
  for(const m of fs.readFileSync(path.join(ROOT,name+'.html'),'utf8').matchAll(/id=['"]([^'"]+)['"]/g))document.getElementById(m[1]);
  const parent={postMessage:m=>sent.push(JSON.parse(JSON.stringify(m)))};
  const sandbox={document,parent,addEventListener:(t,f)=>receive=f,setTimeout:f=>{timers.set(++timerId,f);return timerId},clearTimeout:id=>timers.delete(id)};sandbox.window=sandbox;vm.createContext(sandbox);
- vm.runInContext(fs.readFileSync(path.join(ROOT,name+'.html'),'utf8').match(/<script[^>]*>([\s\S]*?)<\/script>/)[1],sandbox);
+ vm.runInContext(pageScriptOf(path.join(ROOT,name+'.html'),document),sandbox);
  const server=vm.createContext({InvalidMove:class InvalidMove extends Error{}});vm.runInContext(fs.readFileSync(path.join(ROOT,name+'.server.js'),'utf8')+';globalThis.g=game',server);const game=server.g;
  let seed=20261106;const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296};
  const ctx={players:Array.from({length:n},(_,i)=>({id:'p'+i,kind:'human',display_name:'P'+i,max_loss:10})),pot:10*n,move_count:0,random};let current=game.newMatch(ctx);

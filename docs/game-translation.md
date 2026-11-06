@@ -280,10 +280,47 @@ machine translation that does is discarded and the original is shown; `translati
   `warnings` say why. Games written before this have no block.
 - **A translation reads badly:** correct it as above. It is the same text for every game that uses it.
 
+## Which built-in games are translatable
+
+A game is translatable when its client page has the `i18n-strings` block and uses the helper (checked by
+`game_text.lint`, `tests/test_builtin_games_translatable.py`, and for what a player sees in another language,
+`tests/web/translated-games.test.cjs`: it feeds every page `state_changed` messages whose texts are
+`«key»` and fails if any English is left on the screen).
+
+| Games | Folder |
+|---|---|
+| Tic-tac-toe, Poker | `games/` |
+| Battleship, Beat the Landlord, Crazy Eights, Go Fish, Lost Cities, President | `games/audit-batch1/` |
+| 3 Minute Chess, 4 Player Chess, Blokus, Guandan, Mini Golf Duels, Quoridor | `games/audit-batch2/` |
+| Backgammon (and its copy), Brazilian Truco, ERS, Reversi, 6-Card Golf | `games/audit-batch3/` |
+| Blackjack Table, Cheat (BS), Checkers, Hearts, Mancala, Rummy 500 | `games/audit-batch4/` |
+| Chess, Guess Who?, Spades | `games/audit-batch5/` |
+| Crazy Eights, Dots & Boxes, Reversi (the playroom pages) | `games/playroom/` |
+
+Only the debug game (a developer protocol viewer) is not translatable.
+
+Known limits (the same for every game above): a text that the game's **server code** writes into the match
+state (a log line, a hand or result description, a reason such as "checkmate", the "last move" line of a
+board) is shown as written, in English. It stays English until that server code stores codes instead of
+sentences; the client pages were changed, the servers were not. Names of players, of the Guess Who
+characters and card/piece codes are data and are not translated.
+
+A game stored in the database only changes when a new version is published. To publish the changed pages
+to a running server (the ids are in each folder's `manifest.json`; `tictactoe` and `poker` use their file name):
+
+```bash
+python tools/publish_game_code.py --target https://buildplay.fun --dry-run <ids>
+python tools/publish_game_code.py --target https://buildplay.fun --password MASTER <ids>
+```
+
 ## Not done yet
 
 - **The game builder's preview** does not send translations: a creator tests in English. A language picker
   for the preview (translating the unsaved code) is the next step.
+- **Games made by players before this have no block.** Options: ask the agent to "make this game translatable" as a
+  new version, or translate the page's text from outside the game (which cannot work for text built from pieces).
+  The built-in games are done (see above).
+
 - **Games that exist today have no block.** Those in `games/community/` are converted and wait for the owner to
   publish them ("Converting an existing game"); for the others, ask the agent to "make this game translatable" as a
   new version, or convert them by hand the same way. Translating the page's text from outside the game cannot

@@ -37,19 +37,68 @@ button:disabled{opacity:.4;cursor:default}
 </head>
 <body>
 <div id="wrap">
-<h2 style="margin:4px;text-align:center">Backgammon</h2>
-<div id="status">Waiting for platform…</div>
+<h2 style="margin:4px;text-align:center" id="title"></h2>
+<div id="status" role="status" aria-live="polite"></div>
 <div id="info">
 <div id="dice"></div>
-<button id="roll">Roll Dice</button>
-<button id="pass">End Turn</button>
-<button id="clearSel" style="background:#555;color:#fff">Clear</button>
+<button id="roll"></button>
+<button id="pass"></button>
+<button id="clearSel" style="background:#555;color:#fff"></button>
 </div>
 <div id="offWrap"><div id="off0" class="offBox"></div><div id="off1" class="offBox"></div></div>
 <div id="board"><div id="left" class="half"></div><div id="barCol"></div><div id="right" class="half"></div></div>
-<p class="hint">White (P0) moves 24→1 (top-right to bottom-right). Black (P1) moves 1→24. Click a checker then a highlighted point. Bar in middle. Click off-tray to bear off. Doubles = 4 moves.</p>
+<p class="hint" id="hint"></p>
 </div>
+<script type="application/json" id="i18n-strings">
+{
+"title": "Backgammon",
+"waiting_platform": "Waiting for platform…",
+"roll": "Roll Dice",
+"end_turn": "End Turn",
+"pass_no_moves": "Pass (no moves)",
+"clear": "Clear",
+"hint": "White (P0) moves 24→1 (top-right to bottom-right). Black (P1) moves 1→24. Click a checker then a highlighted point. Bar in middle. Click off-tray to bear off. Doubles = 4 moves.",
+"bar_white": "BAR W:{count}",
+"bar_black": "BAR B:{count}",
+"bar": "BAR",
+"white": "White",
+"black": "Black",
+"off_white": "○ {name} off: {count}/15",
+"off_black": "● {name} off: {count}/15",
+"dice_unknown": "🎲 ?",
+"player_n": "Player {n}",
+"wins": "🏆 {name} wins! ({a} - {b})",
+"waiting_white": "Waiting… — {name} (White) to move",
+"waiting_black": "Waiting… — {name} (Black) to move",
+"to_roll_white": "{name} (White) to roll",
+"to_roll_black": "{name} (Black) to roll",
+"to_move_white": " {name} (White) to move [{moves}]",
+"to_move_black": " {name} (Black) to move [{moves}]",
+"with_your_move": "{text} — your move",
+"with_turn_of": "{text} — {name}'s turn"
+}
+</script>
 <script>
+
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+
+
 // Server-side (v2) client: the server owns the dice, the board and the
 // rules. This page only renders the per-player view it receives and
 // sends one action at a time: {action:"roll"}, {action:"move",from,to}
@@ -75,12 +124,14 @@ function legalForDie(st,p,die){let res=[];let opp=1-p;
 // Legal highlights come from the same server search that validates submissions.
 function allMoves(st,p){return p===st.cur?(st.legalMoves||[]):[];}
 function hasAny(st,p){return allMoves(st,p).length>0;}
+function diceText(st){const rolled=st.dice.length?st.dice.join(','):'—';return ['🎲',rolled,'⟸',st.moves.join(',')].join(' ');}
 function view(){return latest?(latest.view||latest.state||null):null;}
 function sendMove(move){if(!latest)return;if(latest.move_count===sentFor)return;sentFor=latest.move_count;parent.postMessage({type:"make_move",move:move},"*");}
 function doRoll(){sendMove({action:'roll'});}
 function doPass(){sendMove({action:'pass'});}
 function doChecker(from,to){let st=view();if(!st||!allMoves(st,st.cur).some(m=>m.from===from&&m.to===to))return;sendMove({action:'move',from:from,to:to});selected=null;}
 function render(){let left=$('left'),right=$('right'),barCol=$('barCol');
+ $('title').textContent=t('title');$('roll').textContent=t('roll');$('clearSel').textContent=t('clear');$('hint').textContent=t('hint');
  left.innerHTML='';right.innerHTML='';barCol.innerHTML='';
  let st=view()||previewSetup();
  let acting=latest&&latest.status==='ongoing'?latest.acting_for_player_index:null;
@@ -108,34 +159,42 @@ function render(){let left=$('left'),right=$('right'),barCol=$('barCol');
  for(let c=0;c<6;c++){left.appendChild(mkPoint(11-c,false));}
  for(let c=0;c<6;c++){right.appendChild(mkPoint(18+c,true));}
  for(let c=0;c<6;c++){right.appendChild(mkPoint(5-c,false));}
- let b0=document.createElement('button');b0.className='barBtn'+(selected==='bar'?' sel':'');b0.textContent='BAR W:'+st.bar[0];
+ let b0=document.createElement('button');b0.className='barBtn'+(selected==='bar'?' sel':'');b0.textContent=t('bar_white',{count:st.bar[0]});
  b0.onclick=()=>{if(!canHuman)return;if(st.bar[st.cur]>0)selected='bar';render();};
- let mid=document.createElement('div');mid.style.cssText='color:#fff;font-size:11px;text-align:center';mid.textContent='BAR';
- let b1=document.createElement('button');b1.className='barBtn'+(selected==='bar'?' sel':'');b1.textContent='BAR B:'+st.bar[1];
+ let mid=document.createElement('div');mid.style.cssText='color:#fff;font-size:11px;text-align:center';mid.textContent=t('bar');
+ let b1=document.createElement('button');b1.className='barBtn'+(selected==='bar'?' sel':'');b1.textContent=t('bar_black',{count:st.bar[1]});
  b1.onclick=()=>{if(!canHuman)return;if(st.bar[st.cur]>0)selected='bar';render();};
  barCol.appendChild(b0);barCol.appendChild(mid);barCol.appendChild(b1);
  let o0=$('off0'),o1=$('off1');
- let n0=latest&&latest.players[0]?latest.players[0].name:'White';let n1=latest&&latest.players[1]?latest.players[1].name:'Black';
- o0.textContent='○ '+n0+' off: '+st.off[0]+'/15';o1.textContent='● '+n1+' off: '+st.off[1]+'/15';
+ let n0=latest&&latest.players[0]?latest.players[0].name:t('white');let n1=latest&&latest.players[1]?latest.players[1].name:t('black');
+ o0.textContent=t('off_white',{name:n0,count:st.off[0]});o1.textContent=t('off_black',{name:n1,count:st.off[1]});
  o0.classList.remove('dest');o1.classList.remove('dest');
  if(canHuman&&selected!==null&&!st.needRoll){let ms=allMoves(st,st.cur).filter(m=>String(m.from)===String(selected));if(ms.some(m=>m.to==='off')){(st.cur===0?o0:o1).classList.add('dest');}}
  o0.onclick=()=>{if(canHuman&&st.cur===0&&selected!==null)doChecker(selected,'off');};
  o1.onclick=()=>{if(canHuman&&st.cur===1&&selected!==null)doChecker(selected,'off');};
- $('dice').textContent=st.needRoll?'🎲 ?':('🎲 '+(st.dice.length?st.dice.join(','):'—')+' ⟸ '+st.moves.join(','));
+ $('dice').textContent=st.needRoll?t('dice_unknown'):diceText(st);
  $('roll').disabled=!canHuman||!st.needRoll;
  let needPass=!st.needRoll&&!hasAny(st,st.cur)&&st.winner===null;
  $('pass').disabled=!canHuman||st.needRoll||hasAny(st,st.cur);
- $('pass').textContent=needPass?'Pass (no moves)':'End Turn';
+ $('pass').textContent=needPass?t('pass_no_moves'):t('end_turn');
  let sEl=$('status');
- if(!latest){sEl.textContent='Waiting for platform…';return;}
- if(latest.status==='over'||st.winner!==null){let w=st.winner;let nm=(w!==null&&latest.players[w])?latest.players[w].name:'Player '+w;sEl.textContent='🏆 '+nm+' wins! ('+st.off[0]+' - '+st.off[1]+')';return;}
- let curName=latest.players[st.cur]?latest.players[st.cur].name:'P'+st.cur;
- let col=st.cur===0?'White':'Black';
- if(acting===null)sEl.textContent='Waiting… — '+curName+' ('+col+') to move';
- else{let aName=latest.players[acting]?latest.players[acting].name:'';sEl.textContent=(st.needRoll?curName+' ('+col+') to roll':' '+curName+' ('+col+') to move ['+st.moves.join(',')+']')+(canHuman?' — your move':(acting!==my?' — '+aName+"'s turn":''));}
+ if(!latest){sEl.textContent=t('waiting_platform');return;}
+ if(latest.status==='over'||st.winner!==null){let w=st.winner;let nm=(w!==null&&latest.players[w])?latest.players[w].name:t('player_n',{n:w});sEl.textContent=t('wins',{name:nm,a:st.off[0],b:st.off[1]});return;}
+ let curName=latest.players[st.cur]?latest.players[st.cur].name:t('player_n',{n:st.cur});
+ let white=st.cur===0;
+ if(acting===null)sEl.textContent=white?t('waiting_white',{name:curName}):t('waiting_black',{name:curName});
+ else{let aName=latest.players[acting]?latest.players[acting].name:'';
+  let q={name:curName,moves:st.moves.join(',')};
+  let text;
+  if(st.needRoll)text=white?t('to_roll_white',q):t('to_roll_black',q);
+  else text=white?t('to_move_white',q):t('to_move_black',q);
+  if(canHuman)text=t('with_your_move',{text:text});
+  else if(acting!==my)text=t('with_turn_of',{text:text,name:aName});
+  sEl.textContent=text;}
 }
 addEventListener('message',ev=>{if(ev.source!==parent||!ev.data||ev.data.type!=='state_changed')return;
  let prevCount=latest?latest.move_count:null;
+ applyLocale(ev.data);
  latest=ev.data;
  if(latest.move_count!==prevCount)selected=null;
  render();});
