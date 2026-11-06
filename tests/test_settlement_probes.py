@@ -278,3 +278,41 @@ SETUP_MOVE_DIVERGENCE = REFERENCE.replace(
 def test_move_agreement_catches_setup_move_offered_mid_game():
     failures = probe_move_agreement(SETUP_MOVE_DIVERGENCE, AGREEMENT_CONTRACT)
     assert any('applyMove rejects' in failure for failure in failures), failures
+
+
+# A computerMove whose hard branch returns an illegal move. Walks never
+# change difficulty, so without a difficulty sweep only a reviewer
+# reading the code would ever see this branch run.
+DIFFICULTY_CONTRACT = {**AGREEMENT_CONTRACT, 'cases': [{
+    **AGREEMENT_CONTRACT['cases'][0],
+    'state': {**AGREEMENT_CONTRACT['cases'][0]['state'], 'difficulty': 'medium'},
+}]}
+
+HARD_DIVERGENT = REFERENCE.replace(
+    "computerMove(state, playerId, ctx) { return {type: 'pass'}; }",
+    "computerMove(state, playerId, ctx) { return state.difficulty === 'hard' ? {type: 'cheat'} : {type: 'pass'}; }",
+).replace(
+    "const s = {...state, moves: state.moves + 1, left: [...state.left]};",
+    "if (move.type === 'cheat') throw new Error('InvalidMove: cheat');\n"
+    "    const s = {...state, moves: state.moves + 1, left: [...state.left]};",
+)
+
+
+def test_move_agreement_sweeps_difficulty_branches():
+    failures = probe_move_agreement(HARD_DIVERGENT, DIFFICULTY_CONTRACT)
+    assert any('difficulty hard' in failure and 'computerMove returned a move applyMove rejects' in failure
+               for failure in failures), failures
+    assert probe_move_agreement(REFERENCE, DIFFICULTY_CONTRACT) == []
+
+
+# A generator drawing from a private counter instead of ctx.random:
+# seeded calls must be reproducible, and only ctx.random is seeded.
+NONDETERMINISTIC_RANDOM = 'let probeCounter = 0;\n' + REFERENCE.replace(
+    "randomMove(state, playerId, ctx) { return {type: 'pass'}; }",
+    "randomMove(state, playerId, ctx) { return {type: 'pass', n: ++probeCounter}; }",
+)
+
+
+def test_move_agreement_catches_unseeded_randomness():
+    failures = probe_move_agreement(NONDETERMINISTIC_RANDOM, AGREEMENT_CONTRACT)
+    assert any('randomMove is not deterministic' in failure for failure in failures), failures

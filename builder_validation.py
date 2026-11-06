@@ -126,8 +126,13 @@ def probe_move_agreement(code, contract, *, samples=24):
     requires every returned move to be accepted by applyMove. The
     played-out position matters: preconditions that only bite later —
     a setup move offered mid-game, a resource-gated move offered with
-    none left — are invisible from the early approved states. Returns
-    failure strings; an empty list means agreement."""
+    none left — are invisible from the early approved states. Sampling
+    also calls computerMove at every difficulty the state can carry
+    (walks never change difficulty, so the easy/hard branches are
+    otherwise exercised only by review), calls each generator twice
+    with one seed to prove seeded determinism, and times generator
+    calls at the platform's own 100 ms limit. Returns failure strings;
+    an empty list means agreement."""
     logic = ContractLogic(code, contract)
     if not logic.has('randomMove') and not logic.has('computerMove'):
         return []
@@ -146,7 +151,7 @@ def probe_move_agreement(code, contract, *, samples=24):
             for i in range(samples):
                 try:
                     move = logic.call('randomMove', state, mover, ctx=ctx, seed=7300 + i,
-                                      time_limit_seconds=0.5)
+                                      time_limit_seconds=0.1)
                 except Exception as exc:
                     failures.append(f'{label}: randomMove failed on an approved position: {exc}')
                     break
@@ -160,17 +165,38 @@ def probe_move_agreement(code, contract, *, samples=24):
                     failures.append(f'{label}: randomMove returned a move applyMove rejects: '
                                     f'{json.dumps(move, default=str)} — the move generator and '
                                     'the validator disagree about legality')
-        if logic.has('computerMove'):
             try:
-                move = logic.call('computerMove', state, mover, ctx=ctx, seed=7500,
-                                  time_limit_seconds=0.5)
-            except Exception as exc:
-                failures.append(f'{label}: computerMove raised instead of returning a legal move: {exc}')
-            else:
+                first = logic.call('randomMove', state, mover, ctx=ctx, seed=7399,
+                                   time_limit_seconds=0.1)
+                second = logic.call('randomMove', state, mover, ctx=ctx, seed=7399,
+                                    time_limit_seconds=0.1)
+                if first != second:
+                    failures.append(f'{label}: randomMove is not deterministic for a fixed seed '
+                                    '(it must draw only from ctx.random)')
+            except Exception:
+                pass
+        if logic.has('computerMove'):
+            variants = [(state, label)]
+            if isinstance(state, dict) and 'difficulty' in state:
+                variants += [({**state, 'difficulty': level}, f'{label} (difficulty {level})')
+                             for level in ('easy', 'medium', 'hard')
+                             if level != state.get('difficulty')]
+            for variant, variant_label in variants:
+                try:
+                    move = logic.call('computerMove', variant, mover, ctx=ctx, seed=7500,
+                                      time_limit_seconds=0.1)
+                    again = logic.call('computerMove', variant, mover, ctx=ctx, seed=7500,
+                                       time_limit_seconds=0.1)
+                except Exception as exc:
+                    failures.append(f'{variant_label}: computerMove raised instead of returning a legal move: {exc}')
+                    continue
+                if move != again:
+                    failures.append(f'{variant_label}: computerMove is not deterministic for a fixed seed '
+                                    '(it must draw only from ctx.random)')
                 if move is None:
-                    failures.append(f'{label}: computerMove returned no move on a live approved position')
-                elif not accepted(state, mover, move, ctx, 7500):
-                    failures.append(f'{label}: computerMove returned a move applyMove rejects: '
+                    failures.append(f'{variant_label}: computerMove returned no move on a live approved position')
+                elif not accepted(variant, mover, move, ctx, 7500):
+                    failures.append(f'{variant_label}: computerMove returned a move applyMove rejects: '
                                     f'{json.dumps(move, default=str)}')
 
     seen = []
@@ -197,7 +223,7 @@ def probe_move_agreement(code, contract, *, samples=24):
         except Exception:
             state, turn = None, None
         plies = 0
-        while state is not None and turn and plies < 8:
+        while state is not None and turn and plies < 24:
             mover = turn[0]
             move = None
             for seed in range(7600, 7608):
