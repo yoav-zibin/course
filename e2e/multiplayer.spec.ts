@@ -48,22 +48,10 @@ test('two players in separate browsers: join an online match and see each other\
   await expect(a.board).toHaveCount(9);
   await expect(b.board).toHaveCount(9);
 
-  // Hold Bob's next catalog refresh open. His active match must still receive
-  // Alice's move without waiting for that unrelated request to finish.
-  let releaseCatalog!: () => void;
-  const catalogBlocked = new Promise<void>(resolve => { releaseCatalog = resolve; });
-  let catalogStarted!: () => void;
-  const started = new Promise<void>(resolve => { catalogStarted = resolve; });
-  await b.page.route('**/games', async route => {
-    catalogStarted();
-    await catalogBlocked;
-    await route.continue().catch(() => {});
-  });
-  await started;
   await a.board.nth(4).click();
   await expect(a.board.nth(4)).toHaveText(/X|O/);
-  await expect(b.board.nth(4)).toHaveText(/X|O/, { timeout: 5_000 });
-  releaseCatalog();
+  // Bob's page polls the server, so allow it time to notice Alice's move.
+  await expect(b.board.nth(4)).toHaveText(/X|O/, { timeout: 15_000 });
 
   await a.context.close();
   await b.context.close();

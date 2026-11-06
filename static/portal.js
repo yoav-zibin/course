@@ -9,7 +9,6 @@
 
 const $ = (id) => document.getElementById(id);
 const POLL_MS = 2000;
-const MATCH_POLL_MS = 1000;
 async function portalTransport(method, path, { body, user, requestId } = {}) {
   const controller = new AbortController(),
     timer = setTimeout(() => controller.abort(), 20000);
@@ -536,34 +535,6 @@ function refresh() {
   return refreshPending;
 }
 
-// Poll the active online match independently of catalog/list refreshes. A slow
-// catalog request or another tab's offline lock must not delay the next turn.
-let matchPollPending = false;
-async function pollActiveMatch() {
-  const current = state.match, user = me();
-  if (matchPollPending || document.hidden || !navigator.onLine || !user ||
-      !current || current.localMode || current.status !== "ongoing" ||
-      state.selectedId !== current.id || state.moveInFlight ||
-      offline.read().queues?.[current.id]?.length) return;
-  matchPollPending = true;
-  try {
-    const next = await portalTransport("GET", `/matches/${encodeURIComponent(current.id)}`, {user});
-    if (me()?.id !== user.id || state.selectedId !== current.id || state.moveInFlight ||
-        !state.match || state.match.id !== current.id ||
-        offline.read().queues?.[current.id]?.length ||
-        next.move_count < state.match.move_count ||
-        (next.move_count === state.match.move_count && next.updated_at < state.match.updated_at)) return;
-    if (next.move_count === state.match.move_count && next.updated_at === state.match.updated_at) return;
-    state.match = offline.decorate(next);
-    render();
-    await syncGame();
-  } catch {
-    // The regular refresh owns offline fallback and user-visible errors.
-  } finally {
-    matchPollPending = false;
-  }
-}
-
 function invalidatePopularGames() {
   state.popularGamesFetchedAt = 0;
   state.popularGamesForceRefresh = true;
@@ -727,15 +698,10 @@ async function refreshLocked() {
     }
     if (state.selectedId) {
       try {
-        const selectedId = state.selectedId;
-        const refreshedMatch = await portalRequest(
+        state.match = await portalRequest(
           "GET",
-          `/matches/${selectedId}`,
+          `/matches/${state.selectedId}`,
         );
-        if (state.selectedId === selectedId && (!state.match || state.match.id !== selectedId ||
-            refreshedMatch.move_count > state.match.move_count ||
-            (refreshedMatch.move_count === state.match.move_count && refreshedMatch.updated_at >= state.match.updated_at)))
-          state.match = refreshedMatch;
       } catch (error) {
         if (error.status !== 404) throw error;
         showMessage(I18n.t("ui.match.gone", {}, "This match no longer exists."), "error");
@@ -2232,7 +2198,6 @@ async function main() {
   setInterval(() => {
     if (!document.hidden && !state.moveInFlight) refresh();
   }, POLL_MS);
-  setInterval(pollActiveMatch, MATCH_POLL_MS);
   setInterval(updateSpeedClock, 250);
   if ("serviceWorker" in navigator && !document.querySelector('meta[name="local-preview"]'))
     navigator.serviceWorker
