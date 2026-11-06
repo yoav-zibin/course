@@ -45,6 +45,7 @@
   "error.game_schemas_required": "يلزم توفير game_schemas عند توفير server_code",
   "error.game_schemas_requires_server": "يتطلب game_schemas توفير server_code",
   "error.game_schemas_required_for_server_code": "يلزم توفير game_schemas لـ server_code",
+  "error.game_texts_not_translatable": "لا يمكن ترجمة نصوص اللعبة: {problems}",
   "error.refactor_job_running": "توجد مهمة إعادة هيكلة قيد التشغيل بالفعل؛ انتظر حتى تنتهي.",
   "error.refactor_job_not_found": "لا توجد مهمة إعادة هيكلة كهذه.",
   "error.match_not_ongoing": "المباراة ليست جارية",
