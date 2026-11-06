@@ -37,7 +37,11 @@ STEP_PROMPTS['tests'] += ('\n' + PLATFORM_CONTRACT + '\n' + DRAFTING_CONTRACT +
     'A case may instead be a negative example: set expected_error:"InvalidMove", include turn (the nonempty array of player IDs '
     'who may move before the move), set expected_turn to that same turn, expected_state to state, the expected views to the '
     'before views, and omit expected_payouts. Use negative examples for moves the rules must reject (for example a move that '
-    'leaves no path, or one made with no walls left). A negative example is never a terminal case.')
+    'leaves no path, or one made with no walls left). A negative example is never a terminal case. '
+    'Examples the user names are mandatory inclusions, not the whole set: always complete the set to the '
+    'composition above (1–2 initial, 1–4 intermediate, 1–4 terminal, 3–10 total), adding standard cases '
+    'when the named examples leave a kind short — for example an initial case played from the starting '
+    'position — and say in the message which cases you added and why.')
 
 
 def parse_json(raw):
@@ -185,6 +189,26 @@ def propose_images(client, prompt, routing, key, pending):
         if save:
             save(key, progress)
     return {'message':progress['message'], 'artifact':{'images':progress['images']}}
+
+
+def _test_plan_problem(outlines):
+    """None when the outline list satisfies the test composition recipe.
+
+    The recipe mirrors builder_flow.validate_artifact for full cases, but is
+    checked while the plan is still cheap one-line outlines, so a plan that
+    cannot expand into a valid set is repaired before any case is written.
+    """
+    if not isinstance(outlines, list):
+        return 'the plan has no case outlines'
+    if not 3 <= len(outlines) <= 10:
+        return f'the plan has {len(outlines)} case outlines; it must contain 3–10'
+    kinds = [outline.get('kind') if isinstance(outline, dict) else None for outline in outlines]
+    for kind, low, high in (('initial', 1, 2), ('intermediate', 1, 4), ('terminal', 1, 4)):
+        if not low <= kinds.count(kind) <= high:
+            return f'the plan has {kinds.count(kind)} {kind} outlines; it must contain {low}–{high}'
+    if any(kind not in ('initial', 'intermediate', 'terminal') for kind in kinds):
+        return 'every outline needs a kind of initial, intermediate or terminal'
+    return None
 
 
 def expand_test_plan(client, plan, completed, prompt, key, feedback):
@@ -369,7 +393,7 @@ def propose_step(client, draft, step, correction, *, feedback=False):
             else:
                 # Recover the contract without asking for another long serialized artifact.
                 plan_messages = [
-                    {'role':'system','content':'Plan the requested tests. Return JSON {message,state_schema,view_schema,move_schema,cases:[{name,kind,description}]}. Give only short case outlines; the plan must contain 3–10 case outlines, including initial, intermediate and terminal examples. No images or full states. If the correction changes approved rules, return {message,target_step,artifact} per the routing instructions. '+routing},
+                    {'role':'system','content':'Plan the requested tests. Return JSON {message,state_schema,view_schema,move_schema,cases:[{name,kind,description}]}. Give only short case outlines; the plan must contain 3–10 case outlines: 1–2 initial, 1–4 intermediate, 1–4 terminal, every outline with a kind. Examples the user names are mandatory inclusions, not the whole set: complete the composition by adding standard outlines (for example a first move from the starting position) when a kind is short, and say in the message which outlines you added and why. No images or full states. If the correction changes approved rules, return {message,target_step,artifact} per the routing instructions. '+routing},
                     {'role':'user','content':json.dumps(prompt,ensure_ascii=False)}
                 ]
                 def request_plan(messages):
@@ -384,14 +408,17 @@ def propose_step(client, draft, step, correction, *, feedback=False):
                     reply = plan
                 else:
                     outlines = plan.get('cases')
-                    if not isinstance(outlines, list) or not 3 <= len(outlines) <= 10:
-                        # The count is a hard requirement, so repair the plan once
-                        # instead of failing a request the user phrased correctly.
-                        found = len(outlines) if isinstance(outlines, list) else 0
+                    problem = _test_plan_problem(outlines)
+                    if problem:
+                        # The composition is a hard requirement, so repair the
+                        # plan once instead of failing a request the user
+                        # phrased correctly: their named examples stay, and
+                        # the plan is completed around them.
                         plan = request_plan([*plan_messages, {'role':'user','content':
-                            f'Your plan had {found} case outlines; the plan must contain 3–10. Return the complete plan again: '
-                            'keep every example the user asked for as its own outline, and add or merge outlines so the total is '
-                            'between 3 and 10, covering initial, intermediate and terminal examples.'}])
+                            f'Your plan is not usable: {problem}. Return the complete plan again: '
+                            'keep every example the user asked for as its own outline, and add or merge '
+                            'outlines so the plan contains 3–10 outlines with 1–2 initial, 1–4 '
+                            'intermediate and 1–4 terminal.'}])
                     if 'target_step' in plan and plan['target_step'] != 'tests':
                         reply = plan
                     else:
@@ -411,7 +438,7 @@ def propose_step(client, draft, step, correction, *, feedback=False):
             if checkpoint:
                 checkpoint(key, {**reply, 'request_text':correction, 'request_mode':'feedback' if feedback else 'propose'})
             messages = [
-                {'role':'system','content':'Repair the specific validation error in the test contract. Return the complete corrected contract as JSON. Omit all SVG and images. Preserve valid examples, names and approved rules.\n' + PLATFORM_CONTRACT},
+                {'role':'system','content':'Repair the specific validation error in the test contract. Return the complete corrected contract as JSON. Omit all SVG and images. If the error is about case counts or a missing kind, add a standard case of the missing kind (for example an initial case played from the starting position) or merge duplicates — never drop an example the user asked for. Preserve valid examples, names and approved rules.\n' + PLATFORM_CONTRACT},
                 {'role':'user','content':json.dumps({'rules':state['artifacts']['logic']['value'],
                  'request':correction,'contract':{**original,'cases':[
                      {k:v for k,v in case.items() if k!='images'} for case in original.get('cases',[]) if isinstance(case,dict)

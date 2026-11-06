@@ -377,6 +377,10 @@ def test_platform_contract_is_shared_by_generation_and_review_prompts():
     assert PLATFORM_CONTRACT in STEP_PROMPTS['logic']
     assert PLATFORM_CONTRACT in STEP_PROMPTS['tests']
     assert 'expected_error' in STEP_PROMPTS['tests']
+    # User-named examples are completed to the composition, never fitted by
+    # making the user rephrase: the transform rule lives in the tests prompt.
+    assert 'mandatory inclusions' in STEP_PROMPTS['tests']
+    assert 'which cases you added and why' in STEP_PROMPTS['tests']
     for phrase in ('One ruling per situation', 'only when', 'worked example'):
         assert phrase in DRAFTING_CONTRACT, phrase
     assert DRAFTING_CONTRACT in STEP_PROMPTS['logic']
