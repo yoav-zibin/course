@@ -232,6 +232,24 @@ needs no command: its first save after the upgrade rewrites the rows as bundles 
 
 The game connection protocol (`state_changed` with `strings`, `locale`, `direction`) is unchanged.
 
+## After publishing games: pre-translate
+
+A game's texts are translated the first time somebody asks for them in a language: the request for the
+language's bundle (`GET /i18n/bundle/<language>`) translates what is missing with Google Translate and
+waits a few seconds for it. So the first person to switch language after games were published (or after
+a language was added) gets the slow, partly translated answer, and the next ones the finished bundle.
+Run this once after publishing, and nobody has to wait:
+
+```bash
+python3 tools/prewarm_translations.py --target https://buildplay.fun            # every language
+python3 tools/prewarm_translations.py --target https://buildplay.fun es fr       # some
+```
+
+It sends the same public GET requests a browser sends (no password), asks for each language's bundle until
+every game is translated, and prints how many games were still missing after each attempt. It makes the
+server translate, which counts against `translation.daily_character_limit`; when the limit is reached it says
+so and the rest stays in English until the next (UTC) day.
+
 ## Turn it on
 
 Translation is off until configured (`"translation": {"provider": "off"}`).
