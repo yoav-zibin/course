@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 BATCH1_DIRECTORY = Path(__file__).resolve().parent / "games" / "audit-batch1"
 BATCH2_DIRECTORY = Path(__file__).resolve().parent / "games" / "audit-batch2"
 BATCH3_DIRECTORY = Path(__file__).resolve().parent / "games" / "audit-batch3"
+BATCH4_DIRECTORY = Path(__file__).resolve().parent / "games" / "audit-batch4"
 
 
 def _sha256(code: str | None) -> str:
@@ -33,6 +34,10 @@ def apply_audit_batch2(platform: GamePlatform) -> list[dict[str, Any]]:
 
 def apply_audit_batch3(platform: GamePlatform) -> list[dict[str, Any]]:
     return _apply_audit_batch(platform, BATCH3_DIRECTORY, "audit-batch3")
+
+
+def apply_audit_batch4(platform: GamePlatform) -> list[dict[str, Any]]:
+    return _apply_audit_batch(platform, BATCH4_DIRECTORY, "audit-batch4")
 
 
 def _apply_audit_batch(
@@ -90,7 +95,7 @@ def _apply_audit_batch(
                             _admin=True,
                             # A slower production CPU still has to finish whole
                             # walks. Keep all checks and the 100ms call limit.
-                            _test_budget_seconds=5.0 if batch_name in {"audit-batch2", "audit-batch3"} else 1.0,
+                            _test_budget_seconds=5.0 if batch_name in {"audit-batch2", "audit-batch3", "audit-batch4"} else 1.0,
                         )
                         result.update(status="updated", version=updated.version)
         except Exception as error:
