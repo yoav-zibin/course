@@ -108,7 +108,7 @@ def test_incomplete_drafts_can_be_saved_but_not_published(api: Api):
     assert api.ok("GET", "/game-drafts", as_user=owner) == [draft]
 
 
-def test_private_drafts_survive_restart_and_old_data_loads(tmp_path: Path):
+def test_private_drafts_survive_restart(tmp_path: Path):
     path = tmp_path / "data.json"
     store = JsonFileStore(path)
     api = Api(store=store)
@@ -124,17 +124,6 @@ def test_private_drafts_survive_restart_and_old_data_loads(tmp_path: Path):
         assert client.ok("GET", "/games") == []
     finally:
         restarted.close()
-    # The production v2 layout has no drafts. It must load without data loss.
-    data = json.loads(path.read_text())
-    data["format_version"] = 2
-    del data["data"]["game_drafts"]
-    path.write_text(json.dumps(data))
-    old = JsonFileStore(path)
-    try:
-        assert len(old.list_users()) == 1
-        assert old.list_game_drafts(owner_user_id=owner) == []
-    finally:
-        old.close()
 
 
 def test_merge_moves_drafts_and_deleting_game_removes_private_copy(api: Api):

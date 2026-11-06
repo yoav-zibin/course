@@ -415,10 +415,6 @@ class GameFrame {
       return;
     }
     let next = message.next_turn_player_indices;
-    // Games written before turn sets send a single index; wrap it into a set.
-    if (next === undefined && Number.isInteger(message.next_turn_player_index)) {
-      next = [message.next_turn_player_index];
-    }
     if (
       !(next === null || (Array.isArray(next) && next.length > 0 && next.every(Number.isInteger))) ||
       !("new_state" in message)
@@ -442,8 +438,6 @@ function stateChangedMessage({ state, players, turn, status, endReason, moveCoun
     state,
     players,
     turn_of_player_indices: turn,
-    // Legacy field for games written before turn sets: the first seat in the turn.
-    turn_of_player_index: turn === null ? null : turn[0],
     status,
     end_reason: endReason,
     move_count: moveCount,

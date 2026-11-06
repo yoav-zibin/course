@@ -9,7 +9,7 @@ from collections.abc import Iterator
 import pytest
 
 from game_platform import example_data
-from game_platform.json_file_store import FORMAT_VERSION, read_snapshot
+from game_platform.json_file_store import read_snapshot
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("FIRESTORE_EMULATOR_HOST"),
@@ -20,6 +20,7 @@ if os.environ.get("FIRESTORE_EMULATOR_HOST"):
     from google.cloud import firestore
 
     from game_platform.firestore_store import (
+        _FIRESTORE_FORMAT_VERSION,
         FirestoreStore,
         export_snapshot,
         import_snapshot,
@@ -185,7 +186,7 @@ def test_only_changed_records_are_rewritten(client, prefix, open_store) -> None:
 
 
 def test_newer_data_is_refused(client, prefix) -> None:
-    client.collection(f"{prefix}meta").document("format").set({"version": FORMAT_VERSION + 1})
+    client.collection(f"{prefix}meta").document("format").set({"version": _FIRESTORE_FORMAT_VERSION + 1})
     with pytest.raises(ValueError, match="update the server"):
         FirestoreStore(client, collection_prefix=prefix)
 

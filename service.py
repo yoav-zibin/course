@@ -489,7 +489,7 @@ class GamePlatform:
             logging.getLogger(__name__).error(
                 "%d server-side game versions are missing required game_schemas: %s. "
                 "Starting in degraded mode: schema-less game logic remains blocked; "
-                "backfill these versions before re-enabling those games.",
+                "add game_schemas to these versions before re-enabling those games.",
                 len(missing_game_schemas),
                 details,
             )
@@ -3269,7 +3269,7 @@ class GamePlatform:
             if game.game_schemas is None:
                 raise GameLogicError(
                     f"game {game.id} version {game.version} has no game_schemas; "
-                    "backfill it before enabling this game"
+                    "add game_schemas to it before enabling this game"
                 )
             contract = (game.builder_workflow or {}).get("artifacts", {}).get("tests", {}).get("value")
             if contract:
