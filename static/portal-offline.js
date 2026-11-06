@@ -778,8 +778,19 @@ class PortalOffline {
       this.write(data, {cacheOnly: !reportFailure});
       return data.local[id];
     }
-    const base = data.responses[`/matches/${id}`] || match;
+    // The in-memory match can run ahead of the saved response: the active-match
+    // poll refreshes state.match straight from the server without rewriting
+    // the offline cache, so a move made right after an opponent's (or the
+    // computer's) move would otherwise be rejected as "changed in another
+    // tab" even though it is based on the fresh view. But the saved response
+    // is the base the queued moves were built on, so only treat it as stale
+    // when the match has advanced past it plus the queued moves; a saved
+    // response that is ahead still means this view is stale.
+    const cached = data.responses[`/matches/${id}`];
     const queue = data.queues[id] || [];
+    const base = cached && match.move_count > cached.move_count + queue.length
+      ? match
+      : cached || match;
     if (base.move_count + queue.length !== body.expected_move_count)
       throw new Error(
         I18n.t("ui.offline.err_match_other_tab", {}, "This match changed in another tab. Refresh before moving."),
