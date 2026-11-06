@@ -378,6 +378,10 @@ def test_server_review_failure_repairs_code_before_ready(monkeypatch):
                 self.reviews+=1
                 return json.dumps({'passed': self.reviews != 1,'issues': ['Fix setup'] if self.reviews==1 else []})
             if 'Now write only the client' in messages[-1]['content']: return json.dumps({'code':f['code']})
+            # A repair is first offered as targeted edits; an edit that
+            # does not apply makes the build fall back to the full-file
+            # repair this test exercises.
+            if 'targeted edits' in messages[-1]['content']: return json.dumps({'edits':[{'find':'not present in the attempt','replace':'x'}]})
             self.generations+=1
             if self.generations==2: assert 'review_rules' in messages[-1]['content']
             return json.dumps({'code':f['code'],'server_code':f['server_code']})

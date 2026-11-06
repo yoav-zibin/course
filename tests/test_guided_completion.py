@@ -115,6 +115,11 @@ def test_reject_visual_then_repair_and_publish(monkeypatch,tmp_path):
                     assert 'Missing counter' in messages[-1]['content']
                     assert messages[-2]['content']==f['code']
                 return json.dumps({'code':f['code']})
+            if 'targeted edits' in messages[-1].get('content',''):
+                # A repair is first offered as targeted edits; this model
+                # answers with an edit that does not apply, so the build
+                # falls back to the full-file repair this test exercises.
+                return json.dumps({'edits':[{'find':'not present in the attempt','replace':'x'}]})
             self.generation+=1
             assert 'CURRENT OUTPUT REQUIRED: Return only the complete executable server JavaScript' in messages[-1]['content']
             if self.generation==1:return 'const game = {}; unexpected prose'
@@ -1572,3 +1577,132 @@ def test_standalone_svg_adds_namespace_and_viewbox():
     no_extent = '<svg><circle r="5"/></svg>'
     assert 'viewBox' not in _standalone_svg(no_extent)
     assert _standalone_svg('not an svg') == 'not an svg'
+
+
+FAKE_SERVER = (
+    "const game={newMatch(ctx){return {state:{n:0},turn:[ctx.players[0].id]};},"
+    "applyMove(state,id,move,ctx){if(move.add!==1)throw new InvalidMove('Add one');"
+    "const n=state.n+move.add;return {state:{n},turn:[ctx.players[0].id]};},"
+    "viewFor(state,id,ctx){return {n:state.n};}};"
+)
+
+
+def test_apply_server_patches_applies_edits_in_order():
+    from game_platform.builder_jobs import _apply_server_patches
+    patched = _apply_server_patches(FAKE_SERVER, [
+        {'find': 'move.add!==1', 'replace': 'move.add!==2'},
+        {'find': "throw new InvalidMove('Add one')", 'replace': "throw new InvalidMove('Add two')"},
+    ])
+    assert "move.add!==2" in patched and "InvalidMove('Add two')" in patched
+    # Edits apply sequentially to the evolving text: the second edit's find
+    # does not exist in the original source at all — the first edit creates
+    # it — so the pair only succeeds if application is sequential.
+    with pytest.raises(ValueError):
+        _apply_server_patches(FAKE_SERVER, [{'find': '{state:{n:1}', 'replace': '{state:{n:2}'}])
+    sequential = _apply_server_patches(FAKE_SERVER, [
+        {'find': '{state:{n:0}', 'replace': '{state:{n:1}'},
+        {'find': '{state:{n:1}', 'replace': '{state:{n:2}'},
+    ])
+    assert '{state:{n:2}' in sequential and '{state:{n:0}' not in sequential
+
+
+def test_apply_server_patches_leaves_untouched_regions_byte_identical():
+    from game_platform.builder_jobs import _apply_server_patches
+    find = '{state:{n:0}'
+    at = FAKE_SERVER.index(find)
+    prefix, suffix = FAKE_SERVER[:at], FAKE_SERVER[at + len(find):]
+    patched = _apply_server_patches(FAKE_SERVER, [{'find': find, 'replace': '{state:{n:5}'}])
+    assert patched == prefix + '{state:{n:5}' + suffix
+    assert patched.startswith(prefix) and patched.endswith(suffix)
+    assert len(patched) == len(FAKE_SERVER)
+
+
+def test_apply_server_patches_rejects_unusable_edits():
+    from game_platform.builder_jobs import _apply_server_patches
+    with pytest.raises(ValueError):
+        _apply_server_patches(FAKE_SERVER, [])
+    with pytest.raises(ValueError):
+        _apply_server_patches(FAKE_SERVER, [{'find': 'n:0', 'replace': 'n:0'}])
+    with pytest.raises(ValueError):
+        _apply_server_patches(FAKE_SERVER, [{'find': '', 'replace': 'x'}])
+    with pytest.raises(ValueError):
+        _apply_server_patches(FAKE_SERVER, [{'find': 'no such text anywhere', 'replace': 'x'}])
+    # 'state' occurs many times: a find that is not unique cannot be applied.
+    with pytest.raises(ValueError):
+        _apply_server_patches(FAKE_SERVER, [{'find': 'state', 'replace': 'x'}])
+    with pytest.raises(ValueError):
+        _apply_server_patches(FAKE_SERVER, [{'find': '{n:0}'}])
+    with pytest.raises(ValueError):
+        _apply_server_patches(FAKE_SERVER, [{'find': f'x{i}', 'replace': 'y'} for i in range(13)])
+    with pytest.raises(ValueError):
+        _apply_server_patches(FAKE_SERVER, 'not a list')
+
+
+def _patch_repair_model(fixture_value, broken, patch_reply):
+    """Scripted model for a two-attempt build: attempt 1 generates the
+    broken server (full file), attempt 2 is offered the patch request."""
+    import json as _json
+
+    class Model:
+        server_generations = 0
+        patch_calls = 0
+        diagnoses = 0
+
+        def chat(self, messages, **kwargs):
+            first = messages[0]['content']
+            last = messages[-1].get('content', '') if isinstance(messages[-1].get('content'), str) else ''
+            if 'targeted edits' in last:
+                self.patch_calls += 1
+                return _json.dumps(patch_reply)
+            if isinstance(first, str) and first.startswith('Determine whether the code or an example'):
+                self.diagnoses += 1
+                return '{"cause":"implementation"}'
+            if isinstance(first, list) or (isinstance(first, str) and 'Review game server' in first):
+                return _json.dumps({'passed': True, 'issues': []})
+            if any('Now write only the client' in str(m.get('content', '')) for m in messages):
+                return _json.dumps({'code': fixture_value['code']})
+            self.server_generations += 1
+            return _json.dumps({'code': fixture_value['code'],
+                                'server_code': broken if self.server_generations == 1 else fixture_value['server_code']})
+
+    return Model()
+
+
+def _run_patch_repair_build(monkeypatch, model):
+    from game_platform import builder_jobs, builder_render
+    p, d = setup_draft()
+    d = p.change_builder_workflow(caller_id=d.owner_user_id, draft_id=d.id,
+                                  expected_revision=d.revision, change=flow.begin_build)
+    monkeypatch.setattr('game_platform.builder_visual.review_views', lambda *args: [])
+    monkeypatch.setattr(builder_render, 'render_game', lambda *args, **kwargs: [])
+    builder_jobs.run_build(p, model, d.owner_user_id, d.id, d.builder_workflow['job']['id'])
+    return p.get_game_draft(caller_id=d.owner_user_id, draft_id=d.id)
+
+
+def test_build_repairs_server_with_targeted_patch(monkeypatch):
+    f = fixture()
+    broken = f['server_code'].replace('n:0', 'n:1')
+    assert broken != f['server_code']
+    model = _patch_repair_model(f, broken, {'edits': [{'find': '{state:{n:1}', 'replace': '{state:{n:0}'}]})
+    saved = _run_patch_repair_build(monkeypatch, model)
+    assert saved.builder_workflow['job']['status'] == 'ready_for_review', saved.builder_workflow['job']
+    # The patch was offered once, applied in code, and no second full-file
+    # generation happened: the accepted server is attempt 1's file with
+    # exactly the one snippet changed — i.e. the fixture server itself.
+    assert model.patch_calls == 1 and model.server_generations == 1 and model.diagnoses == 1
+    assert saved.server_code == f['server_code']
+    assert saved.server_code == broken.replace('{state:{n:1}', '{state:{n:0}')
+    assert any('Applied 1 targeted edit' in entry for entry in saved.builder_workflow['job']['log'])
+
+
+def test_build_falls_back_to_full_generation_when_patch_does_not_apply(monkeypatch):
+    f = fixture()
+    broken = f['server_code'].replace('n:0', 'n:1')
+    assert broken != f['server_code']
+    model = _patch_repair_model(f, broken, {'edits': [{'find': 'a snippet that is not in the file', 'replace': 'x'}]})
+    saved = _run_patch_repair_build(monkeypatch, model)
+    assert saved.builder_workflow['job']['status'] == 'ready_for_review', saved.builder_workflow['job']
+    # The unusable patch cost one call and changed nothing: attempt 2 fell
+    # back to the full-file generation and the build proceeded as before.
+    assert model.patch_calls == 1 and model.server_generations == 2
+    assert saved.server_code == f['server_code']

@@ -313,6 +313,51 @@ def _apply_test_operations(artifact, operations, protected):
     return result
 
 
+def _apply_server_patches(server, edits):
+    """Apply a repair's targeted edits to the previous attempt's server code.
+
+    The repair answers with {find, replace} snippets rather than a re-typed
+    file, so code the repair does not touch keeps its exact previous text —
+    a repair cannot break a passing behavior by re-emitting it slightly
+    differently, the drift the anchored full-file repairs still allowed.
+    Edits apply sequentially to the evolving text; each find must be a
+    non-empty string occurring exactly once at the moment it is applied.
+    Raises ValueError for anything malformed or unapplicable; the caller
+    falls back to a full-file regeneration, so a bad patch can never stop
+    a build that would have proceeded without patching.
+    """
+    if not isinstance(server, str) or not server:
+        raise ValueError('no previous server source to patch')
+    if not isinstance(edits, list) or not 1 <= len(edits) <= 12:
+        raise ValueError('edits must be a list of 1 to 12 edits')
+    patched = server
+    for edit in edits:
+        if not isinstance(edit, dict):
+            raise ValueError('each edit must be an object with find and replace')
+        find, replace = edit.get('find'), edit.get('replace')
+        if not isinstance(find, str) or not isinstance(replace, str):
+            raise ValueError('edit find and replace must be strings')
+        if not find or find == replace:
+            raise ValueError('edit find must be non-empty and differ from replace')
+        if patched.count(find) != 1:
+            raise ValueError('edit find must occur exactly once in the server source')
+        patched = patched.replace(find, replace, 1)
+    return patched
+
+
+SERVER_PATCH_INSTRUCTION = (
+    'Instead of returning the complete server file, repair the previous attempt '
+    'with targeted edits. Return ONLY a JSON object of the form '
+    '{"edits":[{"find":"...","replace":"..."}]} with between 1 and 12 edits — '
+    'no prose, no Markdown, no complete file. Each "find" must be copied verbatim '
+    'from the server code above and must occur exactly once in that file; use the '
+    'smallest snippet that uniquely identifies the change, and when replacing a '
+    'whole function or block, include that complete function or block as the '
+    '"find". Make the minimal edits that fix every listed failure and preserve '
+    'every behavior that already passed: do not rename, restructure or rewrite '
+    'working code, and do not change the approved specification or tests.')
+
+
 def _standalone_svg(svg):
     """An SVG shown through an <img> only renders when its root declares the
     SVG namespace, and only scales to fit when it declares a viewBox; add
@@ -1176,6 +1221,32 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
             raise ValueError(f'Missing generated {field}')
         return raw
 
+    def patch_source(messages, previous):
+        """Repair the previous server attempt with targeted edits.
+
+        Returns the patched source, or None on ANY problem with the patch
+        call or its reply — the caller then falls back to the full-file
+        generation, so patching introduces no new way for a build to stop.
+        Job-control failures keep their meaning instead of falling back:
+        a deadline TimeoutError, and the RuntimeErrors update() raises for
+        a cancelled/replaced job, propagate exactly as they would from a
+        full-file generation.
+        """
+        request = [*messages, {'role':'user','content':SERVER_PATCH_INSTRUCTION}]
+        try:
+            reply = ask(request, 8000, purpose='Patching server code')
+            edits = reply.get('edits') if isinstance(reply, dict) else None
+            patched = _apply_server_patches(previous, edits)
+        except TimeoutError:
+            raise
+        except RuntimeError as exc:
+            if 'cancelled or replaced' in str(exc) or 'changed repeatedly' in str(exc): raise
+            return None
+        except Exception:
+            return None
+        stage(f'Applied {len(edits)} targeted edit' + ('s' if len(edits) != 1 else '') + ' to the previous attempt')
+        return patched
+
     try:
         draft = stage('Preparing approved specification')
         artifacts = draft.builder_workflow['artifacts']
@@ -1193,6 +1264,12 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
             messages.append({'role':'user','content':'A previous build of this same approved specification failed with the findings below. Treat them as defects to avoid from the first line of code, not as feedback to rediscover after generating: '+json.dumps(prior_failures)})
 
         errors=[]; generated=None
+        # The most recent server source THIS build generated (full file or
+        # patch). A repair generation patches it instead of re-typing the
+        # whole file; checkpoint-restored code does not seed it, so the
+        # first generation after a restore stays a full-file write exactly
+        # as before.
+        last_server=None
         memory=[]
         attempt = 0
         scores = []
@@ -1227,7 +1304,10 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
                 if not server_restored:
                     code = ''
                     try:
-                        server = generate_source(messages, 'server_code')
+                        server = patch_source(messages, last_server) if last_server is not None else None
+                        if server is None:
+                            server = generate_source(messages, 'server_code')
+                        last_server = server
                     except (ValueError, ModelOutputLimitError, ModelApiError) as exc:
                         errors = [{'server_generation':str(exc)}]
                         messages.append({'role':'user','content':'Return a concise complete raw server JavaScript file. '+str(exc)})
