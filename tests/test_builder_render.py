@@ -69,3 +69,43 @@ def test_missing_node_fails_with_a_clear_message(monkeypatch, tmp_path):
     assert builder_render._node_binary() is None
     with pytest.raises(RuntimeError, match='Node.js was not found on the server'):
         builder_render.render_game('draft', 'job', '<html></html>', [])
+
+
+def test_preflight_reports_missing_node(monkeypatch, tmp_path):
+    monkeypatch.setattr(builder_render.shutil, 'which', lambda name: None)
+    monkeypatch.setattr(builder_render.Path, 'home', staticmethod(lambda: tmp_path))
+    monkeypatch.setattr(builder_render.os.path, 'isfile', lambda p: False)
+    ok, detail = builder_render.preflight_browser()
+    assert not ok and 'Node.js was not found' in detail
+
+
+def test_preflight_reports_missing_playwright(monkeypatch):
+    monkeypatch.setattr(builder_render, '_node_binary', lambda: '/bin/node')
+    done = SimpleNamespace(returncode=1, stdout='',
+                           stderr="Error: Cannot find module 'playwright'\n")
+    monkeypatch.setattr(builder_render.subprocess, 'run', lambda *args, **kwargs: done)
+    ok, detail = builder_render.preflight_browser()
+    assert not ok and 'playwright' in detail
+
+
+def test_preflight_reports_an_unrunnable_node(monkeypatch):
+    monkeypatch.setattr(builder_render, '_node_binary', lambda: '/bin/node')
+    def run(*args, **kwargs):
+        raise OSError('permission denied')
+    monkeypatch.setattr(builder_render.subprocess, 'run', run)
+    ok, detail = builder_render.preflight_browser()
+    assert not ok and 'could not be run' in detail
+
+
+def test_preflight_passes_when_the_module_resolves(monkeypatch):
+    monkeypatch.setattr(builder_render, '_node_binary', lambda: '/bin/node')
+    seen = {}
+    def run(command, **kwargs):
+        seen['command'] = command
+        return SimpleNamespace(returncode=0, stdout='/repo/node_modules/playwright/index.js', stderr='')
+    monkeypatch.setattr(builder_render.subprocess, 'run', run)
+    ok, detail = builder_render.preflight_browser()
+    assert ok and detail == ''
+    # The check resolves from the render script's own directory — the
+    # same walk Node does for the script's require('playwright').
+    assert seen['command'][0] == '/bin/node' and seen['command'][-1].endswith('scripts')
