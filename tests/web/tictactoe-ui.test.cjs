@@ -35,5 +35,5 @@ test('texts come from the translations the platform sends',()=>{
   assert.equal(t.nodes.get('status').textContent,'Tu turno, You (X).');
   assert.equal(t.nodes.get('board').children[8].attributes['aria-label'],'Fila 3, columna 3: vacía');
   assert.match(t.nodes.get('players').children[0].textContent,/— tú$/);
-  t.send({});assert.match(t.nodes.get('status').textContent,/^Your move/);
+  t.send({locale:'en'});assert.match(t.nodes.get('status').textContent,/^Your move/);
 });

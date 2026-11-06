@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{font-family:sans-serif;padding:12px;max-width:640px;margin:auto;background:#0b5d2e;color:#fff}h2{margin:4px 0}#pile{background:#fff;color:#111;border-radius:10px;min-height:120px;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;flex-wrap:wrap}.card{border:2px solid #333;border-radius:6px;padding:8px 10px;font-weight:bold;background:#f8f8f8;min-width:34px;text-align:center}.card.red{color:#c00}.card.back{background:#1a3a8f;color:#fff}.row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}button{font-size:18px;padding:12px 16px;border-radius:10px;border:none;font-weight:bold;cursor:pointer}button:disabled{opacity:.4;cursor:default}#flip{background:#ffd23f}#slap{background:#ff3b30;color:#fff;font-size:22px;width:100%}.pl{background:rgba(255,255,255,.15);border-radius:8px;padding:6px 8px;font-size:14px}.pl.b{outline:3px solid #ffd23f}#log{font-size:13px;background:rgba(0,0,0,.3);border-radius:8px;padding:8px;max-height:120px;overflow:auto}</style>
+</head>
+<body>
+<h2>🥳 Egyptian Rat Screw</h2>
+<div id="status">Waiting…</div>
+<div class="row" id="players"></div>
+<h3>Pile (<span id="pc">0</span>) <span id="ch"></span></h3>
+<div id="pile"></div>
+<div class="row"><button id="flip">⬇️ PLAY CARD</button></div>
+<button id="slap">👋 SLAP!</button>
+<div class="row" style="font-size:12px">Slaps: double • sandwich • top-bottom • tens sum 10 • marriage KQ • 4-run • joker</div>
+<div id="log"></div>
+<script>
+// Server-side (v2) client: the server owns the deck, the pile and the
+// rules. Hands are face-down stacks — the view carries only counts, so
+// nobody can peek at upcoming cards. Buttons send {type:"flip"} or
+// {type:"slap"}; the server validates and resolves everything.
+let L=null, sentFor=-1;
+const R=r=>r===99?'🃏':r===14?'A':r===11?'J':r===12?'Q':r===13?'K':''+r;
+const S=s=>({S:'♠',H:'♥',D:'♦',C:'♣'}[s]||'');
+function sendMove(move){if(!L)return;if(L.move_count===sentFor)return;sentFor=L.move_count;parent.postMessage({type:'make_move',move:move},'*');}
+function doFlip(){sendMove({type:'flip'});}
+function doSlap(){sendMove({type:'slap'});}
+addEventListener('message',e=>{
+ if(e.source!==parent||!e.data||e.data.type!=='state_changed')return;
+ L=e.data;
+ const st=L.view||L.state;
+ const n=L.players.length;
+ if(!st){document.getElementById('status').textContent='Dealing…';return;}
+ const acting=L.status==='ongoing'?L.acting_for_player_index:null;
+ const my=L.my_player_index;
+ const isSlap=!!st.slap;
+ let s='';
+ if(L.status==='over'||st.winner!==null&&st.winner!==undefined){s='🏆 '+(L.players[st.winner]?L.players[st.winner].name:'?')+' wins all the cards!';}
+ else if(isSlap)s='⚡ '+st.slap.reason+' — EVERYONE SLAP NOW!';
+ else if(st.challenge)s=L.players[st.challenge.by].name+' played a face — '+L.players[st.flipper].name+' has '+st.challenge.left+' chance(s)!';
+ else s=L.players[st.flipper].name+"'s turn to flip";
+ document.getElementById('status').textContent=s;
+ document.getElementById('pc').textContent=st.pile.length;
+ document.getElementById('ch').textContent=st.challenge?(' | Challenge: '+st.challenge.left+' left'):'';
+ let pd=document.getElementById('players');pd.innerHTML='';
+ st.counts.forEach((count,i)=>{let d=document.createElement('div');d.className='pl'+((!isSlap&&st.flipper===i)||(isSlap&&acting===i)?' b':'');d.textContent=L.players[i].name+(L.players[i].kind==='computer'?' 🤖':'')+': '+count+' cards';pd.appendChild(d);});
+ let pl=document.getElementById('pile');pl.innerHTML='';
+ if(st.pile.length===0)pl.innerHTML='<i>Empty pile</i>';
+ else{let show=st.pile.slice(-5);
+  if(st.pile.length>5){let b=document.createElement('div');b.className='card back';b.textContent='+'+(st.pile.length-5);pl.appendChild(b);}
+  show.forEach(c=>{let d=document.createElement('div');d.className='card'+((c.s==='H'||c.s==='D')?' red':'');d.textContent=c.r===99?'🃏':R(c.r)+S(c.s);pl.appendChild(d);});
+  pl.style.outline=isSlap?'4px solid #ff3b30':'none';
+ }
+ document.getElementById('log').innerHTML=(st.log||[]).map(x=>'• '+x).join('<br>');
+ const myTurn=acting!==null&&acting===my&&L.status==='ongoing'&&st.winner===null;
+ const inSlapRound=isSlap&&my!==null&&L.status==='ongoing'&&st.winner===null;
+ document.getElementById('flip').disabled=!myTurn||isSlap;
+ document.getElementById('slap').disabled=!(myTurn||inSlapRound)||st.pile.length===0;
+});
+document.getElementById('flip').onclick=doFlip;
+document.getElementById('slap').onclick=doSlap;
+</script>
+</body>
+</html>

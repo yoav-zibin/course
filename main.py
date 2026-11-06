@@ -7,7 +7,7 @@ from pathlib import Path
 
 import uvicorn
 
-from game_platform import observability
+from game_platform import metrics, observability
 from game_platform.api import create_app
 from game_platform.config import Config, load_config
 from game_platform.json_file_store import JsonFileStore
@@ -174,6 +174,19 @@ def main() -> None:
         if args.purge_example_data:
             purge_example_data(platform)
             return
+        # Published community games live in the data store, not in games/.
+        # These bounded release migrations only touch the audited originals;
+        # hash/version guards preserve subsequent author edits and old matches.
+        from game_platform.game_patch_migrations import (
+            apply_audit_batch1, apply_audit_batch2, apply_audit_batch3, apply_audit_batch4,
+        )
+
+        patch_results = [
+            *apply_audit_batch1(platform), *apply_audit_batch2(platform),
+            *apply_audit_batch3(platform), *apply_audit_batch4(platform),
+        ]
+        if any(result["status"] == "updated" for result in patch_results):
+            store.flush()
         platform.resume_computer_moves()
         warn_about_insecure_setup(config, platform)
         app = create_app(
@@ -192,6 +205,16 @@ def main() -> None:
             ai_max_fix_attempts=config.ai_max_fix_attempts,
             monitor=monitor,
         )
+        if config.monitoring.cloud_metrics_enabled:
+            # API call counts to Cloud Monitoring (metrics.py): counted by a
+            # middleware, published by a background thread, never on the
+            # request path. Best-effort: if the VM's account may not write
+            # metrics, the reporter logs that once and stays off.
+            reporter = metrics.ApiMetricsReporter()
+            app.add_middleware(
+                metrics.ApiCallMetricsMiddleware, counter=reporter.counter
+            )
+            reporter.start()
         monitor.start()
         observability.log_event(
             "server_started",

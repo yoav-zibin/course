@@ -175,7 +175,7 @@ def test_one_second_early_is_fine_and_one_second_late_times_out() -> None:
     assert kinds(world.get(match_id)) == ["human", "human"]
     world.clock.advance(2)  # 61 s
     match = world.get(match_id)
-    assert kinds(match) == ["computer", "human"]
+    assert kinds(match) == ["human", "human"]
     assert [(t.player_index, t.user_id, t.at) for t in match.timeouts] == [
         (0, world.ann, START + dt.timedelta(seconds=60))
     ]
@@ -222,19 +222,19 @@ def test_a_late_move_from_the_offline_queue_gets_a_clear_409() -> None:
 # Time's up
 
 
-def test_a_computer_takes_over_when_leaving_is_allowed_and_the_match_goes_on() -> None:
+def test_timeout_ends_multiplayer_without_creating_computers() -> None:
     world = World()
-    match_id = world.match(joiners=[world.bob, world.cy])
+    mid = world.match(joiners=[world.bob, world.cy])
     world.clock.advance(61)
-    match = world.get(match_id)
-    assert match.status == "ongoing" and kinds(match) == ["computer", "human", "human"]
-    # The computer's turn has no clock; the others keep playing its moves for it.
+    match = world.get(mid)
+    assert match.status == "over" and match.end_reason == "timed_out"
+    assert kinds(match) == ["human", "human", "human"]
     assert match.turn_deadline is None
-    world.move(match_id, world.bob, [1])  # Bob plays the computer's move
-    assert world.get(match_id).turn_deadline == world.clock.now + dt.timedelta(seconds=60)
+    with pytest.raises(ConflictError):
+        world.move(mid, world.bob, [1])
 
 
-def test_a_v2_computer_takeover_moves_itself() -> None:
+def test_a_v2_timeout_ends_without_running_a_computer() -> None:
     """Regression (Phase 8): when a timed-out seat is taken over in a v2
     match, the server must move the computer — in v1 a human's browser
     did it, so the takeover path never scheduled a move and the match
@@ -275,16 +275,12 @@ def test_a_v2_computer_takeover_moves_itself() -> None:
         initial_state=None,
     )
     clock.advance(61)
-    # This read applies the timeout: Ann's seat is taken over.
     after = platform.get_match(match.id, caller_id=ann)
-    assert kinds(after) == ["computer", "human"]
-    # The takeover scheduled the computer's move (synchronously here,
-    # since the delay is 0); the next read shows it has already moved
-    # (a pass, in the debug game) and it is Bob's turn.
-    after = platform.get_match(match.id, caller_id=ann)
-    assert len(after.moves) == 1
-    assert after.turn_of_player_indices == frozenset({1})
-    assert after.state["passes"] == 1
+    assert kinds(after) == ["human", "human"]
+    assert after.status == "over" and after.end_reason == "timed_out"
+    assert after.turn_of_player_indices is None
+    assert len(after.moves) == 0
+    assert after.state == {"counter": 0, "note": ""}
 
 
 def test_every_human_with_the_turn_times_out() -> None:
@@ -292,7 +288,7 @@ def test_every_human_with_the_turn_times_out() -> None:
     match_id = world.match(joiners=[world.bob, world.cy], first=[0, 1])
     world.clock.advance(61)
     match = world.get(match_id)
-    assert kinds(match) == ["computer", "computer", "human"]
+    assert kinds(match) == ["human", "human", "human"]
     assert sorted(t.user_id for t in match.timeouts) == sorted([world.ann, world.bob])
 
 
@@ -328,10 +324,10 @@ def test_the_match_ends_when_no_humans_are_left() -> None:
 
 def test_computer_seats_never_time_out() -> None:
     world = World()
-    match_id = world.match(joiners=[world.bob], computers=1, first=[2])
+    match_id = world.match(computers=1, first=[1])
     world.clock.advance(3600)
     match = world.get(match_id)
-    assert match.status == "ongoing" and kinds(match) == ["human", "human", "computer"]
+    assert match.status == "ongoing" and kinds(match) == ["human", "computer"]
     assert match.turn_deadline is None
 
 
@@ -356,7 +352,7 @@ def test_two_simultaneous_checks_time_out_only_once() -> None:
     assert len(match.timeouts) == 1
     assert {len(r.timeouts) for r in results} == {1}
     assert [m.body for m in world.notifier.messages].count(
-        "Time ran out in Duel: a computer took over your seat"
+        "Duel ended: time ran out"
     ) == 1
 
 
@@ -365,37 +361,30 @@ def test_listing_applies_the_timeout_too() -> None:
     match_id = world.match(joiners=[world.bob])
     world.clock.advance(61)
     listed = world.platform.list_matches(caller_id=world.bob, status=None, game_id=None)
-    assert kinds(next(m for m in listed if m.id == match_id)) == ["computer", "human"]
+    assert kinds(next(m for m in listed if m.id == match_id)) == ["human", "human"]
 
 
 def test_the_timed_out_player_can_still_watch() -> None:
     world = World()
-    match_id = world.match(joiners=[world.bob, world.cy])
+    mid = world.match(joiners=[world.bob], first=[1])
     world.clock.advance(61)
-    world.get(match_id)
-    # Ann owns this match; Bob is a plain player who times out next.
-    world.move(match_id, world.cy, [1])  # Cy plays the computer's move; Bob's turn
-    world.clock.advance(61)
-    match = world.platform.get_match(match_id, caller_id=world.bob)
-    assert match.seat_of(world.bob) is None and match.involves(world.bob)
-    assert match_id in [m.id for m in world.platform.list_matches(caller_id=world.bob, status=None, game_id=None)]
+    match = world.platform.get_match(mid, caller_id=world.bob)
+    assert match.status == "over" and match.involves(world.bob)
+    assert mid in [m.id for m in world.platform.list_matches(caller_id=world.bob, status=None, game_id=None)]
 
 
-def test_joining_a_seat_that_has_the_turn_restarts_its_clock() -> None:
+def test_ended_timeout_cannot_be_joined() -> None:
     world = World()
-    match_id = world.match(joiners=[world.bob], computers=1, first=[0])
+    mid = world.match(joiners=[world.bob])
     world.clock.advance(61)
-    world.get(match_id)  # Ann timed out; a computer holds seat 0 and the turn
-    world.clock.advance(30)
-    world.platform.join_match(caller_id=world.cy, match_id=match_id)
-    match = world.get(match_id)
-    assert match.seat_of(world.cy).player_index == 0
-    assert match.turn_deadline == world.clock.now + dt.timedelta(seconds=60)
+    assert world.get(mid).status == "over"
+    with pytest.raises(ConflictError, match="the match is over"):
+        world.platform.join_match(caller_id=world.cy, match_id=mid)
 
 
 def test_joining_a_seat_without_the_turn_leaves_the_clock_alone() -> None:
     world = World(counts=(2, 3))
-    match_id = world.match(joiners=[world.bob], computers=1, first=[0])
+    match_id = world.match(joiners=[world.bob], first=[0])
     started = world.get(match_id).turn_deadline
     world.clock.advance(30)
     world.platform.join_match(caller_id=world.cy, match_id=match_id)
@@ -429,7 +418,7 @@ def test_the_timed_out_player_is_notified_about_the_takeover() -> None:
     world.clock.advance(61)
     world.get(match_id)
     sent = [(m.subscription.user_id, m.body) for m in world.notifier.messages]
-    assert sent == [(world.ann, "Time ran out in Duel: a computer took over your seat")]
+    assert sorted(sent) == sorted((u, "Duel ended: time ran out") for u in (world.ann, world.bob, world.cy))
 
 
 def test_everyone_is_notified_when_the_match_ends_on_time() -> None:
@@ -444,20 +433,19 @@ def test_everyone_is_notified_when_the_match_ends_on_time() -> None:
     assert sent == sorted([(world.ann, "Duel ended: time ran out"), (world.bob, "Duel ended: time ran out")])
 
 
-def test_the_end_also_reaches_players_who_timed_out_earlier() -> None:
+def test_repeated_timeout_reads_do_not_notify_twice() -> None:
     world = World()
     for user in (world.ann, world.bob):
         world.subscribe(user)
-    match_id = world.match(joiners=[world.bob])
-    world.clock.advance(61)
-    world.get(match_id)  # Ann times out; a computer takes her seat; she watches
-    world.move(match_id, world.bob, [1])  # Bob plays the computer's move; Bob's turn
+    mid = world.match(joiners=[world.bob])
     world.notifier.messages.clear()
     world.clock.advance(61)
-    match = world.get(match_id)  # Bob times out too; no human is left
-    assert (match.status, match.end_reason) == ("over", "timed_out")
-    sent = sorted((m.subscription.user_id, m.body) for m in world.notifier.messages)
-    assert sent == sorted([(world.ann, "Duel ended: time ran out"), (world.bob, "Duel ended: time ran out")])
+    world.get(mid)
+    count = len(world.notifier.messages)
+    assert count == 2
+    world.clock.advance(61)
+    assert world.get(mid).status == "over"
+    assert len(world.notifier.messages) == count
 
 
 # The API
@@ -475,7 +463,7 @@ def test_the_api_returns_the_clock_and_the_servers_time() -> None:
     world.clock.advance(41)
     body = client.get(f"/matches/{match_id}").json()
     assert body["timeouts"] == [{"player_index": 0, "user_id": world.ann, "at": "2026-01-01T00:01:00Z"}]
-    assert body["players"][0]["kind"] == "computer"
+    assert body["players"][0]["kind"] == "human"
 
 
 # The data file

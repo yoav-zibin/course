@@ -13,7 +13,7 @@ function worker() {
 }
 test('every page script, style, manifest and install icon is precached at its exact URL',()=>{
   const {shell} = worker();
-  const assets = [...read('static/portal.html').matchAll(/(?:src|href)="(\/static\/[^"#]+)"/g)].map(m=>m[1]);
+  const assets = [...read('static/portal.html').matchAll(/<(?:script|link|img)\b[^>]*?\s(?:src|href)="(\/static\/[^"#]+)"/g)].map(m=>m[1]);
   for(const asset of assets) assert.ok(shell.includes(asset), `missing ${asset}`);
   for(const asset of shell) assert.ok(fs.existsSync(path.join(root, asset.split('?')[0])), asset);
   const manifest=JSON.parse(read('static/portal.webmanifest'));

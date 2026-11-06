@@ -132,7 +132,7 @@ async function useStarter() {
   let game=state.starters.find(item=>item.id===$("starter-game").value);
   if (!game) return;
   const session=state.session, user=me(), editor=state.editor;
-  if (await StoragePages.enabled()) game=await apiRequest("GET","/games/"+encodeURIComponent(game.id)+"/versions/"+game.version,{user:me()});
+  game=await apiRequest("GET","/games/"+encodeURIComponent(game.id)+"/versions/"+game.version,{user:me()});
   if (session!==state.session || user?.id!==me()?.id || state.selectedId!=="new" || state.editor!==editor || state.editor.code) return;
   state.editor=content({...game,name:game.name+" (copy)",description:(game.description || game.name)+" · Based on "+game.name+" v"+game.version+"."});
   state.messages=[];state.log=[];state.undo=[];state.aiOpen=true;
@@ -672,6 +672,8 @@ async function onUserChanged() {
 }
 async function resumeWorkspace() {
   let last;
+  const requested = decodeURIComponent(location.hash.slice(1));
+  if (me() && requested && state.drafts.some(draft=>draft.id===requested)) { await select(requested); return; }
   try {last=me() && localStorage.getItem("game-platform.builder.last.v2."+me().id);} catch {}
   if (last && ((last!=="new" && await StoragePages.enabled()) || state.games.some(game=>game.id===last) || state.drafts.some(game=>game.id===last) ||
       (last==="new" && localStorage.getItem(recoveryKey("new"))))) await select(last);

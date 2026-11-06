@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>4 Player Chess</title><style>body{margin:0;padding:16px;background:#101827;color:#edf2ff;font:16px system-ui}*{box-sizing:border-box}h1{font-size:23px;margin:0 0 8px}#status{font-weight:650;margin:12px 0;color:#8ee7cd}.grid{display:grid;grid-template-columns:repeat(14,30px);gap:1px}.sq{width:30px;height:30px;display:grid;place-items:center;font-size:19px;padding:0;border:0;border-radius:2px}.sq.light{background:#334155}.sq.dark{background:#1e293b}.sq.off{background:transparent}.sq.dest{outline:3px solid #22c55e;cursor:pointer;z-index:1}.sq.sel{outline:3px solid #fcd34d;z-index:1}.sq.chk{outline:3px solid #ef4444;z-index:1}.sq.last{background:#7c6a2f}.p0{color:#f87171}.p1{color:#60a5fa}.p2{color:#4ade80}.p3{color:#facc15}.meta{font-size:14px;color:#bec9dc}button.act{font:inherit;min-height:44px;padding:0 16px;border:1px solid #64748b;border-radius:8px;background:#25344e;color:white;cursor:pointer;margin:8px 8px 0 0}button.act:disabled{opacity:.5;cursor:default}.rules{font-size:14px;color:#bec9dc;max-width:520px}</style></head><body><h1>4 Player Chess</h1><p class="rules">Four armies on one cross-shaped board, in two teams: seats 1&amp;3 (red &amp; green) against seats 2&amp;4 (blue &amp; yellow). Your partner sits opposite you. Pawns promote to queens at the far edge; a checkmated or stalemated army is eliminated — eliminate both enemy kings' armies to win. If 24 half-moves pass, the team with more material wins. You may also resign your army.</p><div id="status">Waiting for the platform…</div><div class="meta" id="meta"></div><div class="grid" id="grid"></div><div id="actions"></div><script>
+"use strict";
+let latest=null,sentFor=-1,selected=null;
+const $=id=>document.getElementById(id);
+const GLYPH={K:"♚",Q:"♛",R:"♜",B:"♝",N:"♞",P:"♟"};
+const valid=(r,c)=>!(r<0||r>13||c<0||c>13||((r<3||r>10)&&(c<3||c>10)));
+function moveCount(){return latest?(latest.move_count??latest.moveCount??0):0;}
+function myTurn(){return latest&&latest.status==="ongoing"&&latest.acting_for_player_index!==null&&latest.acting_for_player_index!==undefined;}
+function send(move){if(!myTurn()||sentFor===moveCount())return;sentFor=moveCount();selected=null;parent.postMessage({type:"make_move",move},"*");render();}
+function render(){
+ if(!latest)return;
+ const v=latest.view,status=$("status"),grid=$("grid");
+ const name=i=>(latest.players&&latest.players[i]&&latest.players[i].name)||("Player "+(i+1));
+ if(!v){status.textContent="Waiting…";return;}
+ const over=latest.status==="over"||(v.winnerTeam!==null&&v.winnerTeam!==undefined);
+ $("meta").textContent=(latest.players||[]).map((p,i)=>p.name+" (seat "+(i+1)+(v.eliminated[i]?", eliminated":"")+")").join(" · ")+" · half-move "+v.ply+" of 24";
+ if(over)status.textContent=v.winnerTeam===null||v.winnerTeam===undefined?"Game over — draw on material.":"🏆 Team "+(v.winnerTeam+1)+" wins!";
+ else if(sentFor===moveCount())status.textContent="Saving move…";
+ else if(myTurn())status.textContent=name(latest.acting_for_player_index)+" — your move"+(v.inCheck?" (your king is in check!)":"");
+ else{const t=latest.turn_of_player_indices||latest.turn;status.textContent=t&&t.length?("Waiting for "+t.map(name).join(", ")):"Waiting…";}
+ const legal=(myTurn()&&!over)?(v.legalMoves||[]):[];
+ const dests=selected?legal.filter(m=>m.fr===selected[0]&&m.fc===selected[1]):[];
+ const chk=new Set(v.checkKings||[]);
+ const lm=v.lastMove;
+ grid.replaceChildren();
+ for(let r=0;r<14;r++)for(let c=0;c<14;c++){
+   const d=document.createElement("button");
+   if(!valid(r,c)){d.className="sq off";d.disabled=true;grid.append(d);continue;}
+   const piece=v.board[r+","+c];
+   d.className="sq "+(((r+c)%2===0)?"light":"dark");
+   if(lm&&((lm.fr===r&&lm.fc===c)||(lm.tr===r&&lm.tc===c)))d.classList.add("last");
+   if(chk.has(r+","+c))d.classList.add("chk");
+   if(piece){d.textContent=GLYPH[piece.t]||piece.t;d.classList.add("p"+piece.o);}
+   const dest=dests.find(m=>m.tr===r&&m.tc===c);
+   if(selected&&selected[0]===r&&selected[1]===c)d.classList.add("sel");
+   if(dest){d.classList.add("dest");d.onclick=()=>send({kind:"move",fr:selected[0],fc:selected[1],tr:r,tc:c});}
+   else if(legal.some(m=>m.fr===r&&m.fc===c))d.onclick=()=>{selected=[r,c];render();};
+   else d.disabled=true;
+   grid.append(d);
+ }
+ const actions=$("actions");actions.replaceChildren();
+ if(myTurn()&&!over){
+   if(legal.length===0&&!v.inCheck){
+     const p=document.createElement("button");p.className="act";p.textContent="No legal moves — eliminate my army";
+     p.disabled=sentFor===moveCount();p.onclick=()=>send({kind:"pass"});actions.append(p);
+   }
+   const rs=document.createElement("button");rs.className="act";rs.textContent="Resign my army";
+   rs.disabled=sentFor===moveCount();rs.onclick=()=>send({kind:"elim"});actions.append(rs);
+ }
+}
+addEventListener("message",e=>{if(e.source!==parent||!e.data||e.data.type!=="state_changed")return;latest=e.data;selected=null;render();});
+</script></body></html>

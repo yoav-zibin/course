@@ -65,16 +65,15 @@ def test_a_human_may_move_for_a_computer_sharing_the_turn(api: Api) -> None:
     match_id = api.new_match(
         owner=alice,
         game_id=game_id,
-        num_computer_opponents=1,
-        joiners=[bob],
+        num_computer_opponents=2,
         start=True,
     )
-    assert api.match_summary(match_id)["players"] == ["alice", "bob", "computer"]
+    assert api.match_summary(match_id)["players"] == ["alice", "computer", "computer"]
 
     # Alice gives the turn to bob and the computer.
     api.move(match_id, as_user=alice, next_turn=[1, 2])
     # Bob moves for himself...
-    api.move(match_id, as_user=bob, next_turn=[2])
+    api.move(match_id, as_user=alice, next_turn=[2])
     # ...then alice moves for the computer; the move is recorded for its seat.
     assert api.move(match_id, as_user=alice, next_turn=[0]).status_code == 201
 
@@ -83,7 +82,7 @@ def test_a_human_may_move_for_a_computer_sharing_the_turn(api: Api) -> None:
         (move["player_index"], api.name(move["made_by_user_id"])) for move in moves
     ] == [
         (0, "alice"),
-        (1, "bob"),
+        (1, "alice"),
         (2, "alice"),
     ]
 
@@ -163,11 +162,10 @@ def test_a_human_player_submits_the_computers_move(api: Api) -> None:
     match_id = api.new_match(
         owner=alice,
         game_id=game_id,
-        num_computer_opponents=1,
-        joiners=[bob],
+        num_computer_opponents=2,
         start=True,
     )
-    assert api.match_summary(match_id)["players"] == ["alice", "bob", "computer"]
+    assert api.match_summary(match_id)["players"] == ["alice", "computer", "computer"]
 
     api.move(match_id, as_user=alice, next_turn=2)
     # Any human player may move for the computer, but outsiders may not.
@@ -175,14 +173,14 @@ def test_a_human_player_submits_the_computers_move(api: Api) -> None:
         403,
         "you are not a player in this match",
     )
-    assert api.move(match_id, as_user=bob, next_turn=0).status_code == 201
+    assert api.move(match_id, as_user=alice, next_turn=0).status_code == 201
 
     moves = api.ok("GET", f"/matches/{match_id}/moves")
     assert [
         (move["player_index"], api.name(move["made_by_user_id"])) for move in moves
     ] == [
         (0, "alice"),
-        (2, "bob"),
+        (2, "alice"),
     ]
 
 
@@ -245,8 +243,7 @@ def test_expected_move_count_rejects_a_stale_move(api: Api) -> None:
     match_id = api.new_match(
         owner=alice,
         game_id=game_id,
-        num_computer_opponents=1,
-        joiners=[bob],
+        num_computer_opponents=2,
         start=True,
     )
     api.move(match_id, as_user=alice, next_turn=2)
@@ -265,7 +262,7 @@ def test_expected_move_count_rejects_a_stale_move(api: Api) -> None:
 
     # Both humans try to submit the computer's second move; only the first one counts.
     assert computer_move(alice).status_code == 201
-    assert error(computer_move(bob)) == (409, "expected 1 moves but the match has 2")
+    assert error(computer_move(alice)) == (409, "expected 1 moves but the match has 2")
 
 
 def test_move_body_is_validated(api: Api) -> None:

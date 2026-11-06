@@ -53,8 +53,8 @@ struct PlaySetupView: View {
                     }
                     if online && others.count > 1 {
                         Text(switchedToComputer
-                             ? "Friends play online on their own phones, so pass-and-play seats became computers."
-                             : "With friends online, the other seats can be friends or computers (no pass-and-play).")
+                             ? "Friends play online on their own phones; all seats are human."
+                             : "With friends online, all opponents are human. Computers are only for single-player.")
                             .font(Theme.font(12)).foregroundStyle(Theme.warningText)
                             .accessibilityIdentifier("friend-rule-note")
                     }
@@ -153,12 +153,16 @@ struct PlaySetupView: View {
         }
     }
 
-    /// Picking a friend makes it an online match: pass-and-play seats become computers.
+    /// Each mode uses either humans only or one human against computers.
     private func choose(_ choice: SeatChoice, for i: Int) {
         others[i] = choice
-        if choice == .friend, others.contains(.human) {
-            others = others.map { $0 == .human ? .computer : $0 }
+        if choice == .friend {
+            others = others.map { _ in .friend }
             switchedToComputer = true
+        } else if choice == .computer {
+            others = others.map { _ in .computer }
+        } else {
+            others = others.map { _ in .human }
         }
         if !online { switchedToComputer = false }
         error = nil
@@ -166,7 +170,8 @@ struct PlaySetupView: View {
 
     /// Keeps choices already made; new seats start as computers.
     private func resize(to n: Int) {
-        others = (1..<max(n, 1)).map { seat in seat - 1 < others.count ? others[seat - 1] : .computer }
+        let fill = others.first ?? .computer
+        others = (1..<max(n, 1)).map { _ in fill }
     }
 
     /// Creates the online match and opens its waiting room.

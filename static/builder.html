@@ -11,16 +11,17 @@
       gtag('config', 'G-6CCXZQYVE7');
     </script><meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Game platform · Builder</title>
-  <link rel="stylesheet" href="/static/common.css?v=12" />
+  <link rel="stylesheet" href="/static/common.css?v=16" />
   <link rel="stylesheet" href="/static/builder.css?v=14" />
-  <link rel="stylesheet" href="/static/experiments.css?v=1" />
+  <link rel="stylesheet" href="/static/experiments.css?v=6" />
 </head>
-<body>
+<body data-skin-preview>
 <header class="topbar" data-app-page="builder">
   <h1 data-i18n="ui.app_name">Game platform</h1>
   <nav aria-label="Game platform">
         <a href="/portal" data-i18n="ui.nav.portal">Portal</a>
         <a href="/builder" aria-current="page" data-i18n="ui.nav.builder">Builder</a>
+        <a href="/static/guided-builder.html" data-i18n="ui.nav.new_builder">New Builder</a>
   </nav>
   <span class="spacer"></span>
   <button id="notify-toggle" type="button" class="notify-toggle" aria-pressed="false" hidden>Enable notifications</button>
@@ -28,7 +29,7 @@
 </header>
 <div class="app builder-shell">
   <aside class="sidebar">
-    <div class="app-brand"><span class="app-brand-mark" aria-hidden="true">✳</span><span class="app-brand-name" data-i18n="ui.builder.brand">Game Builder</span></div>
+    <a class="app-brand" href="/portal" aria-label="Game platform home"><span class="app-brand-mark" aria-hidden="true">✳</span><span class="app-brand-name" data-i18n="ui.builder.brand">Game Builder</span></a>
     <button id="new-game" type="button" class="primary" data-i18n="ui.builder.new_game_button">+ New game</button>
     <div class="library-label" data-i18n="ui.builder.your_games">Your games</div><div id="games"></div>
   </aside>
@@ -75,12 +76,12 @@
   <div id="ai-panel-body"></div>
 </aside>
 <button id="open-ai" type="button" hidden>Ask AI</button>
-<script src="/static/common.js?v=15"></script>
+<script src="/static/common.js?v=20"></script>
 <script src="/static/i18n.js?v=3"></script>
-<script src="/static/auth.js?v=7"></script>
+<script src="/static/auth.js?v=8"></script>
 <script src="/static/push-notifications.js?v=1"></script>
 <script src="/static/storage-pages.js?v=1"></script>
-<script src="/static/builder.js?v=30"></script>
-<script src="/static/experiments.js?v=1"></script>
+<script src="/static/builder.js?v=31"></script>
+<script src="/static/experiments.js?v=7"></script>
 </body>
 </html>

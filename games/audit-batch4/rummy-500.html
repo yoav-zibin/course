@@ -1,0 +1,184 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{font-family:sans-serif;background:#0b5d3b;color:#fff;margin:0;padding:10px}
+#app{max-width:980px;margin:0 auto}
+.card{display:inline-block;width:52px;height:72px;border-radius:8px;background:#fff;color:#111;border:2px solid #333;text-align:center;vertical-align:top;margin:2px;padding-top:6px;font-weight:bold;font-size:15px;cursor:default;user-select:none;line-height:1.2}
+.card.red{color:#c00}.card.back{background:linear-gradient(135deg,#27407a,#101f45);color:#fff;border-color:#fff}
+.card.sel{outline:3px solid gold;transform:translateY(-6px)}
+.card.clickable{cursor:pointer}
+.pile{display:flex;flex-wrap:wrap;align-items:flex-end;background:rgba(0,0,0,.25);border-radius:10px;padding:8px;min-height:90px;margin:6px 0}
+button{margin:3px;padding:8px 12px;border-radius:8px;border:0;font-weight:bold;cursor:pointer}
+button:disabled{opacity:.4;cursor:default}
+.meld{background:rgba(255,255,255,.12);border:1px solid #fff3;border-radius:10px;padding:6px;margin:6px 0}
+.meld.selM{outline:3px solid gold}
+.bar{background:rgba(0,0,0,.35);border-radius:10px;padding:8px;margin:6px 0}
+.small{font-size:13px;opacity:.9}
+#hand{background:rgba(0,0,0,.25);border-radius:10px;padding:8px;min-height:90px}
+</style>
+</head>
+<body>
+<div id="app">
+<h2 style="margin:4px 0">Rummy 500 <span class="small">(simplified: no out-of-turn Rummy calls)</span></h2>
+<div id="status" class="bar">Waiting for platform…</div>
+<div id="scores" class="bar"></div>
+<div id="table"></div>
+<div id="controls" class="bar"></div>
+<div id="myarea" class="bar"></div>
+</div>
+<script>
+let latest=null, sel=new Set(), selMeld=null, sortMode='rank', sentFor=-1;
+const S={H:'\u2665',D:'\u2666',C:'\u2663',S:'\u2660'};
+function isJ(c){ return c.r===0; }
+function cStr(c){ if(isJ(c)) return 'JOKER'; const r=c.r===1?'A':c.r===11?'J':c.r===12?'Q':c.r===13?'K':''+c.r; return r+S[c.s]; }
+function cColor(c){ return (c.s==='H'||c.s==='D')?'red':''; }
+function isValidMeld(cards){
+ if(!cards||cards.length<3) return false;
+ const nj=cards.filter(c=>!isJ(c));
+ if(nj.length===0) return true;
+ if(nj.every(c=>c.r===nj[0].r)) return true;
+ if(nj.length<2) return false;
+ if(!nj.every(c=>c.s===nj[0].s)) return false;
+ const ranks=nj.map(c=>c.r);
+ if(new Set(ranks).size!==ranks.length) return false;
+ return Math.max(...ranks)-Math.min(...ranks)+1<=cards.length;
+}
+// Exact bounded search under isValidMeld: rank sets, then every ace-low
+// suit interval. Keep one natural of each rank; jokers fill any holes.
+// Unlike the bot's capped subset search, this also covers longer melds.
+function requiredMeld(hand, requiredId) {
+  const required = hand.find(c => c.id === requiredId);
+  if (!required) return null;
+  const wild = hand.filter(c => c.r === 0);
+  if (required.r === 0 && wild.length >= 3) return wild;
+  for (let rank = 1; rank <= 13; rank++) {
+    if (required.r !== 0 && required.r !== rank) continue;
+    const cards = hand.filter(c => c.r === rank).concat(wild);
+    if (cards.length >= 3 && isValidMeld(cards)) return cards;
+  }
+  for (const suit of ["S", "H", "D", "C"]) {
+    if (required.r !== 0 && required.s !== suit) continue;
+    const byRank = new Map();
+    for (const card of hand) if (card.r !== 0 && card.s === suit) byRank.set(card.r, card);
+    if (required.r !== 0) byRank.set(required.r, required);
+    for (let low = 1; low <= 13; low++) {
+      const naturals = [];
+      for (let high = low; high <= 13; high++) {
+        if (byRank.has(high)) naturals.push(byRank.get(high));
+        if (naturals.length < 2 || (required.r !== 0 && (required.r < low || required.r > high))) continue;
+        const cards = naturals.concat(wild);
+        if (cards.length >= 3 && isValidMeld(cards)) return cards;
+      }
+    }
+  }
+  return null;
+}
+function canUseRequiredCard(hand, melds, requiredId) {
+  const card = hand.find(c => c.id === requiredId);
+  if (!card) return false;
+  if (melds.some(m => isValidMeld(m.cards.concat(m.exts.map(e => e.card), [card])))) return true;
+  return requiredMeld(hand, requiredId) !== null;
+}
+
+function sorted(hand){ const a=[...hand]; if(sortMode==='rank') a.sort((x,y)=>(isJ(x)?99:x.r)-(isJ(y)?99:y.r)||(x.s||'').localeCompare(y.s||'')); else a.sort((x,y)=>(x.s||'Z').localeCompare(y.s||'Z')||(isJ(x)?99:x.r)-(isJ(y)?99:y.r)); return a; }
+function view(){ return latest?latest.view:null; }
+function actor(){ return latest?latest.acting_for_player_index:null; }
+function myIdx(){ return latest?latest.my_player_index:null; }
+function canAct(){ return latest&&latest.status==='ongoing'&&actor()!=null&&actor()===myIdx()&&sentFor!==latest.move_count; }
+function send(move){
+ if(!canAct()) return;
+ sentFor=latest.move_count;
+ parent.postMessage({type:'make_move',move:move},'*');
+ render();
+}
+function doDrawStock(){ const v=view(); if(canAct()&&v.phase==='draw'&&v.deckCount>0) send({type:'draw_stock'}); }
+function doDrawDiscard(idx){
+ const v=view(); if(!canAct()||v.phase!=='draw'||!Number.isInteger(idx)||idx<0||idx>=v.discard.length) return;
+ const taken=v.discard.slice(idx);
+ if(taken.length>1&&!canUseRequiredCard(v.hand.concat(taken),v.melds,taken[0].id)){alert('The deepest discard must be melded or laid off.');return;}
+ send({type:'draw_discard',index:idx});
+}
+function doEndStock(){ const v=view(); if(canAct()&&v.phase==='draw'&&v.deckCount===0) send({type:'end_round'}); }
+function doNextRound(){ const v=view(); if(canAct()&&v.phase==='roundOver'&&v.matchWinner===null) send({type:'next_round'}); }
+function doMeld(ids){
+ const v=view(); if(!v||!canAct()||v.phase!=='play'||!Array.isArray(ids)||new Set(ids).size!==ids.length) return;
+ const cards=ids.map(id=>v.hand.find(c=>c.id===id)).filter(Boolean);
+ if(cards.length<3||cards.length!==ids.length) return;
+ if(!isValidMeld(cards)){ alert('Not a valid meld (need 3+ set same rank, or 3+ run same suit, Ace low). Jokers wild.'); return; }
+ sel.clear(); send({type:'meld',card_ids:ids});
+}
+function doLayoff(cardId,meldId){
+ const v=view(); if(!canAct()||v.phase!=='play') return;
+ const card=v.hand.find(c=>c.id===cardId),meld=v.melds.find(m=>m.id===meldId);
+ if(!card||!meld||!isValidMeld(meld.cards.concat(meld.exts.map(e=>e.card),[card]))){alert('That card does not extend the meld.');return;}
+ sel.clear(); send({type:'layoff',card_id:cardId,meld_id:meldId});
+}
+function doDiscard(cardId){
+ const v=view(); if(!v||!canAct()||v.phase!=='play'||!v.hand.some(c=>c.id===cardId)) return;
+ if(v.pending){ alert('You must meld the deep card first!'); return; }
+ if(v.ban===cardId&&v.hand.length>1){ alert('You cannot discard the single top card you just took.'); return; }
+ sel.clear(); send({type:'discard',card_id:cardId});
+}
+function render(){
+ const statusEl=document.getElementById('status'), scEl=document.getElementById('scores'), tEl=document.getElementById('table'), cEl=document.getElementById('controls'), mEl=document.getElementById('myarea');
+ if(!latest||!view()){ statusEl.textContent='Waiting for platform…'; return; }
+ const v=view(), pls=latest.players, a=latest.status==='ongoing'?actor():null, me=myIdx();
+ const over=v.matchWinner!=null;
+ let status='Round '+v.roundNum+' • Dealer '+pls[v.dealer%pls.length].name+' • ';
+ if(latest.status==='over'||over) status='Match over! Winner: '+pls[v.matchWinner].name;
+ else if(v.phase==='roundOver') status=(v.endReason==='went out'?'A player went out!':'Stock closed the round.')+' (scores below) — '+(a!=null?pls[a].name:'…')+' starts next round.';
+ else if(sentFor===latest.move_count) status+='Saving move…';
+ else status+=(a==null?'Waiting…':pls[a].name+"'s turn"+(a===me?' (you)':''))+' • Phase: '+v.phase+(v.pending?' • MUST MELD deep card!':'');
+ statusEl.innerHTML=status+'<br><span class="small">'+(v.log||'')+'</span>';
+ scEl.innerHTML='<b>Scores (target 500):</b> '+pls.map((p,i)=>p.name+': '+(v.scores[i]||0)+(p.kind==='computer'?' [CPU]':'')).join(' • ')+(v.roundScores?'<br><span class="small">Last round: '+v.roundScores.map((t,i)=>pls[i].name+' '+(t>=0?'+':'')+t).join(' • ')+'</span>':'');
+ tEl.innerHTML='';
+ const bar=document.createElement('div'); bar.className='bar';
+ bar.innerHTML='<b>Stock:</b> '+v.deckCount+' cards <b style="margin-left:12px">Discard pile ('+v.discard.length+'):</b> <span class="small">click a card to take it + everything on top (draw phase)</span>';
+ tEl.appendChild(bar);
+ const pile=document.createElement('div'); pile.className='pile';
+ v.discard.forEach((c,idx)=>{ const d=document.createElement('div'); d.className='card '+cColor(c)+((v.phase==='draw'&&canAct())?' clickable':''); d.textContent=cStr(c); d.title='Take from here ('+(v.discard.length-idx)+' cards)'; if(v.phase==='draw'&&canAct()){ d.onclick=()=>doDrawDiscard(idx); } pile.appendChild(d); });
+ if(!v.discard.length) pile.innerHTML='<span class="small">empty</span>';
+ tEl.appendChild(pile);
+ const mh=document.createElement('div');
+ v.melds.forEach(m=>{ const d=document.createElement('div'); d.className='meld'+(selMeld===m.id?' selM':''); const owner=pls[m.owner]?pls[m.owner].name:'#'+m.owner;
+  d.innerHTML='<b>'+m.id+'</b> (by '+owner+'): '; const span=document.createElement('span');
+  const extIds={}; m.exts.forEach(e=>{ extIds[e.card.id]=e.by; });
+  m.cards.concat(m.exts.map(e=>e.card)).forEach(c=>{ const cd=document.createElement('div'); cd.className='card '+cColor(c); cd.style.width='44px';cd.style.height='60px';cd.style.fontSize='12px'; cd.textContent=cStr(c); cd.title=(extIds[c.id]!=null?'laid by '+pls[extIds[c.id]].name:'meld by '+owner); span.appendChild(cd); });
+  d.appendChild(span); d.style.cursor='pointer'; d.onclick=()=>{ selMeld=(selMeld===m.id?null:m.id); render(); };
+  mh.appendChild(d); });
+ if(!v.melds.length) mh.innerHTML='<div class="small">No melds yet.</div>';
+ tEl.appendChild(mh);
+ let oppHtml='<div class="bar"><b>Players:</b><br>';
+ pls.forEach((p,i)=>{ oppHtml+=(a===i?'▶ ':'')+p.name+(i===me?' (you)':'')+' ['+p.kind+'] — hand: '+(v.counts[i]||0)+' cards'+(i===v.dealer?' (D)':'')+'<br>'; });
+ oppHtml+='</div>';
+ tEl.insertAdjacentHTML('beforeend',oppHtml);
+ cEl.innerHTML='';
+ if(over){ cEl.innerHTML='<b>'+pls[v.matchWinner].name+' wins the match with '+v.scores[v.matchWinner]+'!</b>'; }
+ else if(v.phase==='roundOver'){ const b=document.createElement('button'); b.textContent='Start Next Round'; b.disabled=!canAct(); b.onclick=doNextRound; cEl.appendChild(b); if(!canAct()) cEl.insertAdjacentHTML('beforeend','<span class="small"> Waiting for '+(a!=null?pls[a].name:'the next player')+' to start it.</span>'); }
+ else if(!canAct()){ cEl.innerHTML='<span class="small">Waiting for '+(a!=null?pls[a].name:'other player')+'…</span>'; }
+ else if(v.phase==='draw'){ const b1=document.createElement('button'); b1.textContent='Draw Stock ('+v.deckCount+')'; b1.disabled=!v.deckCount; b1.onclick=doDrawStock; cEl.appendChild(b1);
+  if(v.deckCount===0){ const b2=document.createElement('button'); b2.textContent='End Round (stock dry)'; b2.onclick=doEndStock; cEl.appendChild(b2); }
+  cEl.insertAdjacentHTML('beforeend','<span class="small"> or click a discard card above to take it.</span>'); }
+ else if(v.phase==='play'){ const bM=document.createElement('button'); bM.textContent='Meld Selected (3+)'; bM.onclick=()=>doMeld([...sel]); cEl.appendChild(bM);
+  const bL=document.createElement('button'); bL.textContent='Lay Off Selected'+(selMeld?' on '+selMeld:''); bL.disabled=sel.size!==1||!selMeld; bL.onclick=()=>doLayoff([...sel][0],selMeld); cEl.appendChild(bL);
+  const bD=document.createElement('button'); bD.textContent='Discard Selected'; bD.disabled=sel.size!==1; bD.onclick=()=>doDiscard([...sel][0]); cEl.appendChild(bD);
+  const bS=document.createElement('button'); bS.textContent='Sort: '+sortMode; bS.onclick=()=>{ sortMode=sortMode==='rank'?'suit':'rank'; render(); }; cEl.appendChild(bS);
+  let hint='<div class="small">Select cards in your hand below.'; if(v.pending){ const pc=v.hand.find(c=>c.id===v.pending); hint+=' MUST meld deep card '+(pc?cStr(pc):'')+' before discarding.'; } if(v.ban) hint+=' Cannot discard the just-taken top card.'; hint+='</div>'; cEl.insertAdjacentHTML('beforeend',hint);
+ }
+ mEl.innerHTML='';
+ if(me==null){ mEl.innerHTML='<span class="small">Spectating — hands hidden.</span>'; }
+ else { const mh2=document.createElement('div'); mh2.innerHTML='<b>Your hand ('+pls[me].name+'):</b> '; const wrap=document.createElement('div'); wrap.id='hand';
+  sorted(v.hand||[]).forEach(c=>{ const d=document.createElement('div'); d.className='card '+cColor(c)+(sel.has(c.id)?' sel':''); d.textContent=cStr(c); if(canAct()&&v.phase==='play'){ d.classList.add('clickable'); d.onclick=()=>{ if(sel.has(c.id)) sel.delete(c.id); else sel.add(c.id); render(); }; } wrap.appendChild(d); });
+  mEl.appendChild(mh2); mEl.appendChild(wrap);
+ }
+}
+addEventListener('message',(ev)=>{ if(ev.source!==parent||!ev.data||ev.data.type!=='state_changed') return; latest=ev.data; sentFor=-1;
+ const v=latest.view;
+ if(v){ const handIds=new Set((v.hand||[]).map(c=>c.id)); [...sel].forEach(id=>{ if(!handIds.has(id)) sel.delete(id); }); if(selMeld&&!v.melds.some(m=>m.id===selMeld)) selMeld=null; }
+ render(); });
+</script>
+</body>
+</html>

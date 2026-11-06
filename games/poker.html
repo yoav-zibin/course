@@ -42,13 +42,17 @@
 {
   "title": "Texas hold'em",
   "waiting_platform": "Waiting for the platform…",
-  "waiting_deal": "Waiting for the first deal…",
+  "waiting_start": "Waiting for the game to start.",
+  "seated_waiting": "You're seated. Waiting for the game to start.",
+  "note_seated": "seated",
   "info": "Hand #{number} · blinds {small}/{big} · pot {pot}",
+  "info_watching": "Hand #{number} · blinds {small}/{big} · pot {pot} · You are watching this match",
   "game_winner": "{name} wins the game!",
   "over": "The match is over.",
   "your_turn": "Your turn, {name}.",
   "waiting_for": "Waiting for {name}.",
   "waiting_next": "Waiting for the next player.",
+  "joined_next": "You've joined this match — you'll be dealt in from the next hand.",
   "player_you": "{name} (you)",
   "note_dealer": "dealer",
   "note_folded": "folded",
@@ -87,7 +91,7 @@ function t(key, params) {
 // Call this first in the state_changed handler, before drawing anything: the platform sends
 // the viewer's translations (message.strings), language and writing direction with it.
 function applyLocale(message) {
-  strings = message.strings ? { ...SOURCE_STRINGS, ...message.strings } : SOURCE_STRINGS;
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
   if (message.locale) document.documentElement.lang = message.locale;
   if (message.direction) document.documentElement.dir = message.direction;
 }
@@ -126,22 +130,39 @@ if (typeof window !== "undefined" && window.document) {
 
   function render() {
     const s = view();
+    const players = latest.players ?? [];
+    const me = latest.my_player_index;
     if (!s) {
-      $("status").textContent = t("waiting_deal");
+      // No hand yet (the match has not started, or its first state is
+      // still on its way): show who is seated instead of an empty table.
+      $("status").textContent = me === null ? t("waiting_start") : t("seated_waiting");
+      if (players.length) {
+        $("table").replaceChildren(
+          el("tr", {}, el("th", { textContent: t("head_player") }), el("th", { textContent: "" })),
+          ...players.map((player, seat) => el("tr", {},
+            el("td", { textContent: seat === me ? t("player_you", { name: player.name }) : player.name }),
+            el("td", { className: "muted", textContent: t("note_seated") }))));
+      }
       return;
     }
     const acting = latest.status === "ongoing" ? latest.acting_for_player_index : null;
-    const players = latest.players;
-    const me = latest.my_player_index;
     const pot = s.contributed.reduce((a, b) => a + b, 0);
     $("title").textContent = t("title");
-    $("info").textContent = t("info", { number: s.hand_number, small: s.small_blind, big: s.big_blind, pot });
+    const hand = { number: s.hand_number, small: s.small_blind, big: s.big_blind, pot };
+    if (me === null) $("info").textContent = t("info_watching", hand);
+    else $("info").textContent = t("info", hand);
 
     if (s.winner !== null) $("status").textContent = t("game_winner", { name: players[s.winner].name });
     else if (latest.status === "over") $("status").textContent = t("over");
     else if (acting !== null) $("status").textContent = t("your_turn", { name: players[acting].name });
     else if (players[s.to_act]) $("status").textContent = t("waiting_for", { name: players[s.to_act].name });
     else $("status").textContent = t("waiting_next");
+    // A player who joined mid-hand is seated but not dealt in yet: say
+    // so plainly instead of leaving them to decode the table.
+    if (me !== null && latest.status === "ongoing" && s.winner === null &&
+        !s.dealt_in[me] && s.chips[me] > 0) {
+      $("status").textContent = t("joined_next");
+    }
 
     $("board").replaceChildren(...s.board.map(cardNode));
 

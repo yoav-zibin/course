@@ -1,0 +1,87 @@
+[
+  {
+    "id": "3a6438c0-c712-4301-ade9-eb4b60346658",
+    "name": "Blokus",
+    "expected_version": 2,
+    "client": "blokus.html",
+    "server": "blokus.server.js",
+    "original_client_sha256": "b5166d1b8e8641b9f2cf5fd086adfcea2822cfcf00d7068f82f963a16f08b519",
+    "original_server_sha256": "be651f2bae7e9722abbe09669ba22833a0f62c9715ec6c98c6930c53135b4831",
+    "allowed_player_counts": [
+      2,
+      4
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false
+  },
+  {
+    "id": "b7e3617b-5592-4fa2-ab91-dcb9a42364c1",
+    "name": "Quoridor",
+    "expected_version": 4,
+    "client": "quoridor.html",
+    "server": "quoridor.server.js",
+    "original_client_sha256": "ba140f0a20f309b563db61dc90568db3195bcf7667d7bc13ed2ddbce2f1e0590",
+    "original_server_sha256": "51bc616b9fde14d6edf9e0986e2ec068e8f327f157082d6b57747c4e5fa4bb5f",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": true,
+    "allows_join_mid_match": false
+  },
+  {
+    "id": "87a0d4f0-7020-4397-9358-82daa3452960",
+    "name": "4 player chess",
+    "expected_version": 5,
+    "client": "4-player-chess.html",
+    "server": "4-player-chess.server.js",
+    "original_client_sha256": "eadaf6e98ede4e087b5ffabdc7100552e7fb7dfa12c430b9fec78ea2b3234642",
+    "original_server_sha256": "7e3259499a350ad20373cdb6fb4b617bd698f78812711e6dbf5e796922d119cc",
+    "allowed_player_counts": [
+      4
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false
+  },
+  {
+    "id": "dbf85e1d-cacc-4845-9bb4-de349e13b005",
+    "name": "Mini Golf Duels",
+    "expected_version": 2,
+    "client": "mini-golf-duels.html",
+    "server": "mini-golf-duels.server.js",
+    "original_client_sha256": "1b19a1ac28e2bd08c9efef5c3870131e84b61da4e01560dd8878c5f5231a9292",
+    "original_server_sha256": "93c778c4f3869f1a6c30e507a6b40b49a7381260f658b79d3ff946ffd4e78ea6",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false
+  },
+  {
+    "id": "f8d1a658-3af8-483a-8555-0e02e7212be4",
+    "name": "3 Minute Chess",
+    "expected_version": 2,
+    "client": "3-minute-chess.html",
+    "server": "3-minute-chess.server.js",
+    "original_client_sha256": "9b5eec19b40864d6c321f2a1a5903ccb8305d12af07536485d1280f524709ade",
+    "original_server_sha256": "d88e585f10c105924d1574df190312b2b5b08f9feed97e382807f58535693c04",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false
+  },
+  {
+    "id": "3e816ad0-0823-4068-946f-cab07a8f7126",
+    "name": "Guandan",
+    "expected_version": 3,
+    "client": "guandan.html",
+    "server": "guandan.server.js",
+    "original_client_sha256": "7ccf85bfecb1b2b1bbe7c4013c8475414e5899cd4479111c5e4e580ebce6523f",
+    "original_server_sha256": "d97b9f0ecd4ee3b09f7ea04d07d0aa712b73a3b58cafbf26d5dab1a7b2dd1dea",
+    "allowed_player_counts": [
+      4
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false
+  }
+]

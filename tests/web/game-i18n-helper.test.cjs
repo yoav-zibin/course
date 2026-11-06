@@ -53,7 +53,6 @@ test('going back to English restores the original texts',()=>{
   const game=page(TABLE);
   game.apply({locale:'es',strings:{your_turn:'Tu turno'}});
   game.apply({locale:'en'});
-  game.apply({strings:{}}); // an English message carries no strings
   assert.equal(game.t('your_turn'),'Your turn');
 });
 

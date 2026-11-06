@@ -1,0 +1,124 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;background:#04170e;color:#fff;min-height:100vh}
+header{max-width:900px;margin:auto;padding:14px 12px 0;text-align:center}
+h1{margin:0;font-size:24px;letter-spacing:.3px}
+h1 span{color:#ff6b81}
+.sub{font-size:13px;opacity:.85;margin-top:4px}
+#status{max-width:900px;margin:10px auto 0;padding:10px 14px;background:#0b3d24;border:1px solid #1f7a48;border-radius:12px;font-size:14px;text-align:center}
+#scores{max-width:900px;margin:10px auto 0;display:flex;gap:8px;padding:0 12px;flex-wrap:wrap}
+.score{flex:1;min-width:150px;background:#0d4a2b;border:2px solid transparent;border-radius:12px;padding:8px 10px}
+.score.turn{border-color:gold;box-shadow:0 0 0 2px gold}
+.score .nm{font-weight:800;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.score .pts{font-size:13px;margin-top:2px}
+#tableWrap{max-width:900px;margin:10px auto;padding:0 12px}
+#table{background:radial-gradient(ellipse at center,#1a8a46 0%,#10602f 55%,#073d1c 100%);border:10px solid #4a2c14;border-radius:28px;min-height:520px;box-shadow:inset 0 0 80px rgba(0,0,0,.55),0 10px 30px rgba(0,0,0,.5);overflow:hidden;padding:12px;display:grid;grid-template-columns:132px 1fr 132px;grid-template-rows:auto 1fr auto;grid-template-areas:"top top top" "left center right" "bottom bottom bottom";gap:8px}
+.seat{width:100%;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-height:0}
+.seat-bottom{grid-area:bottom}
+.seat-top{grid-area:top}
+.seat-left{grid-area:left}
+.seat-right{grid-area:right}
+.seat .pname{font-size:12px;font-weight:800;background:rgba(0,0,0,.65);display:inline-block;padding:3px 10px;border-radius:20px;max-width:128px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;order:0}
+.seat.turn .pname{background:gold;color:#111}
+.seat-top .slot{order:0}
+.seat-top .pname{order:1}
+.seat-top .taken-line{order:2}
+.seat-top .backs{order:3}
+.slot{width:92px;height:128px;border-radius:12px;border:2px dashed rgba(255,255,255,.4);display:flex;align-items:center;justify-content:center;font-size:12px;color:rgba(255,255,255,.8);background:rgba(0,0,0,.15);order:1;flex-shrink:0}
+.slot.filled{border:none;background:none}
+.slot .count{font-size:12px}
+.taken-line{min-height:18px;order:2}
+.backs{display:flex;gap:3px;justify-content:center;flex-wrap:wrap;min-height:4px;order:3}
+#center{grid-area:center;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none;min-height:140px}
+#center .big{font-size:18px;font-weight:900;text-shadow:0 2px 8px rgba(0,0,0,.7)}
+#center .small2{font-size:13px;opacity:.95;text-shadow:0 1px 4px rgba(0,0,0,.7)}
+.pcard{width:88px;height:124px;background:#fff;color:#111;border-radius:10px;position:relative;box-shadow:0 5px 14px rgba(0,0,0,.5);border:1px solid #999;flex-shrink:0;user-select:none}
+.pcard.red{color:#c1121f}
+.pcard .corner{position:absolute;font-weight:900;line-height:1;text-align:center;width:26px}
+.pcard .corner .r{font-size:17px;display:block}
+.pcard .corner .s{font-size:15px;display:block}
+.pcard .corner.tl{left:5px;top:5px}
+.pcard .corner.br{right:5px;bottom:5px;transform:rotate(180deg)}
+.pcard .pip{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.pcard .pip .bigS{font-size:46px;line-height:1}
+.pcard .pip .bigR{font-size:18px;font-weight:900;margin-top:2px}
+.slot .pcard{width:88px;height:124px}
+#handWrap{max-width:900px;margin:0 auto 24px;padding:0 12px}
+#handLabel{font-size:14px;margin:10px 2px 6px}
+#hand{display:flex;align-items:flex-end;padding:16px 12px;background:rgba(0,0,0,.45);border-radius:16px;overflow-x:auto;min-height:152px;gap:0}
+#hand .pcard{margin-left:-28px;cursor:default}
+#hand .pcard:first-child{margin-left:0}
+#hand .pcard.playable{cursor:pointer;box-shadow:0 0 0 3px gold,0 8px 18px rgba(0,0,0,.6)}
+#hand .pcard.playable:hover{transform:translateY(-16px)}
+#hand .pcard.dim{opacity:.5}
+.back{width:18px;height:26px;background:linear-gradient(135deg,#1e4ed8,#0f2a86);border:1px solid #fff;border-radius:4px}
+.taken{font-size:11px;background:rgba(0,0,0,.55);border-radius:10px;display:inline-block;padding:2px 8px}
+@media(max-width:600px){#table{grid-template-columns:92px 1fr 92px;min-height:460px}.pcard{width:72px;height:102px}.slot{width:76px;height:106px}.slot .pcard{width:72px;height:102px}.pcard .pip .bigS{font-size:36px}#hand .pcard{margin-left:-32px}}
+</style></head>
+<body>
+<header><h1><span>♥</span> Hearts — One Hand</h1><div class="sub">1 round only &bull; 13 tricks &bull; Q&#9824; = 13 &bull; &hearts; = 1 &bull; lowest wins &bull; no passing</div></header>
+<div id="status">Waiting…</div>
+<div id="scores"></div>
+<div id="tableWrap"><div id="table">
+<div class="seat seat-top" id="seat2"><div class="pname"></div><div class="slot"></div><div class="taken-line"><span class="taken"></span></div><div class="backs"></div></div>
+<div class="seat seat-left" id="seat1"><div class="pname"></div><div class="slot"></div><div class="taken-line"><span class="taken"></span></div><div class="backs"></div></div>
+<div id="center"><div class="big"></div><div class="small2"></div></div>
+<div class="seat seat-right" id="seat3"><div class="pname"></div><div class="slot"></div><div class="taken-line"><span class="taken"></span></div><div class="backs"></div></div>
+<div class="seat seat-bottom" id="seat0"><div class="pname"></div><div class="slot"></div><div class="taken-line"><span class="taken"></span></div><div class="backs"></div></div>
+</div></div>
+<div id="handWrap"><div id="handLabel"></div><div id="hand"></div></div>
+<script>
+let latest=null;
+const SYM={C:'♣',D:'♦',S:'♠',H:'♥'};
+function suit(c){return c.slice(-1)}
+function rankStr(c){return c.slice(0,-1)}
+function isRed(c){return suit(c)==='H'||suit(c)==='D'}
+function cardEl(c){const d=document.createElement('div');d.className='pcard'+(isRed(c)?' red':'');const r=rankStr(c),s=SYM[suit(c)];d.innerHTML='<div class="corner tl"><span class="r">'+r+'</span><span class="s">'+s+'</span></div><div class="pip"><span class="bigS">'+s+'</span><span class="bigR">'+r+'</span></div><div class="corner br"><span class="r">'+r+'</span><span class="s">'+s+'</span></div>';return d}
+function play(card){parent.postMessage({type:'make_move',move:{card:card}},'*')}
+function render(){
+ const m=latest,st=m.view,players=m.players,my=m.my_player_index,acting=m.acting_for_player_index;
+ const status=document.getElementById('status'),scoresEl=document.getElementById('scores'),handEl=document.getElementById('hand'),label=document.getElementById('handLabel');
+ handEl.innerHTML='';scoresEl.innerHTML='';
+ if(!st){status.textContent='Shuffling…';label.textContent='';return}
+ const n=players.length;
+ const cur=st.phase==='over'?-1:st.cur;
+ const low=Math.min(...st.taken), winners=players.filter((_,i)=>st.taken[i]===low).map(p=>p.name);
+ const result=winners.length>1?'Tie: '+winners.join(' & ')+' with '+low+' pts':winners[0]+' wins with '+low+' pts';
+ if(st.phase==='over'){status.innerHTML='<b>Game over — one hand done!</b> 🏆 '+result+' ['+st.taken.join(', ')+']'+(st.shooter>=0?' • 🌙 '+players[st.shooter].name+' SHOT THE MOON!':'')}
+ else{const cn=players[cur]?players[cur].name:'?';const you=cur===my?' — YOUR TURN!':'';status.textContent='Trick '+(st.trickNum+1)+'/13 • '+cn+"'s turn"+you+(st.heartsBroken?' • ♥ broken':' • ♥ not broken')+(st.trickNum===0?' • 2♣ leads, no points':'')}
+ for(let i=0;i<n;i++){const d=document.createElement('div');d.className='score'+(i===cur&&st.phase!=='over'?' turn':'');d.innerHTML='<div class="nm">'+players[i].name+(i===my?' (you)':'')+'</div><div class="pts">Taken <b>'+st.taken[i]+'</b> ♥'+(st.shooter===i?' 🌙':'')+'</div>';scoresEl.appendChild(d)}
+ const myIdx=my===null?0:my;
+ for(let pos=0;pos<4;pos++){
+  const pi=(myIdx+pos)%n;const seat=document.getElementById('seat'+pos);
+  const pn=seat.querySelector('.pname'),slot=seat.querySelector('.slot'),tk=seat.querySelector('.taken'),backs=seat.querySelector('.backs');
+  slot.innerHTML='';backs.innerHTML='';slot.classList.remove('filled');
+  pn.textContent=players[pi].name+(pi===my?' (you)':'');
+  seat.classList.toggle('turn',pi===cur&&st.phase!=='over');
+  const played=st.trick.find(t=>t.player===pi);
+  if(played){slot.classList.add('filled');slot.appendChild(cardEl(played.card))}
+  else{slot.innerHTML='<span class="count">'+(st.phase==='over'?'—':(st.counts[pi]+' cards'))+'</span>'}
+  tk.textContent='♥ '+st.taken[pi];
+  if(pi!==my&&st.phase!=='over'){let h='';for(let k=0;k<Math.min(st.counts[pi],7);k++)h+='<div class="back"></div>';backs.innerHTML=h}
+ }
+ const cb=document.querySelector('#center .big'),cs=document.querySelector('#center .small2');
+ if(st.phase==='over'){cb.textContent='🏆 '+result;cs.textContent='Final: '+st.taken.join(' • ')}
+ else if(st.trick.length===0){cb.textContent=st.trickNum===0?'2♣ to lead':'Trick '+(st.trickNum+1)+' of 13';cs.textContent=st.heartsBroken?'Hearts broken':'Hearts not broken'}
+ else{cb.textContent='';cs.textContent=''}
+ if(my===null){label.textContent='Spectating:';handEl.innerHTML='<span style="font-size:13px;opacity:.9">Spectator — hands are hidden. Cards on the table above.</span>';return}
+ const myHand=(st.hand||[]).slice();
+ if(st.phase==='over'){label.textContent='Done! You took '+st.taken[my]+' pts.';for(const c of myHand)handEl.appendChild(cardEl(c));return}
+ const canAct=m.status==='ongoing'&&acting===my;
+ const legal=canAct?(st.legal||[]):[];
+ const actName=(players[acting]?players[acting].name:'…');
+ label.textContent='Your hand ('+myHand.length+')'+(canAct?' — gold = playable, click to play':' — waiting for '+actName);
+ for(const c of myHand){const isL=legal.indexOf(c)>=0;const el=cardEl(c);if(canAct){el.classList.add(isL?'playable':'dim');if(isL)el.onclick=function(){play(c)}}else el.classList.add('dim');handEl.appendChild(el)}
+}
+addEventListener('message',function(e){
+ if(e.source!==parent||!e.data||e.data.type!=='state_changed')return;
+ latest=e.data;render();
+});
+</script>
+</body>
+</html>

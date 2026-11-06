@@ -5,7 +5,7 @@ writes them back to the store, so a store never shares mutable state with its ca
 """
 
 import datetime as dt
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Final, Literal
 
 from pydantic import JsonValue
@@ -16,7 +16,7 @@ MAX_PLAYERS: Final = 10
 MatchStatus = Literal["waiting_for_players", "ongoing", "over"]
 SeatKind = Literal["human", "computer"]
 # "timed_out": a speed match ended because a player ran out of time to move.
-EndReason = Literal["finished", "player_left", "timed_out"]
+EndReason = Literal["finished", "player_left", "timed_out", "solo_computers_only"]
 
 
 LinkedAccountKind = Literal["google", "phone", "email"]
@@ -160,6 +160,7 @@ class Game:
     # None means a v1 game: the client computes everything and the server only
     # stores the state. Defaults to None so older data files load.
     server_code: str | None = None
+    builder_workflow: dict[str, JsonValue] | None = None
     created_at: dt.datetime
     updated_at: dt.datetime
     # Applies to the whole game, so it is set on every version read back from the store
@@ -181,6 +182,7 @@ class GameDraft:
     code: str
     # The draft's server code (v2 Game API); see [Game.server_code].
     server_code: str | None = None
+    builder_workflow: dict[str, JsonValue] | None = None
     created_at: dt.datetime
     updated_at: dt.datetime
     base_version: int = 0
@@ -264,6 +266,8 @@ class Seat:
     # Account ownership can change on merge; a game's opaque state may still
     # contain the original player ID. Keep that game identity stable.
     logic_player_id: str | None = None
+    # Preserve the seat's index/identity after leaving; no bot takes it over.
+    active: bool = True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -392,6 +396,10 @@ class Match:
         return tuple(seat.user_id for seat in self.seats if seat.user_id is not None)
 
     @property
+    def active_human_user_ids(self) -> tuple[str, ...]:
+        return tuple(s.user_id for s in self.seats if s.kind == "human" and s.active)
+
+    @property
     def num_computer_opponents(self) -> int:
         return sum(1 for seat in self.seats if seat.kind == "computer")
 
@@ -433,6 +441,43 @@ class Invite:
     # How many times the link was opened (GET /invites/{token}), whether or not
     # anyone joined; the top of the referral funnel.
     views: int = 0
+
+
+# Feedback is a bug (in a game or the platform), a suggestion or feature request, or a
+# problem: problematic content, like a bad game or a bad user.
+FeedbackKind = Literal["bug", "suggestion", "problem"]
+# "platform" is the website itself, with no target id.
+FeedbackTargetType = Literal["user", "game", "match", "platform"]
+# "open" until an admin (or, later, an agent) looks at it.
+FeedbackStatus = Literal["open", "reviewed", "dismissed"]
+
+
+@dataclass(frozen=True, kw_only=True)
+class Feedback:
+    """Someone's feedback on a user, a game, a match or the platform, in their own words.
+    Private: only admins see feedback, and nobody is ever told who sent it."""
+
+    id: str
+    reporter_user_id: str
+    target_type: FeedbackTargetType
+    # Empty for the platform.
+    target_id: str
+    # Feedback saved before kinds existed was always a report of a problem.
+    kind: FeedbackKind = "problem"
+    # What it's about, in the sender's words (5 to 1000 characters, trimmed).
+    text: str
+    created_at: dt.datetime
+    # Sending feedback of the same kind on the same target within 24 hours replaces
+    # the text.
+    updated_at: dt.datetime
+    status: FeedbackStatus = "open"
+    # The target's and the sender's names when it was sent, so the admin listing
+    # doesn't look up every user and game.
+    target_name: str = ""
+    reporter_name: str = ""
+    # When it was sent: a game's version; a match's game_id, game_version and
+    # move_count; and the page it came from (as the website sent it).
+    context: dict[str, str | int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, kw_only=True)

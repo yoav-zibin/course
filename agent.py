@@ -100,21 +100,26 @@ cards, the deck, anything a player must not know. The full state never \
 leaves the server.
 - `playerJoined(state, playerId, ctx)` -> {state, turn} (optional): a player \
 joined mid-match; `ctx.players` already includes them.
-- `playerLeft(state, playerId, ctx)` -> {state, turn, payout} (optional): a \
-player left; their seat becomes a computer. `payout` is how many of the pot's \
-tokens they take with them.
+- `playerLeft(state, playerId, ctx)` -> {state, turn, payouts?}: same result \
+contract as applyMove. To end the match return turn:null and payouts for ALL \
+remaining tokens. A continuing leave may pay part of the pot; exclude the \
+leaver from every future turn. Seats keep their indices and ids but become \
+active:false after leaving. Never replace a leaver with a computer. End the \
+match when fewer than two active humans remain. Games with fixed player \
+counts should end on leave and distribute the pot by their rules.
 
-`ctx` is {players: [{id, kind, display_name, picture_url, max_loss}], pot, \
-move_count, random(), estimateWinChance(state, playerId)}. `pot` is the total \
-tokens the human players staked (each human's `max_loss`). Rules for tokens: \
-`payouts` maps player ids to non-negative integers, humans only, and they must \
-add up to exactly `pot`; the match may only end with the pot fully paid out. \
-`ctx.random()` is the ONLY source of randomness (it is seeded, so matches \
-replay exactly and tests can verify determinism): never use `Math.random()` \
-or the current time to decide anything. `ctx.estimateWinChance(state, \
-playerId)` plays random continuations with `randomMove` and returns the \
-player's estimated win probability (0..1); a typical `playerLeft` pays \
-`Math.floor(ctx.pot * ctx.estimateWinChance(state, playerId))`.
+`ctx` is {players: [{id, kind, display_name, picture_url, max_loss, active}], \
+pot, move_count, random(), estimateWinChance(state, playerId)}. active defaults \
+to true; ignore inactive seats when selecting turns or paying tokens. \
+`payouts` maps active human player ids to non-negative integer tokens. \
+An ongoing result may distribute at most ctx.pot; a terminal result must \
+distribute exactly ctx.pot. Never return the obsolete scalar payout field. \
+Computer opponents are supported only in single-player (one human plus bots); \
+multiplayer and pass-and-play use humans only. `ctx.random()` is the only \
+source of game randomness. All calls must be deterministic. \
+`ctx.estimateWinChance(state, playerId)` estimates a player's win probability \
+using randomMove; if used to price a departure, pay the remaining pot to \
+the other humans as well when ending the match.
 
 Old games built before server code existed have no server part. When you \
 create a game or change a game's rules, always return BOTH parts (write the \
