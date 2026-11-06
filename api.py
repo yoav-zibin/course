@@ -1,10 +1,13 @@
 """FastAPI routes for the game platform."""
 
+import asyncio
+import hashlib
+import html
 import io
+import json
 import logging
 import mimetypes
 import secrets
-import asyncio
 import threading
 import time
 import uuid
@@ -13,20 +16,24 @@ from collections.abc import Awaitable, Callable, Sequence
 from http import HTTPStatus
 from pathlib import Path
 from typing import Annotated, Final, Literal
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 import segno
 from starlette.concurrency import run_in_threadpool
-from starlette.datastructures import State
+from starlette.datastructures import MutableHeaders, State
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from pydantic import JsonValue
+from starlette.middleware.gzip import GZipMiddleware
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
+from game_platform.invariants import InvariantRequest, InvariantReport, check_invariants
 from game_platform import i18n, observability
+from game_platform.game_input_metrics import game_input_metrics
 from game_platform.models import Game, GameRules, Match, MatchStatus
 from game_platform.schemas import (
     AdminGameCodeRequest,
@@ -38,6 +45,8 @@ from game_platform.schemas import (
     RefactorJobOut,
     CatalogOut,
     GameStringsOut,
+    BundleOut,
+    CatalogOut,
     GamesTextOut,
     GameTextOut,
     CampaignLinkCreate,
@@ -59,6 +68,7 @@ from game_platform.schemas import (
     EmulatorOut,
     EmulatorResetRequest,
     GameOut,
+    GameSchemas,
     GameSummaryOut,
     GameTestOut,
     GameTestRequest,
@@ -70,7 +80,10 @@ from game_platform.schemas import (
     InviteOut,
     InviteViewOut,
     MatchCreate,
+    FeedbackCreate,
+    FeedbackOut,
     MatchOut,
+    MatchSummaryOut,
     MatchHistoryOut,
     MatchStart,
     MatchUpdate,
@@ -101,9 +114,11 @@ from game_platform.service import (
     ConflictError,
     ForbiddenError,
     GamePlatform,
+    GameMessageError,
     InvalidRequestError,
     NotFoundError,
     PlatformError,
+    TooManyRequestsError,
     UnauthorizedError,
 )
 from game_platform.agent import GENERATION_BUDGET_SECONDS, AgentError, chat_with_agent
@@ -120,6 +135,7 @@ _STATUS_OF_ERROR: Final[tuple[tuple[type[PlatformError], HTTPStatus], ...]] = (
     (NotFoundError, HTTPStatus.NOT_FOUND),
     (InvalidRequestError, HTTPStatus.BAD_REQUEST),
     (ConflictError, HTTPStatus.CONFLICT),
+    (TooManyRequestsError, HTTPStatus.TOO_MANY_REQUESTS),
 )
 
 
@@ -179,6 +195,60 @@ def health(platform: Platform, request: Request, response: Response) -> HealthOu
     )
 
 
+# Browser error reports
+
+MAX_CLIENT_ERROR_BYTES: Final = 4096
+
+
+class ClientErrorReport(BaseModel):
+    """What a page tells the server about an error it hit (no passwords, tokens or user
+    data: the page sends the error's message, which is also cleaned here)."""
+
+    model_config = ConfigDict(extra="ignore")
+    kind: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")]
+    message: Annotated[str, Field(max_length=1000)] = ""
+    page: Annotated[str, Field(max_length=500)] = ""
+    user_agent: Annotated[str, Field(max_length=500)] = ""
+
+
+@router.post("/client-errors", status_code=HTTPStatus.ACCEPTED)
+async def report_client_error(request: Request) -> dict[str, bool]:
+    """Public. A page reports an error (a script error, or the device's storage being
+    full) so it reaches the server's log as a `client_error` event. The body is small JSON
+    (kind, message, page, user_agent); each client may send a few per minute (429 after)."""
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > MAX_CLIENT_ERROR_BYTES:
+        raise HTTPException(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "report too large")
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > MAX_CLIENT_ERROR_BYTES:
+            raise HTTPException(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "report too large")
+    monitor: observability.Monitor = request.app.state.monitor
+    client = observability.CLIENT.get() or "unknown"
+    # Counted before the body is checked, so garbage can't be sent without limit either.
+    if not monitor.take_client_error_slot(client):
+        raise HTTPException(HTTPStatus.TOO_MANY_REQUESTS, "too many error reports; try again later")
+    try:
+        report = ClientErrorReport.model_validate_json(bytes(body))
+    except ValueError:
+        raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY, "invalid error report") from None
+    page = urlsplit(report.page)
+    monitor.log_client_error(
+        client,
+        {
+            "kind": report.kind,
+            "message": observability.scrub_text(report.message, 500),
+            # Only the path: a query or fragment may hold a token.
+            "page": observability.scrub_text(page.path or report.page, 200),
+            "user_agent": observability.scrub_text(
+                report.user_agent or request.headers.get("user-agent", ""), 200
+            ),
+        },
+    )
+    return {"ok": True}
+
+
 @router.get("/c/{campaign_code}")
 def campaign_link(platform: Platform, campaign_code: str) -> RedirectResponse:
     platform.record_campaign_click(campaign_code=campaign_code)
@@ -200,7 +270,24 @@ def _match_out(
     )
 
 
+def _match_summary_out(platform: GamePlatform, match: Match) -> MatchSummaryOut:
+    """A match for a list: no state, so no per-match view work — see
+    [MatchSummaryOut]."""
+    return MatchSummaryOut.of(match, now=platform.now())
+
+
 # Users
+
+
+@router.post("/validation/invariants", tags=["validation"])
+def validate_invariants(body: InvariantRequest) -> InvariantReport:
+    """Validate a supplied closed dataset without accessing or modifying server data.
+
+    Use raw snapshot-shaped records (seats, nested rules, and full move history).
+    Credentials, code, and game state are not required. Missing references are
+    errors; incomplete legacy first-turn history is reported as a warning.
+    """
+    return check_invariants(body)
 
 
 @router.post("/users", status_code=HTTPStatus.CREATED)
@@ -272,6 +359,28 @@ def referrals(platform: Platform, request: Request, caller_id: CallerId) -> Refe
         referred_users=[UserOut.of(user) for user in referred],
         invites=[InviteOut.of_invite(i, base_url=base_url) for i in invites],
     )
+
+
+@router.get("/users")
+def list_users(
+    platform: Platform, caller_id: OptionalCallerId, ids: str = ""
+) -> list[UserOut]:
+    """Public profiles for the comma-separated [ids] query parameter, in request
+    order. The portal loads every visible player this way in a single call;
+    fetching them one by one was the platform's worst slow-request offender
+    under load, as dozens of near-instant calls queued behind each other.
+    Unknown ids are skipped rather than failing the whole batch, and duplicate
+    ids collapse. Includes [referral_code] only for the caller's own profile.
+    """
+    wanted = list(
+        dict.fromkeys(part.strip() for part in ids.split(",") if part.strip())
+    )
+    if len(wanted) > 200:
+        raise InvalidRequestError("at most 200 user ids per request")
+    return [
+        UserOut.of(user, own=caller_id is not None and caller_id == user.id)
+        for user in platform.get_users(wanted)
+    ]
 
 
 @router.get("/users/{user_id}")
@@ -545,6 +654,9 @@ def _save_draft(platform: GamePlatform, caller_id: str, draft_id: str | None, bo
         caller_id=caller_id, draft_id=draft_id, name=body.name,
         description=body.description, code=body.code,
         server_code=body.server_code,
+        game_schemas=(
+            body.game_schemas.model_dump() if body.game_schemas is not None else None
+        ),
         expected_revision=body.expected_revision,
         rules=GameRules(
             allowed_player_counts=tuple(body.allowed_player_counts),
@@ -592,6 +704,9 @@ def create_game(platform: Platform, caller_id: CallerId, body: GameCreate) -> Ga
         ),
         code=body.code,
         server_code=body.server_code,
+        game_schemas=(
+            body.game_schemas.model_dump() if body.game_schemas is not None else None
+        ),
     )
     return GameOut.of(game)
 
@@ -605,6 +720,9 @@ def test_game(
     this before publishing, which is gated on the same tests."""
     report = platform.test_game_code(
         server_code=body.server_code,
+        game_schemas=(
+            body.game_schemas.model_dump() if body.game_schemas is not None else None
+        ),
         rules=GameRules(
             allowed_player_counts=tuple(body.allowed_player_counts),
             allows_leave_mid_match=body.allows_leave_mid_match,
@@ -621,13 +739,15 @@ def emulator_reset(
 ) -> EmulatorOut:
     """Starts an emulated match on unsaved server code (the builder's test
     play): runs newMatch and advances any computer players."""
-    return EmulatorOut.model_validate(
-        platform.emulator_reset(
-            server_code=body.server_code,
-            players=[player.model_dump() for player in body.players],
-            seed=body.seed,
-        )
+    game_schemas = body.game_schemas.model_dump()
+    result = platform.emulator_reset(
+        server_code=body.server_code,
+        game_schemas=game_schemas,
+        players=[player.model_dump() for player in body.players],
+        seed=body.seed,
     )
+    result["game_schemas"] = game_schemas
+    return EmulatorOut.model_validate(result)
 
 
 @router.post("/emulator/act")
@@ -640,6 +760,7 @@ def emulator_act(
     return EmulatorOut.model_validate(
         platform.emulator_act(
             server_code=body.server_code,
+            game_schemas=body.game_schemas.model_dump(),
             players=[player.model_dump() for player in body.players],
             seed=body.seed,
             state=body.state,
@@ -656,20 +777,57 @@ def list_games(
     platform: Platform,
     owner_user_id: str | None = None,
     q: str = "",
-    include_code: bool = True,
-) -> list[GameOut] | list[GameSummaryOut]:
+) -> list[GameSummaryOut]:
     """Published games, oldest first. `q` searches names and descriptions (every word
-    must match, ignoring case). `include_code=false` leaves out each game's code, which
-    is most of the response; load it per game from /games/{id}/versions/{version}."""
+    must match, ignoring case). The list never includes code: with every game's
+    client and server code included, it was over a megabyte, and nobody reads
+    code from a list. Load one game in full from /games/{id}/versions/{version}."""
     games = platform.list_games(owner_user_id=owner_user_id, query=q)
-    if include_code:
-        return [GameOut.of(game) for game in games]
     return [GameSummaryOut.of(game) for game in games]
+
+
+@router.get("/games/popular", include_in_schema=False)
+def list_popular_games(platform: Platform, limit: int = 8) -> list[GameSummaryOut]:
+    """The bounded top games by cumulative players in started matches."""
+    return [GameSummaryOut.of(game) for game in platform.list_popular_games(limit=limit)]
 
 
 @router.get("/builder/games")
 def list_owned_games(platform: Platform, caller_id: CallerId) -> list[GameOut]:
     return [GameOut.of(g) for g in platform.list_owned_games(caller_id=caller_id)]
+
+
+@router.get("/games/versions")
+def list_game_versions(
+    platform: Platform, caller_id: OptionalCallerId, refs: str = ""
+) -> list[GameOut]:
+    """Full games for the comma-separated [refs] query parameter, each ref of the
+    form `game_id@version`, in request order. The portal loads every visible
+    match's game this way in a single call; fetching them one by one was a top
+    slow-request pattern under load (some 250 slow calls on 2026-10-30).
+    Unknown, malformed, or not-visible refs are skipped rather than failing the
+    whole batch, and duplicates collapse. Declared before /games/{game_id} so
+    "versions" is not taken for a game id.
+    """
+    wanted: list[tuple[str, int]] = []
+    seen: set[tuple[str, int]] = set()
+    for part in refs.split(","):
+        game_id, at, version_text = part.strip().rpartition("@")
+        if not at or not game_id:
+            continue
+        try:
+            ref = (game_id, int(version_text))
+        except ValueError:
+            continue
+        if ref not in seen:
+            seen.add(ref)
+            wanted.append(ref)
+    if len(wanted) > 200:
+        raise InvalidRequestError("at most 200 game versions per request")
+    return [
+        GameOut.of(game)
+        for game in platform.get_game_versions(wanted, caller_id=caller_id)
+    ]
 
 
 @router.post("/games/{game_id}/unpublish")
@@ -723,6 +881,9 @@ def update_game(
         server_code=body.server_code
         if "server_code" in body.model_fields_set
         else UNSET,
+        game_schemas=body.game_schemas.model_dump()
+        if body.game_schemas is not None
+        else UNSET,
     )
     return GameOut.of(game)
 
@@ -733,6 +894,32 @@ def delete_game(platform: Platform, caller_id: CallerId, game_id: str) -> None:
 
 
 # Matches
+
+
+# Feedback
+
+
+@router.post("/feedback", status_code=HTTPStatus.CREATED)
+def send_feedback(
+    platform: Platform, caller_id: CallerId, body: FeedbackCreate, response: Response
+) -> FeedbackOut:
+    """Sends feedback on a user, a game, a match or the platform: a bug, a suggestion
+    (or feature request) or a problem (problematic content), in your own words (5 to
+    1000 characters). Any logged-in user, guests included; not on yourself or your own
+    game. At most 20 a day (then 429); sending the same kind of feedback on the same
+    target within 24 hours replaces your earlier text (200 instead of 201). Feedback is
+    private: only admins see it."""
+    feedback, created = platform.send_feedback(
+        caller_id=caller_id,
+        kind=body.kind,
+        target_type=body.target_type,
+        target_id=body.target_id,
+        text=body.text,
+        page=body.page,
+    )
+    if not created:
+        response.status_code = HTTPStatus.OK
+    return FeedbackOut.of(feedback)
 
 
 @router.post("/matches", status_code=HTTPStatus.CREATED)
@@ -774,16 +961,16 @@ def list_matches(
     caller_id: CallerId,
     status: MatchStatus | None = None,
     game_id: str | None = None,
-) -> list[MatchOut]:
+) -> list[MatchSummaryOut]:
     matches = platform.list_matches(caller_id=caller_id, status=status, game_id=game_id)
-    return [_match_out(platform, match, caller_id=caller_id) for match in matches]
+    return [_match_summary_out(platform, match) for match in matches]
 
 
 @router.get("/matches/open")
-def list_open_matches(platform: Platform) -> list[MatchOut]:
+def list_open_matches(platform: Platform) -> list[MatchSummaryOut]:
     """Matches anyone may join: waiting for players, or ongoing with mid-match joins
     allowed. Public, like match details themselves."""
-    return [_match_out(platform, match) for match in platform.list_open_matches()]
+    return [_match_summary_out(platform, match) for match in platform.list_open_matches()]
 
 
 @router.get("/matches/{match_id}")
@@ -1042,6 +1229,50 @@ def get_games_text(platform: Platform, locale: str) -> GamesTextOut:
     )
 
 
+def _etag_matches(header: str | None, etag: str) -> bool:
+    """Whether an If-None-Match header names [etag] (a strong comparison, as for GET)."""
+    if not header:
+        return False
+    tags = [tag.strip() for tag in header.split(",")]
+    return "*" in tags or etag in tags or f"W/{etag}" in tags
+
+
+@i18n_router.get("/bundle/{locale}", response_model=BundleOut)
+def get_bundle(request: Request, platform: Platform, locale: str) -> Response:
+    """Everything a frontend needs in one language, in one response: the interface catalog
+    (as `GET /i18n/{locale}`), and for every published game its name, description and the
+    translated string table of its latest version. Replaces a request per game.
+
+    Texts that have no translation yet are returned as the game wrote them, and the
+    `status` (of the whole bundle and of each game) says so; the server translates them in
+    the background, within the daily budget, and a later request has them. The ETag is a
+    hash of the answer, so it changes when anything in it does (a new or corrected
+    translation, a game published): send it back as If-None-Match to get a `304`. It is
+    the same for every viewer, since only published games are included; a version the
+    viewer is allowed to see but is not the latest published one is still answered by
+    `GET /games/{id}/versions/{v}/strings`."""
+    code = i18n.normalize_locale(locale)
+    if code is None:
+        raise NotFoundError(f"language not supported: {locale}")
+    catalog = CatalogOut(
+        locale=code,
+        direction=i18n.get_locale(code).direction,
+        version=i18n.catalog_version(code),
+        messages=i18n.messages(code),
+    )
+    body = json.dumps(
+        BundleOut.of(platform.translation_bundle(code), catalog).model_dump(),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    etag = '"' + hashlib.sha256(body).hexdigest()[:32] + '"'
+    headers = {"ETag": etag, "Cache-Control": "no-cache"}
+    if _etag_matches(request.headers.get("if-none-match"), etag):
+        return Response(status_code=HTTPStatus.NOT_MODIFIED, headers=headers)
+    return Response(content=body, media_type="application/json", headers=headers)
+
+
 @i18n_router.get("/{locale}", response_model=CatalogOut)
 def get_catalog(
     request: Request, locale: str, prefix: str = "", fallback: bool = True
@@ -1189,6 +1420,11 @@ def console() -> FileResponse:
     return FileResponse(_STATIC_DIR / "console.html")
 
 
+@debug_router.get("/new-builder")
+def new_builder_page() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "guided-builder.html")
+
+
 @debug_router.get("/builder")
 def builder() -> FileResponse:
     return FileResponse(_STATIC_DIR / "builder.html")
@@ -1223,6 +1459,11 @@ def invites_page() -> FileResponse:
     return FileResponse(_STATIC_DIR / "invites.html")
 
 
+@debug_router.get("/feedback", dependencies=[MasterPassword])
+def feedback_page() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "feedback.html")
+
+
 @debug_router.get("/admin", dependencies=[MasterPassword])
 def admin() -> FileResponse:
     """Hub page for the super-admin tools (API console, data browser,
@@ -1239,6 +1480,12 @@ def privacy() -> FileResponse:
 def all_data(platform: Platform) -> AllDataOut:
     """Everything, including users' passwords."""
     return AllDataOut.of(platform.all_data())
+
+
+@debug_router.get("/admin/game-input-metrics", dependencies=[MasterPassword])
+def admin_game_input_metrics() -> list[dict[str, str | int]]:
+    """Process-local counts of per-game JSON Schema input failures."""
+    return game_input_metrics()
 
 
 @debug_router.get("/admin/stats", dependencies=[MasterPassword])
@@ -1400,6 +1647,25 @@ def admin_invites(platform: Platform) -> dict[str, JsonValue]:
     return platform.invite_stats()
 
 
+@debug_router.get("/admin/feedback", dependencies=[MasterPassword])
+def admin_feedback(
+    platform: Platform,
+    kind: str | None = None,
+    target_type: str | None = None,
+    target_id: str | None = None,
+    status: str | None = None,
+) -> dict[str, JsonValue]:
+    """Users' feedback, newest first, and the targets with the most "problem" reports.
+    Filters: kind (bug, suggestion, problem), target_type (user, game, match, platform)
+    with an optional target_id, and status."""
+    return platform.admin_feedback(
+        kind=kind or None,
+        target_type=target_type or None,
+        target_id=target_id or None,
+        status=status or None,
+    )
+
+
 @debug_router.delete(
     "/admin/users/{user_id}",
     dependencies=[MasterPassword],
@@ -1427,7 +1693,7 @@ def admin_delete_match(platform: Platform, match_id: str) -> None:
     platform.admin_delete_match(match_id)
 
 
-@debug_router.post("/agent/chat")
+@router.post("/agent/chat", include_in_schema=False)
 async def agent_chat(
     request: Request, platform: Platform, caller_id: CallerId, body: AgentChatRequest
 ) -> AgentChatResponse:
@@ -1447,6 +1713,7 @@ async def agent_chat(
 
     def server_tester(
         server_code: str,
+        game_schemas: dict | None,
         allowed_player_counts: list[int],
         allows_leave_mid_match: bool,
         allows_join_mid_match: bool,
@@ -1456,6 +1723,7 @@ async def agent_chat(
         built so its failed seeds are replayed first."""
         return platform.test_game_code(
             server_code=server_code,
+            game_schemas=game_schemas,
             rules=GameRules(
                 allowed_player_counts=tuple(allowed_player_counts),
                 allows_leave_mid_match=allows_leave_mid_match,
@@ -1555,7 +1823,12 @@ def refactor_all_games(
             detail="The game-building agent is not set up: no Model API key is "
             "configured on the server.",
         )
-    games = platform.list_games(owner_user_id=None)
+    if body.mode == 'guided_artifacts':
+        from game_platform.builder_budget import validate_tariffs
+        validate_tariffs(config)
+        games = platform.published_games_for_guided_migration(body.game_ids)
+    else:
+        games = platform.list_games(owner_user_id=None)
     missing: list[str] = []
     if body.game_ids is not None:
         by_id = {game.id: game for game in games}
@@ -1588,7 +1861,7 @@ def refactor_all_games(
         request.app.state.refactor_jobs[job["job_id"]] = job
     threading.Thread(
         target=_run_refactor_job,
-        args=(request.app.state, platform, client, job["job_id"], body.prompt, games),
+        args=(request.app.state, platform, client, job["job_id"], body.prompt, games, body.mode),
         daemon=True,
     ).start()
     return _refactor_job_out(job)
@@ -1615,11 +1888,22 @@ def _run_refactor_job(
     job_id: str,
     prompt: str,
     games: list[Game],
+    mode: str = "code",
 ) -> None:
     """The job thread: refactor each game in turn, recording every outcome.
     A game's failure never stops the run — its previous code stays live."""
     for game in games:
-        result = _refactor_one_game(app_state, platform, client, prompt, game)
+        if mode == "guided_artifacts":
+            from game_platform.builder_api import configured_client
+            from game_platform.builder_migration import prefill
+            result = {"game_id":game.id, "name":game.name, "version":game.version}
+            try:
+                changed = prefill(platform,game,lambda owner,draft:configured_client(app_state.model_api_config,platform,owner,draft))
+                result.update(outcome="ready_for_review" if changed else "unchanged",detail="Review the saved proposals in the guided builder")
+            except Exception as exc:
+                result.update(outcome="failed",detail=str(exc)[:500])
+        else:
+            result = _refactor_one_game(app_state, platform, client, prompt, game)
         with app_state.refactor_lock:
             app_state.refactor_jobs[job_id]["results"].append(result)
     with app_state.refactor_lock:
@@ -1647,12 +1931,14 @@ def _refactor_one_game(
 
     def server_tester(
         server_code: str,
+        game_schemas: dict,
         allowed_player_counts: list[int],
         allows_leave_mid_match: bool,
         allows_join_mid_match: bool,
     ):
         return platform.test_game_code(
             server_code=server_code,
+            game_schemas=game_schemas,
             rules=GameRules(
                 allowed_player_counts=tuple(allowed_player_counts),
                 allows_leave_mid_match=allows_leave_mid_match,
@@ -1673,6 +1959,7 @@ def _refactor_one_game(
                 allows_join_mid_match=game.rules.allows_join_mid_match,
                 code=game.code,
                 server_code=game.server_code or "",
+                game_schemas=game.game_schemas,
                 messages=[AgentMessage(role="user", content=prompt)],
                 game_id=game.id,
             ),
@@ -1721,6 +2008,11 @@ def _refactor_one_game(
             server_code=(
                 response.server_code if response.server_code is not None else UNSET
             ),
+            game_schemas=(
+                response.game_schemas.model_dump()
+                if response.game_schemas is not None
+                else UNSET
+            ),
             _admin=True,
         )
     except Exception as exc:
@@ -1761,6 +2053,11 @@ def admin_set_game_code(
             server_code=(
                 body.server_code if body.server_code is not None else UNSET
             ),
+            game_schemas=(
+                body.game_schemas.model_dump()
+                if body.game_schemas is not None
+                else UNSET
+            ),
             _admin=True,
         )
     )
@@ -1791,18 +2088,53 @@ def _error_body(request: Request, message: str) -> dict[str, object]:
     return body
 
 
+async def _game_message_body(request: Request, exc: GameMessageError) -> dict[str, object]:
+    """A text the game's server wrote: `detail` is translated through the game version's
+    table when a template matches (as written otherwise), `code` is `game_message`, and
+    `message_key` and `params` name the template and the values it captured."""
+    locale = getattr(request.state, "locale", i18n.DEFAULT_LOCALE)
+    platform = request.app.state.platform
+    text = None
+    if locale != i18n.DEFAULT_LOCALE and exc.template is not None:
+        text = await run_in_threadpool(platform.translate_game_message, exc, locale)
+    body: dict[str, object] = {"detail": text or str(exc), "code": "game_message"}
+    if exc.key is not None:
+        body["message_key"] = exc.key
+        if exc.params:
+            body["params"] = exc.params
+    return body
+
+
 async def _handle_platform_error(request: Request, exc: Exception) -> JSONResponse:
     status = next(
         (status for kind, status in _STATUS_OF_ERROR if isinstance(exc, kind)),
         HTTPStatus.INTERNAL_SERVER_ERROR,
     )
+    if isinstance(exc, GameMessageError):
+        return JSONResponse(status_code=status, content=await _game_message_body(request, exc))
     return JSONResponse(status_code=status, content=_error_body(request, str(exc)))
 
 
-async def _handle_unexpected_exception(request: Request, exc: Exception) -> JSONResponse:
+async def _handle_unexpected_exception(request: Request, exc: Exception) -> Response:
     """A bug: the request middleware has already logged it with its arguments and stack
     trace. The caller gets the request id to quote when reporting it."""
     request_id = getattr(request.state, "request_id", None)
+    if _is_html_navigation(request):
+        content = (
+            ""
+            if request.method == "HEAD"
+            else _error_page_content(HTTPStatus.INTERNAL_SERVER_ERROR, _page_locale(request))
+        )
+        return HTMLResponse(
+            content,
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            headers={
+                "Cache-Control": "no-store",
+                "Content-Language": _page_locale(request),
+                "Vary": "Accept-Language, X-User-Id",
+                **({"X-Request-Id": request_id} if request_id else {}),
+            },
+        )
     return JSONResponse(
         status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
         content={"detail": "internal server error", "code": "internal_error", "request_id": request_id},
@@ -1820,6 +2152,143 @@ async def _handle_http_exception(request: Request, exc: Exception) -> Response:
     return JSONResponse(body, status_code=exc.status_code, headers=exc.headers)
 
 
+def _is_html_navigation(request: Request) -> bool:
+    """Only turn errors into pages when the caller asked to navigate to a page.
+
+    App API calls use the default */* or application/json Accept header and keep
+    their structured responses. Direct browser navigation asks for text/html.
+    """
+    accept = request.headers.get("accept", "").lower()
+    return request.method in {"GET", "HEAD"} and (
+        "text/html" in accept or request.headers.get("sec-fetch-dest") == "document"
+    )
+
+
+# Operational routes that people open in a browser on purpose (a health check, the API
+# description, the admin tools): they keep their raw replies, errors included, instead of
+# being redirected to the portal or dressed up as a page.
+_RAW_PATHS: Final = frozenset({"/health", "/openapi.json"})
+
+
+def _wants_raw_reply(request: Request) -> bool:
+    """True for the operational routes, and for any address with ?raw=1."""
+    path = request.url.path
+    return (
+        path in _RAW_PATHS
+        or path.startswith("/admin/")
+        or request.query_params.get("raw") == "1"
+    )
+
+
+def _page_locale(request: Request) -> str:
+    """The language of a page the server builds: the one the request negotiated, else
+    (when the error happened before that ran) the browser's own preference."""
+    locale = getattr(request.state, "locale", None)
+    if locale:
+        return str(locale)
+    return i18n.negotiate(
+        explicit=request.query_params.get("lang"),
+        saved=None,
+        accept_language=request.headers.get("accept-language"),
+    )
+
+
+def _error_page_content(status_code: int, locale: str = i18n.DEFAULT_LOCALE) -> str:
+    """The branded error page, written in [locale]."""
+
+    def text(key: str, /, **params: object) -> str:
+        return i18n.translate(key, locale, **params)
+
+    if status_code == HTTPStatus.NOT_FOUND:
+        kind = "not_found"
+    elif status_code in {HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN}:
+        kind = "denied"
+    elif status_code == HTTPStatus.SERVICE_UNAVAILABLE:
+        kind = "unavailable"
+    else:
+        kind = "error"
+    title = text(f"ui.error_page.title_{kind}")
+    message = text(f"ui.error_page.message_{kind}")
+    label = text(f"ui.error_page.label_{kind}", code=status_code)
+    direction = i18n.get_locale(locale).direction
+    app_name = text("ui.app_name")
+
+    return f"""<!doctype html>
+<html lang="{locale}" dir="{direction}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#10131d" />
+    <title>{html.escape(label)} · {html.escape(app_name)}</title>
+    <link rel="stylesheet" href="/static/common.css?v=16" />
+    <link rel="stylesheet" href="/static/error.css?v=1" />
+  </head>
+  <body class="error-page-body">
+    <header class="topbar error-topbar">
+      <a class="app-home-link" href="/portal" aria-label="{html.escape(text("ui.portal.home_aria"))}">
+        <span class="app-brand-mark" aria-hidden="true">✳</span>
+        <h1>{html.escape(app_name)}</h1>
+      </a>
+      <nav aria-label="{html.escape(app_name)}">
+        <a href="/portal" aria-current="page">{html.escape(text("ui.error_page.play_games"))}</a>
+        <a href="/builder">{html.escape(text("ui.nav.builder"))}</a>
+      </nav>
+      <span class="spacer"></span>
+    </header>
+    <main class="error-main">
+      <section class="error-card" aria-labelledby="error-title">
+        <div class="error-art" aria-hidden="true">
+          <span class="error-orbit error-orbit-one"></span>
+          <span class="error-orbit error-orbit-two"></span>
+          <span class="error-spark error-spark-one">✦</span>
+          <span class="error-spark error-spark-two">✧</span>
+          <span class="error-game-mark">✳</span>
+          <span class="error-code">{status_code}</span>
+        </div>
+        <p class="error-eyebrow">{html.escape(label)}</p>
+        <h2 id="error-title">{html.escape(title)}</h2>
+        <p class="error-message">{html.escape(message)}</p>
+        <a class="error-home-button" href="/portal">{html.escape(text("ui.error_page.back"))} <span aria-hidden="true">{"←" if direction == "rtl" else "→"}</span></a>
+        <p class="error-footnote">{html.escape(text("ui.error_page.footnote"))}</p>
+      </section>
+    </main>
+  </body>
+</html>"""
+
+
+async def _branded_browser_responses(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """Show a friendly HTML page instead of raw response data during navigation."""
+    response = await call_next(request)
+    if not _is_html_navigation(request) or _wants_raw_reply(request):
+        return response
+
+    content_type = response.headers.get("content-type", "").lower()
+    headers = {
+        key: value
+        for key, value in response.headers.items()
+        if key.lower() in {"www-authenticate", "x-request-id", "retry-after"}
+    }
+    if response.status_code >= 400:
+        headers["Cache-Control"] = "no-store"
+        locale = _page_locale(request)
+        headers["Content-Language"] = locale
+        headers["Vary"] = "Accept-Language, X-User-Id"
+        content = "" if request.method == "HEAD" else _error_page_content(response.status_code, locale)
+        return HTMLResponse(content, status_code=response.status_code, headers=headers)
+
+    # JSON routes are for the app's fetch calls, not standalone web pages. When
+    # somebody opens one in the address bar, send them to the playable portal.
+    if "json" in content_type:
+        return RedirectResponse(
+            "/portal",
+            status_code=HTTPStatus.SEE_OTHER,
+            headers={"Cache-Control": "no-store"},
+        )
+    return response
+
+
 async def _choose_locale(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
@@ -1827,9 +2296,14 @@ async def _choose_locale(
     saved on the user named by X-User-Id, else Accept-Language, else English. The user
     isn't authenticated here (it only picks a language)."""
     platform = _get_platform(request)
+    user_id = request.headers.get("x-user-id")
+    saved = platform.cached_saved_locale(user_id)
+    if saved is None:
+        # A database read: on the event loop it would stall every request behind it.
+        saved = await run_in_threadpool(platform.saved_locale, user_id)
     request.state.locale = i18n.negotiate(
         explicit=request.query_params.get("lang"),
-        saved=platform.saved_locale(request.headers.get("x-user-id")),
+        saved=saved,
         accept_language=request.headers.get("accept-language"),
     )
     response = await call_next(request)
@@ -1837,6 +2311,36 @@ async def _choose_locale(
         response.headers["Content-Language"] = request.state.locale
         response.headers.append("Vary", "Accept-Language, X-User-Id")
     return response
+
+
+class _VersionedStaticCacheMiddleware:
+    """Immutable caching for versioned static files.
+
+    The pages reference their scripts and styles with a ?v= version in the
+    URL, so a changed file is a changed URL: a browser may keep a versioned
+    response for a year and never revalidate it. Unversioned static files
+    keep the default revalidation behaviour (see [_revalidate_pages]).
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if (
+            scope["type"] != "http"
+            or not scope["path"].startswith("/static/")
+            or b"v=" not in scope.get("query_string", b"")
+        ):
+            await self.app(scope, receive, send)
+            return
+
+        async def send_immutable(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            await send(message)
+
+        await self.app(scope, receive, send_immutable)
 
 
 async def _revalidate_pages(
@@ -1898,6 +2402,7 @@ def create_app(
             allow_methods=["*"],
             allow_headers=["*"],
         )
+    app.state.builder_slots = threading.BoundedSemaphore(2)
     app.state.platform = platform if platform is not None else GamePlatform()
     app.state.master_password = master_password
     monitor = monitor if monitor is not None else observability.Monitor()
@@ -1920,6 +2425,10 @@ def create_app(
     app.state.voice_sender = voice_sender if voice_sender is not None else LogSender()
     app.state.verify_client = verify_client
     app.state.email_sender = email_sender if email_sender is not None else LogSender()
+    from game_platform.builder_api import make_router
+    app.include_router(make_router(_get_platform, _get_caller_id))
+    from game_platform.agent_import import make_router as make_import_router
+    app.include_router(make_import_router(_get_platform, _get_caller_id))
     app.include_router(router)
     from game_platform.scaling_api import install as install_scaling_api
     install_scaling_api(app, debug_tools=debug_tools)
@@ -1933,9 +2442,20 @@ def create_app(
         static_files = StaticFiles(directory=_STATIC_DIR, follow_symlink=True)
         app.mount("/static", static_files, name="static")
         app.middleware("http")(_revalidate_pages)
+    app.middleware("http")(_branded_browser_responses)
     app.add_exception_handler(PlatformError, _handle_platform_error)
     app.add_exception_handler(StarletteHTTPException, _handle_http_exception)
     app.add_exception_handler(Exception, _handle_unexpected_exception)
-    # Last added, so outermost: it times everything, including the other middleware.
+    # Added after the other middleware, so it wraps and times them.
     app.add_middleware(observability.RequestLogMiddleware, monitor=lambda: monitor)
+    # Compression and static caching wrap the logged response on its way
+    # out, so the request log above keeps recording readable bodies at
+    # their full size while browsers receive gzipped bytes and may keep
+    # versioned static files without revalidating them. (The locale
+    # middleware streams responses without a content length, so every
+    # response a client accepts gzip for is compressed; a small body
+    # grows by a few bytes of gzip framing, which the large payloads —
+    # game lists, match lists, the portal script — repay many times over.)
+    app.add_middleware(_VersionedStaticCacheMiddleware)
+    app.add_middleware(GZipMiddleware, compresslevel=6)
     return app

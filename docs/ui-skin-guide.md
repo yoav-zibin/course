@@ -82,6 +82,13 @@ and hover/focus states; do not rely on color alone to communicate status.
    mobile widths. Check dialogs, navigation, disabled states, errors, focus
    indicators, and any color combinations affected by your palette.
 
+On the Portal, visitors can use the top-bar **Skin** menu to preview Classic,
+Aurora, Sunset, or Immersive. A preview stays in the `skin` URL parameter while
+moving between Portal screens. Choosing **Assigned** removes the preview and
+restores the server-assigned experiment skin. Previewing does not change or
+persist the account's Firestore assignment. Immersive remains a preview until
+an administrator registers it as an experiment variant.
+
 The preview command is only for local visual checking. Do not persist a forced
 skin in browser storage or change the assignment endpoint; assignment is
 controlled by the experiment service.

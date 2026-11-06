@@ -5,6 +5,7 @@ Python memory. A database-backed implementation can replace it later without tou
 the service or the HTTP layer.
 """
 
+import datetime as dt
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from typing import Protocol
@@ -21,7 +22,10 @@ from game_platform.models import (
     Translation,
     GameVersionError,
     Invite,
+    LinkedAccountKind,
     Match,
+    MatchStatus,
+    Feedback,
     User,
     WebPushSubscription,
 )
@@ -39,6 +43,10 @@ class Store(Protocol):
     def put_user(self, user: User) -> None: ...
 
     def get_user(self, user_id: str) -> User | None: ...
+
+    def get_user_by_linked_account(
+        self, kind: LinkedAccountKind, identifier: str
+    ) -> User | None: ...
 
     def list_users(self) -> list[User]: ...
 
@@ -80,6 +88,10 @@ class Store(Protocol):
 
     def list_matches_involving(self, user_id: str) -> list[Match]:
         """Matches that [user_id] owns or holds a seat in, oldest first."""
+        ...
+
+    def list_matches_by_status(self, status: MatchStatus) -> list[Match]:
+        """Matches with [status], oldest first."""
         ...
 
     def delete_match(self, match_id: str) -> None: ...
@@ -181,6 +193,22 @@ class Store(Protocol):
 
     def delete_experiment_event(self, event_id: str) -> None: ...
 
+    def record_game_match_start(self, game_id: str, player_count: int) -> None: ...
+
+    def list_popular_game_ids(self, limit: int) -> list[tuple[str, int]]: ...
+
+    def put_feedback(self, feedback: Feedback) -> None: ...
+
+    def get_feedback(self, feedback_id: str) -> Feedback | None: ...
+
+    def list_feedback(self) -> list[Feedback]: ...
+
+    def list_recent_feedback(
+        self, reporter_user_id: str, *, since: dt.datetime, until: dt.datetime
+    ) -> list[Feedback]:
+        """[reporter_user_id]'s feedback created from [since] through [until]."""
+        ...
+
 
 @dataclass(frozen=True, kw_only=True)
 class Snapshot:
@@ -214,6 +242,8 @@ class Snapshot:
     experiments: tuple[Experiment, ...] = ()
     experiment_assignments: tuple[ExperimentAssignment, ...] = ()
     experiment_events: tuple[ExperimentEvent, ...] = ()
+    # Optional so existing data files load without a migration. Admin-only data.
+    feedback: tuple[Feedback, ...] = ()
 
 
 class InMemoryStore:
@@ -222,10 +252,17 @@ class InMemoryStore:
     def __init__(self) -> None:
         # Dicts preserve insertion order, so listings come out oldest first.
         self._users: dict[str, User] = {}
+        self._user_ids_by_linked_account: dict[
+            tuple[LinkedAccountKind, str], dict[str, None]
+        ] = {}
         # All versions of each game, oldest first.
         self._game_versions: dict[str, list[Game]] = {}
         self._deleted_game_ids: set[str] = set()
         self._matches: dict[str, Match] = {}
+        self._match_ids_by_user: dict[str, set[str]] = {}
+        self._match_ids_by_status: dict[str, set[str]] = {}
+        self._match_order: dict[str, int] = {}
+        self._next_match_order = 0
         self._game_drafts: dict[str, GameDraft] = {}
         self._unpublished_game_ids: set[str] = set()
         self._agent_conversations: dict[str, list[AgentConversationEntry]] = {}
@@ -239,6 +276,10 @@ class InMemoryStore:
         self._experiments: dict[str, Experiment] = {}
         self._experiment_assignments: dict[tuple[str, str], ExperimentAssignment] = {}
         self._experiment_events: dict[str, ExperimentEvent] = {}
+        # Test/local fallback only. Production query mode keeps these aggregates
+        # in the dedicated Firestore game_popularity collection.
+        self._game_popularity: dict[str, tuple[int, int]] = {}
+        self._feedback: dict[str, Feedback] = {}
 
     @classmethod
     def of_snapshot(cls, snapshot: Snapshot) -> "InMemoryStore":
@@ -269,6 +310,8 @@ class InMemoryStore:
             store.put_experiment_assignment(assignment)
         for event in snapshot.experiment_events:
             store.put_experiment_event(event)
+        for feedback in snapshot.feedback:
+            store.put_feedback(feedback)
         return store
 
     def snapshot(self) -> Snapshot:
@@ -294,6 +337,7 @@ class InMemoryStore:
             experiments=tuple(self._experiments.values()),
             experiment_assignments=tuple(self._experiment_assignments.values()),
             experiment_events=tuple(self._experiment_events.values()),
+            feedback=tuple(self._feedback.values()),
         )
 
     def put_experiment(self, experiment: Experiment) -> None:
@@ -329,7 +373,53 @@ class InMemoryStore:
     def delete_experiment_event(self, event_id: str) -> None:
         self._experiment_events.pop(event_id, None)
 
+    def record_game_match_start(self, game_id: str, player_count: int) -> None:
+        if type(player_count) is not int or player_count < 1:
+            raise ValueError("player_count must be a positive integer")
+        matches, score = self._game_popularity.get(game_id, (0, 0))
+        self._game_popularity[game_id] = (matches + 1, score + player_count)
+
+    def list_popular_game_ids(self, limit: int) -> list[tuple[str, int]]:
+        return sorted(
+            ((game_id, score) for game_id, (_, score) in self._game_popularity.items()),
+            key=lambda item: (-item[1], item[0]),
+        )[:limit]
+
+    def put_feedback(self, feedback: Feedback) -> None:
+        self._feedback[feedback.id] = feedback
+
+    def get_feedback(self, feedback_id: str) -> Feedback | None:
+        return self._feedback.get(feedback_id)
+
+    def list_feedback(self) -> list[Feedback]:
+        return list(self._feedback.values())
+
+    def list_recent_feedback(
+        self, reporter_user_id: str, *, since: dt.datetime, until: dt.datetime
+    ) -> list[Feedback]:
+        return [
+            feedback
+            for feedback in self._feedback.values()
+            if feedback.reporter_user_id == reporter_user_id and since <= feedback.created_at <= until
+        ]
+
     def put_user(self, user: User) -> None:
+        previous = self._users.get(user.id)
+        old_accounts = (
+            {(account.kind, account.identifier) for account in previous.linked_accounts}
+            if previous is not None
+            else set()
+        )
+        new_accounts = {
+            (account.kind, account.identifier) for account in user.linked_accounts
+        }
+        for account_key in old_accounts - new_accounts:
+            user_ids = self._user_ids_by_linked_account[account_key]
+            user_ids.pop(user.id, None)
+            if not user_ids:
+                del self._user_ids_by_linked_account[account_key]
+        for account_key in new_accounts - old_accounts:
+            self._user_ids_by_linked_account.setdefault(account_key, {})[user.id] = None
         self._users[user.id] = user
 
     def put_game_draft(self, draft: GameDraft) -> None:
@@ -347,11 +437,27 @@ class InMemoryStore:
     def get_user(self, user_id: str) -> User | None:
         return self._users.get(user_id)
 
+    def get_user_by_linked_account(
+        self, kind: LinkedAccountKind, identifier: str
+    ) -> User | None:
+        user_ids = self._user_ids_by_linked_account.get((kind, identifier))
+        if not user_ids:
+            return None
+        return self._users[next(iter(user_ids))]
+
     def list_users(self) -> list[User]:
         return list(self._users.values())
 
     def delete_user(self, user_id: str) -> None:
-        self._users.pop(user_id, None)
+        user = self._users.pop(user_id, None)
+        if user is None:
+            return
+        for account in user.linked_accounts:
+            account_key = (account.kind, account.identifier)
+            user_ids = self._user_ids_by_linked_account[account_key]
+            user_ids.pop(user_id, None)
+            if not user_ids:
+                del self._user_ids_by_linked_account[account_key]
 
     def add_game_version(self, game: Game) -> None:
         versions = self._game_versions.setdefault(game.id, [])
@@ -399,16 +505,70 @@ class InMemoryStore:
         self._deleted_game_ids.add(game_id)
 
     def put_match(self, match: Match) -> None:
+        previous = self._matches.get(match.id)
+        previous_users = self._users_in_match(previous) if previous is not None else set()
+        current_users = self._users_in_match(match)
+        for user_id in previous_users - current_users:
+            match_ids = self._match_ids_by_user[user_id]
+            match_ids.discard(match.id)
+            if not match_ids:
+                del self._match_ids_by_user[user_id]
+        for user_id in current_users - previous_users:
+            self._match_ids_by_user.setdefault(user_id, set()).add(match.id)
+        if previous is not None and previous.status != match.status:
+            match_ids = self._match_ids_by_status[previous.status]
+            match_ids.discard(match.id)
+            if not match_ids:
+                del self._match_ids_by_status[previous.status]
+        if previous is None:
+            self._match_order[match.id] = self._next_match_order
+            self._next_match_order += 1
+        self._match_ids_by_status.setdefault(match.status, set()).add(match.id)
         self._matches[match.id] = match
+
+    @staticmethod
+    def _users_in_match(match: Match) -> set[str]:
+        return {
+            match.owner_user_id,
+            *(seat.user_id for seat in match.seats if seat.user_id is not None),
+            *(timeout.user_id for timeout in match.timeouts),
+        }
 
     def get_match(self, match_id: str) -> Match | None:
         return self._matches.get(match_id)
 
     def list_matches_involving(self, user_id: str) -> list[Match]:
-        return [match for match in self._matches.values() if match.involves(user_id)]
+        return [
+            self._matches[match_id]
+            for match_id in sorted(
+                self._match_ids_by_user.get(user_id, ()),
+                key=self._match_order.__getitem__,
+            )
+        ]
 
     def delete_match(self, match_id: str) -> None:
-        self._matches.pop(match_id, None)
+        match = self._matches.pop(match_id, None)
+        if match is None:
+            return
+        for user_id in self._users_in_match(match):
+            match_ids = self._match_ids_by_user[user_id]
+            match_ids.discard(match_id)
+            if not match_ids:
+                del self._match_ids_by_user[user_id]
+        match_ids = self._match_ids_by_status[match.status]
+        match_ids.discard(match_id)
+        if not match_ids:
+            del self._match_ids_by_status[match.status]
+        del self._match_order[match_id]
+
+    def list_matches_by_status(self, status: MatchStatus) -> list[Match]:
+        return [
+            self._matches[match_id]
+            for match_id in sorted(
+                self._match_ids_by_status.get(status, ()),
+                key=self._match_order.__getitem__,
+            )
+        ]
 
     def list_all_game_versions(self) -> list[Game]:
         return [

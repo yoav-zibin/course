@@ -201,7 +201,7 @@ const Auth = (() => {
       script.async = true;
       script.defer = true;
       script.onload = resolve;
-      script.onerror = () => reject(new Error("couldn't load Google's login script"));
+      script.onerror = () => reject(new Error(I18n.t("ui.auth.google_script_failed", {}, "Couldn't load Google's login script")));
       document.head.appendChild(script);
     });
     return googleLoading.then(() => {
@@ -370,7 +370,7 @@ const Auth = (() => {
     const callButton = kind === "phone" && canCall
       ? el("button", {
           type: "button",
-          textContent: "Call me with a code",
+          textContent: I18n.t("ui.auth.call_me", {}, "Call me with a code"),
           onclick: () => send("call"),
         })
       : null;
@@ -477,7 +477,7 @@ const Auth = (() => {
     if (account) {
       panel.append(el("div", { class: "auth-menu-heading" },
         avatarImg(account.picture_url),
-        `Logged in as ${account.display_name}`));
+        I18n.t("ui.auth.logged_in_as", { name: account.display_name }, `Logged in as ${account.display_name}`)));
       if (account.linked.length) {
         panel.append(
           el("div", { class: "auth-menu-section" },
@@ -493,7 +493,7 @@ const Auth = (() => {
         el("button", {
           type: "button",
           textContent: I18n.t("ui.auth.copy_invite", {}, "Copy my invite link"),
-          title: "Everyone who signs up through this link counts as invited by you",
+          title: I18n.t("ui.auth.invite_hint", {}, "Everyone who signs up through this link counts as invited by you"),
           onclick: () => {
             hidePanel();
             navigator.clipboard
@@ -501,7 +501,18 @@ const Auth = (() => {
               .writeText(inviteLink(current() ?? account))
               .then(() => toast(I18n.t("ui.auth.invite_copied", {}, "Copied your invite link")));
           },
-        })
+        }),
+        // Feedback about the website, on pages that load the feedback dialog (the portal).
+        window.FeedbackDialog ? el("button", {
+          type: "button",
+          class: "feedback-menu-item",
+          textContent: I18n.t("ui.feedback.send_feedback", {}, "Send feedback"),
+          onclick: () => {
+            hidePanel();
+            window.FeedbackDialog.open({ target: { type: "platform", id: "", name: "" }, chooseKind: true,
+              user: current() ?? account, page: location.pathname + location.hash });
+          },
+        }) : null
       );
     }
     if (all.length > 1 || (all.length === 1 && !account)) {

@@ -1,5 +1,6 @@
 :root[data-skin="aurora"] {
   color-scheme: dark;
+  --builder-accent-ink: #071b22;
   --color-bg-0: #071321;
   --color-bg-1: #0e2032;
   --color-bg-2: #132a40;
@@ -23,6 +24,7 @@
 
 :root[data-skin="sunset"] {
   color-scheme: light;
+  --builder-accent-ink: #fffaf6;
   --color-bg-0: #fff8f1;
   --color-bg-1: #ffede0;
   --color-bg-2: #ffe3d1;
@@ -43,3 +45,557 @@
   --radius-md: 9px;
   --font-sans: Georgia, serif;
 }
+
+:root[data-skin="immersive"] {
+  color-scheme: dark;
+  --builder-accent-ink: #100c1d;
+  --color-bg-0: #100c1d;
+  --color-bg-1: #19132b;
+  --color-bg-2: #211a38;
+  --color-bg-3: #30244e;
+  --color-bg-4: #403064;
+  --color-text-primary: #f6f1ff;
+  --color-text-secondary: #d7cdef;
+  --color-text-tertiary: #aa9bc9;
+  --color-text-quaternary: #81739e;
+  --color-border-1: #2a2141;
+  --color-border-2: #3c305c;
+  --color-border-3: #554578;
+  --color-border-4: #75629b;
+  --color-accent: #c6f432;
+  --color-accent-hover: #d9ff62;
+  --color-focus-ring: #e3aaff;
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --font-sans: "Trebuchet MS", sans-serif;
+}
+
+/* The Portal has a richer component palette than the shared app shell. */
+:root[data-skin="aurora"] .portal-shell {
+  --color-bg-0: #071321;
+  --color-bg-1: #0e2032;
+  --color-bg-2: #132a40;
+  --color-bg-3: #1b3852;
+  --color-bg-4: #264968;
+  --color-text-primary: #f0fbff;
+  --color-text-secondary: #c1e3ee;
+  --color-text-tertiary: #89b7ca;
+  --color-border-2: #24465b;
+  --color-border-3: #38617a;
+  --color-accent: #34c6b5;
+  --color-accent-hover: #69e1d1;
+  --color-focus-ring: #69e1d1;
+  background: var(--color-bg-0);
+  color: var(--color-text-primary);
+}
+:root[data-skin="sunset"] .portal-shell {
+  --color-bg-0: #fff8f1;
+  --color-bg-1: #ffede0;
+  --color-bg-2: #ffe3d1;
+  --color-bg-3: #ffd3b8;
+  --color-bg-4: #ffc19c;
+  --color-text-primary: #38251f;
+  --color-text-secondary: #61443a;
+  --color-text-tertiary: #8b6759;
+  --color-border-2: #e8c2ad;
+  --color-border-3: #d7a48a;
+  --color-accent: #b94f35;
+  --color-accent-hover: #963b29;
+  --color-focus-ring: #963b29;
+  background: var(--color-bg-0);
+  color: var(--color-text-primary);
+}
+:root[data-skin="immersive"] .portal-shell {
+  --color-bg-0: #100c1d;
+  --color-bg-1: #19132b;
+  --color-bg-2: #211a38;
+  --color-bg-3: #30244e;
+  --color-bg-4: #403064;
+  --color-text-primary: #f6f1ff;
+  --color-text-secondary: #d7cdef;
+  --color-text-tertiary: #aa9bc9;
+  --color-border-2: #3c305c;
+  --color-border-3: #554578;
+  --color-accent: #c6f432;
+  --color-accent-hover: #d9ff62;
+  --color-focus-ring: #e3aaff;
+  background: var(--color-bg-0);
+  color: var(--color-text-primary);
+}
+
+:root[data-skin="aurora"] .portal-sidebar,
+:root[data-skin="aurora"] .match-creator,
+:root[data-skin="aurora"] .game-detail-page,
+:root[data-skin="aurora"] .match-stage,
+:root[data-skin="aurora"] .portal-shell .game-search-popup,
+:root[data-skin="aurora"] .portal-shell .match-tools {
+  background: #0e2032;
+  border-color: #24465b;
+  color: #f0fbff;
+}
+:root[data-skin="aurora"] .popular-games-section,
+:root[data-skin="aurora"] .play-option,
+:root[data-skin="aurora"] .portal-shell .library-card,
+:root[data-skin="aurora"] .selected-game-card {
+  background: #132a40;
+  border-color: #24465b;
+  color: #f0fbff;
+}
+:root[data-skin="aurora"] .portal-shell input,
+:root[data-skin="aurora"] .portal-shell select {
+  background: #071321;
+  border-color: #38617a;
+  color: #f0fbff;
+}
+:root[data-skin="aurora"] .portal-shell button.primary,
+:root[data-skin="aurora"] .portal-shell .library-toolbar button[aria-pressed="true"] {
+  background: #34c6b5;
+  border-color: #34c6b5;
+  color: #071b22;
+}
+:root[data-skin="aurora"] .portal-shell button.primary:hover:not(:disabled) { background:#69e1d1; border-color:#69e1d1; }
+:root[data-skin="aurora"] .portal-shell button:focus-visible,
+:root[data-skin="aurora"] .portal-shell summary:focus-visible,
+:root[data-skin="aurora"] .portal-shell .popular-game-card:focus-visible {
+  outline-color: #69e1d1;
+}
+:root[data-skin="aurora"] .creator-title,
+:root[data-skin="aurora"] .popular-games-heading h2,
+:root[data-skin="aurora"] .play-option-heading h3,
+:root[data-skin="aurora"] .selected-game-card h2 {
+  color: #f0fbff;
+}
+:root[data-skin="aurora"] .creator-description,
+:root[data-skin="aurora"] .popular-period,
+:root[data-skin="aurora"] .play-option-heading p,
+:root[data-skin="aurora"] .play-option .play-option-note,
+:root[data-skin="aurora"] .library-description {
+  color: #89b7ca;
+}
+
+:root[data-skin="sunset"] .portal-sidebar,
+:root[data-skin="sunset"] .match-creator,
+:root[data-skin="sunset"] .game-detail-page,
+:root[data-skin="sunset"] .match-stage,
+:root[data-skin="sunset"] .portal-shell .game-search-popup,
+:root[data-skin="sunset"] .portal-shell .match-tools {
+  background: #ffede0;
+  border-color: #e8c2ad;
+  color: #38251f;
+}
+:root[data-skin="sunset"] .popular-games-section,
+:root[data-skin="sunset"] .play-option,
+:root[data-skin="sunset"] .portal-shell .library-card,
+:root[data-skin="sunset"] .selected-game-card {
+  background: #ffe3d1;
+  border-color: #e8c2ad;
+  color: #38251f;
+}
+:root[data-skin="sunset"] .portal-shell input,
+:root[data-skin="sunset"] .portal-shell select {
+  background: #fffaf6;
+  border-color: #d7a48a;
+  color: #38251f;
+}
+:root[data-skin="sunset"] .portal-shell button.primary,
+:root[data-skin="sunset"] .portal-shell .library-toolbar button[aria-pressed="true"] {
+  background: #b94f35;
+  border-color: #b94f35;
+  color: #fffaf6;
+}
+:root[data-skin="sunset"] .portal-shell button.primary:hover:not(:disabled) { background:#963b29; border-color:#963b29; }
+:root[data-skin="sunset"] .portal-shell button:focus-visible,
+:root[data-skin="sunset"] .portal-shell summary:focus-visible,
+:root[data-skin="sunset"] .portal-shell .popular-game-card:focus-visible {
+  outline-color: #963b29;
+}
+:root[data-skin="sunset"] .creator-title,
+:root[data-skin="sunset"] .popular-games-heading h2,
+:root[data-skin="sunset"] .play-option-heading h3,
+:root[data-skin="sunset"] .selected-game-card h2,
+:root[data-skin="sunset"] .portal-shell .game-option {
+  color: #38251f;
+}
+:root[data-skin="sunset"] .creator-description,
+:root[data-skin="sunset"] .game-label,
+:root[data-skin="sunset"] .popular-period,
+:root[data-skin="sunset"] .popular-eyebrow,
+:root[data-skin="sunset"] .play-option-heading p,
+:root[data-skin="sunset"] .play-option .play-option-note,
+:root[data-skin="sunset"] .library-description,
+:root[data-skin="sunset"] .library-count,
+:root[data-skin="sunset"] .library-empty,
+:root[data-skin="sunset"] .search-note,
+:root[data-skin="sunset"] .stake-help,
+:root[data-skin="sunset"] .offline-controls,
+:root[data-skin="sunset"] .selected-game-card p {
+  color: #765446;
+}
+:root[data-skin="sunset"] .creator-toggle { color:#873e2b; }
+:root[data-skin="sunset"] .portal-shell .library-toolbar button { color:#765446; }
+:root[data-skin="sunset"] .portal-sidebar .list-item:hover,
+:root[data-skin="sunset"] .portal-sidebar .list-item[aria-selected="true"] { background:#ffd3b8; }
+:root[data-skin="sunset"] #group-turn > summary { color:#34501c; }
+:root[data-skin="sunset"] .open-group > summary { color:#145169; }
+:root[data-skin="sunset"] .portal-shell .game-option:hover,
+:root[data-skin="sunset"] .portal-shell .game-option[aria-selected="true"] {
+  background: #ffd3b8;
+  color: #713b2b;
+}
+:root[data-skin="sunset"] .portal-shell .popular-game-card {
+  background: #ffe3d1;
+  border-color: #e8c2ad;
+  color: #38251f;
+}
+:root[data-skin="sunset"] .popular-game-title { color: #38251f; }
+:root[data-skin="sunset"] .popular-game-players,
+:root[data-skin="sunset"] .popular-game-open,
+:root[data-skin="sunset"] .library-mode,
+:root[data-skin="sunset"] .library-select,
+:root[data-skin="sunset"] .back-to-games { color: #873e2b; }
+:root[data-skin="sunset"] .mode-label { color:#713b2b; background:#ffede0; border-color:#d7a48a; }
+:root[data-skin="sunset"] .portal-shell .result-win { color:#34501c; background:#e6f0d1; border-color:#9ab36a; }
+:root[data-skin="sunset"] .portal-shell .result-loss { color:#812f47; background:#f5dce4; border-color:#d59aae; }
+:root[data-skin="sunset"] .portal-shell .result-draw { color:#145169; background:#d9eff7; border-color:#8abbd0; }
+:root[data-skin="sunset"] .portal-shell .result-neutral { color:#53473e; background:#eee2d8; border-color:#cbb6a8; }
+
+.portal-skin-picker,
+.portal-layout-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+.portal-skin-picker select,
+.portal-layout-picker select {
+  min-height: 36px;
+  max-width: 140px;
+  padding: 6px 9px;
+  color: var(--color-text-primary);
+  background: var(--color-bg-0);
+  border: 1px solid var(--color-border-3);
+  border-radius: var(--radius-sm);
+}
+.portal-app-menu { display:none; flex-direction:column; gap:3px; margin:0 0 4px; }
+.portal-app-menu a {
+  display:block;
+  padding:9px 11px;
+  border-radius:var(--radius-sm);
+  color:var(--color-text-secondary);
+  text-decoration:none;
+}
+.portal-app-menu a:hover,
+.portal-app-menu a[aria-current="page"] { background:var(--color-bg-2); color:var(--color-text-primary); }
+:root[data-portal-layout="left"] .topbar[data-app-page="portal"] nav,
+:root[data-portal-layout="hamburger"] .topbar[data-app-page="portal"] nav { display:none; }
+:root[data-portal-layout="left"] .portal-app-menu,
+:root[data-portal-layout="hamburger"] .portal-app-menu { display:flex; }
+:root[data-portal-layout="top"] .topbar[data-app-page="portal"] nav { display:flex; }
+
+/* Skin the builder's own controls and panels while leaving each game preview's
+   authored interface intact. */
+:root[data-skin="aurora"] .builder-shell {
+  --color-bg-0:#071321;--color-bg-1:#0e2032;--color-bg-2:#132a40;--color-bg-3:#1b3852;--color-bg-4:#264968;
+  --color-text-primary:#f0fbff;--color-text-secondary:#c1e3ee;--color-text-tertiary:#89b7ca;--color-text-quaternary:#63899b;
+  --color-border-1:#183044;--color-border-2:#24465b;--color-border-3:#38617a;--color-border-4:#5888a1;
+  --color-accent:#34c6b5;--color-accent-hover:#69e1d1;--color-focus-ring:#69e1d1;--builder-accent-ink:#071b22;
+}
+:root[data-skin="sunset"] .builder-shell {
+  --color-bg-0:#fff8f1;--color-bg-1:#ffede0;--color-bg-2:#ffe3d1;--color-bg-3:#ffd3b8;--color-bg-4:#ffc19c;
+  --color-text-primary:#38251f;--color-text-secondary:#61443a;--color-text-tertiary:#8b6759;--color-text-quaternary:#a58577;
+  --color-border-1:#f0d7c7;--color-border-2:#e8c2ad;--color-border-3:#d7a48a;--color-border-4:#c8876a;
+  --color-accent:#b94f35;--color-accent-hover:#963b29;--color-focus-ring:#963b29;--builder-accent-ink:#fffaf6;
+}
+:root[data-skin="immersive"] .builder-shell {
+  --color-bg-0:#100c1d;--color-bg-1:#19132b;--color-bg-2:#211a38;--color-bg-3:#30244e;--color-bg-4:#403064;
+  --color-text-primary:#f6f1ff;--color-text-secondary:#d7cdef;--color-text-tertiary:#aa9bc9;--color-text-quaternary:#81739e;
+  --color-border-1:#2a2141;--color-border-2:#3c305c;--color-border-3:#554578;--color-border-4:#75629b;
+  --color-accent:#c6f432;--color-accent-hover:#d9ff62;--color-focus-ring:#e3aaff;--builder-accent-ink:#100c1d;
+}
+:root[data-skin]:not([data-skin="classic"]) .builder-shell {
+  background:var(--color-bg-0);
+  color:var(--color-text-primary);
+  font-family:var(--font-sans);
+}
+:root[data-skin]:not([data-skin="classic"]) .builder-shell .sidebar { background:var(--color-bg-1); border-color:var(--color-border-2); }
+:root[data-skin]:not([data-skin="classic"]) .builder-shell button:not(.primary):not(.danger) {
+  background:var(--color-bg-2);border-color:var(--color-border-3);color:var(--color-text-primary);
+}
+:root[data-skin]:not([data-skin="classic"]) .builder-shell button:not(.primary):not(.danger):hover:not(:disabled) { background:var(--color-bg-3);border-color:var(--color-border-4); }
+:root[data-skin]:not([data-skin="classic"]) .builder-shell button.primary {
+  background:var(--color-accent);border-color:var(--color-accent);color:var(--builder-accent-ink);
+}
+:root[data-skin]:not([data-skin="classic"]) .builder-shell button.primary:hover:not(:disabled) { background:var(--color-accent-hover);border-color:var(--color-accent-hover); }
+:root[data-skin]:not([data-skin="classic"]) .builder-shell .library-label,
+:root[data-skin]:not([data-skin="classic"]) .builder-shell .list-item .sub,
+:root[data-skin]:not([data-skin="classic"]) .builder-shell .starter-card>p,
+:root[data-skin]:not([data-skin="classic"]) .builder-shell .starter-options p,
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #game-summary,
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #test-status,
+:root[data-skin]:not([data-skin="classic"]) .builder-shell .game-history summary { color:var(--color-text-tertiary); }
+:root[data-skin]:not([data-skin="classic"]) .builder-shell .list-item[aria-selected=true] { background:var(--color-bg-3);border-left-color:var(--color-accent); }
+:root[data-skin]:not([data-skin="classic"]) .builder-shell .list-item:hover { background:var(--color-bg-2); }
+:root[data-skin]:not([data-skin="classic"]) .builder-shell .starter-card {
+  background:var(--color-bg-1);border-color:var(--color-border-2);border-top-color:var(--color-accent);
+}
+:root[data-skin]:not([data-skin="classic"]) .builder-shell .starter-options,
+:root[data-skin]:not([data-skin="classic"]) .builder-shell .game-history,
+:root[data-skin]:not([data-skin="classic"]) .builder-shell .game-management { border-color:var(--color-border-2); }
+:root[data-skin]:not([data-skin="classic"]) .builder-shell .starter-options input,
+:root[data-skin]:not([data-skin="classic"]) .builder-shell .starter-options select,
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #play-mode,
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #versions,
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #agent-input,
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #game-name {
+  background:var(--color-bg-0);border-color:var(--color-border-3);color:var(--color-text-primary);
+}
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #agent-input::placeholder { color:var(--color-text-tertiary); }
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #agent-log .user { background:var(--color-bg-3);color:var(--color-text-primary); }
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #agent-log .assistant { background:var(--color-bg-2);color:var(--color-text-primary); }
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #agent-log .system,
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #agent-activity { color:var(--color-text-secondary); }
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #agent-activity { background:var(--color-bg-1);border-color:var(--color-border-2); }
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #agent-activity progress { accent-color:var(--color-accent); }
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #game-name { font-family:var(--font-sans); }
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #game-name:hover,
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #game-name:focus { border-bottom-color:var(--color-border-4); }
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #game-version { color:var(--color-accent-hover); }
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #play-game { color:var(--color-accent-hover); }
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #test-frame { background:var(--color-bg-1);border-color:var(--color-border-2); }
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #test-state,
+:root[data-skin]:not([data-skin="classic"]) .builder-shell #server-code { background:var(--color-bg-1);color:var(--color-text-primary); }
+:root[data-skin]:not([data-skin="classic"]) #ai-panel {
+  background:var(--color-bg-1);border-color:var(--color-border-3);color:var(--color-text-primary);font-family:var(--font-sans);
+}
+:root[data-skin]:not([data-skin="classic"]) #ai-panel .ai-panel-heading {
+  background:var(--color-accent);color:var(--builder-accent-ink, var(--color-bg-0));
+}
+:root[data-skin]:not([data-skin="classic"]) #ai-panel button { color:inherit; }
+:root[data-skin]:not([data-skin="classic"]) #ai-panel #close-ai { color:inherit; }
+:root[data-skin]:not([data-skin="classic"]) #ai-panel button.primary {
+  background:var(--color-accent);border-color:var(--color-accent);color:var(--builder-accent-ink);
+}
+:root[data-skin]:not([data-skin="classic"]) #ai-panel button.primary:hover:not(:disabled) {
+  background:var(--color-accent-hover);border-color:var(--color-accent-hover);
+}
+:root[data-skin]:not([data-skin="classic"]) #ai-panel #agent-log .user { background:var(--color-bg-3);color:var(--color-text-primary); }
+:root[data-skin]:not([data-skin="classic"]) #ai-panel #agent-log .assistant { background:var(--color-bg-2);color:var(--color-text-primary); }
+:root[data-skin]:not([data-skin="classic"]) #open-ai {
+  background:var(--color-accent);border-color:var(--color-accent);color:var(--builder-accent-ink, var(--color-bg-0));
+}
+:root[data-skin]:not([data-skin="classic"]) #open-ai:hover { background:var(--color-accent-hover);border-color:var(--color-accent-hover); }
+
+/* Secondary builder pages already use shared palette variables; keep embedded
+   previews and image placeholders aligned with the selected skin as well. */
+:root[data-skin]:not([data-skin="classic"]) .studio iframe { border-color:var(--color-border-3)!important; }
+:root[data-skin]:not([data-skin="classic"]) .preview-grid img { background:var(--color-bg-1); }
+
+/* Match setup and token panels use the same palette as the surrounding page. */
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .play-option-icon,
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .practice-option .play-option-icon,
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .computer-match-option .play-option-icon {
+  background:var(--color-bg-3);color:var(--color-accent);
+}
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .play-option-heading h3 { color:var(--color-text-primary); }
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .play-option-heading p,
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .play-option .computer-setting,
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .practice-controls label,
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .play-option .play-option-note,
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .play-option #create-hint,
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .offline-controls { color:var(--color-text-secondary); }
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .play-option #practice {
+  background:var(--color-bg-3);border-color:var(--color-border-3);color:var(--color-text-primary);
+}
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .play-option #practice:hover:not(:disabled) {
+  background:var(--color-bg-4);border-color:var(--color-border-4);
+}
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .token-stake-panel,
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .match-currency.token-summary {
+  background:linear-gradient(135deg,var(--color-bg-1),var(--color-bg-2));
+  border-color:var(--color-border-3);color:var(--color-text-primary);
+  box-shadow:0 6px 20px rgb(0 0 0 / 12%);
+}
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .token-stake-icon,
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .token-summary-icon {
+  background:var(--color-bg-3);border-color:var(--color-border-3);color:var(--color-accent);
+}
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .token-stake-heading strong { color:var(--color-text-primary); }
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .token-stake-heading>div>span,
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .token-stake-panel .stake-help,
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .token-summary-values span,
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .token-summary-note,
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .token-summary-payout>span,
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .token-summary-payout>small { color:var(--color-text-secondary); }
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .token-stake-panel .stake-select { color:var(--color-text-secondary); }
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .token-stake-panel .stake-select select {
+  background:var(--color-bg-0);border-color:var(--color-border-3);color:var(--color-text-primary);
+}
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .stake-preview,
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .token-summary-values>div,
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .token-summary-payout,
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .paid-lobby-hint {
+  background:var(--color-bg-2);border-color:var(--color-border-2);color:var(--color-text-primary);
+}
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .token-summary-values strong,
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .token-summary.is-paid .token-summary-values strong,
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .token-summary-payout>strong { color:var(--color-accent); }
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .popular-games-scroll-button {
+  background:var(--color-bg-1);border-color:var(--color-border-3);color:var(--color-text-primary);
+}
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .popular-games-scroll-button:hover:not(:disabled) {
+  background:var(--color-bg-3);border-color:var(--color-border-4);
+}
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .speed-choice { color:var(--color-text-secondary); }
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .match-clock {
+  background:var(--color-bg-3);color:var(--color-text-primary);border:1px solid var(--color-border-2);
+}
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .match-play-notice {
+  background:var(--color-bg-2);color:var(--color-text-secondary);
+}
+:root[data-skin]:not([data-skin="classic"]) .portal-shell .match-play-notice.error {
+  background:color-mix(in srgb,var(--color-error) 12%,var(--color-bg-1));color:var(--color-error);
+}
+
+/* Keep the wallet aligned with the active portal skin. */
+:root[data-skin="aurora"] .topbar .token-wallet {
+  background:linear-gradient(135deg,#17434b,#102d3b);
+  border-color:#337d80;
+  color:#e1fff8;
+  box-shadow:0 4px 18px #030d1245;
+}
+:root[data-skin="aurora"] .topbar .token-wallet-coin {
+  background:#23615f;
+  border-color:#48a99b;
+  color:#a5f1df;
+}
+:root[data-skin="aurora"] .topbar .token-wallet-label { color:#9ecfc3; }
+:root[data-skin="aurora"] .topbar .token-wallet-number { color:#c1e3ee; }
+:root[data-skin="aurora"] .topbar .token-wallet-number strong { color:#f0fbff; }
+
+:root[data-skin="sunset"] .topbar .token-wallet {
+  background:linear-gradient(135deg,#fff3e8,#f8d7c3);
+  border-color:#d7a48a;
+  color:#61443a;
+  box-shadow:0 4px 18px #6d38251f;
+}
+:root[data-skin="sunset"] .topbar .token-wallet-coin {
+  background:#b94f35;
+  border-color:#963b29;
+  color:#fff3e8;
+}
+:root[data-skin="sunset"] .topbar .token-wallet-label { color:#765446; }
+:root[data-skin="sunset"] .topbar .token-wallet-number { color:#61443a; }
+:root[data-skin="sunset"] .topbar .token-wallet-number strong { color:#713b2b; }
+
+:root[data-skin="immersive"] .topbar .token-wallet {
+  background:linear-gradient(135deg,#30244e,#211a38);
+  border-color:#554578;
+  color:#f6f1ff;
+  box-shadow:0 4px 18px #05030c70;
+}
+:root[data-skin="immersive"] .topbar .token-wallet-coin {
+  background:#403064;
+  border-color:#75629b;
+  color:#d9ff62;
+}
+:root[data-skin="immersive"] .topbar .token-wallet-label { color:#aa9bc9; }
+:root[data-skin="immersive"] .topbar .token-wallet-number { color:#d7cdef; }
+:root[data-skin="immersive"] .topbar .token-wallet-number strong { color:#f6f1ff; }
+@media(min-width:900px) {
+  :root[data-portal-layout="left"] .topbar .sidebar-toggle,
+  :root[data-portal-layout="left"] .portal-sidebar .sidebar-close { display:none; }
+}
+.portal-immersive-menu { display:flex; flex-direction:column; gap:2px; margin-bottom:4px; }
+.portal-immersive-menu a {
+  display:block;
+  padding:var(--space-xs) var(--space-sm);
+  border-radius:var(--radius-sm);
+  color:var(--color-text-primary);
+  font-size:var(--font-size-md);
+  text-decoration:none;
+}
+.portal-immersive-menu a:hover { background:var(--color-bg-2); }
+.immersive-build-link { display: none; }
+:root[data-skin="immersive"] .topbar[data-app-page="portal"] nav { display: none; }
+:root[data-skin="immersive"] .portal-main { padding-top: clamp(22px, 5vh, 56px); }
+:root[data-skin="immersive"] .portal-shell .immersive-build-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 15px;
+  border: 1px solid #75629b;
+  border-radius: 999px;
+  background: #211a38;
+  color: #e3aaff;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+:root[data-skin="immersive"] .portal-sidebar,
+:root[data-skin="immersive"] .match-creator,
+:root[data-skin="immersive"] .game-detail-page,
+:root[data-skin="immersive"] .match-stage,
+:root[data-skin="immersive"] .portal-shell .game-search-popup,
+:root[data-skin="immersive"] .portal-shell .match-tools {
+  background: #19132b;
+  border-color: #3c305c;
+  color: #f6f1ff;
+}
+:root[data-skin="immersive"] .popular-games-section,
+:root[data-skin="immersive"] .play-option,
+:root[data-skin="immersive"] .portal-shell .library-card,
+:root[data-skin="immersive"] .selected-game-card {
+  background: #211a38;
+  border-color: #3c305c;
+  color: #f6f1ff;
+}
+:root[data-skin="immersive"] .portal-app-menu a:hover,
+:root[data-skin="immersive"] .portal-app-menu a[aria-current="page"] { background:#30244e; color:#f6f1ff; }
+:root[data-skin="immersive"] .portal-shell input,
+:root[data-skin="immersive"] .portal-shell select {
+  background: #100c1d;
+  border-color: #554578;
+  color: #f6f1ff;
+}
+:root[data-skin="immersive"] .portal-shell button.primary,
+:root[data-skin="immersive"] .portal-shell .library-toolbar button[aria-pressed="true"] {
+  background: #c6f432;
+  border-color: #c6f432;
+  color: #100c1d;
+}
+:root[data-skin="immersive"] body.match-focus > .topbar {
+  display: flex;
+  position: relative;
+  z-index: 5;
+  padding-top: max(6px, env(safe-area-inset-top));
+}
+:root[data-skin="immersive"] body.match-focus > .topbar h1 { display: none; }
+:root[data-skin="immersive"] body.match-focus .portal-shell {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+}
+:root[data-skin="immersive"] body.match-focus .portal-main {
+  overflow: hidden;
+  padding: 0 max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+}
+:root[data-skin="immersive"] body.match-focus .match-stage {
+  min-height: 0;
+  flex: 1;
+  padding: 8px;
+  border-radius: 0;
+}
+@media(max-width:900px) {
+  .topbar[data-app-page="portal"] { flex-wrap:wrap; gap:var(--space-sm); }
+  .topbar[data-app-page="portal"] nav { order:10; flex:1 0 100%; min-width:0; overflow-x:auto; }
+  .portal-skin-picker > span,
+  .portal-layout-picker > span { display:none; }
+  .portal-skin-picker select,
+  .portal-layout-picker select { max-width:120px; padding-inline:6px; }
+}
+@media(max-width:640px) {
+  .portal-skin-picker select,
+  .portal-layout-picker select { max-width: 98px; padding-inline: 6px; }
+}
+:root[data-portal-layout="top"] .topbar[data-app-page="portal"] nav { display:flex; }

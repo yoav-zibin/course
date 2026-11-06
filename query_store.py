@@ -14,6 +14,7 @@ import threading
 from dataclasses import replace
 
 from google.api_core.exceptions import Aborted, AlreadyExists, FailedPrecondition
+from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import TypeAdapter
 
@@ -30,13 +31,16 @@ from game_platform.models import (
     Invite,
     Match,
     Move,
+    Feedback,
     User,
     WebPushSubscription,
     Translation,
 )
 from game_platform.move_history import MoveHistory
+from game_platform.observability import timed_external
 from game_platform.scaling_library import LibraryEntry
 from game_platform.paging import Page, decode_cursor, encode_cursor, page_size
+from game_platform.translation_bundle import TranslationMemory
 
 TYPES = {
     "translations": Translation,
@@ -54,10 +58,12 @@ TYPES = {
     "game_version_errors": GameVersionError,
     "game_test_seeds": GameTestSeeds,
     "agent_conversations": AgentConversation,
+    "feedback": Feedback,
 }
 INTERNAL_COLLECTIONS = frozenset(
     {
         "meta",
+        "translation_bundles",
         "counters",
         "identities",
         "referrals",
@@ -74,6 +80,9 @@ INTERNAL_COLLECTIONS = frozenset(
         "seed_runs",
         "token_ledger",
         "dashboard_runs",
+        "game_popularity",
+        "feedback_limits",
+        "feedback_targets",
     }
 )
 COLLECTIONS = frozenset(TYPES) | INTERNAL_COLLECTIONS
@@ -112,6 +121,47 @@ class _Operation:
         return self.store._local.contexts.pop().__exit__(*args)
 
 
+class _BundleBackend:
+    """Saves translation bundles (see translation_bundle.py) in this store's namespace."""
+
+    def __init__(self, store, *, ignore_migrated_marker=False):
+        self._store = store
+        # The migration command reads the old rows even after it has marked them folded.
+        self._ignore_marker = ignore_migrated_marker
+
+    @property
+    def _bundles(self):
+        return self._store.collection("translation_bundles")
+
+    def read_bundles(self):
+        # One query for every chunk of every language; never inside a transaction.
+        return [doc.to_dict() for doc in self._bundles.stream()]
+
+    def write_entries(self, locale, chunk, puts, deletes):
+        from game_platform.translation_bundle import doc_id
+
+        ref = self._bundles.document(doc_id(locale, chunk))
+        # merge=True merges the entries map key by key: other entries are untouched, and
+        # one write holds both the additions and the removals (DELETE_FIELD).
+        entries = {**puts, **{h: firestore.DELETE_FIELD for h in deletes}}
+        ref.set({"locale": locale, "chunk": chunk, "entries": entries}, merge=True)
+
+    def read_legacy(self):
+        marker = self._store.collection("meta").document("translations").get()
+        if marker.exists and marker.to_dict().get("bundled") and not self._ignore_marker:
+            return None
+        rows = []
+        for doc in self._store.collection("translations").stream():
+            data = doc.to_dict()
+            if data and not data.get("tombstone"):
+                rows.append(ADAPTERS["translations"].validate_json(data["json"]))
+        return rows
+
+    def delete_legacy(self, locale, source_hash):
+        # The old row is simply removed; nothing refers to it.
+        self._store.ref("translations", json.dumps([locale, source_hash])).delete()
+
+
 class QueryStore:
     scalable = True
     last_write_error = None
@@ -123,6 +173,7 @@ class QueryStore:
         self.namespace = namespace
         self._local = threading.local()
         self.operation_lock = _Operation(self)
+        self.translation_memory = TranslationMemory(_BundleBackend(self))
         marker = self.collection("meta").document("schema").get()
         if not marker.exists or marker.to_dict().get("version") != SCHEMA:
             raise ValueError(
@@ -198,9 +249,11 @@ class QueryStore:
             if ref.path in uow["writes"]:
                 return uow["writes"][ref.path][1]
             if ref.path not in uow["reads"]:
-                uow["reads"][ref.path] = ref.get(transaction=uow["tx"]).to_dict()
+                with timed_external("firestore"):
+                    uow["reads"][ref.path] = ref.get(transaction=uow["tx"]).to_dict()
             return uow["reads"][ref.path]
-        return ref.get().to_dict()
+        with timed_external("firestore"):
+            return ref.get().to_dict()
 
     def raw_put(self, ref, data):
         if getattr(self._local, "uow", None) is None:
@@ -216,24 +269,59 @@ class QueryStore:
     def put_experiment(self, experiment):
         self._put("experiments", experiment.id, experiment)
 
+    # Translations are kept in memory, loaded from one document per language (see
+    # translation_bundle.py): a lookup never reads the database, and none of these
+    # methods uses a transaction.
     def get_translations(self, locale, source_hashes):
-        found = {}
-        for source_hash in dict.fromkeys(source_hashes):
-            row = self._get("translations", json.dumps([locale, source_hash]))
-            if row is not None:
-                found[source_hash] = row
-        return found
+        return self.translation_memory.get(locale, source_hashes)
 
     def put_translations(self, translations):
-        # Keep each translation atomic without creating an unbounded batch.
-        for row in translations:
-            self._put("translations", json.dumps([row.locale, row.source_hash]), row)
+        self.translation_memory.put(list(translations))
 
     def delete_translation(self, locale, source_hash):
-        self._delete("translations", json.dumps([locale, source_hash]))
+        self.translation_memory.delete(locale, source_hash)
+
+    def record_game_match_start(self, game_id, player_count):
+        """Adds one started match's player count to its durable popularity score.
+
+        Called inside the match-start unit of work, so a match transition and its
+        score update commit together. One small aggregate document per game keeps
+        the browse query bounded regardless of match history size.
+        """
+        if type(player_count) is not int or player_count < 1:
+            raise ValueError("player_count must be a positive integer")
+        ref = self.collection("game_popularity").document(key(game_id))
+        current = self.raw_get(ref) or {
+            "game_id": game_id,
+            "matches_started": 0,
+            "score": 0,
+        }
+        self.raw_put(
+            ref,
+            {
+                "game_id": game_id,
+                "matches_started": current.get("matches_started", 0) + 1,
+                "score": current.get("score", 0) + player_count,
+            },
+        )
+
+    def list_popular_game_ids(self, limit):
+        query = self.collection("game_popularity").order_by(
+            "score", direction="DESCENDING"
+        ).limit(limit)
+        with timed_external("firestore"):
+            rows = list(query.stream())
+        return [
+            (data["game_id"], data["score"])
+            for row in rows
+            if (data := row.to_dict()) and data.get("score", 0) > 0
+        ]
 
     def list_translations(self, locale=None):
-        return self._list("translations", [("locale", "==", locale)] if locale else ())
+        return sorted(
+            self.translation_memory.list(locale),
+            key=lambda row: (row.locale, row.source_hash),
+        )
 
     def list_experiments(self):
         return self._list("experiments")
@@ -277,6 +365,130 @@ class QueryStore:
             )
         ]
 
+    # Feedback. Sending one reads the caller, their daily-limit document, the target and
+    # the target's counters in one batch, then writes the feedback, the limit document
+    # and the counters in one commit: no queries. A feedback document's name starts with
+    # its inverted update time, so the admin listing is one query, newest first.
+
+    @staticmethod
+    def _feedback_doc(feedback):
+        millis = int(feedback.updated_at.timestamp() * 1000)
+        return f"{10**13 - millis:013d}_{key(feedback.id)[:24]}"
+
+    def _feedback_target_ref(self, target_type, target_id):
+        return self.ref("feedback_targets", json.dumps([target_type, target_id]))
+
+    def _get_all(self, refs):
+        """Reads every ref in [refs] in one batched round trip (inside atomic)."""
+        uow = self._local.uow
+        missing = {
+            ref.path: ref
+            for ref in refs
+            if ref.path not in uow["writes"] and ref.path not in uow["reads"]
+        }
+        if missing:
+            with timed_external("firestore"):
+                for snapshot in self.client.get_all(
+                    list(missing.values()), transaction=uow["tx"]
+                ):
+                    uow["reads"][snapshot.reference.path] = snapshot.to_dict()
+            for path in missing:
+                uow["reads"].setdefault(path, None)
+        return [self.raw_get(ref) for ref in refs]
+
+    def feedback_inputs(self, caller_id, target_type, target_id):
+        """(caller, target record, the caller's feedback in their limit document, the
+        target's counters), read in one batch. Call inside atomic."""
+        collection = {"user": "users", "game": "games", "match": "matches"}.get(target_type)
+        refs = [
+            self.ref("users", caller_id),
+            self.ref("feedback_limits", caller_id),
+            self._feedback_target_ref(target_type, target_id),
+        ]
+        if collection and target_id:
+            refs.append(self.ref(collection, target_id))
+        caller, limits, stats, *target = self._get_all(refs)
+        record = (
+            self._decode(collection, target[0], refs[3], detail=False) if target else None
+        )
+        return (
+            self._decode("users", caller, refs[0]),
+            record,
+            (limits or {}).get("entries", []),
+            stats,
+        )
+
+    def save_feedback(self, feedback, *, entries, replaced_doc=None, new=True):
+        """Writes [feedback], the caller's limit document with [entries] (the feedback
+        they sent in the last 24 hours, this one included) and, when [new], the target's
+        counters. [replaced_doc] is the document of the message it replaces."""
+        uow = self._local.uow
+        doc = self._feedback_doc(feedback)
+        if replaced_doc and replaced_doc != doc:
+            old = self.collection("feedback").document(replaced_doc)
+            uow["writes"][old.path] = (old, None)
+        ref = self.collection("feedback").document(doc)
+        # A fresh, unique name: nothing to read first.
+        uow["writes"][ref.path] = (ref, self._feedback_data(feedback))
+        self.raw_put(
+            self.ref("feedback_limits", feedback.reporter_user_id),
+            {"entries": [{**entry, "doc": entry.get("doc") or doc} for entry in entries]},
+        )
+        if new:
+            self._count_feedback(feedback)
+        return doc
+
+    def _feedback_data(self, feedback):
+        return {
+            "json": ADAPTERS["feedback"].dump_json(feedback).decode(),
+            **{
+                name: getattr(feedback, name)
+                for name in ("id", "kind", "target_type", "target_id", "status", "reporter_user_id")
+            },
+        }
+
+    def _count_feedback(self, feedback):
+        ref = self._feedback_target_ref(feedback.target_type, feedback.target_id)
+        stats = dict(self.raw_get(ref) or {"bug": 0, "suggestion": 0, "problem": 0})
+        stats.update(
+            target_type=feedback.target_type,
+            target_id=feedback.target_id,
+            target_name=feedback.target_name or stats.get("target_name", ""),
+        )
+        stats[feedback.kind] = stats.get(feedback.kind, 0) + 1
+        if feedback.kind == "problem":
+            stats["last_reported_at"] = feedback.created_at
+        self.raw_put(ref, stats)
+
+    def put_feedback(self, feedback):
+        """Saves one feedback message and counts it (used when migrating data)."""
+        with self.atomic():
+            ref = self.collection("feedback").document(self._feedback_doc(feedback))
+            self.raw_put(ref, self._feedback_data(feedback))
+            self._count_feedback(feedback)
+
+    def list_feedback(self):
+        """Legacy bounded listing; the admin listing uses [feedback_page]."""
+        return self._list("feedback")
+
+    def feedback_page(self, *, filters=(), limit):
+        """The newest [limit] feedback messages matching [filters], in one query."""
+        return [
+            record
+            for doc in self._query("feedback", filters, limit=limit)
+            if (record := self._decode("feedback", doc.to_dict(), doc.reference)) is not None
+        ]
+
+    def most_reported(self, *, limit=20):
+        """The [limit] targets with the most "problem" feedback, in one query."""
+        query = (
+            self.collection("feedback_targets")
+            .order_by("problem", direction="DESCENDING")
+            .limit(limit)
+        )
+        with timed_external("firestore"):
+            return [doc.to_dict() for doc in query.stream()]
+
     def flush(self):
         pass  # Every successful operation has already committed.
 
@@ -290,12 +502,27 @@ class QueryStore:
                 {"__name__": self.collection(kind).document(after)}
             )
         uow = getattr(self._local, "uow", None)
-        return list(query.limit(limit).stream(transaction=uow["tx"] if uow else None))
+        with timed_external("firestore"):
+            return list(query.limit(limit).stream(transaction=uow["tx"] if uow else None))
 
     def page(self, kind, *, filters=(), limit=50, cursor=None, scope=None):
         page_size(limit)
         scope = [self.namespace, kind, list(filters), scope]
         after = decode_cursor(scope, cursor)
+        if kind == "translations":
+            rows = [
+                row
+                for row in self.list_translations(
+                    next((value for field, _, value in filters if field == "locale"), None)
+                )
+                if f"{row.locale}@{row.source_hash}" > (after or "")
+            ]
+            return Page(
+                rows[:limit],
+                encode_cursor(scope, f"{rows[limit - 1].locale}@{rows[limit - 1].source_hash}")
+                if len(rows) > limit
+                else None,
+            )
         docs = self._query(kind, filters, limit=limit + 1, after=after)
         items = [
             self._decode(kind, doc.to_dict(), doc.reference, detail=False)
@@ -539,7 +766,7 @@ class QueryStore:
                 )
             participants = sorted({match.owner_user_id, *match.human_user_ids})
             game = self.get_game_version(match.game_id, match.game_version)
-            joinable = not match.private and (
+            joinable = not match.private and not match.num_computer_opponents and (
                 match.status == "waiting_for_players"
                 or (
                     match.status == "ongoing"
@@ -575,6 +802,10 @@ class QueryStore:
 
     def list_matches_involving(self, user_id):
         return self._list("matches", [("participants", "array_contains", user_id)])
+
+    def list_matches_by_status(self, status):
+        """Legacy bounded status listing; scalable clients use the paged v2 API."""
+        return self._list("matches", [("status", "==", status)])
 
     def list_all_matches(self):
         return self._list("matches")
@@ -717,6 +948,24 @@ class QueryStore:
         if not include_unpublished:
             filters.append(("published", "==", True))
         return self._list("games", filters)
+
+    def list_games_without_code(self, *, owner_user_id=None, include_unpublished=False):
+        """Like [list_games], but the games have no code: one query and no body reads."""
+        filters = [("deleted", "==", False)]
+        if owner_user_id is not None:
+            filters.append(("owner_user_id", "==", owner_user_id))
+        if not include_unpublished:
+            filters.append(("published", "==", True))
+        docs = self._query("games", filters, limit=LEGACY_LIMIT + 1)
+        if len(docs) > LEGACY_LIMIT:
+            raise conflict(
+                "result exceeds 100 records; use the paginated API or an administrative job"
+            )
+        return [
+            game
+            for doc in docs
+            if (game := self._decode("games", doc.to_dict(), doc.reference, detail=False))
+        ]
 
     def list_all_game_versions(self):
         return self._list("game_versions")

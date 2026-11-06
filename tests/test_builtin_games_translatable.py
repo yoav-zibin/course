@@ -1,0 +1,55 @@
+"""The built-in games whose client page is translatable (docs/game-translation.md)."""
+
+from pathlib import Path
+
+import pytest
+
+from game_platform import game_text
+
+GAMES = Path(__file__).resolve().parent.parent / "games"
+
+TRANSLATABLE = [
+    "tictactoe.html",
+    "poker.html",
+    "audit-batch1/battleship.html",
+    "audit-batch1/beat-the-landlord.html",
+    "audit-batch1/crazy-eights.html",
+    "audit-batch1/go-fish.html",
+    "audit-batch1/lost-cities.html",
+    "audit-batch1/president.html",
+    "audit-batch2/3-minute-chess.html",
+    "audit-batch2/4-player-chess.html",
+    "audit-batch2/blokus.html",
+    "audit-batch2/guandan.html",
+    "audit-batch2/mini-golf-duels.html",
+    "audit-batch2/quoridor.html",
+    "audit-batch3/backgammon-copy.html",
+    "audit-batch3/backgammon.html",
+    "audit-batch3/brazilian-truco.html",
+    "audit-batch3/ers.html",
+    "audit-batch3/reversi.html",
+    "audit-batch3/six-card-golf.html",
+    "audit-batch4/blackjack-table.html",
+    "audit-batch4/cheat-bs.html",
+    "audit-batch4/checkers.html",
+    "audit-batch4/hearts.html",
+    "audit-batch4/mancala.html",
+    "audit-batch4/rummy-500.html",
+    "audit-batch5/chess.html",
+    "audit-batch5/guess-who.html",
+    "audit-batch5/spades.html",
+    "playroom/crazy-eights.html",
+    "playroom/dots-and-boxes.html",
+    "playroom/reversi.html",
+]
+
+
+@pytest.mark.parametrize("name", TRANSLATABLE)
+def test_the_page_passes_the_translation_lint(name: str) -> None:
+    assert game_text.lint((GAMES / name).read_text(encoding="utf-8")) == []
+
+
+@pytest.mark.parametrize("name", TRANSLATABLE)
+def test_the_page_uses_the_current_helper(name: str) -> None:
+    code = (GAMES / name).read_text(encoding="utf-8")
+    assert game_text.HELPER_JS.strip() in code

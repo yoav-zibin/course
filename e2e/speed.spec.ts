@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { TICTACTOE, TICTACTOE_SERVER, createUser, loginAs, uniqueName } from './helpers';
+import { TICTACTOE, TICTACTOE_SCHEMAS, TICTACTOE_SERVER, createUser, loginAs, uniqueName } from './helpers';
 
 // A real 1-minute speed match: Alice never moves, the server's clock runs out, and a
-// computer takes over her seat while Bob plays on. It waits the real 60 seconds (the
+// match ends without replacing her with a computer. It waits the real 60 seconds (the
 // server has no test clock), so it runs once, in the desktop project only.
-test('a 1-minute speed match: the player who doesn\'t move times out and a computer takes over', async ({ browser, request }, testInfo) => {
+test('a 1-minute speed match: the player who doesn\'t move times out and the match ends', async ({ browser, request }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium', 'waits a real minute; once is enough');
   test.setTimeout(150_000);
   const alice = await createUser(request, uniqueName('Alice'));
@@ -12,7 +12,11 @@ test('a 1-minute speed match: the player who doesn\'t move times out and a compu
   const auth = (u: typeof alice) => ({ 'X-User-Id': u.id, 'X-User-Password': u.password });
   const game = await request.post('/games', {
     headers: auth(alice),
-    data: { name: uniqueName('Speed duel'), description: 'UI test game', allowed_player_counts: [2], allows_leave_mid_match: true, code: TICTACTOE, server_code: TICTACTOE_SERVER },
+    data: {
+      name: uniqueName('Speed duel'), description: 'UI test game', allowed_player_counts: [2],
+      allows_leave_mid_match: true, code: TICTACTOE, server_code: TICTACTOE_SERVER,
+      game_schemas: TICTACTOE_SCHEMAS,
+    },
   });
   expect(game.ok(), await game.text()).toBeTruthy();
   const created = await request.post('/matches', { headers: auth(alice), data: { game_id: (await game.json()).id, turn_seconds: 60 } });
@@ -42,16 +46,15 @@ test('a 1-minute speed match: the player who doesn\'t move times out and a compu
   await expect(a.clock).toHaveClass(/urgent/);
   await expect(b.clock).toHaveClass(/urgent/);
 
-  // Time's up: Alice is told, and stays as a viewer; Bob sees who was replaced.
-  await expect(a.notice).toContainText('You ran out of time. A computer is playing for you now.', { timeout: 20_000 });
-  await expect(b.notice).toContainText(`Time ran out: a computer took over for ${alice.display_name}`, { timeout: 20_000 });
+  // Timeouts retain the human roster and end the match for both players.
+  await expect.poll(async () => (await (await request.get(`/matches/${match.id}`)).json()).status, { timeout: 20_000 }).toBe('over');
+  await expect(a.clock).toBeHidden();
+  await expect(b.clock).toBeHidden();
   const after = await (await request.get(`/matches/${match.id}`)).json();
-  expect(after.players[0].kind).toBe('computer');
-  expect(after.timeouts.map((t: { user_id: string }) => t.user_id)).toEqual([alice.id]);
-  expect(after.status).toBe('ongoing');
-
-  // The match goes on: the server moves the computer that took over seat 0.
-  await expect.poll(async () => (await (await request.get(`/matches/${match.id}`)).json()).move_count, { timeout: 20_000 }).toBeGreaterThan(0);
+  expect(after.players.map((p: {kind: string}) => p.kind)).toEqual(['human', 'human']);
+  expect(after.timeouts.map((t: {user_id: string}) => t.user_id)).toEqual([alice.id]);
+  expect(after.end_reason).toBe('timed_out');
+  expect(after.move_count).toBe(0);
 
   await a.context.close();
   await b.context.close();

@@ -8,13 +8,19 @@ through the emulator endpoints (the phase's exit check).
 """
 
 from pathlib import Path
+import json
 
 import pytest
 
-from game_platform.game_logic import GameLogic, InvalidMoveError
+from game_platform.tests.helpers import UnrestrictedGameLogic as GameLogic
+from game_platform.game_logic import InvalidMoveError
 from game_platform.tests.helpers import Api, error
 
 GAMES_DIR = Path(__file__).parent.parent / "games"
+
+
+def _game_schemas(name: str) -> dict:
+    return json.loads((GAMES_DIR / f"{name}.schema.json").read_text())
 
 
 def _create_game(api: Api, owner: str, name: str, **fields) -> dict:
@@ -22,6 +28,7 @@ def _create_game(api: Api, owner: str, name: str, **fields) -> dict:
         "name": name,
         "code": (GAMES_DIR / f"{name}.html").read_text(),
         "server_code": (GAMES_DIR / f"{name}.server.js").read_text(),
+        "game_schemas": _game_schemas(name),
     }
     body.update(fields)
     return api.ok("POST", "/games", as_user=owner, json=body)
@@ -64,7 +71,7 @@ def test_tictactoe_through_the_emulator(api: Api):
     players = [{"kind": "human", "name": "Dev"}, {"kind": "computer", "name": "Bot"}]
     reply = api.ok(
         "POST", "/emulator/reset", as_user=user,
-        json={"server_code": server_code, "players": players, "seed": 3},
+        json={"server_code": server_code, "game_schemas": _game_schemas("tictactoe"), "players": players, "seed": 3},
     )
     assert reply["error"] is None
     for _ in range(9):
@@ -74,7 +81,7 @@ def test_tictactoe_through_the_emulator(api: Api):
         reply = api.ok(
             "POST", "/emulator/act", as_user=user,
             json={
-                "server_code": server_code, "players": players, "seed": 3,
+                "server_code": server_code, "game_schemas": _game_schemas("tictactoe"), "players": players, "seed": 3,
                 "state": reply["state"], "turn": reply["turn"],
                 "move_count": reply["move_count"],
                 "player_id": "human-1", "move": {"cell": cell},
@@ -198,54 +205,21 @@ def test_poker_computers_play_on_the_server(api: Api):
     assert current["move_count"] > moves_before + 2
 
 
-def test_poker_mid_match_takeover_sits_out_the_hand(api: Api):
-    owner = api.new_user("owner")
-    joiner = api.new_user("joiner")
-    game = _create_game(
-        api, owner, "poker", allowed_player_counts=[2, 3, 4],
-        allows_leave_mid_match=True, allows_join_mid_match=True,
-    )
-    match = api.ok(
-        "POST", "/matches", as_user=owner,
-        json={"game_id": game["id"], "num_computer_opponents": 1},
-    )
-    current = api.ok("POST", f"/matches/{match['id']}/start", as_user=owner, json={})
-    # A hand is in progress against the computer (seat 1). The joiner
-    # takes that seat over mid-hand...
-    api.ok("POST", f"/matches/{match['id']}/join", as_user=joiner)
-    view = api.ok("GET", f"/matches/{match['id']}", as_user=joiner)["state"]
-    # ...but sits it out: no cards, not in the hand, nothing legal to do,
-    # and the server refuses a move from her in this hand.
-    assert view["in_hand"][1] is False
-    assert view["hole"][1] is None
-    assert view["dealt_in"][1] is False
-    assert view["legal"] is None
-    status, _ = error(api.request(
-        "POST", f"/matches/{match['id']}/moves", as_user=joiner,
-        json={"move": {"type": "call"},
-              "expected_move_count": current["move_count"]},
-    ))
-    assert status == 403
-    # The label data behind the player table: the seat that is playing
-    # (seat 0) is dealt in — it must not be flagged "joins next hand".
-    assert view["dealt_in"][0] is True
-    # The owner finishes the hand alone; the next hand deals her in.
-    users_by_seat = {0: owner, 1: joiner}
-    for _ in range(60):
-        view = api.ok("GET", f"/matches/{match['id']}", as_user=joiner)["state"]
-        if view["in_hand"][1]:
-            break
-        probe = api.ok("GET", f"/matches/{match['id']}", as_user=owner)
-        if probe["status"] == "over":
-            break
-        _act_by_view(api, match["id"], users_by_seat)
-    view = api.ok("GET", f"/matches/{match['id']}", as_user=joiner)["state"]
-    assert view["in_hand"][1] is True
-    assert len(view["hole"][1]) == 2
+def test_poker_single_player_cannot_be_joined_mid_hand(api: Api):
+    owner, joiner = api.new_user("owner"), api.new_user("joiner")
+    game = _create_game(api, owner, "poker", allowed_player_counts=[2, 3, 4],
+                        allows_leave_mid_match=True, allows_join_mid_match=True)
+    mid = api.new_match(owner=owner, game_id=game["id"], num_computer_opponents=1, start=True)
+    before = api.ok("GET", f"/matches/{mid}", as_user=owner)
+    assert api.request("POST", f"/matches/{mid}/join", as_user=joiner).status_code == 409
+    assert api.ok("GET", f"/matches/{mid}", as_user=owner)["players"] == before["players"]
 
 
 def test_poker_takeover_on_the_acting_seat_moves_the_turn_on():
-    logic = GameLogic((GAMES_DIR / "poker.server.js").read_text())
+    logic = GameLogic(
+        (GAMES_DIR / "poker.server.js").read_text(),
+        game_schemas=_game_schemas("poker"),
+    )
 
     def player(pid: str, kind: str) -> dict:
         return {"id": pid, "kind": kind, "display_name": pid,
@@ -272,7 +246,10 @@ def test_poker_takeover_on_the_acting_seat_moves_the_turn_on():
 
 
 def test_poker_cannot_fold_when_checking_is_free():
-    logic = GameLogic((GAMES_DIR / "poker.server.js").read_text())
+    logic = GameLogic(
+        (GAMES_DIR / "poker.server.js").read_text(),
+        game_schemas=_game_schemas("poker"),
+    )
 
     def player(pid: str) -> dict:
         return {"id": pid, "kind": "human", "display_name": pid,
@@ -320,7 +297,10 @@ def test_poker_player_left_pays_their_chip_share(api: Api):
     assert preview["pending_leave_payout"] == 10
     balance_before = api.ok("GET", f"/users/{owner}")["token_balance"]
     after = api.ok("POST", f"/matches/{match['id']}/playerLeft", as_user=owner)
-    assert after["players"][0]["kind"] == "computer"
-    assert after["status"] == "ongoing"
+    assert after["players"][0]["kind"] == "human"
+    assert after["players"][0]["active"] is False
+    assert after["status"] == "over"
+    assert after["token_pot"] == 0
+    assert sum(after["token_payouts"].values()) == 30
     balance_after = api.ok("GET", f"/users/{owner}")["token_balance"]
     assert balance_after == balance_before + 10

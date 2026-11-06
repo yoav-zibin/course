@@ -18,6 +18,7 @@ from game_platform.service import GamePlatform
 from game_platform.tests.helpers import FakeClock
 
 ADMIN = ("admin", "pw")
+GAME_SCHEMAS = {"state": True, "move": True, "view": True}
 
 # A tiny counter game that passes the random-walk tester for any player
 # count: every move advances the counter, the sixth move ends the game
@@ -134,6 +135,7 @@ def converting_agent(client, request, **kwargs) -> AgentChatResponse:
         message="Converted.",
         code="<div>v2</div>",
         server_code=GOOD_SERVER_CODE,
+        game_schemas=GAME_SCHEMAS,
         server_test_passed=True,
     )
 
@@ -200,6 +202,7 @@ def test_refactor_saves_nothing_when_the_agents_tests_fail(monkeypatch) -> None:
             message="Could not fix it.",
             code="<div>v2</div>",
             server_code=BAD_SERVER_CODE,
+            game_schemas=GAME_SCHEMAS,
             server_test_passed=False,
             parse_note="attempt 3: server code failed its tests",
         )
@@ -225,6 +228,7 @@ def test_refactor_publish_gate_refuses_broken_code(monkeypatch) -> None:
             message="Converted.",
             code="<div>v2</div>",
             server_code=BAD_SERVER_CODE,
+            game_schemas=GAME_SCHEMAS,
             server_test_passed=True,
         )
 
@@ -310,7 +314,11 @@ def test_admin_set_code_saves_a_game_owned_by_someone_else() -> None:
     response = client.put(
         f"/admin/games/{game['id']}/code",
         auth=ADMIN,
-        json={"code": "<div>v2</div>", "server_code": GOOD_SERVER_CODE},
+        json={
+            "code": "<div>v2</div>",
+            "server_code": GOOD_SERVER_CODE,
+            "game_schemas": GAME_SCHEMAS,
+        },
     )
     assert response.is_success, response.text
     saved = response.json()
@@ -334,7 +342,7 @@ def test_admin_set_code_publish_gate_refuses_broken_server_code() -> None:
     response = client.put(
         f"/admin/games/{game['id']}/code",
         auth=ADMIN,
-        json={"server_code": BAD_SERVER_CODE},
+        json={"server_code": BAD_SERVER_CODE, "game_schemas": GAME_SCHEMAS},
     )
     assert response.status_code == 400
     assert "failed its tests" in response.json()["detail"]

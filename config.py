@@ -52,6 +52,11 @@ class ModelApiConfig(_Section):
     api_key: str = ""
     model: str = "muse-spark-1.3"
     base_url: str = "https://api.ai.meta.com/v1"
+    # Operator-verified upper tariffs (including multimodal inputs) and provider context bound.
+    builder_input_usd_per_million: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None = None
+    builder_output_usd_per_million: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None = None
+    builder_max_input_tokens: Annotated[int, Field(gt=0)] | None = None
+
 
 
 class GoogleAuthConfig(_Section):
@@ -162,6 +167,10 @@ class TranslationConfig(_Section):
     # Beyond it, new texts stay in their original language until tomorrow.
     daily_character_limit: Annotated[int, Field(ge=0)] = 200_000
     timeout_seconds: Annotated[float, Field(gt=0)] = 10.0
+    # Refuse, with HTTP 400, a new game, a draft publication or a new version whose client
+    # code fails the translation checker (no i18n-strings block, text written in the code, ...).
+    # Admin saves, audited migrations and example data are exempt. Set false to allow any code.
+    require_strings: bool = True
 
 
 class MonitoringConfig(_Section):
@@ -177,6 +186,11 @@ class MonitoringConfig(_Section):
     # Also write the log as JSON lines to this file (rotated at 50 MB, 5 kept), for the
     # Google Cloud Ops Agent to read. Empty writes only to the terminal / journal.
     log_file: str = ""
+    # Report API call counts (per handler function and HTTP response code) to
+    # Google Cloud Monitoring as a custom metric (see metrics.py). Off unless
+    # the deployment's service account may write metrics; reporting is
+    # best-effort and off the request path either way.
+    cloud_metrics_enabled: bool = False
     # A request slower than this is logged with its arguments (WARNING)...
     slow_request_ms: Annotated[int, Field(ge=1)] = 1000
     # ...and one slower than this is a minor alert (ERROR).
@@ -200,6 +214,20 @@ class MonitoringConfig(_Section):
     # The server process's memory, as a percent of the machine's.
     memory_warn_percent: Annotated[float, Field(gt=0, le=100)] = 70.0
     memory_critical_percent: Annotated[float, Field(gt=0, le=100)] = 90.0
+    # The server's asyncio loop must answer a tiny task quickly. When the monitor thread
+    # waits longer than this (ms) it logs event_loop_blocked (minor) with the loop thread's
+    # stack, which names the blocking line...
+    event_loop_blocked_ms: Annotated[int, Field(ge=1)] = 500
+    # ...and longer than this is a major alert: every request is stuck behind it.
+    event_loop_blocked_critical_ms: Annotated[int, Field(ge=1)] = 5000
+    # A minute's database calls (the store) with a 95th percentile at or above this (ms)
+    # is a minor alert (store_slow).
+    store_slow_p95_ms: Annotated[int, Field(ge=1)] = 300
+    # Browser error reports (POST /client-errors): at most this many per client per
+    # minute are kept (the rest get 429)...
+    client_errors_per_client_per_minute: Annotated[int, Field(ge=1)] = 10
+    # ...and this many reports from all clients in one minute is a minor alert.
+    client_error_spike_per_minute: Annotated[int, Field(ge=1)] = 30
     # Seconds between the "metrics" summary lines (requests, errors, latency...) and
     # the checks for stuck requests and memory. 0 turns this background work off.
     metrics_interval_seconds: Annotated[float, Field(ge=0)] = 60.0

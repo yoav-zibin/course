@@ -1,0 +1,125 @@
+{
+  "provenance": "Synthetic model only; not measured from GCE or a live benchmark.",
+  "period_start_utc": "2026-09-30T16:00:00+00:00",
+  "period_end_utc_exclusive": "2026-10-30T16:00:00+00:00",
+  "hours": 720,
+  "dataset_inventory": {
+    "users": 10000000,
+    "matches": 1000000000,
+    "games": 100000
+  },
+  "activity_assumptions": {
+    "monthly_active_users_share": 0.2,
+    "monthly_active_users": 2000000,
+    "daily_active_users_share_of_mau": 0.2,
+    "daily_active_users": 400000,
+    "requests_per_daily_active_user_per_day": 40,
+    "monthly_http_requests": 480000000,
+    "monthly_match_starts_assumed": 9983993,
+    "match_starts_as_share_of_inventory": 0.01,
+    "route_mix": {
+      "auth_profile": 0.18,
+      "game_catalog": 0.15,
+      "match_history": 0.12,
+      "match_details": 0.12,
+      "open_quick_match": 0.13,
+      "match_create_join": 0.08,
+      "match_moves": 0.17,
+      "invites_social": 0.03,
+      "health_checks": 0.02
+    },
+    "hourly_shape": "diurnal UTC peak near 20:00, lower weekends, seeded jitter"
+  },
+  "resource_model_assumptions": {
+    "cpu_seconds_per_request": 0.025,
+    "mean_request_seconds_for_concurrency": 0.18,
+    "vcpu_per_instance": 4,
+    "autoscaling_cpu_target_percent": 65.0,
+    "minimum_api_instances": 2,
+    "base_rss_gib_per_instance": 4.0,
+    "request_bytes_in": 2000,
+    "response_bytes_out": 18000,
+    "firestore_ops_per_route_request": {
+      "auth_profile": {
+        "reads": 1.2,
+        "writes": 0.025
+      },
+      "game_catalog": {
+        "reads": 8.0,
+        "writes": 0.0
+      },
+      "match_history": {
+        "reads": 25.0,
+        "writes": 0.0
+      },
+      "match_details": {
+        "reads": 1.5,
+        "writes": 0.0
+      },
+      "open_quick_match": {
+        "reads": 12.0,
+        "writes": 0.15
+      },
+      "match_create_join": {
+        "reads": 3.0,
+        "writes": 1.0
+      },
+      "match_moves": {
+        "reads": 2.5,
+        "writes": 1.1
+      },
+      "invites_social": {
+        "reads": 2.0,
+        "writes": 0.2
+      },
+      "health_checks": {
+        "reads": 0.0,
+        "writes": 0.0
+      }
+    }
+  },
+  "monthly_summary": {
+    "http_requests_by_route": {
+      "auth_profile": 86400010,
+      "game_catalog": 72000007,
+      "match_history": 57600043,
+      "match_details": 57599950,
+      "open_quick_match": 62399994,
+      "match_create_join": 38400006,
+      "match_moves": 81599999,
+      "invites_social": 14399993,
+      "health_checks": 9599998
+    },
+    "http_requests_total": 480000000,
+    "average_requests_per_second": 185.185,
+    "peak_hour_requests_per_second": 423.1244,
+    "estimated_firestore_document_reads": 3302881006,
+    "estimated_firestore_document_writes": 142560003,
+    "estimated_network_ingress_gib": 894.07,
+    "estimated_network_egress_gib": 8046.63,
+    "average_api_instances_modeled": 2.58,
+    "peak_api_instances_modeled": 5,
+    "peak_api_cpu_utilization_percent_modeled": 64.96,
+    "peak_network_egress_mbps_estimated": 60.93,
+    "max_modeled_latency_p95_ms": 169.75,
+    "max_modeled_latency_p99_ms": 345.64
+  },
+  "memory_warning": {
+    "serialized_full_dataset_gib_rough_estimate": 3840.4,
+    "python_in_memory_gib_rough_estimate_at_multiplier": 13441.6,
+    "assumed_bytes_per_record": {
+      "user": 2560,
+      "match_including_moves": 4096,
+      "game": 20480
+    },
+    "python_overhead_multiplier": 3.5,
+    "warning": "Rough invented sizing assumptions only. This snapshot-based server cannot safely load the target inventory into one VM; this estimate is not a capacity claim."
+  },
+  "caveats": [
+    "All traffic, latency, Firestore operation, CPU, memory, and network values are synthetic estimates.",
+    "No GCE monitoring metrics were read and no HTTP load test was run.",
+    "Resource fields model a hypothetical request-time persistence API fleet, not the current snapshot-based server.",
+    "Firestore operation counts use assumed per-route averages and exclude index, retry, and background operations.",
+    "This model does not establish that the current deployment can serve the target dataset or workload."
+  ]
+}

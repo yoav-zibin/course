@@ -118,6 +118,16 @@ def _apply(
                 if operation.get("server_code_file")
                 else None
             ),
+            game_schemas=(
+                json.loads(
+                    (GAMES_DIR / operation["schema_file"]).read_text(
+                        encoding="utf-8"
+                    )
+                )
+                if operation.get("schema_file")
+                else None
+            ),
+            _check_strings=False,
         )
     elif kind == "update_game":
         platform.update_game(

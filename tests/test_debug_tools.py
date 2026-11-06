@@ -53,6 +53,8 @@ def test_debug_endpoints_are_not_in_the_api_schema(api: Api) -> None:
     paths = api.ok("GET", "/openapi.json")["paths"]
     assert all(not path.startswith("/v2/admin") for path in paths)
     assert sorted(path for path in paths if not path.startswith("/v2/") and path != "/storage/capabilities") == [
+        "/agent/games",
+        "/agent/games/schema",
         "/auth/config",
         "/auth/email/start",
         "/auth/email/verify",
@@ -61,19 +63,27 @@ def test_debug_endpoints_are_not_in_the_api_schema(api: Api) -> None:
         "/auth/phone/start",
         "/auth/phone/verify",
         "/builder/games",
+        "/builder/games/{game_id}/open",
         "/c/{campaign_code}",
+        "/client-errors",
         "/emulator/act",
         "/emulator/reset",
+        "/feedback",
         "/game-drafts",
         "/game-drafts/{draft_id}",
         "/game-drafts/{draft_id}/publish",
+        "/game-drafts/{draft_id}/workflow/images/{filename}",
+        "/game-drafts/{draft_id}/workflow/{action}",
         "/games",
         "/games/test",
+        "/games/versions",
         "/games/{game_id}",
         "/games/{game_id}/unpublish",
         "/games/{game_id}/versions/{version}",
+        "/games/{game_id}/versions/{version}/cover",
         "/games/{game_id}/versions/{version}/strings",
         "/health",
+        "/i18n/bundle/{locale}",
         "/i18n/games/{locale}",
         "/i18n/locales",
         "/i18n/{locale}",
@@ -106,6 +116,7 @@ def test_debug_endpoints_are_not_in_the_api_schema(api: Api) -> None:
         "/users/me/saved-games/{game_id}",
         "/users/{user_id}",
         "/users/{user_id}/merge",
+        "/validation/invariants",
     ]
 
 

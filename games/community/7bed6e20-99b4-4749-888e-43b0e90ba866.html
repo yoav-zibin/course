@@ -1,0 +1,242 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;min-height:100vh;background:linear-gradient(160deg,#0f172a,#1e3a8a);color:#fff;display:flex;justify-content:center;padding:16px}
+.card{width:100%;max-width:560px;background:#0b1226;border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:16px 16px 18px;box-shadow:0 12px 40px rgba(0,0,0,.45)}
+h1{margin:0 0 4px;font-size:22px;letter-spacing:.3px}
+.sub{margin:0 0 10px;opacity:.8;font-size:13px}
+#status{margin:8px 0;min-height:44px;background:rgba(255,255,255,.08);border-radius:10px;padding:8px 12px;font-size:15px;display:flex;align-items:center;gap:8px}
+.dot{width:16px;height:16px;border-radius:50%;flex:none;border:2px solid rgba(255,255,255,.6)}
+.dot.r{background:#ef4444}.dot.y{background:#facc15}.dot.n{background:#64748b}
+.legend{display:flex;gap:12px;font-size:13px;opacity:.95;margin:6px 2px 10px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);padding:4px 10px;border-radius:999px}
+.mdot{width:12px;height:12px;border-radius:50%}
+.mdot.r{background:#ef4444}.mdot.y{background:#facc15}
+#dropRow{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px}
+.dropBtn{border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.07);color:#fff;border-radius:10px;font-size:20px;line-height:1;padding:8px 0;cursor:pointer;transition:transform .08s,background .15s}
+.dropBtn:hover:not(:disabled){background:rgba(255,255,255,.18);transform:translateY(1px)}
+.dropBtn:disabled{opacity:.3;cursor:default}
+.dropBtn.previewR{box-shadow:inset 0 -3px 0 #ef4444}
+.dropBtn.previewY{box-shadow:inset 0 -3px 0 #facc15}
+#board{background:#2563eb;border-radius:14px;padding:10px;display:grid;grid-template-rows:repeat(6,1fr);gap:6px;box-shadow:inset 0 4px 12px rgba(0,0,0,.35)}
+.brow{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.cell{aspect-ratio:1/1;background:#dbeafe;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 3px 6px rgba(0,0,0,.35);position:relative;transition:background .15s}
+.cell.r{background:radial-gradient(circle at 30% 30%,#fca5a5,#ef4444 60%,#991b1b)}
+.cell.y{background:radial-gradient(circle at 30% 30%,#fef9c3,#facc15 60%,#a16207)}
+.cell.ghostR::after,.cell.ghostY::after{content:"";position:absolute;inset:12%;border-radius:50%;opacity:.55}
+.cell.ghostR::after{background:#ef4444}
+.cell.ghostY::after{background:#facc15}
+.cell.win{outline:4px solid #22ff88;outline-offset:-2px;animation:pulse .8s infinite alternate;z-index:1}
+@keyframes pulse{from{box-shadow:0 0 0 0 rgba(34,255,136,.9)}to{box-shadow:0 0 14px 4px rgba(34,255,136,.9)}}
+.cell.colHl{filter:brightness(1.12)}
+#hint{font-size:12px;opacity:.7;margin-top:8px;text-align:center}
+#fullMsg{font-size:13px;color:#fecaca;min-height:18px;text-align:center;margin-top:4px}
+</style>
+</head>
+<body><script type="application/json" id="i18n-strings">
+{
+ "heading": "Connect Four",
+ "sub": "6 × 7 • Red vs Yellow • 4 in a row wins",
+ "hint": "Hover a column to preview • click arrow / cell to drop",
+ "red_name": "Red: {name}",
+ "yellow_name": "Yellow: {name}",
+ "waiting_platform": "Waiting for platform…",
+ "waiting": "Waiting…",
+ "game_over": "Game over",
+ "red_wins": "{name} (Red) wins!",
+ "yellow_wins": "{name} (Yellow) wins!",
+ "draw": "Draw — board full!",
+ "red_to_move": "{name} (Red) to move…",
+ "yellow_to_move": "{name} (Yellow) to move…",
+ "red_to_move_plain": "{name} (Red) to move",
+ "yellow_to_move_plain": "{name} (Yellow) to move",
+ "red_your_turn": "Your turn, {name} (Red) — drop a disc!",
+ "yellow_your_turn": "Your turn, {name} (Yellow) — drop a disc!",
+ "spectating": "{status} (spectating)",
+ "opponent_left": "{status} — opponent left",
+ "column_full": "Column full — pick another.",
+ "player_n": "Player {number}",
+ "server_game_is_over": "Game is over",
+ "server_not_your_turn": "Not your turn",
+ "server_pick_a_column_0_6": "Pick a column 0-6",
+ "server_column_full": "Column full"
+}
+</script>
+<div class="card">
+<h1>Connect Four</h1>
+<p class="sub">6 &times; 7 &bull; Red vs Yellow &bull; 4 in a row wins</p>
+<div class="legend"><span class="pill"><span class="mdot r"></span><span id="nameR">Red (P1)</span></span><span class="pill"><span class="mdot y"></span><span id="nameY">Yellow (P2)</span></span></div>
+<div id="status"><span class="dot n" id="statusDot"></span><span id="statusText">Waiting for platform…</span></div>
+<div id="dropRow"></div>
+<div id="board"></div>
+<div id="fullMsg"></div>
+<div id="hint">Hover a column to preview &bull; click arrow / cell to drop</div>
+</div>
+<script>
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// A text the game's SERVER wrote (a log line, a hand name in the match state): finds its template
+// among the `server_` texts of the table (the most specific that fits, each {name} standing for
+// any text) and shows it in the viewer's language with the same values; any other text is
+// returned as written.
+const SERVER_TEMPLATES = Object.keys(SOURCE_STRINGS)
+  .filter((key) => key.startsWith("server_") && SOURCE_STRINGS[key])
+  .map((key) => {
+    const names = [];
+    let literal = 0;
+    const source = SOURCE_STRINGS[key]
+      .split(/\{(\w+)\}/)
+      .map((piece, index) => {
+        if (index % 2) { names.push(piece); return "([\\s\\S]+?)"; }
+        literal += piece.length;
+        return piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      })
+      .join("");
+    return { key, names, literal, pattern: new RegExp("^" + source + "$") };
+  })
+  .sort((a, b) => b.literal - a.literal || a.names.length - b.names.length || (a.key > b.key ? 1 : a.key === b.key ? 0 : -1));
+
+function tx(text) {
+  if (typeof text !== "string") return text;
+  for (const template of SERVER_TEMPLATES) {
+    const found = template.pattern.exec(text);
+    if (found) {
+      const params = {};
+      template.names.forEach((name, index) => { if (!(name in params)) params[name] = found[index + 1]; });
+      return t(template.key, params);
+    }
+  }
+  return text;
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+let latest=null;
+function applyStaticTexts(){
+ document.querySelector('h1').textContent=t("heading");
+ document.querySelector('.sub').textContent=t("sub");
+ document.getElementById('hint').textContent=t("hint");
+}
+let lastSentFor=-1;
+let hoverCol=null;
+const ROWS=6,COLS=7;
+const boardEl=document.getElementById('board');
+const dropRowEl=document.getElementById('dropRow');
+const statusText=document.getElementById('statusText');
+const statusDot=document.getElementById('statusDot');
+const fullMsg=document.getElementById('fullMsg');
+const cellEls=[];
+const dropBtns=[];
+for(let c=0;c<COLS;c++){const b=document.createElement('button');b.textContent='\u25BC';b.dataset.col=c;b.onclick=()=>humanPlay(c);b.onmouseenter=()=>setHover(c);b.onmouseleave=()=>setHover(null);dropRowEl.appendChild(b);dropBtns.push(b);}
+for(let r=0;r<ROWS;r++){const rowDiv=document.createElement('div');rowDiv.className='brow';const arr=[];for(let c=0;c<COLS;c++){const d=document.createElement('div');d.className='cell';d.onclick=()=>humanPlay(c);d.onmouseenter=()=>setHover(c);d.onmouseleave=()=>setHover(null);rowDiv.appendChild(d);arr.push(d);}boardEl.appendChild(rowDiv);cellEls.push(arr);}
+function view(){return latest&&latest.view?latest.view:null;}
+function toMoveOf(v){if(!v)return 1;if(v.toMove===1||v.toMove===2)return v.toMove;if(v.turn===1||v.turn===2)return v.turn;return 1;}
+function boardOf(){const v=view();return v&&v.board?v.board:Array.from({length:ROWS},()=>Array(COLS).fill(0));}
+function lowestEmpty(board,col){for(let r=ROWS-1;r>=0;r--)if(board[r][col]===0)return r;return -1;}
+function canHumanAct(){
+ if(!latest||latest.status!=='ongoing')return false;
+ if(latest.acting_for_player_index===null||latest.acting_for_player_index===undefined)return false;
+ if(latest.acting_for_player_index!==latest.my_player_index)return false;
+ const v=view();
+ return v&&v.status==='IN_PROGRESS';
+}
+function humanPlay(col){
+ fullMsg.textContent='';
+ if(!canHumanAct())return;
+ if(lowestEmpty(boardOf(),col)===-1){fullMsg.textContent=t("column_full");return;}
+ if(lastSentFor===latest.move_count)return;
+ lastSentFor=latest.move_count;
+ parent.postMessage({type:'make_move',move:{col:col}},'*');
+}
+function setHover(c){hoverCol=c;renderHover();}
+function renderHover(){
+ const v=view();
+ const canAct=canHumanAct();
+ const board=boardOf();
+ const tm=toMoveOf(v);
+ for(let c=0;c<COLS;c++){
+  dropBtns[c].classList.remove('previewR','previewY');
+  if(canAct&&hoverCol===c&&lowestEmpty(board,c)!==-1)dropBtns[c].classList.add(tm===1?'previewR':'previewY');
+ }
+ for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)cellEls[r][c].classList.remove('ghostR','ghostY','colHl');
+ if(canAct&&hoverCol!==null&&hoverCol>=0&&v&&v.status==='IN_PROGRESS'){
+  const t=lowestEmpty(board,hoverCol);
+  for(let r=0;r<ROWS;r++)cellEls[r][hoverCol].classList.add('colHl');
+  if(t!==-1&&board[t][hoverCol]===0)cellEls[t][hoverCol].classList.add(tm===1?'ghostR':'ghostY');
+ }
+}
+function render(){
+ const v=view();
+ const board=boardOf();
+ const names=latest&&latest.players?latest.players.map(p=>p.name||t("player_n",{number:p.player_index+1})):[t("player_n",{number:1}),t("player_n",{number:2})];
+ document.getElementById('nameR').textContent=t("red_name",{name:names[0]||'P1'});
+ document.getElementById('nameY').textContent=t("yellow_name",{name:names[1]||'P2'});
+ const winSet=new Set(((v&&v.winningCells)||[]).map(x=>x[0]+','+x[1]));
+ for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+  const val=board[r][c];
+  const el=cellEls[r][c];
+  el.classList.toggle('r',val===1);el.classList.toggle('y',val===2);
+  el.classList.toggle('win',winSet.has(r+','+c));
+ }
+ let txt=t("waiting_platform"),cls='n';
+ if(v){
+  const turnsOf=latest&&latest.turn_of_player_indices;
+  if(v.status==='WINNER_P1'){txt=t("red_wins",{name:names[0]||'Red'});cls='r';}
+  else if(v.status==='WINNER_P2'){txt=t("yellow_wins",{name:names[1]||'Yellow'});cls='y';}
+  else if(v.status==='DRAW'){txt=t("draw");cls='n';}
+  else if(!latest||latest.status!=='ongoing'){txt=t("waiting");}
+  else{
+   const tm=toMoveOf(v);
+   const turnName=names[tm-1]||t("player_n",{number:tm});
+   const red=tm===1;
+   cls=red?'r':'y';
+   const a=latest.acting_for_player_index;
+   if(a===null||a===undefined){
+    if(turnsOf&&turnsOf.length){const tn=latest.players[turnsOf[0]]?latest.players[turnsOf[0]].name:turnName;txt=red?t("red_to_move",{name:tn}):t("yellow_to_move",{name:tn});}
+    else txt=red?t("red_to_move_plain",{name:turnName}):t("yellow_to_move_plain",{name:turnName});
+   }else{
+    const an=latest.players[a]?latest.players[a].name:turnName;
+    if(a===latest.my_player_index)txt=red?t("red_your_turn",{name:an}):t("yellow_your_turn",{name:an});
+    else txt=red?t("red_to_move",{name:an}):t("yellow_to_move",{name:an});
+   }
+   if(latest.my_player_index===null)txt=t("spectating",{status:txt});
+  }
+  if(latest&&latest.status==='over'&&latest.end_reason==='player_left'&&v.status==='IN_PROGRESS')txt=t("opponent_left",{status:txt});
+ } else if(latest){txt=latest.status==='over'?t("game_over"):t("waiting");}
+ statusText.textContent=txt;
+ statusDot.className='dot '+cls;
+ const canAct=canHumanAct();
+ for(let c=0;c<COLS;c++){
+  const full=lowestEmpty(board,c)===-1;
+  dropBtns[c].disabled=!canAct||full||!v||v.status!=='IN_PROGRESS';
+ }
+ renderHover();
+}
+addEventListener('message',(e)=>{
+ if(e.source!==parent||!e.data||e.data.type!=='state_changed')return;
+ applyLocale(e.data);
+ applyStaticTexts();
+ latest=e.data;
+ render();
+});
+render();
+</script>
+</body>
+</html>

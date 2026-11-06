@@ -219,6 +219,8 @@ def install(app, *, debug_tools):
         # without fetching game source or updating every historical match.
         items = []
         for match in result.items:
+            if match.num_computer_opponents:
+                continue
             game = store.raw_get(store.ref("games", match.game_id))
             if game and game.get("published") and not game.get("deleted"):
                 items.append(_match_out(platform, match))

@@ -21,16 +21,35 @@ class PortalOffline {
       : { responses: {}, queues: {}, conflicts: {}, local: {} };
   }
   write(data) {
-    try {
-      this.storage.setItem(this.key(), JSON.stringify(data));
-    } catch {
-      throw Object.assign(
-        new Error(
-          "Device storage is full or unavailable. This move was not saved; free space and retry.",
-        ),
-        { storageFailure: true },
-      );
+    const attempt = () => {
+      try {
+        this.storage.setItem(this.key(), JSON.stringify(data));
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    if (attempt()) return;
+    // The saved server answers (game lists, every version's code...) are only a cache and
+    // grow without limit; queued moves and local practice matches cannot be re-fetched.
+    // Drop the oldest cached answers, half at a time, until what must be kept fits. An
+    // answer a queued move is built on stays.
+    const keep = (path) => {
+      const id = /^\/matches\/([^/]+)$/.exec(path)?.[1];
+      return id !== undefined && data.queues?.[id]?.length > 0;
+    };
+    let droppable = Object.keys(data.responses || {}).filter((path) => !keep(path));
+    while (droppable.length) {
+      const dropped = droppable.slice(0, Math.max(1, Math.ceil(droppable.length / 2)));
+      for (const path of dropped) delete data.responses[path];
+      droppable = droppable.slice(dropped.length);
+      if (attempt()) return;
     }
+    const message =
+      "Device storage is full or unavailable. This move was not saved; free space and retry.";
+    // The server can't see this otherwise: tell its log (common.js).
+    globalThis.reportClientError?.("storage_full", message);
+    throw Object.assign(new Error(message), { storageFailure: true });
   }
   cached(path) {
     return this.read().responses[path];
@@ -75,8 +94,8 @@ class PortalOffline {
       const snapshot = localId.endsWith("/history");
       const history = localId.endsWith("/moves") || snapshot;
       const match = this.read().local[snapshot ? localId.slice(0, -8) : history ? localId.slice(0, -6) : localId];
-      if (!match) throw new Error("Local practice is no longer saved.");
-      if (snapshot) return {initial_state: null, initial_turn_player_indices: match.historyStart === 0 ? [0] : null, moves: match.moves || []};
+      if (!match) throw new Error(I18n.t("ui.offline.err_practice_gone", {}, "Local practice is no longer saved."));
+      if (snapshot) return {initial_state: match.initialState ?? null, initial_turn_player_indices: Object.hasOwn(match,"initialTurn") ? match.initialTurn : (match.historyStart === 0 ? [0] : null), moves: match.moves || []};
       return history ? (match.moves || []) : match;
     }
     let value;
@@ -98,16 +117,21 @@ class PortalOffline {
         }
         d.responses[paged[1]]=value.items;
         if(paged[1]==="/matches") for(const match of value.items) {
-          if(!d.queues[match.id]?.length) d.responses[`/matches/${match.id}`]=match;
+          if(!d.queues[match.id]?.length && "state" in match) d.responses[`/matches/${match.id}`]=match;
         }
       }
       const matchId = /^\/matches\/([^/]+)$/.exec(path)?.[1];
       if (!(matchId && d.queues[matchId]?.length)) d.responses[path] = value;
       if (path === "/matches")
         for (const match of value)
-          if (!d.queues[match.id]?.length)
+          if (!d.queues[match.id]?.length && "state" in match)
             d.responses[`/matches/${match.id}`] = match;
-      this.write(d);
+      try {
+        this.write(d);
+      } catch (cacheError) {
+        // Not being able to remember an answer is not an error for the page asking for it.
+        if (!cacheError.storageFailure) throw cacheError;
+      }
     } catch (error) {
       if (error.storageFailure) throw error;
       if (
@@ -122,7 +146,7 @@ class PortalOffline {
       value = this.cached(path);
       if (value === undefined)
         throw new Error(
-          "Not saved on this device yet. Open this while online first.",
+          I18n.t("ui.offline.err_not_saved", {}, "Not saved on this device yet. Open this while online first."),
         );
     }
     if (path.startsWith("/v2/matches?")) {
@@ -176,7 +200,7 @@ class PortalOffline {
     if (method === "GET") return this.get(path, options);
     if (!this.online())
       throw new Error(
-        "This action needs a connection. Saved matches and local practice are available offline.",
+        I18n.t("ui.offline.err_needs_connection", {}, "This action needs a connection. Saved matches and local practice are available offline."),
       );
     const identity = this.key();
     let result;
@@ -185,7 +209,7 @@ class PortalOffline {
       if (!(method === "DELETE" && matchId && error.status === 404 && this.cached(path)?.owner_user_id === this.user()?.id)) throw error;
     }
     if (identity !== this.key())
-      throw new Error("Account changed; refresh to see the result.");
+      throw new Error(I18n.t("ui.offline.err_account_refresh", {}, "Account changed; refresh to see the result."));
     if (method === "DELETE" && matchId) this.archiveMatch(matchId);
     if (result?.id && path.startsWith("/matches"))
       this.save(`/matches/${result.id}`, result);
@@ -195,11 +219,11 @@ class PortalOffline {
     const data = this.read(),
       id = match.id;
     if (data.conflicts[id])
-      throw new Error("Resolve the sync conflict before making another move.");
+      throw new Error(I18n.t("ui.offline.err_resolve_conflict", {}, "Resolve the sync conflict before making another move."));
     if (id.startsWith("local-")) {
       if (data.local[id]?.move_count !== body.expected_move_count)
         throw new Error(
-          "Local practice changed in another tab. Refresh before moving.",
+          I18n.t("ui.offline.err_practice_other_tab", {}, "Local practice changed in another tab. Refresh before moving."),
         );
       const previous = data.local[id];
       data.local[id] = this.apply(previous, body);
@@ -211,7 +235,7 @@ class PortalOffline {
     const queue = data.queues[id] || [];
     if (base.move_count + queue.length !== body.expected_move_count)
       throw new Error(
-        "This match changed in another tab. Refresh before moving.",
+        I18n.t("ui.offline.err_match_other_tab", {}, "This match changed in another tab. Refresh before moving."),
       );
     data.responses[`/matches/${id}`] = base;
     queue.push({
@@ -233,7 +257,7 @@ class PortalOffline {
     const identity = this.key();
     const guard = () => {
       if (identity !== this.key())
-        throw new Error("Account changed; sync paused.");
+        throw new Error(I18n.t("ui.offline.err_account_sync", {}, "Account changed; sync paused."));
     };
     for (const id of Object.keys(this.read().queues)) {
       if (this.read().conflicts[id]) continue;
@@ -266,7 +290,7 @@ class PortalOffline {
               this.conflict(
                 id,
                 remote,
-                "Another player changed this match. Your offline moves are saved for review.",
+                I18n.t("ui.offline.notice_other_player", {}, "Another player changed this match. Your offline moves are saved for review."),
               );
               break;
             }
@@ -279,7 +303,7 @@ class PortalOffline {
             this.conflict(
               id,
               remote,
-              "The match changed while offline. Review your saved moves before using the server version.",
+              I18n.t("ui.offline.notice_changed_offline", {}, "The match changed while offline. Review your saved moves before using the server version."),
             );
             break;
           }
@@ -303,7 +327,7 @@ class PortalOffline {
             this.conflict(
               id,
               null,
-              "Repeated sync conflict. Review the server version before continuing.",
+              I18n.t("ui.offline.notice_repeated", {}, "Repeated sync conflict. Review the server version before continuing."),
             );
             break;
           } // Re-read authoritative state before deciding whether to replay.
@@ -314,7 +338,7 @@ class PortalOffline {
           this.network = false;
           this.retryAfter = Date.now() + 10000;
           this.notice =
-            "Connection unavailable. Moves remain saved on this device.";
+            I18n.t("ui.offline.notice_unavailable", {}, "Connection unavailable. Moves remain saved on this device.");
           return;
         }
       }
@@ -341,10 +365,10 @@ class PortalOffline {
     if (conflict.remote) d.responses[`/matches/${id}`] = conflict.remote;
     this.write(d);
   }
-  practice(game, mode = "computer") {
+  async practice(game, mode = "computer") {
     const user = this.user();
     if (!user)
-      throw new Error("Log in online once before starting offline practice.");
+      throw new Error(I18n.t("ui.offline.err_login_first", {}, "Log in online once before starting offline practice."));
     const count = Math.min(...game.allowed_player_counts),
       id = `local-${crypto.randomUUID()}`;
     const match = {
@@ -354,6 +378,7 @@ class PortalOffline {
       owner_user_id: user.id,
       players: Array.from({ length: count }, (_, i) => ({
         player_index: i,
+        id: `local-player-${i}`,
         kind: i === 0 || mode === "pass" ? "human" : "computer",
         user_id: i === 0 ? user.id : null,
       })),
@@ -364,13 +389,74 @@ class PortalOffline {
       end_reason: null,
       created_at: new Date().toISOString(),
       localMode: mode,
+      token_pot: 0,
+      bet_per_player: 0,
+      practiceSeed: crypto.getRandomValues(new Uint32Array(1))[0],
       historyStart: 0,
     };
+    const identity = this.key();
+    if (game.server_code) {
+      const result = await PortalPractice.call(game, "newMatch", [], match);
+      await this.practiceResult(game, match, result, false);
+      match.initialState = match.state;
+      match.initialTurn = match.turn_of_player_indices;
+      await this.practiceComputers(game, match);
+    }
+    if (identity !== this.key()) throw new Error(I18n.t("ui.offline.err_account_practice", {}, "Account changed; practice was not saved."));
     const d = this.read();
     d.local[id] = match;
     d.responses[`/games/${game.id}/versions/${game.version}`] = game;
     this.write(d);
     return match;
+  }
+  async practiceResult(game, match, result, record = true) {
+    const ids = match.players.map(p=>p.id);
+    if (!result || !("state" in result) || !(result.turn === null ||
+        (Array.isArray(result.turn) && result.turn.length &&
+         new Set(result.turn).size === result.turn.length && result.turn.every(id=>ids.includes(id)))))
+      throw new Error(I18n.t("ui.offline.err_invalid_state", {}, "Local game returned an invalid state or turn."));
+    match.logicState = result.state;
+    match.turn_of_player_indices = result.turn === null ? null : result.turn.map(id=>ids.indexOf(id));
+    match.status = result.turn === null ? "over" : "ongoing";
+    match.end_reason = result.turn === null ? "finished" : null;
+    if (record) match.move_count++;
+    const seat = match.localMode === "pass" ? (match.turn_of_player_indices?.[0] ?? 0) : 0;
+    match.state = await PortalPractice.call(game,"viewFor",[match.logicState,ids[seat]],match);
+    if (record) match.moves = [...(match.moves || []), {
+      new_state:match.state,next_turn_player_indices:match.turn_of_player_indices}];
+  }
+  async practiceComputers(game, match) {
+    for (let count=0;match.status === "ongoing";count++) {
+      const computer = match.turn_of_player_indices.map(i=>match.players[i]).find(p=>p.kind === "computer");
+      if (!computer) return;
+      if (count >= 200) throw new Error(I18n.t("ui.offline.err_move_limit", {}, "Local game exceeded the computer move limit."));
+      const move = await PortalPractice.call(game,"computerMove",[match.logicState,computer.id],match);
+      const result = await PortalPractice.call(game,"applyMove",[match.logicState,computer.id,move],match);
+      await this.practiceResult(game,match,result);
+    }
+  }
+  async practiceMove(match, move) {
+    if (!match.id.startsWith("local-") || !match.localMode)
+      throw new Error(I18n.t("ui.offline.err_device_only", {}, "Only device practice can run game rules locally."));
+    const identity = this.key();
+    const original = this.read().local[match.id];
+    if (!original || original.move_count !== match.move_count || original.status !== "ongoing")
+      throw new Error(I18n.t("ui.offline.err_practice_changed", {}, "Local practice changed. Refresh before moving."));
+    const next = JSON.parse(JSON.stringify(original));
+    const game = this.cached(`/games/${match.game_id}/versions/${match.game_version}`);
+    if (!game?.server_code) throw new Error(I18n.t("ui.offline.err_rules_missing", {}, "Practice rules are not saved on this device."));
+    const seat = next.localMode === "pass" ? next.turn_of_player_indices[0] : 0;
+    if (!next.turn_of_player_indices.includes(seat)) throw new Error(I18n.t("ui.error.not_your_turn", {}, "It isn't your turn."));
+    const result = await PortalPractice.call(game,"applyMove",[next.logicState,next.players[seat].id,move],next);
+    await this.practiceResult(game,next,result);
+    await this.practiceComputers(game,next);
+    if (identity !== this.key()) throw new Error(I18n.t("ui.offline.err_account_move", {}, "Account changed; move was not saved."));
+    const data = this.read();
+    if (!PortalOffline.equal(data.local[match.id],original))
+      throw new Error(I18n.t("ui.offline.err_practice_other_tab", {}, "Local practice changed in another tab. Refresh before moving."));
+    data.local[match.id] = next;
+    this.write(data);
+    return next;
   }
   static equal(a, b) {
     if (a === b) return true;

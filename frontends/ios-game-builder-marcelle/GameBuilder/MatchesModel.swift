@@ -98,10 +98,11 @@ final class MatchesModel {
     func mySeat(_ match: Match) -> Int? { match.seat(of: me)?.playerIndex }
 
     /// The seat my game should move for: mine on my turn, or a computer's on a computer's
-    /// turn (any human player may send the computer's move). nil = wait.
+    /// turn in a single-player game. nil = wait.
     func actingSeat(_ match: Match) -> Int? {
         guard match.isOngoing, let turn = match.turnOfPlayerIndices, let mine = mySeat(match) else { return nil }
         if turn.contains(mine) { return mine }
+        guard match.players.filter({ $0.kind == "human" && $0.active != false }).count == 1 else { return nil }
         return turn.first { match.players.indices.contains($0) && match.players[$0].kind == "computer" }
     }
 
@@ -233,7 +234,7 @@ final class MatchesModel {
     /// Creates an online match: me, `computers` computer seats, and `friends` seats that
     /// friends fill by joining with the link.
     func create(game: Game, friends: Int, computers: Int) async throws -> Match {
-        let m = try await create(game: game, computers: computers)
+        let m = try await create(game: game, computers: friends > 0 ? 0 : computers)
         plannedFriends[m.id] = friends
         GameCache.save(plannedFriends, as: "planned-friends")
         return m

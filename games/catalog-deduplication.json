@@ -1,0 +1,77 @@
+[
+  {
+    "keep": {
+      "id": "20a83777-0f59-4105-a09e-0267b9c15e40",
+      "version": 4,
+      "allowed_player_counts": [
+        2
+      ],
+      "allows_leave_mid_match": false,
+      "allows_join_mid_match": false,
+      "client_sha256": "0ee8962deceee2cf8cf278481e284b68e423d90ac312bfc7b96d0ccec98d3293",
+      "server_sha256": "0206fffd96b1447a457f63431d013c6de5d5337dfc40285157304a95204b3c4e"
+    },
+    "remove": {
+      "id": "8d523bfd-9632-4759-98de-717fb744180e",
+      "version": 3,
+      "allowed_player_counts": [
+        2
+      ],
+      "allows_leave_mid_match": false,
+      "allows_join_mid_match": false,
+      "client_sha256": "0ee8962deceee2cf8cf278481e284b68e423d90ac312bfc7b96d0ccec98d3293",
+      "server_sha256": "0206fffd96b1447a457f63431d013c6de5d5337dfc40285157304a95204b3c4e"
+    },
+    "reason": "Identical reviewed Backgammon code pair; keep original, retire copy."
+  },
+  {
+    "keep": {
+      "id": "b59b79d7-660b-4823-8a81-159e0a6a2809",
+      "version": 3,
+      "allowed_player_counts": [
+        2
+      ],
+      "allows_leave_mid_match": false,
+      "allows_join_mid_match": false,
+      "client_sha256": "fa1ff6212cab897198ae45c7f91051efc63b1dd65905d8bb6b961c61b2377469",
+      "server_sha256": "17f62fa448679cd6fdb6a7728a6d0cffa80bae9fe05d5776e2dd78071abee738"
+    },
+    "remove": {
+      "id": "39a5e1f5-c20c-40b1-a633-a8457d273eaf",
+      "version": 3,
+      "allowed_player_counts": [
+        2
+      ],
+      "allows_leave_mid_match": false,
+      "allows_join_mid_match": false,
+      "client_sha256": "75a1c192c933115ad4311a36eda8d93fe58fbba681b902c7536d035a0be19bf9",
+      "server_sha256": "27770125b06c26c3ed92959600314d553cf9d64bde7ad9fb5330bfd5f627f617"
+    },
+    "reason": "Same15x15 unrestricted five-in-a-row human rules; keep original catalog entry."
+  },
+  {
+    "keep": {
+      "id": "tictactoe",
+      "version": 3,
+      "allowed_player_counts": [
+        2
+      ],
+      "allows_leave_mid_match": false,
+      "allows_join_mid_match": false,
+      "client_sha256": "55c9298ed4e66b1748b07949fc04c1cef61cfbc0eeec82b99d02771c8cb178a0",
+      "server_sha256": "b12a6b043adc1761fd2acf21c84b5f0553cea0fbc3947f3e242905911ecac9a7"
+    },
+    "remove": {
+      "id": "3acab71b-7f71-41eb-88a9-864272c12c37",
+      "version": 3,
+      "allowed_player_counts": [
+        2
+      ],
+      "allows_leave_mid_match": false,
+      "allows_join_mid_match": false,
+      "client_sha256": "efcc14ffa3572280d141714745526adef99002a63ccc6a338831fd1a9fecc739",
+      "server_sha256": "1d3ad8bb623810a1ab8dd392088b0f1178d4563b7bc8d7b0ccaf30ee8f75a782"
+    },
+    "reason": "Same classic3x3 three-in-a-row; keep built-in with replay/accessibility improvements."
+  }
+]

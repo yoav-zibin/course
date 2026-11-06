@@ -1,0 +1,395 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{box-sizing:border-box}body{font-family:system-ui,sans-serif;margin:0;padding:14px;background:#0b1e33;color:#eaf2ff;min-height:100vh}
+.wrap{max-width:980px;margin:0 auto}
+h1{margin:4px 0 2px;font-size:22px}
+#status{background:#132c4d;border:1px solid #2b4f7e;border-radius:8px;padding:8px 10px;min-height:38px}
+#sub{color:#9fc0e8;font-size:13px;min-height:18px;margin:6px 0}
+#banner{display:none;border-radius:10px;padding:10px 12px;font-weight:800;margin:8px 0;font-size:16px;text-align:center}
+#banner.hit{display:block;background:linear-gradient(135deg,#ff1a1a,#ff7a00);color:#fff;box-shadow:0 0 18px #ff4400;border:2px solid #ffe600}
+#banner.miss{display:block;background:#223c5e;color:#cfe3ff;border:2px solid #6ea8ff}
+#banner.info{display:block;background:#134d2a;color:#d6ffe0;border:2px solid #3fbf6f}
+.boards{display:flex;gap:18px;flex-wrap:wrap}
+.boardBox{background:#10263f;border:1px solid #2b4f7e;border-radius:10px;padding:10px}
+.grid{display:grid;grid-template-columns:repeat(10,30px);grid-template-rows:repeat(10,30px);gap:2px}
+.cell{width:30px;height:30px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;cursor:default;user-select:none;background:#1e4a7a;border:1px solid #0b1e33;position:relative}
+.cell.water{background:#1e4a7a}
+.cell.ship{background:#8fa3bd;color:#10263f}
+.cell.placed-ship{background:#8fa3bd}
+.cell.target{cursor:pointer}.cell.target:hover{outline:2px solid #ffd54a;background:#2f6cb0}
+.cell.locked{cursor:not-allowed!important;opacity:.7}
+.cell.miss{background:#e8eef7!important;color:#5a7aa0!important;border:1px solid #9fc0e8;font-size:16px}
+.cell.hit{background:radial-gradient(circle,#fff700 0%,#ff9a00 30%,#ff1a1a 65%,#7a0000 100%)!important;color:#fff!important;border:2px solid #ffe600!important;font-size:18px}
+.cell.sunkHit{background:#1a1a1a!important;border:2px solid #ff2222!important;color:#ff6b6b!important;font-size:16px}
+.cell.sunkShip{background:#3a3a3a!important;color:#ffb3b3!important;border:2px solid #ff2222!important;text-decoration:line-through}
+.cell.lastShot{outline:3px solid #fff !important;outline-offset:-1px;z-index:2}
+button{background:#ffd54a;border:0;border-radius:6px;padding:7px 10px;font-weight:700;cursor:pointer;margin:2px}
+button:disabled{opacity:.4;cursor:default}
+button.sel{outline:3px solid #3fbf6f}
+.shipRow{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
+.fleet{font-size:13px;line-height:1.7}
+.sunk{color:#ff8a8a;text-decoration:line-through}.alive{color:#b7ffbf}
+.legend{font-size:12px;color:#9fc0e8;white-space:pre-wrap}
+.coords{font-size:11px;color:#9fc0e8}
+.axis{display:grid;grid-template-columns:repeat(10,30px);gap:2px;font-size:10px;color:#9fc0e8;text-align:center;margin-bottom:2px}
+.sunkBadge{display:inline-block;background:#222;color:#ff6b6b;border:1px solid #f00;border-radius:4px;padding:0 5px;font-size:11px;font-weight:800;margin-left:6px}
+.hitBadge{display:inline-block;background:#ff2200;color:#fff;border-radius:4px;padding:0 5px;font-size:11px;margin-left:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1 id="title"></h1>
+<div id="status" role="status" aria-live="polite"></div>
+<div id="sub"></div>
+<div id="banner"></div>
+<div id="gameArea">
+<div id="setup"></div>
+<div id="battle" style="display:none">
+<div class="boards">
+<div class="boardBox"><h3 id="myTitle"></h3><div class="axis"><div>A</div><div>B</div><div>C</div><div>D</div><div>E</div><div>F</div><div>G</div><div>H</div><div>I</div><div>J</div></div><div class="grid" id="myGrid"></div><div class="fleet" id="myFleet"></div></div>
+<div class="boardBox"><h3 id="opTitle"></h3><div class="axis"><div>A</div><div>B</div><div>C</div><div>D</div><div>E</div><div>F</div><div>G</div><div>H</div><div>I</div><div>J</div></div><div class="grid" id="opGrid"></div><div class="fleet" id="opFleet"></div><div class="legend" id="legend"></div></div>
+</div>
+</div>
+</div>
+</div>
+<script type="application/json" id="i18n-strings">
+{
+"title": "🚢 Battleship",
+"waiting_platform": "Waiting for platform…",
+"waiting": "Waiting…",
+"player_n": "Player {n}",
+"ship_carrier": "Carrier",
+"ship_battleship": "Battleship",
+"ship_cruiser": "Cruiser",
+"ship_submarine": "Submarine",
+"ship_destroyer": "Destroyer",
+"banner_hit": "💥 DIRECT HIT! Extra turn. {name} hit {coord}",
+"banner_hit_sunk": "💥 DIRECT HIT! Extra turn. {name} hit {coord} — ☠️ SUNK {ship}!",
+"banner_miss": "🌊 MISS! {name} missed {coord}",
+"wins_spectator": "🏆 {name} WINS!",
+"win_you": "🎉 YOU WIN! You sank the enemy fleet!",
+"lose_you": "💀 YOU LOSE — {name} sank your fleet!",
+"game_over": "Game over.",
+"sub_over": "Game over — board locked.",
+"banner_over": "🏆 GAME OVER — {name} WINS!",
+"setup_spectating_status": "⚙️ SETUP: {name} placing…",
+"setup_spectating_sub": "Spectating setup…",
+"setup_spectating_body": "Spectating setup… {name} is placing.",
+"setup_other_status": "⚙️ SETUP: {name} placing ships",
+"setup_other_sub": "Waiting for {name}…",
+"setup_other_body": "Waiting for {name} to place ships…",
+"setup_my_status": "⚙️ SETUP: your turn to place ({name})",
+"setup_my_sub": "Place 5 ships. They can't touch, even diagonally.",
+"sub_hit_again": "💥 HIT at {coord} — {name} shoots again!",
+"sub_hit_sunk_again": "💥 HIT at {coord} — ☠️ sank {ship}! — {name} shoots again!",
+"sub_miss": "🌊 MISS at {coord}",
+"sub_sending": "{text} (sending…)",
+"sending": "(sending…)",
+"status_battle": "⚔️ BATTLE: {name}'s turn to fire (HIT keeps turn, MISS passes)",
+"setup_title": "Place your fleet — {name}",
+"ship_btn": "{ship} ({size})",
+"ship_btn_placed": "{ship} ({size}) ✓",
+"rotate_horizontal": "🔄 Rotate: Horizontal (R)",
+"rotate_vertical": "🔄 Rotate: Vertical (R)",
+"random": "🎲 Random",
+"clear": "Clear",
+"ready": "✅ Ready ({count}/5)",
+"setup_hint": "Click water to place. Click a placed ship to remove it. Ships can't overlap or touch, even diagonally.",
+"already_placed": "{ship} already placed.",
+"fleet_item": "{ship} ({hits}/{size})",
+"fleet_item_sunk": "{ship} ({hits}/{size}) SUNK",
+"badge_sunk": "SUNK",
+"badge_hit": "HIT",
+"hidden": "hidden",
+"my_fleet": "🛡️ My Fleet ({name})",
+"targeting_board": "🎯 Targeting Board ({name})",
+"legend": "⚪ splash = MISS   💥 red = HIT   ☠️ dark = SUNK   ⬜ white ring = last shot",
+"fire_title": "{coord} — click to fire",
+"summary_hits_sunk": "Hits: {hits} | Sunk: {sunk}/5",
+"no_sunk": "No sunk ships yet. Hits: {hits}",
+"board_locked": "Board locked — wait for your turn.",
+"server_unknown_player": "unknown player",
+"server_game_over": "game over",
+"server_bad_move": "bad move",
+"server_place_your_ships": "place your ships",
+"server_setup_done": "setup done",
+"server_not_your_setup_turn": "not your setup turn",
+"server_fire_with_x_y": "fire with x,y",
+"server_not_your_turn": "not your turn",
+"server_off_board": "off board",
+"server_already_shot_there": "already shot there",
+"server_bad_phase": "bad phase",
+"server_battle_start_p1_fires_hit_keeps_your_tur": "Battle start! P1 fires. HIT keeps your turn!",
+"server_need_5_ships": "need 5 ships",
+"server_bad_ship": "bad ship",
+"server_missing": "missing {p1}",
+"server_wrong_size": "{p1} wrong size",
+"server_bad_cell": "bad cell",
+"server_overlap": "overlap",
+"server_must_be_straight": "{p1} must be straight",
+"server_must_be_contiguous": "{p1} must be contiguous",
+"server_ships_can_t_touch": "ships can't touch"
+}
+</script>
+<script>
+
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// A text the game's SERVER wrote (a log line, a hand name in the match state): finds its template
+// among the `server_` texts of the table (the most specific that fits, each {name} standing for
+// any text) and shows it in the viewer's language with the same values; any other text is
+// returned as written.
+const SERVER_TEMPLATES = Object.keys(SOURCE_STRINGS)
+  .filter((key) => key.startsWith("server_") && SOURCE_STRINGS[key])
+  .map((key) => {
+    const names = [];
+    let literal = 0;
+    const source = SOURCE_STRINGS[key]
+      .split(/\{(\w+)\}/)
+      .map((piece, index) => {
+        if (index % 2) { names.push(piece); return "([\\s\\S]+?)"; }
+        literal += piece.length;
+        return piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      })
+      .join("");
+    return { key, names, literal, pattern: new RegExp("^" + source + "$") };
+  })
+  .sort((a, b) => b.literal - a.literal || a.names.length - b.names.length || (a.key > b.key ? 1 : a.key === b.key ? 0 : -1));
+
+function tx(text) {
+  if (typeof text !== "string") return text;
+  for (const template of SERVER_TEMPLATES) {
+    const found = template.pattern.exec(text);
+    if (found) {
+      const params = {};
+      template.names.forEach((name, index) => { if (!(name in params)) params[name] = found[index + 1]; });
+      return t(template.key, params);
+    }
+  }
+  return text;
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+
+
+const FLEET=[{name:"Carrier",size:5},{name:"Battleship",size:4},{name:"Cruiser",size:3},{name:"Submarine",size:3},{name:"Destroyer",size:2}];
+const COLS="ABCDEFGHIJ";
+document.getElementById("status").textContent=t("waiting_platform");
+let latest=null, localShips=[], selIdx=0, horiz=true, localKey="";
+let sendLock=false;
+function coordName(x,y){return COLS[x]+(y+1);}
+function cellsFor(sx,sy,size,h){const c=[];for(let i=0;i<size;i++)c.push([h?sx+i:sx,h?sy:sy+i]);return c;}
+function sendMove(move){ if(sendLock) return; sendLock=true; parent.postMessage({type:"make_move",move:move},"*"); setTimeout(render,50); }
+function isSunk(ship,atk){return ship.cells&&ship.cells.length&&ship.cells.every(c=>atk[c[1]][c[0]]===2);}
+function sunkSet(ships,atk){const s=new Set();(ships||[]).forEach(sh=>{if(isSunk(sh,atk))sh.cells.forEach(c=>s.add(c[0]+","+c[1]));});return s;}
+function randomLocalFleet(){
+  for(let r=0;r<60;r++){
+    const ships=[];const occ=new Set();let fail=false;
+    const okCells=(cells)=>{for(const [x,y] of cells){if(x<0||x>9||y<0||y>9)return false;if(occ.has(x+","+y))return false;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){if(!dx&&!dy)continue;if(occ.has((x+dx)+","+(y+dy)))return false;}}return true;};
+    for(const f of FLEET){let placed=false;for(let t=0;t<200&&!placed;t++){const h=Math.random()<0.5;const x=Math.floor(Math.random()*10),y=Math.floor(Math.random()*10);const cells=cellsFor(x,y,f.size,h);if(okCells(cells)){ships.push({name:f.name,size:f.size,cells});cells.forEach(c=>occ.add(c[0]+","+c[1]));placed=true;}}if(!placed){fail=true;break;}}
+    if(!fail&&ships.length===5)return ships;
+  }
+  return [{name:"Carrier",size:5,cells:cellsFor(0,0,5,true)},{name:"Battleship",size:4,cells:cellsFor(0,2,4,true)},{name:"Cruiser",size:3,cells:cellsFor(0,4,3,true)},{name:"Submarine",size:3,cells:cellsFor(0,6,3,true)},{name:"Destroyer",size:2,cells:cellsFor(0,8,2,true)}];
+}
+function el(tag,text,cls,parent){const e=document.createElement(tag);if(text!==undefined&&text!==null)e.textContent=text;if(cls)e.className=cls;if(parent)parent.appendChild(e);return e;}
+const pname=(players,i)=>players[i]?players[i].name:t("player_n",{n:i+1});
+const SHIP_NAMES={Carrier:()=>t("ship_carrier"),Battleship:()=>t("ship_battleship"),Cruiser:()=>t("ship_cruiser"),Submarine:()=>t("ship_submarine"),Destroyer:()=>t("ship_destroyer")};
+const shipName=n=>SHIP_NAMES[n]?SHIP_NAMES[n]():n;
+function updateBanner(v,players){
+  const b=document.getElementById("banner");b.className="";b.style.display="none";b.textContent="";
+  if(!v||!v.last)return;const L=v.last;
+  if(L.x!==undefined){
+    const p={name:pname(players,L.by),coord:coordName(L.x,L.y),ship:L.sunk?shipName(L.sunk):""};
+    if(L.hit){b.className="hit";b.style.display="block";b.textContent=L.sunk?t("banner_hit_sunk",p):t("banner_hit",p);}
+    else{b.className="miss";b.style.display="block";b.textContent=t("banner_miss",p);}
+  } else if(L.msg){b.className="info";b.style.display="block";b.textContent=tx(L.msg);}
+}
+function render(){
+  document.getElementById("title").textContent=t("title");
+  if(!latest)return;
+  const status=document.getElementById("status"),sub=document.getElementById("sub");
+  const setupDiv=document.getElementById("setup"),battleDiv=document.getElementById("battle");
+  const v=latest.view, players=latest.players||[{name:t("player_n",{n:1})},{name:t("player_n",{n:2})}];
+  const acting=latest.status==="ongoing"?latest.acting_for_player_index:null;
+  const me=latest.my_player_index;
+  updateBanner(v,players);
+  if(!v){status.textContent=t("waiting");sub.textContent="";return;}
+  const over=latest.status==="over"||v.winnerIdx===0||v.winnerIdx===1;
+  if(over){
+    setupDiv.style.display="none";setupDiv.replaceChildren();battleDiv.style.display="block";
+    const w=v.winnerIdx;
+    const wName=(w===0||w===1)?pname(players,w):"";
+    if(w===0||w===1){
+      if(me===null)status.textContent=t("wins_spectator",{name:wName});
+      else if(me===w)status.textContent=t("win_you");
+      else status.textContent=t("lose_you",{name:wName});
+    }
+    else status.textContent=t("game_over");
+    sub.textContent=t("sub_over");
+    if(me===null)renderSpectate(v,players);else renderBattle(v,players,me,1-me,false);
+    const b=document.getElementById("banner");if(w===0||w===1){b.className="hit";b.style.display="block";b.textContent=t("banner_over",{name:wName});}
+    return;
+  }
+  if(v.phase==="SETUP"){
+    battleDiv.style.display="none";setupDiv.style.display="";
+    let sp=-1;if(!v.boards[0].ready)sp=0;else if(!v.boards[1].ready)sp=1;
+    const spName=sp>=0?pname(players,sp):"";
+    if(me===null){status.textContent=t("setup_spectating_status",{name:spName});sub.textContent=t("setup_spectating_sub");setupDiv.replaceChildren(el("p",t("setup_spectating_body",{name:spName})));return;}
+    if(me!==sp){status.textContent=t("setup_other_status",{name:spName});sub.textContent=t("setup_other_sub",{name:spName});setupDiv.replaceChildren(el("p",t("setup_other_body",{name:spName})));return;}
+    status.textContent=t("setup_my_status",{name:spName});
+    sub.textContent=t("setup_my_sub");
+    renderSetup(v,sp,acting===me&&!sendLock);
+    return;
+  }
+  // BATTLE
+  setupDiv.replaceChildren();setupDiv.style.display="none";battleDiv.style.display="block";
+  const turn=v.turnIdx;
+  const tName=pname(players,turn);
+  let subTxt="";
+  if(v.last&&v.last.x!==undefined){
+    const L=v.last;
+    const p={coord:coordName(L.x,L.y),ship:L.sunk?shipName(L.sunk):"",name:players[L.by]?players[L.by].name:""};
+    if(L.hit){subTxt=L.sunk?t("sub_hit_sunk_again",p):t("sub_hit_again",p);}
+    else subTxt=t("sub_miss",p);
+  }
+  if(sendLock)subTxt=subTxt?t("sub_sending",{text:subTxt}):t("sending");
+  status.textContent=t("status_battle",{name:tName});
+  sub.textContent=subTxt;
+  if(me===null){renderSpectate(v,players);return;}
+  const opp=1-me;
+  const canFire=(acting===me&&v.turnIdx===me&&!sendLock);
+  renderBattle(v,players,me,opp,canFire);
+}
+function axisRow(parent){const a=el("div",null,"axis",parent);for(const c of COLS)el("div",c,null,a);return a;}
+function renderSetup(v,sp,canAct){
+  const div=document.getElementById("setup");
+  const key=(latest?latest.move_count:0)+"-"+sp;if(key!==localKey){localKey=key;localShips=[];selIdx=0;horiz=true;}
+  const buttons=[];
+  const btn=(text,parent)=>{const b=el("button",text,null,parent);buttons.push(b);return b;};
+  const box=el("div",null,"boardBox");
+  el("h3",t("setup_title",{name:latest.players[sp].name}),null,box);
+  const row=el("div",null,"shipRow",box);
+  FLEET.forEach((f,i)=>{
+    const placed=localShips.find(s=>s.name===f.name);
+    const b=btn(placed?t("ship_btn_placed",{ship:shipName(f.name),size:f.size}):t("ship_btn",{ship:shipName(f.name),size:f.size}),row);
+    b.className=selIdx===i?"sel":"";
+    b.onclick=()=>{if(!canAct)return;selIdx=i;render();};
+  });
+  const ctl=el("div",null,null,box);
+  const rot=btn(horiz?t("rotate_horizontal"):t("rotate_vertical"),ctl);
+  const rand=btn(t("random"),ctl);
+  const clr=btn(t("clear"),ctl);
+  const ready=btn(t("ready",{count:localShips.length}),ctl);
+  if(localShips.length!==5)ready.disabled=true;
+  el("p",t("setup_hint"),"legend",box);
+  axisRow(box);
+  const grid=el("div",null,"grid",box);
+  const smsg=el("div",null,"coords",box);
+  div.replaceChildren(box);
+  const occ={};localShips.forEach((s,i)=>s.cells.forEach(c=>occ[c[0]+","+c[1]]=i));
+  for(let y=0;y<10;y++)for(let x=0;x<10;x++){
+    const d=document.createElement("div");
+    d.className="cell "+(occ[x+","+y]!==undefined?"placed-ship":"water");d.title=coordName(x,y);
+    if(occ[x+","+y]!==undefined)d.textContent="●";
+    d.onclick=()=>{
+      if(!canAct)return;
+      if(occ[x+","+y]!==undefined){const idx=occ[x+","+y];selIdx=FLEET.findIndex(f=>f.name===localShips[idx].name);localShips.splice(idx,1);render();return;}
+      const f=FLEET[selIdx];if(localShips.some(s=>s.name===f.name)){smsg.textContent=t("already_placed",{ship:shipName(f.name)});return;}
+      localShips.push({name:f.name,size:f.size,cells:cellsFor(x,y,f.size,horiz)});
+      const ni=FLEET.findIndex(ff=>!localShips.some(s=>s.name===ff.name));selIdx=ni===-1?selIdx:ni;render();
+    };
+    grid.appendChild(d);
+  }
+  rot.onclick=()=>{if(!canAct)return;horiz=!horiz;render();};
+  rand.onclick=()=>{if(!canAct)return;localShips=randomLocalFleet();render();};
+  clr.onclick=()=>{if(!canAct)return;localShips=[];render();};
+  ready.onclick=()=>{if(!canAct||localShips.length!==5)return;sendMove({type:"place",ships:localShips});};
+  if(!canAct)buttons.forEach(b=>b.disabled=true);
+}
+function fleetLines(ships,atk,spectate){
+  if(!ships.length)return [el("i",t("hidden"))];
+  return ships.map(s=>{
+    const sunk=isSunk(s,atk);const hits=s.cells.filter(c=>atk[c[1]][c[0]]===2).length;
+    const p={ship:shipName(s.name),hits,size:s.size};
+    if(spectate)return el("div",sunk?t("fleet_item_sunk",p):t("fleet_item",p),sunk?"sunk":"alive");
+    const d=el("div",null,sunk?"sunk":"alive");
+    el("span",sunk?"☠️ ":"● ",null,d);
+    el("span",t("fleet_item",p),null,d);
+    if(sunk)el("span",t("badge_sunk"),"sunkBadge",d);else if(hits>0)el("span",t("badge_hit"),"hitBadge",d);
+    return d;
+  });
+}
+function renderBattle(v,players,showMine,showOpp,canFire){
+  document.getElementById("myTitle").textContent=t("my_fleet",{name:pname(players,showMine)});
+  document.getElementById("opTitle").textContent=t("targeting_board",{name:pname(players,showOpp)});
+  document.getElementById("legend").textContent=t("legend");
+  const myG=document.getElementById("myGrid"),opG=document.getElementById("opGrid");myG.replaceChildren();opG.replaceChildren();
+  const myShips=v.boards[showMine].ships||[],opShips=v.boards[showOpp].ships||[];
+  const atkOnMe=v.attacks[showMine],atkOnOpp=v.attacks[showOpp];
+  const mySunk=sunkSet(myShips,atkOnMe),oppSunk=sunkSet(opShips,atkOnOpp);
+  const last=v.last;
+  for(let y=0;y<10;y++)for(let x=0;x<10;x++){
+    const d=document.createElement("div");const hasShip=myShips.some(s=>s.cells.some(c=>c[0]===x&&c[1]===y));const a=atkOnMe[y][x];const k=x+","+y;
+    if(a===2&&mySunk.has(k)){d.className="cell sunkHit";d.textContent="☠️";}
+    else if(a===2){d.className="cell hit";d.textContent="💥";}
+    else if(a===1){d.className="cell miss";d.textContent="○";}
+    else if(hasShip){d.className="cell ship";d.textContent="●";}
+    else{d.className="cell water";}
+    d.title=coordName(x,y);myG.appendChild(d);
+  }
+  for(let y=0;y<10;y++)for(let x=0;x<10;x++){
+    const d=document.createElement("div");const a=atkOnOpp[y][x];const k=x+","+y;
+    const isLast=last&&last.x===x&&last.y===y&&(1-last.by)===showOpp;
+    if(a===2&&oppSunk.has(k)){d.className="cell sunkHit";d.textContent="☠️";}
+    else if(a===2){d.className="cell hit";d.textContent="💥";}
+    else if(a===1){d.className="cell miss";d.textContent="○";}
+    else{d.className="cell water";d.title=canFire?t("fire_title",{coord:coordName(x,y)}):coordName(x,y);if(canFire)d.classList.add("target");else d.classList.add("locked");}
+    if(isLast)d.classList.add("lastShot");
+    if(a===0&&canFire)d.onclick=()=>sendMove({type:"fire",x:x,y:y});
+    opG.appendChild(d);
+  }
+  const sunk=opShips.filter(s=>isSunk(s,atkOnOpp));const totalHits=atkOnOpp.flat().filter(c=>c===2).length;
+  const opLines=[];
+  if(sunk.length){
+    sunk.forEach(s=>{const d=el("div",null,"sunk");el("span","☠️ ",null,d);el("span",shipName(s.name),null,d);el("span",t("badge_sunk"),"sunkBadge",d);opLines.push(d);});
+    opLines.push(el("div",t("summary_hits_sunk",{hits:totalHits,sunk:sunk.length})));
+  }else opLines.push(el("div",t("no_sunk",{hits:totalHits})));
+  if(sendLock)opLines.push(el("div",t("sending"),"coords"));
+  if(!canFire)opLines.push(el("div",t("board_locked"),"coords"));
+  document.getElementById("myFleet").replaceChildren(...fleetLines(myShips,atkOnMe,false));
+  document.getElementById("opFleet").replaceChildren(...opLines);
+}
+function renderSpectate(v,players){
+  document.getElementById("myTitle").textContent=t("my_fleet",{name:pname(players,0)});
+  document.getElementById("opTitle").textContent=t("targeting_board",{name:pname(players,1)});
+  document.getElementById("legend").textContent=t("legend");
+  const myG=document.getElementById("myGrid"),opG=document.getElementById("opGrid");myG.replaceChildren();opG.replaceChildren();
+  const draw=(grid,ships,atk)=>{const sk=sunkSet(ships,atk);for(let y=0;y<10;y++)for(let x=0;x<10;x++){const d=document.createElement("div");const has=(ships||[]).some(s=>s.cells.some(c=>c[0]===x&&c[1]===y));const a=atk[y][x];const sunk=sk.has(x+","+y);
+    if(a===2&&sunk){d.className="cell sunkHit";d.textContent="☠️";}else if(a===2){d.className="cell hit";d.textContent="💥";}else if(a===1){d.className="cell miss";d.textContent="○";}else if(has){d.className="cell ship";d.textContent="●";}else{d.className="cell water";}d.title=coordName(x,y);grid.appendChild(d);}};
+  draw(myG,v.boards[0].ships,v.attacks[0]);draw(opG,v.boards[1].ships,v.attacks[1]);
+  document.getElementById("myFleet").replaceChildren(...fleetLines(v.boards[0].ships||[],v.attacks[0],true));
+  document.getElementById("opFleet").replaceChildren(...fleetLines(v.boards[1].ships||[],v.attacks[1],true));
+}
+addEventListener("message",ev=>{if(ev.source!==parent||!ev.data||ev.data.type!=="state_changed")return;applyLocale(ev.data);latest=ev.data;sendLock=false;render();});
+addEventListener("keydown",e=>{if(e.key==="r"||e.key==="R"){horiz=!horiz;if(latest&&latest.view&&latest.view.phase==="SETUP")render();}});
+</script>
+</body>
+</html>

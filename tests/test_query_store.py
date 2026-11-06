@@ -37,6 +37,31 @@ def store():
     )
 
 
+def test_leave_payout_contract_is_atomic_and_survives_restart(store):
+    from game_platform.tests.test_leave_result_contract import test_leave_uses_game_distribution_and_pays_exactly_once
+    api = api_for(store)
+    test_leave_uses_game_distribution_and_pays_exactly_once(api)
+    second = QueryStore(store.client, namespace=store.namespace)
+    records = list(store._query("matches", [], limit=10))
+    assert len(records) == 1
+    match = store._decode("matches", records[0].to_dict(), records[0].reference)
+    saved = second.get_match(match.id)
+    assert saved.status == "over" and saved.token_pot == 0
+    assert saved.seats[1].active is False
+    assert sum(saved.token_payouts.values()) == 20
+    assert saved.moves[-1].move == {"type": "player_left"}
+
+
+def test_query_multiplayer_rejects_computers(store):
+    from game_platform.tests.test_leave_result_contract import test_bots_cannot_be_added_to_multiplayer_or_joined_via_invite
+    test_bots_cannot_be_added_to_multiplayer_or_joined_via_invite(api_for(store))
+
+
+def test_query_legacy_roster_refund_is_idempotent(store):
+    from game_platform.tests.test_leave_result_contract import test_legacy_mixed_match_ends_and_refunds_once
+    test_legacy_mixed_match_ends_and_refunds_once(api_for(store))
+
+
 def test_restart_and_second_instance_read_committed_move_without_loading_history(store):
     api = api_for(store)
     alice, bob = api.new_user("alice"), api.new_user("bob")
@@ -199,10 +224,19 @@ def test_referrals_and_linked_identity_survive_restart(store):
     assert second.user_for_referral(user.referral_code) == alice
 
 
-def test_startup_never_lists_collections(store):
+def test_startup_only_lists_game_versions_for_schema_preflight(store):
     second = QueryStore(store.client, namespace=store.namespace)
-    with patch.object(second, "_list", side_effect=AssertionError("startup scan")):
+    original_list = second._list
+    listed = []
+
+    def list_for_startup(kind, *args, **kwargs):
+        assert kind == "game_versions", "startup must not scan unrelated collections"
+        listed.append(kind)
+        return original_list(kind, *args, **kwargs)
+
+    with patch.object(second, "_list", side_effect=list_for_startup):
         Api(store=second)
+    assert listed == ["game_versions"]
 
 
 def test_idempotent_move_does_not_append_or_pay_twice(store):
@@ -1220,4 +1254,208 @@ def test_merged_translation_memory_works_in_query_mode_and_survives_rollback(sto
         ).status_code
         == 204
     )
-    assert second.get_translations("es", [added["source_hash"]]) == {}
+    # a store started after the deletion no longer has it (a running one drops it within
+    # the bundle's refresh time)
+    third = QueryStore(store.client, namespace=store.namespace)
+    assert third.get_translations("es", [added["source_hash"]]) == {}
+    assert store.get_translations("es", [added["source_hash"]]) == {}
+
+
+def test_translation_bundles_on_the_emulator_merge_entries_and_load_in_one_query(store):
+    import datetime as dt
+    from game_platform.models import Translation
+    from game_platform.translation import text_hash
+
+    def row(source, text="", locale="es"):
+        return Translation(
+            locale=locale,
+            source_hash=text_hash(source),
+            source=source,
+            text=text or f"[{locale}] {source}",
+            provider="google",
+            created_at=dt.datetime.now(dt.timezone.utc),
+        )
+
+    other = QueryStore(store.client, namespace=store.namespace)
+    store.put_translations([row("One"), row("Two")])
+    other.put_translations([row("Three")])  # a merge: it must not erase One and Two
+    store.delete_translation("es", text_hash("Two"))
+    store.delete_translation("fr", text_hash("never there"))  # no document: no error
+    fresh = QueryStore(store.client, namespace=store.namespace)
+    with patch.object(fresh.client, "get_all", side_effect=AssertionError("no per-text reads")):
+        found = fresh.list_translations("es")
+    assert {item.source for item in found} == {"One", "Three"}
+    document = store.client.collection(store.namespace + "_translation_bundles").document("es-000").get()
+    assert set(document.to_dict()["entries"]) == {text_hash("One"), text_hash("Three")}
+
+
+def _counting_firestore_reads():
+    """Patches the Firestore client so every read round trip is counted: a document
+    get, a query, or a batched get."""
+    import contextlib
+
+    from google.cloud.firestore_v1.client import Client
+    from google.cloud.firestore_v1.document import DocumentReference
+    from google.cloud.firestore_v1.query import Query
+
+    reads = []
+
+    @contextlib.contextmanager
+    def counting():
+        patches = []
+        for cls, name in ((DocumentReference, "get"), (Query, "stream"), (Client, "get_all")):
+            original = getattr(cls, name)
+
+            def counted(self, *args, _original=original, _name=name, **kwargs):
+                reads.append(_name)
+                return _original(self, *args, **kwargs)
+
+            patches.append(patch.object(cls, name, counted))
+        with contextlib.ExitStack() as stack:
+            for p in patches:
+                stack.enter_context(p)
+            yield
+
+    return reads, counting
+
+
+def test_every_feedback_call_reads_firestore_at_most_twice_and_is_fast(store):
+    import time
+
+    api = api_for(store)
+    ann, bob = api.new_user("ann"), api.new_user("bob")
+    game = api.new_game(owner=bob)
+    match = api.new_match(owner=bob, game_id=game, joiners=[ann], start=True)
+    reads, counting = _counting_firestore_reads()
+    calls = [
+        ("POST", "/feedback", {"kind": "problem", "target_type": "user", "target_id": bob, "text": "bad name"}),
+        ("POST", "/feedback", {"kind": "bug", "target_type": "game", "target_id": game, "text": "it flickers"}),
+        ("POST", "/feedback", {"kind": "suggestion", "target_type": "match", "target_id": match, "text": "an undo"}),
+        ("POST", "/feedback", {"kind": "bug", "target_type": "platform", "text": "the menu is slow"}),
+        # A repeat (an update) and a refusal cost the same.
+        ("POST", "/feedback", {"kind": "bug", "target_type": "game", "target_id": game, "text": "it still flickers"}),
+        ("POST", "/feedback", {"kind": "bug", "target_type": "user", "target_id": ann, "text": "me, myself"}),
+        ("GET", "/admin/feedback", None),
+        ("GET", "/admin/feedback", {"kind": "bug", "target_type": "game"}),
+    ]
+    for method, path, body in calls:
+        reads.clear()
+        with counting():
+            started = time.perf_counter()
+            if method == "POST":
+                response = api.request(method, path, as_user=ann, json=body)
+            else:
+                response = api.request(method, path, params=body)
+            took = time.perf_counter() - started
+        assert response.status_code in (200, 201, 400), response.text
+        # A POST is the login check plus one batch; the admin listing is two queries.
+        assert len(reads) <= 2, (method, path, body, reads)
+        assert took < 1, (method, path, took)
+    assert api.ok("GET", "/admin/feedback")["count"] == 4
+
+
+def test_feedback_is_saved_listed_and_limited_in_query_mode(store):
+    from game_platform.scaling_cutover import rollback_snapshot
+
+    api = api_for(store)
+    platform = api.client.app.state.platform
+    ann, bob = api.new_user("ann"), api.new_user("bob")
+    game = api.new_game(owner=bob)
+    match = api.new_match(owner=bob, game_id=game, joiners=[ann], start=True)
+    made = {}
+    for kind, target_type, target in (
+        ("problem", "user", bob), ("bug", "game", game), ("suggestion", "match", match), ("bug", "platform", "")
+    ):
+        response = api.request(
+            "POST",
+            "/feedback",
+            as_user=ann,
+            json={"kind": kind, "target_type": target_type, "target_id": target, "text": "This is wrong"},
+        )
+        assert response.status_code == 201, response.text
+        made[target_type] = response.json()["id"]
+    # Saved in Firestore: a restarted server (a new store) lists them.
+    restarted = ScalablePlatform(store=QueryStore(store.client, namespace=store.namespace))
+    listing = restarted.admin_feedback()
+    assert {r["target_type"]: r["id"] for r in listing["feedback"]} == made
+    assert {r["target_name"] for r in listing["feedback"]} == {"bob", "Poker", "", "Platform"}
+    assert [r["context"]["game_id"] for r in listing["feedback"] if r["target_type"] == "match"] == [game]
+    # A repeat of the same kind within 24 hours updates the same message, at the top.
+    again = api.request(
+        "POST",
+        "/feedback",
+        as_user=ann,
+        json={"kind": "problem", "target_type": "user", "target_id": bob, "text": "Their name is offensive"},
+    )
+    assert again.status_code == 200 and again.json()["id"] == made["user"]
+    listing = api.ok("GET", "/admin/feedback")
+    assert listing["count"] == 4 and listing["feedback"][0]["text"] == "Their name is offensive"
+    assert api.ok("GET", "/admin/feedback", params={"kind": "bug"})["count"] == 2
+    assert api.ok("GET", "/admin/feedback", params={"target_type": "game"})["count"] == 1
+    # Lots of feedback: the listing shows the newest 200, Most reported counts problems,
+    # and the daily limit still reads only the sender's own limit document.
+    targets = [platform.create_user(display_name=f"target {n}").id for n in range(20)]
+    reporters = [api.new_user(f"reporter {n}") for n in range(12)]
+    for n, reporter in enumerate(reporters):
+        for target in targets[: 18 if n else 20]:
+            platform.send_feedback(
+                caller_id=reporter, kind="problem", target_type="user", target_id=target, text="spam account"
+            )
+    listing = platform.admin_feedback()
+    assert (listing["count"], listing["more"]) == (200, True)
+    assert listing["most_reported"][0]["reports"] == 12
+    assert listing["most_reported"][0]["target_name"].startswith("target ")
+    response = api.request(
+        "POST",
+        "/feedback",
+        as_user=reporters[0],
+        json={"kind": "bug", "target_type": "platform", "text": "one too many"},
+    )
+    assert response.status_code == 429
+    # A rollback keeps the feedback.
+    assert len(rollback_snapshot(store).feedback) == 4 + 20 + 11 * 18
+
+
+def test_the_daily_feedback_limit_spans_midnight_in_query_mode(store):
+    import datetime as dt
+
+    from game_platform.service import TooManyRequestsError
+
+    now = [dt.datetime(2026, 1, 1, 23, 0, tzinfo=dt.timezone.utc)]
+    platform = ScalablePlatform(store=store, clock=lambda: now[0], computer_move_delay_seconds=0)
+    ann = platform.create_user(display_name="ann").id
+    targets = [platform.create_user(display_name=f"user {n}").id for n in range(21)]
+
+    def send(target, text="spam account"):
+        return platform.send_feedback(
+            caller_id=ann, kind="problem", target_type="user", target_id=target, text=text
+        )
+
+    for target in targets[:20]:
+        send(target)
+        now[0] += dt.timedelta(minutes=1)
+    now[0] = dt.datetime(2026, 1, 2, 2, 0, tzinfo=dt.timezone.utc)  # the next day
+    with pytest.raises(TooManyRequestsError):
+        send(targets[20])
+    updated, created = send(targets[0], "still spam")
+    assert not created and updated.text == "still spam"
+    now[0] = dt.datetime(2026, 1, 2, 23, 0, tzinfo=dt.timezone.utc)  # 24 hours after the first
+    assert send(targets[20])[1]
+    # The limit document keeps only the last 24 hours.
+    entries = store.raw_get(store.ref("feedback_limits", ann))["entries"]
+    assert len(entries) == 20
+
+
+def test_agent_import_roundtrips_query_store(store):
+    from game_platform.tests.test_agent_import import payload
+    api = api_for(store)
+    owner = api.new_user('Agent import owner')
+    response = api.request('POST', '/agent/games', as_user=owner, json=payload())
+    assert response.status_code == 201, response.text
+    draft = response.json()
+    restarted = QueryStore(store.client, namespace=store.namespace)
+    saved = restarted.get_game_draft(draft['id'])
+    assert saved.owner_user_id == owner
+    assert saved.builder_workflow == draft['builder_workflow']
+    assert saved.code == payload()['client_code']
+    assert restarted.get_game(saved.id) is None

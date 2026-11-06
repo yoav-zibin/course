@@ -34,6 +34,27 @@ const game = {
 };
 """
 
+GAME_SCHEMAS = {
+    "state": {
+        "type": "object",
+        "required": ["count"],
+        "properties": {"count": {"type": "integer", "minimum": 0}},
+        "additionalProperties": False,
+    },
+    "move": {
+        "type": "object",
+        "required": ["add"],
+        "properties": {"add": {"type": "integer", "minimum": 1, "maximum": 3}},
+        "additionalProperties": False,
+    },
+    "view": {
+        "type": "object",
+        "required": ["count"],
+        "properties": {"count": {"type": "integer", "minimum": 0}},
+        "additionalProperties": False,
+    },
+}
+
 
 def generate(store, *, run_id, users, games, matches, max_writes):
     if users < 4 or games < 1 or matches < 0:
@@ -66,8 +87,11 @@ def generate(store, *, run_id, users, games, matches, max_writes):
                     game,
                     server_code=LOGIC,
                     rules=replace(game.rules, allowed_player_counts=(1, 2, 3, 4)),
+                    game_schemas=GAME_SCHEMAS,
                 )
             )
+        elif game.game_schemas is None:
+            store.put_game_version(replace(game, game_schemas=GAME_SCHEMAS))
     base = dt.datetime(2026, 9, 1, tzinfo=dt.timezone.utc)
     for i in range(prior.get("done", 0), matches):
         rng = random.Random(f"{run_id}:{i}")
@@ -80,7 +104,7 @@ def generate(store, *, run_id, users, games, matches, max_writes):
             new_invite_token=lambda: mid + "-invite",
         )
         people = rng.sample(range(users), rng.randint(1, 4))
-        computers = rng.randrange(5 - len(people))
+        computers = rng.randrange(4) if len(people) == 1 else 0
         # A complete service operation and checkpoint are one commit, so a
         # lost response or interrupted process cannot duplicate payouts.
         with store.atomic():

@@ -17,11 +17,11 @@ function setup(request=async()=>{}, hash='', search='') {
     navigator:{onLine:true},localStorage:{},PortalOffline:class {api(...args){return request(...args);}read(){return {};}write(){}} ,
     document:{getElementById:node,body:{classList:{toggle(){}}}},window:{addEventListener(){}},
     location:{hash,search,assign(url){navigations.push(url);}},history:{replaceState(){}},
-    Auth:{current:()=>({id:'owner'})},I18n:{t:(key,params,fallback)=>fallback??key,locale:()=>'en',revision:()=>0,gameName:(id,fallback)=>fallback,gameDescription:(id,fallback)=>fallback,gameText:async()=>({locale:'en',direction:'ltr'})},GameFrame:class{load(){}unload(){}send(){}},
+    Auth:{current:()=>({id:'owner'})},I18n:require('./i18n-stub.cjs'),GameFrame:class{load(){}unload(){}send(){}},
     apiRequest:request,formatTime:()=>'',shortId:x=>x,showPageError:text=>pageErrors.push(text),el:(tag,attrs={},...children)=>({...attrs,children})});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../../static/portal.js'),'utf8').replace(/main\(\);\s*$/,''),ctx);
   const run=code=>vm.runInContext(code,ctx);
-  run('refresh=async()=>{};state.games=[{id:"game",version:2,name:"Hanoi",allowed_player_counts:[1]}]');
+  run('globalThis.originalRefresh=refresh;refresh=async()=>{};state.games=[{id:"game",version:2,name:"Hanoi",allowed_player_counts:[1]}]');
   node('new-game').value='game';
   return {node,run,navigations,pageErrors};
 }
@@ -64,6 +64,27 @@ test('a valid one-seat lobby says ready instead of waiting for another player',(
   run('renderMatch()');assert.equal(node('match-status').textContent,'ready to start');
   assert.match(node('waiting').textContent,/Ready to start with 1 player/);
   assert.doesNotMatch(node('waiting').textContent,/wait for others/i);
+});
+
+test('multiplayer cannot join solo bots or reuse a departed identity',()=>{
+  const {run}=setup();
+  run('state.games[0].allowed_player_counts=[2,3,4];state.games[0].allows_join_mid_match=true;state.match={game_id:"game",game_version:2,status:"ongoing",players:[{player_index:0,kind:"human",user_id:"owner"},{player_index:1,kind:"computer"}]}');
+  assert.equal(run('isJoinable(state.match,"new")'),false);
+  run('state.match.players[1]={player_index:1,kind:"human",user_id:"departed",active:false}');
+  assert.equal(run('seatOf(state.match,"departed")'),null);
+  assert.equal(run('isJoinable(state.match,"departed")'),false);
+  assert.equal(run('isJoinable(state.match,"new")'),true);
+});
+
+test('computer controls appear only in solo lobbies and offer legacy cleanup',()=>{
+  const {node,run}=setup();
+  run('state.games[0].allowed_player_counts=[2,3,4];state.gameCache.set("game@2",state.games[0]);state.match={id:"match",game_id:"game",game_version:2,owner_user_id:"owner",status:"waiting_for_players",players:[{player_index:0,kind:"human",user_id:"owner"}],move_count:0};renderMatch()');
+  assert.ok(node('actions').children.some(child=>child.class==='computer-stepper'));
+  run('state.match.players.push({player_index:1,kind:"human",user_id:"other"});renderMatch()');
+  assert.ok(!node('actions').children.some(child=>child.class==='computer-stepper'));
+  run('state.match.players.push({player_index:2,kind:"computer"});renderMatch()');
+  assert.ok(node('actions').children.some(child=>child.textContent==='Remove computers for multiplayer'));
+  assert.ok(node('actions').children.find(child=>child.textContent==='Start game').disabled);
 });
 
 test('polling preserves collapsed groups and unchanged match buttons',()=>{
@@ -161,7 +182,6 @@ test('random game joins a randomly selected open multiplayer match',async()=>{
     calls.push([method,path,options?.body]);
     if(path==='/matches/open')return [match];
     if(path==='/games')return [{id:'party',version:1,name:'Party',allowed_player_counts:[2],published:true}];
-    if(path==='/games/party/versions/1')return {id:'party',version:1,name:'Party',allowed_player_counts:[2],published:true};
     if(path==='/matches/open-1/join')return {...match,players:[...match.players,{player_index:1,kind:'human',user_id:'owner'}]};
     throw new Error(`Unexpected request ${method} ${path}`);
   });
@@ -169,6 +189,35 @@ test('random game joins a randomly selected open multiplayer match',async()=>{
   assert.equal(run('state.selectedId'),'open-1');
   assert.ok(calls.some(([,path])=>path==='/matches/open-1/join'));
   assert.equal(calls.some(([,path])=>path==='/matches'),false);
+});
+
+test('match lists use the slim catalog and never fetch game code',async()=>{
+  const calls=[];
+  const {node,run}=setup(async(method,path)=>{
+    calls.push(path);
+    if(path==='/users?ids=other')return [{id:'other',display_name:'Other',picture_url:''}];
+    throw new Error(`Unexpected request ${method} ${path}`);
+  });
+  run('state.games[0].allowed_player_counts=[2];state.myMatches=[];state.openMatches=[{id:"open-1",game_id:"game",game_version:2,owner_user_id:"other",status:"waiting_for_players",players:[{player_index:0,kind:"human",user_id:"other"}],move_count:0}]');
+  await run('ensureDetails()');
+  assert.deepEqual(calls,['/users?ids=other']);
+  run('renderLists()');
+  assert.equal(node('count-open').textContent,'1');
+  assert.equal(node('open-matches').children[0].children[0].children[0],'Hanoi');
+});
+
+test('ensureDetails fetches only the open match game version',async()=>{
+  const calls=[];
+  const {run}=setup(async(method,path)=>{
+    calls.push(path);
+    if(path==='/users?ids=owner')return [{id:'owner',display_name:'Owner',picture_url:''}];
+    if(path==='/games/game/versions/2')return {id:'game',version:2,name:'Hanoi',code:'CODE',allowed_player_counts:[1]};
+    throw new Error(`Unexpected request ${method} ${path}`);
+  });
+  run('state.myMatches=[];state.openMatches=[];state.match={id:"m1",game_id:"game",game_version:2,owner_user_id:"owner",status:"ongoing",players:[{player_index:0,kind:"human",user_id:"owner"}],move_count:0,turn_of_player_indices:[0]}');
+  await run('ensureDetails()');
+  assert.deepEqual(calls.sort(),['/games/game/versions/2','/users?ids=owner']);
+  assert.equal(run('state.gameCache.get("game@2").code'),'CODE');
 });
 
 test('random game creates a multiplayer lobby when no open matches exist',async()=>{
@@ -285,6 +334,17 @@ test('finished results are personalized including seat zero, draws, and spectato
   assert.equal(run('matchOutcome(state.match,"owner").label'),'Draw');
 });
 
+test('list summaries carry the outcome as result, without a state',()=>{
+  const {run}=setup();
+  run('state.match={status:"over",end_reason:"finished",players:[{player_index:0,user_id:"owner",kind:"human"},{player_index:1,user_id:"other",kind:"human"}],result:{winner:0,draw:false,done:false}}');
+  assert.equal(run('matchOutcome(state.match,"owner").label'),'You won');
+  assert.equal(run('matchOutcome(state.match,"other").label'),'You lost');
+  run('state.match.result={winner:null,draw:true,done:false}');
+  assert.equal(run('matchOutcome(state.match,"owner").label'),'Draw');
+  run('state.match.result=null');
+  assert.equal(run('matchOutcome(state.match,"owner").label'),'Result unavailable');
+});
+
 test('unfinished, abandoned, unknown and unsynced results are not false confirmed losses',()=>{
   const {run}=setup();
   run('state.match={status:"ongoing",players:[],state:{winner:0}}');
@@ -377,22 +437,10 @@ test('current account avatar wins over stale match profile cache',()=>{
   assert.equal(run('playerPicture({kind:"human",user_id:"other"})'),'/other-cat.png');
 });
 
-test('server games explain unavailable practice before a click; client games restore it',()=>{
-  const t=setup();
-  t.run('state.games[0].supports_local_practice=false;updateMatchSetup()');
-  assert.equal(t.node('practice').disabled,true);
-  assert.equal(t.node('practice-mode').disabled,true);
-  assert.equal(t.node('practice-unavailable').hidden,false);
-  t.run('state.games[0].supports_local_practice=true;updateMatchSetup()');
-  assert.equal(t.node('practice').disabled,false);
-  assert.equal(t.node('practice-mode').disabled,false);
-  assert.equal(t.node('practice-unavailable').hidden,true);
-});
-
-test('unsupported practice hides offline instructions and restores them for local games',()=>{
+test('v2 games offer local practice and offline instructions',()=>{
  const t=setup();t.run('state.games[0].supports_local_practice=false;updateMatchSetup()');
- assert.equal(t.node('practice-offline-note').hidden,true);
- t.run('state.games[0].supports_local_practice=true;updateMatchSetup()');
+ assert.equal(t.node('practice').disabled,false);
+ assert.equal(t.node('practice-mode').disabled,false);
  assert.equal(t.node('practice-offline-note').hidden,false);
 });
 test('duplicate names have stable distinct labels across search and catalog filters',()=>{
@@ -401,4 +449,46 @@ test('duplicate names have stable distinct labels across search and catalog filt
  assert.equal(t.run('catalogGameLabel(state.games[2])'),'Chess');
  t.run('state.games[1].id="abcdefgh-two"');
  assert.match(t.run('catalogGameLabel(state.games[0])'),/abcdefgh-one/);
+});
+
+
+test('background polls coalesce before entering the shared move lock',async()=>{
+ const t=setup();
+ t.run('let releaseRefresh;let lockCalls=0;navigator.locks={request(_name,fn){lockCalls++;return fn();}};refreshLocked=()=>new Promise(resolve=>{releaseRefresh=resolve;});');
+ const first=t.run('originalRefresh()');
+ const second=t.run('originalRefresh()');
+ assert.equal(first,second);assert.equal(t.run('lockCalls'),1);
+ t.run('releaseRefresh()');await first;
+ const third=t.run('originalRefresh()');assert.equal(t.run('lockCalls'),2);
+ t.run('releaseRefresh()');await third;
+});
+test('a language change redraws the offline line and re-sends the open game its texts at once',async()=>{
+  const {run}=setup();
+  run('globalThis.calls=[];renderPortalAccountMenu=()=>calls.push("menu");render=()=>calls.push("render");renderLibrary=()=>calls.push("library");updateMatchSetup=()=>calls.push("setup");offlineStatus=()=>calls.push("offline");syncGame=async()=>{calls.push("game")}');
+  run('redrawAfterLanguageChange()');await Promise.resolve();
+  assert.deepEqual(Array.from(run('calls')),['menu','render','library','setup','offline','game']);
+});
+test('a failing redraw does not stop the others from being asked, and a failing game sync is only logged',async()=>{
+  const {run}=setup();
+  run('globalThis.calls=[];renderPortalAccountMenu=()=>calls.push("menu");render=()=>{throw new Error("boom")};console={warn:(...a)=>calls.push("warned")};syncGame=async()=>{throw new Error("late")}');
+  run('redrawAfterLanguageChange()');await Promise.resolve();
+  assert.deepEqual(Array.from(run('calls')),['menu','warned']);
+  run('calls.length=0;render=()=>{};renderLibrary=()=>{};updateMatchSetup=()=>{};offlineStatus=()=>{}');
+  run('redrawAfterLanguageChange()');await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(Array.from(run('calls')),['menu','warned']);
+});
+test('the match lists are redrawn when only the language changed',()=>{
+  const {run,node}=setup();
+  const list=node('list-test');
+  let drawn=0;
+  list.replaceChildren=function(...children){drawn++;this.children=children;};
+  list.dataset={};
+  run('globalThis.matches=[{id:"m",game_id:"game",game_version:2,status:"ongoing",move_count:3,players:[{kind:"human",user_id:"owner",player_index:0}],turn_of_player_indices:[0]}]');
+  try{
+    run('I18n.revision=()=>1;renderMatchList(globalThis.__list,matches)'.replace('globalThis.__list','document.getElementById("list-test")'));
+    run('renderMatchList(document.getElementById("list-test"),matches)');
+    assert.equal(drawn,1); // nothing changed: not redrawn
+    run('I18n.revision=()=>2;renderMatchList(document.getElementById("list-test"),matches)');
+    assert.equal(drawn,2); // the language (its revision) changed: redrawn
+  }finally{run('I18n.revision=()=>0');}
 });

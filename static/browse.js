@@ -427,13 +427,13 @@ async function refresh() {
       render();
     }
   } catch (error) {
-    $("error").textContent = `Couldn't load data: ${error.message}`;
+    $("error").textContent = I18n.t("ui.admin.load_failed", { message: error.message }, "Couldn't load data: {message}");
   }
   renderFreshness();
 }
 
 function renderFreshness() {
-  $("freshness").textContent = state.loadedAt ? `Loaded ${formatTime(state.loadedAt.toISOString())}` : "Loading…";
+  $("freshness").textContent = state.loadedAt ? I18n.t("ui.admin.loaded", { time: formatTime(state.loadedAt.toISOString()) }, "Loaded {time}") : I18n.t("ui.state.loading", {}, "Loading…");
 }
 
 let autoRefreshTimer = null;
@@ -467,8 +467,8 @@ async function refreshPagedBrowse() {
     const result=await response.json();
     const filter=$("filter").value.toLocaleLowerCase();
     const rows=result.items.filter(x=>JSON.stringify(x).toLocaleLowerCase().includes(filter));
-    const back=el("button",{textContent:"Previous page",disabled:!page.previous.length,onclick:()=>{page.cursor=page.previous.pop();refresh();}});
-    const next=el("button",{textContent:"Next page",disabled:!result.next_cursor,onclick:()=>{page.previous.push(page.cursor);page.cursor=result.next_cursor;refresh();}});
+    const back=el("button",{textContent:I18n.t("ui.storage.previous_page", {}, "Previous page"),disabled:!page.previous.length,onclick:()=>{page.cursor=page.previous.pop();refresh();}});
+    const next=el("button",{textContent:I18n.t("ui.storage.next_page", {}, "Next page"),disabled:!result.next_cursor,onclick:()=>{page.previous.push(page.cursor);page.cursor=result.next_cursor;refresh();}});
     $(id+"-count").textContent=`${rows.length} on this page`;
     $(id).replaceChildren(...rows.map(row=>{
       const detail=el("details",{},el("summary",{textContent:row.display_name||row.name||row.id||row.game_id}),el("pre",{textContent:JSON.stringify(row,null,2)}));

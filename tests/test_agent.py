@@ -11,6 +11,13 @@ from game_platform.schemas import AgentChatRequest
 from game_platform.tests.helpers import Api, validation_errors
 
 
+@pytest.fixture(autouse=True)
+def _texts_are_not_under_test(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests use placeholder HTML; the translation check has its own tests
+    (test_translation_required.py)."""
+    monkeypatch.setattr("game_platform.agent.game_text.lint", lambda code, server_code=None: [])
+
+
 def _request(**overrides) -> AgentChatRequest:
     body = {
         "game_name": "Race to 10",

@@ -214,13 +214,13 @@ async function createGuestUser() {
   });
   const body = await response.json();
   if (!response.ok) {
-    toast(`Couldn't create user: ${JSON.stringify(body.detail)}`);
+    toast(I18n.t("ui.admin.create_user_failed", { message: JSON.stringify(body.detail) }, "Couldn't create user: {message}"));
     return;
   }
   rememberNewUser(body);
   await refreshData();
   setUserId(body.id);
-  toast(`Now acting as ${body.display_name}`);
+  toast(I18n.t("ui.admin.now_acting_as", { name: body.display_name }, "Now acting as {name}"));
 }
 
 // Operation list
@@ -253,7 +253,7 @@ function renderOperations() {
       );
     }
   }
-  if (!children.length) children.push(el("div", { class: "group-title", textContent: "No matches" }));
+  if (!children.length) children.push(el("div", { class: "group-title", textContent: I18n.t("ui.admin.no_matches", {}, "No matches") }));
   $("operations").replaceChildren(...children);
 }
 
@@ -329,7 +329,7 @@ function renderRequest() {
   const op = state.selected;
   const form = $("request");
   if (!op) {
-    form.replaceChildren(el("div", { class: "muted", textContent: "Choose an operation." }));
+    form.replaceChildren(el("div", { class: "muted", textContent: I18n.t("ui.admin.choose_operation", {}, "Choose an operation.") }));
     return;
   }
   const draft = draftFor(op);
@@ -418,7 +418,7 @@ function formatBody() {
     draft.body = JSON.stringify(JSON.parse(draft.body), null, 2);
     $("body").value = draft.body;
   } catch (error) {
-    toast(`Body is not valid JSON: ${error.message}`);
+    toast(I18n.t("ui.admin.body_invalid_json", { message: error.message }, "Body is not valid JSON: {message}"));
   }
 }
 
@@ -446,7 +446,7 @@ function renderAuthNote() {
 function buildUrl(op, draft) {
   const path = op.path.replace(/\{(\w+)\}/g, (_, name) => {
     const value = (draft.params[name] ?? "").trim();
-    if (!value) throw new Error(`Missing path parameter ${name}`);
+    if (!value) throw new Error(I18n.t("ui.admin.missing_path_param", { name }, "Missing path parameter {name}"));
     return encodeURIComponent(value);
   });
   const query = new URLSearchParams();
@@ -483,7 +483,7 @@ function currentRequest() {
     try {
       JSON.parse(draft.body);
     } catch (error) {
-      throw new Error(`Body is not valid JSON: ${error.message}`);
+      throw new Error(I18n.t("ui.admin.body_invalid_json", { message: error.message }, "Body is not valid JSON: {message}"));
     }
     body = draft.body;
     headers["Content-Type"] = "application/json";
@@ -508,7 +508,7 @@ function copyAsCurl() {
     parts.push("-H", shellQuote(`${name}: ${value}`));
   }
   if (request.body) parts.push("-d", shellQuote(JSON.stringify(JSON.parse(request.body))));
-  navigator.clipboard.writeText(parts.join(" ")).then(() => toast("Copied curl command"));
+  navigator.clipboard.writeText(parts.join(" ")).then(() => toast(I18n.t("ui.admin.copied_curl", {}, "Copied curl command")));
 }
 
 async function send() {
@@ -531,7 +531,7 @@ async function send() {
     });
     text = await response.text();
   } catch (error) {
-    showMessage(`Request failed: ${error}`);
+    showMessage(I18n.t("ui.admin.request_failed", { message: String(error) }, "Request failed: {message}"));
     return;
   }
   const entry = {

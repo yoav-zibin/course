@@ -13,7 +13,7 @@ function worker() {
 }
 test('every page script, style, manifest and install icon is precached at its exact URL',()=>{
   const {shell} = worker();
-  const assets = [...read('static/portal.html').matchAll(/(?:src|href)="(\/static\/[^"#]+)"/g)].map(m=>m[1]);
+  const assets = [...read('static/portal.html').matchAll(/<(?:script|link|img)\b[^>]*?\s(?:src|href)="(\/static\/[^"#]+)"/g)].map(m=>m[1]);
   for(const asset of assets) assert.ok(shell.includes(asset), `missing ${asset}`);
   for(const asset of shell) assert.ok(fs.existsSync(path.join(root, asset.split('?')[0])), asset);
   const manifest=JSON.parse(read('static/portal.webmanifest'));
@@ -40,7 +40,7 @@ test('worker serves saved shell offline and leaves APIs and other students pages
 function install(standalone=false) {
   const events={},nodes={};
   for(const id of ['install-portal','install-help','install-message']) nodes[id]={hidden:id==='install-portal',addEventListener:(event,fn)=>events[id+event]=fn};
-  vm.runInNewContext(read('static/portal-install.js'),{document:{getElementById:id=>nodes[id]},navigator:{},window:{matchMedia:()=>({matches:standalone}),addEventListener:(event,fn)=>events[event]=fn}});
+  vm.runInNewContext(read('static/portal-install.js'),{I18n:require('./i18n-stub.cjs'),document:{getElementById:id=>nodes[id]},navigator:{},window:{matchMedia:()=>({matches:standalone}),addEventListener:(event,fn)=>events[event]=fn}});
   return {events,nodes};
 }
 test('install prompt requires a click, handles dismissal, and accepts a later prompt',async()=>{

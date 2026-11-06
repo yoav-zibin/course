@@ -58,6 +58,7 @@ jobs:
           cache: npm
           cache-dependency-path: game_platform/package-lock.json
       - run: npm ci
+      - run: node --test tests/web/*.test.cjs
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test
       - uses: actions/upload-artifact@v4
@@ -97,3 +98,28 @@ jobs:
           chmod 600 ~/.ssh/id_deploy
           ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" "$VM_DEPLOY_COMMAND"
+      - name: Verify deployed service health
+        if: steps.revision.outputs.current == 'true'
+        env:
+          VM_HOST: ${{ secrets.GCP_VM_HOST }}
+          VM_USER: ${{ secrets.GCP_VM_USER }}
+        run: |
+          # First startup includes a bounded99-version Firestore recovery.
+          deadline=$((SECONDS + 180))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            if curl --fail --silent --show-error --max-time 10 https://buildplay.fun/health; then
+              exit 0
+            fi
+            sleep 5
+          done
+          # Narrow startup diagnostics: no config, credentials or user records.
+          ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" 'sudo systemctl is-active game-platform.service; sudo journalctl -u game-platform.service --since "5 minutes ago" --no-pager | grep -E "missing required game_schemas|Backfill these versions|ModuleNotFoundError|ImportError|Address already in use" | tail -n 3' || true
+          exit 1
+
+      - name: Report audited-game publication results
+        if: steps.revision.outputs.current == 'true'
+        env:
+          VM_HOST: ${{ secrets.GCP_VM_HOST }}
+          VM_USER: ${{ secrets.GCP_VM_USER }}
+        run: |
+          ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" 'sudo journalctl -u game-platform.service --since "5 minutes ago" --no-pager | grep -E "audit-batch6:|legacy-schema-recovery:|catalog-deduplication:" | tail -n 105; if sudo test -f /var/log/game-platform/server.log; then sudo grep -E "audit-batch6:|legacy-schema-recovery:|catalog-deduplication:" /var/log/game-platform/server.log | tail -n 105; fi'

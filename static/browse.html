@@ -11,9 +11,9 @@
       gtag('config', 'G-6CCXZQYVE7');
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Game platform · Browse data</title>
-    <link rel="stylesheet" href="/static/common.css?v=8" />
-    <link rel="stylesheet" href="/static/experiments.css?v=1" />
+    <title data-i18n="ui.page.browse">Game platform · Browse data</title>
+    <link rel="stylesheet" href="/static/common.css?v=16" />
+  <link rel="stylesheet" href="/static/experiments.css?v=6" />
     <script>
       // Framed mode for the /admin tabs: hide this page's own top bar.
       if (new URLSearchParams(location.search).has("frame")) {
@@ -217,41 +217,42 @@
   </head>
   <body>
     <header class="topbar">
-      <h1>Game platform</h1>
-      <nav>
-        <a href="/portal">Portal</a>
-        <a href="/builder">Builder</a>
-        <a href="/admin">Admin</a>
+      <h1 data-i18n="ui.app_name">Game platform</h1>
+      <nav aria-label="Game platform" data-i18n-aria-label="ui.app_name">
+        <a href="/portal" data-i18n="ui.nav.portal">Portal</a>
+        <a href="/builder" data-i18n="ui.nav.builder">Builder</a>
+        <a href="/admin" data-i18n="ui.nav.admin">Admin</a>
       </nav>
     </header>
     <main>
       <div class="toolbar">
-        <input id="filter" placeholder="Filter rows (any text, e.g. a name, id or status)" spellcheck="false" />
-        <button id="refresh">Refresh</button>
-        <label class="inline"><input type="checkbox" id="auto-refresh" /> Auto-refresh (2s)</label>
+        <input id="filter" placeholder="Filter rows (any text, e.g. a name, id or status)" data-i18n-placeholder="ui.admin.filter_rows" spellcheck="false" />
+        <button id="refresh" data-i18n="ui.action.refresh">Refresh</button>
+        <label class="inline"><input type="checkbox" id="auto-refresh" /> <span data-i18n="ui.admin.auto_refresh">Auto-refresh (2s)</span></label>
         <span id="freshness" class="muted"></span>
         <span id="error"></span>
       </div>
       <section>
-        <h2>Users <span id="users-count" class="count"></span></h2>
+        <h2><span data-i18n="ui.admin.users">Users</span> <span id="users-count" class="count"></span></h2>
         <div id="users"></div>
       </section>
       <section>
-        <h2>Games <span id="games-count" class="count"></span></h2>
+        <h2><span data-i18n="ui.admin.games">Games</span> <span id="games-count" class="count"></span></h2>
         <div id="games"></div>
       </section>
       <section>
-        <h2>Matches <span id="matches-count" class="count"></span></h2>
+        <h2><span data-i18n="ui.admin.matches">Matches</span> <span id="matches-count" class="count"></span></h2>
         <div id="matches"></div>
       </section>
       <section>
-        <h2>Agent conversations <span id="conversations-count" class="count"></span></h2>
+        <h2><span data-i18n="ui.admin.conversations">Agent conversations</span> <span id="conversations-count" class="count"></span></h2>
         <div id="conversations"></div>
       </section>
     </main>
-    <script src="/static/common.js?v=2"></script>
-<script src="/static/storage-pages.js?v=1"></script>
-<script src="/static/browse.js?v=5"></script>
-<script src="/static/experiments.js?v=1"></script>
+    <script src="/static/common.js?v=22"></script>
+    <script src="/static/i18n.js?v=5"></script>
+<script src="/static/storage-pages.js?v=2"></script>
+<script src="/static/browse.js?v=6"></script>
+<script src="/static/experiments.js?v=7"></script>
   </body>
 </html>

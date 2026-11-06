@@ -1,0 +1,33 @@
+#!/home/zachary/game-platform-venv/bin/python
+"""Fetch the scaling VM's model key from Secret Manager and start the API."""
+
+import base64
+import json
+import os
+import urllib.request
+
+
+metadata = urllib.request.Request(
+    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
+    headers={"Metadata-Flavor": "Google"},
+)
+with urllib.request.urlopen(metadata, timeout=10) as response:
+    access_token = json.load(response)["access_token"]
+
+secret = urllib.request.Request(
+    "https://secretmanager.googleapis.com/v1/projects/849325917253/secrets/game-platform-scaling-model-api-key/versions/1:access",
+    headers={"Authorization": "Bearer " + access_token},
+)
+with urllib.request.urlopen(secret, timeout=15) as response:
+    secret_response = json.load(response)
+
+api_key = base64.b64decode(secret_response["payload"]["data"]).decode().strip()
+if not api_key:
+    raise RuntimeError("Scaling model API key secret is empty")
+
+os.environ["MUSE_SPARK_API_KEY"] = api_key
+python = "/home/zachary/game-platform-venv/bin/python"
+os.execv(
+    python,
+    [python, "-m", "game_platform.main", "--config", "/home/zachary/game_platform/config.scaling.json"],
+)

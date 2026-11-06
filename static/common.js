@@ -3,6 +3,20 @@
 
 "use strict";
 
+// Pages that don't load i18n.js get English: the fallback text passed to I18n.t. (When
+// i18n.js loads after this file, its own I18n replaces this one.)
+if (typeof I18n === "undefined") {
+  const fill = (text, params) => text.replace(/\{(\w+)\}/g, (match, name) => (name in params ? params[name] : match));
+  globalThis.I18n = {
+    t: (key, params = {}, fallback = key) => fill(fallback, params),
+    plural: (key, count, params = {}, fallbacks = {}) =>
+      fill((count === 1 ? fallbacks.one : fallbacks.many) ?? key, { count, ...params }),
+    number: (value) => String(value),
+    date: (value) => new Date(value).toLocaleString(),
+    revision: () => 0,
+  };
+}
+
 /** Creates an element. [attrs] values go to properties, except "class" and data-*. */
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
@@ -33,10 +47,45 @@ function showPageError(text) {
   banner.hidden = !text;
 }
 
+const clientErrorsSent = new Set();
+
+/** Tells the server about an error that happened in this page (POST /client-errors), so it
+ * reaches the server's log instead of only this browser's console. Best effort: never
+ * throws, sends each message once, and at most 5 per page load. [kind] is a short
+ * snake_case name; never put a password or token in [message]. */
+function reportClientError(kind, message) {
+  try {
+    const text = String(message ?? "").slice(0, 500);
+    const key = `${kind}:${text}`;
+    if (clientErrorsSent.has(key) || clientErrorsSent.size >= 5) return;
+    clientErrorsSent.add(key);
+    fetch("/client-errors", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify({
+        kind,
+        message: text,
+        page: location.pathname,
+        user_agent: navigator.userAgent,
+      }),
+    }).catch(() => {});
+  } catch {
+    // Reporting must never cause an error of its own.
+  }
+}
+globalThis.reportClientError = reportClientError;
+
 // Errors that would otherwise only reach the browser console.
-window.addEventListener("error", (event) => showPageError(`Page error: ${event.message}`));
-window.addEventListener("unhandledrejection", (event) =>
-  showPageError(`Page error: ${event.reason?.message ?? event.reason}`));
+window.addEventListener("error", (event) => {
+  showPageError(I18n.t("ui.common.page_error", { message: event.message }, `Page error: ${event.message}`));
+  const file = String(event.filename ?? "").split("/").pop();
+  reportClientError("script_error", `${event.message} (${file}:${event.lineno})`);
+});
+window.addEventListener("unhandledrejection", (event) => {
+  showPageError(I18n.t("ui.common.page_error", { message: event.reason?.message ?? event.reason }, `Page error: ${event.reason?.message ?? event.reason}`));
+  reportClientError("unhandled_rejection", event.reason?.message ?? event.reason);
+});
 
 async function fetchAllData() {
   const response = await fetch("/debug/all-data");
@@ -76,11 +125,11 @@ function toast(message) {
 function idChip(id) {
   return el("span", {
     class: "id",
-    title: `${id}\n(click to copy)`,
+    title: I18n.t("ui.common.copy_id_title", { id }, `${id}\n(click to copy)`),
     textContent: shortId(id),
     onclick: (event) => {
       event.stopPropagation();
-      navigator.clipboard.writeText(id).then(() => toast(`Copied ${id}`));
+      navigator.clipboard.writeText(id).then(() => toast(I18n.t("ui.common.copied", { text: id }, `Copied ${id}`)));
     },
   });
 }
@@ -89,23 +138,19 @@ function idChip(id) {
 function copyable(text) {
   return el("span", {
     class: "id",
-    title: "Click to copy",
+    title: I18n.t("ui.common.click_to_copy", {}, "Click to copy"),
     textContent: text,
     onclick: (event) => {
       event.stopPropagation();
-      navigator.clipboard.writeText(text).then(() => toast(`Copied ${text}`));
+      navigator.clipboard.writeText(text).then(() => toast(I18n.t("ui.common.copied", { text }, `Copied ${text}`)));
     },
   });
 }
 
 function formatTime(iso) {
   if (!iso) return "";
-  const date = new Date(iso);
-  const pad = (n) => String(n).padStart(2, "0");
-  return (
-    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
-    `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
-  );
+  // In the viewer's language and time zone, e.g. "Nov 6, 2026, 3:04:05 PM" or "6 nov 2026, 15:04:05".
+  return I18n.date(iso, { dateStyle: "medium", timeStyle: "medium" });
 }
 
 // API calls
@@ -192,7 +237,7 @@ const ACTING_USER_KEY = "game-platform.user-id";
 function setUpActAs(select, users, onChange) {
   const current = select.value || localStorage.getItem(ACTING_USER_KEY);
   select.replaceChildren(
-    el("option", { value: "", textContent: "(choose a user)" }),
+    el("option", { value: "", textContent: I18n.t("ui.common.choose_user", {}, "(choose a user)") }),
     ...users.map((user) => el("option", { value: user.id, textContent: user.display_name })),
   );
   select.value = users.some((user) => user.id === current) ? current : "";
@@ -270,7 +315,7 @@ class GameFrame {
    * the game can't reach the platform's cookies, storage or API. */
   load(code) {
     this.viewport = null;
-    this.iframe = el("iframe", { className: "game-frame", title: "Game" });
+    this.iframe = el("iframe", { className: "game-frame", title: I18n.t("ui.common.game_frame", {}, "Game") });
     this.iframe.setAttribute("sandbox", "allow-scripts");
     this.ready = new Promise((resolve) => this.iframe.addEventListener("load", resolve, { once: true }));
     this.iframe.srcdoc = code + "<script>(" + fitGameViewport.toString() + ")()<" + "/script>";
@@ -409,6 +454,21 @@ function statusClass(status) {
 }
 
 /** Common app navigation; page-specific wallet/notification controls stay in place. */
+function syncPortalPreviewLinks() {
+  const source = new URLSearchParams(location.search);
+  const previewKeys = ['skin', 'layout'];
+  document.querySelectorAll(
+    '.topbar[data-app-page] .app-home-link, .topbar[data-app-page] nav a, .portal-app-menu a, .app-brand[href]',
+  ).forEach(link => {
+    const target = new URL(link.getAttribute('href') || '/', location.origin);
+    for (const key of previewKeys) {
+      target.searchParams.delete(key);
+      if (source.has(key)) target.searchParams.set(key, source.get(key));
+    }
+    link.href = target.pathname + target.search + target.hash;
+  });
+}
+window.syncPortalPreviewLinks = syncPortalPreviewLinks;
 function setUpAppTopbar() {
   const bar = document.querySelector?.('.topbar[data-app-page]');
   const current = bar?.dataset?.appPage;
@@ -417,14 +477,32 @@ function setUpAppTopbar() {
   brand.setAttribute('data-i18n', 'ui.app_name');
   const nav = bar.querySelector('nav');
   nav.replaceChildren(...[
-    ['portal', 'Portal'], ['builder', 'Builder'], ['admin', 'Admin'],
+    ['portal', 'Portal'], ['builder', 'Builder'], ['new_builder', 'New Builder'], ['admin', 'Admin'],
   ].map(([page, label]) => el('a', {
-    href: '/' + page,
+    href: page === 'new_builder' ? '/static/guided-builder.html' : '/' + page,
     'data-i18n': 'ui.nav.' + page,
     'aria-current': page === current ? 'page' : null,
     textContent: label,
   })));
+  syncPortalPreviewLinks();
 }
+
+/** Treat the platform name in every page header as a home link. */
+function linkTopbarBrandToPortal() {
+  if (typeof document === "undefined" || typeof document.querySelectorAll !== "function") return;
+  document.querySelectorAll(".topbar h1").forEach((heading) => {
+    if (heading.closest("a.app-home-link")) return;
+    const link = el("a", {
+      class: "app-home-link",
+      href: "/portal",
+      "aria-label": I18n.t("ui.portal.home_aria", {}, "Game platform home"),
+      title: I18n.t("ui.common.back_to_games", {}, "Back to games"),
+    });
+    heading.parentNode.insertBefore(link, heading);
+    link.append(heading);
+  });
+}
+linkTopbarBrandToPortal();
 setUpAppTopbar();
 
 /** Dock beside the page when 280px of navigation leaves at least 620px to work. */
@@ -434,30 +512,35 @@ function setUpSidebarDrawer() {
   const main=document.querySelector('.work'), openers=[];
   const wide=window.matchMedia('(min-width: 900px)');
   let opened=false, returnFocus=null;
+  const pinned=()=>Boolean(document.querySelector('.portal-shell'))&&document.documentElement?.dataset.portalLayout==='left'&&wide.matches;
   sidebar.id ||= 'app-sidebar';
-  const close=el('button',{type:'button',class:'sidebar-close','aria-label':'Close sidebar',textContent:'← Close sidebar',onclick:()=>setOpen(false)});
+  const close=el('button',{type:'button',class:'sidebar-close',onclick:()=>setOpen(false)});
   sidebar.prepend(close);
-  const backdrop=el('button',{type:'button',class:'sidebar-backdrop',tabIndex:-1,'aria-label':'Close sidebar',onclick:()=>setOpen(false)});
+  const backdrop=el('button',{type:'button',class:'sidebar-backdrop',tabIndex:-1,onclick:()=>setOpen(false)});
   document.body.append(backdrop);
   function render() {
-    const modal=opened && !wide.matches;
-    document.body.classList.toggle('sidebar-open',opened);
+    const visible=opened||pinned();
+    const modal=visible && !wide.matches;
+    document.body.classList.toggle('sidebar-open',visible);
     document.body.classList.toggle('sidebar-docked',wide.matches);
     document.body.classList.toggle('sidebar-modal',modal);
-    sidebar.inert=!opened;
-    sidebar.setAttribute('aria-hidden',String(!opened));
+    sidebar.inert=!visible;
+    sidebar.setAttribute('aria-hidden',String(!visible));
     sidebar.setAttribute('role',wide.matches?'complementary':'dialog');
-    sidebar.setAttribute('aria-label',document.querySelector('.builder-shell')?'Your games':'Your matches');
+    const layout=document.documentElement?.dataset?.portalLayout;
+    sidebar.setAttribute('aria-label',document.querySelector('.builder-shell')?I18n.t("ui.builder.your_games",{},"Your games"):['left','hamburger'].includes(layout)?I18n.t("ui.common.sidebar_portal",{},"Portal navigation and your matches"):I18n.t("ui.common.sidebar_matches",{},"Your matches"));
     if (modal) sidebar.setAttribute('aria-modal','true');
     else sidebar.removeAttribute('aria-modal');
     main.inert=modal;
-    for (const button of openers) button.setAttribute('aria-expanded',String(opened));
+    for (const button of openers) button.setAttribute('aria-expanded',String(visible));
   }
   function setOpen(value,opener) {
-    const changed = opened !== Boolean(value);
+    if (pinned() && !value) return;
+    const wasVisible = opened || pinned();
     const rect = sidebar.animate ? sidebar.getBoundingClientRect() : null;
     sidebar.getAnimations?.().forEach(animation => animation.cancel());
     opened=Boolean(value);
+    const changed = wasVisible !== (opened || pinned());
     if (opened) returnFocus=opener || document.activeElement;
     render();
     if (changed && rect && document.querySelector('.portal-shell') && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -471,12 +554,22 @@ function setUpSidebarDrawer() {
     else if (returnFocus) { returnFocus.focus({preventScroll:true}); returnFocus=null; }
   }
   for (const toolbar of [document.querySelector('.topbar'),document.querySelector('.match-toolbar')].filter(Boolean)) {
-    const button=el('button',{type:'button',class:'sidebar-toggle',textContent:'☰','aria-label':'Open sidebar','aria-controls':sidebar.id,'aria-expanded':'false'});
+    const button=el('button',{type:'button',class:'sidebar-toggle',textContent:'☰','aria-controls':sidebar.id,'aria-expanded':'false'});
     button.addEventListener('click',()=>setOpen(!opened,button));
     toolbar.prepend(button);openers.push(button);
   }
+  const labelControls=()=>{
+    const closeText=I18n.t("ui.common.close_sidebar",{},"Close sidebar");
+    close.setAttribute('aria-label',closeText);
+    close.textContent=I18n.t("ui.common.close_sidebar_button",{},"← Close sidebar");
+    backdrop.setAttribute('aria-label',closeText);
+    for (const button of openers) button.setAttribute('aria-label',I18n.t("ui.common.open_sidebar",{},"Open sidebar"));
+    render();
+  };
+  labelControls();
+  document.addEventListener('i18n-changed',labelControls);
   sidebar.addEventListener('click',event=>{
-    if (!wide.matches && event.target.closest('.list-item, #new-game, #show-creator')) setOpen(false);
+    if (!wide.matches && event.target.closest('.list-item, #new-game, #show-creator, .portal-app-menu a')) setOpen(false);
   });
   document.addEventListener('keydown',event=>{
     if (!opened) return;
@@ -489,6 +582,7 @@ function setUpSidebarDrawer() {
     }
   });
   wide.addEventListener('change',()=>{render();if(opened && !wide.matches)close.focus();});
+  document.addEventListener('portal-layout-change',render);
   setOpen(false);
 }
 if (document.readyState==='complete'||document.readyState==='interactive') setUpSidebarDrawer();

@@ -1,0 +1,17 @@
+[
+  {
+    "method": "GET",
+    "path": "/health",
+    "weight": 1
+  },
+  {
+    "method": "GET",
+    "path": "/games?include_code=false",
+    "weight": 2
+  },
+  {
+    "method": "GET",
+    "path": "/matches?status=ongoing",
+    "weight": 4
+  }
+]

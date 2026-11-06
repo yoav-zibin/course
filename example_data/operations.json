@@ -59,7 +59,8 @@
   "allows_leave_mid_match": false,
   "allows_join_mid_match": false,
   "code_file": "tictactoe.html",
-  "server_code_file": "tictactoe.server.js"
+  "server_code_file": "tictactoe.server.js",
+  "schema_file": "tictactoe.schema.json"
  },
  {
   "op": "create_game",
@@ -79,7 +80,8 @@
   "allows_leave_mid_match": true,
   "allows_join_mid_match": true,
   "code_file": "poker.html",
-  "server_code_file": "poker.server.js"
+  "server_code_file": "poker.server.js",
+  "schema_file": "poker.schema.json"
  },
  {
   "op": "create_game",
@@ -101,7 +103,8 @@
   "allows_leave_mid_match": true,
   "allows_join_mid_match": true,
   "code_file": "debug.html",
-  "server_code_file": "debug.server.js"
+  "server_code_file": "debug.server.js",
+  "schema_file": "debug.schema.json"
  },
  {
   "op": "create_match",
@@ -453,7 +456,7 @@
   "id": "poker-four-on-the-flop",
   "as": "user3",
   "game": "poker",
-  "num_computer_opponents": 1
+  "num_computer_opponents": 0
  },
  {
   "op": "join",
@@ -463,36 +466,17 @@
  {
   "op": "join",
   "as": "user5",
+  "match": "poker-four-on-the-flop"
+ },
+ {
+  "op": "join",
+  "as": "user6",
   "match": "poker-four-on-the-flop"
  },
  {
   "op": "start",
   "as": "user3",
   "match": "poker-four-on-the-flop"
- },
- {
-  "op": "move",
-  "as": "user3",
-  "match": "poker-four-on-the-flop",
-  "move": {
-   "type": "call"
-  }
- },
- {
-  "op": "move",
-  "as": "user4",
-  "match": "poker-four-on-the-flop",
-  "move": {
-   "type": "fold"
-  }
- },
- {
-  "op": "move",
-  "as": "user5",
-  "match": "poker-four-on-the-flop",
-  "move": {
-   "type": "check"
-  }
  },
  {
   "op": "update_game",
@@ -710,7 +694,7 @@
  },
  {
   "op": "create_match",
-  "id": "poker-took-over-computer",
+  "id": "poker-solo-computers",
   "as": "user5",
   "game": "poker",
   "num_computer_opponents": 2
@@ -718,20 +702,15 @@
  {
   "op": "start",
   "as": "user5",
-  "match": "poker-took-over-computer"
+  "match": "poker-solo-computers"
  },
  {
   "op": "move",
   "as": "user5",
-  "match": "poker-took-over-computer",
+  "match": "poker-solo-computers",
   "move": {
    "type": "call"
   }
- },
- {
-  "op": "join",
-  "as": "user1",
-  "match": "poker-took-over-computer"
  },
  {
   "op": "create_match",
@@ -889,12 +868,6 @@
   "op": "join",
   "as": "user6",
   "match": "poker-ready"
- },
- {
-  "op": "set_num_computer_opponents",
-  "as": "user5",
-  "match": "poker-ready",
-  "num_computer_opponents": 2
  },
  {
   "op": "create_match",

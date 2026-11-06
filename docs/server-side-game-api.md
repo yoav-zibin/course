@@ -2,7 +2,8 @@
 
 This is the in-repo reference for the new server-side Game API, adapted from the
 professor's spec ("Game Platform: server-side Game API (v2)"). **Other teams:
-code against this document.** Changes after Phase 0 are additive only.
+code against this document.** November 6 changes: playerLeft shares the move
+result contract; bots are single-player only.
 
 Status: Phase 0/1 (contract + QuickJS runner) landed first; the REST changes
 below land phase by phase — each section says when.
@@ -56,7 +57,7 @@ const game = {
   playerJoined(state, playerId, ctx) { return { state, turn }; },
 
   // A player left mid-match. Required if the game allows leaving.
-  playerLeft(state, playerId, ctx) { return { state, turn, payout }; },
+  playerLeft(state, playerId, ctx) { return { state, turn, payouts }; },
 };
 ```
 
@@ -68,10 +69,9 @@ const game = {
 | `playerId` | A player's id string. In `viewFor`, `null` means a spectator |
 | `move` | Game-defined JSON from the client, e.g. `{"cell": 4}` |
 | `turn` | The ids of the players who may move next (any one of them), or `null` when the match is over. Never empty |
-| `payouts` | Required when `turn` is null: `{playerId: tokens}`, non-negative integers for humans only, adding up to the pot |
-| `payout` | The leaver's tokens from the pot: an integer from 0 to the pot |
+| `payouts` | `{playerId: tokens}`: non-negative integers for active humans only. Terminal results distribute exactly `ctx.pot`; ongoing results may distribute at most `ctx.pot`. Applies to both `applyMove` and `playerLeft`. |
 | `view` | Whatever the client needs for that player, including the result once the match is over |
-| `ctx.players` | `[{id, kind, display_name, picture_url, max_loss}]` in join order. In `playerJoined` it includes the joiner; in `playerLeft` it still includes the leaver |
+| `ctx.players` | `[{id, kind, display_name, picture_url, max_loss, active}]` in join order. In `playerJoined` it includes the joiner; in `playerLeft` it still includes the leaver |
 | `ctx.pot` | The tokens in the pot |
 | `ctx.random()` | A seeded random number in [0, 1). `Math.random` is replaced by the same generator |
 | `ctx.move_count` | How many moves were made so far |
@@ -82,6 +82,9 @@ const game = {
 - The platform defines a global class `InvalidMove extends Error`.
   `applyMove` throws it for a move that breaks the rules or is malformed; the
   server answers 400 with its message.
+  The 400 body is `{"detail", "code": "game_message"}`; when the game's string table has a `server_`
+  template for the message it also has `message_key` and `params`, and `detail` is translated for the viewer
+  (see docs/game-translation.md, "Texts the server writes"). A new game lists every `InvalidMove` text there.
 - Any other exception, a timeout (100 ms per call), a memory error (64 MB per
   context), or an invalid result (empty/unknown turn, payouts that don't add
   up or pay a computer, non-JSON result, oversized state) is a **bug in the
@@ -97,22 +100,27 @@ const game = {
   back.
 - Leaving before the match starts refunds `max_loss`. Deleting a waiting
   match refunds everyone.
-- `playerLeft` decides a leaver's payout; `payouts` splits the whole pot when
-  the match ends. The pot can't be negative while the match is ongoing and
-  must be exactly 0 when it ends.
-- If a player leaves and at most one human remains, the platform settles the
-  pot: `playerLeft` pays the leaver, the rest of the pot goes to the one
-  remaining human, and they may keep playing against the computers with
-  nothing at stake. If no human is left, the match ends with
-  `end_reason: "player_left"` (any pot the game did not pay out goes to the
-  leaver, so the pot still ends at exactly 0). A game that does not allow
-  leaving, or defines no `playerLeft`, also ends the match that way — with
-  the pot split equally among the humans in the match, the leaver included.
-- Leave-with-tokens confirmation: `POST /matches/{id}/maybeLeave` previews
-  the payout and stores the `playerLeft` result on the match;
-  `POST /matches/{id}/playerLeft` applies it, exactly as previewed. Any
-  other move (or a join) aborts the pending leave. The portal shows the
-  payout in a confirmation dialog first.
+- `playerLeft` returns the same `{state, turn, payouts?}` result as `applyMove`.
+  With `turn: null`, its complete payout distribution is credited exactly once
+  and the match ends with `end_reason: "player_left"`. With an ongoing turn,
+  optional payouts are deducted from the pot and recorded cumulatively.
+- A leaving human is never replaced by a bot. Their seat retains its original
+  index and id, with `active: false` in `ctx.players` and REST `players`. The
+  game must ignore inactive seats in future turns and payouts. The departing
+  player is still active during `playerLeft`, so that call can pay them. End
+  the match if fewer than two active humans remain after a leave. Fixed-roster
+  games should end on departure; games supporting elimination may continue.
+- A game without `playerLeft` ends on departure and the platform divides its
+  remaining pot among active humans. Existing published handlers returning the
+  old scalar `payout` are adapted by the runner: the match ends, the quoted
+  amount goes to the leaver, and the rest goes to the other active humans. If
+  the last human leaves, they receive the full pot. This applies to old pinned
+  game versions as well; it does not rewrite stored code or history.
+- `POST /matches/{id}/maybeLeave` stores the entire validated result. The response
+  exposes `pending_leave_payout` and `pending_leave_ends_match`, never the private
+  resulting state. `POST /matches/{id}/playerLeft` applies that exact result.
+  A move, join, timeout, or another confirmed leave invalidates the preview.
+  Successful game-handled leaves appear in history as `{type: "player_left"}`.
 - `playerLeft` calls get a 2-second time budget instead of the usual
   100 ms, because `ctx.estimateWinChance`'s walks take about a second.
 
@@ -156,13 +164,126 @@ client-computed `new_state` / `next_turn_player_indices`, and
 | `POST /emulator/reset`, `POST /emulator/act` | — | Play unsaved server code the way a match would (the builder's test play): reset runs `newMatch`, act applies one human move; both advance computer players and return the full state, every player's view, and any game error verbatim |
 | `POST /matches` | `{game_id, num_computer_opponents, private?}` | Also `max_loss` (Phase 3) |
 | `POST /matches/{id}/join`, `POST /invites/{token}/accept` | Take a seat | Also deduct `max_loss` (409 if the balance is too low); mid-match the server calls `playerJoined` (Phase 3/4) |
-| `POST /matches/{id}/leave` | A computer takes over the seat, or the match ends | Before the start, a refund; mid-match, `playerLeft` |
+| `POST /matches/{id}/leave` | Ends legacy matches and settles outstanding tokens | Before the start, a refund; mid-match, `playerLeft` |
 | `POST /matches/{id}/maybeLeave`, `POST /matches/{id}/playerLeft` | — | Leave preview + confirm |
 | `POST /matches/{id}/start` | `{first_turn_player_indices, initial_state}` | `{}` — the server calls `newMatch` (Phase 3) |
 | `POST /matches/{id}/moves` | `{new_state, next_turn_player_indices, expected_move_count?}` | `{move, expected_move_count?}`, only from a human in `turn` (403 otherwise); 400 for `InvalidMove` (Phase 3) |
 | `GET /matches/{id}` | The whole state, to anyone | The caller's `view` and the pot; the full state only in the debug tools (Phase 3) |
 | `GET /matches/{id}/moves` | Every `new_state` | Each move's player id, move and time (Phase 3) |
 | `GET /auth/me` | Your profile | Also your token balance (already present) |
+
+## Computer opponents: single-player only
+
+Computer matches contain exactly one human. A second human cannot join a bot
+match through the API or an invite; remove all computers in the waiting room
+first. Multiplayer lobbies and random matchmaking cannot add bots. Bot matches
+are excluded from open-match listings. The emulator follows the same rule, and
+random walks cover either all humans or one human against computers.
+
+Timeouts end a match and refund its outstanding pot; they never create bots.
+Ongoing mixed rosters saved before this change end on their next read, move, or
+worker call with `end_reason: "solo_computers_only"`, refunding the remaining
+pot to active humans once. Waiting lobbies can remove their bots.
+
+## Game JSON Schemas
+
+Every published v2 game version stores a `game_schemas` object with exactly
+three Draft 2020-12 JSON Schemas: `state`, `move`, and `view`. The platform
+generates these from successful random-walk samples when a creator omits them.
+The builder runs generation as part of server-code testing and keeps the
+generated schemas with its autosaved draft; direct API create/update and draft
+publication use the same generator. Creators do not need to author JSON Schema.
+Explicit schemas remain accepted for integrations that already provide them.
+V1 games do not use these schemas.
+
+Generated schemas describe observed JSON value types, leave object properties
+optional, and allow additional object properties so unobserved game branches
+remain playable. Generation requires successful samples for state, move, and
+view, and publication still runs the schema-aware random-walk gate. Generation
+or validation errors block publication instead of falling back to an
+accept-everything schema. Since inference is sample-based, it is not a proof
+that every rare game branch has been observed; games with highly variable
+contracts should still be exercised thoroughly before publishing.
+
+The platform validates state arguments before calling game functions that
+receive state, and validates a human's `move` against the `move` schema before
+`applyMove` runs. `computerMove` and `randomMove` results use the same move
+schema; returned states and `viewFor` results use their respective schemas.
+An invalid human move is rejected with HTTP 400 without changing the match.
+Invalid game-generated values or results are game bugs: the call fails and
+the random-walk test report identifies the failing function and seed.
+
+Invalid game-defined inputs emit a warning log with the game id/version,
+function, input name, and validation message. Process-local counters are
+available at `GET /admin/game-input-metrics` (protected by the master
+password when configured); counters are grouped by game version, function,
+and input and reset when the process restarts. They are not aggregated across
+workers.
+
+Every persisted v2 version—including historical versions—must have schemas.
+V1 records are excluded. At startup, the server logs missing `game-id@version`
+entries and runs in degraded mode so non-game API functionality remains
+available. A v2 game version without schemas is still blocked from executing:
+there is no permissive runtime fallback. Backfill historical versions with the
+exact schemas for those entries before restarting a strict server deployment.
+The automatic generator is used for
+new versions; the backfill utility intentionally requires an explicit,
+complete mapping because old matches may still rely on those versions:
+
+```json
+{
+  "my-game@1": {
+    "state": {"type": "object"},
+    "move": {"type": "object"},
+    "view": {"type": "object"}
+  }
+}
+```
+
+```powershell
+python backfill_game_schemas.py --config C:\path\to\config.json --schemas C:\path\to\game-schema-backfill.json
+```
+
+Writing the map by hand for every historical version is rarely practical, so the
+utility can also fill the versions the map leaves out. It prints each missing
+`game-id@version` with the source of the schema it would get, and writes nothing
+at all unless every missing version has one:
+
+| Option | Gives |
+|---|---|
+| `--schemas FILE` | Exactly the schemas in the map (wins over everything else). |
+| `--use-repo-schemas` | `games/<id>.schema.json` for the newest missing version of a built-in game. |
+| `--infer-rest` | Schemas inferred by playing the version's server code, like the generator for new games (observed types, nothing required, extra properties allowed). Needs the QuickJS runtime, so run it where the server runs. A version that cannot be played is reported and left to the next option. |
+| `--permissive-rest` | A schema that accepts any JSON for what is still left: the behavior before schemas, a stopgap to replace later. |
+| `--dry-run` | Only prints the plan (including the inference results); writes nothing. |
+
+On the production server (Firestore query mode; the utility opens the same store the
+server does) run a dry run first, then the same command without `--dry-run`, and restart:
+
+```bash
+cd /opt/game-platform
+sudo .venv/bin/python -m game_platform.backfill_game_schemas --config /opt/game-platform/config.json --use-repo-schemas --infer-rest --permissive-rest --dry-run
+```
+
+Inference is sample-based, so a rare branch of a game that no sample reached can be
+rejected later: watch `game_function_error` / schema rejections in the log after a backfill.
+
+The utility validates the complete mapping before writing any versions and
+supports the configured JSON-file or Firestore store (including query mode). Back up the database
+before running it; schemas are versioned with the game and should describe
+that version's actual inputs and outputs, not merely allow all JSON values.
+
+To gather exact code and rules for affected versions without exporting user
+records, run `export_game_schema_inventory.py` with the production config and
+the server's read-only Firestore credentials. By default, it finds every
+server-side version missing schemas and writes only each version's name, rules,
+server code, and existing schemas:
+
+```powershell
+python export_game_schema_inventory.py --config C:\path\to\config.json --output C:\path\to\game-schema-inventory.json
+```
+
+Use the optional `--refs` text file only when exporting a specific subset.
 
 ## Computer opponents on the server (Phase 3)
 
@@ -197,12 +318,12 @@ passing version can be published (draft publishing and `PATCH /games/{id}`
 run the gate; `POST /games/test` runs the same tests on unsaved code).
 The tests take at most 1 second: up to
 1000 random walks of up to 1000 moves each, stopping at whichever limit
-comes first. Each walk uses a random player count, a random human/computer
-mix, random `max_loss` values and a random seed; moves come from
+comes first. Each walk uses a random player count, either all humans or one human plus
+computers, random `max_loss` values and a random seed; moves come from
 `computerMove`/`randomMove`; `viewFor` is called for every player and a
 spectator after each move; joins/leaves happen occasionally if allowed
-(the platform's pot settlement when at most one human remains is modeled,
-so a game never owes payouts for a pot the platform settled); malformed
+(full and partial payout distributions are checked, and departed seats remain
+inactive at their original indices); malformed
 moves are fuzzed into `applyMove`. Every result is validated
 (turn, pot, payouts), and selected calls are run twice with identical
 arguments and seed to verify determinism. If not even one walk finishes in
@@ -265,10 +386,9 @@ v2 flow, or the migrated games uses it.
   `ctx.random`; `viewFor` hides the deck and other players' hole cards until
   showdown (it does publish `dealt_in` — which seats were dealt into the
   hand is public, and the client labels seats from it, never from the
-  hidden cards); `playerJoined` plays from the next hand — a seat taken
-  over from a computer mid-hand is folded out and its cards mucked, so
-  the new player sits the rest of the hand out; `playerLeft` pays in
-  proportion to chip share; `payouts` the rest to the best-placed human.
+  hidden cards); `playerJoined` plays from the next hand. `playerLeft` closes
+  the table and pays all active humans in proportion to chip share, including
+  committed chips, with integer remainder tokens assigned in seat order.
 - **Debug:** applies any move `{new_state, next_turn, payouts?}` as-is with
   validation; `computerMove`/`randomMove` pass the turn, and the passes
   are counted in `state.passes` — at 20 the match ends, so all-computer

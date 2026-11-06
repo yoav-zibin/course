@@ -167,8 +167,7 @@ final class MatchesUITests: XCTestCase {
     // MARK: Tests
 
 
-    /// The setup screen: picking a friend makes it an online match, so pass-and-play seats
-    /// become computers, and the button and note change.
+    /// Picking a friend makes every other seat an online human seat.
     func testSetupFriendSeats() {
         launchLoggedIn()
         tap(app.row("Poker"))
@@ -181,7 +180,7 @@ final class MatchesUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Moves stay on this phone. Nothing is sent to the server."].exists)
 
         tap(app.buttons["seat1-friend"])
-        XCTAssertTrue(app.buttons["seat2-computer"].isSelected, "the human seat should become a computer")
+        XCTAssertTrue(app.buttons["seat2-friend"].isSelected, "multiplayer must have only human opponents")
         XCTAssertFalse(app.buttons["seat2-human"].isEnabled, "no pass-and-play with friends online")
         XCTAssertTrue(app.staticTexts["friend-rule-note"].exists)
         XCTAssertTrue(app.staticTexts["Online: moves are shared with your friends."].exists)
@@ -195,15 +194,14 @@ final class MatchesUITests: XCTestCase {
         XCTAssertTrue(app.buttons["seat2-human"].isEnabled)
     }
 
-    /// Online with 1 friend + 1 computer: the waiting room shows the open friend seat with the
-    /// invitation, the friend's name and a check once they join, then the match starts.
-    func testFriendAndComputer() async throws {
+    /// The waiting room waits for both human friends before it can start.
+    func testHumanFriendsOnly() async throws {
         launchLoggedIn()
-        let id = inviteFriends(game: "Poker", players: 3, seats: [1: "friend", 2: "computer"])
-        XCTAssertTrue(app.staticTexts["friend-waiting"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.images["QR code for the match link"].exists)
-        XCTAssertTrue(app.buttons["share link"].exists && app.buttons["copy"].exists)
-        XCTAssertTrue(app.staticTexts["Computer"].exists)
+        let id = inviteFriends(game: "Poker", players: 3, seats: [1: "friend", 2: "friend"])
+        XCTAssertTrue(app.staticTexts.matching(identifier: "friend-waiting").firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.images.matching(identifier: "QR code for the match link").firstMatch.exists)
+        XCTAssertTrue(app.buttons.matching(identifier: "share link").firstMatch.exists && app.buttons.matching(identifier: "copy").firstMatch.exists)
+        XCTAssertFalse(app.staticTexts["Computer"].exists)
         XCTAssertFalse(app.buttons["start-match"].isEnabled, "can't start before the friend joins")
         screenshot("waiting-room-friend")
 
@@ -211,13 +209,17 @@ final class MatchesUITests: XCTestCase {
         _ = try await request("POST", "/matches/\(id)/join", as: friend)
         XCTAssertTrue(app.staticTexts["Friend"].waitForExistence(timeout: 10), "the app didn't see Friend join")
         XCTAssertTrue(app.images["friend-joined"].exists || app.otherElements["friend-joined"].exists || app.images["joined"].exists)
+        XCTAssertFalse(app.buttons["start-match"].isEnabled)
+        let secondFriend = try await newFriend()
+        _ = try await request("POST", "/matches/\(id)/join", as: secondFriend)
+        XCTAssertTrue(app.staticTexts["friend-waiting"].waitForNonExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["friend-waiting"].exists)
         XCTAssertTrue(app.buttons["start-match"].isEnabled)
         screenshot("waiting-room-joined")
 
-        // The server's order: people in join order, then the computer.
+        // The server preserves human join order.
         let waiting = try await match(id)
-        XCTAssertEqual((waiting["players"] as! [[String: Any]]).map { $0["kind"] as! String }, ["human", "human", "computer"])
+        XCTAssertEqual((waiting["players"] as! [[String: Any]]).map { $0["kind"] as! String }, ["human", "human", "human"])
         tap(app.buttons["start-match"])
         XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: 15), "the game didn't load")
         let started = try await match(id)
@@ -316,9 +318,11 @@ final class MatchesUITests: XCTestCase {
         _ = inviteFriends()
         backToGames()
 
-        // ongoing: Friend plays Poker (joinable mid-match) with a computer; I'm not in it.
+        // ongoing: two friends play Poker (joinable mid-match); I'm not in it.
         let friend2 = try await newFriend()
-        let poker = try await request("POST", "/matches", ["game_id": "poker", "num_computer_opponents": 1], as: friend2) as! [String: Any]
+        let poker = try await request("POST", "/matches", ["game_id": "poker", "num_computer_opponents": 0], as: friend2) as! [String: Any]
+        let friend3 = try await newFriend()
+        _ = try await request("POST", "/matches/\(poker["id"] as! String)/join", as: friend3)
         _ = try await request("POST", "/matches/\(poker["id"] as! String)/start", [:], as: friend2)
 
         openMatchesTab()
@@ -390,18 +394,16 @@ final class MatchesUITests: XCTestCase {
         tap(app.buttons["leave"])
         let alert = app.alerts["Leave this match?"]
         XCTAssertTrue(alert.waitForExistence(timeout: 5))
-        XCTAssertTrue(alert.staticTexts["A computer takes over your seat and keeps playing."].exists)
+        XCTAssertTrue(alert.staticTexts["Leaving may end this match and settle its tokens. Your seat will not become a computer."].exists)
         screenshot("leave-confirm")
         alert.buttons["Leave"].tap()
-        // Back on the list, without my seat in it (it may still be listed under open matches,
-        // since Poker lets people join mid-match). On the server a computer has my seat.
+        // The table ends, retaining the departed human's identity for history.
         XCTAssertTrue(app.tab("Matches").waitForExistence(timeout: 10))
-        scrollToMyMatches()
-        XCTAssertTrue(app.staticTexts["you vs Friend"].waitForNonExistence(timeout: 10), "still listed as my match")
         let m = try await match(id)
-        XCTAssertEqual(m["status"] as? String, "ongoing")
+        XCTAssertEqual(m["status"] as? String, "over")
         let seats = m["players"] as! [[String: Any]]
-        XCTAssertEqual(seats[1]["kind"] as? String, "computer", "nobody took over my seat")
+        XCTAssertEqual(seats[1]["kind"] as? String, "human")
+        XCTAssertEqual(seats[1]["active"] as? Bool, false)
         screenshot("after-leave")
     }
 

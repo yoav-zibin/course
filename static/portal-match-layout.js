@@ -16,7 +16,8 @@ window.PortalMatchLayout = (() => {
   function render() {
     const active = Boolean(match);
     const waiting = match?.status === "waiting_for_players";
-    const focused = active && !waiting && (manualFocus ?? landscape.matches);
+    const immersive = document.documentElement?.dataset?.skin === "immersive";
+    const focused = active && !waiting && (manualFocus ?? (landscape.matches || immersive));
     const focusChanged = active && document.body.classList.contains("match-page") &&
       document.body.classList.contains("match-focus") !== focused;
     document.body.classList.toggle("match-page", active);
@@ -44,7 +45,8 @@ window.PortalMatchLayout = (() => {
     if (match?.pending) notices.push(`${match.pending} move${match.pending === 1 ? "" : "s"} saved on this device · waiting to sync`);
     else if (active && !online) notices.push(match.localMode ? "Offline · playing on this device" : "Offline · moves save on this device");
     if (match?.speedNotice) notices.push(match.speedNotice); // speed matches: time ran out
-    if (match?.status === "over") notices.push($("match-result").textContent || "Match finished");
+    if (match?.joinNotice) notices.push(match.joinNotice); // why this match can't be joined
+    if (match?.status === "over") notices.push($("match-result").textContent || I18n.t("ui.match.finished", {}, "Match finished"));
     $("match-play-notice").textContent = notices.join(" · ");
     $("match-play-notice").hidden = notices.length === 0;
     $("match-play-notice").classList.toggle("error", Boolean(error || match?.conflict));
@@ -78,6 +80,7 @@ window.PortalMatchLayout = (() => {
       render();
     });
     document.addEventListener("i18n-changed", render);
+    document.addEventListener("portal-skin-change", render);
     document.addEventListener("keydown", event => {
       if (event.key !== "Escape" || !match) return;
       if (controlsOpen && match.status !== "waiting_for_players") {
