@@ -153,6 +153,7 @@ def migrate(source, destination, *, source_prefix="", batch_records=None):
                     "experiment_events": "put_experiment_event",
                     "users": "put_user",
                     "game_drafts": "put_game_draft",
+                    "game_test_sessions": "put_game_test_session",
                     "push_subscriptions": "put_push_subscription",
                     "invites": "put_invite",
                     "game_version_errors": "add_game_version_error",

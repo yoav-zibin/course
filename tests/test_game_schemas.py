@@ -232,6 +232,18 @@ def test_random_walk_schema_inference_covers_generated_game_values():
     assert schemas["view"]["type"] == "object"
 
 
+def test_schema_inference_includes_terminal_views():
+    from jsonschema import validate
+
+    code = GAME_CODE.replace("viewFor() { return {}; }",
+                             "viewFor(state) { return {line: state.count ? [0, 1, 2] : null}; }")
+    schemas, report = infer_game_schemas(code, game_id="terminal-view",
+                                         rules=RULES, budget_seconds=0.3, run_seed=123)
+    assert report.passed
+    validate({"line": None}, schemas["view"])
+    validate({"line": [0, 1, 2]}, schemas["view"])
+
+
 def test_schema_inference_keeps_nested_constraints_for_nullable_values():
     schema = _infer_value_schema([None, {"count": 1}])
     assert schema == {

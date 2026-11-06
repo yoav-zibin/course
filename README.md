@@ -1172,6 +1172,103 @@ Undo / Redo, responsive/phone/tablet preview widths, and an expandable JSON stat
 inspector. Undo pauses playback so computers cannot immediately overwrite it.
 Making a new move after undo clears the redo branch. Restart resets the session.
 
+### Game test matrix and recordings
+
+Open **Game test matrix** from Builder, or `/game-test` on servers with the web
+pages enabled. Use its shared account menu to sign in, paste the complete v2 client HTML and
+server JavaScript, enter all supported player counts and select one count to
+test. Start validates the server with `/games/test`, then opens sandboxed frames
+for laptop, tablet and three phone sizes, each in portrait and landscape.
+For a solo count it shows one human; for a larger count it shows one human
+against computers, pass-and-play, and separate human multiplayer views of the
+same emulated match. For three or more seats it also simulates each possible
+mix of at least two humans and at least one computer, with a frame per human.
+Mixed matches are simulation-only and remain unsupported in the real Portal.
+Repeat for each supported count. Restart uses a fresh random seed.
+The example [Take Away client](games/take-away.html) and
+[server logic](games/take-away.server.js) support two or three seats and can be
+copied into the corresponding fields to try the matrix.
+
+A browser-capable agent or a person must actually use the page and play several
+random matches to completion in each scenario. The current model API is
+text-only and cannot operate the page automatically. The prompt requests this
+work when browser tools are available and forbids claiming an unperformed test.
+The optional **Play 3 random matches per scenario** button tries visible enabled
+buttons and records each completed match. It stops with a specific error if a
+selected button is too small, its text contrast is too low or uncertain, a move
+fails, or the game cannot be played with simple button clicks. These synthetic
+clicks are not a browser-capable AI and do not test dragging, typing, canvas,
+real Portal matches or control boundaries; review and test those separately.
+The server tester checks repeatability by calling logic with identical state,
+context, seed and time; applying a move twice to successive states is not an
+equivalent idempotence test. Random walks are bounded and do not by themselves
+establish that every match can reach a terminal state.
+
+The page records elapsed timestamps, clicked positions and measurements, moves,
+emulator results and all player views to an owner-only server recording. Use
+**Save recording now** and wait for confirmation, then select a recording and
+**Replay**. The sticky replay bar stays available while scrolling. Use **View**
+to focus one scenario, Previous/Next to browse, Pause/Resume to inspect, or
+Follow replay to scroll to the active scenario; Show active jumps to it.
+To replay only one scenario, select it under **View**, check **Replay only this
+scenario**, and press Replay. It retains recorded timestamps while skipping gaps
+occupied by other scenarios.
+Replay redraws the recorded state messages and click markers at the
+recorded timing, not a pixel video or a recording of arbitrary animations,
+scrolling or typing. Click diagnostics check the measured target and, when
+computable, text contrast; gradients, translucent backgrounds, control
+boundaries and unclicked controls still require manual accessibility review.
+For a browser-capable agent, sign in with an authorized account, perform the
+tests in the page, press Save and wait for the recording ID confirmation. Reload
+the page, select that ID, and replay it to verify server persistence; report any
+save, size-limit or replay errors instead of claiming success. The generation
+API itself has no browser tool; these instructions do not grant it one.
+Recordings contain source code and potentially private views, so avoid real
+secrets. A recording is limited to 4,000,000 uncompressed bytes, 650,000
+compressed/base64 bytes and 5,000 events; errors and unsaved changes are shown
+on the page. If a recording hits a limit, download a backup before explicitly
+ending the session; previously saved events remain on the server. Local
+file/snapshot stores use their
+usual buffered persistence; query storage commits through Firestore. Account
+deletion removes recordings, and merging accounts transfers their ownership.
+Before a query-mode deployment, generate and deploy the namespace's Firestore
+indexes with `python -m game_platform.scaling_indexes --namespace NAMESPACE`
+and verify the private recording test against an isolated Firestore emulator.
+The `game_test_sessions.owner_user_id` index is needed to list recordings.
+Do not treat a local file-store test as proof that production Firestore is ready.
+
+#### Outstanding game-test work
+
+- [ ] Run the private recording create, update, conflict, ownership, restart
+  and replay checks against an isolated Firestore emulator in query mode.
+  Local file-store and browser tests do not verify Firestore persistence.
+- [ ] Before an authorized query-mode deployment, generate and deploy the
+  target namespace's updated indexes, including
+  `game_test_sessions.owner_user_id`, and verify recording save, reload,
+  privacy and replay in an isolated deployment. Confirm `/game-test` is
+  available in the target configuration; the page and static assets currently
+  require `debug_tools`. Do not change production configuration or deploy
+  without authorization.
+- [ ] Integrate or arrange a browser-capable agent with the game-generation
+  workflow, then verify it can sign in with an authorized account, test each
+  supported player count and displayed scenario, complete several random
+  matches, save, reload and replay the recording, and report failures and
+  untested cases. The text-only generation API and synthetic random-button
+  runner do not provide this integration.
+- [ ] Exercise the actual Portal match UI and networking across the intended
+  device and mode matrix; the current matrix uses emulator frames. Keep mixed
+  human/computer rosters simulation-only unless the platform's separate
+  production restriction is explicitly changed.
+- [ ] Record and replay intermediate computer transitions and assess any
+  additional visual fidelity required; current replay redraws recorded states
+  and click markers, not animations, scrolling or typing.
+- [ ] Expand or supplement accessibility review to cover unclicked controls,
+  uncertain backgrounds and non-text control boundaries, and verify any
+  interactions the button-only runner cannot perform.
+- [ ] Review and handle previously collected logs according to the deployment's
+  retention policy: older request logs may contain private test recordings.
+  The updated logging code omits recording and test-emulator request and
+  response bodies for new requests.
 
 Practice sessions have a visible **End practice** control and can be resumed without
 creating another match. **Remove practice from list** archives the local session.

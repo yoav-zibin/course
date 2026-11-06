@@ -50,6 +50,7 @@ def rollback_snapshot(store, *, byte_limit=32 * 1024**2, record_limit=5000):
         "game_versions",
         "matches",
         "game_drafts",
+        "game_test_sessions",
         "agent_conversations",
         "push_subscriptions",
         "invites",

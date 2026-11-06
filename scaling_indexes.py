@@ -59,6 +59,7 @@ def index_config(namespace):
             "visible_to": "array",
         },
         "game_drafts": {"owner_user_id": "order"},
+        "game_test_sessions": {"owner_user_id": "order"},
         "push_subscriptions": {"user_id": "order"},
         "invites": {
             "created_by_user_id": "order",

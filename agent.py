@@ -139,6 +139,24 @@ server code for an old game too). When a change only touches presentation, \
 return the client code with "server_code": null and "game_schemas": null.
 
 Rules you must follow in the code you write:
+- Make every clickable or tappable target at least 30 by 30 CSS pixels at every \
+  supported viewport size, including phone portrait and landscape. Keep controls \
+  visible and usable without overlapping. Use at least 4.5:1 contrast for normal \
+  text, 3:1 for large text and 3:1 for the visual boundaries of controls and \
+  other essential non-text indicators against adjacent colors.
+- Design for laptop, tablet and phone sizes in portrait and landscape, and for \
+  the supported solo, pass-and-play and human multiplayer modes. Test several \
+  random matches through to completion in /game-test when a browser testing tool \
+  is available: enter the client and server code, exercise every displayed \
+  scenario, inspect recorded click sizes and contrast, save the recording, \
+  and reopen it to verify the server retained the events; \
+  do not claim a browser test was performed if you cannot actually run one. \
+  The matrix also offers mixed human/computer simulations; test them when \
+  shown, but do not describe them as supported Portal matches.
+- Keep server functions deterministic: identical arguments, context and random \
+  seed must produce identical results on repeated calls. This is not the same \
+  as applying a move twice to the resulting state; do not make legitimate moves \
+  idempotent by suppressing them.
 - Choose allowed player counts that match the requested game and its code. In Auto \
   mode, the editor's current counts are context, not a constraint: a new game's \
   default [2] must not force a solo puzzle into multiplayer. Tower of Hanoi and \

@@ -60,7 +60,7 @@ _CHUNK_BYTES: Final = 200_000
 _COMPRESS_MIN_BYTES: Final = 1_024
 _COMPRESS_MIN_SAVING: Final = 0.10
 # Firestore's stored representation evolves independently of exported JSON files.
-_FIRESTORE_FORMAT_VERSION: Final = 11
+_FIRESTORE_FORMAT_VERSION: Final = 12
 # Firestore batches hold at most 500 writes; keep requests well under 10 MiB.
 _MAX_BATCH_WRITES: Final = 500
 _MAX_BATCH_BYTES: Final = 8_000_000
@@ -89,6 +89,7 @@ _KINDS: Final = (
     _Kind(field="deleted_game_ids", key=lambda game_id: game_id),
     _Kind(field="matches", key=lambda match: match.id, items_field="moves"),
     _Kind(field="game_drafts", key=lambda draft: draft.id),
+    _Kind(field="game_test_sessions", key=lambda session: session.id),
     _Kind(field="unpublished_game_ids", key=lambda game_id: game_id),
     _Kind(
         field="agent_conversations",
@@ -141,6 +142,7 @@ def _sorted_like_in_memory_store(snapshot_fields: dict[str, list[Any]]) -> None:
         "users",
         "matches",
         "game_drafts",
+        "game_test_sessions",
         "push_subscriptions",
         "experiments",
         "feedback",

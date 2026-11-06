@@ -17,6 +17,8 @@ const draftName=d=>d.builder_workflow?.artifacts?.identity?.value?.display_name 
 let editName=false;
 if(window.matchMedia('(max-width:850px)').matches)$('library').open=false;
 let draft=null, selected=0, working=false, poll=null, renderedRevision=null;
+const matrixLink=el('a',{id:'game-test-matrix',href:'/game-test',target:'_blank',rel:'noopener',textContent:'Open game test matrix',hidden:true});
+$('emulator').after(matrixLink);
 const me=()=>Auth.current();
 const request=(method,path,body)=>apiRequest(method,path,{user:me(),...(body?{body}:{})});
 function error(e){showPageError(e.message||String(e));}
@@ -212,6 +214,8 @@ function render(){
  $('emulator').hidden=!playable;
  if(playable)$('emulator').href='/static/builder.html'+location.search+'#'+encodeURIComponent(draft.id);
  else $('emulator').removeAttribute('href');
+ matrixLink.hidden=!playable;
+ if(playable)matrixLink.href='/game-test?draft='+encodeURIComponent(draft.id);
  $('build-status').textContent=f.job?`${f.job.stage}${f.job.error?' — '+f.job.error:''}`:$('build-error').textContent?'':I18n.t("ui.guided.ready_to_build",{},"All specifications approved. Ready to build.");
  $('build-log').textContent=(f.job?.log||[]).join('\n');
  const shots=f.job?.screenshots||[];

@@ -67,6 +67,8 @@ from game_platform.schemas import (
     EmulatorActRequest,
     EmulatorOut,
     EmulatorResetRequest,
+    MatrixEmulatorActRequest,
+    MatrixEmulatorResetRequest,
     GameOut,
     GameSchemas,
     GameSummaryOut,
@@ -766,6 +768,33 @@ def emulator_act(
     )
 
 
+@router.post("/game-test-emulator/reset")
+def matrix_emulator_reset(
+    platform: Platform, caller_id: CallerId, body: MatrixEmulatorResetRequest
+) -> EmulatorOut:
+    """Simulate test rosters, including combinations unavailable in real matches."""
+    game_schemas = body.game_schemas.model_dump()
+    result = platform.emulator_reset(
+        server_code=body.server_code, game_schemas=game_schemas,
+        players=[player.model_dump() for player in body.players], seed=body.seed,
+    )
+    result["game_schemas"] = game_schemas
+    return EmulatorOut.model_validate(result)
+
+
+@router.post("/game-test-emulator/act")
+def matrix_emulator_act(
+    platform: Platform, caller_id: CallerId, body: MatrixEmulatorActRequest
+) -> EmulatorOut:
+    """Apply a move in a test-only roster; no real match is created."""
+    return EmulatorOut.model_validate(platform.emulator_act(
+        server_code=body.server_code, game_schemas=body.game_schemas.model_dump(),
+        players=[player.model_dump() for player in body.players], seed=body.seed,
+        state=body.state, turn=body.turn, move_count=body.move_count,
+        player_id=body.player_id, move=body.move,
+    ))
+
+
 @router.get("/games")
 def list_games(
     platform: Platform,
@@ -1422,6 +1451,11 @@ def new_builder_page() -> FileResponse:
 @debug_router.get("/builder")
 def builder() -> FileResponse:
     return FileResponse(_STATIC_DIR / "builder.html")
+
+
+@debug_router.get("/game-test")
+def game_test_page() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "game-test.html")
 
 
 @debug_router.get("/portal")
@@ -2404,6 +2438,8 @@ def create_app(
     app.include_router(make_router(_get_platform, _get_caller_id))
     from game_platform.agent_import import make_router as make_import_router
     app.include_router(make_import_router(_get_platform, _get_caller_id))
+    from game_platform.test_session_api import make_router as make_test_session_router
+    app.include_router(make_test_session_router(_get_platform, _get_caller_id))
     app.include_router(router)
     from game_platform.scaling_api import install as install_scaling_api
     install_scaling_api(app, debug_tools=debug_tools)

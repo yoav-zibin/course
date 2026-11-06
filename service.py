@@ -1588,6 +1588,8 @@ class GamePlatform:
                 )
         for draft in self._store.list_game_drafts(owner_user_id=from_user_id):
             self._store.put_game_draft(replace(draft, owner_user_id=into_user_id))
+        for session in self._store.list_game_test_sessions(owner_user_id=from_user_id):
+            self._store.put_game_test_session(replace(session, owner_user_id=into_user_id))
         for match in self._store.list_all_matches():
             updated = match
             if match.owner_user_id == from_user_id:
@@ -5063,6 +5065,8 @@ class GamePlatform:
                     self.leave_match(caller_id=user_id, match_id=match.id)
             for draft in self._store.list_game_drafts(owner_user_id=user_id):
                 self._store.delete_game_draft(draft.id)
+            for session in self._store.list_game_test_sessions(owner_user_id=user_id):
+                self._store.delete_game_test_session(session.id)
             for subscription in self._store.list_push_subscriptions(user_id=user_id):
                 self._store.delete_push_subscription(subscription.id)
             for invite in self._store.list_invites(created_by_user_id=user_id):

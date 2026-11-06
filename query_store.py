@@ -26,6 +26,7 @@ from game_platform.models import (
     AgentConversationEntry,
     Game,
     GameDraft,
+    GameTestSession,
     GameTestSeeds,
     GameVersionError,
     Invite,
@@ -52,6 +53,7 @@ TYPES = {
     "game_versions": Game,
     "games": Game,
     "game_drafts": GameDraft,
+    "game_test_sessions": GameTestSession,
     "matches": Match,
     "invites": Invite,
     "push_subscriptions": WebPushSubscription,
@@ -901,6 +903,18 @@ class QueryStore:
 
     def delete_user(self, user_id):
         self._delete("users", user_id)
+
+    def put_game_test_session(self, session):
+        self._put("game_test_sessions", session.id, session)
+
+    def get_game_test_session(self, session_id):
+        return self._get("game_test_sessions", session_id)
+
+    def list_game_test_sessions(self, *, owner_user_id):
+        return self._list("game_test_sessions", [("owner_user_id", "==", owner_user_id)])
+
+    def delete_game_test_session(self, session_id):
+        self._delete("game_test_sessions", session_id)
 
     def put_game_draft(self, draft):
         self._put("game_drafts", draft.id, draft)

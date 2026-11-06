@@ -174,6 +174,18 @@ class Game:
 
 
 @dataclass(frozen=True, kw_only=True)
+class GameTestSession:
+    """Private, bounded recording of a game test."""
+
+    id: str
+    owner_user_id: str
+    created_at: dt.datetime
+    updated_at: dt.datetime
+    revision: int
+    data: str
+
+
+@dataclass(frozen=True, kw_only=True)
 class GameDraft:
     """Owner-only working copy. Its id becomes the public game id on publication."""
 

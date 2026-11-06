@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Take Away</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 16px; font: 16px system-ui, sans-serif; color: #17213a; background: #f7f8fb; }
+    main { max-width: 420px; margin: auto; }
+    h1 { margin: 0 0 8px; font-size: 24px; }
+    p { margin: 8px 0; }
+    #stones { min-height: 48px; font-size: 28px; letter-spacing: 3px; overflow-wrap: anywhere; }
+    .moves { display: flex; flex-wrap: wrap; gap: 8px; }
+    button { min-width: 64px; min-height: 48px; padding: 8px; border: 2px solid #163b72; border-radius: 6px; background: #fff; color: #163b72; font: inherit; font-weight: 700; }
+    button:disabled { border-color: #777; color: #555; background: #eee; }
+    button:focus-visible { outline: 3px solid #17213a; outline-offset: 3px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Take Away</h1>
+  <p id="instructions">Take 1, 2, or 3 stones. Whoever takes the last stone wins.</p>
+  <p id="status" role="status">Waiting for the match.</p>
+  <div id="stones"></div>
+  <div class="moves">
+    <button type="button" data-take="1" disabled>Take 1</button>
+    <button type="button" data-take="2" disabled>Take 2</button>
+    <button type="button" data-take="3" disabled>Take 3</button>
+  </div>
+</main>
+<script type="application/json" id="i18n-strings">
+{
+  "title": "Take Away",
+  "instructions": "Take 1, 2, or 3 stones. Whoever takes the last stone wins.",
+  "waiting": "Waiting for the match.",
+  "stones": "Stones remaining",
+  "take": "Take {count}",
+  "wins": "{name} wins!",
+  "your_turn": "Your turn. {count} stones remain.",
+  "waiting_for": "Waiting for {name}. {count} stones remain."
+}
+</script>
+<script>
+"use strict";
+const sourceStrings = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = sourceStrings;
+const t = (key, values = {}) => (strings[key] || sourceStrings[key]).replace(
+  /\{(\w+)\}/g, (match, name) => values[name] ?? match
+);
+document.getElementById("status").textContent = t("waiting");
+let latest = null;
+let sent = false;
+const buttons = [...document.querySelectorAll("button[data-take]")];
+addEventListener("message", event => {
+  if (event.source !== parent || event.data?.type !== "state_changed") return;
+  latest = event.data;
+  sent = false;
+  strings = {...sourceStrings, ...(latest.strings || {})};
+  if (latest.locale) document.documentElement.lang = latest.locale;
+  if (latest.direction) document.documentElement.dir = latest.direction;
+  document.querySelector("h1").textContent = t("title");
+  document.getElementById("instructions").textContent = t("instructions");
+  document.getElementById("stones").setAttribute("aria-label", t("stones"));
+  for (const button of buttons) button.textContent = t("take", {count:button.dataset.take});
+  const view = latest.view;
+  if (!view) return;
+  document.getElementById("stones").textContent = "● ".repeat(view.remaining);
+  const name = id => latest.players.find(player => player.player_id === id)?.name || id;
+  const statusText = latest.status === "over"
+    ? t("wins", {name:name(view.winner)})
+    : latest.acting_for_player_index !== null
+      ? t("your_turn", {count:view.remaining})
+      : t("waiting_for", {name:latest.players[latest.turn_of_player_indices[0]].name, count:view.remaining});
+  document.getElementById("status").textContent = statusText;
+  for (const button of buttons)
+    button.disabled = latest.status !== "ongoing" || latest.acting_for_player_index === null ||
+      Number(button.dataset.take) > view.remaining;
+});
+for (const button of buttons) button.addEventListener("click", () => {
+  if (sent || button.disabled) return;
+  sent = true;
+  for (const move of buttons) move.disabled = true;
+  parent.postMessage({type:"make_move", move:{take:Number(button.dataset.take)}}, "*");
+});
+</script>
+</body>
+</html>

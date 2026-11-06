@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from game_platform.json_file_store import JsonFileStore
+from game_platform.json_file_store import FORMAT_VERSION, JsonFileStore
 from game_platform.tests.helpers import Api
 
 
@@ -171,7 +171,7 @@ def test_a_version_1_file_is_migrated_to_turn_sets(tmp_path: Path) -> None:
 
     # Rewrite the file in the old layout: single-index turns, format version 1.
     file = json.loads(path.read_text())
-    assert file["format_version"] == 13
+    assert file["format_version"] == FORMAT_VERSION
     file["format_version"] = 1
     match = file["data"]["matches"][0]
     turn = match.pop("turn_of_player_indices")
@@ -194,10 +194,9 @@ def test_an_unreadable_file_is_rejected_rather_than_overwritten(tmp_path: Path) 
     with pytest.raises(ValidationError):
         JsonFileStore(path)
 
-    path.write_text(
-        '{"format_version": 14, "data": {"users": [], "game_versions": [], '
-        '"deleted_game_ids": [], "matches": []}}'
-    )
+    path.write_text(json.dumps({"format_version": FORMAT_VERSION + 1,
+                                "data": {"users": [], "game_versions": [],
+                                         "deleted_game_ids": [], "matches": []}}))
     with pytest.raises(ValueError) as error:
         JsonFileStore(path)
-    assert str(error.value) == f"{path} has format version 14, expected 13"
+    assert str(error.value) == f"{path} has format version {FORMAT_VERSION + 1}, expected {FORMAT_VERSION}"
