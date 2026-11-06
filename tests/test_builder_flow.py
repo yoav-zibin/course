@@ -345,7 +345,7 @@ def test_tutorial_validation_and_language_registry():
 def test_guided_client_uses_platform_translation_api():
     from game_platform import game_text
     code=fixture()['code']
-    assert game_text.extract_strings(code)=={'title':'Count to three','add':'Add one'}
+    assert game_text.extract_strings(code)=={'title':'Count to three','add':'Add one','server_add_one':'Add one'}
     assert game_text.lint(code)==[]
     assert 'applyLocale(m)' in code
 
