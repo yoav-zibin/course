@@ -1068,5 +1068,8 @@
   "ui.game_test.random_complete": "Random play complete: {completed} matches finished and recorded. Review click and contrast warnings.",
   "ui.game_test.random_failed": "Random play incomplete after {completed} matches: {message}",
   "ui.game_test.starting_scenarios": "Recording {id}: starting {count} scenarios…",
-  "ui.game_test.replay_progress": "{seconds}s · event {index}/{total} · {title}"
+  "ui.game_test.replay_progress": "{seconds}s · event {index}/{total} · {title}",
+  "ui.match.wait_then_start": "दूसरों को शामिल होने के लिए आमंत्रित करें, फिर शुरू करें।",
+  "ui.offline.err_server_unreachable": "सर्वर से संपर्क नहीं हो सका और यह डेटा अभी इस डिवाइस पर सहेजा नहीं गया है। कृपया फिर से कोशिश करें।",
+  "ui.portal.hint_invite_friends": "एक मैच बनाएँ, फिर दोस्तों को शामिल होने के लिए आमंत्रित करें।"
 }

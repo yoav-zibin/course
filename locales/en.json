@@ -1068,5 +1068,8 @@
   "ui.game_test.random_complete": "Random play complete: {completed} matches finished and recorded. Review click and contrast warnings.",
   "ui.game_test.random_failed": "Random play incomplete after {completed} matches: {message}",
   "ui.game_test.starting_scenarios": "Recording {id}: starting {count} scenarios…",
-  "ui.game_test.replay_progress": "{seconds}s · event {index}/{total} · {title}"
+  "ui.game_test.replay_progress": "{seconds}s · event {index}/{total} · {title}",
+  "ui.match.wait_then_start": "Invite others to join, then start.",
+  "ui.offline.err_server_unreachable": "Couldn't reach the server, and this data isn't saved on this device yet. Please try again.",
+  "ui.portal.hint_invite_friends": "Create a match, then invite friends to join."
 }

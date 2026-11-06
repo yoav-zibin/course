@@ -1068,5 +1068,8 @@
   "ui.game_test.random_complete": "Random play complete: {completed} matches finished and recorded. Review click and contrast warnings.",
   "ui.game_test.random_failed": "Random play incomplete after {completed} matches: {message}",
   "ui.game_test.starting_scenarios": "Recording {id}: starting {count} scenarios…",
-  "ui.game_test.replay_progress": "{seconds}s · event {index}/{total} · {title}"
+  "ui.game_test.replay_progress": "{seconds}s · event {index}/{total} · {title}",
+  "ui.match.wait_then_start": "ادعُ الآخرين للانضمام، ثم ابدأ.",
+  "ui.offline.err_server_unreachable": "تعذّر الاتصال بالخادم، وهذه البيانات لم تُحفظ على هذا الجهاز بعد. يُرجى المحاولة مرة أخرى.",
+  "ui.portal.hint_invite_friends": "أنشئ مباراة، ثم ادعُ أصدقاءك للانضمام."
 }

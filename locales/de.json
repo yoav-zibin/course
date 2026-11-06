@@ -1068,5 +1068,8 @@
   "ui.game_test.random_complete": "Random play complete: {completed} matches finished and recorded. Review click and contrast warnings.",
   "ui.game_test.random_failed": "Random play incomplete after {completed} matches: {message}",
   "ui.game_test.starting_scenarios": "Recording {id}: starting {count} scenarios…",
-  "ui.game_test.replay_progress": "{seconds}s · event {index}/{total} · {title}"
+  "ui.game_test.replay_progress": "{seconds}s · event {index}/{total} · {title}",
+  "ui.match.wait_then_start": "Lade andere zum Mitspielen ein und starte dann.",
+  "ui.offline.err_server_unreachable": "Der Server ist nicht erreichbar und diese Daten sind noch nicht auf diesem Gerät gespeichert. Bitte versuche es erneut.",
+  "ui.portal.hint_invite_friends": "Erstelle ein Spiel und lade dann Freunde zum Mitspielen ein."
 }

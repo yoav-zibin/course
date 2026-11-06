@@ -1068,5 +1068,8 @@
   "ui.game_test.random_complete": "Random play complete: {completed} matches finished and recorded. Review click and contrast warnings.",
   "ui.game_test.random_failed": "Random play incomplete after {completed} matches: {message}",
   "ui.game_test.starting_scenarios": "Recording {id}: starting {count} scenarios…",
-  "ui.game_test.replay_progress": "{seconds}s · event {index}/{total} · {title}"
+  "ui.game_test.replay_progress": "{seconds}s · event {index}/{total} · {title}",
+  "ui.match.wait_then_start": "邀请其他人加入，然后开始。",
+  "ui.offline.err_server_unreachable": "无法连接服务器，而且此数据尚未保存在此设备上。请重试。",
+  "ui.portal.hint_invite_friends": "创建对局，然后邀请朋友加入。"
 }
