@@ -6,10 +6,19 @@ regenerates, up to the configured fix attempts.
 
 import json
 
+import pytest
+
 from game_platform.agent import build_prompt_messages, chat_with_agent
 from game_platform.game_testing import GameTestReport, TestFailure
 from game_platform.model_api import ChatResult, ModelApiClient
 from game_platform.schemas import AgentChatRequest
+
+
+@pytest.fixture(autouse=True)
+def _texts_are_not_under_test(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests use placeholder HTML; the translation check has its own tests
+    (test_translation_required.py)."""
+    monkeypatch.setattr("game_platform.agent.game_text.lint", lambda code: [])
 
 
 def _request(**overrides) -> AgentChatRequest:

@@ -45,6 +45,7 @@
   "error.game_schemas_required": "game_schemas é obrigatório quando server_code é fornecido",
   "error.game_schemas_requires_server": "game_schemas requer server_code",
   "error.game_schemas_required_for_server_code": "game_schemas é obrigatório para server_code",
+  "error.game_texts_not_translatable": "os textos do jogo não podem ser traduzidos: {problems}",
   "error.refactor_job_running": "Já há um trabalho de refatoração em execução; aguarde o término.",
   "error.refactor_job_not_found": "Trabalho de refatoração não encontrado.",
   "error.match_not_ongoing": "a partida não está em andamento",

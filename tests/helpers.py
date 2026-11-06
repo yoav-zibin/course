@@ -57,8 +57,11 @@ class Api:
         push_config: PushConfig | None = None,
         max_push_subscriptions_per_user: int = 10,
         computer_move_delay_seconds: float = 0,
+        require_game_strings: bool = False,
+        master_password: str | None = None,
     ) -> None:
         platform = GamePlatform(
+            require_game_strings=require_game_strings,
             store=store,
             clock=FakeClock(),
             push_notifier=push_notifier,
@@ -72,8 +75,10 @@ class Api:
                 sms_sender=sms_sender,
                 email_sender=email_sender,
                 push_config=push_config,
+                master_password=master_password,
             )
         )
+        self.platform = platform
         self._names_by_user_id: dict[str, str] = {}
         self.passwords_by_user_id: dict[str, str] = {}
 

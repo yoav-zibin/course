@@ -45,6 +45,7 @@
   "error.game_schemas_required": "game_schemas est requis lorsque server_code est fourni",
   "error.game_schemas_requires_server": "game_schemas nécessite server_code",
   "error.game_schemas_required_for_server_code": "game_schemas est requis pour server_code",
+  "error.game_texts_not_translatable": "les textes du jeu ne peuvent pas être traduits : {problems}",
   "error.refactor_job_running": "Une tâche de refactorisation est déjà en cours ; attendez qu'elle se termine.",
   "error.refactor_job_not_found": "Aucune tâche de refactorisation de ce nom.",
   "error.match_not_ongoing": "la partie n'est pas en cours",

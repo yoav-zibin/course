@@ -172,6 +172,7 @@ def main() -> None:
             computer_move_delay_seconds=config.computer_move_delay_seconds,
             translator=make_translator(config),
             translation_daily_character_limit=config.translation.daily_character_limit,
+            require_game_strings=config.translation.require_strings,
         )
         if args.purge_example_data:
             purge_example_data(platform)
