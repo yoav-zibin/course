@@ -76,7 +76,7 @@ def test_updates_through_publish_gate_and_is_idempotent(patch_case, monkeypatch)
     assert len(calls) == 1
 
 
-@pytest.mark.parametrize("batch", [2, 3])
+@pytest.mark.parametrize("batch", [2, 3, 4])
 def test_later_batch_uses_its_own_guarded_manifest(patch_case, monkeypatch, batch):
     platform, store, original, client, server, directory, _ = patch_case
     monkeypatch.setattr(migrations, f"BATCH{batch}_DIRECTORY", directory)
@@ -143,11 +143,12 @@ def test_missing_game_is_skipped(patch_case):
     assert migrations.apply_audit_batch1(platform)[0]["status"] == "skipped_missing_or_unpublished"
 
 
-@pytest.mark.parametrize("batch", [1, 2, 3])
+@pytest.mark.parametrize("batch", [1, 2, 3, 4])
 def test_gate_rejection_keeps_both_code_parts_and_continues(patch_case, monkeypatch, batch):
     platform, store, original, _, _, directory, entry = patch_case
     monkeypatch.setattr(migrations, "BATCH2_DIRECTORY", directory)
     monkeypatch.setattr(migrations, "BATCH3_DIRECTORY", directory)
+    monkeypatch.setattr(migrations, "BATCH4_DIRECTORY", directory)
     following = replace(original, id="following-game")
     _seed_versions(store, following)
     (directory / "bad-server.js").write_text("const game = {newMatch(){ throw new Error('rejected candidate'); }};")
