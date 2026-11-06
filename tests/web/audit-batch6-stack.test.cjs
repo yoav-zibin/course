@@ -1,6 +1,7 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+const {pageScriptOf}=require('./page-helper.cjs');
 const ROOT=path.join(__dirname,'../../games/audit-batch6');
 function setup(n=2){
  const nodes=new Map(),sent=[];let receive;
@@ -8,7 +9,7 @@ function setup(n=2){
  const document={getElementById(id){if(!nodes.has(id))nodes.set(id,new El());return nodes.get(id)},createElement:()=>new El()};
  const parent={postMessage:m=>sent.push(JSON.parse(JSON.stringify(m)))};
  const sandbox={document,parent,addEventListener:(_,f)=>receive=f};vm.createContext(sandbox);
- vm.runInContext(fs.readFileSync(path.join(ROOT,'stack-duel.html'),'utf8').match(/<script[^>]*>([\s\S]*?)<\/script>/)[1],sandbox);
+ vm.runInContext(pageScriptOf(path.join(ROOT,'stack-duel.html'),document),sandbox);
  const server=vm.createContext({InvalidMove:class InvalidMove extends Error{}});
  vm.runInContext(fs.readFileSync(path.join(ROOT,'stack-duel.server.js'),'utf8')+';globalThis.g=game',server);
  const game=server.g,ctx={players:Array.from({length:n},(_,i)=>({id:'p'+i,kind:'human',max_loss:10})),pot:n*10,move_count:0};
@@ -45,4 +46,14 @@ test('a genuine no-placement game ending retains tie and unique-winner rendering
 });
 test('ordinary direct-column controls still submit a move accepted by the actual game',()=>{
  const t=setup();t.message(0);assert.deepEqual(t.enabled(),[0,1,2,3,4,5]);t.nodes.get('cols').children[0].onclick();assert.deepEqual(t.sent[0].move,{rot:0,col:0});assert.doesNotThrow(()=>t.advance(t.sent[0].move));
+});
+test('the page shows the translations the platform sends, and English again without them',()=>{
+ const t=setup();
+ t.message(0,{locale:'es',direction:'ltr',strings:{saving:'Guardando…',scores_total:'{scores} · líneas en total {lines}',score_line:'{name}: {lines} líneas',rotate:'↻ Girar',current_piece:'Pieza actual:'}});
+ assert.equal(t.nodes.get('rotate').textContent,'↻ Girar');
+ assert.equal(t.nodes.get('curLabel').textContent,'Pieza actual:');
+ assert.match(t.nodes.get('scores').textContent,/P0: 0 líneas · P1: 0 líneas · líneas en total 0/);
+ t.message(0,{locale:'en'});
+ assert.equal(t.nodes.get('rotate').textContent,'↻ Rotate');
+ assert.match(t.nodes.get('scores').textContent,/P0: 0 lines · P1: 0 lines · total lines 0/);
 });

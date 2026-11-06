@@ -69,7 +69,7 @@ def test_an_unknown_inviter_is_ignored_and_never_blocks_signing_up(api: Api) -> 
 
 def test_an_invite_from_a_merged_away_account_credits_the_survivor(api: Api) -> None:
     ann, ann_old = api.new_user("ann"), api.new_user("ann (old)")
-    api.ok("POST", f"/users/{ann_old}/merge", json={"into_user_id": ann}, as_user=ann_old)
+    api.ok("POST", f"/users/{ann_old}/merge", json={"into_user_id": ann, "into_password": api.passwords_by_user_id[ann]}, as_user=ann_old)
     invited(api, "bob", by=ann_old)
     assert rows_by_name(api)["bob"]["invited_by_user_id"] == ann
 
@@ -173,7 +173,7 @@ def test_merging_keeps_the_invite_credit(api: Api) -> None:
     invited(api, "cy", by=bob_guest)
     # Bob merges his old guest account into his main one.
     api.ok(
-        "POST", f"/users/{bob_guest}/merge", json={"into_user_id": bob}, as_user=bob_guest
+        "POST", f"/users/{bob_guest}/merge", json={"into_user_id": bob, "into_password": api.passwords_by_user_id[bob]}, as_user=bob_guest
     )
     # The merged-away account is gone from the tree; the survivor inherits its
     # inviter and the people it invited.
@@ -192,7 +192,7 @@ def test_a_merge_never_makes_someone_their_own_inviter(api: Api) -> None:
     bob = invited(api, "bob", by=ann_guest)
     ann = invited(api, "ann", by=bob)
     api.ok(
-        "POST", f"/users/{ann_guest}/merge", json={"into_user_id": ann}, as_user=ann_guest
+        "POST", f"/users/{ann_guest}/merge", json={"into_user_id": ann, "into_password": api.passwords_by_user_id[ann]}, as_user=ann_guest
     )
     result = counts(api)
     assert set(result) == {"ann", "bob"}

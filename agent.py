@@ -487,7 +487,7 @@ def chat_with_agent(
         if response.code:
             # The texts must be translatable: a game without a passing string table is a
             # failure like a failing test, fixed by the model within the same retries.
-            problems = game_text.lint(response.code)
+            problems = game_text.lint(response.code, response.server_code)
             if problems:
                 last_error = AgentError(
                     "The game's client code cannot be translated: " + "; ".join(problems[:5])

@@ -1,4 +1,122 @@
-<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#07120e;color:#fff;margin:0}#w{max-width:1100px;margin:auto;padding:8px}.pill{background:#12291f;border:1px solid #2a5a48;border-radius:20px;padding:4px 12px;font-size:13px}#topbar{display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap}#felt{position:relative;width:100%;aspect-ratio:16/9;background:radial-gradient(ellipse at 50% 45%,#2a8a62 0%,#165c3e 45%,#0c3d29 75%,#082a1d 100%);border-radius:24px;border:8px solid #4a2c17;overflow:hidden;min-height:420px}.center{position:absolute;left:50%;top:46%;transform:translate(-50%,-58%);text-align:center;pointer-events:none}.logo{width:92px;height:92px;margin:auto;border-radius:50%;background:radial-gradient(circle,#134a36,#0a2c1f);border:3px solid rgba(255,215,0,.6);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:11px}.seatbox{position:absolute;text-align:center;width:230px;margin-left:-115px}.seatbox.bottom{left:50%;bottom:8px}.seatbox.top{left:50%;top:8px}.seatbox.left{left:4px;top:42%;transform:translateY(-50%);width:160px;margin:0}.seatbox.right{right:4px;top:42%;transform:translateY(-50%);width:160px;margin:0}.avatar{display:inline-flex;gap:6px;background:rgba(0,0,0,.55);border:2px solid rgba(255,255,255,.25);border-radius:20px;padding:4px 10px;font-size:13px;font-weight:700}.avatar.turn{box-shadow:0 0 12px gold;border-color:gold}.backs{display:flex;justify-content:center;margin-top:4px}.bk{width:18px;height:26px;background:linear-gradient(135deg,#b3122e,#5c0a1c);border:1px solid #fff;border-radius:3px;margin-left:-10px}.bk:first-child{margin:0}.plays{min-height:34px;display:flex;gap:3px;justify-content:center;flex-wrap:wrap;margin-top:4px;max-width:240px}.pc{background:#fff;color:#111;border-radius:5px;padding:2px 5px;font-size:12px;font-weight:800}.pc.red{color:#c00}.pc.pass{background:#222;color:#aaa}.pc.wild{background:#ffe9a8}#handzone{background:#0e2a20;border-radius:12px;padding:8px 6px 14px;margin-top:8px;text-align:center;border:1px solid #2a5a48}#actionbar{display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap;background:rgba(0,0,0,.45);border:1px solid #2a5a48;border-radius:12px;padding:8px;margin-bottom:6px}.btn{background:gold;border:0;border-radius:10px;padding:12px 20px;font-weight:900;cursor:pointer;font-size:16px}.btn.sug{background:#7fd0ff}.btn:disabled{opacity:.35}.small{font-size:12px;opacity:.9}#fan{display:flex;align-items:flex-end;overflow-x:auto;padding:30px 12px 14px;min-height:140px;justify-content:flex-start}.c{width:56px;height:82px;background:linear-gradient(180deg,#fff,#e8e8e8);border-radius:9px;color:#111;flex:0 0 auto;margin-left:-14px;position:relative;cursor:pointer;border:2px solid #bbb;text-align:center;user-select:none;box-shadow:0 2px 4px rgba(0,0,0,.5)}.c:first-child{margin-left:0}.c.red{color:#c00}.c.sel{transform:translateY(-22px);border-color:gold;box-shadow:0 0 14px gold}.c.sug{border-color:#7fd0ff;box-shadow:0 0 10px #7fd0ff}.c.heartwild{background:linear-gradient(180deg,#fff6c8,#ffe9a8);border-color:orange}.c .r{font-weight:900;font-size:16px}.c .s{font-size:19px}.c .wl{position:absolute;bottom:3px;left:0;right:0;font-size:9px;font-weight:900;color:#a60}</style></head><body><div id=w><div id=topbar><div class=pill>Guandan 0+2 vs 1+3</div><div class=pill id=lv></div><div class=pill id=mode></div></div><div id=felt><div class=center><div class=logo><div>TRUMP</div><div id=ctr style=font-size:22px;font-weight:900;color:gold></div><div id=ctr2></div></div></div><div id=seats></div></div><div id=handzone><div id=actionbar><button class=btn id=bPlay>Play</button><button class=btn id=bPass>Pass</button><button class="btn sug" id=bSug>Suggest</button><span class=small id=hint2 style=width:100%></span></div><div class=small id=hint></div><div id=fan></div></div></div><script>let S=null,PL=[],MY=null,ACT=null,STATUS='ongoing',sentFor=-1;const SU='♠♥♣♦',RS={11:'J',12:'Q',13:'K',14:'A',15:'SJ',16:'BJ'};function rn(r){return RS[r]||r}function isWild(c,tr){return c.r===tr&&c.s===1}function isTrump(c,tr){return c.r>=15||c.r===tr}function pw1(c,tr){if(c.r===16)return 1000;if(c.r===15)return 900;if(c.r===tr)return 800;return c.r}function sortH(h,tr){h.sort((a,b)=>pw1(b,tr)-pw1(a,tr)||a.r-b.r||a.s-b.s)}function dec(code){return{r:code>>3,s:code&7}}
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#07120e;color:#fff;margin:0}#w{max-width:1100px;margin:auto;padding:8px}.pill{background:#12291f;border:1px solid #2a5a48;border-radius:20px;padding:4px 12px;font-size:13px}#topbar{display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap}#felt{position:relative;width:100%;aspect-ratio:16/9;background:radial-gradient(ellipse at 50% 45%,#2a8a62 0%,#165c3e 45%,#0c3d29 75%,#082a1d 100%);border-radius:24px;border:8px solid #4a2c17;overflow:hidden;min-height:420px}.center{position:absolute;left:50%;top:46%;transform:translate(-50%,-58%);text-align:center;pointer-events:none}.logo{width:92px;height:92px;margin:auto;border-radius:50%;background:radial-gradient(circle,#134a36,#0a2c1f);border:3px solid rgba(255,215,0,.6);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:11px}.seatbox{position:absolute;text-align:center;width:230px;margin-left:-115px}.seatbox.bottom{left:50%;bottom:8px}.seatbox.top{left:50%;top:8px}.seatbox.left{left:4px;top:42%;transform:translateY(-50%);width:160px;margin:0}.seatbox.right{right:4px;top:42%;transform:translateY(-50%);width:160px;margin:0}.avatar{display:inline-flex;gap:6px;background:rgba(0,0,0,.55);border:2px solid rgba(255,255,255,.25);border-radius:20px;padding:4px 10px;font-size:13px;font-weight:700}.avatar.turn{box-shadow:0 0 12px gold;border-color:gold}.backs{display:flex;justify-content:center;margin-top:4px}.bk{width:18px;height:26px;background:linear-gradient(135deg,#b3122e,#5c0a1c);border:1px solid #fff;border-radius:3px;margin-left:-10px}.bk:first-child{margin:0}.plays{min-height:34px;display:flex;gap:3px;justify-content:center;flex-wrap:wrap;margin-top:4px;max-width:240px}.pc{background:#fff;color:#111;border-radius:5px;padding:2px 5px;font-size:12px;font-weight:800}.pc.red{color:#c00}.pc.pass{background:#222;color:#aaa}.pc.wild{background:#ffe9a8}#handzone{background:#0e2a20;border-radius:12px;padding:8px 6px 14px;margin-top:8px;text-align:center;border:1px solid #2a5a48}#actionbar{display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap;background:rgba(0,0,0,.45);border:1px solid #2a5a48;border-radius:12px;padding:8px;margin-bottom:6px}.btn{background:gold;border:0;border-radius:10px;padding:12px 20px;font-weight:900;cursor:pointer;font-size:16px}.btn.sug{background:#7fd0ff}.btn:disabled{opacity:.35}.small{font-size:12px;opacity:.9}#fan{display:flex;align-items:flex-end;overflow-x:auto;padding:30px 12px 14px;min-height:140px;justify-content:flex-start}.c{width:56px;height:82px;background:linear-gradient(180deg,#fff,#e8e8e8);border-radius:9px;color:#111;flex:0 0 auto;margin-left:-14px;position:relative;cursor:pointer;border:2px solid #bbb;text-align:center;user-select:none;box-shadow:0 2px 4px rgba(0,0,0,.5)}.c:first-child{margin-left:0}.c.red{color:#c00}.c.sel{transform:translateY(-22px);border-color:gold;box-shadow:0 0 14px gold}.c.sug{border-color:#7fd0ff;box-shadow:0 0 10px #7fd0ff}.c.heartwild{background:linear-gradient(180deg,#fff6c8,#ffe9a8);border-color:orange}.c .r{font-weight:900;font-size:16px}.c .s{font-size:19px}.c .wl{position:absolute;bottom:3px;left:0;right:0;font-size:9px;font-weight:900;color:#a60}</style></head><body><div id=w><div id=topbar><div class=pill id=pillTitle></div><div class=pill id=lv></div><div class=pill id=mode></div></div><div id=felt><div class=center><div class=logo><div id=logoTrump></div><div id=ctr style=font-size:22px;font-weight:900;color:gold></div><div id=ctr2></div></div></div><div id=seats></div></div><div id=handzone><div id=actionbar><button class=btn id=bPlay></button><button class=btn id=bPass></button><button class="btn sug" id=bSug></button><span class=small id=hint2 style=width:100%></span></div><div class=small id=hint></div><div id=fan></div></div></div><script type="application/json" id="i18n-strings">
+{
+"title": "Guandan 0+2 vs 1+3",
+"trump": "TRUMP",
+"play": "Play",
+"pass": "Pass",
+"suggest": "Suggest",
+"small_joker": "SJ",
+"big_joker": "BJ",
+"combo_single": "single",
+"combo_pair": "pair",
+"combo_trips": "trips",
+"combo_fullhouse": "fullhouse",
+"combo_straight": "straight",
+"combo_tube": "tube",
+"combo_plate": "plate",
+"combo_bomb": "bomb",
+"combo_sflush": "sflush",
+"combo_jokerbomb": "jokerbomb",
+"mode_pass_and_play": "4 pass-and-play",
+"mode_computers": "4 computers",
+"mode_vs_computer": "vs Computer",
+"waiting_match": "Waiting for the match to start",
+"teams": "Teams 0+2 vs 1+3.",
+"waiting_platform": "Waiting for platform…",
+"level_line": "A {a} B {b}",
+"level_tribute": "{text} {tribute}",
+"game_over_a": "{text} GAME OVER TA WINS",
+"game_over_b": "{text} GAME OVER TB WINS",
+"round_line": "Rd {round} Fin:{order}",
+"seat_short": "S{n}",
+"seat_name": "S{n} {name}",
+"finish_place": "F{place}",
+"cards_count": "{count} cards",
+"pass_chip": "PASS",
+"lead_or_beat": "lead/beat",
+"seat_who": "Seat {n} {name}",
+"seat_who_anon": "Seat {n}",
+"you_seat": "You S{n}",
+"wild_label": "*WILD",
+"msg_over": "Game over",
+"msg_combo": "Seat {n} {type} {main}",
+"msg_combo_mine": "Seat {n} your move {type} {main}",
+"msg_open": "Seat {n} open lead any: single/pair/trips/full-house/straight5/tube/plate/bomb",
+"msg_open_mine": "Seat {n} your move open lead any: single/pair/trips/full-house/straight5/tube/plate/bomb",
+"suggested": "Suggested: {type} {main} — press Play",
+"no_playable": "no playable hand",
+"alert_invalid": "Invalid: valid = single/pair/trips/full-house(3+2)/straight5/tube(3x2)/plate(2x3)/bomb4+/straight-flush/joker-bomb",
+"alert_must_beat": "Must beat",
+"server_unknown_player": "unknown player",
+"server_the_match_is_over": "the match is over",
+"server_not_your_turn": "not your turn",
+"server_bad_move": "bad move",
+"server_you_must_lead_a_play": "you must lead a play",
+"server_no_cards": "no cards",
+"server_bad_card": "bad card",
+"server_card_not_in_hand": "card not in hand",
+"server_invalid_combination": "invalid combination",
+"server_does_not_beat_the_current_play": "does not beat the current play"
+}
+</script>
+<script>
+
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// A text the game's SERVER wrote (a log line, a hand name in the match state): finds its template
+// among the `server_` texts of the table (the most specific that fits, each {name} standing for
+// any text) and shows it in the viewer's language with the same values; any other text is
+// returned as written.
+const SERVER_TEMPLATES = Object.keys(SOURCE_STRINGS)
+  .filter((key) => key.startsWith("server_") && SOURCE_STRINGS[key])
+  .map((key) => {
+    const names = [];
+    let literal = 0;
+    const source = SOURCE_STRINGS[key]
+      .split(/\{(\w+)\}/)
+      .map((piece, index) => {
+        if (index % 2) { names.push(piece); return "([\\s\\S]+?)"; }
+        literal += piece.length;
+        return piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      })
+      .join("");
+    return { key, names, literal, pattern: new RegExp("^" + source + "$") };
+  })
+  .sort((a, b) => b.literal - a.literal || a.names.length - b.names.length || (a.key > b.key ? 1 : a.key === b.key ? 0 : -1));
+
+function tx(text) {
+  if (typeof text !== "string") return text;
+  for (const template of SERVER_TEMPLATES) {
+    const found = template.pattern.exec(text);
+    if (found) {
+      const params = {};
+      template.names.forEach((name, index) => { if (!(name in params)) params[name] = found[index + 1]; });
+      return t(template.key, params);
+    }
+  }
+  return text;
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+
+let S=null,PL=[],MY=null,ACT=null,STATUS='ongoing',sentFor=-1;const SU='♠♥♣♦',RS={11:'J',12:'Q',13:'K',14:'A'};function rn(r){if(r===15)return t('small_joker');if(r===16)return t('big_joker');return RS[r]||r}
+function el(tag,text,cls,parent){const e=document.createElement(tag);if(text!==undefined&&text!==null)e.textContent=text;if(cls)e.className=cls;if(parent)parent.appendChild(e);return e}
+function comboName(type){switch(type){case 'single':return t('combo_single');case 'pair':return t('combo_pair');case 'trips':return t('combo_trips');case 'fullhouse':return t('combo_fullhouse');case 'straight':return t('combo_straight');case 'tube':return t('combo_tube');case 'plate':return t('combo_plate');case 'bomb':return t('combo_bomb');case 'sflush':return t('combo_sflush');case 'jokerbomb':return t('combo_jokerbomb');default:return type}}
+let hint2State=null;function isWild(c,tr){return c.r===tr&&c.s===1}function isTrump(c,tr){return c.r>=15||c.r===tr}function pw1(c,tr){if(c.r===16)return 1000;if(c.r===15)return 900;if(c.r===tr)return 800;return c.r}function sortH(h,tr){h.sort((a,b)=>pw1(b,tr)-pw1(a,tr)||a.r-b.r||a.s-b.s)}function dec(code){return{r:code>>3,s:code&7}}
 // A is low in A2345 / AA2233 / AAA222 and high at the other end;
 // level cards retain their printed rank in every sequence.
 function sequencePatterns(length) {
@@ -320,11 +438,35 @@ function leadCombo(hand, tr) {
   return cands[0];
 }
 
-let sel=new Set(),sugSet=new Set(),latestMoveCount=-1;function viewSeat(){if(MY!==null)return MY;if(S&&ACT!==null)return ACT;if(S)return S.turn;return 0}function relPos(s){let v=viewSeat();return[['bottom'],['right'],['top'],['left']][(s-v+4)%4][0]}function cn2(c){if(c.r===15)return{t:'SJ',s:''};if(c.r===16)return{t:'BJ',s:''};return{t:RS[c.r]||c.r,s:SU[c.s]}}function canAct(){return ACT!==null&&MY!==null&&MY===ACT&&STATUS==='ongoing'&&S&&!S.gameOver}
-function modeText(){let h=PL.filter(p=>p&&p.kind==='human').length,c=PL.filter(p=>p&&p.kind==='computer').length;if(h===4)return '4 pass-and-play';if(c===4)return '4 computers';if(c>0)return 'vs Computer';return '4 pass-and-play'}
+let sel=new Set(),sugSet=new Set(),latestMoveCount=-1;function viewSeat(){if(MY!==null)return MY;if(S&&ACT!==null)return ACT;if(S)return S.turn;return 0}function relPos(s){let v=viewSeat();return[['bottom'],['right'],['top'],['left']][(s-v+4)%4][0]}function cn2(c){if(c.r===15||c.r===16)return{t:rn(c.r),s:''};return{t:RS[c.r]||c.r,s:SU[c.s]}}function canAct(){return ACT!==null&&MY!==null&&MY===ACT&&STATUS==='ongoing'&&S&&!S.gameOver}
+function modeText(){let h=PL.filter(p=>p&&p.kind==='human').length,c=PL.filter(p=>p&&p.kind==='computer').length;if(h===4)return t('mode_pass_and_play');if(c===4)return t('mode_computers');if(c>0)return t('mode_vs_computer');return t('mode_pass_and_play')}
 function sendMove(move){if(sentFor===latestMoveCount)return;sentFor=latestMoveCount;parent.postMessage({type:'make_move',move:move},'*')}
-function render(){let lv=document.getElementById('lv'),md=document.getElementById('mode'),sw=document.getElementById('seats'),fan=document.getElementById('fan'),hi=document.getElementById('hint'),hi2=document.getElementById('hint2');let bPlay=document.getElementById('bPlay'),bPass=document.getElementById('bPass'),bSug=document.getElementById('bSug');sw.innerHTML='';fan.innerHTML='';md.textContent=modeText();if(!S){lv.textContent='Waiting for the match to start';hi.textContent='Teams 0+2 vs 1+3.';hi2.textContent='Waiting for platform…';bPlay.style.display='none';bPass.style.display='none';bSug.style.display='none';return}else{bPlay.style.display='';bPass.style.display='';bSug.style.display='';}let tr=S.trumpRank,vs=viewSeat();S.hands.forEach(h=>sortH(h,tr));lv.innerHTML='A '+rn(S.teamLevel[0])+' B '+rn(S.teamLevel[1])+(S.tribute?' '+S.tribute:'')+(S.gameOver?' GAME OVER T'+(S.winnerTeam===0?'A':'B')+' WINS':'');document.getElementById('ctr').textContent=rn(tr);document.getElementById('ctr2').textContent='Rd '+(S.round||1)+' Fin:'+(S.finishOrder.map(s=>'S'+(s+1)).join(',')||'-');for(let s=0;s<4;s++){if(s===vs)continue;let pos=relPos(s),d=document.createElement('div');d.className='seatbox '+pos;let nm=(PL[s]?PL[s].name:'S'+(s+1));let p=S.trick.plays[s],ht=p===''?'':(p==='PASS'?'<span class="pc pass">PASS</span>':[].concat(p).map(c=>{let o=cn2(c),rd=(c.s===1||c.s===3);return '<span class="pc'+(rd?' red':'')+(isWild(c,tr)?' wild':'')+'">'+(c.r>=15?o.t:o.t+o.s)+'</span>'}).join(''));let bk='';if(S.hands[s]){let n=Math.min(S.hands[s].length,10);for(let i=0;i<n;i++)bk+='<div class=bk></div>'}d.innerHTML='<div class="avatar'+(S.turn===s?' turn':'')+'">'+(S.turn===s?'> ':'')+'S'+(s+1)+' '+nm+(S.finishOrder.includes(s)?' F'+(S.finishOrder.indexOf(s)+1):'')+'</div><div class=small>'+(S.hands[s]?S.hands[s].length+' cards':'')+'</div><div class=backs>'+bk+'</div><div class=plays>'+ht+'</div>';sw.appendChild(d)}let meBox=document.createElement('div');meBox.className='seatbox bottom';let p=S.trick.plays[vs],ht=p===''?'lead/beat':(p==='PASS'?'<span class="pc pass">PASS</span>':[].concat(p).map(c=>{let o=cn2(c),rd=(c.s===1||c.s===3);return '<span class="pc'+(rd?' red':'')+(isWild(c,tr)?' wild':'')+'">'+(c.r>=15?o.t:o.t+o.s)+'</span>'}).join(''));let who=(MY===null?'Seat '+(vs+1)+(PL[vs]? ' '+PL[vs].name:''):'You S'+(MY+1));meBox.innerHTML='<div class=plays>'+ht+'</div><div class="avatar'+(S.turn===vs?' turn':'')+'">'+who+'</div>';sw.appendChild(meBox);if(MY!==null&&S.hands[vs]){let h=S.hands[vs];h.forEach((c,i)=>{let o=cn2(c),rd=(c.s===1||c.s===3),w=isWild(c,tr),el=document.createElement('div');el.className='c'+(rd?' red':'')+(sel.has(i)?' sel':'')+(sugSet.has(i)?' sug':'')+(w?' heartwild':'');el.innerHTML='<div class=r>'+(c.r>=15?o.t:o.t)+'</div><div class=s>'+o.s+'</div>'+(w?'<div class=wl>*WILD</div>':'');el.onclick=()=>{if(!canAct())return;if(sel.has(i))sel.delete(i);else sel.add(i);render()};fan.appendChild(el)})}let can=canAct();bPlay.disabled=!can;bPass.disabled=!can||!S.trick.combo;bSug.disabled=!can;let msg=S.gameOver?'Game over':('Seat '+(S.turn+1)+(can?' your move':'')+' '+(S.trick.combo?S.trick.combo.type+' '+rn(S.trick.combo.main):'open lead any: single/pair/trips/full-house/straight5/tube/plate/bomb'));hi.textContent=msg;if(hi2.textContent.startsWith('Suggested')||hi2.textContent.startsWith('no playable')){}else hi2.textContent=msg}
-document.getElementById('bSug').onclick=()=>{if(!S||!canAct())return;let vs=viewSeat(),h=S.hands[vs];let r=suggestIdx(h,S.trumpRank,S.trick.combo);sugSet.clear();sel.clear();if(!r){document.getElementById('hint2').textContent='no playable hand';render();return}r.idx.forEach(i=>{sel.add(i);sugSet.add(i)});let d=r.d;document.getElementById('hint2').textContent='Suggested: '+d.type+' '+rn(d.main)+' \u2014 press Play';render()};document.getElementById('bPlay').onclick=()=>{if(!S||!canAct())return;let vs=viewSeat(),h=S.hands[vs],idx=[...sel].sort((a,b)=>a-b);if(!idx.length)return;let cards=idx.map(i=>h[i]),d=detect(cards,S.trumpRank);if(!d){alert('Invalid: valid = single/pair/trips/full-house(3+2)/straight5/tube(3x2)/plate(2x3)/bomb4+/straight-flush/joker-bomb');return}if(S.trick.combo&&!beats(d,S.trick.combo)){alert('Must beat');return}sel.clear();sugSet.clear();sendMove({cards:cards.map(c=>({r:c.r,s:c.s}))})};document.getElementById('bPass').onclick=()=>{if(!S||!canAct()||!S.trick.combo)return;sel.clear();sugSet.clear();sendMove({pass:true})};window.addEventListener('message',e=>{let m=e.data;if(!m||m.type!=='state_changed')return;PL=m.players||[];MY=m.my_player_index;ACT=m.acting_for_player_index;STATUS=m.status;latestMoveCount=m.move_count;let v=m.view;if(!v){S=null;render();return}
+function cardChip(c,tr,parent){const o=cn2(c),rd=(c.s===1||c.s===3);return el('span',c.r>=15?o.t:o.t+o.s,'pc'+(rd?' red':'')+(isWild(c,tr)?' wild':''),parent)}
+function playChips(p,tr,parent){if(p==='PASS'){el('span',t('pass_chip'),'pc pass',parent);return}[].concat(p).forEach(c=>cardChip(c,tr,parent))}
+function render(){let lv=document.getElementById('lv'),md=document.getElementById('mode'),sw=document.getElementById('seats'),fan=document.getElementById('fan'),hi=document.getElementById('hint'),hi2=document.getElementById('hint2');let bPlay=document.getElementById('bPlay'),bPass=document.getElementById('bPass'),bSug=document.getElementById('bSug');
+document.getElementById('pillTitle').textContent=t('title');document.getElementById('logoTrump').textContent=t('trump');bPlay.textContent=t('play');bPass.textContent=t('pass');bSug.textContent=t('suggest');
+sw.replaceChildren();fan.replaceChildren();md.textContent=modeText();
+if(!S){lv.textContent=t('waiting_match');hi.textContent=t('teams');hi2.textContent=t('waiting_platform');bPlay.style.display='none';bPass.style.display='none';bSug.style.display='none';return}else{bPlay.style.display='';bPass.style.display='';bSug.style.display='';}
+let tr=S.trumpRank,vs=viewSeat();S.hands.forEach(h=>sortH(h,tr));
+let level=t('level_line',{a:rn(S.teamLevel[0]),b:rn(S.teamLevel[1])});if(S.tribute)level=t('level_tribute',{text:level,tribute:S.tribute});if(S.gameOver)level=S.winnerTeam===0?t('game_over_a',{text:level}):t('game_over_b',{text:level});lv.textContent=level;
+document.getElementById('ctr').textContent=rn(tr);
+document.getElementById('ctr2').textContent=t('round_line',{round:S.round||1,order:S.finishOrder.map(s=>t('seat_short',{n:s+1})).join(',')||'-'});
+for(let s=0;s<4;s++){if(s===vs)continue;let pos=relPos(s),d=el('div',null,'seatbox '+pos);let nm=(PL[s]?PL[s].name:t('seat_short',{n:s+1}));
+ let av=el('div',null,'avatar'+(S.turn===s?' turn':''),d);if(S.turn===s)el('span','> ',null,av);el('span',t('seat_name',{n:s+1,name:nm}),null,av);
+ if(S.finishOrder.includes(s))el('span',t('finish_place',{place:S.finishOrder.indexOf(s)+1}),null,av).style.marginInlineStart='6px';
+ el('div',S.hands[s]?t('cards_count',{count:S.hands[s].length}):'','small',d);
+ let bk=el('div',null,'backs',d);if(S.hands[s]){let n=Math.min(S.hands[s].length,10);for(let i=0;i<n;i++)el('div',null,'bk',bk)}
+ let pl=el('div',null,'plays',d);let p=S.trick.plays[s];if(p!=='')playChips(p,tr,pl);
+ sw.appendChild(d)}
+let meBox=el('div',null,'seatbox bottom');let mp=S.trick.plays[vs];let mpl=el('div',null,'plays',meBox);if(mp==='')mpl.textContent=t('lead_or_beat');else playChips(mp,tr,mpl);
+let who;if(MY===null){who=PL[vs]?t('seat_who',{n:vs+1,name:PL[vs].name}):t('seat_who_anon',{n:vs+1})}else who=t('you_seat',{n:MY+1});
+el('div',who,'avatar'+(S.turn===vs?' turn':''),meBox);sw.appendChild(meBox);
+if(MY!==null&&S.hands[vs]){let h=S.hands[vs];h.forEach((c,i)=>{let o=cn2(c),rd=(c.s===1||c.s===3),w=isWild(c,tr),ce=el('div',null,'c'+(rd?' red':'')+(sel.has(i)?' sel':'')+(sugSet.has(i)?' sug':'')+(w?' heartwild':''));el('div',o.t,'r',ce);el('div',o.s,'s',ce);if(w)el('div',t('wild_label'),'wl',ce);ce.onclick=()=>{if(!canAct())return;if(sel.has(i))sel.delete(i);else sel.add(i);render()};fan.appendChild(ce)})}
+let can=canAct();bPlay.disabled=!can;bPass.disabled=!can||!S.trick.combo;bSug.disabled=!can;
+let msg;if(S.gameOver)msg=t('msg_over');else if(S.trick.combo){let q={n:S.turn+1,type:comboName(S.trick.combo.type),main:rn(S.trick.combo.main)};msg=can?t('msg_combo_mine',q):t('msg_combo',q)}else{let q={n:S.turn+1};msg=can?t('msg_open_mine',q):t('msg_open',q)}
+hi.textContent=msg;
+if(hint2State&&hint2State.kind==='suggested')hi2.textContent=t('suggested',{type:comboName(hint2State.type),main:rn(hint2State.main)});else if(hint2State&&hint2State.kind==='none')hi2.textContent=t('no_playable');else hi2.textContent=msg}
+document.getElementById('bSug').onclick=()=>{if(!S||!canAct())return;let vs=viewSeat(),h=S.hands[vs];let r=suggestIdx(h,S.trumpRank,S.trick.combo);sugSet.clear();sel.clear();if(!r){hint2State={kind:'none'};render();return}r.idx.forEach(i=>{sel.add(i);sugSet.add(i)});let d=r.d;hint2State={kind:'suggested',type:d.type,main:d.main};render()};document.getElementById('bPlay').onclick=()=>{if(!S||!canAct())return;let vs=viewSeat(),h=S.hands[vs],idx=[...sel].sort((a,b)=>a-b);if(!idx.length)return;let cards=idx.map(i=>h[i]),d=detect(cards,S.trumpRank);if(!d){alert(t('alert_invalid'));return}if(S.trick.combo&&!beats(d,S.trick.combo)){alert(t('alert_must_beat'));return}sel.clear();sugSet.clear();sendMove({cards:cards.map(c=>({r:c.r,s:c.s}))})};document.getElementById('bPass').onclick=()=>{if(!S||!canAct()||!S.trick.combo)return;sel.clear();sugSet.clear();sendMove({pass:true})};window.addEventListener('message',e=>{let m=e.data;if(!m||m.type!=='state_changed')return;applyLocale(m);PL=m.players||[];MY=m.my_player_index;ACT=m.acting_for_player_index;STATUS=m.status;latestMoveCount=m.move_count;let v=m.view;if(!v){S=null;render();return}
 let hands=v.counts.map((n,i)=>i===MY?(v.hand||[]).map(dec):Array.from({length:n},()=>({r:2,s:0})));
 // keep real card objects only for my seat; other seats render counts/backs from lengths and their public plays
 S={teamLevel:v.teamLevel,trumpRank:v.trumpRank,hands:hands,finishOrder:v.finishOrder,trick:{leader:v.trick.leader,plays:v.trick.plays.map(p=>p===''||p==='PASS'?p:p.map(dec)),combo:v.trick.combo,lastSeat:v.trick.lastSeat,passes:v.trick.passes},turn:v.current,round:v.round,tribute:v.tribute,winnerTeam:v.winnerTeam,gameOver:v.gameOver};

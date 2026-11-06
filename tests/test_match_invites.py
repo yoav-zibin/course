@@ -142,7 +142,7 @@ def test_merging_accounts_keeps_invites(api: Api) -> None:
     match_id = api.new_match(owner=alice, game_id=api.new_game(owner=alice))
     token = _invite(api, match_id, as_user=alice)["token"]
     api.ok("POST", f"/invites/{token}/accept", as_user=bob)
-    api.ok("POST", f"/users/{alice}/merge", as_user=alice, json={"into_user_id": alice2})
+    api.ok("POST", f"/users/{alice}/merge", as_user=alice, json={"into_user_id": alice2, "into_password": api.passwords_by_user_id[alice2]})
 
     (invite,) = api.ok("GET", "/users/me/invites", as_user=alice2)
     assert invite["created_by_user_id"] == alice2

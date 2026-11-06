@@ -85,7 +85,8 @@ def test_account_merge_moves_recordings_to_survivor(api):
     other = api.new_user("other")
     saved = api.ok("POST", "/game-test-sessions", as_user=source,
                    json={"revision": 0, "recording": recording()})
-    api.ok("POST", f"/users/{source}/merge", as_user=source, json={"into_user_id": target})
+    api.ok("POST", f"/users/{source}/merge", as_user=source,
+           json={"into_user_id": target, "into_password": api.passwords_by_user_id[target]})
     path = "/game-test-sessions/" + saved["id"]
     assert api.ok("GET", path, as_user=target)["recording"] == recording()
     assert api.request("GET", path, as_user=other).status_code == 404

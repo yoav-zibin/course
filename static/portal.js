@@ -221,6 +221,26 @@ function updateMatchCurrency(match, user) {
   const notes = [];
   if (paid && match.status === "waiting_for_players")
     notes.push(el("p", {class:"token-summary-note", textContent:I18n.t("ui.stakes.pot_note", {}, "Pot is collected when the match starts. Paid matches need human players.")}));
+  const payoutPending = paid && match.status === "over" && match.proposed_payouts != null && match.payout_outcome == null;
+  if (payoutPending) {
+    const seat = user && match.players.find(p => p.user_id === user.id);
+    if (seat) {
+      const proposed = match.proposed_payouts[String(seat.player_index)] ?? 0;
+      const net = proposed - stake;
+      notes.push(el("div", {class:"token-summary-payout"},
+        el("span", {textContent:I18n.t("ui.stakes.proposed_payout", {}, "Proposed payout")}),
+        el("strong", {textContent:I18n.t("ui.stakes.tokens", {count: proposed}, `${proposed} tokens`)}),
+        el("small", {textContent:I18n.t("ui.stakes.net", {amount: `${net > 0 ? "+" : ""}${net}`}, `Net ${net > 0 ? "+" : ""}${net} tokens`)})));
+    }
+    const agreed = (match.payout_agreed_player_indices || []).includes(seat?.player_index);
+    notes.push(el("p", {class:"token-summary-note", textContent: agreed
+      ? I18n.t("ui.stakes.waiting_for_others", {}, "You agreed. Waiting for the other players to agree before tokens move.")
+      : I18n.t("ui.stakes.agreement_needed", {}, "Tokens move only once every player agrees to these payouts. A dispute, or no answer within an hour, refunds every stake.")}));
+  }
+  if (paid && match.status === "over" && (match.payout_outcome === "disputed" || match.payout_outcome === "expired"))
+    notes.push(el("p", {class:"token-summary-note", textContent: match.payout_outcome === "disputed"
+      ? I18n.t("ui.stakes.refunded_disputed", {}, "A player disputed the result, so every stake was refunded.")
+      : I18n.t("ui.stakes.refunded_expired", {}, "Not every player agreed in time, so every stake was refunded.")}));
   if (paid && match.status === "over" && match.token_payouts != null) {
     const seat = user && match.players.find(p => p.user_id === user.id);
     if (seat) {
@@ -291,6 +311,13 @@ function playerName(player) {
 /** Whether [user] may report [player] in [match]: another human in an online match. */
 function canReportPlayer(match, player, user) {
   return Boolean(user && !match.localMode && player.kind === "human" && player.user_id && player.user_id !== user.id);
+}
+
+/** The owner of a (non-quick) match that hasn't started may remove other humans. */
+function canRemovePlayer(match, player, user) {
+  return Boolean(user && !match.localMode && match.status === "waiting_for_players" &&
+    match.owner_user_id === user.id && match.matchmaking_player_count == null &&
+    player.kind === "human" && player.user_id && player.user_id !== user.id);
 }
 
 /** Opens the feedback dialog for [target] {type, id, name}: a fixed [kind], or the
@@ -715,7 +742,10 @@ async function joinRandomMatch() {
     state.openMatches = openMatches;
     state.games = games;
     await ensureDetails();
-    const candidates = state.openMatches.filter((match) => isJoinable(match, user.id));
+    // A random join must not commit the player to anything they didn't pick:
+    // skip matches that stake tokens or run a move clock.
+    const candidates = state.openMatches.filter((match) => isJoinable(match, user.id) &&
+      !(match.bet_per_player > 0) && match.turn_seconds == null);
     for (let i = candidates.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
@@ -982,8 +1012,9 @@ function onGameSearchKey(event) {
 function renderMatchList(node, matches) {
   // Keep the native details/summary nodes stable: polling must not reopen groups,
   // move keyboard focus, or replace unchanged buttons while someone is clicking.
+  // The language is part of the key: the rows' badges, names and "N moves" are text built here.
   const key = JSON.stringify([matches, state.selectedId, [...state.nameCache],
-    matches.map((m) => gameMetaOf(m.game_id, m.game_version)?.name)]);
+    matches.map((m) => gameMetaOf(m.game_id, m.game_version)?.name), I18n.revision()]);
   if (node.dataset.key === key) return;
   node.dataset.key = key;
   node.replaceChildren(...(matches.length ? matches.map(matchItem)
@@ -1175,7 +1206,12 @@ function renderMatch() {
         onerror: event => { event.target.hidden = true; }}), el("span", {textContent:
           `${playerName(player)}${player === mySeat ? " · " + I18n.t("ui.match.seat_you", {}, "You") : ""}` +
           `${turn.includes(player.player_index) ? " — " + I18n.t("ui.match.to_move", {}, "to move") : ""}`,
-      }), canReportPlayer(match, player, user) ? el("button", {
+      }), canRemovePlayer(match, player, user) ? actionButton(
+        I18n.t("ui.match.remove_player", {}, "Remove"),
+        async () => portalRequest("DELETE", `/matches/${match.id}/players/${player.user_id}`, {user}),
+        {danger: true, confirm: I18n.t("ui.match.remove_player_confirm", {name: playerName(player)},
+          `Remove ${playerName(player)} from this match? They can't join it again.`)},
+      ) : null, canReportPlayer(match, player, user) ? el("button", {
         type: "button", class: "feedback-report", textContent: I18n.t("ui.feedback.report_short", {}, "⚑ Report"),
         title: I18n.t("ui.feedback.report_player", {}, "Report player"),
         "aria-label": I18n.t("ui.feedback.report_player_named", {name: playerName(player)}, `Report player ${playerName(player)}`),
@@ -1324,6 +1360,19 @@ function renderMatch() {
       );
     }
   } else if (match.status === "over") {
+    // A v1 paid match's pot split waits for every human to agree: answer it first.
+    const mustAnswerPayouts = mySeat && !match.localMode && match.proposed_payouts != null &&
+      match.payout_outcome == null && mySeat.kind === "human" &&
+      !(match.payout_agreed_player_indices || []).includes(mySeat.player_index);
+    if (mustAnswerPayouts) {
+      actions.push(
+        actionButton(I18n.t("ui.stakes.agree", {}, "Agree to payouts"), call("POST", "/payouts", {agree: true}), {primary: true}),
+        actionButton(I18n.t("ui.stakes.dispute", {}, "Dispute"), call("POST", "/payouts", {agree: false}), {
+          danger: true,
+          confirm: I18n.t("ui.stakes.dispute_confirm", {}, "Dispute the result? Every player gets their stake back."),
+        }),
+      );
+    }
     if (mySeat && !match.localMode) {
       const playingSoloWithComputers =
         match.players.filter((player) => player.kind === "human").length === 1 &&
@@ -1519,6 +1568,21 @@ function renderHistory() {
   $("history-back").disabled = (replay?.index ?? count) <= (replay?.minimum ?? 0);
   $("history-forward").disabled = !replay || replay.index >= count;
   $("history-live").disabled = !replay;
+}
+
+// Texts the script built (badges, buttons, lists, the offline line in the sidebar) are redrawn in
+// the new language, and the open game is sent its texts in it now, not at the next poll.
+function redrawAfterLanguageChange() {
+  try {
+    renderPortalAccountMenu();
+    render();
+    renderLibrary();
+    updateMatchSetup();
+    offlineStatus();
+    syncGame().catch((error) => console.warn("Couldn't send the game its new language:", error));
+  } catch (error) {
+    console.warn("Couldn't redraw after a language change:", error);
+  }
 }
 
 async function syncGame() {
@@ -1800,17 +1864,7 @@ async function main() {
   });
   document.addEventListener("portal-layout-change", syncPortalRoutes);
   $("notify-toggle").addEventListener("click", toggleNotifications);
-  document.addEventListener("i18n-changed", () => {
-    // Texts the script built (badges, buttons, lists) are redrawn in the new language.
-    try {
-      renderPortalAccountMenu();
-      render();
-      renderLibrary();
-      updateMatchSetup();
-    } catch (error) {
-      console.warn("Couldn't redraw after a language change:", error);
-    }
-  });
+  document.addEventListener("i18n-changed", redrawAfterLanguageChange);
   document.addEventListener("auth-changed", () => {
     renderPortalAccountMenu();
     state.armed = null;

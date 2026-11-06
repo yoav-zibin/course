@@ -33,26 +33,114 @@ button.ctrl:disabled{opacity:.35}
 </style>
 </head>
 <body>
-<header><h1>BLOKUS CLASSIC</h1><span class="muted">20 × 20 · 21 pieces per color</span></header>
-<div id="status">Waiting for BuildPlay...</div>
+<header><h1 id="title"></h1><span class="muted" id="subtitle"></span></header>
+<div id="status" role="status" aria-live="polite"></div>
 <div id="layout">
 <div><div id="board"></div><div id="message"></div></div>
 <aside>
 <div id="scores"></div>
-<h3>Pieces <span id="colorName"></span></h3>
+<h3 id="piecesTitle"></h3>
 <div id="pieces"></div>
 <div class="controls">
-<button class="ctrl" id="rotate">Rotate ↻</button>
-<button class="ctrl" id="flip">Flip ⇋</button>
-<button class="ctrl" id="pass">Pass</button>
+<button class="ctrl" id="rotate"></button>
+<button class="ctrl" id="flip"></button>
+<button class="ctrl" id="pass"></button>
 </div>
-<div class="note">Select a piece, rotate or flip it, then click the board at its top-left position. First piece must cover your color's corner. Later pieces must touch your own pieces at a corner, never along an edge. Other colors may touch edges. For two players, each controls two colors.</div>
+<div class="note" id="note"></div>
 </aside>
 </div>
+<script type="application/json" id="i18n-strings">
+{
+"title": "BLOKUS CLASSIC",
+"subtitle": "20 × 20 · 21 pieces per color",
+"waiting": "Waiting for BuildPlay...",
+"waiting_state": "Waiting for BuildPlay game state...",
+"player_n": "Player {n}",
+"color_blue": "Blue",
+"color_yellow": "Yellow",
+"color_red": "Red",
+"color_green": "Green",
+"pieces_title": "Pieces {color}",
+"rotate": "Rotate ↻",
+"flip": "Flip ⇋",
+"pass": "Pass",
+"note": "Select a piece, rotate or flip it, then click the board at its top-left position. First piece must cover your color's corner. Later pieces must touch your own pieces at a corner, never along an edge. Other colors may touch edges. For two players, each controls two colors.",
+"score_line": "{name} ({colors}): {score}",
+"draw": "Game over — Draw!",
+"wins": "Game over — {name} wins!",
+"game_over": "Game over",
+"your_turn": "Your turn ({name}) — place a {color} piece",
+"waiting_for": "Waiting for {name} (Player {n})...",
+"server_unknown_player": "unknown player",
+"server_game_over": "game over",
+"server_not_your_turn": "not your turn",
+"server_bad_move": "bad move",
+"server_not_your_color": "not your color",
+"server_piece_used": "piece used",
+"server_bad_orientation": "bad orientation",
+"server_illegal_placement": "illegal placement"
+}
+</script>
 <script>
+
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// A text the game's SERVER wrote (a log line, a hand name in the match state): finds its template
+// among the `server_` texts of the table (the most specific that fits, each {name} standing for
+// any text) and shows it in the viewer's language with the same values; any other text is
+// returned as written.
+const SERVER_TEMPLATES = Object.keys(SOURCE_STRINGS)
+  .filter((key) => key.startsWith("server_") && SOURCE_STRINGS[key])
+  .map((key) => {
+    const names = [];
+    let literal = 0;
+    const source = SOURCE_STRINGS[key]
+      .split(/\{(\w+)\}/)
+      .map((piece, index) => {
+        if (index % 2) { names.push(piece); return "([\\s\\S]+?)"; }
+        literal += piece.length;
+        return piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      })
+      .join("");
+    return { key, names, literal, pattern: new RegExp("^" + source + "$") };
+  })
+  .sort((a, b) => b.literal - a.literal || a.names.length - b.names.length || (a.key > b.key ? 1 : a.key === b.key ? 0 : -1));
+
+function tx(text) {
+  if (typeof text !== "string") return text;
+  for (const template of SERVER_TEMPLATES) {
+    const found = template.pattern.exec(text);
+    if (found) {
+      const params = {};
+      template.names.forEach((name, index) => { if (!(name in params)) params[name] = found[index + 1]; });
+      return t(template.key, params);
+    }
+  }
+  return text;
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+
+
 var SIZE=20;
 var COLORS=["#3285f5","#f4c542","#e94f64","#42bc80"];
-var COLOR_NAMES=["Blue","Yellow","Red","Green"];
+var COLOR_KEYS=[function(){return t("color_blue")},function(){return t("color_yellow")},function(){return t("color_red")},function(){return t("color_green")}];
+function cname(c){return COLOR_KEYS[c]?COLOR_KEYS[c]():""}
+function setStatic(){document.getElementById("title").textContent=t("title");document.getElementById("subtitle").textContent=t("subtitle");document.getElementById("note").textContent=t("note");rotBtn.textContent=t("rotate");flipBtn.textContent=t("flip");passBtn.textContent=t("pass")}
 var SHAPES=[[[0,0]],[[0,0],[0,1]],[[0,0],[0,1],[0,2]],[[0,0],[0,1],[1,0]],[[0,0],[0,1],[0,2],[0,3]],[[0,0],[0,1],[1,0],[1,1]],[[0,0],[1,0],[2,0],[2,1]],[[0,0],[0,1],[0,2],[1,1]],[[0,0],[0,1],[1,1],[1,2]],[[0,1],[0,2],[1,0],[1,1],[2,1]],[[0,0],[0,1],[0,2],[0,3],[0,4]],[[0,0],[1,0],[2,0],[3,0],[3,1]],[[0,0],[0,1],[1,0],[1,1],[2,0]],[[0,0],[1,0],[1,1],[2,1],[3,1]],[[0,0],[0,1],[0,2],[1,1],[2,1]],[[0,0],[0,2],[1,0],[1,1],[1,2]],[[0,0],[1,0],[2,0],[2,1],[2,2]],[[0,0],[1,0],[1,1],[2,1],[2,2]],[[0,1],[1,0],[1,1],[1,2],[2,1]],[[0,0],[1,0],[2,0],[3,0],[2,1]],[[0,0],[0,1],[1,1],[2,1],[2,2]]];
 function norm(c){var mr=Math.min.apply(null,c.map(function(x){return x[0]})),mc=Math.min.apply(null,c.map(function(x){return x[1]}));return c.map(function(x){return [x[0]-mr,x[1]-mc]}).sort(function(a,b){return a[0]-b[0]||a[1]-b[1]})} 
 function rot(c){return norm(c.map(function(x){return [x[1],-x[0]]}))}
@@ -87,16 +175,16 @@ b.addEventListener("mouseenter",function(){if(!canAct())return;prevR=r;prevC=c;p
 b.disabled=!canPlace(r,c);b.addEventListener("click",function(){onBoard(r,c)});boardEl.appendChild(b)})(r,c)}}
 function paintPreview(){var cells=boardEl.children;if(!view||cells.length!==SIZE*SIZE)return;var pv=previewCells(),set={};pv.forEach(function(x){set[x[0]+","+x[1]]=1});for(var r=0;r<SIZE;r++)for(var c=0;c<SIZE;c++){var i=r*SIZE+c,el=cells[i];if(view.board[r][c]>=0)continue;el.classList.remove("preview");el.style.background=((r+c)%2===0)?"#263650":"#30415b";if(set[r+","+c]&&canAct()&&prevR>=0){el.classList.add("preview");el.style.background=COLORS[selColor]+"aa"}}}
 function onBoard(r,c){if(!canPlace(r,c))return;submit({color:selColor,piece:selPiece,ori:selOri,row:r,col:c});}
-function renderPieces(){piecesEl.innerHTML="";if(!view)return;var cols=[];for(var c=0;c<4;c++){if(view.colorOwners[c]===view.currentPlayer)cols.push(c)}colorNameEl.textContent=COLOR_NAMES[selColor]||"";cols.forEach(function(color){var h=document.createElement("div");h.style.gridColumn="1 / -1";h.style.fontWeight="bold";h.style.color=COLORS[color];h.textContent=COLOR_NAMES[color];piecesEl.appendChild(h);
+function renderPieces(){piecesEl.innerHTML="";if(!view)return;var cols=[];for(var c=0;c<4;c++){if(view.colorOwners[c]===view.currentPlayer)cols.push(c)}document.getElementById("piecesTitle").textContent=t("pieces_title",{color:cname(selColor)});cols.forEach(function(color){var h=document.createElement("div");h.style.gridColumn="1 / -1";h.style.fontWeight="bold";h.style.color=COLORS[color];h.textContent=cname(color);piecesEl.appendChild(h);
 for(var p=0;p<SHAPES.length;p++)(function(p){var b=document.createElement("button");b.className="piece";b.disabled=!canAct()||!view.available[color][p];if(color===selColor&&p===selPiece)b.classList.add("active");var shape=(color===selColor&&p===selPiece)?curOri():SHAPES[p];var set={};shape.forEach(function(x){set[x[0]+","+x[1]]=1});var m=document.createElement("div");m.className="mini";for(var rr=0;rr<5;rr++)for(var cc=0;cc<5;cc++){var s=document.createElement("span");if(set[rr+","+cc])s.style.background=COLORS[color];m.appendChild(s)}b.appendChild(m);var lb=document.createElement("div");lb.textContent="#"+(p+1);lb.style.fontSize="10px";b.appendChild(lb);b.addEventListener("click",function(){if(!canAct())return;selColor=color;selPiece=p;selOri=0;render()});piecesEl.appendChild(b)})(p)})}
-function renderScores(){scoresEl.innerHTML="";if(!view)return;var n=view.playerCount||(latest.players?latest.players.length:2);for(var i=0;i<n;i++){var d=document.createElement("div");var cols=[];for(var c=0;c<4;c++){if(view.colorOwners[c]===i)cols.push(COLOR_NAMES[c])}var sc=(view.scores&&view.scores[i]!==undefined)?view.scores[i]:"?";var nm=(latest.players&&latest.players[i])?latest.players[i].name:("Player "+(i+1));d.textContent=nm+" ("+cols.join(" + ")+"): "+sc;if(!view.finished&&i===view.currentPlayer){d.style.fontWeight="bold";d.style.color="#fff"}if(view.winners&&view.winners.indexOf(i)>=0&&view.finished){d.style.color="#8dff9d"}scoresEl.appendChild(d)}}
-function render(){if(!view){statusEl.textContent="Waiting for BuildPlay...";return}ensureSel();var turnName="";if(latest.players&&latest.players[view.currentPlayer])turnName=latest.players[view.currentPlayer].name;if(view.finished){if(view.winners&&view.winners.length>1)statusEl.textContent="Game over — Draw!";else if(view.winners&&view.winners.length===1){var w=latest.players?latest.players[view.winners[0]].name:("Player "+(view.winners[0]+1));statusEl.textContent="Game over — "+w+" wins!"}else statusEl.textContent="Game over"}else{if(actor()!==null)statusEl.textContent="Your turn ("+turnName+") — place a "+COLOR_NAMES[selColor]+" piece";else{var a=latest.turn_of_player_indices;statusEl.textContent="Waiting for "+turnName+" (Player "+(view.currentPlayer+1)+")..."}}renderScores();renderBoard();renderPieces();rotBtn.disabled=!canAct();flipBtn.disabled=!canAct();passBtn.disabled=!canAct()}
+function renderScores(){scoresEl.innerHTML="";if(!view)return;var n=view.playerCount||(latest.players?latest.players.length:2);for(var i=0;i<n;i++){var d=document.createElement("div");var cols=[];for(var c=0;c<4;c++){if(view.colorOwners[c]===i)cols.push(cname(c))}var sc=(view.scores&&view.scores[i]!==undefined)?view.scores[i]:"?";var nm=(latest.players&&latest.players[i])?latest.players[i].name:t("player_n",{n:i+1});var colorsText=cols.join(" + ");d.textContent=t("score_line",{name:nm,colors:colorsText,score:sc});if(!view.finished&&i===view.currentPlayer){d.style.fontWeight="bold";d.style.color="#fff"}if(view.winners&&view.winners.indexOf(i)>=0&&view.finished){d.style.color="#8dff9d"}scoresEl.appendChild(d)}}
+function render(){setStatic();if(!view){statusEl.textContent=t("waiting");return}ensureSel();var turnName="";if(latest.players&&latest.players[view.currentPlayer])turnName=latest.players[view.currentPlayer].name;if(view.finished){if(view.winners&&view.winners.length>1)statusEl.textContent=t("draw");else if(view.winners&&view.winners.length===1){var w=latest.players?latest.players[view.winners[0]].name:t("player_n",{n:view.winners[0]+1});statusEl.textContent=t("wins",{name:w})}else statusEl.textContent=t("game_over")}else{if(actor()!==null)statusEl.textContent=t("your_turn",{name:turnName,color:cname(selColor)});else{statusEl.textContent=t("waiting_for",{name:turnName,n:view.currentPlayer+1})}}renderScores();renderBoard();renderPieces();rotBtn.disabled=!canAct();flipBtn.disabled=!canAct();passBtn.disabled=!canAct()}
 function showMsg(t){msgEl.textContent=t}
 rotBtn.addEventListener("click",function(){if(!canAct())return;var o=ORIENTS[selPiece];var cur=curOri();var r2=rot(cur);for(var i=0;i<o.length;i++){if(JSON.stringify(o[i])===JSON.stringify(r2)){selOri=i;break}}render()});
 flipBtn.addEventListener("click",function(){if(!canAct())return;var o=ORIENTS[selPiece];var f2=flip(curOri());for(var i=0;i<o.length;i++){if(JSON.stringify(o[i])===JSON.stringify(f2)){selOri=i;break}}render()});
 passBtn.addEventListener("click",function(){if(!canAct())return;submit({pass:true})});
-window.addEventListener("message",function(e){if(e.source!==parent)return;var d=e.data;if(!d||typeof d!=="object")return;if(d.type!=="state_changed")return;latest=d;sentFor=-1;view=d.view||null;prevR=-1;prevC=-1;showMsg("");render()});
-statusEl.textContent="Waiting for BuildPlay game state...";
+window.addEventListener("message",function(e){if(e.source!==parent)return;var d=e.data;if(!d||typeof d!=="object")return;if(d.type!=="state_changed")return;applyLocale(d);latest=d;sentFor=-1;view=d.view||null;prevR=-1;prevC=-1;showMsg("");render()});
+setStatic();statusEl.textContent=t("waiting_state");
 </script>
 </body>
 </html>

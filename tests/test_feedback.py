@@ -109,7 +109,7 @@ def test_the_service_checks_kinds_and_targets_too() -> None:
 
 def test_a_merged_away_account_is_still_yourself(api: Api) -> None:
     ann, ann_old, bob = api.new_user("ann"), api.new_user("ann (old)"), api.new_user("bob")
-    api.ok("POST", f"/users/{ann_old}/merge", json={"into_user_id": ann}, as_user=ann_old)
+    api.ok("POST", f"/users/{ann_old}/merge", json={"into_user_id": ann, "into_password": api.passwords_by_user_id[ann]}, as_user=ann_old)
     assert error(send(api, ann, "user", ann_old)) == (400, "you can't send feedback about yourself")
     # Feedback on someone's old account counts against the survivor.
     assert send(api, bob, "user", ann_old).json()["target_id"] == ann

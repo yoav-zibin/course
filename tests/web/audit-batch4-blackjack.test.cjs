@@ -3,14 +3,12 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
+const {pageScript,pageScriptOf,fakeDom,texts}=require('./page-helper.cjs');
 
 function client(){
- const nodes=new Map(),sent=[];let receive;
- function element(){return {children:[],className:'',textContent:'',innerHTML:'',disabled:false,
-  append(...items){this.children.push(...items);},replaceChildren(...items){this.children=items;}};}
- const document={getElementById(id){if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);},createElement:element};
+ const sent=[];let receive;const {document,ids:nodes}=fakeDom();
  const parent={postMessage(m){sent.push(m);}};
- const code=fs.readFileSync(path.join(__dirname,'../../games/audit-batch4/blackjack-table.html'),'utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
+ const code=pageScriptOf(path.join(__dirname,'../../games/audit-batch4/blackjack-table.html'),document);
  vm.runInNewContext(code,{document,parent,addEventListener(type,fn){if(type==='message')receive=fn;}});
  return {nodes,sent,send(message){receive({source:parent,data:message});},foreign(message){receive({source:{},data:message});}};
 }

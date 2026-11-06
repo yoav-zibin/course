@@ -91,6 +91,7 @@ from game_platform.schemas import (
     MatchUpdate,
     MergeRequest,
     MoveCreate,
+    PayoutAgreement,
     MoveOut,
     PhoneStart,
     PushConfigOut,
@@ -116,6 +117,7 @@ from game_platform.service import (
     ConflictError,
     ForbiddenError,
     GamePlatform,
+    GameMessageError,
     InvalidRequestError,
     NotFoundError,
     PlatformError,
@@ -412,9 +414,14 @@ def merge_users(
     logins move over, then it is marked as replaced by the surviving user (never
     deleted, so its old credentials keep working as an alias of the survivor).
     The stronger login method always survives (google > phone > email > guest);
-    on ties the requested direction is kept. Authenticate as the merged-away user."""
+    on ties the requested direction is kept. Authenticate as the merged-away user,
+    and pass the surviving user's password as [body.into_password]: the caller
+    must control both accounts."""
     user = platform.merge_users(
-        caller_id=caller_id, from_user_id=user_id, into_user_id=body.into_user_id
+        caller_id=caller_id,
+        from_user_id=user_id,
+        into_user_id=body.into_user_id,
+        into_password=body.into_password,
     )
     return UserOut.of(user, own=True)
 
@@ -1100,6 +1107,29 @@ def make_move(
         expected_move_count=body.expected_move_count,
         payout_player_indices=body.payout_player_indices,
         move=body.move,
+    )
+    return _match_out(platform, match, caller_id=caller_id)
+
+
+@router.delete("/matches/{match_id}/players/{user_id}")
+def remove_player(
+    platform: Platform, caller_id: CallerId, match_id: str, user_id: str
+) -> MatchOut:
+    """The owner removes a player from a match that hasn't started (like that
+    player leaving), and they can't join it again."""
+    match = platform.remove_player(caller_id=caller_id, match_id=match_id, user_id=user_id)
+    return _match_out(platform, match, caller_id=caller_id)
+
+
+@router.post("/matches/{match_id}/payouts")
+def agree_to_payouts(
+    platform: Platform, caller_id: CallerId, match_id: str, body: PayoutAgreement
+) -> MatchOut:
+    """Agree to (or dispute) the pot split a v1 paid match's final move proposed.
+    Tokens move only once every human seat agrees; one dispute refunds every
+    stake, as does no agreement by the match's payout_deadline."""
+    match = platform.agree_to_payouts(
+        caller_id=caller_id, match_id=match_id, agree=body.agree
     )
     return _match_out(platform, match, caller_id=caller_id)
 
@@ -2116,11 +2146,30 @@ def _error_body(request: Request, message: str) -> dict[str, object]:
     return body
 
 
+async def _game_message_body(request: Request, exc: GameMessageError) -> dict[str, object]:
+    """A text the game's server wrote: `detail` is translated through the game version's
+    table when a template matches (as written otherwise), `code` is `game_message`, and
+    `message_key` and `params` name the template and the values it captured."""
+    locale = getattr(request.state, "locale", i18n.DEFAULT_LOCALE)
+    platform = request.app.state.platform
+    text = None
+    if locale != i18n.DEFAULT_LOCALE and exc.template is not None:
+        text = await run_in_threadpool(platform.translate_game_message, exc, locale)
+    body: dict[str, object] = {"detail": text or str(exc), "code": "game_message"}
+    if exc.key is not None:
+        body["message_key"] = exc.key
+        if exc.params:
+            body["params"] = exc.params
+    return body
+
+
 async def _handle_platform_error(request: Request, exc: Exception) -> JSONResponse:
     status = next(
         (status for kind, status in _STATUS_OF_ERROR if isinstance(exc, kind)),
         HTTPStatus.INTERNAL_SERVER_ERROR,
     )
+    if isinstance(exc, GameMessageError):
+        return JSONResponse(status_code=status, content=await _game_message_body(request, exc))
     return JSONResponse(status_code=status, content=_error_body(request, str(exc)))
 
 

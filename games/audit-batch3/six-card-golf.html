@@ -21,15 +21,127 @@ button:disabled{opacity:.4;cursor:default}
 </style>
 </head>
 <body><div class="wrap">
-<h2>⛳ 6-Card Golf</h2>
-<div id="status">Waiting…</div>
+<h2 id="title"></h2>
+<div id="status" role="status" aria-live="polite"></div>
 <div class="pilearea" id="piles"></div>
 <div id="hands"></div>
 <div id="actions" style="text-align:center"></div>
 <div id="log"></div>
-<div class="help"><b>How to play:</b> Each has 6 cards (2x3). Start by flipping any 2. On turn draw top of Stock or Discard. If from Stock you may replace any card (new card face-up) OR discard it to flip one of your face-down cards. If from Discard you must replace. Matching ranks in a column = 0 for that column. A=1, 2-10=face, J=0, Q=10, K=0. When someone has all 6 up, others get 1 last turn. Lowest wins!</div>
+<div class="help"><b id="helpTitle"></b> <span id="helpText"></span></div>
 </div>
+<script type="application/json" id="i18n-strings">
+{
+"title": "⛳ 6-Card Golf",
+"help_title": "How to play:",
+"help_text": "Each has 6 cards (2x3). Start by flipping any 2. On turn draw top of Stock or Discard. If from Stock you may replace any card (new card face-up) OR discard it to flip one of your face-down cards. If from Discard you must replace. Matching ranks in a column = 0 for that column. A=1, 2-10=face, J=0, Q=10, K=0. When someone has all 6 up, others get 1 last turn. Lowest wins!",
+"waiting": "Waiting…",
+"waiting_start": "Waiting to start…",
+"score_item": "{name}:{score}",
+"tie": "🏆 Tie: {names} with {best}! ({scores})",
+"winner": "🏆 {name} wins with {best}! ({scores})",
+"saving": "Saving move…",
+"flip_turn": "🔄 {name} flip 2 cards",
+"turn_mine": "👉 Your turn ({name})",
+"turn_other": "👉 {name}'s turn",
+"with_last_round": "{text} — LAST ROUND!",
+"with_play_drawn": "{text} — play your drawn card",
+"with_draw_pile": "{text} — draw Stock or Discard",
+"stock": "Stock ({count})",
+"discard": "Discard",
+"drawn": "Drawn",
+"player_final": "{name} — Final: {score}",
+"player_final_you": "{name} (you) — Final: {score}",
+"player_showing": "{name} — Showing: {score}",
+"player_showing_you": "{name} (you) — Showing: {score}",
+"game_over": "Game over. Thanks for playing!",
+"waiting_for": "Waiting for {names}…",
+"select_two": "Select 2 face-down cards, then:",
+"flip_selected": "Flip selected ({count}/2)",
+"clear": "Clear",
+"draw_stock": "Draw Stock",
+"take_discard": "Take Discard",
+"drew_replace": "Drew {card} — click a card to replace it",
+"instead_flip": "Instead: Discard & Flip a face-down",
+"now_flip": "Now click one of YOUR face-down cards to flip.",
+"cancel": "Cancel",
+"server_not_seated": "not seated",
+"server_game_over": "game over",
+"server_not_your_flip": "not your flip",
+"server_flip_2_cards": "flip 2 cards",
+"server_pick_2_different_cards": "pick 2 different cards",
+"server_already_face_up": "already face up",
+"server_not_in_play": "not in play",
+"server_not_your_turn": "not your turn",
+"server_bad_move": "bad move",
+"server_already_drew": "already drew",
+"server_draw_stock_or_discard": "draw stock or discard",
+"server_discard_empty": "discard empty",
+"server_stock_empty": "stock empty",
+"server_draw_first": "draw first",
+"server_pick_a_card": "pick a card",
+"server_only_stock_draw_can_flip": "only stock draw can flip",
+"server_unknown_move": "unknown move",
+"server_flipped_2_to_flip": "{p1} flipped 2. {p2} to flip.",
+"server_drew_from": "{p1} drew from {p2}.",
+"server_replaced_a_card": "{p1} replaced a card.",
+"server_discarded_stock_to_flip": "{p1} discarded stock to flip."
+}
+</script>
 <script>
+
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// A text the game's SERVER wrote (a log line, a hand name in the match state): finds its template
+// among the `server_` texts of the table (the most specific that fits, each {name} standing for
+// any text) and shows it in the viewer's language with the same values; any other text is
+// returned as written.
+const SERVER_TEMPLATES = Object.keys(SOURCE_STRINGS)
+  .filter((key) => key.startsWith("server_") && SOURCE_STRINGS[key])
+  .map((key) => {
+    const names = [];
+    let literal = 0;
+    const source = SOURCE_STRINGS[key]
+      .split(/\{(\w+)\}/)
+      .map((piece, index) => {
+        if (index % 2) { names.push(piece); return "([\\s\\S]+?)"; }
+        literal += piece.length;
+        return piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      })
+      .join("");
+    return { key, names, literal, pattern: new RegExp("^" + source + "$") };
+  })
+  .sort((a, b) => b.literal - a.literal || a.names.length - b.names.length || (a.key > b.key ? 1 : a.key === b.key ? 0 : -1));
+
+function tx(text) {
+  if (typeof text !== "string") return text;
+  for (const template of SERVER_TEMPLATES) {
+    const found = template.pattern.exec(text);
+    if (found) {
+      const params = {};
+      template.names.forEach((name, index) => { if (!(name in params)) params[name] = found[index + 1]; });
+      return t(template.key, params);
+    }
+  }
+  return text;
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+
+
 let latest=null, flipSel=[], flipModeArmed=false, pending=false;
 function rankL(r){return r==1?'A':r==11?'J':r==12?'Q':r==13?'K':''+r;}
 function suitS(s){return ['\u2660','\u2665','\u2666','\u2663'][s];}
@@ -55,90 +167,112 @@ function sendMove(m){
  pending=true;flipSel=[];flipModeArmed=false;
  parent.postMessage({type:'make_move',move:m},'*');render();return true;
 }
-function nameOf(i){try{return latest.players[i].name;}catch(e){return 'P'+i;}}
 function curIdx(view){return view.cur!==undefined?view.cur:view.turn;}
 function flipIdx(view){return view.flipTurnIdx!==undefined?view.flipTurnIdx:view.flipTurn;}
-function cardHTML(c,hidden,clickable,onclick){
-  if(hidden||c.up===false) return '<div class="card back'+(clickable?' clickable':'')+'" '+(onclick?('onclick="'+onclick+'"'):'')+'>?</div>';
-  let red=isRed(c.s)?' red':'';
-  return '<div class="card'+red+(clickable?' clickable':'')+'" '+(onclick?('onclick="'+onclick+'"'):'')+'><div>'+rankL(c.r)+'</div><div>'+suitS(c.s)+'</div></div>';
+function el(tag,text,cls,parent){const e=document.createElement(tag);if(text!==undefined&&text!==null)e.textContent=text;if(cls)e.className=cls;if(parent)parent.appendChild(e);return e;}
+function cardEl(c,hidden,clickable,onclick,parent){
+  if(hidden||c.up===false){const b=el('div','?','card back'+(clickable?' clickable':''),parent);if(onclick)b.setAttribute('onclick',onclick);return b;}
+  const d=el('div',null,'card'+(isRed(c.s)?' red':'')+(clickable?' clickable':''),parent);
+  if(onclick)d.setAttribute('onclick',onclick);
+  el('div',rankL(c.r),null,d);el('div',suitS(c.s),null,d);return d;
 }
+function blankCard(parent){return el('div','\u2014','card',parent);}
+function pileBox(label,parent){const box=el('div',null,null,parent);box.style.textAlign='center';box.appendChild(document.createTextNode(label));el('br',null,null,box);return box;}
 function render(){
   let sEl=document.getElementById('status');
   let hEl=document.getElementById('hands');
   let pEl=document.getElementById('piles');
   let aEl=document.getElementById('actions');
   let lEl=document.getElementById('log');
-  if(!latest){sEl.textContent='Waiting…';return;}
+  document.getElementById('title').textContent=t('title');document.getElementById('helpTitle').textContent=t('help_title');document.getElementById('helpText').textContent=t('help_text');
+  if(!latest){sEl.textContent=t('waiting');return;}
   let view=latest.view, players=latest.players;
   let acting=latest.acting_for_player_index;
   let my=latest.my_player_index;
   let canMove=canAct();
-  if(!view){sEl.textContent='Waiting to start…';pEl.innerHTML='';hEl.innerHTML='';aEl.innerHTML='';lEl.textContent='';return;}
+  if(!view){sEl.textContent=t('waiting_start');pEl.replaceChildren();hEl.replaceChildren();aEl.replaceChildren();lEl.textContent='';return;}
   let cur=curIdx(view), flip=flipIdx(view);
   if(view.phase=='over'){
     let sc=view.scores;
     const best=Math.min(...sc),winners=sc.map((score,i)=>score===best?players[i].name:null).filter(name=>name!==null);
-    sEl.textContent='\uD83C\uDFC6 '+(winners.length>1?'Tie: '+winners.join(' & '):winners[0]+' wins')+' with '+best+'! ('+sc.map((s,i)=>players[i].name+':'+s).join(', ')+')';
-  } else if(pending){sEl.textContent='Saving move…';}
-  else if(acting==null){sEl.textContent='Waiting…';}
-  else if(view.phase=='flip'){sEl.textContent='\uD83D\uDD04 '+players[flip].name+' flip 2 cards';}
-  else{sEl.textContent=((acting==my)?'\uD83D\uDC49 Your turn ('+players[acting].name+')':'\uD83D\uDC49 '+players[acting].name+"'s turn")+(view.lastChance?' \u2014 LAST ROUND!':'')+(view.drew?' \u2014 play your drawn card':' \u2014 draw Stock or Discard');}
-  lEl.textContent=view.log||'';
+    const scoreList=sc.map((s,i)=>t('score_item',{name:players[i].name,score:s})).join(', ');
+    sEl.textContent=winners.length>1?t('tie',{names:winners.join(' & '),best:best,scores:scoreList}):t('winner',{name:winners[0],best:best,scores:scoreList});
+  } else if(pending){sEl.textContent=t('saving');}
+  else if(acting==null){sEl.textContent=t('waiting');}
+  else if(view.phase=='flip'){sEl.textContent=t('flip_turn',{name:players[flip].name});}
+  else{
+    let text=(acting==my)?t('turn_mine',{name:players[acting].name}):t('turn_other',{name:players[acting].name});
+    if(view.lastChance)text=t('with_last_round',{text:text});
+    text=view.drew?t('with_play_drawn',{text:text}):t('with_draw_pile',{text:text});
+    sEl.textContent=text;
+  }
+  lEl.textContent=tx(view.log||'');
   let stockN=view.stockCount||0;
   let discTop=view.discard&&view.discard.length?view.discard[view.discard.length-1]:null;
   let drew=view.drew;
   let needDraw=view.phase=='play'&&!drew&&canMove;
   let stockClick=(needDraw)?'window.clickStock()':null;
   let discClick=(needDraw&&discTop)?'window.clickDisc()':null;
-  pEl.innerHTML='<div style="text-align:center">Stock ('+stockN+')<br><div class="card back'+(stockClick&&canMove?' clickable':'')+'" '+(stockClick&&canMove?('onclick="'+stockClick+'"'):'')+'>?</div></div>'
-   +'<div style="text-align:center">Discard<br>'+(discTop?cardHTML(discTop,false,(!!discClick&&canMove),(discClick&&canMove?discClick:null)):'<div class=card>\u2014</div>')+'</div>'
-   +'<div style="text-align:center">Drawn<br>'+(drew?(drew.hidden?'<div class="card back">?</div>':cardHTML(drew,false,false,null)):'<div class=card>\u2014</div>')+'</div>';
-  let html='';
+  pEl.replaceChildren();
+  const stockBox=pileBox(t('stock',{count:stockN}),pEl);
+  const stockCard=el('div','?','card back'+(stockClick&&canMove?' clickable':''),stockBox);
+  if(stockClick&&canMove)stockCard.setAttribute('onclick',stockClick);
+  const discBox=pileBox(t('discard'),pEl);
+  if(discTop)cardEl(discTop,false,(!!discClick&&canMove),(discClick&&canMove?discClick:null),discBox);else blankCard(discBox);
+  const drawnBox=pileBox(t('drawn'),pEl);
+  if(drew){if(drew.hidden)el('div','?','card back',drawnBox);else cardEl(drew,false,false,null,drawnBox);}else blankCard(drawnBox);
+  hEl.replaceChildren();
   for(let pi=0;pi<players.length;pi++){
     let hand=view.hands&&view.hands[pi]?view.hands[pi]:null;
-    if(!hand){html+='<div class=playerbox><b>'+players[pi].name+'</b></div>';continue;}
+    const box=el('div',null,'playerbox',hEl);
+    if(!hand){el('b',players[pi].name,null,box);continue;}
     let active=(view.phase=='flip'&&flip==pi)||(view.phase=='play'&&cur==pi);
+    if(active)box.className='playerbox active';
     let sc=view.phase=='over'?finalScore(hand):liveScore(hand);
-    html+='<div class="playerbox'+(active?' active':'')+'"><b>'+players[pi].name+'</b> '+(pi==my?'(you)':'')+' \u2014 '+(view.phase=='over'?'Final: '+sc:'Showing: '+sc)+(view.knocker==pi&&view.lastChance?' \uD83D\uDD14':'')+'<div class=handgrid>';
+    const q={name:players[pi].name,score:sc};
+    let head;
+    if(view.phase=='over')head=(pi==my)?t('player_final_you',q):t('player_final',q);
+    else head=(pi==my)?t('player_showing_you',q):t('player_showing',q);
+    el('b',head,null,box);
+    if(view.knocker==pi&&view.lastChance)el('span',' \uD83D\uDD14',null,box);
+    const grid=el('div',null,'handgrid',box);
     for(let r=0;r<2;r++){
-      html+='<div class=row>';
+      const row=el('div',null,'row',grid);
       for(let c=0;c<3;c++){let idx=(r===0?c:c+3);let card=hand[idx];
         let clickable=false,onclick=null;
         if(canMove&&view.phase=='flip'&&pi==flip&&pi==acting&&!card.up){
-          clickable=true;onclick='window.clickFlip('+idx+');';
           let sel=flipSel.includes(idx);
-          html+='<div class="card back clickable" onclick="'+onclick+'" style="'+(sel?'outline:3px solid lime;':'')+'">'+(sel?'\u2713':'?')+'</div>';
+          const b=el('div',sel?'\u2713':'?','card back clickable',row);b.setAttribute('onclick','window.clickFlip('+idx+');');
+          if(sel)b.style.cssText='outline:3px solid lime;';
           continue;
         }
         if(canMove&&view.phase=='play'&&pi==cur&&pi==acting&&drew&&!drew.hidden){
           if(flipModeArmed){ if(!card.up){clickable=true;onclick='window.clickFlipSpot('+idx+');';} }
           else{clickable=true;onclick='window.clickReplace('+idx+');';}
         }
-        if(!card.up)html+='<div class="card back'+(clickable?' clickable':'')+'" '+(onclick?('onclick="'+onclick+'"'):'')+'>?</div>';
-        else html+=cardHTML(card,false,clickable,onclick);
+        if(!card.up){const b=el('div','?','card back'+(clickable?' clickable':''),row);if(onclick)b.setAttribute('onclick',onclick);}
+        else cardEl(card,false,clickable,onclick,row);
       }
-      html+='</div>';
     }
-    html+='</div></div>';
   }
-  hEl.innerHTML=html;
-  let ab='';
-  if(view.phase=='over'){ab='<div>Game over. Thanks for playing!</div>';}
-  else if(!canMove){ab='<div style="opacity:.7">Waiting for '+(latest.turn_of_player_indices||[]).map(i=>players[i]?players[i].name:'…').join(', ')+'…</div>';}
+  aEl.replaceChildren();
+  const btn=(text,onclick,disabled)=>{const b=el('button',text,null,aEl);b.setAttribute('onclick',onclick);if(disabled)b.disabled=true;return b;};
+  if(view.phase=='over'){el('div',t('game_over'),null,aEl);}
+  else if(!canMove){const names=(latest.turn_of_player_indices||[]).map(i=>players[i]?players[i].name:'\u2026').join(', ');el('div',t('waiting_for',{names:names}),null,aEl).style.opacity='.7';}
   else if(view.phase=='flip'&&acting==flip){
-    ab='<div>Select 2 face-down cards, then:</div><button '+(flipSel.length==2?'':'disabled')+' onclick="window.confirmFlip()">Flip selected ('+flipSel.length+'/2)</button><button onclick="window.clearFlip()">Clear</button>';
+    el('div',t('select_two'),null,aEl);
+    btn(t('flip_selected',{count:flipSel.length}),'window.confirmFlip()',flipSel.length!=2);
+    btn(t('clear'),'window.clearFlip()',false);
   } else if(view.phase=='play'&&acting==cur){
-    if(!drew){ab='<button onclick="window.clickStock()">Draw Stock</button><button onclick="window.clickDisc()" '+(discTop?'':'disabled')+'>Take Discard</button>';}
+    if(!drew){btn(t('draw_stock'),'window.clickStock()',false);btn(t('take_discard'),'window.clickDisc()',!discTop);}
     else{
-      if(drew.hidden){ab='<div>Waiting…</div>';}
+      if(drew.hidden){el('div',t('waiting'),null,aEl);}
       else if(!flipModeArmed){
-        ab='<div>Drew '+rankL(drew.r)+suitS(drew.s)+' \u2014 click a card to replace it</div>';
-        if(drew.from=='stock'&&actingHand().some(c=>!c.up))ab+='<button onclick="window.armFlip()">Instead: Discard & Flip a face-down</button>';
-      } else ab='<div>Now click one of YOUR face-down cards to flip.</div><button onclick="window.disarmFlip()">Cancel</button>';
+        el('div',t('drew_replace',{card:rankL(drew.r)+suitS(drew.s)}),null,aEl);
+        if(drew.from=='stock'&&actingHand().some(c=>!c.up))btn(t('instead_flip'),'window.armFlip()',false);
+      } else {el('div',t('now_flip'),null,aEl);btn(t('cancel'),'window.disarmFlip()',false);}
     }
-  } else {ab='<div style="opacity:.7">Waiting…</div>';}
-  aEl.innerHTML=ab;
+  } else {el('div',t('waiting'),null,aEl).style.opacity='.7';}
   if(latest.status=='over'){aEl.querySelectorAll('button').forEach(b=>b.disabled=true);}
 }
 window.clickFlip=function(i){
@@ -161,6 +295,7 @@ window.disarmFlip=function(){flipModeArmed=false;render();};
 window.clickFlipSpot=function(i){sendMove({kind:'discardFlip',idx:i});};
 addEventListener('message',ev=>{
   if(ev.source!==parent||!ev.data||ev.data.type!='state_changed')return;
+  applyLocale(ev.data);
   latest=ev.data;
   // A rejected move refreshes the same move count; allow retry after that response.
   pending=false;flipSel=[];flipModeArmed=false;

@@ -326,7 +326,7 @@ def require_publishable(draft):
     source = extract_strings(draft.code)
     if source is None: raise ConflictError('Game is missing its translation string table')
     from game_platform.game_text import lint
-    problems = lint(draft.code)
+    problems = lint(draft.code, draft.server_code)
     if problems: raise ConflictError("The game's texts cannot be translated: " + '; '.join(problems[:5]))
     tutorial = {s:s for s in vocabulary(flow['artifacts']['tutorial']['value']['html'])}
     for locale in LANGUAGES:

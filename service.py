@@ -24,7 +24,7 @@ from pydantic import JsonValue
 
 import logging
 
-from game_platform import game_text, i18n, observability
+from game_platform import game_messages, game_text, i18n, observability
 from game_platform.avatars import user_avatar, USER_AVATARS, computer_avatar
 from game_platform.models import (
     AgentConversation,
@@ -48,6 +48,7 @@ from game_platform.models import (
     Feedback,
     MatchStatus,
     Move,
+    PayoutOutcome,
     SeatTimeout,
     Seat,
     Translation,
@@ -164,6 +165,30 @@ class InvalidRequestError(PlatformError):
     """The request's values don't make sense for the resource it targets."""
 
 
+class GameMessageError(InvalidRequestError):
+    """A text the game's own server code wrote (the reason of an InvalidMove): answered 400
+    like InvalidRequestError, and translated for the viewer through the game version's string
+    table (see game_messages.py). [key] and [params] are set when a template of the table
+    matches the text; [template] is that template in English."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        game_id: str,
+        game_version: int,
+        key: str | None = None,
+        template: str | None = None,
+        params: dict[str, str] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.game_id = game_id
+        self.game_version = game_version
+        self.key = key
+        self.template = template
+        self.params = params or {}
+
+
 class ConflictError(PlatformError):
     """The resource's current state doesn't allow this transition."""
 
@@ -220,6 +245,9 @@ def _new_verification_code() -> str:
 # Speed matches: the allowed seconds per move (1, 3 or 10 minutes). None is a regular
 # match with no clock. Kept as a list so more choices can be added later.
 SPEED_TURN_SECONDS: Final = (60, 180, 600)
+# How long the other humans in a v1 paid match have to agree to the pot split the
+# final move proposed. Without every agreement by then, every stake is refunded.
+PAYOUT_AGREEMENT_SECONDS: Final = 3600
 
 # playerLeft calls get a longer time budget than other game functions:
 # a playerLeft may price its payout with ctx.estimateWinChance, whose
@@ -468,6 +496,9 @@ class GamePlatform:
         self._bundle_games_ttl_seconds = bundle_games_ttl_seconds
         self._bundle_games: tuple[float, list[Game]] | None = None
         self._bundle_tables: dict[tuple[str, int], tuple[dict[str, str] | None]] = {}
+        # The compiled server-text templates of each game version (game_messages.py), kept
+        # in memory: a version's code never changes.
+        self._server_templates: dict[tuple[str, int], tuple[game_messages.Template, ...]] = {}
         self._bundle_jobs: dict[str, threading.Event] = {}
         self._bundle_jobs_lock = threading.Lock()
         self._new_id = new_id
@@ -1508,24 +1539,39 @@ class GamePlatform:
             return self._merge_locked(source=source, into=into), merged_from
 
     def merge_users(
-        self, *, caller_id: str, from_user_id: str, into_user_id: str
+        self,
+        *,
+        caller_id: str,
+        from_user_id: str,
+        into_user_id: str,
+        into_password: str,
     ) -> User:
         """Merges [from_user_id] into [into_user_id]: games (all versions), matches
         (owner, seats, hidden flags and move authors), and linked accounts move over,
         then the source user is marked as replaced by the surviving user instead of
         being deleted, so its old credentials keep working as an alias of the
         survivor. The stronger login method always survives (google > phone >
-        email > guest); on ties the requested direction is kept. The caller must
-        authenticate as the merged-away (replaced) user, so nobody can absorb
-        someone else's account. Returns the surviving user.
+        email > guest); on ties the requested direction is kept.
+
+        The caller must prove control of BOTH accounts: they authenticate as the
+        merged-away (replaced) user, and [into_password] must be the target's
+        password. Otherwise anyone could merge their own account into a victim's
+        public user id and, since the replaced account's credentials then resolve
+        to the survivor, act as the victim. Returns the surviving user.
         """
         with self._lock:
             if from_user_id == into_user_id:
                 raise InvalidRequestError("cannot merge a user into itself")
+            source = self._require_user(from_user_id)
+            target = self._require_user(into_user_id)
+            if not hmac.compare_digest(
+                into_password.encode(), target.password.encode()
+            ):
+                raise ForbiddenError(
+                    "into_password is not the target account's password"
+                )
             source, target = self._merge_pair(
-                self._require_user(from_user_id),
-                self._require_user(into_user_id),
-                prefer_first_as_source=True,
+                source, target, prefer_first_as_source=True
             )
             if source.id != caller_id:
                 raise ForbiddenError(
@@ -1829,13 +1875,13 @@ class GamePlatform:
             self._owned_draft(caller_id=caller_id, draft_id=draft_id)
             self._store.delete_game_draft(draft_id)
 
-    def _require_translatable(self, code: str | None) -> None:
+    def _require_translatable(self, code: str | None, server_code: str | None = None) -> None:
         """translation.require_strings: client code that fails game_text.lint is refused,
         with the checker's problems in plain words. Games with no client code are exempt;
         the admin and migration paths and example data never call this."""
         if not self._require_game_strings or not code or not code.strip():
             return
-        problems = game_text.lint(code)
+        problems = game_text.lint(code, server_code)
         if problems:
             shown = "; ".join(problems[:5])
             if len(problems) > 5:
@@ -1859,7 +1905,7 @@ class GamePlatform:
                 if draft.base_version != 0:
                     raise ConflictError("published game is no longer available")
                 game_schemas = draft.game_schemas
-                self._require_translatable(draft.code)
+                self._require_translatable(draft.code, draft.server_code)
                 if draft.server_code:
                     if game_schemas is None:
                         game_schemas = self._generate_game_schemas(
@@ -1922,7 +1968,7 @@ class GamePlatform:
     ) -> Game:
         server_code = server_code or None
         if _check_strings:
-            self._require_translatable(code)
+            self._require_translatable(code, server_code)
         if server_code is None and game_schemas is not None:
             raise InvalidRequestError("game_schemas requires server_code")
         with self._lock:
@@ -2028,6 +2074,51 @@ class GamePlatform:
             translatable=table is not None,
             warnings=warnings,
         )
+
+    def _game_message_error(self, game: Game, message: str) -> GameMessageError:
+        """The 400 for a move the game's server rejected with [message]."""
+        found = None
+        try:
+            found = game_messages.match(self._templates_of(game), message)
+        except Exception:  # noqa: BLE001 - a text we cannot match is shown as written
+            logging.getLogger(__name__).exception("matching a game message failed")
+        return GameMessageError(
+            message,
+            game_id=game.id,
+            game_version=game.version,
+            key=found.key if found else None,
+            template=found.template if found else None,
+            params=found.params if found else None,
+        )
+
+    def _templates_of(self, game: Game) -> tuple[game_messages.Template, ...]:
+        cache_key = (game.id, game.version)
+        templates = self._server_templates.get(cache_key)
+        if templates is None:
+            try:
+                table = game_text.extract_strings(game.code or "")
+            except game_text.StringsError:
+                table = None
+            templates = game_messages.compile_templates(table)
+            if game.code:
+                self._server_templates[cache_key] = templates
+        return templates
+
+    def translate_game_message(self, error: GameMessageError, locale: str) -> str | None:
+        """The text of [error] in [locale] (the matching template translated, the captured
+        values put back as written), or None when it stays as the game wrote it: English, no
+        matching template, no translator, a translation that failed. Never raises."""
+        try:
+            if error.template is None or i18n.normalize_locale(locale) in (None, i18n.DEFAULT_LOCALE):
+                return None
+            translated = self._translation.translate([error.template], locale)
+            text = translated.texts.get(error.template)
+            if not text:
+                return None
+            return game_messages.fill(text, error.params)
+        except Exception:  # noqa: BLE001 - translation must never fail a request
+            logging.getLogger(__name__).exception("translating a game message failed")
+            return None
 
     def translation_bundle(self, locale: str) -> TranslationBundle:
         """The names, descriptions and string tables of the published games in [locale],
@@ -2342,7 +2433,7 @@ class GamePlatform:
             if updated == game:
                 return game
             if not _admin and updated.code != game.code:
-                self._require_translatable(updated.code)
+                self._require_translatable(updated.code, updated.server_code)
             if game.builder_workflow and not _publishing:
                 raise ConflictError("This game has approved specifications; edit and verify it in the guided builder")
             if updated.server_code and (
@@ -2537,6 +2628,8 @@ class GamePlatform:
         once they have all their players. The caller holds the lock."""
         if match.seat_of(caller_id) is not None:
             raise ConflictError("you are already a player in this match")
+        if caller_id in match.removed_user_ids:
+            raise ForbiddenError("you were removed from this match")
         if not self._get_game(match.game_id).published:
             raise ConflictError("this game is no longer published")
         if match.status == "over":
@@ -2558,15 +2651,24 @@ class GamePlatform:
                 num_computer_opponents=match.num_computer_opponents,
             )
         game = self._store.get_game_version(match.game_id, match.game_version)
+        # A v2 match takes the joiner's stake as they join, in the waiting room
+        # and mid-match alike. A v1 match takes its players' stakes at the start
+        # (_fund_match_tokens), so only a mid-match joiner pays here. Either way
+        # the pot grows by the stake, so nobody holds a seat in a paid match (and
+        # a share of its pot, or of its refund) without having paid in.
         stake = (
             match.bet_per_player
-            if game is not None and game.server_code
+            if (game is not None and game.server_code) or match.status == "ongoing"
             else 0
         )
         if stake:
-            # A v2 match takes the joiner's stake as they join (the pot
-            # grows by it), in the waiting room and mid-match alike.
+            # Raises (before anything is saved) when the joiner can't afford it.
             self._deduct_stake(caller_id, stake)
+        elif match.bet_per_player:
+            # A waiting v1 match takes stakes only at the start, so check now that
+            # the joiner could pay: otherwise one short player would make the
+            # owner's Start fail for everyone ("a player has insufficient tokens").
+            self._check_can_stake(caller_id, match.bet_per_player)
         saved = self._save(
             replace(
                 match,
@@ -3657,6 +3759,28 @@ class GamePlatform:
             )
             return started
 
+    def remove_player(self, *, caller_id: str, match_id: str, user_id: str) -> Match:
+        """The owner removes [user_id] from the waiting room, exactly as if they
+        had left it (their seat is freed, and a v2 stake taken on joining is
+        refunded), and bars them from joining this match again. This is how an
+        owner gets rid of a player who can't, or won't, let the match start."""
+        with self._lock:
+            match = self._get_owned_match(caller_id=caller_id, match_id=match_id)
+            if match.status != "waiting_for_players":
+                raise ConflictError("players can only be removed before the match starts")
+            if match.matchmaking_player_count is not None:
+                raise ConflictError("players can't be removed from a quick match")
+            if user_id == caller_id:
+                raise ConflictError(
+                    "the owner cannot remove themselves; delete the match instead"
+                )
+            if match.seat_of(user_id) is None:
+                raise NotFoundError("that user is not a player in this match")
+            left = self.leave_match(caller_id=user_id, match_id=match_id)
+            return self._save(
+                replace(left, removed_user_ids=left.removed_user_ids | {user_id})
+            )
+
     def leave_match(self, *, caller_id: str, match_id: str) -> Match:
         with self._lock:
             match = self._get_match(match_id)
@@ -3781,7 +3905,7 @@ class GamePlatform:
                 time_limit_seconds=PLAYER_LEFT_TIME_LIMIT_SECONDS,
             )
         except InvalidMoveError as error:
-            raise InvalidRequestError(error.message) from error
+            raise self._game_message_error(game, error.message) from error
         return {
             "player_id": caller_id,
             "payout": (result.get("payouts") or {}).get(match.player_id_of(self._get_seat(match, caller_id)), 0),
@@ -4044,9 +4168,7 @@ class GamePlatform:
             if next_turn_player_indices is not None and payout_player_indices is not None:
                 raise InvalidRequestError("payouts only allowed on the final move")
             if next_turn_player_indices is None:
-                if match.token_pot:
-                    if payout_player_indices is None:
-                        raise InvalidRequestError("terminal move requires pot distribution")
+                if match.token_pot and payout_player_indices is not None:
                     human_seats = {s.player_index for s in match.seats if s.kind == "human"}
                     if set(payout_player_indices) != human_seats:
                         raise InvalidRequestError("payouts must include every human seat")
@@ -4056,11 +4178,29 @@ class GamePlatform:
                         raise InvalidRequestError("payouts must total the token pot")
                 elif payout_player_indices is not None and any(payout_player_indices.values()):
                     raise InvalidRequestError("no tokens available for payout")
-            if next_turn_player_indices is None and match.token_pot:
-                for index, amount in payout_player_indices.items():
-                    uid = match.seats[index].user_id
-                    user = self._store.get_user(uid)
-                    self._store.put_user(replace(user, token_balance=user.token_balance + amount))
+            # A v1 client's claimed result can't be checked (the server runs no
+            # game code), so a paid final move only proposes the split: no tokens
+            # move until every other human agrees (agree_to_payouts).
+            proposal = (
+                dict(payout_player_indices)
+                if next_turn_player_indices is None
+                and match.token_pot
+                and payout_player_indices is not None
+                else None
+            )
+            if (
+                next_turn_player_indices is None
+                and match.token_pot
+                and payout_player_indices is None
+            ):
+                # A game that knows nothing about tokens ended a paid match: there
+                # is no result to pay out, so every human gets their stake back
+                # (an equal split of the pot) instead of the match never ending.
+                payout_player_indices = self._settle_pot(
+                    match.token_pot,
+                    {},
+                    recipients=[s for s in match.seats if s.kind == "human"],
+                )
             now = self._clock()
             move = Move(
                 move_number=len(match.moves) + 1,
@@ -4082,12 +4222,26 @@ class GamePlatform:
                     end_reason=None
                     if next_turn_player_indices is not None
                     else "finished",
-                    token_payouts=payout_player_indices if next_turn_player_indices is None else None,
+                    token_payouts=payout_player_indices
+                    if next_turn_player_indices is None and proposal is None
+                    else None,
+                    proposed_payouts=proposal,
+                    payout_agreed_indices=frozenset({seat.player_index})
+                    if proposal is not None
+                    else frozenset(),
+                    payout_deadline=now
+                    + dt.timedelta(seconds=PAYOUT_AGREEMENT_SECONDS)
+                    if proposal is not None
+                    else None,
+                    payout_outcome=None,
                     # Every accepted move restarts the clock, also when the same
                     # player moves again (a raise and its answer, chained jumps).
                     turn_started_at=now if match.turn_seconds else None,
                 )
             )
+            if proposal is not None and self._payout_agreed_by_all(saved):
+                # Only one human seat: nobody else has to agree.
+                saved = self._settle_proposed_payouts(saved, outcome="agreed")
             if saved.status == "over":
                 self._notify_match_event(
                     "notify.match_over",
@@ -4119,6 +4273,65 @@ class GamePlatform:
                 )
             return saved
 
+    def agree_to_payouts(
+        self, *, caller_id: str, match_id: str, agree: bool
+    ) -> Match:
+        """A human in a finished v1 paid match answers the pot split its final
+        move proposed. Agreeing records the caller's seat, and once every human
+        seat has agreed the pot is paid as proposed. Disputing refunds every
+        stake at once. Either answer is final for that seat."""
+        with self._lock:
+            # Reading the match applies an expired agreement deadline first.
+            match = self._get_match(match_id)
+            seat = match.seat_of(caller_id)
+            if seat is None or seat.kind != "human":
+                raise ForbiddenError("you are not a player in this match")
+            if not match.payout_pending:
+                raise ConflictError("this match has no payouts waiting for agreement")
+            if seat.player_index in match.payout_agreed_indices:
+                raise ConflictError("you already agreed to these payouts")
+            if not agree:
+                return self._settle_proposed_payouts(match, outcome="disputed")
+            saved = self._save(
+                replace(
+                    match,
+                    payout_agreed_indices=match.payout_agreed_indices
+                    | {seat.player_index},
+                )
+            )
+            if self._payout_agreed_by_all(saved):
+                saved = self._settle_proposed_payouts(saved, outcome="agreed")
+            return saved
+
+    @staticmethod
+    def _payout_human_indices(match: Match) -> frozenset[int]:
+        """The seats that must agree to a proposed split: every human seat, the
+        same seats the proposal has to pay (see make_move)."""
+        return frozenset(s.player_index for s in match.seats if s.kind == "human")
+
+    def _payout_agreed_by_all(self, match: Match) -> bool:
+        return self._payout_human_indices(match) <= match.payout_agreed_indices
+
+    def _settle_proposed_payouts(self, match: Match, *, outcome: PayoutOutcome) -> Match:
+        """Ends a pending v1 pot split: "agreed" pays it as proposed; "disputed"
+        or "expired" refunds every human's stake (an equal split of the pot).
+        Clears the pending state, so it can never pay twice. The caller holds
+        the lock."""
+        assert match.proposed_payouts is not None and match.payout_outcome is None
+        if outcome == "agreed":
+            payouts = dict(match.proposed_payouts)
+            for index, amount in payouts.items():
+                self._credit_tokens(match.seats[index].user_id or "", amount)
+        else:
+            payouts = self._settle_pot(
+                match.token_pot,
+                {},
+                recipients=[s for s in match.seats if s.kind == "human"],
+            )
+        return self._save(
+            replace(match, token_payouts=payouts, payout_outcome=outcome)
+        )
+
     def _make_move_v2(
         self,
         match: Match,
@@ -4140,7 +4353,7 @@ class GamePlatform:
                 game, match, "applyMove", match.state, match.player_id_of(seat), move
             )
         except InvalidMoveError as error:
-            raise InvalidRequestError(error.message) from error
+            raise self._game_message_error(game, error.message) from error
         saved = self._apply_logic_result(
             match,
             result=result,
@@ -4160,21 +4373,8 @@ class GamePlatform:
         with self._lock:
             match = self._get_match(match_id)
             if match.status != "over" and caller_id in match.active_human_user_ids:
-                game = self._store.get_game_version(
-                    match.game_id, match.game_version
-                )
-                if (
-                    game is not None
-                    and game.server_code
-                    and match.status == "waiting_for_players"
-                    and match.bet_per_player
-                    and match.token_pot
-                    >= match.bet_per_player * len(match.human_user_ids)
-                ):
-                    # A waiting v2 match holds its players' stakes (taken
-                    # as they joined); deleting it refunds everyone.
-                    for user_id in match.human_user_ids:
-                        self._credit_tokens(user_id, match.bet_per_player)
+                # Deleting refunds every stake the match holds (a waiting v2
+                # match's, taken as players joined, or an ongoing match's pot).
                 self._delete_match_and_invites(match_id)
                 return
             if match.status != "over":
@@ -4375,9 +4575,37 @@ class GamePlatform:
             raise ConflictError("the match is over")
 
     def _delete_match_and_invites(self, match_id: str) -> None:
+        """Deletes a match and its invites, first giving back any tokens it still
+        holds, so no deletion path (a player's, an admin's, deleting the owner's
+        account) can make a stake disappear. The caller holds the lock."""
+        match = self._store.get_match(match_id)
+        if match is not None:
+            self._refund_held_pot(match)
         for invite in self._store.list_invites(match_id=match_id):
             self._store.delete_invite(invite.token)
         self._store.delete_match(match_id)
+
+    @staticmethod
+    def _held_pot(match: Match) -> int:
+        """Tokens the match holds that nobody has been paid yet: the pot of a
+        waiting (v2 stakes are taken on joining) or ongoing match, or of a
+        finished v1 match whose split still waits for agreement. A settled
+        match holds nothing, even where [token_pot] still records its size."""
+        if match.status == "over" and not match.payout_pending:
+            return 0
+        return match.token_pot
+
+    def _refund_held_pot(self, match: Match) -> None:
+        """Splits what [match] still holds equally among its humans (each gets
+        their stake back), like a timeout does. The caller holds the lock and is
+        about to delete the match."""
+        held = self._held_pot(match)
+        if held <= 0:
+            return
+        humans = [s for s in match.seats if s.kind == "human"]
+        self._settle_pot(
+            held, {}, recipients=[s for s in humans if s.active] or humans
+        )
 
     # Saved games: each user's library of games to come back to
 
@@ -5167,6 +5395,13 @@ class GamePlatform:
                 match, status="over", turn_of_player_indices=None,
                 end_reason="solo_computers_only", token_pot=0,
                 token_payouts=payouts or match.token_payouts, pending_leave=None))
+        if (
+            match.payout_pending
+            and match.payout_deadline is not None
+            and self._clock() >= match.payout_deadline
+        ):
+            # Not everyone agreed to the v1 pot split in time: refund the stakes.
+            return self._settle_proposed_payouts(match, outcome="expired")
         deadline = match.turn_deadline
         if deadline is None:
             return match

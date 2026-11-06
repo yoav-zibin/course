@@ -185,11 +185,14 @@ which is fine for development and useless for real users.
 
 #### Merging accounts
 
-`POST /users/{id}/merge` `{into_user_id}` merges one account into another: every game
-(all versions), match (owner, seats, hidden flags, and move authors), and linked login
-of the URL's user moves to `into_user_id`, then the URL's user is deleted. Authenticate
-as the merged-away user, so nobody can absorb someone else's account; merging a user
-into itself is a 400. The website uses this when you link a login that belongs to
+`POST /users/{id}/merge` `{into_user_id, into_password}` merges one account into
+another: every game (all versions), match (owner, seats, hidden flags, and move authors),
+and linked login of the URL's user moves to `into_user_id`, then the URL's user is marked
+as replaced (its old credentials keep working as an alias of the survivor). The caller
+must control both accounts: authenticate as the merged-away user, and send the surviving
+account's password as `into_password` (a wrong one is a 403). Otherwise anyone could
+merge their own account into someone else's public user id and act as them. Merging a
+user into itself is a 400. The website uses this when you link a login that belongs to
 another of your accounts.
 
 #### Invite links (referrals)
@@ -274,7 +277,7 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `PATCH /users/{id}` | yes | Change your own `display_name` and/or `locale` (403 for other users) |
 | `GET /i18n/locales` |  | The supported languages (see [Languages](#languages)) |
 | `GET /i18n/{locale}` |  | Every text in one language: UI labels, status labels, error messages |
-| `POST /users/{id}/merge` | yes | Merge this account into `into_user_id` and delete it (authenticate as this user) |
+| `POST /users/{id}/merge` | yes | Merge this account into `into_user_id` (authenticate as this user and send `into_password`, the target's password) |
 | `GET /matches/open` |  | Matches anyone may join (waiting, or ongoing with mid-match joins) |
 | `POST /games` | yes | Create a game |
 | `GET /games?owner_user_id=&q=` |  | List published games that aren't deleted, optionally by owner. `q` searches names and descriptions (every word must match, ignoring case). The list never includes code, which is most of each game; load one game in full from `GET /games/{id}` |
@@ -291,6 +294,8 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `POST /matches/{id}/start` | yes | Start `{first_turn_player_indices, initial_state}`, both optional (owner only) |
 | `POST /matches/{id}/leave` | yes | Leave the match |
 | `POST /matches/{id}/moves` | yes | Make a move `{new_state, next_turn_player_indices, expected_move_count?}` |
+| `POST /matches/{id}/payouts` | yes | Agree to (`{agree: true}`) or dispute (`{agree: false}`) a v1 paid match's proposed pot split |
+| `DELETE /matches/{id}/players/{user_id}` | yes | Owner removes a player before the match starts (like them leaving; a v2 stake is refunded); they can't join it again. Not for quick matches |
 | `GET /matches/{id}/moves` |  | Full move history |
 | `DELETE /matches/{id}` | yes | Owner: delete the match. Other players: hide an ended match from their list |
 | `GET /users/me/saved-games` | yes | The caller's saved games, most recently saved first |
@@ -335,12 +340,28 @@ Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct
   (`end_reason: "finished"`). When a computer seat has the turn, any human player in
   the match computes and submits the computer's move.
   `expected_move_count` optionally guards against two clients submitting the same move.
+- **Token stakes in games without server code (v1).** The server can't check a v1
+  client's claimed result, so the final move of a paid match only *proposes* how the pot
+  is split (`payout_player_indices`, which must pay every human seat and total the pot).
+  No tokens move yet: the match is over with `proposed_payouts` set and `token_payouts`
+  null. Every other human answers with `POST /matches/{id}/payouts {agree}` (the portal
+  shows Agree / Dispute buttons). Once every human seat has agreed, the pot is paid as
+  proposed (`payout_outcome: "agreed"`). One dispute (`"disputed"`), or no full agreement
+  within an hour (`payout_deadline`, `"expired"`), refunds every stake instead. A final
+  move with no `payout_player_indices` (a game that knows nothing about tokens) ends the
+  match and refunds every stake, so any game can finish a paid match. v2 games are
+  unaffected: their server code computes the payouts.
 - Leaving a waiting match frees the seat (the owner must delete the match instead). Leaving
   an ongoing match replaces the leaver with a computer (which keeps the turn) if the game
   `allows_leave_mid_match`, and otherwise ends it (`end_reason: "player_left"`). The match
   also ends if its last human leaves.
 - Joining an ongoing match requires `allows_join_mid_match`; the joiner takes over the
   first computer seat, or adds a seat if the game's maximum player count allows it.
+  In a paid match the joiner stakes `bet_per_player` like everyone else (it is added to
+  `token_pot`); a joiner who can't afford it is turned away (409).
+- Joining a paid match that hasn't started checks that the joiner can afford the stake
+  (counting today's grant); it is taken when the match starts. The owner can remove a
+  waiting player (the portal shows a Remove button), who then can't rejoin that match.
 
 ### Feedback
 
@@ -935,7 +956,10 @@ A v1 game sends the full result:
 
 `new_state` replaces the match's state. `next_turn_player_indices` lists the seats that
 may move next (more than one when several players move at once), or `null` to end the
-match. The portal submits it with
+match. In a match with a token pot, the final move may also carry
+`payout_player_indices` (seat index to tokens, paying every human seat and totaling
+`token_pot`): the split it proposes pays out once every other player agrees. Without
+it every stake is refunded (see [Match rules](#match-rules)). The portal submits it with
 `POST /matches/{id}/moves` (with `expected_move_count`, so a stale move is rejected) and
 then sends a fresh `state_changed`. Moves the server rejects (not your turn, a seat that
 doesn't exist) are shown to the player and followed by `state_changed` with the

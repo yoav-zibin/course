@@ -1,0 +1,25 @@
+{
+  "_about": "Server texts the extractor cannot read from the code, per page (for example texts a helper function returns and the move handler throws). They are added to the page table like the others. Written by hand after reading the server code.",
+  "audit-batch1/battleship.html": [
+    "need 5 ships",
+    "bad ship",
+    "missing {p1}",
+    "{p1} wrong size",
+    "bad cell",
+    "off board",
+    "overlap",
+    "{p1} must be straight",
+    "{p1} must be contiguous",
+    "ships can't touch"
+  ],
+  "audit-batch3/ers.html": [
+    "JOKER!",
+    "DOUBLE!",
+    "MARRIAGE!",
+    "TENS!",
+    "TOP-BOTTOM!",
+    "SANDWICH!",
+    "TENS (sandwich)!",
+    "4-IN-A-ROW!"
+  ]
+}

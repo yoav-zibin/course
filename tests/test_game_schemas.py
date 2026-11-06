@@ -7,6 +7,7 @@ import pytest
 from game_platform.backfill_game_schemas import (
     PERMISSIVE_SCHEMAS,
     backfill_game_schemas,
+    infer_schemas,
     missing_versions,
     plan_schema_map,
     repo_schemas,
@@ -405,3 +406,37 @@ def test_the_backfill_opens_the_same_store_as_the_server_in_query_mode():
         module.open_store(config)
     client.assert_called_once_with(project="p", database="d")
     assert store.call_args.kwargs == {"namespace": "production_v1"}
+
+
+def test_the_backfill_can_use_inferred_schemas_before_the_stopgap():
+    from unittest.mock import patch
+
+    now = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+    store = InMemoryStore()
+    for game_id in ("alpha", "beta", "gamma"):
+        store.add_game_version(_legacy(game_id, 1, now))
+    missing = missing_versions(store)
+    inferred_schemas = {"state": {"type": "object"}, "move": {"type": "object"}, "view": {"type": "object"}}
+
+    def fake_infer(server_code, *, game_id, rules, **kwargs):
+        if game_id == "beta":
+            raise ValueError("no successful samples")
+        return inferred_schemas, None
+
+    messages = []
+    with patch("game_platform.game_testing.infer_game_schemas", fake_infer):
+        found = infer_schemas(store, ["alpha@1", "beta@1", "gamma@1"], log=messages.append)
+    assert set(found) == {"alpha@1", "gamma@1"} and found["alpha@1"] == inferred_schemas
+    assert messages == ["beta@1: could not infer schemas (no successful samples)"]
+
+    plan, source = plan_schema_map(missing, {}, inferred=found, permissive_rest=True)
+    assert source == {
+        "alpha@1": "inferred from sample games (not a proof)",
+        "beta@1": "permissive (no validation)",
+        "gamma@1": "inferred from sample games (not a proof)",
+    }
+    # without the stopgap, the version that could not be inferred is left out and the backfill refuses
+    partial, _ = plan_schema_map(missing, {}, inferred=found)
+    with pytest.raises(ValueError, match="missing schemas for beta@1"):
+        backfill_game_schemas(store, partial)
+    assert backfill_game_schemas(store, plan) == 3

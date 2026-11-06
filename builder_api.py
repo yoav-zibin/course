@@ -141,7 +141,7 @@ def make_router(platform_dependency, caller_dependency):
             if specs['client_strings'] is None:
                 raise InvalidRequestError('Rebuild the game with its required translation string table')
             from game_platform.game_text import lint
-            text_problems = lint(draft.code)
+            text_problems = lint(draft.code, draft.server_code)
             if text_problems:
                 raise InvalidRequestError("The game's texts cannot be translated: " + '; '.join(text_problems[:5]) + '. Rebuild the game.')
             key = flow.digest(['translate', job['id'], specs, flow.LANGUAGES])
