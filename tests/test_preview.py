@@ -19,6 +19,10 @@ def test_preview_serves_local_builder_and_forwards_authenticated_muse_requests()
         assert page.status_code == 200
         assert 'builder.css' in page.text
         assert 'Connected to buildplay.fun' in page.text
+        guided = client.get('/new-builder?skin=sunset')
+        assert guided.status_code == 200
+        assert 'id="new-draft"' in guided.text
+        assert 'Connected to buildplay.fun' in guided.text
         reply = client.post('/agent/chat', json={'messages': []}, headers={'X-User-Id': 'test-user', 'X-User-Password': 'test-password'})
         assert reply.status_code == 202
         job = reply.json()['preview_job_id']
@@ -43,7 +47,7 @@ def test_preview_portal_disables_service_worker_and_prevents_asset_caching():
         assert entry.headers['cache-control'] == 'no-store'
         assert 'name="local-preview"' in entry.text
         assert "registration.unregister()" in entry.text
-        assert "location.replace('/static/portal.html'+location.hash)" in entry.text
+        assert "location.replace('/static/portal.html'+location.search+location.hash)" in entry.text
 
         portal = client.get('/static/portal.html')
         assert portal.status_code == 200

@@ -1,10 +1,11 @@
 """FastAPI routes for the game platform."""
 
+import asyncio
+import html
 import io
 import logging
 import mimetypes
 import secrets
-import asyncio
 import threading
 import time
 import uuid
@@ -17,13 +18,15 @@ from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 import segno
 from starlette.concurrency import run_in_threadpool
-from starlette.datastructures import State
+from starlette.datastructures import MutableHeaders, State
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.gzip import GZipMiddleware
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from game_platform.invariants import InvariantRequest, InvariantReport, check_invariants
@@ -71,7 +74,10 @@ from game_platform.schemas import (
     InviteOut,
     InviteViewOut,
     MatchCreate,
+    FeedbackCreate,
+    FeedbackOut,
     MatchOut,
+    MatchSummaryOut,
     MatchHistoryOut,
     MatchStart,
     MatchUpdate,
@@ -105,6 +111,7 @@ from game_platform.service import (
     InvalidRequestError,
     NotFoundError,
     PlatformError,
+    TooManyRequestsError,
     UnauthorizedError,
 )
 from game_platform.agent import GENERATION_BUDGET_SECONDS, AgentError, chat_with_agent
@@ -121,6 +128,7 @@ _STATUS_OF_ERROR: Final[tuple[tuple[type[PlatformError], HTTPStatus], ...]] = (
     (NotFoundError, HTTPStatus.NOT_FOUND),
     (InvalidRequestError, HTTPStatus.BAD_REQUEST),
     (ConflictError, HTTPStatus.CONFLICT),
+    (TooManyRequestsError, HTTPStatus.TOO_MANY_REQUESTS),
 )
 
 
@@ -255,6 +263,12 @@ def _match_out(
     )
 
 
+def _match_summary_out(platform: GamePlatform, match: Match) -> MatchSummaryOut:
+    """A match for a list: no state, so no per-match view work — see
+    [MatchSummaryOut]."""
+    return MatchSummaryOut.of(match, now=platform.now())
+
+
 # Users
 
 
@@ -338,6 +352,28 @@ def referrals(platform: Platform, request: Request, caller_id: CallerId) -> Refe
         referred_users=[UserOut.of(user) for user in referred],
         invites=[InviteOut.of_invite(i, base_url=base_url) for i in invites],
     )
+
+
+@router.get("/users")
+def list_users(
+    platform: Platform, caller_id: OptionalCallerId, ids: str = ""
+) -> list[UserOut]:
+    """Public profiles for the comma-separated [ids] query parameter, in request
+    order. The portal loads every visible player this way in a single call;
+    fetching them one by one was the platform's worst slow-request offender
+    under load, as dozens of near-instant calls queued behind each other.
+    Unknown ids are skipped rather than failing the whole batch, and duplicate
+    ids collapse. Includes [referral_code] only for the caller's own profile.
+    """
+    wanted = list(
+        dict.fromkeys(part.strip() for part in ids.split(",") if part.strip())
+    )
+    if len(wanted) > 200:
+        raise InvalidRequestError("at most 200 user ids per request")
+    return [
+        UserOut.of(user, own=caller_id is not None and caller_id == user.id)
+        for user in platform.get_users(wanted)
+    ]
 
 
 @router.get("/users/{user_id}")
@@ -717,20 +753,57 @@ def list_games(
     platform: Platform,
     owner_user_id: str | None = None,
     q: str = "",
-    include_code: bool = True,
-) -> list[GameOut] | list[GameSummaryOut]:
+) -> list[GameSummaryOut]:
     """Published games, oldest first. `q` searches names and descriptions (every word
-    must match, ignoring case). `include_code=false` leaves out each game's code, which
-    is most of the response; load it per game from /games/{id}/versions/{version}."""
+    must match, ignoring case). The list never includes code: with every game's
+    client and server code included, it was over a megabyte, and nobody reads
+    code from a list. Load one game in full from /games/{id}/versions/{version}."""
     games = platform.list_games(owner_user_id=owner_user_id, query=q)
-    if include_code:
-        return [GameOut.of(game) for game in games]
     return [GameSummaryOut.of(game) for game in games]
+
+
+@router.get("/games/popular", include_in_schema=False)
+def list_popular_games(platform: Platform, limit: int = 8) -> list[GameSummaryOut]:
+    """The bounded top games by cumulative players in started matches."""
+    return [GameSummaryOut.of(game) for game in platform.list_popular_games(limit=limit)]
 
 
 @router.get("/builder/games")
 def list_owned_games(platform: Platform, caller_id: CallerId) -> list[GameOut]:
     return [GameOut.of(g) for g in platform.list_owned_games(caller_id=caller_id)]
+
+
+@router.get("/games/versions")
+def list_game_versions(
+    platform: Platform, caller_id: OptionalCallerId, refs: str = ""
+) -> list[GameOut]:
+    """Full games for the comma-separated [refs] query parameter, each ref of the
+    form `game_id@version`, in request order. The portal loads every visible
+    match's game this way in a single call; fetching them one by one was a top
+    slow-request pattern under load (some 250 slow calls on 2026-10-30).
+    Unknown, malformed, or not-visible refs are skipped rather than failing the
+    whole batch, and duplicates collapse. Declared before /games/{game_id} so
+    "versions" is not taken for a game id.
+    """
+    wanted: list[tuple[str, int]] = []
+    seen: set[tuple[str, int]] = set()
+    for part in refs.split(","):
+        game_id, at, version_text = part.strip().rpartition("@")
+        if not at or not game_id:
+            continue
+        try:
+            ref = (game_id, int(version_text))
+        except ValueError:
+            continue
+        if ref not in seen:
+            seen.add(ref)
+            wanted.append(ref)
+    if len(wanted) > 200:
+        raise InvalidRequestError("at most 200 game versions per request")
+    return [
+        GameOut.of(game)
+        for game in platform.get_game_versions(wanted, caller_id=caller_id)
+    ]
 
 
 @router.post("/games/{game_id}/unpublish")
@@ -796,6 +869,32 @@ def delete_game(platform: Platform, caller_id: CallerId, game_id: str) -> None:
 # Matches
 
 
+# Feedback
+
+
+@router.post("/feedback", status_code=HTTPStatus.CREATED)
+def send_feedback(
+    platform: Platform, caller_id: CallerId, body: FeedbackCreate, response: Response
+) -> FeedbackOut:
+    """Sends feedback on a user, a game, a match or the platform: a bug, a suggestion
+    (or feature request) or a problem (problematic content), in your own words (5 to
+    1000 characters). Any logged-in user, guests included; not on yourself or your own
+    game. At most 20 a day (then 429); sending the same kind of feedback on the same
+    target within 24 hours replaces your earlier text (200 instead of 201). Feedback is
+    private: only admins see it."""
+    feedback, created = platform.send_feedback(
+        caller_id=caller_id,
+        kind=body.kind,
+        target_type=body.target_type,
+        target_id=body.target_id,
+        text=body.text,
+        page=body.page,
+    )
+    if not created:
+        response.status_code = HTTPStatus.OK
+    return FeedbackOut.of(feedback)
+
+
 @router.post("/matches", status_code=HTTPStatus.CREATED)
 def create_match(
     platform: Platform, caller_id: CallerId, body: MatchCreate
@@ -835,16 +934,16 @@ def list_matches(
     caller_id: CallerId,
     status: MatchStatus | None = None,
     game_id: str | None = None,
-) -> list[MatchOut]:
+) -> list[MatchSummaryOut]:
     matches = platform.list_matches(caller_id=caller_id, status=status, game_id=game_id)
-    return [_match_out(platform, match, caller_id=caller_id) for match in matches]
+    return [_match_summary_out(platform, match) for match in matches]
 
 
 @router.get("/matches/open")
-def list_open_matches(platform: Platform) -> list[MatchOut]:
+def list_open_matches(platform: Platform) -> list[MatchSummaryOut]:
     """Matches anyone may join: waiting for players, or ongoing with mid-match joins
     allowed. Public, like match details themselves."""
-    return [_match_out(platform, match) for match in platform.list_open_matches()]
+    return [_match_summary_out(platform, match) for match in platform.list_open_matches()]
 
 
 @router.get("/matches/{match_id}")
@@ -1250,6 +1349,11 @@ def console() -> FileResponse:
     return FileResponse(_STATIC_DIR / "console.html")
 
 
+@debug_router.get("/new-builder")
+def new_builder_page() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "guided-builder.html")
+
+
 @debug_router.get("/builder")
 def builder() -> FileResponse:
     return FileResponse(_STATIC_DIR / "builder.html")
@@ -1282,6 +1386,11 @@ def stats_page() -> FileResponse:
 @debug_router.get("/invites", dependencies=[MasterPassword])
 def invites_page() -> FileResponse:
     return FileResponse(_STATIC_DIR / "invites.html")
+
+
+@debug_router.get("/feedback", dependencies=[MasterPassword])
+def feedback_page() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "feedback.html")
 
 
 @debug_router.get("/admin", dependencies=[MasterPassword])
@@ -1461,6 +1570,25 @@ def admin_invites(platform: Platform) -> dict[str, JsonValue]:
     return platform.invite_stats()
 
 
+@debug_router.get("/admin/feedback", dependencies=[MasterPassword])
+def admin_feedback(
+    platform: Platform,
+    kind: str | None = None,
+    target_type: str | None = None,
+    target_id: str | None = None,
+    status: str | None = None,
+) -> dict[str, JsonValue]:
+    """Users' feedback, newest first, and the targets with the most "problem" reports.
+    Filters: kind (bug, suggestion, problem), target_type (user, game, match, platform)
+    with an optional target_id, and status."""
+    return platform.admin_feedback(
+        kind=kind or None,
+        target_type=target_type or None,
+        target_id=target_id or None,
+        status=status or None,
+    )
+
+
 @debug_router.delete(
     "/admin/users/{user_id}",
     dependencies=[MasterPassword],
@@ -1488,7 +1616,7 @@ def admin_delete_match(platform: Platform, match_id: str) -> None:
     platform.admin_delete_match(match_id)
 
 
-@debug_router.post("/agent/chat")
+@router.post("/agent/chat", include_in_schema=False)
 async def agent_chat(
     request: Request, platform: Platform, caller_id: CallerId, body: AgentChatRequest
 ) -> AgentChatResponse:
@@ -1616,7 +1744,12 @@ def refactor_all_games(
             detail="The game-building agent is not set up: no Model API key is "
             "configured on the server.",
         )
-    games = platform.list_games(owner_user_id=None)
+    if body.mode == 'guided_artifacts':
+        from game_platform.builder_budget import validate_tariffs
+        validate_tariffs(config)
+        games = platform.published_games_for_guided_migration(body.game_ids)
+    else:
+        games = platform.list_games(owner_user_id=None)
     missing: list[str] = []
     if body.game_ids is not None:
         by_id = {game.id: game for game in games}
@@ -1649,7 +1782,7 @@ def refactor_all_games(
         request.app.state.refactor_jobs[job["job_id"]] = job
     threading.Thread(
         target=_run_refactor_job,
-        args=(request.app.state, platform, client, job["job_id"], body.prompt, games),
+        args=(request.app.state, platform, client, job["job_id"], body.prompt, games, body.mode),
         daemon=True,
     ).start()
     return _refactor_job_out(job)
@@ -1676,11 +1809,22 @@ def _run_refactor_job(
     job_id: str,
     prompt: str,
     games: list[Game],
+    mode: str = "code",
 ) -> None:
     """The job thread: refactor each game in turn, recording every outcome.
     A game's failure never stops the run — its previous code stays live."""
     for game in games:
-        result = _refactor_one_game(app_state, platform, client, prompt, game)
+        if mode == "guided_artifacts":
+            from game_platform.builder_api import configured_client
+            from game_platform.builder_migration import prefill
+            result = {"game_id":game.id, "name":game.name, "version":game.version}
+            try:
+                changed = prefill(platform,game,lambda owner,draft:configured_client(app_state.model_api_config,platform,owner,draft))
+                result.update(outcome="ready_for_review" if changed else "unchanged",detail="Review the saved proposals in the guided builder")
+            except Exception as exc:
+                result.update(outcome="failed",detail=str(exc)[:500])
+        else:
+            result = _refactor_one_game(app_state, platform, client, prompt, game)
         with app_state.refactor_lock:
             app_state.refactor_jobs[job_id]["results"].append(result)
     with app_state.refactor_lock:
@@ -1860,10 +2004,20 @@ async def _handle_platform_error(request: Request, exc: Exception) -> JSONRespon
     return JSONResponse(status_code=status, content=_error_body(request, str(exc)))
 
 
-async def _handle_unexpected_exception(request: Request, exc: Exception) -> JSONResponse:
+async def _handle_unexpected_exception(request: Request, exc: Exception) -> Response:
     """A bug: the request middleware has already logged it with its arguments and stack
     trace. The caller gets the request id to quote when reporting it."""
     request_id = getattr(request.state, "request_id", None)
+    if _is_html_navigation(request):
+        content = "" if request.method == "HEAD" else _error_page_content(HTTPStatus.INTERNAL_SERVER_ERROR)
+        return HTMLResponse(
+            content,
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            headers={
+                "Cache-Control": "no-store",
+                **({"X-Request-Id": request_id} if request_id else {}),
+            },
+        )
     return JSONResponse(
         status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
         content={"detail": "internal server error", "code": "internal_error", "request_id": request_id},
@@ -1879,6 +2033,118 @@ async def _handle_http_exception(request: Request, exc: Exception) -> Response:
     detail = exc.detail
     body = _error_body(request, detail) if isinstance(detail, str) else {"detail": detail}
     return JSONResponse(body, status_code=exc.status_code, headers=exc.headers)
+
+
+def _is_html_navigation(request: Request) -> bool:
+    """Only turn errors into pages when the caller asked to navigate to a page.
+
+    App API calls use the default */* or application/json Accept header and keep
+    their structured responses. Direct browser navigation asks for text/html.
+    """
+    accept = request.headers.get("accept", "").lower()
+    return request.method in {"GET", "HEAD"} and (
+        "text/html" in accept or request.headers.get("sec-fetch-dest") == "document"
+    )
+
+
+def _error_page_content(status_code: int) -> str:
+    if status_code == HTTPStatus.NOT_FOUND:
+        title = "We couldn't find that page"
+        message = (
+            "That page may have moved, or the link may be out of date. "
+            "There are plenty of games waiting back at the portal."
+        )
+        label = "404 · Page not found"
+    elif status_code in {HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN}:
+        title = "This page is unavailable"
+        message = (
+            "You may need permission to open this page. "
+            "You can return to the game portal and keep playing."
+        )
+        label = f"{status_code} · Access unavailable"
+    elif status_code == HTTPStatus.SERVICE_UNAVAILABLE:
+        title = "We'll be right back"
+        message = (
+            "This page is temporarily unavailable. Please try again in a little while, "
+            "or head back to the games."
+        )
+        label = f"{status_code} · Temporarily unavailable"
+    else:
+        title = "Something went wrong"
+        message = "We couldn't load this page just now. Please try again, or return to the game portal."
+        label = f"{status_code} · Page error"
+
+    return f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#10131d" />
+    <title>{html.escape(label)} · Game platform</title>
+    <link rel="stylesheet" href="/static/common.css?v=16" />
+    <link rel="stylesheet" href="/static/error.css?v=1" />
+  </head>
+  <body class="error-page-body">
+    <header class="topbar error-topbar">
+      <a class="app-home-link" href="/portal" aria-label="Game platform home">
+        <span class="app-brand-mark" aria-hidden="true">✳</span>
+        <h1>Game platform</h1>
+      </a>
+      <nav aria-label="Game platform">
+        <a href="/portal" aria-current="page">Play games</a>
+        <a href="/builder">Builder</a>
+      </nav>
+      <span class="spacer"></span>
+    </header>
+    <main class="error-main">
+      <section class="error-card" aria-labelledby="error-title">
+        <div class="error-art" aria-hidden="true">
+          <span class="error-orbit error-orbit-one"></span>
+          <span class="error-orbit error-orbit-two"></span>
+          <span class="error-spark error-spark-one">✦</span>
+          <span class="error-spark error-spark-two">✧</span>
+          <span class="error-game-mark">✳</span>
+          <span class="error-code">{status_code}</span>
+        </div>
+        <p class="error-eyebrow">{html.escape(label)}</p>
+        <h2 id="error-title">{html.escape(title)}</h2>
+        <p class="error-message">{html.escape(message)}</p>
+        <a class="error-home-button" href="/portal">Back to games <span aria-hidden="true">→</span></a>
+        <p class="error-footnote">Your next game is just one click away.</p>
+      </section>
+    </main>
+  </body>
+</html>"""
+
+
+async def _branded_browser_responses(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """Show a friendly HTML page instead of raw response data during navigation."""
+    response = await call_next(request)
+    if not _is_html_navigation(request):
+        return response
+
+    content_type = response.headers.get("content-type", "").lower()
+    headers = {
+        key: value
+        for key, value in response.headers.items()
+        if key.lower() in {"www-authenticate", "x-request-id", "retry-after"}
+    }
+    if response.status_code >= 400:
+        headers["Cache-Control"] = "no-store"
+        content = "" if request.method == "HEAD" else _error_page_content(response.status_code)
+        return HTMLResponse(content, status_code=response.status_code, headers=headers)
+
+    # JSON routes are for the app's fetch calls, not standalone web pages. When
+    # somebody opens one in the address bar, send them to the playable portal.
+    if "json" in content_type:
+        return RedirectResponse(
+            "/portal",
+            status_code=HTTPStatus.SEE_OTHER,
+            headers={"Cache-Control": "no-store"},
+        )
+    return response
 
 
 async def _choose_locale(
@@ -1903,6 +2169,36 @@ async def _choose_locale(
         response.headers["Content-Language"] = request.state.locale
         response.headers.append("Vary", "Accept-Language, X-User-Id")
     return response
+
+
+class _VersionedStaticCacheMiddleware:
+    """Immutable caching for versioned static files.
+
+    The pages reference their scripts and styles with a ?v= version in the
+    URL, so a changed file is a changed URL: a browser may keep a versioned
+    response for a year and never revalidate it. Unversioned static files
+    keep the default revalidation behaviour (see [_revalidate_pages]).
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if (
+            scope["type"] != "http"
+            or not scope["path"].startswith("/static/")
+            or b"v=" not in scope.get("query_string", b"")
+        ):
+            await self.app(scope, receive, send)
+            return
+
+        async def send_immutable(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            await send(message)
+
+        await self.app(scope, receive, send_immutable)
 
 
 async def _revalidate_pages(
@@ -1964,6 +2260,7 @@ def create_app(
             allow_methods=["*"],
             allow_headers=["*"],
         )
+    app.state.builder_slots = threading.BoundedSemaphore(2)
     app.state.platform = platform if platform is not None else GamePlatform()
     app.state.master_password = master_password
     monitor = monitor if monitor is not None else observability.Monitor()
@@ -1986,6 +2283,8 @@ def create_app(
     app.state.voice_sender = voice_sender if voice_sender is not None else LogSender()
     app.state.verify_client = verify_client
     app.state.email_sender = email_sender if email_sender is not None else LogSender()
+    from game_platform.builder_api import make_router
+    app.include_router(make_router(_get_platform, _get_caller_id))
     app.include_router(router)
     from game_platform.scaling_api import install as install_scaling_api
     install_scaling_api(app, debug_tools=debug_tools)
@@ -1999,9 +2298,20 @@ def create_app(
         static_files = StaticFiles(directory=_STATIC_DIR, follow_symlink=True)
         app.mount("/static", static_files, name="static")
         app.middleware("http")(_revalidate_pages)
+    app.middleware("http")(_branded_browser_responses)
     app.add_exception_handler(PlatformError, _handle_platform_error)
     app.add_exception_handler(StarletteHTTPException, _handle_http_exception)
     app.add_exception_handler(Exception, _handle_unexpected_exception)
-    # Last added, so outermost: it times everything, including the other middleware.
+    # Added after the other middleware, so it wraps and times them.
     app.add_middleware(observability.RequestLogMiddleware, monitor=lambda: monitor)
+    # Compression and static caching wrap the logged response on its way
+    # out, so the request log above keeps recording readable bodies at
+    # their full size while browsers receive gzipped bytes and may keep
+    # versioned static files without revalidating them. (The locale
+    # middleware streams responses without a content length, so every
+    # response a client accepts gzip for is compressed; a small body
+    # grows by a few bytes of gzip framing, which the large payloads —
+    # game lists, match lists, the portal script — repay many times over.)
+    app.add_middleware(_VersionedStaticCacheMiddleware)
+    app.add_middleware(GZipMiddleware, compresslevel=6)
     return app

@@ -365,7 +365,7 @@ private fun playerName(player: Player, state: PortalState) = if (player.kind == 
     var copied by remember { mutableStateOf(false) }
     confirmation?.let { action ->
         AlertDialog(onDismissRequest = { confirmation = null }, title = { Text("$action match?") },
-            text = { Text(if (action == "Delete") "This removes the match for everyone." else if (game.allowsLeave) "A computer will take over your seat." else "Leaving an ongoing match ends it for everyone.") },
+            text = { Text(if (action == "Delete") "This removes the match for everyone." else "Leaving may end this match and settle its tokens. Your seat will not become a computer.") },
             confirmButton = { TextButton({ confirmation = null; if (action == "Delete") vm.delete() else vm.leave() }) { Text(action) } },
             dismissButton = { TextButton({ confirmation = null }) { Text("Stay") } })
     }
@@ -404,20 +404,20 @@ private fun playerName(player: Player, state: PortalState) = if (player.kind == 
                 Spacer(Modifier.height(12.dp))
                 Text("${match.players.size} seated · ${game.counts.joinToString(" or ")} needed", color = Muted)
                 Spacer(Modifier.height(22.dp))
-                if (mine == null && match.players.size < game.counts.max()) Button(vm::join, enabled = !state.busy && state.online) { Text("Join this match") }
+                if (mine == null && match.players.none { it.kind == "computer" } && match.players.size < game.counts.max()) Button(vm::join, enabled = !state.busy && state.online) { Text("Join this match") }
                 else if (owner) {
-                    Button(vm::start, enabled = !state.busy && state.online && match.players.size in game.counts, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Start game") }
+                    Button(vm::start, enabled = !state.busy && state.online && match.players.size in game.counts && (match.players.none { it.kind == "computer" } || match.players.count { it.kind == "human" } == 1), modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Start game") }
                     val computers = match.players.count { it.kind == "computer" }
                     Row {
                         TextButton({ vm.computers(computers - 1) }, enabled = computers > 0 && !state.busy) { Text("− Computer") }
-                        TextButton({ vm.computers(computers + 1) }, enabled = match.players.size < game.counts.max() && !state.busy) { Text("+ Computer") }
+                        TextButton({ vm.computers(computers + 1) }, enabled = match.players.count { it.kind == "human" } == 1 && match.players.size < game.counts.max() && !state.busy) { Text("+ Computer") }
                     }
                 } else Text("The host will start when everyone is here.", color = Muted)
                 Spacer(Modifier.height(16.dp))
                 Text("Send the link to someone on another device. They'll join the same game.", color = Muted, fontSize = 13.sp)
             }
         } else {
-            if (mine == null && match.status == "ongoing" && game.allowsJoin && (match.players.any { it.kind == "computer" } || match.players.size < game.counts.max())) {
+            if (mine == null && match.status == "ongoing" && game.allowsJoin && match.players.none { it.kind == "computer" } && match.players.size < game.counts.max()) {
                 Button(vm::join, Modifier.padding(horizontal = 20.dp), enabled = !state.busy && state.online) { Text("Join this match") }
             }
             GameView(state, Modifier.fillMaxWidth().weight(1f).padding(horizontal = 12.dp, vertical = 4.dp), vm::makeMove, vm::reportError)

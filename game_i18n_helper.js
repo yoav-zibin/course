@@ -11,7 +11,7 @@ function t(key, params) {
 // Call this first in the state_changed handler, before drawing anything: the platform sends
 // the viewer's translations (message.strings), language and writing direction with it.
 function applyLocale(message) {
-  if (message.strings) strings = { ...SOURCE_STRINGS, ...message.strings };
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
   if (message.locale) document.documentElement.lang = message.locale;
   if (message.direction) document.documentElement.dir = message.direction;
 }

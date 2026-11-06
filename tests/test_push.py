@@ -6,11 +6,13 @@ by the log-provider default everywhere else.
 """
 
 import base64
+import datetime as dt
 import os
 from collections.abc import Sequence
 
 from game_platform.config import PushConfig
-from game_platform.push import PushMessage, generate_vapid_keys
+from game_platform.models import WebPushSubscription
+from game_platform.push import PushMessage, WebPushNotifier, generate_vapid_keys
 from game_platform.store import InMemoryStore
 from game_platform.tests.helpers import Api, validation_errors
 
@@ -310,20 +312,21 @@ def test_ending_a_match_notifies_the_other_players() -> None:
     assert message.tag == f"match-{match_id}-over"
 
 
-def test_a_move_made_for_a_computer_notifies_the_next_human() -> None:
+def test_solo_client_does_not_notify_itself_after_a_computer_move() -> None:
     api, notifier = _api_with_notifier()
-    alice, bob = api.new_user("alice"), api.new_user("bob")
+    alice = api.new_user("alice")
+    bob = alice
     _subscribe_ok(api, bob, "https://push.example.com/s/bob")
     game_id = api.new_game(owner=alice, allowed_player_counts=(3,))
     match_id = api.new_match(
-        owner=alice, game_id=game_id, num_computer_opponents=1, joiners=[bob], start=True
+        owner=alice, game_id=game_id, num_computer_opponents=2, start=True
     )
 
     api.move(match_id, as_user=alice, next_turn=2)  # the computer's turn: no message
     assert notifier.messages == []
-    api.move(match_id, as_user=alice, next_turn=1)  # played for the computer
-    (message,) = _messages_to(notifier, bob)
-    assert message.body == "Your turn in Poker"
+    api.move(match_id, as_user=alice, next_turn=0)  # played for the computer
+    assert _messages_to(notifier, bob) == []
+    assert api.match_summary(match_id)["turn"] == [0]
 
 
 def test_every_subscription_of_a_user_is_notified() -> None:
@@ -374,7 +377,7 @@ def test_leaving_mid_match_notifies_the_remaining_players() -> None:
 
     api.ok("POST", f"/matches/{match_id}/leave", as_user=bob)
     (message,) = _messages_to(notifier, alice)
-    assert message.body == "bob left Poker; a computer takes over"
+    assert message.body == "The match in Poker is over"
 
 
 def test_leaving_that_ends_the_match_sends_match_over() -> None:
@@ -426,3 +429,55 @@ def test_push_test_notifies_the_callers_subscriptions() -> None:
     (message,) = _messages_to(notifier, alice)
     assert message.body == "Test notification from the game platform"
     assert message.url == "/static/portal.html"
+
+
+# Real delivery (WebPushNotifier)
+
+
+def test_webpush_notifier_hands_pywebpush_a_text_key(monkeypatch) -> None:
+    """Regression: the notifier used to hand pywebpush the VAPID key as PEM
+    bytes; its Vapid.from_string calls .encode() on the key (and only accepts
+    the base64url form besides), so every real delivery died with
+    AttributeError before anything reached a push service. The notifier must
+    pass the configured base64url key through as a string."""
+    from py_vapid import Vapid
+
+    import game_platform.push as push_module
+
+    sent: dict = {}
+    monkeypatch.setattr(push_module, "webpush", lambda **kwargs: sent.update(kwargs))
+    private_key, _public_key = generate_vapid_keys()
+    notifier = WebPushNotifier(
+        config=PushConfig(
+            provider="webpush",
+            vapid_private_key=private_key,
+            vapid_subject="mailto:ops@example.com",
+        ),
+        store=InMemoryStore(),
+    )
+    keys = _keys()
+    now = dt.datetime.now(dt.timezone.utc)
+    message = PushMessage(
+        subscription=WebPushSubscription(
+            id="sub-1",
+            user_id="user-1",
+            endpoint="https://push.example.com/s/1",
+            p256dh=keys["p256dh"],
+            auth=keys["auth"],
+            created_at=now,
+            updated_at=now,
+        ),
+        title="Your turn in Poker",
+        body="Test",
+        url="/static/portal.html",
+        tag="match-1-turn",
+    )
+    try:
+        notifier.deliver(message)
+    finally:
+        notifier.close()
+    key = sent["vapid_private_key"]
+    assert isinstance(key, str)
+    assert key == private_key
+    # The exact call that used to crash: py_vapid must accept what we hand over.
+    Vapid.from_string(private_key=key)

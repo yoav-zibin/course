@@ -17,11 +17,12 @@
     <meta name="apple-mobile-web-app-title" content="Playroom" />
     <link rel="manifest" href="/static/portal.webmanifest" />
     <title>Game platform · Portal</title>
-    <link rel="stylesheet" href="/static/common.css?v=12" />
-    <link rel="stylesheet" href="/static/portal.css?v=27" />
+    <link rel="stylesheet" href="/static/common.css?v=16" />
+    <link rel="stylesheet" href="/static/portal.css?v=32" />
     <link rel="stylesheet" href="/static/portal-match-layout.css?v=1" />
     <link rel="stylesheet" href="/static/portal-speed.css?v=2" />
-    <link rel="stylesheet" href="/static/experiments.css?v=1" />
+    <link rel="stylesheet" href="/static/feedback-dialog.css?v=1" />
+    <link rel="stylesheet" href="/static/experiments.css?v=6" />
   </head>
   <body>
     <header class="topbar" data-app-page="portal">
@@ -29,14 +30,23 @@
       <nav aria-label="Game platform">
         <a href="/portal" aria-current="page" data-i18n="ui.nav.portal">Portal</a>
         <a href="/builder" data-i18n="ui.nav.builder">Builder</a>
+        <a href="/static/guided-builder.html" data-i18n="ui.nav.new_builder">New Builder</a>
       </nav>
       <span class="spacer"></span>
       <span id="token-wallet" class="token-wallet" role="status" aria-live="polite" title="Your virtual tokens" data-i18n-title="ui.portal.wallet_title" hidden><span class="token-wallet-coin" aria-hidden="true">✦</span><span class="token-wallet-copy"><span class="token-wallet-label" data-i18n="ui.portal.wallet_label">MY WALLET</span><span class="token-wallet-number"><strong id="token-balance">0</strong> <span data-i18n="ui.portal.wallet_tokens">tokens</span></span></span></span>
+      <label class="portal-skin-picker" for="portal-skin-picker"><span data-i18n="ui.portal.skin">Skin</span><select id="portal-skin-picker" data-i18n-aria-label="ui.portal.skin" aria-label="Portal skin"><option value="" data-i18n="ui.portal.skin_assigned">Assigned</option><option value="classic">Classic</option><option value="aurora">Aurora</option><option value="sunset">Sunset</option><option value="immersive" data-i18n="ui.portal.skin_immersive">Immersive</option></select></label>
+      <label class="portal-layout-picker" for="portal-layout-picker"><span data-i18n="ui.portal.layout">Layout</span><select id="portal-layout-picker" data-i18n-aria-label="ui.portal.layout" aria-label="Portal layout"><option value="" data-i18n="ui.portal.layout_default">Skin default</option><option value="left" data-i18n="ui.portal.layout_left">Left sidebar</option><option value="hamburger" data-i18n="ui.portal.layout_hamburger">Hamburger</option><option value="top" data-i18n="ui.portal.layout_top">Top bar</option></select></label>
        <span id="account-menu"></span>
     </header>
     <div class="app portal-shell">
       <aside class="sidebar portal-sidebar">
-        <div class="app-brand"><span class="app-brand-mark" aria-hidden="true">✳</span><span class="app-brand-name" data-i18n="ui.portal.brand">Game Portal</span></div>
+        <a class="app-brand" href="/portal" aria-label="Game platform home"><span class="app-brand-mark" aria-hidden="true">✳</span><span class="app-brand-name" data-i18n="ui.portal.brand">Game Portal</span></a>
+        <nav class="portal-app-menu" aria-label="Game platform">
+          <a href="/portal" aria-current="page" data-i18n="ui.nav.portal">Portal</a>
+          <a href="/builder" data-i18n="ui.nav.builder">Builder</a>
+          <a href="/static/guided-builder.html" data-i18n="ui.nav.new_builder">New Builder</a>
+          <a href="/admin" data-i18n="ui.nav.admin">Admin</a>
+        </nav>
         <button id="show-creator" type="button" class="primary" data-i18n="ui.portal.new_match_button">+ New match</button>
         <div id="portal-login-note" class="muted" data-i18n="ui.portal.login_note" hidden>Log in to see your matches.</div>
         <div id="my-matches">
@@ -58,10 +68,18 @@
           <div class="creator-content">
             <div id="game-catalog">
               <p class="creator-description" data-i18n="ui.portal.creator_description">A quick round or a new rivalry. Pick a game and make it yours.</p>
+              <section id="popular-games-section" class="popular-games-section" aria-labelledby="popular-games-title" hidden>
+                <div class="popular-games-heading"><div><p id="popular-games-eyebrow" class="popular-eyebrow" data-i18n="ui.games.community_picks">TOP PICKS FROM THE COMMUNITY</p><h2 id="popular-games-title" data-i18n="ui.games.most_popular">Most popular</h2></div><span id="popular-games-metric" class="popular-period" data-i18n="ui.games.popularity_metric">Ranked by players in started matches</span></div>
+                <div class="popular-games-carousel">
+                  <button id="popular-games-prev" class="popular-games-scroll-button is-prev" type="button" aria-label="Scroll to previous popular games" aria-controls="popular-games" title="Previous games" hidden>‹</button>
+                  <div id="popular-games" class="popular-games-row"></div>
+                  <button id="popular-games-next" class="popular-games-scroll-button is-next" type="button" aria-label="Scroll to next popular games" aria-controls="popular-games" title="Next games" hidden>›</button>
+                </div>
+              </section>
               <label class="game-label" for="game-search" data-i18n="ui.portal.choose_your_game">Choose your game</label>
               <div id="game-chooser" class="game-chooser">
                 <input id="new-game" type="hidden" />
-                <div class="game-search-controls"><input id="game-search" type="search" role="combobox" aria-label="Search games" data-i18n-aria-label="ui.action.search" aria-autocomplete="list" aria-controls="game-results" aria-expanded="false" autocomplete="off" placeholder="Search by name or description…" data-i18n-placeholder="ui.portal.search_placeholder" /><button id="browse-games" type="button" data-i18n="ui.games.browse_all">Browse all games</button></div>
+                <div class="game-search-controls"><input id="game-search" type="search" role="combobox" aria-label="Search games" data-i18n-aria-label="ui.action.search" aria-autocomplete="list" aria-controls="game-results" aria-expanded="false" autocomplete="off" placeholder="Search by name or description…" data-i18n-placeholder="ui.portal.search_placeholder" /><button id="browse-games" type="button" data-i18n="ui.games.browse_all">Browse all games</button><a id="immersive-build-link" class="immersive-build-link" href="/builder" data-i18n="ui.builder.create_title">Create a game</a></div>
                 <div id="game-search-popup" class="game-search-popup" hidden><div id="game-results" role="listbox" aria-label="Matching games"></div><div id="game-results-note" class="search-note" role="status"></div></div>
               </div>
               <section class="game-library" aria-label="Browse games">
@@ -88,7 +106,8 @@
           <div id="game-detail-content">
             <div id="selected-game-card" class="selected-game-card">
               <div class="game-symbol" aria-hidden="true">✳</div>
-              <div><h2 id="selected-game-name">Choose a game</h2><p id="selected-game-description"></p><span id="selected-game-mode" class="mode-label"></span></div>
+              <div><h2 id="selected-game-name">Choose a game</h2><p id="selected-game-description"></p><span id="selected-game-mode" class="mode-label"></span>
+                <button id="feedback-game" type="button" class="feedback-link" hidden data-i18n="ui.feedback.game">Feedback on this game</button></div>
             </div>
             <div class="play-options">
               <section class="play-option" aria-labelledby="online-play-title">
@@ -112,6 +131,11 @@
                   <button id="practice" type="button" aria-describedby="practice-offline-note" data-i18n="ui.portal.play_on_device">Play on this device ↗</button>
                 </div>
                 <p id="practice-offline-note" class="play-option-note" data-i18n="ui.portal.practice_offline_note">For offline play, open the game online first.</p>
+              </section>
+              <section id="computer-match-option" class="play-option computer-match-option" aria-labelledby="computer-match-title" hidden>
+                <div class="play-option-heading"><span class="play-option-icon" aria-hidden="true">🤖</span><div><h3 id="computer-match-title">Play with computers</h3><p>Start a server match with a computer in every other seat. Computer matches are single-player, so friends can't join them.</p></div></div>
+                <div class="computer-match-controls"><button id="play-computers" type="button" class="primary">Play with computers ↗</button></div>
+                <p class="play-option-note" id="computer-match-hint">Uses the largest player count this game supports.</p>
               </section>
             </div>
             <div id="create-message" class="message" role="status"></div>
@@ -137,6 +161,7 @@
              <div id="match-currency" class="match-currency" role="status" aria-live="polite" hidden></div>
           </div>
           <div id="match-result" class="match-result" role="status" hidden></div>
+          <details id="how-to-play" hidden><summary>How to play</summary><p id="game-rules-text" style="white-space:pre-wrap"></p><div id="game-tutorial"></div></details>
           <div id="seats" class="seats"></div>
           <button id="match-sounds" type="button" aria-pressed="false">Sound off</button>
           <div id="actions" class="inline-row"></div>
@@ -148,18 +173,20 @@
         </section>
       </main>
     </div>
-    <script src="/static/common.js?v=16"></script>
+    <script src="/static/common.js?v=21"></script>
     <script src="/static/i18n.js?v=3"></script>
-    <script src="/static/auth.js?v=7"></script>
-<script src="/static/portal-practice.js?v=1"></script>
-<script src="/static/portal-offline.js?v=9"></script>
-<script src="/static/experiments.js?v=1"></script>
+    <script src="/static/auth.js?v=8"></script>
+<script src="/static/portal-practice.js?v=2"></script>
+<script src="/static/portal-offline.js?v=10"></script>
+    <script src="/static/experiments.js?v=7"></script>
     <script src="/static/portal-install.js?v=1"></script>
-    <script src="/static/portal-match-layout.js?v=4"></script>
+    <script src="/static/portal-match-layout.js?v=7"></script>
     <script src="/static/portal-speed.js?v=2"></script>
+    <script src="/static/feedback-dialog.js?v=1"></script>
     <script src="/static/push-notifications.js?v=1"></script>
     <script src="/static/portal-feedback.js?v=2"></script>
     <script src="/static/storage-pages.js?v=2"></script>
-    <script src="/static/portal.js?v=56"></script>
+    <script src="/static/tutorial-frame.js?v=1"></script>
+    <script src="/static/portal.js?v=73"></script>
   </body>
 </html>

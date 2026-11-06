@@ -1,0 +1,148 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{font-family:sans-serif;background:#1e2a32;color:#eee;margin:0;padding:10px;display:flex;flex-direction:column;align-items:center}
+#wrap{max-width:720px;width:100%}
+#status{background:#0f171c;padding:8px 12px;border-radius:8px;min-height:20px;text-align:center;margin:8px 0}
+#board{background:#8b5a2b;border:8px solid #4a2f18;border-radius:10px;padding:8px;display:flex;gap:8px;user-select:none}
+.half{flex:1;display:grid;grid-template-columns:repeat(6,1fr);grid-template-rows:110px 110px;gap:4px}
+.pt{border-radius:6px;position:relative;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:18px;box-sizing:border-box}
+.pt.top{padding-top:18px}.pt.bot{padding-top:8px;justify-content:flex-start}
+.pt.light{background:#e8c88a}.pt.dark{background:#7a4a2a}
+.pt.sel{outline:3px solid yellow}
+.pt.dest{outline:3px solid #2bff5a;cursor:pointer}
+.pt.src{outline:2px dashed #fff}
+.tri{position:absolute;top:0;left:0;right:0;height:22px;text-align:center;font-size:11px;color:#0008;font-weight:bold}
+.bot .tri{top:auto;bottom:0}
+.chk{width:28px;height:28px;border-radius:50%;border:2px solid #0008;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:13px;margin:-4px 0;box-shadow:0 1px 2px #000}
+.w{background:#f5f5f5;color:#111}.b{background:#222;color:#eee}
+.stack{display:flex;flex-direction:column;align-items:center}
+.bot .stack{flex-direction:column-reverse}
+#barCol{width:56px;background:#4a2f18;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:6px 0}
+#barCol .barBtn{width:44px;min-height:34px;border-radius:6px;background:#333;color:#fff;border:2px solid #888;cursor:pointer;font-size:12px}
+#barCol .barBtn.sel{outline:3px solid yellow}
+#info{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center;margin:8px 0}
+#dice{font-size:28px;letter-spacing:6px}
+button{padding:8px 14px;border-radius:8px;border:0;font-weight:bold;cursor:pointer}
+button:disabled{opacity:.4;cursor:default}
+#roll{background:#2b9d48;color:#fff}#pass{background:#d99a2b}
+#offWrap{display:flex;gap:12px;justify-content:center;margin:4px 0;font-size:14px}
+.offBox{background:#0f171c;padding:6px 10px;border-radius:8px;cursor:pointer}
+.offBox.dest{outline:3px solid #2bff5a}
+.hint{font-size:12px;opacity:.8;text-align:center}
+</style>
+</head>
+<body>
+<div id="wrap">
+<h2 style="margin:4px;text-align:center">Backgammon</h2>
+<div id="status">Waiting for platform…</div>
+<div id="info">
+<div id="dice"></div>
+<button id="roll">Roll Dice</button>
+<button id="pass">End Turn</button>
+<button id="clearSel" style="background:#555;color:#fff">Clear</button>
+</div>
+<div id="offWrap"><div id="off0" class="offBox"></div><div id="off1" class="offBox"></div></div>
+<div id="board"><div id="left" class="half"></div><div id="barCol"></div><div id="right" class="half"></div></div>
+<p class="hint">White (P0) moves 24→1 (top-right to bottom-right). Black (P1) moves 1→24. Click a checker then a highlighted point. Bar in middle. Click off-tray to bear off. Doubles = 4 moves.</p>
+</div>
+<script>
+// Server-side (v2) client: the server owns the dice, the board and the
+// rules. This page only renders the per-player view it receives and
+// sends one action at a time: {action:"roll"}, {action:"move",from,to}
+// or {action:"pass"}. The legal-move helpers below are used only to
+// highlight destinations and enable buttons — the server re-validates
+// every action.
+let latest=null, selected=null, sentFor=-1;
+const $=id=>document.getElementById(id);
+function previewSetup(){return {owner:setupOwner(),cnt:setupCnt(),bar:[0,0],off:[0,0],cur:0,dice:[],moves:[],needRoll:true,winner:null};}
+function setupOwner(){let o=new Array(24).fill(-1);o[23]=0;o[12]=0;o[7]=0;o[5]=0;o[0]=1;o[11]=1;o[16]=1;o[18]=1;return o;}
+function setupCnt(){let c=new Array(24).fill(0);c[23]=2;c[12]=5;c[7]=3;c[5]=5;c[0]=2;c[11]=5;c[16]=3;c[18]=5;return c;}
+function dir(p){return p===0?-1:1;}
+function allHome(st,p){if(st.bar[p]>0)return false;for(let i=0;i<24;i++){if(st.owner[i]===p&&st.cnt[i]>0){if(p===0&&(i<0||i>5))return false;if(p===1&&(i<18||i>23))return false;}}return true;}
+function entryIdx(p,die){return p===0?24-die:die-1;}
+function distHome(p,from){return p===0?from+1:24-from;}
+function canBear(p,from,die,st){let d=distHome(p,from);if(die===d)return true;if(die>d){if(p===0){for(let j=from+1;j<=5;j++)if(st.owner[j]===p&&st.cnt[j]>0)return false;return true;}else{for(let j=18;j<from;j++)if(st.owner[j]===p&&st.cnt[j]>0)return false;return true;}}return false;}
+function legalForDie(st,p,die){let res=[];let opp=1-p;
+ if(st.bar[p]>0){let to=entryIdx(p,die);if(!(st.owner[to]===opp&&st.cnt[to]>=2))res.push({from:'bar',to:to,die:die});return res;}
+ for(let i=0;i<24;i++){if(st.owner[i]!==p||st.cnt[i]<=0)continue;let to=i+dir(p)*die;
+  if(to<0||to>=24){if(allHome(st,p)&&canBear(p,i,die,st))res.push({from:i,to:'off',die:die});}
+  else{if(st.owner[to]===opp&&st.cnt[to]>=2)continue;res.push({from:i,to:to,die:die});}}
+ return res;}
+// Legal highlights come from the same server search that validates submissions.
+function allMoves(st,p){return p===st.cur?(st.legalMoves||[]):[];}
+function hasAny(st,p){return allMoves(st,p).length>0;}
+function view(){return latest?(latest.view||latest.state||null):null;}
+function sendMove(move){if(!latest)return;if(latest.move_count===sentFor)return;sentFor=latest.move_count;parent.postMessage({type:"make_move",move:move},"*");}
+function doRoll(){sendMove({action:'roll'});}
+function doPass(){sendMove({action:'pass'});}
+function doChecker(from,to){let st=view();if(!st||!allMoves(st,st.cur).some(m=>m.from===from&&m.to===to))return;sendMove({action:'move',from:from,to:to});selected=null;}
+function render(){let left=$('left'),right=$('right'),barCol=$('barCol');
+ left.innerHTML='';right.innerHTML='';barCol.innerHTML='';
+ let st=view()||previewSetup();
+ let acting=latest&&latest.status==='ongoing'?latest.acting_for_player_index:null;
+ let my=latest?latest.my_player_index:null;
+ let canHuman=acting!==null&&acting===my&&st.winner===null&&latest.status==='ongoing';
+ function mkPoint(idx,isTop){let d=document.createElement('div');let light=(idx%2===0);
+  d.className='pt '+(isTop?'top':'bot')+' '+(light?'light':'dark');
+  let num=document.createElement('div');num.className='tri';num.textContent=(idx+1);d.appendChild(num);
+  let stack=document.createElement('div');stack.className='stack';
+  let o=st.owner[idx],c=st.cnt[idx];
+  if(o!==-1&&c>0){let show=Math.min(c,5);for(let k=0;k<show;k++){let ch=document.createElement('div');ch.className='chk '+(o===0?'w':'b');ch.textContent=(k===4&&c>5)?c:'';stack.appendChild(ch);}}
+  d.appendChild(stack);
+  if(selected!==null&&String(selected)===String(idx))d.classList.add('sel');
+  if(canHuman&&!st.needRoll){let ms=allMoves(st,st.cur);
+   let isSrc=ms.some(m=>String(m.from)===String(idx));
+   if(isSrc&&selected===null)d.classList.add('src');
+   if(selected!==null){let dests=ms.filter(m=>String(m.from)===String(selected)).map(m=>String(m.to));
+    if(dests.includes(String(idx)))d.classList.add('dest');}}
+  d.onclick=()=>{if(!canHuman||st.needRoll)return;if(st.bar[st.cur]>0&&selected!=='bar'){return;}
+   if(selected===null){if(o===st.cur)selected=idx;}
+   else{if(selected===idx)selected=null;else{let ms=allMoves(st,st.cur);let ok=ms.some(m=>String(m.from)===String(selected)&&String(m.to)===String(idx));if(ok)doChecker(selected,idx);else if(o===st.cur)selected=idx;else selected=null;}}
+   render();};
+  return d;}
+ for(let c=0;c<6;c++){left.appendChild(mkPoint(12+c,true));}
+ for(let c=0;c<6;c++){left.appendChild(mkPoint(11-c,false));}
+ for(let c=0;c<6;c++){right.appendChild(mkPoint(18+c,true));}
+ for(let c=0;c<6;c++){right.appendChild(mkPoint(5-c,false));}
+ let b0=document.createElement('button');b0.className='barBtn'+(selected==='bar'?' sel':'');b0.textContent='BAR W:'+st.bar[0];
+ b0.onclick=()=>{if(!canHuman)return;if(st.bar[st.cur]>0)selected='bar';render();};
+ let mid=document.createElement('div');mid.style.cssText='color:#fff;font-size:11px;text-align:center';mid.textContent='BAR';
+ let b1=document.createElement('button');b1.className='barBtn'+(selected==='bar'?' sel':'');b1.textContent='BAR B:'+st.bar[1];
+ b1.onclick=()=>{if(!canHuman)return;if(st.bar[st.cur]>0)selected='bar';render();};
+ barCol.appendChild(b0);barCol.appendChild(mid);barCol.appendChild(b1);
+ let o0=$('off0'),o1=$('off1');
+ let n0=latest&&latest.players[0]?latest.players[0].name:'White';let n1=latest&&latest.players[1]?latest.players[1].name:'Black';
+ o0.textContent='○ '+n0+' off: '+st.off[0]+'/15';o1.textContent='● '+n1+' off: '+st.off[1]+'/15';
+ o0.classList.remove('dest');o1.classList.remove('dest');
+ if(canHuman&&selected!==null&&!st.needRoll){let ms=allMoves(st,st.cur).filter(m=>String(m.from)===String(selected));if(ms.some(m=>m.to==='off')){(st.cur===0?o0:o1).classList.add('dest');}}
+ o0.onclick=()=>{if(canHuman&&st.cur===0&&selected!==null)doChecker(selected,'off');};
+ o1.onclick=()=>{if(canHuman&&st.cur===1&&selected!==null)doChecker(selected,'off');};
+ $('dice').textContent=st.needRoll?'🎲 ?':('🎲 '+(st.dice.length?st.dice.join(','):'—')+' ⟸ '+st.moves.join(','));
+ $('roll').disabled=!canHuman||!st.needRoll;
+ let needPass=!st.needRoll&&!hasAny(st,st.cur)&&st.winner===null;
+ $('pass').disabled=!canHuman||st.needRoll||hasAny(st,st.cur);
+ $('pass').textContent=needPass?'Pass (no moves)':'End Turn';
+ let sEl=$('status');
+ if(!latest){sEl.textContent='Waiting for platform…';return;}
+ if(latest.status==='over'||st.winner!==null){let w=st.winner;let nm=(w!==null&&latest.players[w])?latest.players[w].name:'Player '+w;sEl.textContent='🏆 '+nm+' wins! ('+st.off[0]+' - '+st.off[1]+')';return;}
+ let curName=latest.players[st.cur]?latest.players[st.cur].name:'P'+st.cur;
+ let col=st.cur===0?'White':'Black';
+ if(acting===null)sEl.textContent='Waiting… — '+curName+' ('+col+') to move';
+ else{let aName=latest.players[acting]?latest.players[acting].name:'';sEl.textContent=(st.needRoll?curName+' ('+col+') to roll':' '+curName+' ('+col+') to move ['+st.moves.join(',')+']')+(canHuman?' — your move':(acting!==my?' — '+aName+"'s turn":''));}
+}
+addEventListener('message',ev=>{if(ev.source!==parent||!ev.data||ev.data.type!=='state_changed')return;
+ let prevCount=latest?latest.move_count:null;
+ latest=ev.data;
+ if(latest.move_count!==prevCount)selected=null;
+ render();});
+$('roll').onclick=()=>doRoll();
+$('pass').onclick=()=>doPass();
+$('clearSel').onclick=()=>{selected=null;render();};
+render();
+</script>
+</body>
+</html>

@@ -52,6 +52,11 @@ class ModelApiConfig(_Section):
     api_key: str = ""
     model: str = "muse-spark-1.3"
     base_url: str = "https://api.ai.meta.com/v1"
+    # Operator-verified upper tariffs (including multimodal inputs) and provider context bound.
+    builder_input_usd_per_million: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None = None
+    builder_output_usd_per_million: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None = None
+    builder_max_input_tokens: Annotated[int, Field(gt=0)] | None = None
+
 
 
 class GoogleAuthConfig(_Section):
@@ -177,6 +182,11 @@ class MonitoringConfig(_Section):
     # Also write the log as JSON lines to this file (rotated at 50 MB, 5 kept), for the
     # Google Cloud Ops Agent to read. Empty writes only to the terminal / journal.
     log_file: str = ""
+    # Report API call counts (per handler function and HTTP response code) to
+    # Google Cloud Monitoring as a custom metric (see metrics.py). Off unless
+    # the deployment's service account may write metrics; reporting is
+    # best-effort and off the request path either way.
+    cloud_metrics_enabled: bool = False
     # A request slower than this is logged with its arguments (WARNING)...
     slow_request_ms: Annotated[int, Field(ge=1)] = 1000
     # ...and one slower than this is a minor alert (ERROR).

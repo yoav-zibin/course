@@ -1,0 +1,132 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:system-ui,sans-serif;background:#f3ead8;color:#3a2a18;margin:0;padding:16px;display:flex;flex-direction:column;align-items:center}
+h2{margin:8px 0 4px}
+#status{font-weight:700;margin:8px 0;min-height:24px;text-align:center}
+#sub{font-size:13px;opacity:.8;margin-bottom:10px;text-align:center}
+#board{display:flex;gap:10px;align-items:stretch;background:#a06a35;border-radius:20px;padding:14px;box-shadow:0 4px 14px rgba(0,0,0,.3);max-width:720px;width:100%;box-sizing:border-box}
+.store{flex:0 0 84px;background:#7c4f24;border-radius:40px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#ffe9c4;min-height:180px}
+.store b{font-size:28px}
+.store span{font-size:12px;opacity:.9;text-align:center;padding:0 6px}
+.store.highlight{outline:3px solid gold}
+#mid{flex:1;display:flex;flex-direction:column;gap:10px}
+.row{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.pit{background:#e8c88a;border:2px solid #6b4420;border-radius:50%;min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:default;position:relative;user-select:none}
+.pit .n{font-size:22px;font-weight:800}
+.pit .dots{font-size:10px;letter-spacing:1px;opacity:.7;max-width:90%;overflow:hidden;white-space:nowrap}
+.pit.clickable{background:#fff2c9;cursor:pointer;border-color:#2a7a2a;box-shadow:0 0 0 2px #2a7a2a}
+.pit.clickable:hover{transform:scale(1.05)}
+.pit.last{outline:3px solid #2a7aff}
+.label{font-size:12px;font-weight:700;text-align:center;color:#ffe9c4}
+#info{margin-top:10px;font-size:14px;text-align:center;max-width:720px}
+#scores{display:flex;gap:16px;justify-content:center;margin-top:6px;font-size:14px}
+details{margin-top:10px;max-width:720px;font-size:13px}
+button.pit{font-family:inherit;color:inherit}
+</style>
+</head>
+<body>
+<h2>Mancala</h2>
+<div id="status">Waiting for platform…</div>
+<div id="sub"></div>
+<div id="board">
+  <div class="store" id="storeLeft"><span id="storeLeftName">P1</span><b id="storeLeftCount">0</b><span>store</span></div>
+  <div id="mid">
+    <div class="label" id="topLabel">Top</div>
+    <div class="row" id="topRow"></div>
+    <div class="row" id="botRow"></div>
+    <div class="label" id="botLabel">Bottom</div>
+  </div>
+  <div class="store" id="storeRight"><span id="storeRightName">P0</span><b id="storeRightCount">0</b><span>store</span></div>
+</div>
+<div id="scores"></div>
+<div id="info"></div>
+<details><summary>How to play</summary><p>Pick up all stones from one of your 6 pits. Sow one by one counterclockwise (toward your store on your end). Skip opponent's store. Last stone in your store = extra turn. Last stone in empty pit on your side = capture that + opposite pit to your store. Game ends when one side is empty; remaining stones go to owner. Most stones wins.</p></details>
+<script>
+let latest=null, pending=false;
+function getView(){ if(!latest) return null; return latest.view!==undefined?latest.view:latest.state; }
+function norm(s){
+  if(!s||!Array.isArray(s.pits)||s.pits.length!==12||!Array.isArray(s.stores)) return {pits:[4,4,4,4,4,4,4,4,4,4,4,4],stores:[0,0],lastPos:null,lastPlayer:-1,extraTurn:false,captured:0,winner:null,gameOver:false};
+  return s;
+}
+function pname(i,players){ if(players&&players[i]) return players[i].name||("Player "+i); return "Player "+i; }
+function trySend(pit){
+  if(!latest||pending||latest.status!=="ongoing")return;
+  if(latest.acting_for_player_index==null)return;
+  pending=true;
+  parent.postMessage({type:"make_move",move:{pit:pit}},"*");
+}
+function render(){
+  if(!latest)return;
+  let st=norm(getView());
+  let players=latest.players||[{name:"P0"},{name:"P1"}];
+  while(players.length<2)players.push({name:"P"+players.length});
+  let my=latest.my_player_index;
+  let bottom=(my===0||my===1)?my:0;
+  let top=1-bottom;
+  let acting=latest.status==="ongoing"?latest.acting_for_player_index:null;
+  let statusEl=document.getElementById("status");
+  let sub=document.getElementById("sub");
+  let over=latest.status==="over"||st.gameOver;
+  if(over){
+    let w=st.winner;
+    if(w===-1)statusEl.textContent="Tie game! "+st.stores[0]+" \u2013 "+st.stores[1];
+    else if(w===0||w===1)statusEl.textContent="\uD83C\uDFC6 "+pname(w,players)+" wins "+st.stores[w]+" \u2013 "+st.stores[1-w]+"!";
+    else statusEl.textContent="Game over "+st.stores[0]+" \u2013 "+st.stores[1];
+    sub.textContent="";
+  }else{
+    if(acting==null)statusEl.textContent="Waiting for another player\u2026";
+    else{
+      let extra=st.extraTurn?" \u2014 extra turn!":"";
+      statusEl.textContent=pname(acting,players)+"'s turn"+(acting===my?" (you)":"")+extra;
+    }
+    sub.textContent=my==null?"Spectating \u2014 "+pname(0,players)+" (bottom) vs "+pname(1,players)+" (top)":"You are "+pname(my,players)+" \u2014 "+(my===bottom?"bottom":"top")+" side. "+(acting===my?"Pick a highlighted pit.":acting!=null?"Waiting for "+pname(acting,players)+"\u2026":"");
+  }
+  let leftPlayer=top,rightPlayer=bottom;
+  document.getElementById("storeLeftName").textContent=pname(leftPlayer,players)+(leftPlayer===my?" (you)":"");
+  document.getElementById("storeRightName").textContent=pname(rightPlayer,players)+(rightPlayer===my?" (you)":"");
+  document.getElementById("storeLeftCount").textContent=st.stores[leftPlayer];
+  document.getElementById("storeRightCount").textContent=st.stores[rightPlayer];
+  document.getElementById("storeLeft").className="store"+((st.lastPos===(leftPlayer===0?"s0":"s1"))?" highlight":"");
+  document.getElementById("storeRight").className="store"+((st.lastPos===(rightPlayer===0?"s0":"s1"))?" highlight":"");
+  document.getElementById("topLabel").textContent=pname(top,players)+(top===my?" (you)":"");
+  document.getElementById("botLabel").textContent=pname(bottom,players)+(bottom===my?" (you)":"");
+  let topOrder=bottom===0?[6,7,8,9,10,11]:[5,4,3,2,1,0];
+  let botOrder=bottom===0?[0,1,2,3,4,5]:[11,10,9,8,7,6];
+  buildRow("topRow",topOrder,st,acting,my,over);
+  buildRow("botRow",botOrder,st,acting,my,over);
+  document.getElementById("scores").textContent="Stores \u2014 "+pname(0,players)+": "+st.stores[0]+"  |  "+pname(1,players)+": "+st.stores[1]+"  |  Total stones: "+(st.stores[0]+st.stores[1]+st.pits.reduce((a,b)=>a+b,0));
+  let info="";
+  if(st.lastPlayer>=0&&st.lastPos)info+="Last: "+pname(st.lastPlayer,players)+" \u2192 "+(st.lastPos[0]==="s"?"store ("+st.lastPos+")":"pit "+st.lastPos.slice(1))+((st.captured>0)?" captured "+st.captured:"")+". ";
+  if(latest.status==="ongoing"&&acting!=null)info+="Counterclockwise: bottom sows left\u2192right, top sows right\u2192left.";
+  document.getElementById("info").textContent=info;
+}
+function buildRow(rowId,order,st,acting,my,over){
+  let row=document.getElementById(rowId);
+  row.innerHTML="";
+  for(let pit of order){
+    let b=document.createElement("button");
+    b.className="pit";
+    let cnt=st.pits[pit];
+    let dots=cnt<=10?"\u25CF".repeat(cnt):cnt+" stones";
+    b.innerHTML="<div class='n'>"+cnt+"</div><div class='dots'>"+dots+"</div>";
+    b.title="Pit "+pit+" ("+cnt+")";
+    if(st.lastPos==="p"+pit)b.classList.add("last");
+    let canPlay=!over&&latest.status==="ongoing"&&acting!=null&&acting===my&&((acting===0&&pit<6)||(acting===1&&pit>=6))&&cnt>0;
+    if(canPlay){b.classList.add("clickable");b.disabled=false;b.onclick=()=>trySend(pit);}
+    else{b.disabled=true;b.style.cursor="default";}
+    row.appendChild(b);
+  }
+}
+addEventListener("message",(e)=>{
+  if(e.source!==parent||!e.data||e.data.type!=="state_changed")return;
+  latest=e.data;
+  pending=false; // Parent updates include same-count rejection acknowledgements.
+  render();
+});
+</script>
+</body>
+</html>
