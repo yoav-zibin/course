@@ -1,6 +1,6 @@
 """Named verification checks: extend CHECKS without changing the build worker."""
 from game_platform import game_text
-from game_platform.builder_validation import probe_leaving, verify_examples
+from game_platform.builder_validation import probe_leaving, probe_move_agreement, verify_examples
 from game_platform.game_testing import test_server_code
 
 
@@ -72,6 +72,14 @@ def settlement_probes(code, server, spec, rules):
     return {'passed': not failures, 'details': failures}
 
 
+def move_agreement(code, server, spec, rules):
+    try:
+        failures = probe_move_agreement(server, spec['tests'])
+    except Exception as exc:  # a probe crash is a failed check, never a crashed build
+        failures = [f'move agreement probes could not run: {exc}']
+    return {'passed': not failures, 'details': failures}
+
+
 def localization(code, server, spec, rules):
     errors = game_text.lint(code, server)
     if 'applyLocale(' not in code:
@@ -97,7 +105,7 @@ def random_walks(code, server, spec, rules):
     return {'passed': report.passed, 'details': str(report.failures)}
 
 
-CHECKS = (('approved_examples', examples), ('settlement_probes', settlement_probes), ('localization', localization), ('random_walks', random_walks))
+CHECKS = (('approved_examples', examples), ('settlement_probes', settlement_probes), ('move_agreement', move_agreement), ('localization', localization), ('random_walks', random_walks))
 REVIEW_BRIEFS = (
     ('rules', 'Check setup, legal moves, turn order and terminal conditions against the approved rules.'),
     ('privacy', 'Check hidden information and spectator views; detect information leaks in viewFor.'),

@@ -210,3 +210,53 @@ def test_contract_states_the_recipe_and_performance_rules():
                    'must not clone the state'):
         assert phrase in PLATFORM_CONTRACT, phrase
     assert 'do not fail code for a leaving or settlement scenario the probes already verify' in REVIEW_DISCIPLINE
+
+
+# --- Move-agreement probes -------------------------------------------------
+# The same reference game, judged on one approved opening position: its
+# generators return {type:'pass'}, which its applyMove accepts, so a
+# correct game agrees with itself. Each broken variant reproduces one
+# failure class from real guided builds.
+
+from game_platform.builder_validation import probe_move_agreement
+
+AGREEMENT_CONTRACT = {**CONTRACT, 'cases': [{
+    'name': 'opening', 'kind': 'initial',
+    'ctx': {'players': [{'id': 'human-1', 'kind': 'human', 'display_name': 'A', 'picture_url': '', 'max_loss': 0},
+                        {'id': 'human-2', 'kind': 'human', 'display_name': 'B', 'picture_url': '', 'max_loss': 0}],
+            'pot': 0, 'move_count': 0, 'seed': 7},
+    'state': {'moves': 0, 'turnSeat': 0, 'left': [], 'winner': None, 'finalPayouts': None},
+    'player_id': 'human-1',
+}]}
+
+DIVERGENT_RANDOM = REFERENCE.replace(
+    "randomMove(state, playerId, ctx) { return {type: 'pass'}; }",
+    "randomMove(state, playerId, ctx) { return {type: 'cheat'}; }",
+).replace(
+    "const s = {...state, moves: state.moves + 1, left: [...state.left]};",
+    "if (move.type === 'cheat') throw new Error('InvalidMove: cheat');\n"
+    "    const s = {...state, moves: state.moves + 1, left: [...state.left]};",
+)
+
+THROWING_COMPUTER = REFERENCE.replace(
+    "computerMove(state, playerId, ctx) { return {type: 'pass'}; }",
+    "computerMove(state, playerId, ctx) { throw new Error('no moves'); }",
+)
+
+
+def test_move_agreement_reference_game_agrees():
+    assert probe_move_agreement(REFERENCE, AGREEMENT_CONTRACT) == []
+
+
+def test_move_agreement_catches_divergent_random_move():
+    failures = probe_move_agreement(DIVERGENT_RANDOM, AGREEMENT_CONTRACT)
+    assert any('randomMove returned a move applyMove rejects' in failure for failure in failures)
+
+
+def test_move_agreement_catches_throwing_computer_move():
+    failures = probe_move_agreement(THROWING_COMPUTER, AGREEMENT_CONTRACT)
+    assert any('computerMove raised instead of returning a legal move' in failure for failure in failures)
+
+
+def test_move_agreement_is_a_registered_check():
+    assert 'move_agreement' in dict(CHECKS)

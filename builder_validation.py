@@ -1,4 +1,6 @@
 """Schema and approved-example validation shared by runtime and guided builds."""
+import json
+
 from jsonschema import Draft202012Validator
 from game_platform.game_logic import GameLogic, GameLogicError, InvalidMoveError
 
@@ -110,6 +112,76 @@ def verify_examples(code, contract):
         except Exception as exc:
             results.append({'name':case['name'],'passed':False,'error':str(exc)})
     return results
+
+
+def probe_move_agreement(code, contract, *, samples=24):
+    """Deterministic agreement between the move generators and applyMove,
+    sampled on the approved examples' states.
+
+    Random walks found these only by luck of the seed: a randomMove that
+    returns moves its own applyMove rejects (a second, divergent legality
+    implementation), and generators that throw or crawl on ordinary
+    positions. The approved states are the positions the user cares
+    about, so the probe samples randomMove there, calls computerMove
+    once per state, and requires every returned move to be accepted by
+    applyMove. Returns failure strings; an empty list means agreement."""
+    logic = ContractLogic(code, contract)
+    if not logic.has('randomMove') and not logic.has('computerMove'):
+        return []
+    failures = []
+
+    def accepted(state, mover, move, ctx, seed):
+        try:
+            logic.call('applyMove', state, mover, move, ctx=ctx, seed=seed)
+            return True
+        except Exception:
+            return False
+
+    seen = []
+    for case in contract['cases']:
+        if len(failures) >= 6:
+            break
+        if 'expected_error' in case:
+            continue
+        state = case['state']
+        if any(state == other for other in seen):
+            continue
+        seen.append(state)
+        ctx = {k: v for k, v in case['ctx'].items() if k != 'seed'}
+        mover = case['player_id']
+        label = f"example '{case['name']}'"
+        if logic.has('randomMove'):
+            distinct = []
+            for i in range(samples):
+                try:
+                    move = logic.call('randomMove', state, mover, ctx=ctx, seed=7300 + i,
+                                      time_limit_seconds=0.5)
+                except Exception as exc:
+                    failures.append(f'{label}: randomMove failed on an approved position: {exc}')
+                    break
+                if move is None:
+                    failures.append(f'{label}: randomMove returned no move on a live approved position')
+                    break
+                if not any(move == other for other in distinct):
+                    distinct.append(move)
+            for move in distinct:
+                if not accepted(state, mover, move, ctx, 7400):
+                    failures.append(f'{label}: randomMove returned a move applyMove rejects: '
+                                    f'{json.dumps(move, default=str)} — the move generator and '
+                                    'the validator disagree about legality')
+        if logic.has('computerMove'):
+            try:
+                move = logic.call('computerMove', state, mover, ctx=ctx, seed=7500,
+                                  time_limit_seconds=0.5)
+            except Exception as exc:
+                failures.append(f'{label}: computerMove raised instead of returning a legal move: {exc}')
+            else:
+                if move is None:
+                    failures.append(f'{label}: computerMove returned no move on a live approved position')
+                elif not accepted(state, mover, move, ctx, 7500):
+                    failures.append(f'{label}: computerMove returned a move applyMove rejects: '
+                                    f'{json.dumps(move, default=str)}')
+    return failures
 
 
 def probe_leaving(code, contract, *, allowed_player_counts, allows_leave_mid_match):
