@@ -2130,6 +2130,22 @@ def _is_html_navigation(request: Request) -> bool:
     )
 
 
+# Operational routes that people open in a browser on purpose (a health check, the API
+# description, the admin tools): they keep their raw replies, errors included, instead of
+# being redirected to the portal or dressed up as a page.
+_RAW_PATHS: Final = frozenset({"/health", "/openapi.json"})
+
+
+def _wants_raw_reply(request: Request) -> bool:
+    """True for the operational routes, and for any address with ?raw=1."""
+    path = request.url.path
+    return (
+        path in _RAW_PATHS
+        or path.startswith("/admin/")
+        or request.query_params.get("raw") == "1"
+    )
+
+
 def _error_page_content(status_code: int) -> str:
     if status_code == HTTPStatus.NOT_FOUND:
         title = "We couldn't find that page"
@@ -2205,7 +2221,7 @@ async def _branded_browser_responses(
 ) -> Response:
     """Show a friendly HTML page instead of raw response data during navigation."""
     response = await call_next(request)
-    if not _is_html_navigation(request):
+    if not _is_html_navigation(request) or _wants_raw_reply(request):
         return response
 
     content_type = response.headers.get("content-type", "").lower()
