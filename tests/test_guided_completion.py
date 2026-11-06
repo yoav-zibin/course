@@ -329,18 +329,25 @@ def test_test_proposal_requests_illustrations_one_case_at_a_time():
     draft = approved_draft()
     contract = deepcopy(draft.builder_workflow['artifacts']['tests']['value'])
     pictures = {case['name']:case.pop('images') for case in contract['cases']}
+    outlines = [{k: c[k] for k in ('name', 'kind', 'description')} for c in contract['cases']]
+    schemas = {k: contract[k] for k in ('state_schema', 'view_schema', 'move_schema')}
+    full = {case['name']: case for case in contract['cases']}
     class SplitProvider:
         cases = []
         def chat(self, messages, **kwargs):
+            instruction = messages[0]['content']
             payload = json.loads(messages[1]['content'])
-            if 'example' in payload:
-                name = payload['example']['name']
-                self.cases.append(name)
-                return json.dumps({'images':pictures[name]})
-            return json.dumps({'message':'Review these cases', 'artifact':contract})
+            if instruction.startswith('Plan the requested tests'):
+                return json.dumps({**schemas, 'cases': outlines, 'message': 'Review these cases'})
+            if instruction.startswith('Write only the single'):
+                return json.dumps(full[payload['outline']['name']])
+            name = payload['example']['name']
+            self.cases.append(name)
+            return json.dumps({'images':pictures[name]})
     provider = SplitProvider()
     result = propose_step(provider,draft,'tests','Generate the examples')
-    assert provider.cases == list(pictures)
+    # Illustrations are requested per case (concurrently, so in any order).
+    assert sorted(provider.cases) == sorted(pictures)
     flow.validate_artifact('tests',result.builder_workflow['artifacts']['tests']['value'])
 
 
@@ -432,7 +439,13 @@ def test_incomplete_contract_and_svg_recover_without_restarting_draft(output_lim
         propose_step(client,draft,'tests','Use three cases')
     draft.builder_workflow['pending_generation'] = client.saved
     result = propose_step(client,draft,'tests','Use three cases')
-    assert calls == [o['name'] for o in outlines[:2]] + [outlines[2]['name']]*3 + [o['name'] for o in outlines[3:]]
+    # Cases are written concurrently and committed in outline order: the
+    # failed case is attempted twice in the first run and once on resume,
+    # while the cases before it are generated exactly once.
+    from collections import Counter
+    counts = Counter(calls)
+    assert counts[outlines[0]['name']] == counts[outlines[1]['name']] == 1
+    assert counts[outlines[2]['name']] == 3
     artifact = result.builder_workflow['artifacts']['tests']['value']
     flow.validate_artifact('tests',artifact)
     assert all(len(case['images'])==4 for case in artifact['cases'])
@@ -598,19 +611,25 @@ def test_reopened_test_proposal_reuses_verified_cases_after_network_failure():
     artifacts = d.builder_workflow['artifacts']
     contract = deepcopy(artifacts['tests']['value'])
     pictures = {case['name']:case.pop('images') for case in contract['cases']}
-    calls = []
+    outlines = [{k: c[k] for k in ('name', 'kind', 'description')} for c in contract['cases']]
+    schemas = {k: contract[k] for k in ('state_schema', 'view_schema', 'move_schema')}
+    full = {case['name']: case for case in contract['cases']}
+    illustrated = []
+    failing = {'enabled': True}
     class Provider:
         def chat_with_reasoning(self, messages, **opts):
+            instruction = messages[0]['content']
             data = json.loads(messages[1]['content'])
-            if 'example' in data:
+            if instruction.startswith('Plan the requested tests'):
+                value = {**schemas, 'cases': outlines, 'message': 'Review cases'}
+            elif instruction.startswith('Write only the single'):
+                value = full[data['outline']['name']]
+            else:
                 name = data['example']['name']
-                calls.append(name)
-                if len(calls)==3:
+                illustrated.append(name)
+                if failing['enabled'] and name == outlines[-1]['name']:
                     raise TimeoutError()
                 value = {'images':pictures[name]}
-            else:
-                calls.append('plan')
-                value = {'message':'Review cases','artifact':contract}
             return ChatResult(json.dumps(value),prompt_tokens=10,completion_tokens=10)
     cfg = SimpleNamespace(builder_input_usd_per_million=1,builder_output_usd_per_million=1,builder_max_input_tokens=10000)
     def run(draft):
@@ -619,8 +638,13 @@ def test_reopened_test_proposal_reuses_verified_cases_after_network_failure():
         run(d)
     reopened = p.get_game_draft(caller_id=d.owner_user_id,draft_id=d.id)
     assert reopened.builder_workflow['pending_generation']['progress']['request_text']=='Use three cases'
+    illustrated.clear()
+    failing['enabled'] = False
     result = run(reopened)
-    assert calls == ['plan',*list(pictures)[:2],*list(pictures)[1:]]
+    # The reopened draft resumes the saved proposal: only the illustrations
+    # that never completed are requested again, not the whole set.
+    assert outlines[-1]['name'] in illustrated
+    assert len(illustrated) <= 2
     assert 'pending_generation' not in result.builder_workflow
     flow.validate_artifact('tests',result.builder_workflow['artifacts']['tests']['value'])
 
@@ -630,21 +654,205 @@ def test_test_proposal_repairs_invalid_data_before_drawing(extra_data):
     from copy import deepcopy
     from game_platform.builder_jobs import propose_step
     d = approved_draft()
-    contract = d.builder_workflow['artifacts']['tests']['value']
-    invalid = deepcopy(contract)
-    invalid['cases'][-1]['expected_turn'] = ['unknown-seat']
+    contract = deepcopy(d.builder_workflow['artifacts']['tests']['value'])
+    pictures = {case['name']: case.pop('images') for case in contract['cases']}
+    outlines = [{k: c[k] for k in ('name', 'kind', 'description')} for c in contract['cases']]
+    schemas = {k: contract[k] for k in ('state_schema', 'view_schema', 'move_schema')}
+    full = {case['name']: case for case in contract['cases']}
+    # A duplicated case name is a set-level error no single-case repair can
+    # fix, so the whole-contract repair remains the fallback for it.
+    duplicated = outlines + [dict(outlines[1])]
     calls = []
     class Provider:
         def chat(self,messages,**options):
-            calls.append(messages[0]['content'].split()[0])
-            if calls[-1]=='Repair':
+            instruction = messages[0]['content']
+            calls.append(instruction.split()[0])
+            if instruction.startswith('Repair'):
                 if extra_data and calls.count('Repair') == 1:
-                    return json.dumps(contract) + ' {}'
-                return json.dumps(contract)
-            return json.dumps({'message':'Review','artifact':invalid})
+                    return json.dumps({**contract, 'cases': [
+                        {**case, 'images': pictures[case['name']]} for case in contract['cases']]}) + ' {}'
+                return json.dumps({**contract, 'cases': [
+                    {**case, 'images': pictures[case['name']]} for case in contract['cases']]})
+            if instruction.startswith('Plan'):
+                return json.dumps({**schemas, 'cases': duplicated, 'message': 'Review'})
+            if instruction.startswith('Write'):
+                name = json.loads(messages[1]['content'])['outline']['name']
+                return json.dumps(full[name])
+            raise AssertionError(instruction)
     draft = propose_step(Provider(),d,'tests','Review tests')
-    assert calls == ['You','Repair'] + (['Repair'] if extra_data else [])
+    assert calls[0] == 'Plan'
+    assert calls.count('Repair') == 1 + (1 if extra_data else 0)
     flow.validate_artifact('tests',draft.builder_workflow['artifacts']['tests']['value'])
+
+
+def test_case_repair_regenerates_only_the_broken_case():
+    import copy
+    from game_platform.builder_jobs import propose_step
+    draft = approved_draft()
+    contract = copy.deepcopy(draft.builder_workflow['artifacts']['tests']['value'])
+    cases = contract.pop('cases')
+    originals = {case['name']: case.pop('images') for case in cases}
+    outlines = [{k: c[k] for k in ('name', 'kind', 'description')} for c in cases]
+    singles = []
+    instructions = []
+    class Provider:
+        def chat(self, messages, **options):
+            instruction = messages[0]['content']
+            instructions.append(instruction)
+            if instruction.startswith('Plan the requested tests'):
+                return json.dumps(dict(contract, cases=outlines, message='Review the examples'))
+            if instruction.startswith('Write only the single'):
+                payload = json.loads(messages[1]['content'])
+                singles.append(payload)
+                case = next(c for c in cases if c['name'] == payload['outline']['name'])
+                if payload['outline']['name'] == 'Intermediate move' and 'validation_error' not in payload:
+                    case = {k: v for k, v in case.items() if k != 'move'}
+                return json.dumps(case)
+            if instruction.startswith('Illustrate only this one'):
+                name = json.loads(messages[1]['content'])['example']['name']
+                return json.dumps({'images': originals[name]})
+            raise AssertionError(instruction)
+    result = propose_step(Provider(), draft, 'tests', 'Check these moves')
+    artifact = result.builder_workflow['artifacts']['tests']['value']
+    flow.validate_artifact('tests', artifact)
+    # The tests pipeline goes straight to the plan now: no doomed attempt
+    # at the whole contract in a single reply.
+    assert not any(i.startswith('You help a person specify') for i in instructions)
+    regens = [p for p in singles if 'validation_error' in p]
+    assert len(regens) == 1
+    assert regens[0]['outline']['name'] == 'Intermediate move'
+    assert 'Test is missing move' in regens[0]['validation_error']
+
+
+def test_case_repair_drops_a_case_that_keeps_failing():
+    import copy
+    from game_platform.builder_jobs import propose_step
+    draft = approved_draft()
+    contract = copy.deepcopy(draft.builder_workflow['artifacts']['tests']['value'])
+    cases = contract.pop('cases')
+    originals = {case['name']: case.pop('images') for case in cases}
+    extra = copy.deepcopy(next(c for c in cases if c['name'] == 'Intermediate move'))
+    extra['name'] = 'Second intermediate'
+    all_cases = cases + [extra]
+    originals['Second intermediate'] = originals['Intermediate move']
+    outlines = [{k: c[k] for k in ('name', 'kind', 'description')} for c in all_cases]
+    class Provider:
+        def chat(self, messages, **options):
+            instruction = messages[0]['content']
+            if instruction.startswith('Plan the requested tests'):
+                return json.dumps(dict(contract, cases=outlines, message='Review the examples'))
+            if instruction.startswith('Write only the single'):
+                payload = json.loads(messages[1]['content'])
+                case = next(c for c in all_cases if c['name'] == payload['outline']['name'])
+                if payload['outline']['name'] == 'Second intermediate':
+                    case = {k: v for k, v in case.items() if k != 'move'}
+                elif payload['outline']['name'] == cases[0]['name']:
+                    # Differ from the approved artifact so the proposal (and
+                    # its message) is recorded rather than treated as a
+                    # no-change re-proposal.
+                    case = {**case, 'description': case['description'] + ' (regenerated)'}
+                return json.dumps(case)
+            if instruction.startswith('Illustrate only this one'):
+                name = json.loads(messages[1]['content'])['example']['name']
+                return json.dumps({'images': originals[name]})
+            raise AssertionError(instruction)
+    result = propose_step(Provider(), draft, 'tests', 'Check these moves')
+    artifact = result.builder_workflow['artifacts']['tests']['value']
+    flow.validate_artifact('tests', artifact)
+    assert [c['name'] for c in artifact['cases']] == [c['name'] for c in cases]
+    assert any('Second intermediate' in entry.get('text', '')
+               for entry in result.builder_workflow['conversation'])
+
+
+def test_terminally_failed_checkpoint_is_discarded():
+    import copy
+    from game_platform.builder_jobs import propose_step
+    draft = approved_draft()
+    contract = copy.deepcopy(draft.builder_workflow['artifacts']['tests']['value'])
+    cases = contract.pop('cases')
+    originals = {case['name']: case.pop('images') for case in cases}
+    outlines = [{k: c[k] for k in ('name', 'kind', 'description')} for c in cases]
+    duplicated = outlines + [dict(outlines[1])]
+    class Failing:
+        def chat(self, messages, **options):
+            instruction = messages[0]['content']
+            if instruction.startswith('Plan the requested tests'):
+                return json.dumps(dict(contract, cases=duplicated, message='Review the examples'))
+            if instruction.startswith('Write only the single'):
+                name = json.loads(messages[1]['content'])['outline']['name']
+                return json.dumps(next(c for c in cases if c['name'] == name))
+            return '{"broken":"'
+        def checkpoint(self, key, progress):
+            self.saved = copy.deepcopy({'key': key, 'progress': progress})
+    failing = Failing()
+    with pytest.raises(ValueError, match='start over'):
+        propose_step(failing, draft, 'tests', 'Check these moves')
+    assert failing.saved['progress'].get('discarded') is True
+    draft.builder_workflow['pending_generation'] = failing.saved
+    planned = []
+    class Healthy:
+        def chat(self, messages, **options):
+            instruction = messages[0]['content']
+            if instruction.startswith('Plan the requested tests'):
+                planned.append(instruction)
+                return json.dumps(dict(contract, cases=outlines, message='Review the examples'))
+            if instruction.startswith('Write only the single'):
+                name = json.loads(messages[1]['content'])['outline']['name']
+                return json.dumps(next(c for c in cases if c['name'] == name))
+            if instruction.startswith('Illustrate only this one'):
+                name = json.loads(messages[1]['content'])['example']['name']
+                return json.dumps({'images': originals[name]})
+            raise AssertionError(instruction)
+    result = propose_step(Healthy(), draft, 'tests', 'Check these moves')
+    # The discarded checkpoint was not resumed: generation started fresh.
+    assert planned
+    flow.validate_artifact('tests', result.builder_workflow['artifacts']['tests']['value'])
+
+
+def test_unversioned_checkpoint_is_ignored():
+    import copy
+    from game_platform.builder_jobs import propose_step
+    draft = approved_draft()
+    contract = copy.deepcopy(draft.builder_workflow['artifacts']['tests']['value'])
+    cases = contract.pop('cases')
+    originals = {case['name']: case.pop('images') for case in cases}
+    outlines = [{k: c[k] for k in ('name', 'kind', 'description')} for c in cases]
+    class Flaky:
+        def chat(self, messages, **options):
+            instruction = messages[0]['content']
+            if instruction.startswith('Plan the requested tests'):
+                return json.dumps(dict(contract, cases=outlines, message='Review the examples'))
+            if instruction.startswith('Write only the single'):
+                name = json.loads(messages[1]['content'])['outline']['name']
+                return json.dumps(next(c for c in cases if c['name'] == name))
+            raise TimeoutError()
+        def checkpoint(self, key, progress):
+            self.saved = copy.deepcopy({'key': key, 'progress': progress})
+    flaky = Flaky()
+    with pytest.raises(TimeoutError):
+        propose_step(flaky, draft, 'tests', 'Check these moves')
+    saved = flaky.saved
+    assert saved['progress'].get('v') == 1
+    # A checkpoint in the pre-versioning shape (no stamp) must not resume.
+    del saved['progress']['v']
+    draft.builder_workflow['pending_generation'] = saved
+    planned = []
+    class Healthy:
+        def chat(self, messages, **options):
+            instruction = messages[0]['content']
+            if instruction.startswith('Plan the requested tests'):
+                planned.append(instruction)
+                return json.dumps(dict(contract, cases=outlines, message='Review the examples'))
+            if instruction.startswith('Write only the single'):
+                name = json.loads(messages[1]['content'])['outline']['name']
+                return json.dumps(next(c for c in cases if c['name'] == name))
+            if instruction.startswith('Illustrate only this one'):
+                name = json.loads(messages[1]['content'])['example']['name']
+                return json.dumps({'images': originals[name]})
+            raise AssertionError(instruction)
+    result = propose_step(Healthy(), draft, 'tests', 'Check these moves')
+    assert planned
+    flow.validate_artifact('tests', result.builder_workflow['artifacts']['tests']['value'])
 
 
 def test_feedback_routes_to_spec_and_requires_reapproval():
