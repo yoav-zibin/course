@@ -3,6 +3,7 @@ is set; see "Firestore" in the README for running the emulator."""
 
 import json
 import os
+import time
 import uuid
 from collections.abc import Iterator
 
@@ -58,8 +59,26 @@ def _all_data(api: "Api") -> dict:
     return api.ok("GET", "/debug/all-data")
 
 
+def _await_popular_ids(store, expected, timeout: float = 10.0) -> None:
+    """Wait until the native ranked listing reflects the in-memory scores.
+
+    The listing is a Firestore query over the persisted popularity records,
+    which the background writer flushes on its interval, so it may lag the
+    scores (including a seed written at store construction) by up to that
+    interval.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        rows = store.list_popular_game_ids(8)
+        if rows == expected:
+            return
+        if time.monotonic() >= deadline:
+            assert rows == expected, f"popular games {rows} != {expected}"
+        time.sleep(0.1)
+
+
 def test_popularity_uses_native_firestore_ranking_and_survives_restart(open_store):
-    from game_platform.tests.test_popularity import exercise_popularity
+    from game_platform.tests.test_popularity import _await_popular, exercise_popularity
 
     store = open_store()
     first, second = exercise_popularity(Api(store=store))
@@ -68,7 +87,7 @@ def test_popularity_uses_native_firestore_ranking_and_survives_restart(open_stor
     store.close()
     restored = Api(store=open_store())
     assert restored.ok("GET", f"/games/{first}/popularity")["score"] == 4
-    assert [row["id"] for row in restored.ok("GET", "/games/popular")] == [first, second]
+    _await_popular(restored, [first, second])
 
 
 def test_native_popularity_documents_load_without_a_snapshot_json_field(client, prefix, open_store):
@@ -93,11 +112,11 @@ def test_existing_firestore_history_seeds_popularity_once(client, prefix, open_s
     import_snapshot(client, snapshot, collection_prefix=prefix)
     store = open_store()
     assert store.game_popularity_score(game) == 2
-    assert store.list_popular_game_ids(8) == [(game, 2)]
+    _await_popular_ids(store, [(game, 2)])
     store.close()
     restarted = open_store()
     assert restarted.game_popularity_score(game) == 2
-    assert restarted.list_popular_game_ids(8) == [(game, 2)]
+    _await_popular_ids(restarted, [(game, 2)])
 
 
 def test_everything_survives_a_restart(open_store) -> None:

@@ -1,7 +1,27 @@
+import time
 from pathlib import Path
 
 from game_platform.json_file_store import JsonFileStore
 from game_platform.tests.helpers import Api
+
+
+def _await_popular(api: Api, expected: list[str], path: str = "/games/popular",
+                   timeout: float = 10.0) -> None:
+    """Wait until the ranked list matches the in-memory scores.
+
+    The ranking is a native query over the persisted popularity records,
+    which the background writer flushes on its interval, so it may lag the
+    scores by up to that interval. Stores that answer from memory match
+    on the first poll.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        ids = [row["id"] for row in api.ok("GET", path)]
+        if ids == expected:
+            return
+        if time.monotonic() >= deadline:
+            assert ids == expected, f"popular games {ids} != {expected}"
+        time.sleep(0.1)
 
 
 def exercise_popularity(api: Api) -> tuple[str, str]:
@@ -15,12 +35,12 @@ def exercise_popularity(api: Api) -> tuple[str, str]:
     api.ok("POST", f"/matches/{lobby}/start", as_user=owner, json={"initial_state": {}})
     assert api.ok("GET", f"/games/{first}/popularity")["score"] == 2
     api.new_match(owner=owner, game_id=second, num_computer_opponents=2, start=True)
-    assert [row["id"] for row in api.ok("GET", "/games/popular")] == [second, first]
+    _await_popular(api, [second, first])
 
     replay = api.new_match(owner=owner, game_id=first, num_computer_opponents=1, start=True)
     assert api.request("POST", f"/matches/{replay}/start", as_user=owner, json={}).status_code == 409
     assert api.ok("GET", f"/games/{first}/popularity")["score"] == 4
-    assert [row["id"] for row in api.ok("GET", "/games/popular?limit=1")] == [first]
+    _await_popular(api, [first], path="/games/popular?limit=1")
     api.ok("DELETE", f"/matches/{replay}", as_user=owner)
     assert api.ok("GET", f"/games/{first}/popularity")["score"] == 4
     return first, second
