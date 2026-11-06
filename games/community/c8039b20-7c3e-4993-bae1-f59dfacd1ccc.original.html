@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fox and Geese</title><style>body{margin:0;padding:16px;background:#101827;color:#edf2ff;font:16px system-ui}*{box-sizing:border-box}h1{font-size:23px;margin:0 0 8px}#status{font-weight:650;margin:12px 0;color:#8ee7cd}.board{display:grid;grid-template-columns:repeat(7,44px);gap:3px}.pt{height:44px;border-radius:8px;border:1px solid #475569;background:#25344e;font-size:22px;display:grid;place-items:center;padding:0}.pt.off{background:transparent;border:0}.pt.dest{outline:3px solid #22c55e;cursor:pointer}.pt.sel{outline:3px solid #fcd34d}button.act{font:inherit;min-height:46px;padding:0 18px;border:1px solid #64748b;border-radius:8px;background:#25344e;color:white;cursor:pointer;margin-top:10px}button.act:disabled{opacity:.5;cursor:default}.rules{font-size:14px;color:#bec9dc;max-width:460px}</style></head><body><h1>Fox and Geese</h1><p class="rules">The geese (seat 2) move first and win by trapping the fox so it cannot move. The fox (seat 1) wins by capturing geese — jumping over one into an empty point — until 4 or fewer remain. Geese move one point down, left, or right; the fox moves one point in any direction and may chain jumps, stopping whenever it likes.</p><div id="status">Waiting for the platform…</div><div class="board" id="board"></div><div id="extra"></div><script>
+"use strict";
+let latest=null,sentFor=-1,selected=null;
+const $=id=>document.getElementById(id);
+function moveCount(){return latest?(latest.move_count??latest.moveCount??0):0;}
+function myTurn(){return latest&&latest.status==="ongoing"&&latest.acting_for_player_index!==null&&latest.acting_for_player_index!==undefined;}
+function send(move){if(!myTurn()||sentFor===moveCount())return;sentFor=moveCount();selected=null;parent.postMessage({type:"make_move",move},"*");render();}
+const isPoint=(r,c)=>r>=0&&r<7&&c>=0&&c<7&&(r>=2&&r<=4||c>=2&&c<=4);
+const same=(a,b)=>a&&b&&a[0]===b[0]&&a[1]===b[1];
+function render(){
+ if(!latest)return;
+ const v=latest.view,status=$("status"),board=$("board"),extra=$("extra");
+ const name=i=>(latest.players&&latest.players[i]&&latest.players[i].name)||("Player "+(i+1));
+ if(!v){status.textContent="Waiting…";board.replaceChildren();return;}
+ const over=latest.status==="over"||(v.winner!==null&&v.winner!==undefined)||v.draw;
+ if(over){
+   if(v.draw)status.textContent="Draw — 60 quiet moves.";
+   else status.textContent=name(v.winner)+" wins! "+(v.winner===0?"🦊":"🪿");
+ }else if(sentFor===moveCount())status.textContent="Saving move…";
+ else if(myTurn())status.textContent=name(latest.acting_for_player_index)+" ("+(v.toMove===0?"🦊 fox":"🪿 geese")+") — your turn. Captured geese: "+v.captured;
+ else status.textContent="Waiting for "+name(v.toMove)+" ("+(v.toMove===0?"🦊 fox":"🪿 geese")+"). Captured geese: "+v.captured;
+ const moves=(myTurn()&&!over)?(v.moves||[]):[];
+ const dests=selected?moves.filter(m=>m.from&&same(m.from,selected)).map(m=>m.to):[];
+ board.replaceChildren();
+ for(let r=0;r<7;r++)for(let c=0;c<7;c++){
+   const d=document.createElement("button");
+   if(!isPoint(r,c)){d.className="pt off";d.disabled=true;board.append(d);continue;}
+   d.className="pt";
+   const isFox=v.fox[0]===r&&v.fox[1]===c;
+   const isGoose=v.geese.some(g=>g[0]===r&&g[1]===c);
+   d.textContent=isFox?"🦊":isGoose?"🪿":"·";
+   const dest=dests.find(t=>t[0]===r&&t[1]===c);
+   if(selected&&selected[0]===r&&selected[1]===c)d.classList.add("sel");
+   if(dest){d.classList.add("dest");d.onclick=()=>send({from:selected.slice(),to:[r,c]});}
+   else if(moves.some(m=>m.from&&m.from[0]===r&&m.from[1]===c))d.onclick=()=>{selected=[r,c];render();};
+   else d.disabled=true;
+   board.append(d);
+ }
+ extra.replaceChildren();
+ if(myTurn()&&!over&&moves.some(m=>m.stop)){
+   const b=document.createElement("button");b.className="act";b.textContent="Stop jumping here";
+   b.disabled=sentFor===moveCount();b.onclick=()=>send({stop:true});extra.append(b);
+ }
+}
+addEventListener("message",e=>{if(e.source!==parent||!e.data||e.data.type!=="state_changed")return;latest=e.data;selected=null;render();});
+</script></body></html>

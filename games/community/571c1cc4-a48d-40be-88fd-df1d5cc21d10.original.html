@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NIM - Strategy Game</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; padding: 20px; min-height: 100vh; background: #0b1220; color: #eaf1ff; font-family: Arial, sans-serif; text-align: center; }
+h1 { color: #7db8ff; font-size: 40px; letter-spacing: 6px; margin: 12px 0 8px; }
+.subtitle, .rules { color: #9aacc8; line-height: 1.6; }
+#status { margin: 24px 0; font-size: 20px; font-weight: bold; }
+.pile { background: #18243a; border: 1px solid #344763; border-radius: 15px; padding: 18px; margin: 15px auto; max-width: 480px; }
+.pile h3 { color: #a8d5ff; margin: 5px 0; }
+.stones { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin: 20px 0; }
+.stone { width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg,#b5dcff,#3478ce); border: 2px solid #d4eaff; cursor: pointer; }
+.stone.selected { background: #ffca70; border-color: #fff0c7; transform: scale(1.1); }
+button.action { padding: 12px 25px; background: #448ce0; color: white; border: none; border-radius: 9px; font-weight: bold; cursor: pointer; }
+button:disabled { opacity: 0.4; cursor: default; }
+#message { color: #ffca70; min-height: 24px; margin-top: 15px; }
+.rules { max-width: 480px; margin: 25px auto; font-size: 13px; }
+@media (max-width: 480px) { body { padding: 12px; } .pile { padding: 12px; } .stone { width: 33px; height: 33px; } }
+</style>
+</head>
+<body>
+<h1>NIM</h1>
+<p class="subtitle">A classic mathematical strategy game</p>
+<div id="status">Waiting for the platform...</div>
+<div id="board"></div>
+<div id="message"></div>
+<div class="rules">Remove one or more stones from ONE pile per turn. The player who takes the last stone wins.</div>
+<script>
+let latest = null;
+let selectedPile = -1;
+let selectedCount = 0;
+let moveSent = false;
+
+function getView() {
+  if (latest && latest.view && Array.isArray(latest.view.piles)) return latest.view;
+  return { piles: [3,5,7], winnerIndex: null };
+}
+function canAct() {
+  return !!(latest && latest.status === "ongoing" && latest.acting_for_player_index !== null && latest.acting_for_player_index !== undefined && !moveSent);
+}
+function nameOf(i) {
+  if (latest && latest.players && latest.players[i]) {
+    const p = latest.players[i];
+    return (p.name || ("Player " + (i+1))) + (p.kind === "computer" ? " (Computer)" : "");
+  }
+  return "Player " + (i+1);
+}
+function sendMove(pile, count) {
+  if (!canAct()) return;
+  moveSent = true;
+  parent.postMessage({ type: "make_move", move: { pile: pile, count: count } }, "*");
+  document.getElementById("message").textContent = "Submitting move...";
+  render();
+}
+function render() {
+  if (!latest) return;
+  const view = getView();
+  const status = document.getElementById("status");
+  const board = document.getElementById("board");
+  const humanTurn = canAct();
+  if (latest.status === "over" || view.winnerIndex !== null && view.winnerIndex !== undefined) {
+    status.textContent = (view.winnerIndex !== null && view.winnerIndex !== undefined) ? nameOf(view.winnerIndex) + " wins!" : "Game over!";
+  } else {
+    const turns = latest.turn_of_player_indices || [];
+    if (turns.length > 0) {
+      const t = turns[0];
+      if (latest.acting_for_player_index !== null && latest.acting_for_player_index !== undefined) status.textContent = "Your turn, " + nameOf(t) + "!";
+      else status.textContent = nameOf(t) + "'s turn";
+    } else status.textContent = "Waiting for players...";
+  }
+  board.innerHTML = "";
+  view.piles.forEach((amount, pileIndex) => {
+    const section = document.createElement("div");
+    section.className = "pile";
+    const heading = document.createElement("h3");
+    heading.textContent = "Pile " + (pileIndex+1) + " \u2014 " + amount + " stones";
+    section.appendChild(heading);
+    const stones = document.createElement("div");
+    stones.className = "stones";
+    for (let j = 1; j <= amount; j++) {
+      const count = amount - j + 1;
+      const stone = document.createElement("button");
+      stone.className = "stone";
+      stone.disabled = !humanTurn || amount <= 0;
+      stone.setAttribute("aria-label", "Select " + count + " stones");
+      if (selectedPile === pileIndex && j > amount - selectedCount) stone.classList.add("selected");
+      stone.onclick = () => { if (!canAct()) return; selectedPile = pileIndex; selectedCount = count; render(); };
+      stones.appendChild(stone);
+    }
+    section.appendChild(stones);
+    const take = document.createElement("button");
+    take.className = "action";
+    take.textContent = selectedPile === pileIndex ? "Take " + selectedCount + " stones" : "Select stones";
+    take.disabled = !humanTurn || selectedPile !== pileIndex || selectedCount < 1 || selectedCount > amount;
+    take.onclick = () => { if (!canAct()) return; sendMove(pileIndex, selectedCount); };
+    section.appendChild(take);
+    board.appendChild(section);
+  });
+}
+window.addEventListener("message", event => {
+  if (event.source !== parent) return;
+  const data = event.data;
+  if (!data || data.type !== "state_changed") return;
+  latest = data;
+  moveSent = false;
+  selectedPile = -1;
+  selectedCount = 0;
+  const msg = document.getElementById("message");
+  if (canAct()) msg.textContent = "";
+  else if (latest.status === "ongoing" && latest.turn_of_player_indices && latest.turn_of_player_indices.length) msg.textContent = "Waiting for opponent...";
+  else msg.textContent = "";
+  render();
+});
+</script>
+</body>
+</html>

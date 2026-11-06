@@ -1,0 +1,134 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;padding:16px;background:#1a1d24;color:#f2f3f5;display:flex;justify-content:center}
+  .wrap{width:100%;max-width:560px}
+  h2{margin:0 0 4px}
+  .sub{opacity:.7;margin:0 0 12px;font-size:13px}
+  .card{background:#262b36;border-radius:14px;padding:14px;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+  #status{font-weight:700;min-height:24px;margin:0 0 10px}
+  .players{display:flex;gap:8px;margin-bottom:10px}
+  .p{flex:1;display:flex;align-items:center;gap:8px;background:#1c2029;border:2px solid transparent;border-radius:10px;padding:8px 10px;font-size:14px}
+  .p.active{border-color:#ffb84d}
+  .stone{width:22px;height:22px;border-radius:50%;flex-shrink:0}
+  .stone.b{background:radial-gradient(circle at 30% 30%,#666,#000 70%);border:1px solid #000}
+  .stone.w{background:radial-gradient(circle at 30% 30%,#fff,#c9c9c9 75%);border:1px solid #888}
+  .p small{display:block;opacity:.65;font-weight:400}
+  #boardWrap{background:#e0b25f;border-radius:10px;padding:10px;box-shadow:inset 0 0 0 2px #b9853a}
+  #board{display:grid;grid-template-columns:repeat(15,1fr);grid-template-rows:repeat(15,1fr);aspect-ratio:1/1;background:
+    linear-gradient(#a67c33,#a67c33),linear-gradient(#a67c33,#a67c33),#e0b25f;
+    border-radius:6px;overflow:hidden;touch-action:manipulation}
+  .cell{position:relative;border:0;background:transparent;padding:0;cursor:pointer}
+  .cell::before,.cell::after{content:"";position:absolute;background:#7a5a26}
+  .cell::before{left:50%;top:0;bottom:0;width:1px}
+  .cell::after{top:50%;left:0;right:0;height:1px}
+  .cell span.st{position:absolute;inset:8%;border-radius:50%;z-index:2;display:block}
+  .cell span.st.black{background:radial-gradient(circle at 32% 30%,#6b6b6b,#0a0a0a 68%);box-shadow:0 2px 4px rgba(0,0,0,.5)}
+  .cell span.st.white{background:radial-gradient(circle at 32% 30%,#fff,#c4c4c4 75%);box-shadow:0 2px 4px rgba(0,0,0,.45);border:1px solid #777}
+  .cell.last span.st::after{content:"";position:absolute;left:50%;top:50%;width:34%;height:34%;transform:translate(-50%,-50%);border-radius:50%;background:#e53935}
+  .cell.win span.st{outline:3px solid #e53935;outline-offset:1px}
+  .cell.playable:hover::before,.cell.playable:hover::after{background:#5d441d}
+  .cell.playable:hover span.preview{position:absolute;inset:12%;border-radius:50%;z-index:2;opacity:.55;display:block}
+  .footer{display:flex;justify-content:space-between;margin-top:10px;font-size:13px;opacity:.8}
+  .hint{font-size:12px;opacity:.65;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h2>⚫ Gomoku</h2>
+<p class="sub">Five in a row wins. Black moves first.</p>
+<div class="card">
+<p id="status">Waiting for the platform…</p>
+<div class="players">
+<div class="p" id="p0"><div class="stone b"></div><div><b id="n0">Black</b><small>Player 1 • Black</small></div></div>
+<div class="p" id="p1"><div class="stone w"></div><div><b id="n1">White</b><small>Player 2 • White</small></div></div>
+</div>
+<div id="boardWrap"><div id="board"></div></div>
+<div class="footer"><span id="moveInfo">Move 0</span><span id="youInfo"></span></div>
+<div class="hint">Tap an intersection to place. Computers move automatically.</div>
+</div>
+</div>
+<script>
+var SIZE=15;
+var latest=null;
+var boardEl=document.getElementById('board');
+var cells=[];
+for(var r=0;r<SIZE;r++){cells.push([]);for(var c=0;c<SIZE;c++){(function(rr,cc){
+  var b=document.createElement('button');b.className='cell';b.setAttribute('aria-label','row '+(rr+1)+' col '+(cc+1));
+  b.innerHTML='<span class="st" style="display:none"></span><span class="preview" style="display:none"></span>';
+  b.addEventListener('click',function(){tryPlace(rr,cc);});
+  b.addEventListener('mouseenter',function(){preview(rr,cc,true);});
+  b.addEventListener('mouseleave',function(){preview(rr,cc,false);});
+  boardEl.appendChild(b);cells[rr][cc]=b;})(r,c);}}
+
+function emptyBoard(){var b=[];for(var i=0;i<SIZE;i++){b.push([]);for(var j=0;j<SIZE;j++)b[i].push(0);}return b;}
+function getView(){return (latest&&latest.view)?latest.view:{board:emptyBoard(),last:null,winner:null,winLine:null,draw:false};}
+function canHumanMove(){
+  if(!latest||latest.status!=='ongoing')return false;
+  return latest.acting_for_player_index!==null&&latest.acting_for_player_index!==undefined;
+}
+function preview(r,c,on){
+  if(!on||!canHumanMove()){if(cells[r]&&cells[r][c])cells[r][c].querySelector('.preview').style.display='none';return;}
+  var s=getView();if(s.board[r][c]!==0||s.winner!==null||s.winner!==undefined&&s.winner!==null)return;
+  if(s.winner!==null&&s.winner!==undefined&&s.winner!==null)return;
+  var seat=latest.acting_for_player_index;
+  var el=cells[r][c].querySelector('.preview');
+  el.style.display='block';
+  el.style.background=seat===0?'#111':'#fafafa';
+  el.style.border=seat===0?'none':'1px solid #777';
+}
+function tryPlace(r,c){
+  if(!canHumanMove())return;
+  var s=getView();
+  if(s.winner!==null&&s.winner!==undefined)return;
+  if(s.draw)return;
+  if(s.board[r][c]!==0)return;
+  parent.postMessage({type:'make_move',move:{r:r,c:c}},'*');
+}
+function render(){
+  var s=getView();
+  var winSet={};
+  if(s.winLine)for(var i=0;i<s.winLine.length;i++)winSet[s.winLine[i].r+','+s.winLine[i].c]=true;
+  var playable=canHumanMove();
+  for(var r=0;r<SIZE;r++)for(var c=0;c<SIZE;c++){
+    var cell=cells[r][c];var v=s.board[r][c];
+    var st=cell.querySelector('.st');
+    if(v===0){st.style.display='none';}
+    else{st.style.display='block';st.className='st '+(v===1?'black':'white');}
+    cell.classList.toggle('last',!!(s.last&&s.last.r===r&&s.last.c===c));
+    cell.classList.toggle('win',!!winSet[r+','+c]);
+    cell.classList.toggle('playable',playable&&v===0);
+    cell.disabled=!playable||v!==0;
+    if(!playable||v!==0)cell.querySelector('.preview').style.display='none';
+  }
+  var statusEl=document.getElementById('status');
+  var p0=document.getElementById('p0'),p1=document.getElementById('p1');
+  document.getElementById('n0').textContent=latest&&latest.players[0]?latest.players[0].name+' (Black)':'Black';
+  document.getElementById('n1').textContent=latest&&latest.players[1]?latest.players[1].name+' (White)':'White';
+  p0.classList.remove('active');p1.classList.remove('active');
+  document.getElementById('moveInfo').textContent='Move '+(latest?latest.move_count:0);
+  var you=latest?(latest.my_player_index===null||latest.my_player_index===undefined?'Spectating':('You: '+latest.players[latest.my_player_index].name+' ('+(latest.my_player_index===0?'Black':'White')+')')):'';
+  document.getElementById('youInfo').textContent=you;
+  if(!latest){statusEl.textContent='Waiting for the platform…';return;}
+  if(s.winner!==null&&s.winner!==undefined){var w=latest.players[s.winner]?latest.players[s.winner].name:'Player '+(s.winner+1);statusEl.textContent='🏆 '+w+' wins with five in a row!';return;}
+  if(s.draw){statusEl.textContent='🤝 Draw — board is full.';return;}
+  if(latest.status==='over'){statusEl.textContent='Game over.';return;}
+  var a=latest.acting_for_player_index;
+  if(a===null||a===undefined){var t=latest.turn_of_player_indices;if(t&&t.length){var nm2=latest.players[t[0]]?latest.players[t[0]].name:'Player '+(t[0]+1);statusEl.textContent='⏳ '+nm2+' to move';if(t[0]===0)p0.classList.add('active');else if(t[0]===1)p1.classList.add('active');}else{statusEl.textContent='Waiting for another player…';}return;}
+  var nm=latest.players[a]?latest.players[a].name:'Player '+(a+1);
+  var col=a===0?'⚫':'⚪';
+  statusEl.textContent=col+' '+nm+' to move ('+(a===0?'Black':'White')+')';
+  if(a===0)p0.classList.add('active');else p1.classList.add('active');
+}
+addEventListener('message',function(event){
+  if(event.source!==parent||!event.data||event.data.type!=='state_changed')return;
+  latest=event.data;
+  render();
+});
+</script>
+</body>
+</html>
