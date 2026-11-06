@@ -982,8 +982,9 @@ function onGameSearchKey(event) {
 function renderMatchList(node, matches) {
   // Keep the native details/summary nodes stable: polling must not reopen groups,
   // move keyboard focus, or replace unchanged buttons while someone is clicking.
+  // The language is part of the key: the rows' badges, names and "N moves" are text built here.
   const key = JSON.stringify([matches, state.selectedId, [...state.nameCache],
-    matches.map((m) => gameMetaOf(m.game_id, m.game_version)?.name)]);
+    matches.map((m) => gameMetaOf(m.game_id, m.game_version)?.name), I18n.revision()]);
   if (node.dataset.key === key) return;
   node.dataset.key = key;
   node.replaceChildren(...(matches.length ? matches.map(matchItem)
