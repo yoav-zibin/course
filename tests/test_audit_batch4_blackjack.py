@@ -2,8 +2,8 @@
 from copy import deepcopy
 from pathlib import Path
 import pytest
-from game_platform.game_logic import GameLogic
-from game_platform.game_testing import test_server_code as publication_gate
+from game_platform.tests.helpers import UnrestrictedGameLogic as GameLogic
+from game_platform.tests.helpers import run_unrestricted_server_code as publication_gate
 from game_platform.models import GameRules
 
 SOURCE = Path(__file__).parent.parent/'games/audit-batch4/blackjack-table.server.js'

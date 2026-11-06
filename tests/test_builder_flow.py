@@ -156,6 +156,134 @@ def test_build_survives_a_malformed_diagnosis_reply(monkeypatch):
     assert saved.builder_workflow['job']['status']=='ready_for_review',saved.builder_workflow['job']
 
 
+def _build_with_model(monkeypatch, model, render=None):
+    from game_platform.builder_jobs import run_build
+    from game_platform import builder_render
+    f=fixture();d=flow.begin_build(approved_draft());store=InMemoryStore();store.put_game_draft(d)
+    platform=GamePlatform(store=store)
+    user=platform.create_user(display_name='Builder');store.put_user(replace(user,id=d.owner_user_id))
+    monkeypatch.setattr('game_platform.builder_visual.review_views',lambda *args:[])
+    monkeypatch.setattr(builder_render,'render_game',render or (lambda *args,**kwargs:[]))
+    run_build(platform,model,d.owner_user_id,d.id,d.builder_workflow['job']['id'])
+    return f,platform.get_game_draft(caller_id=d.owner_user_id,draft_id=d.id)
+
+
+def test_build_retries_a_timed_out_model_call(monkeypatch):
+    import json
+    from game_platform.model_api import ModelApiError
+    f=fixture()
+    calls=[]
+    class Model:
+        def chat(self,messages,**kwargs):
+            calls.append(1)
+            if len(calls)==1:
+                raise ModelApiError('Muse timed out. Please try again with a smaller change.',retryable=False)
+            system=messages[0]['content'] if isinstance(messages[0]['content'],str) else ''
+            if 'Review game server' in system or isinstance(messages[0]['content'],list):
+                return json.dumps({'passed':True,'issues':[]})
+            return json.dumps({'code':f['code'],'server_code':f['server_code']})
+    _,saved=_build_with_model(monkeypatch,Model())
+    # The first call timed out and was retried inside the same attempt;
+    # the build completed instead of stopping with the timeout message.
+    assert saved.builder_workflow['job']['status']=='ready_for_review',saved.builder_workflow['job']
+
+
+def test_build_absorbs_a_persistent_timeout_as_a_failed_attempt(monkeypatch):
+    import json
+    from game_platform.model_api import ModelApiError
+    f=fixture()
+    servers=[]
+    class Model:
+        def chat(self,messages,**kwargs):
+            system=messages[0]['content'] if isinstance(messages[0]['content'],str) else ''
+            if 'Review game server' in system or isinstance(messages[0]['content'],list):
+                return json.dumps({'passed':True,'issues':[]})
+            if any('complete executable server JavaScript' in str(m.get('content','')) for m in messages):
+                servers.append(1)
+                if len(servers)<=2:
+                    raise ModelApiError('Muse timed out. Please try again with a smaller change.',retryable=False)
+            return json.dumps({'code':f['code'],'server_code':f['server_code']})
+    _,saved=_build_with_model(monkeypatch,Model())
+    # Generation timed out twice on attempt 1 (the call and its in-call
+    # retry): that consumed the attempt, and attempt 2 completed the build.
+    assert len(servers)==3
+    assert saved.builder_workflow['job']['status']=='ready_for_review',saved.builder_workflow['job']
+
+
+def test_build_retries_client_on_presentation_failure(monkeypatch):
+    import json
+    f=fixture()
+    calls={'server':0,'client':0,'renders':0,'server_temperatures':[]}
+    class Model:
+        def chat(self,messages,**kwargs):
+            system=messages[0]['content'] if isinstance(messages[0]['content'],str) else ''
+            if 'Review game server' in system or isinstance(messages[0]['content'],list):
+                return json.dumps({'passed':True,'issues':[]})
+            if any('complete client HTML document' in str(m.get('content','')) for m in messages):
+                calls['client']+=1
+            else:
+                calls['server']+=1; calls['server_temperatures'].append(kwargs.get('temperature'))
+            return json.dumps({'code':f['code'],'server_code':f['server_code']})
+    def render(*args,**kwargs):
+        calls['renders']+=1
+        if calls['renders']==1:
+            raise RuntimeError('Browser verification unavailable or failed: Error: UI verification failed: {"tinyTargets":81}')
+        return []
+    _,saved=_build_with_model(monkeypatch,Model(),render=render)
+    # The screenshot presentation failure (tiny tap targets) rewrote only
+    # the client inside the same attempt: one server, two clients.
+    assert saved.builder_workflow['job']['status']=='ready_for_review',saved.builder_workflow['job']
+    assert calls=={'server':1,'client':2,'renders':2,'server_temperatures':[0.3]},calls
+
+
+def test_build_checkpoints_server_not_pair_when_client_never_verifies(monkeypatch):
+    import json
+    from game_platform.builder_jobs import run_build
+    from game_platform import builder_render
+    f=fixture();d=flow.begin_build(approved_draft());store=InMemoryStore();store.put_game_draft(d)
+    platform=GamePlatform(store=store)
+    user=platform.create_user(display_name='Builder');store.put_user(replace(user,id=d.owner_user_id))
+    monkeypatch.setattr('game_platform.builder_visual.review_views',lambda *args:[])
+    def failing_render(*args,**kwargs):
+        raise RuntimeError('Browser verification unavailable or failed: Error: UI verification failed: {"tinyTargets":81}')
+    monkeypatch.setattr(builder_render,'render_game',failing_render)
+    class Model:
+        def chat(self,messages,**kwargs):
+            system=messages[0]['content'] if isinstance(messages[0]['content'],str) else ''
+            if 'Review game server' in system or isinstance(messages[0]['content'],list):
+                return json.dumps({'passed':True,'issues':[]})
+            return json.dumps({'code':f['code'],'server_code':f['server_code']})
+    run_build(platform,Model(),d.owner_user_id,d.id,d.builder_workflow['job']['id'])
+    saved=platform.get_game_draft(caller_id=d.owner_user_id,draft_id=d.id)
+    job=saved.builder_workflow['job']
+    assert job['status']=='failed',job
+    # The verified server is checkpointed for the next build, but the pair
+    # is NOT: the client never passed the screenshot checks, so freezing
+    # it as verified would make every later build re-fail on it.
+    assert job['server_checkpoint']['server_code']==f['server_code']
+    assert not job.get('verified_code_digest')
+    # A later build for the same specification restores the server and
+    # only writes a client.
+    d2=platform.change_builder_workflow(caller_id=d.owner_user_id,draft_id=d.id,expected_revision=saved.revision,change=flow.begin_build)
+    monkeypatch.setattr(builder_render,'render_game',lambda *args,**kwargs:[])
+    calls={'server':0,'client':0}
+    class Model2:
+        def chat(self,messages,**kwargs):
+            system=messages[0]['content'] if isinstance(messages[0]['content'],str) else ''
+            if 'Review game server' in system or isinstance(messages[0]['content'],list):
+                return json.dumps({'passed':True,'issues':[]})
+            if any('complete client HTML document' in str(m.get('content','')) for m in messages):
+                calls['client']+=1
+            else:
+                calls['server']+=1
+            return json.dumps({'code':f['code'],'server_code':f['server_code']})
+    run_build(platform,Model2(),d2.owner_user_id,d2.id,d2.builder_workflow['job']['id'])
+    saved2=platform.get_game_draft(caller_id=d.owner_user_id,draft_id=d.id)
+    assert saved2.builder_workflow['job']['status']=='ready_for_review',saved2.builder_workflow['job']
+    assert calls=={'server':0,'client':1},calls
+    assert any('Restored verified server' in entry for entry in saved2.builder_workflow['job']['log'])
+
+
 def test_cancellation_and_code_changes_block_publish():
     d=flow.begin_build(approved_draft())
     with pytest.raises(ConflictError):flow.propose(d,'understanding',{'text':'Different'},'Changed')
@@ -181,7 +309,17 @@ def test_games_test_rechecks_saved_approved_examples():
     platform=GamePlatform(store=store)
     broken=fixture()['server_code'].replace('n:0','n:1').replace('n: 0','n: 1')
     assert broken != fixture()['server_code']
-    report=platform.test_game_code(server_code=broken,rules=d.rules,game_id=d.id)
+    test_schemas = d.builder_workflow['artifacts']['tests']['value']
+    report=platform.test_game_code(
+        server_code=broken,
+        game_schemas={
+            'state': test_schemas['state_schema'],
+            'move': test_schemas['move_schema'],
+            'view': test_schemas['view_schema'],
+        },
+        rules=d.rules,
+        game_id=d.id,
+    )
     assert not report.passed
     assert report.failures[0].function=='approved_example'
 
@@ -451,6 +589,13 @@ def test_platform_contract_is_shared_by_generation_and_review_prompts():
     for phrase in ('ONE settlement function', 'state.finalPayouts', 'the departing human',
                    'complete legal move list once', 'No weighting between move types',
                    'state.difficulty when the game state carries it'):
+        assert phrase in PLATFORM_CONTRACT, phrase
+    # The computerMove recipe, because review-level wording kept producing
+    # the same shortcut search (per-candidate boards, dead budget guards,
+    # helpers disagreeing about extra walls, step-only replies) and an
+    # endgame crash on a list that did not exist.
+    for phrase in ('computerMove recipe', 'distance map', 'single counter for the whole computerMove call',
+                   'apply every wall it is given', 'same complete legal-move generator', 'must never throw'):
         assert phrase in PLATFORM_CONTRACT, phrase
     import inspect
     from game_platform import builder_jobs

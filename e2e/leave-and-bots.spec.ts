@@ -26,7 +26,7 @@ test('leave dialog quotes the game payout and ends without a replacement bot', a
     computerMove(){return {}},randomMove(){return {}},viewFor(s){return s},
     playerLeft(state,id,ctx){const other=ctx.players.find(p=>p.id!==id);return {state:{n:1},turn:null,payouts:{[id]:3,[other.id]:ctx.pot-3}}}
   };`;
-  const game = await (await request.post('/games',{headers:auth(alice),data:{name:uniqueName('Cash out'),allowed_player_counts:[2],allows_leave_mid_match:true,code:'<p>Cash out</p>',server_code:source}})).json();
+  const game = await (await request.post('/games',{headers:auth(alice),data:{name:uniqueName('Cash out'),allowed_player_counts:[2],allows_leave_mid_match:true,code:'<p>Cash out</p>',server_code:source,game_schemas:{state:{type:'object',properties:{n:{type:'integer'}},required:['n'],additionalProperties:false},move:{type:'object'},view:{type:'object',properties:{n:{type:'integer'}},required:['n'],additionalProperties:false}}}})).json();
   const match = await (await request.post('/matches',{headers:auth(alice),data:{game_id:game.id,max_loss:10}})).json();
   expect((await request.post(`/matches/${match.id}/join`,{headers:auth(bob)})).ok()).toBeTruthy();
   expect((await request.post(`/matches/${match.id}/start`,{headers:auth(alice),data:{}})).ok()).toBeTruthy();

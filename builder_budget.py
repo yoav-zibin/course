@@ -84,11 +84,17 @@ class BudgetedModel:
     def chat(self, messages, *, max_tokens, **options):
         reserve = self.cost(self.input_limit, max_tokens)
         self.record(reserve)
-        # An interrupted or unmetered request retains its entire reservation.
         try:
             result = self.client.chat_with_reasoning(messages, max_tokens=max_tokens, **options)
         except ModelApiError as exc:
-            self.settle(reserve, exc.usage)
+            if exc.usage is None:
+                # The provider reported no usage (a timeout, or an HTTP
+                # error before generation): the call produced nothing, so
+                # release the whole reservation instead of charging the
+                # draft the worst case for a platform-side failure.
+                self.record(-reserve)
+            else:
+                self.settle(reserve, exc.usage)
             raise
         self.settle(reserve, result)
         return result.content

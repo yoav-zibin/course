@@ -290,6 +290,12 @@ def begin_build(draft):
     if reusable:
         for key in ('verified_code_digest','checks','server_reviews'):
             flow['job'][key] = previous[key]
+    if previous.get('server_checkpoint') and previous.get('spec_digest') == spec_digest(flow):
+        # A server that passed every check and review in an earlier build
+        # stays verified for the same approved specification, even when
+        # its client never verified: the new build restores the server
+        # and writes a fresh client instead of starting from nothing.
+        flow['job']['server_checkpoint'] = previous['server_checkpoint']
     return replace(draft, builder_workflow=flow)
 
 

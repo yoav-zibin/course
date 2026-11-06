@@ -161,6 +161,9 @@ class Game:
     # stores the state. Defaults to None so older data files load.
     server_code: str | None = None
     builder_workflow: dict[str, JsonValue] | None = None
+    # Draft 2020-12 schemas for the server-owned state, move, and player view.
+    # None is valid only for v1 games and old records awaiting backfill.
+    game_schemas: dict[str, JsonValue] | None = None
     created_at: dt.datetime
     updated_at: dt.datetime
     # Applies to the whole game, so it is set on every version read back from the store
@@ -183,6 +186,7 @@ class GameDraft:
     # The draft's server code (v2 Game API); see [Game.server_code].
     server_code: str | None = None
     builder_workflow: dict[str, JsonValue] | None = None
+    game_schemas: dict[str, JsonValue] | None = None
     created_at: dt.datetime
     updated_at: dt.datetime
     base_version: int = 0

@@ -53,6 +53,10 @@ def _ids(*values: str) -> Iterator[str]:
     return iter(values)
 
 
+def _game_schemas(name: str) -> dict:
+    return json.loads((GAMES_DIR / f"{name}.schema.json").read_text())
+
+
 def _play_tictactoe() -> list[tuple[int, dict]]:
     """Plays a scripted tic-tac-toe match (human takes the first free
     cell; the server computer answers). Returns (move_count, state)
@@ -70,6 +74,7 @@ def _play_tictactoe() -> list[tuple[int, dict]]:
         ),
         code=(GAMES_DIR / "tictactoe.html").read_text(),
         server_code=(GAMES_DIR / "tictactoe.server.js").read_text(),
+        game_schemas=_game_schemas("tictactoe"),
     )
     match = platform.create_match(
         caller_id=owner.id, game_id=game.id, num_computer_opponents=1
@@ -124,6 +129,7 @@ def _play_poker_hand() -> dict:
         ),
         code=(GAMES_DIR / "poker.html").read_text(),
         server_code=(GAMES_DIR / "poker.server.js").read_text(),
+        game_schemas=_game_schemas("poker"),
     )
     match = platform.create_match(
         caller_id=alice.id, game_id=game.id, num_computer_opponents=0
@@ -170,7 +176,12 @@ def test_the_emulator_answers_identical_requests_identically(api: Api) -> None:
         {"kind": "computer", "name": "Bot"},
         {"kind": "computer", "name": "Bot 2"},
     ]
-    body = {"server_code": server_code, "players": players, "seed": 42}
+    body = {
+        "server_code": server_code,
+        "game_schemas": _game_schemas("poker"),
+        "players": players,
+        "seed": 42,
+    }
     first = api.ok("POST", "/emulator/reset", as_user=user, json=body)
     second = api.ok("POST", "/emulator/reset", as_user=user, json=body)
     assert first["error"] is None

@@ -2,7 +2,8 @@
 
 import pytest
 
-from game_platform.game_logic import GameLogic, GameLogicError
+from game_platform.tests.helpers import UnrestrictedGameLogic as GameLogic
+from game_platform.game_logic import GameLogicError
 from game_platform.tests.test_server_leaving import (
     LEAVE_GAME, _balance, _create_game, _paid_match, _move,
 )

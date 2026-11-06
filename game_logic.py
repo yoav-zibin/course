@@ -34,10 +34,13 @@ Design notes:
 import datetime as dt
 import json
 import threading
-from typing import Any
+from typing import Any, Mapping
 
 import quickjs
+from jsonschema.exceptions import SchemaError
 
+from game_platform.game_input_metrics import record_invalid_game_input
+from game_platform.game_schemas import compile_game_schemas, validation_message
 # The per-call limits from the spec: a game function that needs more than
 # this is buggy, however interesting its reasons.
 TIME_LIMIT_SECONDS = 0.1
@@ -122,6 +125,142 @@ Date = __FrozenDate;
 // not won.
 const __ESTIMATE_WALKS = 100;
 const __ESTIMATE_MAX_MOVES = 200;
+function __schemaTypeMatches(type, value) {
+  switch (type) {
+    case "null": return value === null;
+    case "object": return value !== null && typeof value === "object" && !Array.isArray(value);
+    case "array": return Array.isArray(value);
+    case "string": return typeof value === "string";
+    case "boolean": return typeof value === "boolean";
+    case "integer": return typeof value === "number" && Number.isInteger(value);
+    case "number": return typeof value === "number" && Number.isFinite(value);
+    default: return false;
+  }
+}
+function __schemaDeepEqual(left, right) {
+  if (left === right) return true;
+  if (left === null || right === null || typeof left !== typeof right) return false;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) &&
+      left.length === right.length && left.every((item, index) =>
+        __schemaDeepEqual(item, right[index]));
+  }
+  if (typeof left !== "object") return false;
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  return leftKeys.length === rightKeys.length &&
+    leftKeys.every((key, index) => key === rightKeys[index] &&
+      __schemaDeepEqual(left[key], right[key]));
+}
+function __resolveSchemaRef(ref, root) {
+  if (typeof ref !== "string" || !ref.startsWith("#/")) return null;
+  let value = root;
+  for (const part of ref.slice(2).split("/")) {
+    const key = part.replace(/~1/g, "/").replace(/~0/g, "~");
+    if (value === null || typeof value !== "object" || !(key in value)) return null;
+    value = value[key];
+  }
+  return value;
+}
+function __schemaIsValid(schema, value, root, depth) {
+  if (depth > 128) return false;
+  if (schema === true) return true;
+  if (schema === false || schema === null || typeof schema !== "object") return false;
+  if ("$ref" in schema) {
+    const target = __resolveSchemaRef(schema.$ref, root);
+    if (target === null || !__schemaIsValid(target, value, root, depth + 1)) return false;
+  }
+  if ("type" in schema) {
+    const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+    if (!types.some(type => __schemaTypeMatches(type, value))) return false;
+  }
+  if ("const" in schema && !__schemaDeepEqual(value, schema.const)) return false;
+  if (Array.isArray(schema.enum) &&
+      !schema.enum.some(item => __schemaDeepEqual(value, item))) return false;
+  if (Array.isArray(schema.allOf) &&
+      !schema.allOf.every(item => __schemaIsValid(item, value, root, depth + 1))) return false;
+  if (Array.isArray(schema.anyOf) &&
+      !schema.anyOf.some(item => __schemaIsValid(item, value, root, depth + 1))) return false;
+  if (Array.isArray(schema.oneOf) &&
+      schema.oneOf.filter(item => __schemaIsValid(item, value, root, depth + 1)).length !== 1) return false;
+  if ("not" in schema && __schemaIsValid(schema.not, value, root, depth + 1)) return false;
+  if ("if" in schema) {
+    const branch = __schemaIsValid(schema.if, value, root, depth + 1)
+      ? schema.then : schema.else;
+    if (branch !== undefined && !__schemaIsValid(branch, value, root, depth + 1)) return false;
+  }
+  if (typeof value === "number") {
+    if ("minimum" in schema && value < schema.minimum) return false;
+    if ("maximum" in schema && value > schema.maximum) return false;
+    if ("exclusiveMinimum" in schema && value <= schema.exclusiveMinimum) return false;
+    if ("exclusiveMaximum" in schema && value >= schema.exclusiveMaximum) return false;
+    if ("multipleOf" in schema &&
+        Math.abs(value / schema.multipleOf - Math.round(value / schema.multipleOf)) > 1e-10) return false;
+  }
+  if (typeof value === "string") {
+    if ("minLength" in schema && Array.from(value).length < schema.minLength) return false;
+    if ("maxLength" in schema && Array.from(value).length > schema.maxLength) return false;
+    if ("pattern" in schema && !(new RegExp(schema.pattern)).test(value)) return false;
+  }
+  if (Array.isArray(value)) {
+    if ("minItems" in schema && value.length < schema.minItems) return false;
+    if ("maxItems" in schema && value.length > schema.maxItems) return false;
+    if (schema.uniqueItems &&
+        value.some((item, index) => value.slice(index + 1).some(other =>
+          __schemaDeepEqual(item, other)))) return false;
+    const prefix = Array.isArray(schema.prefixItems) ? schema.prefixItems : [];
+    for (let index = 0; index < prefix.length && index < value.length; index++) {
+      if (!__schemaIsValid(prefix[index], value[index], root, depth + 1)) return false;
+    }
+    if (schema.items !== undefined) {
+      for (let index = prefix.length; index < value.length; index++) {
+        if (!__schemaIsValid(schema.items, value[index], root, depth + 1)) return false;
+      }
+    }
+    if (schema.contains !== undefined) {
+      const matches = value.filter(item =>
+        __schemaIsValid(schema.contains, item, root, depth + 1)).length;
+      if (matches < (schema.minContains === undefined ? 1 : schema.minContains)) return false;
+      if (schema.maxContains !== undefined && matches > schema.maxContains) return false;
+    }
+  }
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    const keys = Object.keys(value);
+    if ("minProperties" in schema && keys.length < schema.minProperties) return false;
+    if ("maxProperties" in schema && keys.length > schema.maxProperties) return false;
+    if (Array.isArray(schema.required) &&
+        !schema.required.every(key => Object.prototype.hasOwnProperty.call(value, key))) return false;
+    if (schema.propertyNames !== undefined &&
+        !keys.every(key => __schemaIsValid(schema.propertyNames, key, root, depth + 1))) return false;
+    for (const [key, child] of Object.entries(value)) {
+      let declared = false;
+      if (schema.properties && Object.prototype.hasOwnProperty.call(schema.properties, key)) {
+        declared = true;
+        if (!__schemaIsValid(schema.properties[key], child, root, depth + 1)) return false;
+      }
+      for (const [pattern, propertySchema] of Object.entries(schema.patternProperties || {})) {
+        if ((new RegExp(pattern)).test(key)) {
+          declared = true;
+          if (!__schemaIsValid(propertySchema, child, root, depth + 1)) return false;
+        }
+      }
+      if (!declared && schema.additionalProperties !== undefined &&
+          !__schemaIsValid(schema.additionalProperties, child, root, depth + 1)) return false;
+    }
+    for (const [key, required] of Object.entries(schema.dependentRequired || {})) {
+      if (Object.prototype.hasOwnProperty.call(value, key) &&
+          !required.every(dependency => Object.prototype.hasOwnProperty.call(value, dependency))) return false;
+    }
+    for (const [key, dependent] of Object.entries(schema.dependentSchemas || {})) {
+      if (Object.prototype.hasOwnProperty.call(value, key) &&
+          !__schemaIsValid(dependent, value, root, depth + 1)) return false;
+    }
+  }
+  return true;
+}
+function __gameSchemaIsValid(name, value) {
+  return __schemaIsValid(__gameSchemas[name], value, __gameSchemas[name], 0);
+}
 function __estimateWalk(ctx, moveFor, state, firstTurn) {
   // One walk: the final payouts object, or null when the walk fails or
   // the game does not end within the move cap.
@@ -134,14 +273,19 @@ function __estimateWalk(ctx, moveFor, state, firstTurn) {
       let moved = false;
       for (const candidate of ctx.players) {
         try {
+          __assertEstimateSchema("state", current);
           const move = moveFor.call(game, current, candidate.id, ctx);
+          __assertEstimateSchema("move", move);
           const result = game.applyMove(current, candidate.id, move, ctx);
+          __assertEstimateSchema("state", result.state);
           current = result.state;
           if (result.turn === null) return result.payouts || null;
           turn = result.turn;
           moved = true;
           break;
-        } catch (e) { /* that player cannot move here; try the next */ }
+        } catch (e) {
+          if (e && e.gameSchemaFailure) throw e;
+        }
       }
       if (!moved) return null;
       continue;
@@ -150,9 +294,13 @@ function __estimateWalk(ctx, moveFor, state, firstTurn) {
     const mover = turn[Math.floor(__random() * turn.length)];
     let result;
     try {
+      __assertEstimateSchema("state", current);
       const move = moveFor.call(game, current, mover, ctx);
+      __assertEstimateSchema("move", move);
       result = game.applyMove(current, mover, move, ctx);
+      __assertEstimateSchema("state", result.state);
     } catch (e) {
+      if (e && e.gameSchemaFailure) throw e;
       return null;
     }
     current = result.state;
@@ -160,6 +308,13 @@ function __estimateWalk(ctx, moveFor, state, firstTurn) {
     turn = result.turn;
   }
   return null;
+}
+function __assertEstimateSchema(schemaName, value) {
+  if (value === undefined || !__gameSchemaIsValid(schemaName, value)) {
+    const error = new Error("invalid " + schemaName + " in estimateWinChance");
+    error.gameSchemaFailure = true;
+    throw error;
+  }
 }
 function __estimateWinChance(ctx, state, playerId, firstTurn) {
   const moveFor = typeof game.randomMove === "function" ? game.randomMove
@@ -185,9 +340,8 @@ function __estimateWinChance(ctx, state, playerId, firstTurn) {
 //   {"ok": true, "result": <the function's JSON result>}
 //   {"ok": false, "kind": "invalid_move", "message": ...}
 //   {"ok": false, "kind": "error", "message": ..., "stack": ...}
-// argsJson is a JSON array of the function's arguments *without* ctx;
-// ctxJson is the ctx object as JSON, to which this helper adds random().
-function __invoke(name, argsJson, ctxJson, seed, frozenMillis) {
+// inputJson contains the function arguments (without ctx) and ctx.
+function __invoke(name, inputJson, seed, frozenMillis) {
   __seedRandom(seed);
   __frozenMillis = frozenMillis;
   try {
@@ -196,12 +350,13 @@ function __invoke(name, argsJson, ctxJson, seed, frozenMillis) {
       return JSON.stringify({ok: false, kind: "error",
         message: "game." + name + " is not defined", stack: ""});
     }
-    const ctx = JSON.parse(ctxJson);
+    const input = JSON.parse(inputJson);
+    const ctx = input.ctx;
     ctx.random = __random;
     ctx.estimateWinChance = function (state, playerId, turn) {
       return __estimateWinChance(ctx, state, playerId, turn);
     };
-    const args = JSON.parse(argsJson);
+    const args = input.args;
     args.push(ctx);
     const result = fn.apply(game, args);
     const text = JSON.stringify(result === undefined ? null : result);
@@ -262,13 +417,29 @@ class GameLogic:
         self,
         server_code: str,
         *,
+        game_schemas: Mapping[str, Any],
+        game_id: str = "unsaved",
+        game_version: int = 0,
         time_limit_seconds: float = TIME_LIMIT_SECONDS,
         memory_limit_bytes: int = MEMORY_LIMIT_BYTES,
     ) -> None:
         self._server_code = server_code
+        try:
+            self._schema_validators = compile_game_schemas(game_schemas)
+        except (SchemaError, TypeError, ValueError) as error:
+            raise GameLogicError(f"invalid game_schemas: {error}") from error
+        self._game_schemas = dict(game_schemas)
+        self._unrestricted_schemas = {
+            name: validator.schema is True or validator.schema == {}
+            for name, validator in self._schema_validators.items()
+        }
+        self._game_id = game_id
+        self._game_version = game_version
         self._time_limit_seconds = time_limit_seconds
         self._memory_limit_bytes = memory_limit_bytes
         self._context: quickjs.Context | None = None
+        self._invoke: quickjs.Object | None = None
+        self._available_functions: dict[str, bool] = {}
         self._lock = threading.RLock()
 
     def _new_context(self) -> quickjs.Context:
@@ -276,7 +447,15 @@ class GameLogic:
         context.set_time_limit(self._time_limit_seconds)
         context.set_memory_limit(self._memory_limit_bytes)
         try:
+            schemas_json = json.dumps(self._game_schemas, separators=(",", ":"))
+            context.eval(
+                "__gameSchemas = JSON.parse(" + json.dumps(schemas_json) + ")"
+            )
             context.eval(_PRELUDE)
+            invoke = context.eval(
+                "(function(){ const run = __invoke; return function(name, input, seed, now) {"
+                " return run(name, input, seed, now); }; })()"
+            )
             context.eval(self._server_code)
             defined = context.eval(
                 "typeof game === 'object' && game !== null"
@@ -289,6 +468,13 @@ class GameLogic:
             raise GameLogicError(
                 "the game's server code does not define a global `game` object"
             )
+        self._available_functions = {
+            function: bool(
+                context.eval(f"typeof game.{function} === 'function'")
+            )
+            for function in GAME_FUNCTIONS
+        }
+        self._invoke = invoke
         return context
 
     def load(self) -> None:
@@ -299,6 +485,8 @@ class GameLogic:
 
     def _drop_context(self) -> None:
         self._context = None
+        self._invoke = None
+        self._available_functions = {}
 
     def has(self, function: str) -> bool:
         """Whether the game defines [function] (some functions are optional)."""
@@ -306,15 +494,19 @@ class GameLogic:
             return self._has(function)
 
     def _has(self, function: str) -> bool:
+        if function in self._available_functions:
+            return self._available_functions[function]
         if self._context is None:
             try:
                 self._context = self._new_context()
             except GameLogicError:
                 return False
         try:
-            return bool(
+            result = bool(
                 self._context.eval(f"typeof game.{function} === 'function'")
             )
+            self._available_functions[function] = result
+            return result
         except Exception:
             return False
 
@@ -367,15 +559,18 @@ class GameLogic:
             raise GameLogicError(f"unknown game function: {function!r}")
         if self._context is None:
             self._context = self._new_context()
+        if not self._has(function):
+            raise GameLogicError(f"game.{function} is not defined")
+        self._validate_inputs(function, args, ctx or {})
+        if self._context is None:
+            self._context = self._new_context()
         frozen_millis = 0
         if now is not None:
             frozen_millis = int(now.timestamp() * 1000)
-        invocation = "__invoke({name}, {args}, {ctx}, {seed}, {frozen})".format(
-            name=json.dumps(function),
-            args=json.dumps(json.dumps(list(args))),
-            ctx=json.dumps(json.dumps(ctx or {})),
-            seed=int(seed) & 0xFFFFFFFF,
-            frozen=frozen_millis,
+        input_json = json.dumps(
+            {"args": list(args), "ctx": ctx or {}},
+            separators=(",", ":"),
+            allow_nan=False,
         )
         override = (
             time_limit_seconds
@@ -386,7 +581,14 @@ class GameLogic:
         if override is not None:
             self._context.set_time_limit(override)
         try:
-            envelope_text = self._context.eval(invocation)
+            if self._invoke is None:
+                raise GameLogicError("the game's QuickJS context is unavailable")
+            envelope_text = self._invoke(
+                function,
+                input_json,
+                int(seed) & 0xFFFFFFFF,
+                float(frozen_millis),
+            )
         except quickjs.JSException as error:
             # Nothing came back: the call was interrupted (timeout/memory)
             # or the prelude itself failed. The context may be in a bad
@@ -413,6 +615,7 @@ class GameLogic:
                 self._validate_result("legacyPlayerLeft", result, ctx or {})
                 result = self._legacy_leave_result(result, args[1], ctx or {})
             self._validate_result(function, result, ctx or {})
+            self._validate_schema_result(function, result)
             if function == "playerLeft" and isinstance(result, dict) and result.get("turn") is not None:
                 if args[1] in result["turn"]:
                     raise GameLogicError("game.playerLeft returned a turn for the departing player")
@@ -448,6 +651,107 @@ class GameLogic:
             payouts.update({pid: share + (i < extra) for i, pid in enumerate(others)})
         return {"state": result.get("state"), "turn": None, "payouts": payouts}
 
+    def _validate_inputs(
+        self, function: str, args: tuple[Any, ...], ctx: dict[str, Any]
+    ) -> None:
+        expected_args = 0 if function == "newMatch" else 3 if function == "applyMove" else 2
+        if len(args) != expected_args:
+            raise GameLogicError(
+                f"game.{function} expected {expected_args} arguments, got {len(args)}"
+            )
+        if (
+            not isinstance(ctx, dict)
+            or not isinstance(ctx.get("players"), list)
+            or not isinstance(ctx.get("pot"), int)
+            or isinstance(ctx.get("pot"), bool)
+            or ctx["pot"] < 0
+            or not isinstance(ctx.get("move_count"), int)
+            or isinstance(ctx.get("move_count"), bool)
+            or ctx["move_count"] < 0
+        ):
+            raise GameLogicError("invalid platform ctx")
+        players = ctx["players"]
+        player_ids: set[str] = set()
+        for player in players:
+            if (
+                not isinstance(player, dict)
+                or not isinstance(player.get("id"), str)
+                or not player["id"]
+                or player.get("kind") not in ("human", "computer")
+            ):
+                raise GameLogicError("invalid player in platform ctx")
+            player_ids.add(player["id"])
+
+        if function == "newMatch":
+            return
+        state = args[0]
+        self._validate_game_value(
+            function=function, input_name="state", schema_name="state", value=state
+        )
+        player_id = args[1]
+        if function == "viewFor":
+            if player_id is not None and not isinstance(player_id, str):
+                raise GameLogicError("game.viewFor playerId must be a string or null")
+        elif not isinstance(player_id, str) or not player_id:
+            raise GameLogicError(f"game.{function} playerId must be a non-empty string")
+        elif player_id not in player_ids:
+            raise GameLogicError(f"game.{function} playerId is not in ctx.players")
+        if function == "applyMove":
+            self._validate_game_value(
+                function=function,
+                input_name="move",
+                schema_name="move",
+                value=args[2],
+                is_player_input=True,
+            )
+
+    def _validate_game_value(
+        self,
+        *,
+        function: str,
+        input_name: str,
+        schema_name: str,
+        value: Any,
+        is_player_input: bool = False,
+    ) -> None:
+        message = self._schema_message(schema_name, value)
+        if message is None:
+            return
+        record_invalid_game_input(
+            game_id=self._game_id,
+            game_version=self._game_version,
+            function=function,
+            input_name=input_name,
+            message=message,
+        )
+        if is_player_input:
+            raise InvalidMoveError(f"invalid move: {message}")
+        raise GameLogicError(
+            f"game.{function} received invalid {input_name}: {message}"
+        )
+
+    def _schema_message(self, schema_name: str, value: Any) -> str | None:
+        if self._unrestricted_schemas[schema_name]:
+            return None
+        return validation_message(self._schema_validators[schema_name], value)
+
+    def _validate_schema_result(self, function: str, result: Any) -> None:
+        if function in ("computerMove", "randomMove"):
+            schema_name, value = "move", result
+        elif function == "viewFor":
+            schema_name, value = "view", result
+        elif function in ("newMatch", "applyMove", "playerJoined", "playerLeft"):
+            if not isinstance(result, dict) or "state" not in result:
+                return
+            schema_name, value = "state", result["state"]
+        else:
+            return
+        message = self._schema_message(schema_name, value)
+        if message is not None:
+            raise GameLogicError(
+                f"game.{function} returned invalid {schema_name}: {message}"
+            )
+
     @staticmethod
     def _validate_result(
         function: str, result: Any, ctx: dict[str, Any]
@@ -456,14 +760,15 @@ class GameLogic:
         turn is null or a non-empty set of current players, payouts go only
         to humans and — when the match ends — add up to the pot, and a
         leaver's payout is within the pot. Violations are game bugs."""
-        # Views and moves are game-defined JSON, including objects whose
-        # field names happen to overlap the platform's transition envelope.
-        if function in ("computerMove", "randomMove", "viewFor"):
-            return
         if not isinstance(result, dict):
+            if function in ("computerMove", "randomMove", "viewFor"):
+                return
             raise GameLogicError(
                 f"game.{function} must return an object, got {result!r}"
             )
+        if function in ("computerMove", "randomMove", "viewFor"):
+            return
+
         players = ctx.get("players") or []
         player_ids = {player.get("id") for player in players}
         active_ids = {p.get("id") for p in players if p.get("active", True)}

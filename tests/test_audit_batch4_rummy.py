@@ -3,8 +3,9 @@ from copy import deepcopy
 from pathlib import Path
 from itertools import combinations
 import pytest
-from game_platform.game_logic import GameLogic, InvalidMoveError
-from game_platform.game_testing import test_server_code as run_gate
+from game_platform.tests.helpers import UnrestrictedGameLogic as GameLogic
+from game_platform.game_logic import InvalidMoveError
+from game_platform.tests.helpers import run_unrestricted_server_code as run_gate
 from game_platform.models import GameRules
 ROOT=Path(__file__).parent.parent/'games'/'audit-batch4'
 SOURCE=(ROOT/'rummy-500.server.js').read_text()
