@@ -186,4 +186,39 @@ S['58bd6827'] = { names: ['Ana', 'Ben', 'Cy'], data: ['5\u2660', '9\u2665', 'K\u
   [{ msg: over(spoons({ phase: 'gameOver', winner: 0 }), { players: three }) }, { msg: over(spoons({ phase: 'gameOver', winner: 7 }), { players: three }) }, { msg: msg({ view: null }) }],
 ] };
 
+// --- Tap to 10
+S['d00a8d7b'] = { names: [], data: [], scenarios: [
+  [{ msg: null }, { msg: msg({ view: null }) }, { msg: mine({ score: 4, target: 10 }) }, { msg: mine({ score: 4, target: 10 }), then: click('btn') }],
+  [{ msg: theirs({ score: 5, target: 10 }) }, { msg: over({ score: 10, target: 10 }) }, { msg: over({ score: 3, target: 10 }) }],
+] };
+
+// --- Chopsticks
+const chop = (hands, extra = {}) => ({ hands, turnIndex: 0, status: 'active', winnerIndex: null, ...extra });
+const hands = (p) => Array.from(p.doc.querySelectorAll('.hand'));
+const setInputs = (l, r) => (p) => { p.$('sl').value = l; p.$('sr').value = r; p.$('splitBtn').click(); };
+const botComputer = [{ name: 'Ana', player_index: 0, id: 'p0' }, { name: 'Robo', player_index: 1, id: 'p1', kind: 'computer' }];
+const topComputer = [{ name: 'Robo', player_index: 0, id: 'p0', kind: 'computer' }, { name: 'Ben', player_index: 1, id: 'p1' }];
+S['a5a16425'] = { names: ['Ana', 'Ben', 'Robo'], skipCoverage: ['loading'], data: [], scenarios: [
+  [{ msg: msg({ view: null }) }, { msg: msg({ view: null, status: 'over' }) }, { msg: msg({ view: chop([[1, 1], [1, 1]]), players: [{ player_index: 0 }, { player_index: 1 }] }) }],
+  [{ msg: mine(chop([[1, 1], [1, 1]])) }, { msg: mine(chop([[1, 1], [1, 1]])), then: (p) => hands(p)[0].click() }, { msg: mine(chop([[0, 1], [1, 1]])), then: (p) => hands(p)[2].click() },
+    { msg: mine(chop([[1, 1], [0, 1]])), then: (p) => { hands(p)[3].click(); hands(p)[0].click(); } }, { msg: mine(chop([[1, 1], [1, 1]])), then: (p) => { hands(p)[3].click(); hands(p)[1].click(); } }, { msg: mine(chop([[1, 1], [1, 1]])), then: (p) => { hands(p)[2].click(); p.$('cancelBtn').click(); } }],
+  [{ msg: mine(chop([[1, 1], [1, 1]])), then: setInputs('1.5', '0.5') }, { msg: mine(chop([[1, 1], [1, 1]])), then: setInputs('0', '5') }, { msg: mine(chop([[1, 1], [1, 1]])), then: setInputs('1', '2') }, { msg: mine(chop([[1, 1], [1, 1]])), then: setInputs('1', '1') },
+    { msg: mine(chop([[1, 3], [1, 1]])), then: setInputs('3', '1') }, { msg: mine(chop([[2, 2], [1, 1]])), then: setInputs('1', '3') }, { msg: mine(chop([[0, 3], [1, 1]])) }],
+  [{ msg: theirs(chop([[1, 1], [1, 1]], { turnIndex: 1 })) }, { msg: theirs(chop([[1, 1], [1, 1]], { turnIndex: 1 }), { turn_of_player_indices: [] }) }, { msg: spectator(chop([[1, 1], [2, 2]], { turnIndex: 1 })) }, { msg: spectator(chop([[1, 1], [2, 2]]), { players: [{ name: 'Ana', player_index: 0, id: 'p0' }] }) }],
+  [{ msg: over(chop([[0, 0], [1, 1]], { status: 'over', winnerIndex: 1 })) }, { msg: over(chop([[0, 0], [1, 1]], { status: 'over', winnerIndex: 5 })) }, { msg: over(chop([[0, 0], [1, 1]], { status: 'over' })) }],
+  // hits, kills, splits, collapsed moves and the fallback guess
+  [{ msg: mine(chop([[1, 1], [1, 1]])) }, { msg: theirs(chop([[1, 1], [1, 2]], { turnIndex: 1 })) }],
+  [{ msg: mine(chop([[4, 1], [4, 1]])) }, { msg: theirs(chop([[4, 1], [0, 1]], { turnIndex: 1 })) }],
+  [{ msg: mine(chop([[2, 2], [1, 1]])) }, { msg: theirs(chop([[1, 3], [1, 1]], { turnIndex: 1 })) }],
+  [{ msg: mine(chop([[2, 2], [1, 1]])) }, { msg: theirs(chop([[1, 3], [1, 3]], { turnIndex: 1 })) }],
+  [{ msg: mine(chop([[2, 2], [1, 1]])) }, { msg: theirs(chop([[2, 3], [1, 1]], { turnIndex: 1 })) }],
+  [{ msg: mine(chop([[1, 1], [1, 1]])) }, { msg: theirs(chop([[1, 1], [4, 1]], { turnIndex: 1 })) }],
+  [{ msg: mine(chop([[1, 1], [1, 1]])) }, { msg: theirs(chop([[1, 1], [1, 2]], { turnIndex: 1 }), { players: [{ player_index: 0 }] }) }],
+  [{ msg: mine(chop([[1, 1], [1, 1]]), { players: botComputer }) }, { msg: mine(chop([[1, 1], [1, 3]], { turnIndex: 1 }), { players: botComputer, acting_for_player_index: 0 }), then: (p) => hands(p)[0].click() }],
+  [{ msg: mine(chop([[1, 1], [1, 1]], { turnIndex: 1 }), { players: botComputer }) }, { msg: mine(chop([[2, 1], [1, 1]]), { players: botComputer }), then: (p) => hands(p)[0].click() }],
+  [{ msg: mine(chop([[2, 2], [1, 1]], { turnIndex: 1 }), { players: botComputer }) }, { msg: mine(chop([[2, 3], [1, 1]]), { players: botComputer }) }],
+  [{ msg: mine(chop([[1, 1], [1, 1]]), { players: topComputer }) }, { msg: mine(chop([[1, 1], [1, 1]]), { players: topComputer }) }],
+  [{ msg: mine(chop([[4, 1], [1, 1]], { turnIndex: 1 }), { players: botComputer }) }, { msg: mine(chop([[0, 1], [1, 1]]), { players: botComputer }) }],
+] };
+
 module.exports = { S, msg, mine, theirs, over, spectator, PLAYERS, UNNAMED, click };
