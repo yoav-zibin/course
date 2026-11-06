@@ -58,8 +58,20 @@ for (const [prefix, spec] of Object.entries(S)) {
     }
     assert.deepEqual([...leftovers], [], 'texts shown without translation');
     for (const [key, text] of Object.entries(table)) {
+      if ((spec.skipCoverage || []).includes(key)) continue;
       const re = patternOf(text);
       assert.ok(shown.some((s) => re.test(s)), `no scenario shows the text "${key}": ${text}`);
     }
   });
 }
+
+test('SOS rules keep the S-O-S pattern bold wherever the translation puts it', () => {
+  const file = fs.readdirSync(DIR).find((f) => f.startsWith('a1ca4c85') && !f.endsWith('.original.html'));
+  const page = loadPage(path.join(DIR, file));
+  page.send({ type: 'state_changed', status: 'ongoing', players: [], strings: { rules: 'Bilden Sie {pattern} in jeder Richtung.' }, locale: 'de' });
+  const rules = page.doc.querySelector('.rules');
+  assert.equal(rules.textContent, 'Bilden Sie S → O → S in jeder Richtung.');
+  assert.equal(rules.querySelector('b').textContent, 'S → O → S');
+  page.send({ type: 'state_changed', status: 'ongoing', players: [], strings: { rules: 'Keine Markierung.' }, locale: 'de' });
+  assert.equal(page.doc.querySelector('.rules').textContent, 'Keine Markierung.');
+});

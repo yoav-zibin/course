@@ -64,7 +64,7 @@ S['4f49cbdc'] = { names: ['Ana', 'Ben'], scenarios: [
 const sosBoard = (cells) => { const b = Array(36).fill(''); for (const [i, v] of cells) b[i] = v; return b; };
 const sos = (cells, extra = {}) => ({ board: sosBoard(cells), scores: [1, 2], lines: [], lastMove: -1, winner: null, ...extra });
 const withComputer = [{ name: 'Ana', player_index: 0, id: 'p0' }, { name: 'Robo', player_index: 1, id: 'p1', kind: 'computer' }];
-S['a1ca4c85'] = { names: ['Ana', 'Ben', 'Robo'], data: ['S', 'O', 'SOS', ' horizontally, vertically or diagonally. Each new SOS = 1 point + you go again. Most points when full wins.'], scenarios: [
+S['a1ca4c85'] = { names: ['Ana', 'Ben', 'Robo'], skipCoverage: ['rules'], data: ['S', 'O', 'SOS', ' horizontally, vertically or diagonally. Each new SOS = 1 point + you go again. Most points when full wins.'], scenarios: [
   [{ msg: msg() }, { msg: mine(sos([[0, 'S'], [1, 'O'], [2, 'S']], { lines: [[0, 1, 2]], lastMove: 2 })) }, { msg: mine(sos([])), then: (p) => { p.$('btnO').click(); p.$('board').children[7].click(); } }],
   [{ msg: theirs(sos([])) }, { msg: theirs(sos([]), { acting_for_player_index: 1 }) }, { msg: theirs(sos([]), { acting_for_player_index: null, turn_of_player_indices: [] }) }, { msg: spectator(sos([]), { acting_for_player_index: 1 }) }],
   [{ msg: theirs(sos([]), { players: withComputer, acting_for_player_index: 1 }) }, { msg: mine(sos([]), { players: withComputer }) }],
