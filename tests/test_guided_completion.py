@@ -94,7 +94,7 @@ def test_reject_visual_then_repair_and_publish(monkeypatch,tmp_path):
         def chat(self,messages,**kwargs):
             first=messages[0]['content']
             if isinstance(first,list):
-                assert sum(item['type']=='image_url' for item in first)==8
+                assert sum(item['type']=='image_url' for item in first)==32
                 self.reviewed+=1
                 return json.dumps({'passed':self.reviewed!=1,'issues':['Missing counter'] if self.reviewed==1 else []})
             if 'Review game server' in first:
@@ -106,6 +106,11 @@ def test_reject_visual_then_repair_and_publish(monkeypatch,tmp_path):
                     assert kwargs['max_tokens']==16000
                     assert 'previous reply hit its output limit' in messages[-1]['content']
                 return '{"passed":true,"issues":[]}'
+            if 'targeted edits' in messages[-1].get('content','') and any('Now write only the client' in m.get('content','') for m in messages if isinstance(m.get('content'),str)):
+                # A client repair is first offered as targeted edits; this
+                # model answers with an edit that does not apply, so the
+                # build falls back to the full client write counted below.
+                return json.dumps({'edits':[{'find':'not present in the client','replace':'x'}]})
             if any('Now write only the client' in m.get('content','') for m in messages if isinstance(m.get('content'),str)):
                 # A visual-review failure now retries only the client
                 # against the verified server (it once discarded the
@@ -130,11 +135,13 @@ def test_reject_visual_then_repair_and_publish(monkeypatch,tmp_path):
     def render(*args,**kwargs):
         shots=[]
         for case in f['contract']['cases']:
-            for view,width,direction in [('view_of_mover',390,'ltr'),('view_of_other',844,'rtl'),('expected_view_of_mover',820,'ltr'),('expected_view_of_other',1366,'rtl')]:
-                shots.append(dict(test=case['name'],view=view,width=width,direction=direction,approvedFile='test.png',file='test.png'))
+            for width,height in [(360,640),(390,844),(844,390),(820,1180),(1366,768),(1920,1080)]:
+                for direction in ('ltr','rtl'):
+                    for view in ('view_of_mover','view_of_other','expected_view_of_mover','expected_view_of_other'):
+                        shots.append(dict(test=case['name'],view=view,width=width,height=height,direction=direction,approvedFile='test.png',file='test.png'))
         return shots
     (tmp_path/job).mkdir();(tmp_path/job/'test.png').write_bytes(b'test image')
-    monkeypatch.setattr(builder_render,'ARTIFACT_ROOT',tmp_path);monkeypatch.setattr(builder_render,'render_game',render)
+    monkeypatch.setattr(builder_render,'ARTIFACT_ROOT',tmp_path);monkeypatch.setattr(builder_render,'render_game',render);monkeypatch.setattr(builder_render,'preflight_browser',lambda: (True,''))
     model=Model();builder_jobs.run_build(p,model,d.owner_user_id,d.id,job)
     saved=p.get_game_draft(caller_id=d.owner_user_id,draft_id=d.id)
     assert saved.builder_workflow['job']['status']=='ready_for_review',saved.builder_workflow['job']
@@ -160,6 +167,11 @@ def test_client_localization_failure_retries_only_the_client(monkeypatch,tmp_pat
                 return json.dumps({'passed':True,'issues':[]})
             if 'Review game server' in first:
                 return '{"passed":true,"issues":[]}'
+            if 'targeted edits' in messages[-1].get('content','') and any('Now write only the client' in m.get('content','') for m in messages if isinstance(m.get('content'),str)):
+                # A client repair is first offered as targeted edits; this
+                # model answers with an edit that does not apply, so the
+                # build falls back to the full client write counted below.
+                return json.dumps({'edits':[{'find':'not present in the client','replace':'x'}]})
             if any('Now write only the client' in m.get('content','') for m in messages if isinstance(m.get('content'),str)):
                 self.client_calls+=1
                 if self.client_calls==1: return json.dumps({'code':bad_client})
@@ -171,11 +183,13 @@ def test_client_localization_failure_retries_only_the_client(monkeypatch,tmp_pat
     def render(*args,**kwargs):
         shots=[]
         for case in f['contract']['cases']:
-            for view,width,direction in [('view_of_mover',390,'ltr'),('view_of_other',844,'rtl'),('expected_view_of_mover',820,'ltr'),('expected_view_of_other',1366,'rtl')]:
-                shots.append(dict(test=case['name'],view=view,width=width,direction=direction,approvedFile='test.png',file='test.png'))
+            for width,height in [(360,640),(390,844),(844,390),(820,1180),(1366,768),(1920,1080)]:
+                for direction in ('ltr','rtl'):
+                    for view in ('view_of_mover','view_of_other','expected_view_of_mover','expected_view_of_other'):
+                        shots.append(dict(test=case['name'],view=view,width=width,height=height,direction=direction,approvedFile='test.png',file='test.png'))
         return shots
     (tmp_path/job).mkdir();(tmp_path/job/'test.png').write_bytes(b'test image')
-    monkeypatch.setattr(builder_render,'ARTIFACT_ROOT',tmp_path);monkeypatch.setattr(builder_render,'render_game',render)
+    monkeypatch.setattr(builder_render,'ARTIFACT_ROOT',tmp_path);monkeypatch.setattr(builder_render,'render_game',render);monkeypatch.setattr(builder_render,'preflight_browser',lambda: (True,''))
     model=Model();builder_jobs.run_build(p,model,d.owner_user_id,d.id,job)
     saved=p.get_game_draft(caller_id=d.owner_user_id,draft_id=d.id)
     assert saved.builder_workflow['job']['status']=='ready_for_review',saved.builder_workflow['job']
@@ -1112,9 +1126,10 @@ def test_image_step_resumes_at_failed_drawing():
     assert 'Recount the rows and columns' not in systems['Start']
 
 
-def test_review_output_limit_is_bounded_and_names_failed_stage():
-    from game_platform import builder_jobs
+def test_review_output_limit_is_bounded_and_names_failed_stage(monkeypatch):
+    from game_platform import builder_jobs, builder_render
     from game_platform.model_api import ModelOutputLimitError
+    monkeypatch.setattr(builder_render,'preflight_browser',lambda: (True,''))
     p,d=setup_draft()
     d=p.change_builder_workflow(caller_id=d.owner_user_id,draft_id=d.id,expected_revision=d.revision,change=flow.begin_build)
     f=fixture()
@@ -1672,8 +1687,9 @@ def _run_patch_repair_build(monkeypatch, model):
     p, d = setup_draft()
     d = p.change_builder_workflow(caller_id=d.owner_user_id, draft_id=d.id,
                                   expected_revision=d.revision, change=flow.begin_build)
-    monkeypatch.setattr('game_platform.builder_visual.review_views', lambda *args: [])
+    monkeypatch.setattr('game_platform.builder_visual.review_views', lambda *args: ([], []))
     monkeypatch.setattr(builder_render, 'render_game', lambda *args, **kwargs: [])
+    monkeypatch.setattr(builder_render, 'preflight_browser', lambda: (True, ''))
     builder_jobs.run_build(p, model, d.owner_user_id, d.id, d.builder_workflow['job']['id'])
     return p.get_game_draft(caller_id=d.owner_user_id, draft_id=d.id)
 
@@ -1705,6 +1721,233 @@ def test_build_falls_back_to_full_generation_when_patch_does_not_apply(monkeypat
     # back to the full-file generation and the build proceeded as before.
     assert model.patch_calls == 1 and model.server_generations == 2
     assert saved.server_code == f['server_code']
+
+
+def _client_failure_model(fixture_value, clients):
+    """Scripted model for carry-over builds: one good server; client
+    replies follow `clients` (the last entry repeats). Counts each call
+    class so tests can prove what the second attempt did NOT redo."""
+    import json as _json
+
+    class Model:
+        server_generations = 0
+        patch_calls = 0
+        server_reviews = 0
+        client_calls = 0
+
+        def chat(self, messages, **kwargs):
+            first = messages[0]['content']
+            last = messages[-1].get('content', '') if isinstance(messages[-1].get('content'), str) else ''
+            if 'targeted edits' in last:
+                if any('Now write only the client' in str(m.get('content', '')) for m in messages):
+                    # A client patch offer, not a server one: answer with
+                    # an edit that does not apply, so the full client
+                    # write follows; patch_calls keeps meaning server
+                    # patch offers only.
+                    return _json.dumps({'edits': [{'find': 'not present in the client', 'replace': 'x'}]})
+                self.patch_calls += 1
+                return _json.dumps({'edits': [{'find': 'not present in the attempt', 'replace': 'x'}]})
+            if isinstance(first, str) and 'Review game server' in first:
+                self.server_reviews += 1
+                return _json.dumps({'passed': True, 'issues': []})
+            if isinstance(first, list):
+                return _json.dumps({'passed': True, 'issues': []})
+            if any('Now write only the client' in str(m.get('content', '')) for m in messages):
+                self.client_calls += 1
+                return _json.dumps({'code': clients[min(self.client_calls, len(clients)) - 1]})
+            self.server_generations += 1
+            return _json.dumps({'code': fixture_value['code'], 'server_code': fixture_value['server_code']})
+
+    return Model()
+
+
+def _run_client_failure_build(monkeypatch, model, render=None):
+    from game_platform import builder_jobs, builder_render
+    p, d = setup_draft()
+    d = p.change_builder_workflow(caller_id=d.owner_user_id, draft_id=d.id,
+                                  expected_revision=d.revision, change=flow.begin_build)
+    monkeypatch.setattr('game_platform.builder_visual.review_views', lambda *args: ([], []))
+    monkeypatch.setattr(builder_render, 'render_game', render or (lambda *args, **kwargs: []))
+    monkeypatch.setattr(builder_render, 'preflight_browser', lambda: (True, ''))
+    builder_jobs.run_build(p, model, d.owner_user_id, d.id, d.builder_workflow['job']['id'])
+    return p.get_game_draft(caller_id=d.owner_user_id, draft_id=d.id)
+
+
+def test_client_only_failure_carries_the_verified_server(monkeypatch):
+    f = fixture()
+    bad_client = f['code'].replace('applyLocale(', 'applyLocaleDisabled(')
+    assert bad_client != f['code']
+    # Attempt 1's client fails localization on all three tries; the next
+    # client (attempt 2, first try) is the good one.
+    model = _client_failure_model(f, [bad_client, bad_client, bad_client, f['code']])
+    saved = _run_client_failure_build(monkeypatch, model)
+    assert saved.builder_workflow['job']['status'] == 'ready_for_review', saved.builder_workflow['job']
+    # Attempt 2 reused the server attempt 1 verified: no server generation,
+    # no patch call and no server reviews the second time — only the client
+    # was written again (3 failed tries + the good one).
+    assert model.server_generations == 1 and model.patch_calls == 0
+    assert model.server_reviews == 4
+    assert model.client_calls == 4
+    assert any('Restored verified server from this build' in entry
+               for entry in saved.builder_workflow['job']['log'])
+
+
+def test_browser_move_rejection_does_not_carry_the_server(monkeypatch):
+    f = fixture()
+    renders = {'count': 0}
+    def render(*args, **kwargs):
+        renders['count'] += 1
+        if renders['count'] == 1:
+            # The browser's submitted move is illegal for the verified
+            # server: that implicates the pair, not just the client.
+            return [dict(caseIndex=0, view='view_of_mover', emittedMoves=[{'add': 99}])]
+        return []
+    model = _client_failure_model(f, [f['code']])
+    saved = _run_client_failure_build(monkeypatch, model, render=render)
+    assert saved.builder_workflow['job']['status'] == 'ready_for_review', saved.builder_workflow['job']
+    # No carry-over: attempt 2 repaired the server (patch offer, then the
+    # full-file fallback) and re-ran the reviews before the client stage.
+    assert model.patch_calls == 1 and model.server_generations == 2
+    assert model.server_reviews == 8
+    assert not any('Restored verified server from this build' in entry
+                   for entry in saved.builder_workflow['job']['log'])
+
+
+def test_restored_server_carries_after_client_only_failure(monkeypatch):
+    from game_platform import builder_jobs, builder_render
+    f = fixture()
+    p, d = setup_draft()
+    d = p.change_builder_workflow(caller_id=d.owner_user_id, draft_id=d.id,
+                                  expected_revision=d.revision, change=flow.begin_build)
+    monkeypatch.setattr('game_platform.builder_visual.review_views', lambda *args: ([], []))
+    monkeypatch.setattr(builder_render, 'preflight_browser', lambda: (True, ''))
+    renders = {'fail': True}
+    def render(*args, **kwargs):
+        if renders['fail']:
+            raise RuntimeError('Browser verification unavailable or failed: Error: UI verification failed: {"tinyTargets":81}')
+        return []
+    monkeypatch.setattr(builder_render, 'render_game', render)
+    class CheckpointModel:
+        def chat(self, messages, **kwargs):
+            first = messages[0]['content']
+            if isinstance(first, list) or (isinstance(first, str) and 'Review game server' in first):
+                return json.dumps({'passed': True, 'issues': []})
+            return json.dumps({'code': f['code'], 'server_code': f['server_code']})
+    # Build 1 verifies the server but the client never passes the
+    # screenshot stage, so only the server is checkpointed.
+    builder_jobs.run_build(p, CheckpointModel(), d.owner_user_id, d.id, d.builder_workflow['job']['id'])
+    saved = p.get_game_draft(caller_id=d.owner_user_id, draft_id=d.id)
+    assert saved.builder_workflow['job']['status'] == 'failed', saved.builder_workflow['job']
+    assert saved.builder_workflow['job']['server_checkpoint']['server_code'] == f['server_code']
+    # Build 2 restores that server at attempt 1; its client fails
+    # localization on all three tries, and the next attempt must carry
+    # the restored server straight to the client stage — no server
+    # generation, patch or review calls anywhere in build 2.
+    renders['fail'] = False
+    d2 = p.change_builder_workflow(caller_id=d.owner_user_id, draft_id=d.id,
+                                   expected_revision=saved.revision, change=flow.begin_build)
+    bad_client = f['code'].replace('applyLocale(', 'applyLocaleDisabled(')
+    assert bad_client != f['code']
+    model = _client_failure_model(f, [bad_client, bad_client, bad_client, f['code']])
+    builder_jobs.run_build(p, model, d.owner_user_id, d.id, d2.builder_workflow['job']['id'])
+    saved2 = p.get_game_draft(caller_id=d.owner_user_id, draft_id=d.id)
+    assert saved2.builder_workflow['job']['status'] == 'ready_for_review', saved2.builder_workflow['job']
+    assert model.server_generations == 0 and model.patch_calls == 0 and model.server_reviews == 0
+    assert model.client_calls == 4
+    log = saved2.builder_workflow['job']['log']
+    assert any('Restored verified server from saved draft' in entry for entry in log)
+    assert any('Restored verified server from this build' in entry for entry in log)
+
+
+def test_terminal_build_error_names_the_real_cause():
+    import time as _time
+    from game_platform.builder_jobs import _terminal_build_error
+    guard = RuntimeError('Build cancelled or replaced')
+    # A different stored job id: a newer build replaced this one.
+    assert _terminal_build_error(guard, {'id': 'newer'}, 'mine', False) == \
+        'Build replaced: a newer build was started for this draft.'
+    # Same job, deadline in the past: expired, naming the last stage.
+    expired = {'id': 'mine', 'deadline': _time.time() - 5,
+               'stage': 'Writing the client for the verified server'}
+    assert _terminal_build_error(TimeoutError('Build exceeded its ten-minute budget'), expired, 'mine', False) == \
+        'Build expired: the time limit was reached during Writing the client for the verified server.'
+    assert _terminal_build_error(guard, {'id': 'mine', 'deadline': _time.time() - 5}, 'mine', False) == \
+        'Build expired: the time limit was reached during the build.'
+    # Same job, deadline ahead, job-control failure: a cancellation.
+    live = {'id': 'mine', 'deadline': _time.time() + 600, 'stage': 'Writing code · attempt 1'}
+    assert _terminal_build_error(guard, live, 'mine', False) == 'Build cancelled.'
+    assert _terminal_build_error(RuntimeError('Draft changed repeatedly'), live, 'mine', False) == 'Build cancelled.'
+    # The saved-server sentence is appended only when a server survives.
+    assert _terminal_build_error(guard, live, 'mine', True) == \
+        'Build cancelled.\nThe verified server is saved — restarting the build resumes from it.'
+    assert 'verified server is saved' not in _terminal_build_error(guard, live, 'mine', False)
+    # A genuine build failure keeps its original error text untouched.
+    assert _terminal_build_error(RuntimeError('Verification failed: [...]'), live, 'mine', True) == \
+        'Verification failed: [...]'
+
+
+def _expired_build(monkeypatch, checkpoint=False):
+    import time as _time
+    from game_platform import builder_jobs, builder_render
+    p, d = setup_draft()
+    d = p.change_builder_workflow(caller_id=d.owner_user_id, draft_id=d.id,
+                                  expected_revision=d.revision, change=flow.begin_build)
+    monkeypatch.setattr(builder_render, 'preflight_browser', lambda: (True, ''))
+    def expire(draft):
+        draft.builder_workflow['job']['deadline'] = _time.time() - 1
+        if checkpoint:
+            draft.builder_workflow['job']['server_checkpoint'] = \
+                {'server_code': 'const game = {};', 'checks': {}, 'reviews': {}}
+        return draft
+    d = p.change_builder_workflow(caller_id=d.owner_user_id, draft_id=d.id,
+                                  expected_revision=d.revision, change=expire)
+    calls = []
+    class Model:
+        def chat(self, messages, **kwargs):
+            calls.append(1)
+            return '{}'
+    builder_jobs.run_build(p, Model(), d.owner_user_id, d.id, d.builder_workflow['job']['id'])
+    saved = p.get_game_draft(caller_id=d.owner_user_id, draft_id=d.id)
+    return saved.builder_workflow['job'], calls
+
+
+def test_build_that_expires_stores_the_expired_message(monkeypatch):
+    job, calls = _expired_build(monkeypatch)
+    assert job['status'] == 'failed', job
+    # The deadline died at the first stage write — the stored stage is
+    # the one begin_build queued — and no model call was spent.
+    assert job['error'] == 'Build expired: the time limit was reached during Queued.'
+    assert calls == []
+
+
+def test_expired_build_with_a_checkpoint_says_the_server_is_saved(monkeypatch):
+    job, calls = _expired_build(monkeypatch, checkpoint=True)
+    assert job['status'] == 'failed', job
+    assert job['error'] == ('Build expired: the time limit was reached during Queued.'
+                            '\nThe verified server is saved — restarting the build resumes from it.')
+    assert calls == []
+
+
+def test_build_preflight_stops_before_any_model_call(monkeypatch):
+    from game_platform import builder_jobs, builder_render
+    p, d = setup_draft()
+    d = p.change_builder_workflow(caller_id=d.owner_user_id, draft_id=d.id,
+                                  expected_revision=d.revision, change=flow.begin_build)
+    monkeypatch.setattr(builder_render, 'preflight_browser',
+                        lambda: (False, "the 'playwright' Node module is not installed"))
+    calls = []
+    class Model:
+        def chat(self, messages, **kwargs):
+            calls.append(1)
+            return '{}'
+    builder_jobs.run_build(p, Model(), d.owner_user_id, d.id, d.builder_workflow['job']['id'])
+    saved = p.get_game_draft(caller_id=d.owner_user_id, draft_id=d.id)
+    job = saved.builder_workflow['job']
+    assert job['status'] == 'failed', job
+    assert 'Browser verification unavailable' in job['error']
+    assert 'npm install --no-save playwright' in job['error']
+    # The broken host surfaced before a single model call was spent.
+    assert calls == []
 
 
 def test_cover_brief_follows_the_authors_ask():
@@ -1743,3 +1986,162 @@ def test_image_step_creative_cover_when_board_not_mentioned():
     assert 'Recount the rows and columns' not in systems['Cover']
     assert 'Creative cover' not in systems['Start']
     assert 'Cover fidelity' not in systems['Start']
+
+
+def _visual_review_build(monkeypatch, tmp_path, verdicts):
+    """Run a build whose visual reviews answer from `verdicts` (one dict
+    per case review, consumed in order). Returns (saved, model)."""
+    from game_platform import builder_render, builder_jobs
+    p, d = setup_draft()
+    d = p.change_builder_workflow(caller_id=d.owner_user_id, draft_id=d.id,
+                                  expected_revision=d.revision, change=flow.begin_build)
+    f = fixture(); job = d.builder_workflow['job']['id']
+    queue = list(verdicts)
+    class Model:
+        client_calls = 0
+        def chat(self, messages, **kwargs):
+            first = messages[0]['content']
+            if isinstance(first, list):
+                return json.dumps(queue.pop(0))
+            if 'Review game server' in first:
+                return '{"passed":true,"issues":[]}'
+            if 'targeted edits' in messages[-1].get('content', '') and any(
+                    'Now write only the client' in m.get('content', '') for m in messages
+                    if isinstance(m.get('content'), str)):
+                # A client repair is first offered as targeted edits;
+                # answer with an edit that does not apply, so the build
+                # falls back to the full client write counted below.
+                return json.dumps({'edits': [{'find': 'not present in the client', 'replace': 'x'}]})
+            if any('Now write only the client' in m.get('content', '') for m in messages
+                   if isinstance(m.get('content'), str)):
+                self.client_calls += 1
+                return json.dumps({'code': f['code']})
+            return json.dumps({'code': f['code'], 'server_code': f['server_code']})
+    def render(*args, **kwargs):
+        shots = []
+        for case in f['contract']['cases']:
+            for width, height in [(360, 640), (390, 844), (844, 390), (820, 1180), (1366, 768), (1920, 1080)]:
+                for direction in ('ltr', 'rtl'):
+                    for view in ('view_of_mover', 'view_of_other', 'expected_view_of_mover', 'expected_view_of_other'):
+                        shots.append(dict(test=case['name'], view=view, width=width, height=height,
+                                          direction=direction, approvedFile='test.png', file='test.png'))
+        return shots
+    (tmp_path / job).mkdir(); (tmp_path / job / 'test.png').write_bytes(b'test image')
+    monkeypatch.setattr(builder_render, 'ARTIFACT_ROOT', tmp_path)
+    monkeypatch.setattr(builder_render, 'render_game', render)
+    monkeypatch.setattr(builder_render, 'preflight_browser', lambda: (True, ''))
+    model = Model()
+    builder_jobs.run_build(p, model, d.owner_user_id, d.id, job)
+    saved = p.get_game_draft(caller_id=d.owner_user_id, draft_id=d.id)
+    return saved, model
+
+
+def test_visual_cosmetic_only_findings_are_accepted_and_stored(monkeypatch, tmp_path):
+    verdict = {'passed': False, 'issues': [
+        {'issue': 'Walls counter could use an icon', 'severity': 'cosmetic'}]}
+    saved, model = _visual_review_build(monkeypatch, tmp_path, [verdict] * 3)
+    job = saved.builder_workflow['job']
+    assert job['status'] == 'ready_for_review', job
+    # Cosmetic findings never retry the client: one write was accepted.
+    assert model.client_calls == 1
+    names = [case['name'] for case in fixture()['contract']['cases']]
+    assert job['visual_notes'] == [{'case': name, 'issue': 'Walls counter could use an icon'}
+                                   for name in names]
+    assert any('Visual review noted 3 cosmetic issues for your review' in entry
+               for entry in job['log'])
+
+
+def test_visual_blocking_findings_retry_and_the_accepted_clients_notes_win(monkeypatch, tmp_path):
+    first = {'passed': False, 'issues': [
+        {'issue': 'The placed wall is not rendered', 'severity': 'blocking'},
+        {'issue': 'Turn pill on the wrong card'},
+        {'issue': 'Counter icon style differs', 'severity': 'cosmetic'}]}
+    second = {'passed': False, 'issues': [
+        {'issue': 'Button wording could be shorter', 'severity': 'cosmetic'}]}
+    saved, model = _visual_review_build(monkeypatch, tmp_path, [first] * 3 + [second] * 3)
+    job = saved.builder_workflow['job']
+    assert job['status'] == 'ready_for_review', job
+    # The blocking findings (including the one whose severity was never
+    # stated) forced exactly one client rewrite; the second client was
+    # accepted despite its verdict's passed flag, on cosmetic findings.
+    assert model.client_calls == 2
+    names = [case['name'] for case in fixture()['contract']['cases']]
+    assert job['visual_notes'] == [{'case': name, 'issue': 'Button wording could be shorter'}
+                                   for name in names]
+
+
+def _client_patch_build(monkeypatch, first_client, patch_reply):
+    """Run a build whose first visual review fails with a blocking
+    finding, so the client is repaired once; the model answers the
+    client patch offer with `patch_reply`. Returns (saved, model)."""
+    from game_platform import builder_jobs, builder_render
+    p, d = setup_draft()
+    d = p.change_builder_workflow(caller_id=d.owner_user_id, draft_id=d.id,
+                                  expected_revision=d.revision, change=flow.begin_build)
+    f = fixture()
+    reviews = {'calls': 0}
+    def review(ask, job_id, cases, screenshots, rules):
+        reviews['calls'] += 1
+        if reviews['calls'] == 1:
+            return ([{'visual_review': cases[0]['name'], 'issues': ['Counter missing']}], [])
+        return ([], [])
+    class Model:
+        server_generations = 0
+        client_generations = 0
+        client_patch_calls = 0
+        def chat(self, messages, **kwargs):
+            first = messages[0]['content']
+            last = messages[-1].get('content', '') if isinstance(messages[-1].get('content'), str) else ''
+            is_client = any('Now write only the client' in str(m.get('content', '')) for m in messages)
+            if 'targeted edits' in last:
+                if is_client:
+                    self.client_patch_calls += 1
+                    return json.dumps(patch_reply)
+                return json.dumps({'edits': [{'find': 'not present in the attempt', 'replace': 'x'}]})
+            if isinstance(first, str) and 'Review game server' in first:
+                return json.dumps({'passed': True, 'issues': []})
+            if isinstance(first, list):
+                return json.dumps({'passed': True, 'issues': []})
+            if is_client:
+                self.client_generations += 1
+                return json.dumps({'code': first_client})
+            self.server_generations += 1
+            return json.dumps({'code': f['code'], 'server_code': f['server_code']})
+    monkeypatch.setattr('game_platform.builder_visual.review_views', review)
+    monkeypatch.setattr(builder_render, 'render_game', lambda *args, **kwargs: [])
+    monkeypatch.setattr(builder_render, 'preflight_browser', lambda: (True, ''))
+    model = Model()
+    builder_jobs.run_build(p, model, d.owner_user_id, d.id, d.builder_workflow['job']['id'])
+    return p.get_game_draft(caller_id=d.owner_user_id, draft_id=d.id), model
+
+
+def test_build_repairs_client_with_targeted_patch(monkeypatch):
+    f = fixture()
+    # The first client differs from the fixture at exactly one unique,
+    # inert spot: a single CSS color digit.
+    first_client = f['code'].replace('#182140', '#182141')
+    assert first_client != f['code'] and first_client.count('#182141') == 1
+    saved, model = _client_patch_build(
+        monkeypatch, first_client, {'edits': [{'find': '#182141', 'replace': '#182140'}]})
+    assert saved.builder_workflow['job']['status'] == 'ready_for_review', saved.builder_workflow['job']
+    # The repair was a patch, not a re-write: one full client generation,
+    # one patch call, and the accepted client is the first client with
+    # exactly the edited region changed — the fixture code itself.
+    assert model.client_generations == 1 and model.client_patch_calls == 1
+    assert saved.code == f['code']
+    assert saved.code == first_client.replace('#182141', '#182140')
+    assert any('Applied 1 targeted edit' in entry and 'previous client' in entry
+               for entry in saved.builder_workflow['job']['log'])
+
+
+def test_build_falls_back_to_full_client_write_when_patch_does_not_apply(monkeypatch):
+    f = fixture()
+    first_client = f['code'].replace('#182140', '#182141')
+    saved, model = _client_patch_build(
+        monkeypatch, first_client, {'edits': [{'find': 'a snippet that is not in the page', 'replace': 'x'}]})
+    assert saved.builder_workflow['job']['status'] == 'ready_for_review', saved.builder_workflow['job']
+    # The unusable patch cost one call and changed nothing: the retry
+    # fell back to the full client write, which returned the first
+    # client again and was accepted as-is.
+    assert model.client_patch_calls == 1 and model.client_generations == 2
+    assert saved.code == first_client

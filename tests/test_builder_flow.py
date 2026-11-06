@@ -114,8 +114,9 @@ def test_build_job_persists_ready_code_and_does_not_publish(monkeypatch):
     class Model:
         def chat(self,messages,**kwargs):
             return json.dumps({'passed':True,'issues':[]}) if 'Review game server' in messages[0]['content'] or isinstance(messages[0]['content'],list) else json.dumps({'code':f['code'],'server_code':f['server_code']})
-    monkeypatch.setattr('game_platform.builder_visual.review_views',lambda *args:[])
+    monkeypatch.setattr('game_platform.builder_visual.review_views',lambda *args: ([], []))
     monkeypatch.setattr(builder_render,'render_game',lambda *args,**kwargs:[])
+    monkeypatch.setattr(builder_render,'preflight_browser',lambda: (True,''))
     run_build(platform,Model(),d.owner_user_id,d.id,d.builder_workflow['job']['id'])
     saved=platform.get_game_draft(caller_id=d.owner_user_id,draft_id=d.id)
     assert saved.builder_workflow['job']['status']=='ready_for_review',saved.builder_workflow['job']
@@ -145,8 +146,9 @@ def test_build_survives_a_malformed_diagnosis_reply(monkeypatch):
                 servers.append(1)
                 return json.dumps({'code':f['code'],'server_code':broken if len(servers)==1 else f['server_code']})
             return json.dumps({'code':f['code'],'server_code':f['server_code']})
-    monkeypatch.setattr('game_platform.builder_visual.review_views',lambda *args:[])
+    monkeypatch.setattr('game_platform.builder_visual.review_views',lambda *args: ([], []))
     monkeypatch.setattr(builder_render,'render_game',lambda *args,**kwargs:[])
+    monkeypatch.setattr(builder_render,'preflight_browser',lambda: (True,''))
     run_build(platform,Model(),d.owner_user_id,d.id,d.builder_workflow['job']['id'])
     saved=platform.get_game_draft(caller_id=d.owner_user_id,draft_id=d.id)
     # The first attempt's examples failed and the diagnosis reply was not
@@ -162,8 +164,9 @@ def _build_with_model(monkeypatch, model, render=None):
     f=fixture();d=flow.begin_build(approved_draft());store=InMemoryStore();store.put_game_draft(d)
     platform=GamePlatform(store=store)
     user=platform.create_user(display_name='Builder');store.put_user(replace(user,id=d.owner_user_id))
-    monkeypatch.setattr('game_platform.builder_visual.review_views',lambda *args:[])
+    monkeypatch.setattr('game_platform.builder_visual.review_views',lambda *args: ([], []))
     monkeypatch.setattr(builder_render,'render_game',render or (lambda *args,**kwargs:[]))
+    monkeypatch.setattr(builder_render,'preflight_browser',lambda: (True,''))
     run_build(platform,model,d.owner_user_id,d.id,d.builder_workflow['job']['id'])
     return f,platform.get_game_draft(caller_id=d.owner_user_id,draft_id=d.id)
 
@@ -219,6 +222,12 @@ def test_build_retries_client_on_presentation_failure(monkeypatch):
             system=messages[0]['content'] if isinstance(messages[0]['content'],str) else ''
             if 'Review game server' in system or isinstance(messages[0]['content'],list):
                 return json.dumps({'passed':True,'issues':[]})
+            if 'targeted edits' in str(messages[-1].get('content','')) and any('Now write only the client' in str(m.get('content','')) for m in messages):
+                # The client repair is offered as targeted edits and this
+                # model answers with an applicable one, so the repair is
+                # the patch itself — still only the client changing.
+                calls['client']+=1
+                return json.dumps({'edits':[{'find':'#182140','replace':'#182141'}]})
             if any('complete client HTML document' in str(m.get('content','')) for m in messages):
                 calls['client']+=1
             else:
@@ -243,10 +252,11 @@ def test_build_checkpoints_server_not_pair_when_client_never_verifies(monkeypatc
     f=fixture();d=flow.begin_build(approved_draft());store=InMemoryStore();store.put_game_draft(d)
     platform=GamePlatform(store=store)
     user=platform.create_user(display_name='Builder');store.put_user(replace(user,id=d.owner_user_id))
-    monkeypatch.setattr('game_platform.builder_visual.review_views',lambda *args:[])
+    monkeypatch.setattr('game_platform.builder_visual.review_views',lambda *args: ([], []))
     def failing_render(*args,**kwargs):
         raise RuntimeError('Browser verification unavailable or failed: Error: UI verification failed: {"tinyTargets":81}')
     monkeypatch.setattr(builder_render,'render_game',failing_render)
+    monkeypatch.setattr(builder_render,'preflight_browser',lambda: (True,''))
     class Model:
         def chat(self,messages,**kwargs):
             system=messages[0]['content'] if isinstance(messages[0]['content'],str) else ''
@@ -385,8 +395,9 @@ def test_server_review_failure_repairs_code_before_ready(monkeypatch):
             self.generations+=1
             if self.generations==2: assert 'review_rules' in messages[-1]['content']
             return json.dumps({'code':f['code'],'server_code':f['server_code']})
-    monkeypatch.setattr('game_platform.builder_visual.review_views',lambda *args:[])
+    monkeypatch.setattr('game_platform.builder_visual.review_views',lambda *args: ([], []))
     model=Model();monkeypatch.setattr(builder_render,'render_game',lambda *args,**kwargs:[])
+    monkeypatch.setattr(builder_render,'preflight_browser',lambda: (True,''))
     run_build(platform,model,d.owner_user_id,d.id,d.builder_workflow['job']['id'])
     saved=platform.get_game_draft(caller_id=d.owner_user_id,draft_id=d.id)
     assert saved.builder_workflow['job']['status']=='ready_for_review',saved.builder_workflow['job']

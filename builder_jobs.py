@@ -313,8 +313,8 @@ def _apply_test_operations(artifact, operations, protected):
     return result
 
 
-def _apply_server_patches(server, edits):
-    """Apply a repair's targeted edits to the previous attempt's server code.
+def _apply_patches(source, edits):
+    """Apply a repair's targeted edits to the previous attempt's source.
 
     The repair answers with {find, replace} snippets rather than a re-typed
     file, so code the repair does not touch keeps its exact previous text —
@@ -326,11 +326,11 @@ def _apply_server_patches(server, edits):
     falls back to a full-file regeneration, so a bad patch can never stop
     a build that would have proceeded without patching.
     """
-    if not isinstance(server, str) or not server:
-        raise ValueError('no previous server source to patch')
+    if not isinstance(source, str) or not source:
+        raise ValueError('no previous source to patch')
     if not isinstance(edits, list) or not 1 <= len(edits) <= 12:
         raise ValueError('edits must be a list of 1 to 12 edits')
-    patched = server
+    patched = source
     for edit in edits:
         if not isinstance(edit, dict):
             raise ValueError('each edit must be an object with find and replace')
@@ -340,9 +340,14 @@ def _apply_server_patches(server, edits):
         if not find or find == replace:
             raise ValueError('edit find must be non-empty and differ from replace')
         if patched.count(find) != 1:
-            raise ValueError('edit find must occur exactly once in the server source')
+            raise ValueError('edit find must occur exactly once in the source')
         patched = patched.replace(find, replace, 1)
     return patched
+
+
+def _apply_server_patches(server, edits):
+    """The server repair path's name for _apply_patches."""
+    return _apply_patches(server, edits)
 
 
 SERVER_PATCH_INSTRUCTION = (
@@ -356,6 +361,19 @@ SERVER_PATCH_INSTRUCTION = (
     '"find". Make the minimal edits that fix every listed failure and preserve '
     'every behavior that already passed: do not rename, restructure or rewrite '
     'working code, and do not change the approved specification or tests.')
+
+CLIENT_PATCH_INSTRUCTION = (
+    'Instead of returning the complete client file, repair the previous client '
+    'with targeted edits. Return ONLY a JSON object of the form '
+    '{"edits":[{"find":"...","replace":"..."}]} with between 1 and 12 edits — '
+    'no prose, no Markdown, no complete file. Each "find" must be copied verbatim '
+    'from the client code above and must occur exactly once in that file; use the '
+    'smallest snippet that uniquely identifies the change, and when replacing a '
+    'whole element or block, include that complete element or block as the '
+    '"find". Make the minimal edits that fix every listed failure and preserve '
+    'every behavior that already passed: do not rename, restructure or rewrite '
+    'working parts of the page, and do not change the verified server or the '
+    'approved specification.')
 
 
 _COVER_BOARD_WORDS = ('board', 'gameplay', 'screenshot', 'mockup', 'grid',
@@ -1154,6 +1172,33 @@ def _summarize_failures(errors):
     return [item[:240] for item in summary[:8]]
 
 
+def _terminal_build_error(exc, job, job_id, server_saved):
+    """The plain-language reason a build stopped, stored on the failed job.
+
+    The job-control guards collapse three different events into the same
+    opaque RuntimeError ('Build cancelled or replaced'), and a deadline
+    overrun looks no different. Name the actual cause from the stored
+    job: a different job id means a newer build replaced this one; a
+    deadline in the past means it expired (in the stage last recorded);
+    a remaining job-control failure is a cancellation. Anything else is
+    a real build failure and keeps its original error text untouched.
+    When a verified server survives the stop, say so: restarting the
+    build resumes from it instead of starting over."""
+    job = job or {}
+    if job.get('id') != job_id:
+        message = 'Build replaced: a newer build was started for this draft.'
+    elif job.get('deadline') is not None and time.time() > job['deadline']:
+        message = f"Build expired: the time limit was reached during {job.get('stage') or 'the build'}."
+    elif isinstance(exc, RuntimeError) and ('cancelled or replaced' in str(exc)
+                                            or 'changed repeatedly' in str(exc)):
+        message = 'Build cancelled.'
+    else:
+        return str(exc)[:8000]
+    if server_saved:
+        message += '\nThe verified server is saved — restarting the build resumes from it.'
+    return message
+
+
 def run_build(platform, client, owner, draft_id, job_id, deliver=None):
     def announce(message):
         if deliver: deliver(message)
@@ -1178,6 +1223,11 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
             j['log'].append(message)
             return d
         return update(change)
+    def note_cosmetic_findings(notes):
+        # Cosmetic visual findings never fail a build; they are surfaced
+        # in the log here and stored on the job at ready_for_review.
+        if notes:
+            stage(f'Visual review noted {len(notes)} cosmetic issue' + ('s' if len(notes) != 1 else '') + ' for your review')
     def model_reply(messages, tokens, purpose='Generating code', temperature=1.0):
         current = stage('Calling the model: ' + purpose)
         remaining = current.builder_workflow['job']['deadline'] - time.time()
@@ -1272,8 +1322,45 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
         stage(f'Applied {len(edits)} targeted edit' + ('s' if len(edits) != 1 else '') + ' to the previous attempt')
         return patched
 
+    def patch_client(messages, previous):
+        """Repair the previous client with targeted edits, mirroring
+        patch_source for the server: returns the patched HTML, or None
+        on ANY problem with the patch call or its reply — the caller
+        then falls back to the full-file generation, so patching
+        introduces no new way for a build to stop. Job-control failures
+        keep their meaning instead of falling back, exactly as there."""
+        request = [*messages, {'role':'user','content':CLIENT_PATCH_INSTRUCTION}]
+        try:
+            reply = ask(request, 8000, purpose='Patching client code')
+            edits = reply.get('edits') if isinstance(reply, dict) else None
+            patched = _apply_patches(previous, edits)
+        except TimeoutError:
+            raise
+        except RuntimeError as exc:
+            if 'cancelled or replaced' in str(exc) or 'changed repeatedly' in str(exc): raise
+            return None
+        except Exception:
+            return None
+        stage(f'Applied {len(edits)} targeted edit' + ('s' if len(edits) != 1 else '') + ' to the previous client')
+        return patched
+
+    # Bound before the try so the failure handler can always tell whether
+    # this build verified a server, even when it died before the loop.
+    verified_carry = None
+    # Cosmetic visual-review notes of the client that ends up accepted;
+    # stored on the job at ready_for_review for the human's review.
+    visual_notes = []
     try:
         draft = stage('Preparing approved specification')
+        # Fail in seconds, before any model call, when this host cannot
+        # run the screenshot stage at all: a build that discovers a
+        # missing Node.js or Playwright only at rendering has already
+        # spent its generation budget to learn the host is broken.
+        from game_platform.builder_render import preflight_browser
+        browser_ready, browser_problem = preflight_browser()
+        if not browser_ready:
+            raise RuntimeError('Browser verification unavailable: ' + browser_problem +
+                               '. Install the render prerequisites (npm install --no-save playwright in the repository root) and restart the build.')
         artifacts = draft.builder_workflow['artifacts']
         spec = {key:value['value'] for key,value in artifacts.items()}
         # The schemas the game is published with: they come from the approved
@@ -1301,6 +1388,22 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
         # first generation after a restore stays a full-file write exactly
         # as before.
         last_server=None
+        # The same for the client: the most recent client source THIS
+        # build generated. A client retry (feedback present) patches it
+        # instead of re-typing the whole page; checkpoint-restored code
+        # does not seed it either.
+        last_client=None
+        # A server verified by checks and reviews — passed in this build,
+        # or restored at attempt 0 from a checkpoint whose stored checks
+        # and reviews are its record — whose attempt then failed only in
+        # the client stage, plus whether the latest finished attempt
+        # failed that way. Together they let
+        # the next attempt reuse the verified server instead of spending
+        # generation, checks and reviews re-proving identical code while
+        # only the client is repaired. Any other failure drops the record:
+        # a stale server must never be reused after an intervening failure.
+        verified_carry=None
+        client_only_failure=False
         memory=[]
         attempt = 0
         scores = []
@@ -1315,24 +1418,46 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
             stage(f'Writing code · attempt {attempt+1}')
             checkpoint = draft.builder_workflow['job']
             restored_pair = False
+            failed_client_only = False
             if attempt == 0 and checkpoint.get('verified_code_digest') == flow.digest([draft.code,draft.server_code]):
                 code,server = draft.code,draft.server_code
                 generated = {'code':code,'server_code':server}
                 checks,reviews = checkpoint['checks'],checkpoint['server_reviews']
                 examples = checks['approved_examples']['details']
                 restored_pair = True
+                # A restored server is a verified server: seed the carry
+                # record from the checkpoint's stored checks and reviews,
+                # so a client-only failure of this attempt carries it
+                # into the next attempt exactly like an in-build one.
+                verified_carry = {'server_code':server,'checks':checks,'reviews':reviews,'examples':examples}
                 stage('Restored verified code from saved draft')
             else:
+                carried = verified_carry is not None and client_only_failure
                 server_restored = attempt == 0 and bool(checkpoint.get('server_checkpoint'))
-                if server_restored:
+                if carried:
+                    # The previous attempt verified this server and failed
+                    # only in the client stage: reuse it and go straight to
+                    # the client. No generation, checks or reviews — those
+                    # already passed on this exact code in this build.
+                    server = verified_carry['server_code']
+                    checks,reviews = verified_carry['checks'],verified_carry['reviews']
+                    examples = verified_carry['examples']
+                    generated = {'server_code':server}
+                    errors = []
+                    stage('Restored verified server from this build')
+                elif server_restored:
                     saved_server = checkpoint['server_checkpoint']
                     server = saved_server['server_code']
                     checks,reviews = saved_server['checks'],saved_server['reviews']
                     examples = checks['approved_examples']['details']
                     generated = {'server_code':server}
                     errors = []
+                    # As with a restored pair: the checkpoint's stored
+                    # checks and reviews are this server's verification
+                    # record, so seed the carry-over from them too.
+                    verified_carry = {'server_code':server,'checks':checks,'reviews':reviews,'examples':examples}
                     stage('Restored verified server from saved draft')
-                if not server_restored:
+                if not carried and not server_restored:
                     code = ''
                     try:
                         server = patch_source(messages, last_server) if last_server is not None else None
@@ -1342,6 +1467,7 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
                     except (ValueError, ModelOutputLimitError, ModelApiError) as exc:
                         errors = [{'server_generation':str(exc)}]
                         messages.append({'role':'user','content':'Return a concise complete raw server JavaScript file. '+str(exc)})
+                        client_only_failure = False; verified_carry = None
                         scores.append(_verification_progress(errors)); attempt += 1
                         continue
                     stage('Loading generated server JavaScript')
@@ -1355,6 +1481,7 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
                             {'role':'assistant','content':server},
                             {'role':'user','content':f'The server script failed to load before any test ran. QuickJS reported: {problem}\nReturn the complete corrected server JavaScript only. Define the global game object; omit prose, Markdown and module exports.'},
                         ])
+                        client_only_failure = False; verified_carry = None
                         scores.append(_verification_progress(errors)); attempt += 1
                         continue
                     generated = {'server_code':server}
@@ -1412,7 +1539,8 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
                             reviews[name] = review
                             if review.get('passed') is not True:
                                 errors.append({'review_' + name: review})
-                if not errors and not server_restored:
+                if not errors and not server_restored and not carried:
+                    verified_carry = {'server_code':server,'checks':checks,'reviews':reviews,'examples':examples}
                     def save_server_checkpoint(d):
                         d.builder_workflow['job']['server_checkpoint'] = {'server_code':server,'checks':checks,'reviews':reviews}
                         return replace(d, server_code=server, game_schemas=game_schemas)
@@ -1432,13 +1560,23 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
                 # rewrite can fix.
                 client_errors = []
                 client_feedback = []
+                client_notes = []
+                # Stays True only while every exit from this loop is a
+                # client-only failure (generation, localization, screenshot
+                # presentation, visual review). The two breaks below clear
+                # it: they implicate the server or the review machinery, so
+                # the next attempt must not carry the server over.
+                client_only = True
                 for client_try in range(3):
                     if client_try: stage(f'Rewriting the client · try {client_try+1}')
                     client_request = [*messages,
                                       {'role':'user','content':'The verified server is below. Now write only the client HTML/JS as one raw HTML document. Follow the approved UI, views, images and translation API.\n'+server},
                                       *client_feedback]
                     try:
-                        code = generate_source(client_request, 'code')
+                        code = patch_client(client_request, last_client) if client_feedback and last_client is not None else None
+                        if code is None:
+                            code = generate_source(client_request, 'code')
+                        last_client = code
                     except (ValueError, ModelOutputLimitError, ModelApiError) as exc:
                         client_errors = [{'client_generation':str(exc)}]
                         client_feedback = [{'role':'user','content':'Client generation failed: '+str(exc)+'. Keep the implementation concise and return the complete client HTML only.'}]
@@ -1469,14 +1607,17 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
                         # the verified server: that implicates the pair,
                         # not the client's presentation — fail the attempt.
                         client_errors = [{'browser_verification':str(exc)}]
+                        client_only = False
                         break
                     stage('Reviewing client screenshots', screenshots=screenshots)
                     from game_platform.builder_visual import review_views
                     try:
-                        visual_errors = review_views(ask, job_id, spec['tests']['cases'], screenshots, spec['ui']['text'])
+                        visual_errors, client_notes = review_views(ask, job_id, spec['tests']['cases'], screenshots, spec['ui']['text'])
                     except ModelApiError as exc:
                         client_errors = [{'visual_review':str(exc)}]
+                        client_only = False
                         break
+                    note_cosmetic_findings(client_notes)
                     if visual_errors:
                         client_errors = visual_errors
                         client_feedback = [{'role':'assistant','content':code},
@@ -1485,7 +1626,11 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
                     client_errors = []
                     break
                 errors = client_errors
+                failed_client_only = client_only and bool(client_errors)
                 if not errors:
+                    # The accepted client's cosmetic notes are the ones
+                    # the human sees; earlier tries' notes are superseded.
+                    visual_notes = client_notes
                     # Only now — server verified, client localized, browser
                     # moves and screenshots verified — is the pair
                     # checkpointed for later builds. Checkpointing it
@@ -1497,22 +1642,52 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
                         return replace(d,code=code,server_code=server,game_schemas=game_schemas)
                     update(save_verified_pair)
             if not errors and restored_pair:
+                # The same client-only classification as the client stage:
+                # a screenshot presentation finding or a visual-review
+                # complaint lets the next attempt carry this restored
+                # server into the client stage; a rejected browser move
+                # implicates the pair, and a failed review call the
+                # machinery, so neither qualifies.
+                pair_stage_client_only = True
+                pair_notes = []
                 try:
                     stage('Rendering client test views at phone, tablet and desktop sizes')
                     from game_platform.builder_render import render_game
                     from game_platform.builder_validation import sampled_positions, verify_browser_moves
                     cases = spec['tests']['cases'] + sampled_positions(server,spec['tests'],rules)
                     screenshots=render_game(draft_id,job_id,code,cases, tutorial=spec['tutorial']['html'], timeout=max(1,int(draft.builder_workflow['job']['deadline']-time.time())))
-                    verify_browser_moves(server,spec['tests'],cases,screenshots)
-                    stage('Reviewing client screenshots', screenshots=screenshots)
-                    from game_platform.builder_visual import review_views
-                    errors.extend(review_views(ask, job_id, spec['tests']['cases'], screenshots, spec['ui']['text']))
+                    try:
+                        verify_browser_moves(server,spec['tests'],cases,screenshots)
+                    except RuntimeError as exc:
+                        pair_stage_client_only = False
+                        errors.append({'browser_verification':str(exc)[-2000:]})
+                    else:
+                        stage('Reviewing client screenshots', screenshots=screenshots)
+                        from game_platform.builder_visual import review_views
+                        pair_errors, pair_notes = review_views(ask, job_id, spec['tests']['cases'], screenshots, spec['ui']['text'])
+                        errors.extend(pair_errors)
+                        note_cosmetic_findings(pair_notes)
                 except RuntimeError as exc:
                     if 'UI verification failed' not in str(exc): raise
                     errors.append({'browser_verification':str(exc)[-2000:]})
                 except ModelApiError as exc:
+                    pair_stage_client_only = False
                     errors.append({'visual_review':str(exc)})
+                failed_client_only = pair_stage_client_only and bool(errors)
+                if not errors:
+                    visual_notes = pair_notes
             if errors:
+                # Carry-over eligibility describes the attempt that just
+                # finished: the verified server may be reused only when
+                # this attempt failed purely in the client stage. Any
+                # other failure — server-side, or a client failure that
+                # implicates the pair — drops the record, so a stale
+                # server is never reused after an intervening failure.
+                if failed_client_only:
+                    client_only_failure = True
+                else:
+                    client_only_failure = False
+                    verified_carry = None
                 stage('Verification failures: ' + json.dumps(errors)[:2000])
             stage('Verification attempt complete', checks=checks, server_reviews=reviews)
             if not errors: break
@@ -1534,7 +1709,7 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
         # Persist verified code for the emulator before asking for final human approval.
         def ready(d):
             f=d.builder_workflow; f['job'].update(status='ready_for_review',stage='Play the game and review the screenshots',
-                code_digest=flow.digest([code,server]),examples=examples,server_reviews=reviews,checks=checks)
+                code_digest=flow.digest([code,server]),examples=examples,server_reviews=reviews,checks=checks,visual_notes=visual_notes)
             return replace(d, name=spec['identity']['display_name'],description=spec['identity']['short_description'],rules=rules,code=code,server_code=server,game_schemas=game_schemas)
         update(ready)
         announce('Your game is ready to review')
@@ -1542,9 +1717,12 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
         # Store failures even when the deadline expired; never resurrect cancelled jobs.
         try:
             d=platform.get_game_draft(caller_id=owner,draft_id=draft_id)
+            stored_job = (d.builder_workflow or {}).get('job') or {}
+            error = _terminal_build_error(exc, stored_job, job_id,
+                                          bool(stored_job.get('server_checkpoint')) or verified_carry is not None)
             def failed(d):
                 if (d.builder_workflow.get('job') or {}).get('id') == job_id and d.builder_workflow['job']['status'] in flow.ACTIVE:
-                    d.builder_workflow['job'].update(status='failed',stage='Build stopped',error=str(exc)[:8000])
+                    d.builder_workflow['job'].update(status='failed',stage='Build stopped',error=error)
                 return d
             platform.change_builder_workflow(caller_id=owner,draft_id=draft_id,expected_revision=d.revision,change=failed)
             announce('Your game build needs attention')
