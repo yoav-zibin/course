@@ -33,10 +33,45 @@ function showPageError(text) {
   banner.hidden = !text;
 }
 
+const clientErrorsSent = new Set();
+
+/** Tells the server about an error that happened in this page (POST /client-errors), so it
+ * reaches the server's log instead of only this browser's console. Best effort: never
+ * throws, sends each message once, and at most 5 per page load. [kind] is a short
+ * snake_case name; never put a password or token in [message]. */
+function reportClientError(kind, message) {
+  try {
+    const text = String(message ?? "").slice(0, 500);
+    const key = `${kind}:${text}`;
+    if (clientErrorsSent.has(key) || clientErrorsSent.size >= 5) return;
+    clientErrorsSent.add(key);
+    fetch("/client-errors", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify({
+        kind,
+        message: text,
+        page: location.pathname,
+        user_agent: navigator.userAgent,
+      }),
+    }).catch(() => {});
+  } catch {
+    // Reporting must never cause an error of its own.
+  }
+}
+globalThis.reportClientError = reportClientError;
+
 // Errors that would otherwise only reach the browser console.
-window.addEventListener("error", (event) => showPageError(`Page error: ${event.message}`));
-window.addEventListener("unhandledrejection", (event) =>
-  showPageError(`Page error: ${event.reason?.message ?? event.reason}`));
+window.addEventListener("error", (event) => {
+  showPageError(`Page error: ${event.message}`);
+  const file = String(event.filename ?? "").split("/").pop();
+  reportClientError("script_error", `${event.message} (${file}:${event.lineno})`);
+});
+window.addEventListener("unhandledrejection", (event) => {
+  showPageError(`Page error: ${event.reason?.message ?? event.reason}`);
+  reportClientError("unhandled_rejection", event.reason?.message ?? event.reason);
+});
 
 async function fetchAllData() {
   const response = await fetch("/debug/all-data");

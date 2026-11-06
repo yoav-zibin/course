@@ -45,12 +45,11 @@ class PortalOffline {
       droppable = droppable.slice(dropped.length);
       if (attempt()) return;
     }
-    throw Object.assign(
-      new Error(
-        "Device storage is full or unavailable. This move was not saved; free space and retry.",
-      ),
-      { storageFailure: true },
-    );
+    const message =
+      "Device storage is full or unavailable. This move was not saved; free space and retry.";
+    // The server can't see this otherwise: tell its log (common.js).
+    globalThis.reportClientError?.("storage_full", message);
+    throw Object.assign(new Error(message), { storageFailure: true });
   }
   cached(path) {
     return this.read().responses[path];

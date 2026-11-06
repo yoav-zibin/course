@@ -1,8 +1,10 @@
 """FastAPI routes for the game platform."""
 
 import asyncio
+import hashlib
 import html
 import io
+import json
 import logging
 import mimetypes
 import secrets
@@ -14,7 +16,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from http import HTTPStatus
 from pathlib import Path
 from typing import Annotated, Final, Literal
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,7 +29,7 @@ from starlette.datastructures import MutableHeaders, State
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
-from pydantic import JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from game_platform.invariants import InvariantRequest, InvariantReport, check_invariants
 from game_platform import i18n, observability
@@ -43,6 +45,8 @@ from game_platform.schemas import (
     RefactorJobOut,
     CatalogOut,
     GameStringsOut,
+    BundleOut,
+    CatalogOut,
     GamesTextOut,
     GameTextOut,
     CampaignLinkCreate,
@@ -188,6 +192,60 @@ def health(platform: Platform, request: Request, response: Response) -> HealthOu
         uptime_seconds=int(time.monotonic() - request.app.state.started_at),
         storage=error or "ok",
     )
+
+
+# Browser error reports
+
+MAX_CLIENT_ERROR_BYTES: Final = 4096
+
+
+class ClientErrorReport(BaseModel):
+    """What a page tells the server about an error it hit (no passwords, tokens or user
+    data: the page sends the error's message, which is also cleaned here)."""
+
+    model_config = ConfigDict(extra="ignore")
+    kind: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")]
+    message: Annotated[str, Field(max_length=1000)] = ""
+    page: Annotated[str, Field(max_length=500)] = ""
+    user_agent: Annotated[str, Field(max_length=500)] = ""
+
+
+@router.post("/client-errors", status_code=HTTPStatus.ACCEPTED)
+async def report_client_error(request: Request) -> dict[str, bool]:
+    """Public. A page reports an error (a script error, or the device's storage being
+    full) so it reaches the server's log as a `client_error` event. The body is small JSON
+    (kind, message, page, user_agent); each client may send a few per minute (429 after)."""
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > MAX_CLIENT_ERROR_BYTES:
+        raise HTTPException(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "report too large")
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > MAX_CLIENT_ERROR_BYTES:
+            raise HTTPException(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "report too large")
+    monitor: observability.Monitor = request.app.state.monitor
+    client = observability.CLIENT.get() or "unknown"
+    # Counted before the body is checked, so garbage can't be sent without limit either.
+    if not monitor.take_client_error_slot(client):
+        raise HTTPException(HTTPStatus.TOO_MANY_REQUESTS, "too many error reports; try again later")
+    try:
+        report = ClientErrorReport.model_validate_json(bytes(body))
+    except ValueError:
+        raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY, "invalid error report") from None
+    page = urlsplit(report.page)
+    monitor.log_client_error(
+        client,
+        {
+            "kind": report.kind,
+            "message": observability.scrub_text(report.message, 500),
+            # Only the path: a query or fragment may hold a token.
+            "page": observability.scrub_text(page.path or report.page, 200),
+            "user_agent": observability.scrub_text(
+                report.user_agent or request.headers.get("user-agent", ""), 200
+            ),
+        },
+    )
+    return {"ok": True}
 
 
 @router.get("/c/{campaign_code}")
@@ -1160,6 +1218,50 @@ def get_games_text(platform: Platform, locale: str) -> GamesTextOut:
         status=status,  # type: ignore[arg-type]
         games={game_id: GameTextOut(**text) for game_id, text in games.items()},
     )
+
+
+def _etag_matches(header: str | None, etag: str) -> bool:
+    """Whether an If-None-Match header names [etag] (a strong comparison, as for GET)."""
+    if not header:
+        return False
+    tags = [tag.strip() for tag in header.split(",")]
+    return "*" in tags or etag in tags or f"W/{etag}" in tags
+
+
+@i18n_router.get("/bundle/{locale}", response_model=BundleOut)
+def get_bundle(request: Request, platform: Platform, locale: str) -> Response:
+    """Everything a frontend needs in one language, in one response: the interface catalog
+    (as `GET /i18n/{locale}`), and for every published game its name, description and the
+    translated string table of its latest version. Replaces a request per game.
+
+    Texts that have no translation yet are returned as the game wrote them, and the
+    `status` (of the whole bundle and of each game) says so; the server translates them in
+    the background, within the daily budget, and a later request has them. The ETag is a
+    hash of the answer, so it changes when anything in it does (a new or corrected
+    translation, a game published): send it back as If-None-Match to get a `304`. It is
+    the same for every viewer, since only published games are included; a version the
+    viewer is allowed to see but is not the latest published one is still answered by
+    `GET /games/{id}/versions/{v}/strings`."""
+    code = i18n.normalize_locale(locale)
+    if code is None:
+        raise NotFoundError(f"language not supported: {locale}")
+    catalog = CatalogOut(
+        locale=code,
+        direction=i18n.get_locale(code).direction,
+        version=i18n.catalog_version(code),
+        messages=i18n.messages(code),
+    )
+    body = json.dumps(
+        BundleOut.of(platform.translation_bundle(code), catalog).model_dump(),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    etag = '"' + hashlib.sha256(body).hexdigest()[:32] + '"'
+    headers = {"ETag": etag, "Cache-Control": "no-cache"}
+    if _etag_matches(request.headers.get("if-none-match"), etag):
+        return Response(status_code=HTTPStatus.NOT_MODIFIED, headers=headers)
+    return Response(content=body, media_type="application/json", headers=headers)
 
 
 @i18n_router.get("/{locale}", response_model=CatalogOut)
