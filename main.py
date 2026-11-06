@@ -180,12 +180,13 @@ def main() -> None:
         # These bounded release migrations only touch the audited originals;
         # hash/version guards preserve subsequent author edits and old matches.
         from game_platform.game_patch_migrations import (
-            apply_audit_batch1, apply_audit_batch2, apply_audit_batch3, apply_audit_batch4,
+            apply_audit_batch1, apply_audit_batch2, apply_audit_batch3, apply_audit_batch4, apply_audit_batch5,
         )
 
         patch_results = [
             *apply_audit_batch1(platform), *apply_audit_batch2(platform),
             *apply_audit_batch3(platform), *apply_audit_batch4(platform),
+            *apply_audit_batch5(platform),
         ]
         if any(result["status"] == "updated" for result in patch_results):
             store.flush()

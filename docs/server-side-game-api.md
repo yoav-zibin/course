@@ -207,12 +207,13 @@ password when configured); counters are grouped by game version, function,
 and input and reset when the process restarts. They are not aggregated across
 workers.
 
-Before deploying strict validation to a database that already contains v2
-games, every persisted v2 version—including historical versions—must have
-schemas. V1 records are excluded. The server refuses to start and lists any
-missing `game-id@version` entries rather than accepting a missing-schema
-fallback. Create a JSON map containing the exact schemas for those entries,
-then run the backfill utility against the same server configuration:
+Every persisted v2 version—including historical versions—must have schemas.
+V1 records are excluded. At startup, the server logs missing `game-id@version`
+entries and runs in degraded mode so non-game API functionality remains
+available. A v2 game version without schemas is still blocked from executing:
+there is no permissive runtime fallback. Create a JSON map containing the
+exact schemas for those entries, then run the backfill utility against the
+same server configuration:
 
 ```json
 {
