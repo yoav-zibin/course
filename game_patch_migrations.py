@@ -92,11 +92,20 @@ def _apply_audit_batch(
                     ):
                         result["status"] = "skipped_hash"
                     else:
+                        # Legacy versions can lack the newly required schemas.
+                        # Supply a reviewed schema only for this guarded update;
+                        # never replace an existing author's schema or old version.
+                        schema_update = {}
+                        if game.game_schemas is None and entry.get("schemas"):
+                            schema_update["game_schemas"] = json.loads(
+                                (directory / entry["schemas"]).read_text(encoding="utf-8")
+                            )
                         updated = platform.update_game(
                             caller_id=game.owner_user_id,
                             game_id=game.id,
                             code=client,
                             server_code=server,
+                            **schema_update,
                             _admin=True,
                             # A slower production CPU still has to finish whole
                             # walks. Keep all checks and the 100ms call limit.
