@@ -175,14 +175,17 @@ function parseInto(html, parent, doc) {
     if (m[2]) {
       const tag = m[2].toLowerCase();
       const el = doc.createElement(tag);
+      let target = top;
+      // Like a browser, put table rows made by innerHTML into a <tbody>.
+      if (tag === 'tr' && top.localName === 'table') { target = top.children.find((c) => c.localName === 'tbody') || top.appendChild(doc.createElement('tbody')); }
       for (const a of m[3].matchAll(/([^\s=>\/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g)) el.setAttribute(a[1].toLowerCase(), decode(a[2] ?? a[3] ?? a[4] ?? ''));
-      top.appendChild(el);
+      target.appendChild(el);
       if (tag === 'script' || tag === 'style') {
         const end = html.toLowerCase().indexOf('</' + tag, re.lastIndex);
         const raw = html.slice(re.lastIndex, end < 0 ? html.length : end);
         if (raw) el.appendChild(new TextNode(raw));
         re.lastIndex = end < 0 ? html.length : html.indexOf('>', end) + 1;
-      } else if (!VOID.has(tag) && !m[4]) stack.push(el);
+      } else if (!VOID.has(tag) && !m[4]) { if (target !== top) stack.push(target); stack.push(el); }
       continue;
     }
     if (m[5]) { if (/^\s+$/.test(m[5]) && top === parent && parent.localName === 'html') continue; top.appendChild(new TextNode(decode(m[5]))); }

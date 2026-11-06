@@ -20,7 +20,7 @@ function stringsOf(html) {
   return JSON.parse(html.match(/<script type="application\/json" id="i18n-strings">([\s\S]*?)<\/script>/)[1]);
 }
 const pseudo = (table) => Object.fromEntries(Object.entries(table).map(([k, v]) => [k, MARK + v]));
-const patternOf = (text) => new RegExp(MARK + text.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\\?\{\w+\\?\}/g, '[\\s\\S]*'));
+const patternOf = (text) => new RegExp(MARK + text.trim().replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\\?\{\w+\\?\}/g, '[\\s\\S]*'));
 // A text with no real words (numbers, symbols, a single letter) needs no translation.
 const needsTranslation = (text) => /[A-Za-zÀ-ɏЀ-ӿ]{2,}/.test(text);
 
@@ -92,4 +92,13 @@ test('Nine Stars legend keeps the bold bonus in place', () => {
   const legend = page.doc.querySelector('.legend');
   assert.match(legend.textContent, /Pour \+2 par ligne\./);
   assert.equal(legend.querySelector('b').textContent, '+2');
+});
+test('Tower of Hanoi and Bulls and Cows keep their counters in the translated sentence', () => {
+  const hanoi = loadByPrefix('ad578d02');
+  hanoi.send({ type: 'state_changed', status: 'ongoing', players: [], locale: 'de', strings: { moves_label: 'Züge: {value}', minimal_label: 'Minimum: {value}' } });
+  assert.equal(hanoi.doc.querySelector('#game p').textContent, 'Züge: 0  |  Minimum: 7');
+  assert.equal(hanoi.doc.querySelector('#game p').querySelector('b#moves').textContent, '0');
+  const bulls = loadByPrefix('916ab616');
+  bulls.send({ type: 'state_changed', status: 'ongoing', players: [], locale: 'de', strings: { your_number: 'Ihre Zahl: {value}', opponent_number: 'Gegner: {value}' } });
+  assert.equal(bulls.doc.querySelector('#playDiv p').textContent, 'Ihre Zahl:   |  Gegner: ****');
 });

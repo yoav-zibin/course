@@ -155,4 +155,35 @@ S['42d06892'] = { names: ['Ana', 'Ben', 'Robo'], skipCoverage: ['waiting_platfor
   [{ msg: over(war({ winner: -1, counts: [0, 0] })) }, { msg: over(war({ winner: 0, counts: [52, 0], faceUp: [card(14, '\u2660'), card(2, '\u2665')], revealed: [true, true] })) }, { msg: over(war({ winner: 1 }), { players: [] }) }, { msg: over(war({ winner: 5 })) }, { msg: msg({ view: null }) }],
 ] };
 
+// --- Star Count
+S['aac01cd8'] = { names: [], scenarios: [
+  [{ msg: msg() }, { msg: mine({ count: 0 }) }, { msg: mine({ count: 3 }) }, { msg: mine({ count: 3 }), then: click('add') }],
+  [{ msg: over({ count: 5 }) }, { msg: mine({ count: 5 }) }],
+] };
+
+// --- Tower of Hanoi
+const hanoi = (extra = {}) => ({ phase: 'play', pegs: [[3, 2, 1], [], []], disks: 3, moves: 0, solved: false, ...extra });
+S['ad578d02'] = { names: [], skipCoverage: ['moves_label', 'minimal_label'], scenarios: [
+  [{ msg: msg({ view: { phase: 'setup' } }) }, { msg: msg({ view: { phase: 'setup' } }), then: (p) => p.doc.querySelectorAll('#setup button')[1].click() }, { msg: theirs({ phase: 'setup' }) }],
+  [{ msg: mine(hanoi()) }, { msg: mine(hanoi({ moves: 2, pegs: [[3], [2], [1]] })), then: (p) => { p.$('pegs').children[0].click(); p.$('pegs').children[2].click(); } }, { msg: mine(hanoi({ disks: 4, pegs: [[4, 3], [2], [1]] })), then: (p) => { p.$('pegs').children[1].click(); p.$('pegs').children[1].click(); p.$('restart').click(); } }],
+  [{ msg: theirs(hanoi()) }, { msg: mine(hanoi({ solved: true, moves: 7, pegs: [[], [], [3, 2, 1]] })) }, { msg: over(hanoi({ moves: 9, disks: 4, pegs: [[], [], [4, 3, 2, 1]] })) }, { msg: msg({ view: null }) }],
+] };
+
+// --- Bulls and Cows (Bulgarian)
+const bulls = (extra = {}) => ({ phase: 'play', mySecret: '1234', oppSecret: null, myGuesses: ['5678', '1357'], myFeedback: [{ b: 0, c: 1 }, { b: 1, c: 2 }], oppGuesses: ['9876'], oppFeedback: [{ b: 2, c: 0 }], winner: null, ...extra });
+S['916ab616'] = { names: ['Ana', 'Ben'], skipCoverage: ['your_number', 'opponent_number'], scenarios: [
+  [{ msg: msg({ view: { phase: 'setup' } }) }, { msg: msg({ view: { phase: 'setup' } }), then: (p) => { p.$('secretBtn').click(); } }, { msg: msg({ view: { phase: 'setup' }, move_count: 4 }), then: (p) => { p.$('secretInput').value = '1234'; p.$('secretBtn').click(); } }, { msg: msg({ view: { phase: 'setup', mySecret: '4321' }, acting_for_player_index: 1, turn_of_player_indices: [1] }) }, { msg: spectator({ phase: 'setup' }, { turn_of_player_indices: [] }) }, { msg: msg({ view: {} , turn_of_player_indices: [0, 1] }) }],
+  [{ msg: mine(bulls()) }, { msg: mine(bulls()), then: (p) => { p.$('guessInput').value = '12'; p.$('guessBtn').click(); } }, { msg: mine(bulls(), { move_count: 5 }), then: (p) => { p.$('guessInput').value = '9876'; p.$('guessBtn').click(); } }, { msg: msg({ view: bulls({ myGuesses: [], oppGuesses: [], mySecret: null }), acting_for_player_index: 1, turn_of_player_indices: [1] }) }, { msg: msg({ view: bulls(), acting_for_player_index: null, turn_of_player_indices: [] }) }],
+  [{ msg: over(bulls({ winner: 0 })) }, { msg: over(bulls({ winner: 1, oppSecret: '1234' })) }],
+] };
+
+// --- Spoons
+const spoons = (extra = {}) => ({ phase: 'pass', round: 2, deckCount: 20, spoonsLeft: 3, alive: [true, true, false], handCounts: [4, 4, 0], letters: ['S', '', 'SPOONS'], passed: [true, false, false], spoons: [1], dealer: 0, loser: null, hand: ['5\u2660', '9\u2665', 'K\u2663', 'K\u2666'], winner: null, ...extra });
+const three = [{ name: 'Ana', player_index: 0, id: 'p0' }, { name: 'Ben', player_index: 1, id: 'p1' }, { name: 'Cy', player_index: 2, id: 'p2' }];
+S['58bd6827'] = { names: ['Ana', 'Ben', 'Cy'], data: ['5\u2660', '9\u2665', 'K\u2663', 'K\u2666', 'S', 'SPOONS'], scenarios: [
+  [{ msg: msg({ players: three }) }, { msg: mine(spoons(), { players: three }) }, { msg: mine(spoons(), { players: three }), then: (p) => p.$('hand').children[0].click() }, { msg: mine(spoons({ hand: ['K\u2660', 'K\u2665', 'K\u2663', 'K\u2666'] }), { players: three, move_count: 8 }), then: (p) => p.$('actions').children[0].click() }, { msg: theirs(spoons(), { players: three }) }],
+  [{ msg: mine(spoons({ phase: 'grab', loser: 2 }), { players: three }) }, { msg: mine(spoons({ phase: 'roundEnd', loser: 1, dealer: 1 }), { players: three }), then: (p) => p.$('actions').children[1].click() }, { msg: theirs(spoons({ phase: 'roundEnd', spoons: [] }), { players: three }) }],
+  [{ msg: over(spoons({ phase: 'gameOver', winner: 0 }), { players: three }) }, { msg: over(spoons({ phase: 'gameOver', winner: 7 }), { players: three }) }, { msg: msg({ view: null }) }],
+] };
+
 module.exports = { S, msg, mine, theirs, over, spectator, PLAYERS, UNNAMED, click };
