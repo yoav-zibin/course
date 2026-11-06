@@ -4325,21 +4325,8 @@ class GamePlatform:
         with self._lock:
             match = self._get_match(match_id)
             if match.status != "over" and caller_id in match.active_human_user_ids:
-                game = self._store.get_game_version(
-                    match.game_id, match.game_version
-                )
-                if (
-                    game is not None
-                    and game.server_code
-                    and match.status == "waiting_for_players"
-                    and match.bet_per_player
-                    and match.token_pot
-                    >= match.bet_per_player * len(match.human_user_ids)
-                ):
-                    # A waiting v2 match holds its players' stakes (taken
-                    # as they joined); deleting it refunds everyone.
-                    for user_id in match.human_user_ids:
-                        self._credit_tokens(user_id, match.bet_per_player)
+                # Deleting refunds every stake the match holds (a waiting v2
+                # match's, taken as players joined, or an ongoing match's pot).
                 self._delete_match_and_invites(match_id)
                 return
             if match.status != "over":
@@ -4540,9 +4527,37 @@ class GamePlatform:
             raise ConflictError("the match is over")
 
     def _delete_match_and_invites(self, match_id: str) -> None:
+        """Deletes a match and its invites, first giving back any tokens it still
+        holds, so no deletion path (a player's, an admin's, deleting the owner's
+        account) can make a stake disappear. The caller holds the lock."""
+        match = self._store.get_match(match_id)
+        if match is not None:
+            self._refund_held_pot(match)
         for invite in self._store.list_invites(match_id=match_id):
             self._store.delete_invite(invite.token)
         self._store.delete_match(match_id)
+
+    @staticmethod
+    def _held_pot(match: Match) -> int:
+        """Tokens the match holds that nobody has been paid yet: the pot of a
+        waiting (v2 stakes are taken on joining) or ongoing match, or of a
+        finished v1 match whose split still waits for agreement. A settled
+        match holds nothing, even where [token_pot] still records its size."""
+        if match.status == "over" and not match.payout_pending:
+            return 0
+        return match.token_pot
+
+    def _refund_held_pot(self, match: Match) -> None:
+        """Splits what [match] still holds equally among its humans (each gets
+        their stake back), like a timeout does. The caller holds the lock and is
+        about to delete the match."""
+        held = self._held_pot(match)
+        if held <= 0:
+            return
+        humans = [s for s in match.seats if s.kind == "human"]
+        self._settle_pot(
+            held, {}, recipients=[s for s in humans if s.active] or humans
+        )
 
     # Saved games: each user's library of games to come back to
 
