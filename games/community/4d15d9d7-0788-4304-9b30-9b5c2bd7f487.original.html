@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>4×5 Tic Tac Toe</title><style>body{margin:0;padding:16px;background:#101827;color:#edf2ff;font:16px system-ui}*{box-sizing:border-box}h1{font-size:23px;margin:0 0 8px}#status{font-weight:650;margin:12px 0;color:#8ee7cd}.board{display:grid;grid-template-columns:repeat(5,62px);gap:7px}button.cell{height:62px;font-size:28px;font-weight:700;border:1px solid #64748b;border-radius:9px;background:#25344e;color:white;cursor:pointer}button.cell:disabled{cursor:default}button.cell.win{background:#14532d;border-color:#22c55e}button.cell.last{border-color:#fcd34d}.rules{font-size:14px;color:#bec9dc;max-width:420px}</style></head><body><h1>4×5 Tic Tac Toe</h1><p class="rules">Four in a row on a 4×5 board wins — across, down, or diagonally. Player 1 is ✕, Player 2 is ○.</p><div id="status">Waiting for the platform…</div><div class="board" id="board"></div><script>
+"use strict";
+let latest=null,sentFor=-1;
+const $=id=>document.getElementById(id);
+const MARKS=["✕","○"];
+function moveCount(){return latest?(latest.move_count??latest.moveCount??0):0;}
+function myTurn(){return latest&&latest.status==="ongoing"&&latest.acting_for_player_index!==null&&latest.acting_for_player_index!==undefined;}
+function send(cell){if(!myTurn()||sentFor===moveCount())return;sentFor=moveCount();parent.postMessage({type:"make_move",move:{cell}},"*");render();}
+function render(){
+ if(!latest)return;
+ const v=latest.view,status=$("status"),board=$("board");
+ const name=i=>(latest.players&&latest.players[i]&&latest.players[i].name)||("Player "+(i+1));
+ if(!v){status.textContent="Waiting…";board.replaceChildren();return;}
+ if(latest.status==="over"||(v.winner!==null&&v.winner!==undefined)){
+   if(v.winner==="draw")status.textContent="Draw!";
+   else if(typeof v.winner==="number")status.textContent=name(v.winner)+" wins!";
+   else status.textContent="Match ended.";
+ }else if(sentFor===moveCount())status.textContent="Saving move…";
+ else if(myTurn())status.textContent=name(latest.acting_for_player_index)+" — your turn";
+ else{const t=latest.turn_of_player_indices||latest.turn;status.textContent=t&&t.length?("Waiting for "+t.map(name).join(", ")):"Waiting…";}
+ board.replaceChildren();
+ const win=v.winningLine||[];
+ for(let i=0;i<20;i++){
+   const b=document.createElement("button");
+   b.className="cell"+(win.includes(i)?" win":"")+(v.lastMove===i?" last":"");
+   const seat=v.board[i];
+   b.textContent=seat===null||seat===undefined?"":MARKS[seat%2];
+   b.disabled=!myTurn()||sentFor===moveCount()||seat!==null&&seat!==undefined;
+   b.setAttribute("aria-label","Cell "+(i+1));b.onclick=()=>send(i);board.append(b);
+ }
+}
+addEventListener("message",e=>{if(e.source!==parent||!e.data||e.data.type!=="state_changed")return;latest=e.data;render();});
+</script></body></html>

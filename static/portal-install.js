@@ -29,10 +29,10 @@
       await current.prompt();
       const result = await current.userChoice;
       message.textContent = result.outcome === "accepted"
-        ? "Installation requested. Open Playroom from your Home Screen or apps."
-        : "You can install later from your browser’s menu.";
+        ? I18n.t("ui.install.accepted", {}, "Installation requested. Open Playroom from your Home Screen or apps.")
+        : I18n.t("ui.install.later", {}, "You can install later from your browser’s menu.");
     } catch {
-      message.textContent = "Use your browser’s menu to install Playroom.";
+      message.textContent = I18n.t("ui.install.use_menu", {}, "Use your browser’s menu to install Playroom.");
     } finally {
       prompting = false;
       button.disabled = false;

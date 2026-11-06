@@ -1,0 +1,49 @@
+{
+  "state": {
+    "type": "object",
+    "required": ["board", "winner", "draw"],
+    "properties": {
+      "board": {
+        "type": "array",
+        "minItems": 9,
+        "maxItems": 9,
+        "items": {"enum": ["", "X", "O"]}
+      },
+      "winner": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0, "maximum": 1}]},
+      "draw": {"type": "boolean"}
+    },
+    "additionalProperties": false
+  },
+  "move": {
+    "type": "object",
+    "required": ["cell"],
+    "properties": {"cell": {"type": "integer", "minimum": 0, "maximum": 8}},
+    "additionalProperties": false
+  },
+  "view": {
+    "type": "object",
+    "required": ["board", "winner", "draw", "line"],
+    "properties": {
+      "board": {
+        "type": "array",
+        "minItems": 9,
+        "maxItems": 9,
+        "items": {"enum": ["", "X", "O"]}
+      },
+      "winner": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0, "maximum": 1}]},
+      "draw": {"type": "boolean"},
+      "line": {
+        "oneOf": [
+          {"type": "null"},
+          {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {"type": "integer", "minimum": 0, "maximum": 8}
+          }
+        ]
+      }
+    },
+    "additionalProperties": false
+  }
+}

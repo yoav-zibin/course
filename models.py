@@ -5,7 +5,7 @@ writes them back to the store, so a store never shares mutable state with its ca
 """
 
 import datetime as dt
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Final, Literal
 
 from pydantic import JsonValue
@@ -17,6 +17,8 @@ MatchStatus = Literal["waiting_for_players", "ongoing", "over"]
 SeatKind = Literal["human", "computer"]
 # "timed_out": a speed match ended because a player ran out of time to move.
 EndReason = Literal["finished", "player_left", "timed_out", "solo_computers_only"]
+# How a v1 match's proposed pot split ended (see Match.proposed_payouts).
+PayoutOutcome = Literal["agreed", "disputed", "expired"]
 
 
 LinkedAccountKind = Literal["google", "phone", "email"]
@@ -161,6 +163,9 @@ class Game:
     # stores the state. Defaults to None so older data files load.
     server_code: str | None = None
     builder_workflow: dict[str, JsonValue] | None = None
+    # Draft 2020-12 schemas for the server-owned state, move, and player view.
+    # None is valid only for v1 games and old records awaiting backfill.
+    game_schemas: dict[str, JsonValue] | None = None
     created_at: dt.datetime
     updated_at: dt.datetime
     # Applies to the whole game, so it is set on every version read back from the store
@@ -168,6 +173,18 @@ class Game:
     deleted: bool = False
     # Current game-wide visibility, applied to every version read from the store.
     published: bool = True
+
+
+@dataclass(frozen=True, kw_only=True)
+class GameTestSession:
+    """Private, bounded recording of a game test."""
+
+    id: str
+    owner_user_id: str
+    created_at: dt.datetime
+    updated_at: dt.datetime
+    revision: int
+    data: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -183,6 +200,7 @@ class GameDraft:
     # The draft's server code (v2 Game API); see [Game.server_code].
     server_code: str | None = None
     builder_workflow: dict[str, JsonValue] | None = None
+    game_schemas: dict[str, JsonValue] | None = None
     created_at: dt.datetime
     updated_at: dt.datetime
     base_version: int = 0
@@ -354,6 +372,26 @@ class Match:
     # Cleared by any move; applied by POST /matches/{id}/playerLeft.
     # The state inside is server-only and is never sent to clients.
     pending_leave: JsonValue = None
+    # v1 paid matches (no server code): the server can't check a client's claimed
+    # result, so the final move only *proposes* how the pot is split. Tokens move
+    # once every human seat agrees; a dispute, or no agreement by
+    # [payout_deadline], refunds every stake instead. [proposed_payouts] is kept
+    # after settling, as a record of what was proposed.
+    proposed_payouts: dict[int, int] | None = None
+    # The human seats that agreed so far (the proposer agrees by proposing).
+    payout_agreed_indices: frozenset[int] = frozenset()
+    payout_deadline: dt.datetime | None = None
+    # How a proposal ended: "agreed" (paid as proposed), "disputed" or "expired"
+    # (stakes refunded). None while it waits, or when nothing was proposed.
+    payout_outcome: PayoutOutcome | None = None
+    # Users the owner removed from the waiting room; they can't join this match
+    # again (so they can't keep taking a seat to block its start).
+    removed_user_ids: frozenset[str] = frozenset()
+
+    @property
+    def payout_pending(self) -> bool:
+        """Whether a v1 pot is waiting for every human to agree to its split."""
+        return self.proposed_payouts is not None and self.payout_outcome is None
 
     @property
     def turn_deadline(self) -> dt.datetime | None:
@@ -441,6 +479,43 @@ class Invite:
     # How many times the link was opened (GET /invites/{token}), whether or not
     # anyone joined; the top of the referral funnel.
     views: int = 0
+
+
+# Feedback is a bug (in a game or the platform), a suggestion or feature request, or a
+# problem: problematic content, like a bad game or a bad user.
+FeedbackKind = Literal["bug", "suggestion", "problem"]
+# "platform" is the website itself, with no target id.
+FeedbackTargetType = Literal["user", "game", "match", "platform"]
+# "open" until an admin (or, later, an agent) looks at it.
+FeedbackStatus = Literal["open", "reviewed", "dismissed"]
+
+
+@dataclass(frozen=True, kw_only=True)
+class Feedback:
+    """Someone's feedback on a user, a game, a match or the platform, in their own words.
+    Private: only admins see feedback, and nobody is ever told who sent it."""
+
+    id: str
+    reporter_user_id: str
+    target_type: FeedbackTargetType
+    # Empty for the platform.
+    target_id: str
+    # Feedback saved before kinds existed was always a report of a problem.
+    kind: FeedbackKind = "problem"
+    # What it's about, in the sender's words (5 to 1000 characters, trimmed).
+    text: str
+    created_at: dt.datetime
+    # Sending feedback of the same kind on the same target within 24 hours replaces
+    # the text.
+    updated_at: dt.datetime
+    status: FeedbackStatus = "open"
+    # The target's and the sender's names when it was sent, so the admin listing
+    # doesn't look up every user and game.
+    target_name: str = ""
+    reporter_name: str = ""
+    # When it was sent: a game's version; a match's game_id, game_version and
+    # move_count; and the page it came from (as the website sent it).
+    context: dict[str, str | int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, kw_only=True)

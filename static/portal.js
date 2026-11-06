@@ -34,7 +34,7 @@ async function portalTransport(method, path, { body, user, requestId } = {}) {
     try {
       data = text ? JSON.parse(text) : null;
     } catch {
-      throw new Error("Invalid server response");
+      throw new Error(I18n.t("ui.error.invalid_response", {}, "Invalid server response"));
     }
     if (!response.ok)
       throw new ApiError(response.status, data?.detail || response.statusText);
@@ -53,7 +53,7 @@ const portalLock = (run) =>
     ? navigator.locks.request("playroom-portal", run)
     : Promise.reject(
         new Error(
-          "Offline moves need a current browser with Web Locks support.",
+          I18n.t("ui.error.web_locks", {}, "Offline moves need a current browser with Web Locks support."),
         ),
       );
 let shellReady = false;
@@ -69,8 +69,13 @@ function offlineStatus() {
   const data = offline.read();
   const pending = Object.values(data.queues).reduce((n, q) => n + q.length, 0);
   const conflicts = Object.keys(data.conflicts).length;
-  $("offline-status").textContent =
-    `${navigator.onLine && offline.network ? "Online" : "Offline"} · ${pending} pending moves${conflicts ? ` · ${conflicts} sync conflicts` : ""} · ${shellReady ? "Portal saved for offline" : "Offline setup not ready"}`;
+  const parts = [
+    navigator.onLine && offline.network ? I18n.t("ui.offline.online", {}, "Online") : I18n.t("ui.offline.offline", {}, "Offline"),
+    I18n.plural("ui.offline.pending", pending, {}, { one: "1 pending move", many: `${pending} pending moves` }),
+  ];
+  if (conflicts) parts.push(I18n.plural("ui.offline.conflicts", conflicts, {}, { one: "1 sync conflict", many: `${conflicts} sync conflicts` }));
+  parts.push(shellReady ? I18n.t("ui.offline.saved", {}, "Portal saved for offline") : I18n.t("ui.offline.not_ready", {}, "Offline setup not ready"));
+  $("offline-status").textContent = parts.join(" · ");
 }
 
 // Web push notifications: the toggle subscribes this browser and registers it with
@@ -163,11 +168,13 @@ function updateStakePreview() {
   if (solo && select.value !== "0") select.value = "0";
   const amount = Number(select.value);
   if (!amount || solo) {
-    preview.replaceChildren(el("span", {class:"stake-preview-text", textContent: solo ? "Solo game · No wager" : "Free game · No tokens at risk"}));
+    preview.replaceChildren(el("span", {class:"stake-preview-text", textContent: solo ? I18n.t("ui.stakes.preview_solo", {}, "Solo game · No wager") : I18n.t("ui.stakes.preview_free", {}, "Free game · No tokens at risk")}));
   } else {
-    const extra = walletBalance === null ? "" : ` · Wallet: ${walletBalance} tokens`;
+    const params = {amount, pot: amount * 2, balance: walletBalance};
     preview.replaceChildren(
-      el("span", {class:"stake-preview-text", textContent:`${amount} tokens per person · ${amount * 2} tokens in a 2-player pot${extra}`}));
+      el("span", {class:"stake-preview-text", textContent: walletBalance === null
+        ? I18n.t("ui.stakes.preview", params, `${amount} tokens per person · ${amount * 2} tokens in a 2-player pot`)
+        : I18n.t("ui.stakes.preview_wallet", params, `${amount} tokens per person · ${amount * 2} tokens in a 2-player pot · Wallet: ${walletBalance} tokens`)}));
   }
 }
 
@@ -188,7 +195,7 @@ async function updateTokenWallet(user) {
     walletBalance = record.token_balance;
     const balance = String(walletBalance);
     if ($("token-balance").textContent !== balance) $("token-balance").textContent = balance;
-    wallet.title = `${balance} virtual tokens · Earn 10 when starting your first eligible match each day`;
+    wallet.title = I18n.t("ui.portal.wallet_hint", {balance}, `${balance} virtual tokens · Earn 10 when starting your first eligible match each day`);
     wallet.hidden = false;
     // No optimistic balance adjustments: the server may grant today's +10 at start.
     updateStakePreview();
@@ -214,6 +221,26 @@ function updateMatchCurrency(match, user) {
   const notes = [];
   if (paid && match.status === "waiting_for_players")
     notes.push(el("p", {class:"token-summary-note", textContent:I18n.t("ui.stakes.pot_note", {}, "Pot is collected when the match starts. Paid matches need human players.")}));
+  const payoutPending = paid && match.status === "over" && match.proposed_payouts != null && match.payout_outcome == null;
+  if (payoutPending) {
+    const seat = user && match.players.find(p => p.user_id === user.id);
+    if (seat) {
+      const proposed = match.proposed_payouts[String(seat.player_index)] ?? 0;
+      const net = proposed - stake;
+      notes.push(el("div", {class:"token-summary-payout"},
+        el("span", {textContent:I18n.t("ui.stakes.proposed_payout", {}, "Proposed payout")}),
+        el("strong", {textContent:I18n.t("ui.stakes.tokens", {count: proposed}, `${proposed} tokens`)}),
+        el("small", {textContent:I18n.t("ui.stakes.net", {amount: `${net > 0 ? "+" : ""}${net}`}, `Net ${net > 0 ? "+" : ""}${net} tokens`)})));
+    }
+    const agreed = (match.payout_agreed_player_indices || []).includes(seat?.player_index);
+    notes.push(el("p", {class:"token-summary-note", textContent: agreed
+      ? I18n.t("ui.stakes.waiting_for_others", {}, "You agreed. Waiting for the other players to agree before tokens move.")
+      : I18n.t("ui.stakes.agreement_needed", {}, "Tokens move only once every player agrees to these payouts. A dispute, or no answer within an hour, refunds every stake.")}));
+  }
+  if (paid && match.status === "over" && (match.payout_outcome === "disputed" || match.payout_outcome === "expired"))
+    notes.push(el("p", {class:"token-summary-note", textContent: match.payout_outcome === "disputed"
+      ? I18n.t("ui.stakes.refunded_disputed", {}, "A player disputed the result, so every stake was refunded.")
+      : I18n.t("ui.stakes.refunded_expired", {}, "Not every player agreed in time, so every stake was refunded.")}));
   if (paid && match.status === "over" && match.token_payouts != null) {
     const seat = user && match.players.find(p => p.user_id === user.id);
     if (seat) {
@@ -279,6 +306,24 @@ function playerName(player) {
   return player.user_id
     ? nameOf(player.user_id)
     : I18n.t("ui.match.computer_name", { number: player.player_index + 1 }, `Computer ${player.player_index + 1}`);
+}
+
+/** Whether [user] may report [player] in [match]: another human in an online match. */
+function canReportPlayer(match, player, user) {
+  return Boolean(user && !match.localMode && player.kind === "human" && player.user_id && player.user_id !== user.id);
+}
+
+/** The owner of a (non-quick) match that hasn't started may remove other humans. */
+function canRemovePlayer(match, player, user) {
+  return Boolean(user && !match.localMode && match.status === "waiting_for_players" &&
+    match.owner_user_id === user.id && match.matchmaking_player_count == null &&
+    player.kind === "human" && player.user_id && player.user_id !== user.id);
+}
+
+/** Opens the feedback dialog for [target] {type, id, name}: a fixed [kind], or the
+ * sender's choice of bug, suggestion or problem. */
+function openFeedback(target, {kind = "bug", chooseKind = true} = {}) {
+  window.FeedbackDialog?.open({target, kind, chooseKind, user: me(), page: location.pathname + location.hash});
 }
 
 function gameOf(gameId, version) {
@@ -540,7 +585,7 @@ async function refreshLocked() {
         );
       } catch (error) {
         if (error.status !== 404) throw error;
-        showMessage("This match no longer exists.", "error");
+        showMessage(I18n.t("ui.match.gone", {}, "This match no longer exists."), "error");
         state.replay = null;
         state.match = null;
       }
@@ -561,7 +606,7 @@ async function refreshLocked() {
     offlineStatus();
   } catch (error) {
     window.PortalFeedback?.reset();
-    showPageError(`Couldn't load data from the server: ${error.message}`);
+    showPageError(I18n.t("ui.portal.load_failed", {message: error.message}, `Couldn't load data from the server: ${error.message}`));
   } finally {
     state.refreshing = false;
     offlineStatus();
@@ -679,11 +724,11 @@ async function joinRandomMatch() {
   if (state.randomJoining) return;
   const user = me();
   if (!user) {
-    showPageError("Log in to join a random match.");
+    showPageError(I18n.t("ui.portal.random_login", {}, "Log in to join a random match."));
     return;
   }
   if (!navigator.onLine) {
-    showPageError("Connect to the internet to join a random match.");
+    showPageError(I18n.t("ui.portal.random_offline", {}, "Connect to the internet to join a random match."));
     return;
   }
   state.randomJoining = true;
@@ -697,7 +742,10 @@ async function joinRandomMatch() {
     state.openMatches = openMatches;
     state.games = games;
     await ensureDetails();
-    const candidates = state.openMatches.filter((match) => isJoinable(match, user.id));
+    // A random join must not commit the player to anything they didn't pick:
+    // skip matches that stake tokens or run a move clock.
+    const candidates = state.openMatches.filter((match) => isJoinable(match, user.id) &&
+      !(match.bet_per_player > 0) && match.turn_seconds == null);
     for (let i = candidates.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
@@ -716,7 +764,7 @@ async function joinRandomMatch() {
     const multiplayerGames = state.games.filter((game) =>
       game.published !== false && game.allowed_player_counts.some((count) => count > 1));
     if (!multiplayerGames.length)
-      throw new Error("No published multiplayer games are available to create a lobby.");
+      throw new Error(I18n.t("ui.portal.no_multiplayer_games", {}, "No published multiplayer games are available to create a lobby."));
     const game = multiplayerGames[Math.floor(Math.random() * multiplayerGames.length)];
     const match = await portalRequest("POST", "/matches", {
       user,
@@ -724,7 +772,7 @@ async function joinRandomMatch() {
     });
     selectMatch(match.id);
   } catch (error) {
-    showPageError(`Couldn't join a random match: ${error.message}`);
+    showPageError(I18n.t("ui.portal.random_failed", {message: error.message}, `Couldn't join a random match: ${error.message}`));
   } finally {
     state.randomJoining = false;
     state.libraryKey = null;
@@ -785,7 +833,7 @@ function renderLibrary() {
       onclick:() => random ? joinRandomMatch() : openGamePage(game.id)},
       game.cover_url ? el("img", {class:"library-art", src:game.cover_url, alt:"", loading:"lazy", style:"object-fit:cover;width:100%;aspect-ratio:16/9"}) : el("span", {class:"library-art", style:`--art-hue:${hue}`, "aria-hidden":"true"},
         el("span", {class:"library-monogram", textContent:initials}),
-        el("span", {class:"library-art-label", textContent:"GAME PLATFORM"})),
+        el("span", {class:"library-art-label", textContent:I18n.t("ui.app_name", {}, "Game platform").toUpperCase()})),
       el("span", {class:"library-copy"}, el("span", {class:"library-mode", textContent:gameCountLabel(game)}),
         el("span", {class:"library-title", textContent:name}),
         el("span", {class:"library-description", textContent:description || I18n.t("ui.games.default_description", {}, "Choose this game to start a new match.")}),
@@ -901,8 +949,10 @@ function renderGameSearch() {
     el("span", {textContent: isRandomGame(game) ? game.name : catalogGameLabel(game)}),
     ...(game.description ? [el("span", {class: "game-option-description", textContent: game.description})] : [])),
     el("small", {textContent: gameCountLabel(game)}))));
-  $("game-results-note").textContent = results.length === 0 ? "No matching games. Try a different name."
-    : `${results.length} ${results.length === 1 ? "game" : "games"}${query ? " found" : " available"}. Scroll to browse ${query ? "all matches" : "the full catalog"}, or type to filter. Use arrow keys and Enter to open or join a game.`;
+  $("game-results-note").textContent = results.length === 0 ? I18n.t("ui.portal.no_matching", {}, "No matching games. Try a different name.")
+    : query
+      ? I18n.plural("ui.portal.results_found", results.length, {}, {one: "1 game found. Scroll to browse all matches, or type to filter. Use arrow keys and Enter to open or join a game.", many: `${results.length} games found. Scroll to browse all matches, or type to filter. Use arrow keys and Enter to open or join a game.`})
+      : I18n.plural("ui.portal.results_available", results.length, {}, {one: "1 game available. Scroll to browse the full catalog, or type to filter. Use arrow keys and Enter to open or join a game.", many: `${results.length} games available. Scroll to browse the full catalog, or type to filter. Use arrow keys and Enter to open or join a game.`});
 }
 
 function revealPortalSection(id) {
@@ -962,12 +1012,13 @@ function onGameSearchKey(event) {
 function renderMatchList(node, matches) {
   // Keep the native details/summary nodes stable: polling must not reopen groups,
   // move keyboard focus, or replace unchanged buttons while someone is clicking.
+  // The language is part of the key: the rows' badges, names and "N moves" are text built here.
   const key = JSON.stringify([matches, state.selectedId, [...state.nameCache],
-    matches.map((m) => gameMetaOf(m.game_id, m.game_version)?.name)]);
+    matches.map((m) => gameMetaOf(m.game_id, m.game_version)?.name), I18n.revision()]);
   if (node.dataset.key === key) return;
   node.dataset.key = key;
   node.replaceChildren(...(matches.length ? matches.map(matchItem)
-    : [el("div", {class: "empty-note", textContent: "No matches here."})]));
+    : [el("div", {class: "empty-note", textContent: I18n.t("ui.match.no_matches", {}, "No matches here.")})]));
 }
 
 // The selected match
@@ -1000,17 +1051,20 @@ function updateMatchSetup() {
   updateStakePreview();
   $("create").textContent = solo ? I18n.t("ui.portal.play_solo", {}, "Play solo ↗") : I18n.t("ui.portal.create_match", {}, "Create match ↗");
   $("selected-game-card").hidden = !game;
+  const canGiveFeedback = Boolean(game && me() && game.owner_user_id && game.owner_user_id !== me().id && !isRandomGame(game));
+  $("feedback-game").hidden = !canGiveFeedback;
+  $("feedback-game").onclick = canGiveFeedback ? () => openFeedback({type: "game", id: game.id, name: I18n.gameName(game.id, game.name)}) : null;
   $("selected-game-name").textContent = (game && I18n.gameName(game.id, game.name)) || I18n.t("ui.games.choose", {}, "Choose a game");
   $("selected-game-description").textContent = (game && I18n.gameDescription(game.id, game.description)) || "";
-  $("selected-game-mode").textContent = solo ? "1 player · solo" : game ? `${game.allowed_player_counts.join(", ")} players` : "";
-  $("create-hint").textContent = solo ? "Starts immediately. No opponent needed." : game ? "Create a match, then invite friends or add computers in the lobby." : state.games.length ? "Choose a game from the search results to continue." : "Publish a game in the builder to make it available here.";
+  $("selected-game-mode").textContent = solo ? I18n.t("ui.games.solo_label", {}, "1 player · solo") : game ? I18n.t("ui.portal.mode_players", {counts: game.allowed_player_counts.join(", ")}, `${game.allowed_player_counts.join(", ")} players`) : "";
+  $("create-hint").textContent = solo ? I18n.t("ui.portal.hint_solo", {}, "Starts immediately. No opponent needed.") : game ? I18n.t("ui.portal.hint_create", {}, "Create a match, then invite friends or add computers in the lobby.") : state.games.length ? I18n.t("ui.portal.hint_choose", {}, "Choose a game from the search results to continue.") : I18n.t("ui.portal.hint_publish", {}, "Publish a game in the builder to make it available here.");
 }
 
 function selectMatch(id) {
   if (id === state.selectedId) return;
   state.selectedId = id;
   frame.unload();state.loaded = null;
-  if (id) $("game-box").textContent = "Loading game…";
+  if (id) $("game-box").textContent = I18n.t("ui.portal.loading_game", {}, "Loading game…");
   const saved = offline.read();
   saved.selectedId = id;
   offline.write(saved);
@@ -1082,7 +1136,7 @@ function renderMatch() {
   if (!match) {
     window.PortalMatchLayout?.update(null);
     $("placeholder").textContent = user
-      ? "Your match will open here. You can also select a match from the sidebar."
+      ? I18n.t("ui.portal.placeholder", {}, "Your match will open here. You can also select a match from the sidebar.")
       : I18n.t("ui.portal.sign_in_to_play", {}, "Sign in at the top right, then choose a game above.");
     return;
   }
@@ -1099,7 +1153,7 @@ function renderMatch() {
       tutorial.replaceChildren();
       if (game?.tutorial_html) {
         const frame = document.createElement("iframe");
-        frame.title = "Game tutorial";
+        frame.title = I18n.t("ui.portal.tutorial_title", {}, "Game tutorial");
         frame.setAttribute("sandbox", "allow-scripts");
         frame.referrerPolicy = "no-referrer";
         frame.loading = "lazy";
@@ -1152,7 +1206,17 @@ function renderMatch() {
         onerror: event => { event.target.hidden = true; }}), el("span", {textContent:
           `${playerName(player)}${player === mySeat ? " · " + I18n.t("ui.match.seat_you", {}, "You") : ""}` +
           `${turn.includes(player.player_index) ? " — " + I18n.t("ui.match.to_move", {}, "to move") : ""}`,
-      })),
+      }), canRemovePlayer(match, player, user) ? actionButton(
+        I18n.t("ui.match.remove_player", {}, "Remove"),
+        async () => portalRequest("DELETE", `/matches/${match.id}/players/${player.user_id}`, {user}),
+        {danger: true, confirm: I18n.t("ui.match.remove_player_confirm", {name: playerName(player)},
+          `Remove ${playerName(player)} from this match? They can't join it again.`)},
+      ) : null, canReportPlayer(match, player, user) ? el("button", {
+        type: "button", class: "feedback-report", textContent: I18n.t("ui.feedback.report_short", {}, "⚑ Report"),
+        title: I18n.t("ui.feedback.report_player", {}, "Report player"),
+        "aria-label": I18n.t("ui.feedback.report_player_named", {name: playerName(player)}, `Report player ${playerName(player)}`),
+        onclick: () => openFeedback({type: "user", id: player.user_id, name: playerName(player)}, {kind: "problem", chooseKind: false}),
+      }) : null),
     ),
   );
 
@@ -1257,6 +1321,9 @@ function renderMatch() {
       } else if (computers > 0) {
         actions.push(actionButton(I18n.t("ui.match.remove_computers", {}, "Remove computers for multiplayer"), call("PATCH", "", {num_computer_opponents: 0})));
       }
+      if (computers > 0 && !paidMatch) {
+        actions.push(el("p", {class:"paid-lobby-hint", textContent:I18n.t("ui.match.computers_single_player", {}, "With computer opponents this match is single-player: friends can't join it. Remove the computers to play with other people.")}));
+      }
       const readyToStart = counts.includes(match.players.length) && (!paidMatch || computers === 0) && (computers === 0 || humanCount === 1);
       actions.push(actionButton(I18n.t("ui.match.start_game", {}, "Start game"), call("POST", "/start"), {primary:true, disabled:!readyToStart}));
       secondaryActions.push(actionButton(I18n.t("ui.match.delete_match", {}, "Delete match"), call("DELETE"), {danger:true, confirm:I18n.t("ui.match.delete_confirm", {}, "Delete this match for everyone?")}));
@@ -1264,6 +1331,7 @@ function renderMatch() {
       actions.push(
         actionButton(I18n.t("ui.action.leave", {}, "Leave"), call("POST", "/leave"), { danger: true }),
       );
+      secondaryActions.push(actionButton(I18n.t("ui.match.delete_match", {}, "Delete match"), call("DELETE"), {danger:true, confirm:I18n.t("ui.match.delete_confirm", {}, "Delete this match for everyone?")}));
     }
   } else if (match.status === "ongoing" && mySeat && !match.localMode) {
     if (game && game.server_code) {
@@ -1292,6 +1360,19 @@ function renderMatch() {
       );
     }
   } else if (match.status === "over") {
+    // A v1 paid match's pot split waits for every human to agree: answer it first.
+    const mustAnswerPayouts = mySeat && !match.localMode && match.proposed_payouts != null &&
+      match.payout_outcome == null && mySeat.kind === "human" &&
+      !(match.payout_agreed_player_indices || []).includes(mySeat.player_index);
+    if (mustAnswerPayouts) {
+      actions.push(
+        actionButton(I18n.t("ui.stakes.agree", {}, "Agree to payouts"), call("POST", "/payouts", {agree: true}), {primary: true}),
+        actionButton(I18n.t("ui.stakes.dispute", {}, "Dispute"), call("POST", "/payouts", {agree: false}), {
+          danger: true,
+          confirm: I18n.t("ui.stakes.dispute_confirm", {}, "Dispute the result? Every player gets their stake back."),
+        }),
+      );
+    }
     if (mySeat && !match.localMode) {
       const playingSoloWithComputers =
         match.players.filter((player) => player.kind === "human").length === 1 &&
@@ -1313,17 +1394,10 @@ function renderMatch() {
         {primary:true},
       ));
     }
-    if (isOwner)
-      secondaryActions.push(
-        actionButton(I18n.t("ui.match.delete_match", {}, "Delete match"), call("DELETE"), {
-          danger: true,
-          confirm: I18n.t("ui.match.delete_confirm", {}, "Delete this match for everyone?"),
-        }),
-      );
-    else if (mySeat && !match.localMode)
+    if (mySeat && !match.localMode)
       actions.push(actionButton(I18n.t("ui.match.hide_from_list", {}, "Hide from my list"), call("DELETE")));
   }
-  if (isOwner && match.status === "ongoing") {
+  if (mySeat && !match.localMode && match.status === "ongoing") {
     secondaryActions.push(
       actionButton(I18n.t("ui.match.delete_match", {}, "Delete match"), call("DELETE"), {
         danger: true,
@@ -1348,6 +1422,14 @@ function renderMatch() {
             .then(() => toast(I18n.t("ui.match.invite_copied", {}, "✓ Invite link copied"))),
       }),
     );
+  if (user && !match.localMode) {
+    const gameName = game ? I18n.gameName(game.id, game.name) : I18n.t("ui.feedback.a_game", {}, "a game");
+    secondaryActions.push(el("button", {type: "button", class: "feedback-action", textContent: I18n.t("ui.feedback.match", {}, "Send feedback about this match"),
+      onclick: () => openFeedback({type: "match", id: match.id, name: gameName})}));
+    if (game && game.owner_user_id !== user.id)
+      secondaryActions.push(el("button", {type: "button", class: "feedback-action", textContent: I18n.t("ui.feedback.game", {}, "Feedback on this game"),
+        onclick: () => openFeedback({type: "game", id: match.game_id, name: gameName})}));
+  }
   if (secondaryActions.length) {
     const menu = el("details", {class:"match-more", open:state.moreActionsMatch === match.id},
       el("summary", {"aria-label":I18n.t("ui.match.more_actions", {}, "More match actions"), textContent:"⋯"}),
@@ -1394,7 +1476,14 @@ function renderMatch() {
   window.PortalSpeed?.observe(match);
   updateSpeedClock();
   const speedNotice = window.PortalSpeed?.notice(match, user?.id, nameOf);
-  window.PortalMatchLayout?.update(speedNotice ? {...match, speedNotice} : match);
+  const joinNotice = user && !mySeat && !match.localMode && match.status !== "over" &&
+      match.players.some((player) => player.kind === "computer")
+    ? I18n.t("ui.match.computers_no_join", {}, "This match has computer opponents, so it can't be joined. A match is played either against computers or against other people.")
+    : null;
+  window.PortalMatchLayout?.update(
+    speedNotice || joinNotice
+      ? {...match, ...(speedNotice ? {speedNotice} : {}), ...(joinNotice ? {joinNotice} : {})}
+      : match);
 }
 
 // The 10-second alert for the player to move (sound, vibration, tab title, notification).
@@ -1468,17 +1557,32 @@ async function browseHistory(direction) {
     if (!move) return;
     state.replay = {id: match.id, index, minimum, move};
     }
-  } catch (error) { showMessage(`History unavailable: ${error.message}`, "error"); return; }
+  } catch (error) { showMessage(I18n.t("ui.portal.history_unavailable", {message: error.message}, `History unavailable: ${error.message}`), "error"); return; }
   renderHistory();await syncGame();
 }
 function renderHistory() {
   const match = state.match, replay = state.replay?.id === match?.id ? state.replay : null;
   const count = match?.move_count || 0;
   $("match-history").hidden = count < 1;
-  $("history-position").textContent = replay ? `Viewing move ${replay.index} of ${count} · read only` : `Live · ${count} moves`;
+  $("history-position").textContent = replay ? I18n.t("ui.portal.viewing_move", {index: replay.index, count}, `Viewing move ${replay.index} of ${count} · read only`) : I18n.plural("ui.portal.live_moves", count, {}, {one: "Live · 1 move", many: `Live · ${count} moves`});
   $("history-back").disabled = (replay?.index ?? count) <= (replay?.minimum ?? 0);
   $("history-forward").disabled = !replay || replay.index >= count;
   $("history-live").disabled = !replay;
+}
+
+// Texts the script built (badges, buttons, lists, the offline line in the sidebar) are redrawn in
+// the new language, and the open game is sent its texts in it now, not at the next poll.
+function redrawAfterLanguageChange() {
+  try {
+    renderPortalAccountMenu();
+    render();
+    renderLibrary();
+    updateMatchSetup();
+    offlineStatus();
+    syncGame().catch((error) => console.warn("Couldn't send the game its new language:", error));
+  } catch (error) {
+    console.warn("Couldn't redraw after a language change:", error);
+  }
 }
 
 async function syncGame() {
@@ -1557,7 +1661,7 @@ async function onMakeMove(move) {
         // A v2 game sent only its move: the server validates and applies
         // it, so the client checks nothing but whose turn it is.
         if (!match || !user || actingFor(match, user.id) === null)
-          throw new Error("It isn't your turn.");
+          throw new Error(I18n.t("ui.error.not_your_turn", {}, "It isn't your turn."));
         if (match.localMode) {
           const updated = await offline.practiceMove(match, move.move);
           if (state.match?.id === match.id) state.match = updated;
@@ -1584,9 +1688,9 @@ async function onMakeMove(move) {
       const next = move.next_turn_player_indices;
       const seats = new Set(match.players.map(player=>player.player_index));
       if (!(next === null || (Array.isArray(next) && next.length && new Set(next).size === next.length && next.every(seat=>Number.isInteger(seat)&&seats.has(seat)))))
-        throw new Error("The game sent an invalid next player. Your move was not queued. Restart or repair this game in Builder.");
+        throw new Error(I18n.t("ui.portal.invalid_next_player", {}, "The game sent an invalid next player. Your move was not queued. Restart or repair this game in Builder."));
       if (!match || !user || actingFor(match, user.id) === null)
-        throw new Error("It isn't your turn.");
+        throw new Error(I18n.t("ui.error.not_your_turn", {}, "It isn't your turn."));
       state.match = offline.enqueue(match, {
         ...move,
         expected_move_count: match.move_count,
@@ -1607,7 +1711,7 @@ async function practice() {
   if (state.creating) return;
   const user = me();
   if (!user) {
-    $("create-message").textContent = "Log in first.";
+    $("create-message").textContent = I18n.t("ui.portal.log_in_first", {}, "Log in first.");
     $("create-message").className = "message error";
     return;
   }
@@ -1616,7 +1720,7 @@ async function practice() {
   $("practice").disabled = true;
   const game = state.games.find((g) => g.id === $("new-game").value);
   try {
-    if (!game) throw new Error("Choose a game from the search results first.");
+    if (!game) throw new Error(I18n.t("ui.portal.choose_game_search_first", {}, "Choose a game from the search results first."));
     const full = await portalRequest(
       "GET",
       `/games/${game.id}/versions/${game.version}`,
@@ -1627,7 +1731,7 @@ async function practice() {
     selectMatch(match.id);
   } catch (error) {
     $("create-message").textContent = match
-      ? `Match created, but couldn't start automatically: ${error.message}. You can retry Start from the lobby.`
+      ? I18n.t("ui.portal.created_not_started_lobby", {message: error.message}, `Match created, but couldn't start automatically: ${error.message}. You can retry Start from the lobby.`)
       : error.message;
     $("create-message").className = "message error";
     if (match) selectMatch(match.id);
@@ -1643,12 +1747,12 @@ async function createMatch() {
   if (state.creating) return;
   const user = me();
   if (!user) {
-    $("create-message").textContent = "Log in first.";
+    $("create-message").textContent = I18n.t("ui.portal.log_in_first", {}, "Log in first.");
     $("create-message").className = "message error";
     return;
   }
   if (!state.games.some((game) => game.id === $("new-game").value)) {
-    $("create-message").textContent = "Choose a game from the search results first.";
+    $("create-message").textContent = I18n.t("ui.portal.choose_game_search_first", {}, "Choose a game from the search results first.");
     return;
   }
   let match;
@@ -1657,8 +1761,8 @@ async function createMatch() {
   const game = state.games.find((item) => item.id === $("new-game").value);
   try {
     const bet = Number($("match-stake").value);
-    if (!Number.isSafeInteger(bet) || bet < 0) throw new Error("Invalid token stake");
-    if (bet > 0 && game?.allowed_player_counts?.length === 1 && game.allowed_player_counts[0] === 1) throw new Error("Token stakes require a multiplayer match");
+    if (!Number.isSafeInteger(bet) || bet < 0) throw new Error(I18n.t("ui.portal.invalid_stake", {}, "Invalid token stake"));
+    if (bet > 0 && game?.allowed_player_counts?.length === 1 && game.allowed_player_counts[0] === 1) throw new Error(I18n.t("ui.portal.stake_needs_multiplayer", {}, "Token stakes require a multiplayer match"));
     match = await portalRequest("POST", "/matches", {
       user,
       body: {
@@ -1678,7 +1782,7 @@ async function createMatch() {
     selectMatch(match.id);
   } catch (error) {
     if (match) selectMatch(match.id);
-    $("create-message").textContent = match ? `Match created, but couldn't start automatically: ${error.message}. Press Start to retry.` : error.message;
+    $("create-message").textContent = match ? I18n.t("ui.portal.created_not_started", {message: error.message}, `Match created, but couldn't start automatically: ${error.message}. Press Start to retry.`) : error.message;
     $("create-message").className = "message error";
   } finally {
     state.creating = false;
@@ -1691,31 +1795,31 @@ async function playWithAllComputers() {
   const user=me();
   const game=state.games.find(item=>item.id===(state.detailGameId || $("new-game").value));
   if (!user) {
-    $("create-message").textContent="Log in first.";
+    $("create-message").textContent=I18n.t("ui.portal.log_in_first", {}, "Log in first.");
     $("create-message").className="message error";
     return;
   }
   if (!game) {
-    $("create-message").textContent="Choose a game first.";
+    $("create-message").textContent=I18n.t("ui.portal.choose_game_first", {}, "Choose a game first.");
     $("create-message").className="message error";
     return;
   }
   const playerCount=Math.max(...game.allowed_player_counts.filter(count=>count>1));
   if (!Number.isFinite(playerCount)) {
-    $("create-message").textContent="This game needs at least two player seats.";
+    $("create-message").textContent=I18n.t("ui.portal.needs_two_seats", {}, "This game needs at least two player seats.");
     $("create-message").className="message error";
     return;
   }
   let match;
   state.creating=true;
   $("play-computers").disabled=true;
-  $("play-computers").textContent="Starting match…";
-  $("create-message").textContent=`Starting a free match against ${playerCount-1} computer${playerCount===2?"":"s"}…`;
+  $("play-computers").textContent=I18n.t("ui.portal.starting_match", {}, "Starting match…");
+  $("create-message").textContent=I18n.plural("ui.portal.starting_computers", playerCount-1, {}, {one: "Starting a free match against 1 computer…", many: `Starting a free match against ${playerCount-1} computers…`});
   $("create-message").className="message";
   try {
     const cachedGame=gameOf(game.id,game.version);
     const full=cachedGame?.code ? cachedGame : await fetchGameVersion(game.id,game.version);
-    if (!full.server_code) throw new Error("Play with computers is available for server-side games.");
+    if (!full.server_code) throw new Error(I18n.t("ui.portal.computers_server_only", {}, "Play with computers is available for server-side games."));
     match=await portalRequest("POST","/matches",{user,body:{game_id:game.id,num_computer_opponents:playerCount-1,bet_per_player:0}});
     match=await portalRequest("POST",`/matches/${match.id}/start`,{user,body:{first_turn_player_indices:[0]}});
     invalidatePopularGames();
@@ -1723,13 +1827,13 @@ async function playWithAllComputers() {
     selectMatch(match.id);
   } catch(error) {
     $("create-message").textContent=match
-      ? `Match created, but couldn't start automatically: ${error.message}. Press Start to retry.`
+      ? I18n.t("ui.portal.created_not_started", {message: error.message}, `Match created, but couldn't start automatically: ${error.message}. Press Start to retry.`)
       : error.message;
     $("create-message").className="message error";
     if (match) selectMatch(match.id);
   } finally {
     state.creating=false;
-    $("play-computers").textContent="Play with computers ↗";
+    $("play-computers").textContent=I18n.t("ui.portal.computers_button", {}, "Play with computers ↗");
     renderLists();
   }
 }
@@ -1760,17 +1864,7 @@ async function main() {
   });
   document.addEventListener("portal-layout-change", syncPortalRoutes);
   $("notify-toggle").addEventListener("click", toggleNotifications);
-  document.addEventListener("i18n-changed", () => {
-    // Texts the script built (badges, buttons, lists) are redrawn in the new language.
-    try {
-      renderPortalAccountMenu();
-      render();
-      renderLibrary();
-      updateMatchSetup();
-    } catch (error) {
-      console.warn("Couldn't redraw after a language change:", error);
-    }
-  });
+  document.addEventListener("i18n-changed", redrawAfterLanguageChange);
   document.addEventListener("auth-changed", () => {
     renderPortalAccountMenu();
     state.armed = null;
@@ -1917,7 +2011,7 @@ async function main() {
         }
       })
       .catch((error) =>
-        showPageError(`Offline setup failed: ${error.message}`),
+        showPageError(I18n.t("ui.offline.setup_failed", {message: error.message}, `Offline setup failed: ${error.message}`)),
       );
   setupNotifications();
 }

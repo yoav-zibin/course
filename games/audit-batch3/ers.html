@@ -1,0 +1,159 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{font-family:sans-serif;padding:12px;max-width:640px;margin:auto;background:#0b5d2e;color:#fff}h2{margin:4px 0}#pile{background:#fff;color:#111;border-radius:10px;min-height:120px;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;flex-wrap:wrap}.card{border:2px solid #333;border-radius:6px;padding:8px 10px;font-weight:bold;background:#f8f8f8;min-width:34px;text-align:center}.card.red{color:#c00}.card.back{background:#1a3a8f;color:#fff}.row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}button{font-size:18px;padding:12px 16px;border-radius:10px;border:none;font-weight:bold;cursor:pointer}button:disabled{opacity:.4;cursor:default}#flip{background:#ffd23f}#slap{background:#ff3b30;color:#fff;font-size:22px;width:100%}.pl{background:rgba(255,255,255,.15);border-radius:8px;padding:6px 8px;font-size:14px}.pl.b{outline:3px solid #ffd23f}#log{font-size:13px;background:rgba(0,0,0,.3);border-radius:8px;padding:8px;max-height:120px;overflow:auto}</style>
+</head>
+<body>
+<h2 id="title"></h2>
+<div id="status" role="status" aria-live="polite"></div>
+<div class="row" id="players"></div>
+<h3 id="pileTitle"></h3><div id="ch"></div>
+<div id="pile"></div>
+<div class="row"><button id="flip"></button></div>
+<button id="slap"></button>
+<div class="row" style="font-size:12px" id="slapsHelp"></div>
+<div id="log"></div>
+<script type="application/json" id="i18n-strings">
+{
+"title": "🥳 Egyptian Rat Screw",
+"waiting": "Waiting…",
+"dealing": "Dealing…",
+"flip": "⬇️ PLAY CARD",
+"slap": "👋 SLAP!",
+"slaps_help": "Slaps: double • sandwich • top-bottom • tens sum 10 • marriage KQ • 4-run • joker",
+"pile_title": "Pile ({count})",
+"challenge_left": "| Challenge: {left} left",
+"wins_all": "🏆 {name} wins all the cards!",
+"slap_now": "⚡ {reason} — EVERYONE SLAP NOW!",
+"challenge_status": "{by} played a face — {name} has {left} chance(s)!",
+"turn_to_flip": "{name}'s turn to flip",
+"player_cards": "{name}: {count} cards",
+"player_cards_cpu": "{name} 🤖: {count} cards",
+"empty_pile": "Empty pile",
+"server_game_over": "game over",
+"server_unknown_player": "unknown player",
+"server_slap_round_slap": "slap round: slap!",
+"server_unknown_move": "unknown move",
+"server_not_your_turn_to_flip": "not your turn to flip",
+"server_no_cards_to_flip": "no cards to flip",
+"server_slap_it": "{p1} → {p2} SLAP IT!",
+"server_slapped_and_takes_cards": "{p1} SLAPPED and takes {p2} cards!",
+"server_false_slap_penalty_1_card": "{p1} FALSE SLAP! Penalty 1 card.",
+"server_slapped_at_nothing": "{p1} slapped at nothing.",
+"server_wins_the_pile": "{p1} → {p2} wins the pile!",
+"server_move_cap_reached_most_cards_wins": "Move cap reached — most cards wins!",
+"server_played": "{p1} played {p2}",
+"server_joker": "JOKER!",
+"server_double": "DOUBLE!",
+"server_marriage": "MARRIAGE!",
+"server_tens": "TENS!",
+"server_top_bottom": "TOP-BOTTOM!",
+"server_sandwich": "SANDWICH!",
+"server_tens_sandwich": "TENS (sandwich)!",
+"server_4_in_a_row": "4-IN-A-ROW!"
+}
+</script>
+<script>
+
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// A text the game's SERVER wrote (a log line, a hand name in the match state): finds its template
+// among the `server_` texts of the table (the most specific that fits, each {name} standing for
+// any text) and shows it in the viewer's language with the same values; any other text is
+// returned as written.
+const SERVER_TEMPLATES = Object.keys(SOURCE_STRINGS)
+  .filter((key) => key.startsWith("server_") && SOURCE_STRINGS[key])
+  .map((key) => {
+    const names = [];
+    let literal = 0;
+    const source = SOURCE_STRINGS[key]
+      .split(/\{(\w+)\}/)
+      .map((piece, index) => {
+        if (index % 2) { names.push(piece); return "([\\s\\S]+?)"; }
+        literal += piece.length;
+        return piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      })
+      .join("");
+    return { key, names, literal, pattern: new RegExp("^" + source + "$") };
+  })
+  .sort((a, b) => b.literal - a.literal || a.names.length - b.names.length || (a.key > b.key ? 1 : a.key === b.key ? 0 : -1));
+
+function tx(text) {
+  if (typeof text !== "string") return text;
+  for (const template of SERVER_TEMPLATES) {
+    const found = template.pattern.exec(text);
+    if (found) {
+      const params = {};
+      template.names.forEach((name, index) => { if (!(name in params)) params[name] = found[index + 1]; });
+      return t(template.key, params);
+    }
+  }
+  return text;
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+
+
+// Server-side (v2) client: the server owns the deck, the pile and the
+// rules. Hands are face-down stacks — the view carries only counts, so
+// nobody can peek at upcoming cards. Buttons send {type:"flip"} or
+// {type:"slap"}; the server validates and resolves everything.
+let L=null, sentFor=-1;
+function staticTexts(){document.getElementById('title').textContent=t('title');document.getElementById('flip').textContent=t('flip');document.getElementById('slap').textContent=t('slap');document.getElementById('slapsHelp').textContent=t('slaps_help');document.getElementById('pileTitle').textContent=t('pile_title',{count:L&&(L.view||L.state)?(L.view||L.state).pile.length:0});}
+staticTexts();
+document.getElementById('status').textContent=t('waiting');
+const R=r=>r===99?'🃏':r===14?'A':r===11?'J':r===12?'Q':r===13?'K':''+r;
+const S=s=>({S:'♠',H:'♥',D:'♦',C:'♣'}[s]||'');
+function sendMove(move){if(!L)return;if(L.move_count===sentFor)return;sentFor=L.move_count;parent.postMessage({type:'make_move',move:move},'*');}
+function doFlip(){sendMove({type:'flip'});}
+function doSlap(){sendMove({type:'slap'});}
+addEventListener('message',e=>{
+ if(e.source!==parent||!e.data||e.data.type!=='state_changed')return;
+ applyLocale(e.data);L=e.data;staticTexts();
+ const st=L.view||L.state;
+ const n=L.players.length;
+ if(!st){document.getElementById('status').textContent=t('dealing');return;}
+ const acting=L.status==='ongoing'?L.acting_for_player_index:null;
+ const my=L.my_player_index;
+ const isSlap=!!st.slap;
+ let s='';
+ if(L.status==='over'||st.winner!==null&&st.winner!==undefined){s=t('wins_all',{name:L.players[st.winner]?L.players[st.winner].name:'?'});}
+ else if(isSlap)s=t('slap_now',{reason:tx(st.slap.reason)});
+ else if(st.challenge)s=t('challenge_status',{by:L.players[st.challenge.by].name,name:L.players[st.flipper].name,left:st.challenge.left});
+ else s=t('turn_to_flip',{name:L.players[st.flipper].name});
+ document.getElementById('status').textContent=s;
+ document.getElementById('ch').textContent=st.challenge?t('challenge_left',{left:st.challenge.left}):'';
+ let pd=document.getElementById('players');pd.replaceChildren();
+ st.counts.forEach((count,i)=>{let d=document.createElement('div');d.className='pl'+((!isSlap&&st.flipper===i)||(isSlap&&acting===i)?' b':'');let line;if(L.players[i].kind==='computer')line=t('player_cards_cpu',{name:L.players[i].name,count:count});else line=t('player_cards',{name:L.players[i].name,count:count});d.textContent=line;pd.appendChild(d);});
+ let pl=document.getElementById('pile');pl.replaceChildren();
+ if(st.pile.length===0){const empty=document.createElement('i');empty.textContent=t('empty_pile');pl.appendChild(empty);}
+ else{let show=st.pile.slice(-5);
+  if(st.pile.length>5){let b=document.createElement('div');b.className='card back';b.textContent='+'+(st.pile.length-5);pl.appendChild(b);}
+  show.forEach(c=>{let d=document.createElement('div');d.className='card'+((c.s==='H'||c.s==='D')?' red':'');d.textContent=c.r===99?'🃏':R(c.r)+S(c.s);pl.appendChild(d);});
+  pl.style.outline=isSlap?'4px solid #ff3b30':'none';
+ }
+ document.getElementById('log').replaceChildren(...(st.log||[]).map(x=>{const d=document.createElement('div');d.textContent='• '+tx(x);return d;}));
+ const myTurn=acting!==null&&acting===my&&L.status==='ongoing'&&st.winner===null;
+ const inSlapRound=isSlap&&my!==null&&L.status==='ongoing'&&st.winner===null;
+ document.getElementById('flip').disabled=!myTurn||isSlap;
+ document.getElementById('slap').disabled=!(myTurn||inSlapRound)||st.pile.length===0;
+});
+document.getElementById('flip').onclick=doFlip;
+document.getElementById('slap').onclick=doSlap;
+</script>
+</body>
+</html>

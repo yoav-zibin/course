@@ -43,9 +43,10 @@ test('local rules have no portal storage or network access, and a looping game t
   const result=await page.evaluate(async()=>{
     const runner=(window as any).PortalPractice ?? PortalPractice;
     const match={players:[],move_count:0,practiceSeed:1,created_at:new Date().toISOString()};
-    const isolated=await runner.call({server_code:`const game={newMatch(){return {storage:typeof localStorage,document:typeof document};}};`},'newMatch',[],match);
-    const blocked=await runner.call({server_code:`const game={newMatch(){try {const xhr=new XMLHttpRequest();xhr.open('GET','https://example.com/',false);xhr.send();return false;}catch{return true;}}};`},'newMatch',[],match);
-    let timeout='';try {await runner.call({server_code:'while(true){}'},'newMatch',[],match);} catch(e){timeout=(e as Error).message;}
+    const game_schemas={state:true,move:true,view:true};
+    const isolated=await runner.call({game_schemas,server_code:`const game={newMatch(){return {storage:typeof localStorage,document:typeof document};}};`},'newMatch',[],match);
+    const blocked=await runner.call({game_schemas,server_code:`const game={newMatch(){try {const xhr=new XMLHttpRequest();xhr.open('GET','https://example.com/',false);xhr.send();return false;}catch{return true;}}};`},'newMatch',[],match);
+    let timeout='';try {await runner.call({game_schemas,server_code:'while(true){}'},'newMatch',[],match);} catch(e){timeout=(e as Error).message;}
     return {isolated,blocked,timeout};
   });
   expect(result.isolated).toEqual({storage:'undefined',document:'undefined'});

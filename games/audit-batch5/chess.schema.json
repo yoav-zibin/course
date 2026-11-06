@@ -1,0 +1,364 @@
+{
+  "state": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "bd",
+      "turn",
+      "castling",
+      "ep",
+      "half",
+      "full",
+      "winner",
+      "reason",
+      "history",
+      "rep",
+      "lastMove"
+    ],
+    "properties": {
+      "bd": {
+        "type": "array",
+        "minItems": 64,
+        "maxItems": 64,
+        "items": {
+          "type": "integer",
+          "minimum": -6,
+          "maximum": 6
+        }
+      },
+      "turn": {
+        "enum": [
+          "w",
+          "b"
+        ]
+      },
+      "castling": {
+        "type": "object",
+        "required": [
+          "K",
+          "Q",
+          "k",
+          "q"
+        ],
+        "properties": {
+          "K": {
+            "type": "boolean"
+          },
+          "Q": {
+            "type": "boolean"
+          },
+          "k": {
+            "type": "boolean"
+          },
+          "q": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ep": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 63
+          }
+        ]
+      },
+      "half": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "full": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "winner": {
+        "enum": [
+          null,
+          -1,
+          0,
+          1
+        ]
+      },
+      "reason": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        ]
+      },
+      "history": {
+        "type": "array",
+        "maxItems": 240,
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        }
+      },
+      "rep": {
+        "type": "object",
+        "propertyNames": {
+          "pattern": "^[0-9]{1,10}\\.[0-9]{1,10}$"
+        },
+        "additionalProperties": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "lastMove": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "object",
+            "required": [
+              "fr",
+              "fc",
+              "tr",
+              "tc"
+            ],
+            "properties": {
+              "fr": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              },
+              "fc": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              },
+              "tr": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              },
+              "tc": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "additionalProperties": false
+  },
+  "move": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "oneOf": [
+      {
+        "type": "object",
+        "required": [
+          "fr",
+          "fc",
+          "tr",
+          "tc"
+        ],
+        "properties": {
+          "fr": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 7
+          },
+          "fc": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 7
+          },
+          "tr": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 7
+          },
+          "tc": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 7
+          },
+          "promo": {
+            "enum": [
+              "Q",
+              "R",
+              "B",
+              "N"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "resign"
+        ],
+        "properties": {
+          "resign": {
+            "const": true
+          }
+        },
+        "additionalProperties": false
+      }
+    ]
+  },
+  "view": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": [
+      "bd",
+      "castling",
+      "ep",
+      "half",
+      "full",
+      "winner",
+      "reason",
+      "history",
+      "lastMove",
+      "toMove"
+    ],
+    "properties": {
+      "bd": {
+        "type": "array",
+        "minItems": 64,
+        "maxItems": 64,
+        "items": {
+          "type": "integer",
+          "minimum": -6,
+          "maximum": 6
+        }
+      },
+      "castling": {
+        "type": "object",
+        "required": [
+          "K",
+          "Q",
+          "k",
+          "q"
+        ],
+        "properties": {
+          "K": {
+            "type": "boolean"
+          },
+          "Q": {
+            "type": "boolean"
+          },
+          "k": {
+            "type": "boolean"
+          },
+          "q": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ep": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 63
+          }
+        ]
+      },
+      "half": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "full": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "winner": {
+        "enum": [
+          null,
+          -1,
+          0,
+          1
+        ]
+      },
+      "reason": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        ]
+      },
+      "history": {
+        "type": "array",
+        "maxItems": 240,
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        }
+      },
+      "lastMove": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "object",
+            "required": [
+              "fr",
+              "fc",
+              "tr",
+              "tc"
+            ],
+            "properties": {
+              "fr": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              },
+              "fc": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              },
+              "tr": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              },
+              "tc": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "toMove": {
+        "enum": [
+          "w",
+          "b"
+        ]
+      }
+    },
+    "additionalProperties": false
+  }
+}

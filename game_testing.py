@@ -7,7 +7,8 @@ random seed per walk. After every call it makes the checks the contract
 requires — results the runner accepts, views for every player, payouts
 that sum to the pot and go to humans only — and it fuzzes `applyMove`
 with malformed moves, which must be rejected with InvalidMove (or
-return a valid result), never crash. Some calls are run twice with
+return a valid result), never crash. Game state transitions, generated moves
+and views are run twice with
 identical arguments and seed: the results must be identical, because
 game logic must be deterministic given `ctx.random`.
 
@@ -23,8 +24,9 @@ See docs/server-side-game-api.md (the Testing section).
 
 import random
 import time
+from collections import defaultdict
 from dataclasses import dataclass
-from typing import Any, Final
+from typing import Any, Callable, Final
 
 from pydantic import JsonValue
 
@@ -96,11 +98,14 @@ class GameTestReport:
     # The seeds of the walks that failed, in the order they ran; store
     # them and pass them back as regression seeds on the next run.
     failed_seeds: tuple[int, ...] = ()
+    game_schemas: dict[str, JsonValue] | None = None
 
 
 def test_server_code(
     server_code: str,
     *,
+    game_schemas: dict[str, JsonValue],
+    game_id: str = "unsaved",
     rules: GameRules,
     regression_seeds: tuple[int, ...] = (),
     budget_seconds: float = 1.0,
@@ -108,15 +113,25 @@ def test_server_code(
     max_moves_per_walk: int = 1000,
     run_seed: int | None = None,
     contract: dict | None = None,
+    sample_observer: Callable[[str, tuple[Any, ...], Any], None] | None = None,
 ) -> GameTestReport:
     """Tests [server_code] under [rules] with random walks, replaying
     [regression_seeds] first. Never raises for a broken game: every game
     bug becomes a failure in the report."""
     if contract:
         from game_platform.builder_validation import ContractLogic
-        logic = ContractLogic(server_code, contract)
+        logic = ContractLogic(
+            server_code,
+            contract,
+            game_schemas=game_schemas,
+            game_id=game_id,
+        )
     else:
-        logic = GameLogic(server_code)
+        logic = GameLogic(
+            server_code,
+            game_schemas=game_schemas,
+            game_id=game_id,
+        )
     master = random.Random(run_seed)
     deadline = time.monotonic() + budget_seconds
     walk_seeds = [
@@ -131,7 +146,13 @@ def test_server_code(
     for seed in walk_seeds:
         if walks_completed >= max_walks or time.monotonic() >= deadline:
             break
-        walk = _Walk(logic, rules=rules, seed=seed, deadline=deadline)
+        walk = _Walk(
+            logic,
+            rules=rules,
+            seed=seed,
+            deadline=deadline,
+            sample_observer=sample_observer,
+        )
         if walk.run(max_moves_per_walk):
             walks_completed += 1
         moves_made += walk.move_count
@@ -166,17 +187,140 @@ def test_server_code(
     )
 
 
+def infer_game_schemas(
+    server_code: str,
+    *,
+    game_id: str,
+    rules: GameRules,
+    budget_seconds: float = 3.0,
+    max_walks: int = 1000,
+    run_seed: int | None = None,
+    contract: dict | None = None,
+) -> tuple[dict[str, JsonValue], GameTestReport]:
+    """Infers JSON Schema types from successful random-walk samples.
+
+    The inference is sample-based: observed properties are type-checked,
+    unknown object properties remain allowed, and no property is required.
+    The normal schema-aware random-walk gate must still pass before publishing.
+    """
+    samples: dict[str, list[JsonValue]] = defaultdict(list)
+
+    def observe(function: str, args: tuple[Any, ...], result: Any) -> None:
+        if function in {
+            "applyMove",
+            "computerMove",
+            "randomMove",
+            "viewFor",
+            "playerJoined",
+            "playerLeft",
+        } and args and len(samples["state"]) < 2000:
+            samples["state"].append(args[0])
+
+        if function == "newMatch" and isinstance(result, dict):
+            if "state" in result and len(samples["state"]) < 2000:
+                samples["state"].append(result["state"])
+        elif function in {"applyMove", "playerJoined", "playerLeft"} and isinstance(result, dict):
+            if "state" in result and len(samples["state"]) < 2000:
+                samples["state"].append(result["state"])
+
+        if function in {"computerMove", "randomMove"} and len(samples["move"]) < 2000:
+            samples["move"].append(result)
+        elif function == "viewFor" and len(samples["view"]) < 2000:
+            samples["view"].append(result)
+
+    report = test_server_code(
+        server_code,
+        game_schemas={"state": True, "move": True, "view": True},
+        game_id=game_id,
+        rules=rules,
+        budget_seconds=budget_seconds,
+        max_walks=max_walks,
+        run_seed=run_seed,
+        contract=contract,
+        sample_observer=observe,
+    )
+    missing = sorted(
+        name for name in ("state", "move", "view") if not samples[name]
+    )
+    if missing:
+        raise ValueError(
+            "could not infer "
+            + ", ".join(missing)
+            + " schema: random walks did not produce successful samples "
+            "for every game value"
+        )
+    schemas: dict[str, JsonValue] = {
+        key: _infer_value_schema(values)
+        for key, values in samples.items()
+    }
+    return schemas, report
+
+
+def _infer_value_schema(values: list[JsonValue], *, depth: int = 0) -> JsonValue:
+    if not values or depth >= 16:
+        return True
+    types = {_json_type(value) for value in values}
+    schema: dict[str, JsonValue] = {
+        "type": sorted(types) if len(types) > 1 else next(iter(types))
+    }
+    if "object" in types:
+        objects = [value for value in values if isinstance(value, dict)]
+        keys = set().union(*(value.keys() for value in objects))
+        schema["properties"] = {
+            key: _infer_value_schema(
+                [value[key] for value in objects if key in value],
+                depth=depth + 1,
+            )
+            for key in sorted(keys)
+        }
+        schema["additionalProperties"] = True
+    elif "array" in types:
+        items = [
+            item
+            for value in values
+            if isinstance(value, list)
+            for item in value
+        ]
+        schema["items"] = _infer_value_schema(items, depth=depth + 1)
+    return schema
+
+
+def _json_type(value: JsonValue) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int):
+        return "integer"
+    if isinstance(value, float):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, list):
+        return "array"
+    if isinstance(value, dict):
+        return "object"
+    raise TypeError(f"not a JSON value: {type(value).__name__}")
+
+
 class _Walk:
     """One random walk: a whole match played by the game's own move
     generators, derived entirely from its seed."""
 
     def __init__(
-        self, logic: GameLogic, *, rules: GameRules, seed: int, deadline: float
+        self,
+        logic: GameLogic,
+        *,
+        rules: GameRules,
+        seed: int,
+        deadline: float,
+        sample_observer: Callable[[str, tuple[Any, ...], Any], None] | None = None,
     ) -> None:
         self._logic = logic
         self._rules = rules
         self._seed = seed
         self._deadline = deadline
+        self._sample_observer = sample_observer
         self._rng = random.Random(seed)
         self.failures: list[TestFailure] = []
         self.move_count = 0
@@ -265,9 +409,12 @@ class _Walk:
     ) -> tuple[bool, Any]:
         """One game call; a bug becomes a failure. Returns (ok, result)."""
         try:
-            return True, self._call(
+            result = self._call(
                 function, *args, time_limit_seconds=time_limit_seconds
             )
+            if self._sample_observer is not None:
+                self._sample_observer(function, args, result)
+            return True, result
         except (GameLogicError, InvalidMoveError) as error:
             self._fail(
                 function, str(error), state=state, player_id=player_id, move=move
@@ -277,10 +424,12 @@ class _Walk:
     def _check_views(self, state: JsonValue) -> bool:
         """viewFor must answer for every player and for a spectator."""
         for player_id in [*(p["id"] for p in self._players), None]:
-            ok, _ = self._call_or_fail(
+            ok, result = self._call_or_fail(
                 "viewFor", state, player_id, state=state, player_id=player_id
             )
             if not ok:
+                return False
+            if not self._check_deterministic("viewFor", result, state, player_id, state=state):
                 return False
         return True
 
@@ -320,7 +469,7 @@ class _Walk:
             return True
         state: JsonValue = result.get("state")
         turn: list[str] | None = result.get("turn")
-        if turn is not None and not self._check_views(state):
+        if not self._check_views(state):
             return True
         steps = 0
         while turn is not None:
@@ -410,10 +559,13 @@ class _Walk:
         if not ok:
             self._players.pop()
             return True, state, None
+        if not self._check_deterministic("playerJoined", result, state, joiner["id"], state=state):
+            self._players.pop()
+            return True, state, None
         self._pot += joiner["max_loss"]
         new_state: JsonValue = result.get("state")
         new_turn: list[str] | None = result.get("turn")
-        if new_turn is not None and not self._check_views(new_state):
+        if not self._check_views(new_state):
             return True, state, None
         return False, new_state, new_turn
 
@@ -444,6 +596,8 @@ class _Walk:
         )
         if not ok:
             return False, state, turn
+        if not self._check_deterministic(source, move, state, mover, state=state):
+            return False, state, turn
         try:
             result = self._call("applyMove", state, mover, move)
         except InvalidMoveError as error:
@@ -466,7 +620,9 @@ class _Walk:
                 move=move,
             )
             return False, state, turn
-        if self.move_count == 0 and not self._check_deterministic(
+        if self._sample_observer is not None:
+            self._sample_observer("applyMove", (state, mover, move), result)
+        if not self._check_deterministic(
             "applyMove", result, state, mover, move, state=state
         ):
             return False, state, turn
@@ -475,7 +631,7 @@ class _Walk:
         self._last_moves.append({"player_id": mover, "move": move})
         new_state: JsonValue = result.get("state")
         new_turn: list[str] | None = result.get("turn")
-        if new_turn is not None and not self._check_views(new_state):
+        if not self._check_views(new_state):
             return False, state, turn
         return True, new_state, new_turn
 

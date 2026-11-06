@@ -5,6 +5,7 @@ Python memory. A database-backed implementation can replace it later without tou
 the service or the HTTP layer.
 """
 
+import datetime as dt
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from typing import Protocol
@@ -17,6 +18,7 @@ from game_platform.models import (
     ExperimentEvent,
     Game,
     GameDraft,
+    GameTestSession,
     GameTestSeeds,
     Translation,
     GameVersionError,
@@ -24,12 +26,21 @@ from game_platform.models import (
     LinkedAccountKind,
     Match,
     MatchStatus,
+    Feedback,
     User,
     WebPushSubscription,
 )
 
 
 class Store(Protocol):
+    def put_game_test_session(self, session: GameTestSession) -> None: ...
+
+    def get_game_test_session(self, session_id: str) -> GameTestSession | None: ...
+
+    def list_game_test_sessions(self, *, owner_user_id: str) -> list[GameTestSession]: ...
+
+    def delete_game_test_session(self, session_id: str) -> None: ...
+
     def put_game_draft(self, draft: GameDraft) -> None: ...
 
     def get_game_draft(self, draft_id: str) -> GameDraft | None: ...
@@ -195,6 +206,18 @@ class Store(Protocol):
 
     def list_popular_game_ids(self, limit: int) -> list[tuple[str, int]]: ...
 
+    def put_feedback(self, feedback: Feedback) -> None: ...
+
+    def get_feedback(self, feedback_id: str) -> Feedback | None: ...
+
+    def list_feedback(self) -> list[Feedback]: ...
+
+    def list_recent_feedback(
+        self, reporter_user_id: str, *, since: dt.datetime, until: dt.datetime
+    ) -> list[Feedback]:
+        """[reporter_user_id]'s feedback created from [since] through [until]."""
+        ...
+
 
 @dataclass(frozen=True, kw_only=True)
 class Snapshot:
@@ -207,6 +230,7 @@ class Snapshot:
     matches: tuple[Match, ...]
     # Optional so existing data files load without a migration. Never public games.
     game_drafts: tuple[GameDraft, ...] = ()
+    game_test_sessions: tuple[GameTestSession, ...] = ()
     unpublished_game_ids: tuple[str, ...] = ()
     # Optional so existing data files load without a migration. Admin-only data.
     agent_conversations: tuple[AgentConversation, ...] = ()
@@ -228,6 +252,8 @@ class Snapshot:
     experiments: tuple[Experiment, ...] = ()
     experiment_assignments: tuple[ExperimentAssignment, ...] = ()
     experiment_events: tuple[ExperimentEvent, ...] = ()
+    # Optional so existing data files load without a migration. Admin-only data.
+    feedback: tuple[Feedback, ...] = ()
 
 
 class InMemoryStore:
@@ -248,6 +274,7 @@ class InMemoryStore:
         self._match_order: dict[str, int] = {}
         self._next_match_order = 0
         self._game_drafts: dict[str, GameDraft] = {}
+        self._game_test_sessions: dict[str, GameTestSession] = {}
         self._unpublished_game_ids: set[str] = set()
         self._agent_conversations: dict[str, list[AgentConversationEntry]] = {}
         self._push_subscriptions: dict[str, WebPushSubscription] = {}
@@ -263,6 +290,7 @@ class InMemoryStore:
         # Test/local fallback only. Production query mode keeps these aggregates
         # in the dedicated Firestore game_popularity collection.
         self._game_popularity: dict[str, tuple[int, int]] = {}
+        self._feedback: dict[str, Feedback] = {}
 
     @classmethod
     def of_snapshot(cls, snapshot: Snapshot) -> "InMemoryStore":
@@ -277,6 +305,8 @@ class InMemoryStore:
             store.put_match(match)
         for draft in snapshot.game_drafts:
             store.put_game_draft(draft)
+        for session in snapshot.game_test_sessions:
+            store.put_game_test_session(session)
         for conversation in snapshot.agent_conversations:
             store._agent_conversations[conversation.game_id] = list(conversation.entries)
         for subscription in snapshot.push_subscriptions:
@@ -293,6 +323,8 @@ class InMemoryStore:
             store.put_experiment_assignment(assignment)
         for event in snapshot.experiment_events:
             store.put_experiment_event(event)
+        for feedback in snapshot.feedback:
+            store.put_feedback(feedback)
         return store
 
     def snapshot(self) -> Snapshot:
@@ -305,6 +337,7 @@ class InMemoryStore:
             deleted_game_ids=tuple(sorted(self._deleted_game_ids)),
             matches=tuple(self._matches.values()),
             game_drafts=tuple(self._game_drafts.values()),
+            game_test_sessions=tuple(self._game_test_sessions.values()),
             unpublished_game_ids=tuple(sorted(self._unpublished_game_ids)),
             agent_conversations=tuple(
                 AgentConversation(game_id=game_id, entries=tuple(entries))
@@ -318,6 +351,7 @@ class InMemoryStore:
             experiments=tuple(self._experiments.values()),
             experiment_assignments=tuple(self._experiment_assignments.values()),
             experiment_events=tuple(self._experiment_events.values()),
+            feedback=tuple(self._feedback.values()),
         )
 
     def put_experiment(self, experiment: Experiment) -> None:
@@ -365,6 +399,24 @@ class InMemoryStore:
             key=lambda item: (-item[1], item[0]),
         )[:limit]
 
+    def put_feedback(self, feedback: Feedback) -> None:
+        self._feedback[feedback.id] = feedback
+
+    def get_feedback(self, feedback_id: str) -> Feedback | None:
+        return self._feedback.get(feedback_id)
+
+    def list_feedback(self) -> list[Feedback]:
+        return list(self._feedback.values())
+
+    def list_recent_feedback(
+        self, reporter_user_id: str, *, since: dt.datetime, until: dt.datetime
+    ) -> list[Feedback]:
+        return [
+            feedback
+            for feedback in self._feedback.values()
+            if feedback.reporter_user_id == reporter_user_id and since <= feedback.created_at <= until
+        ]
+
     def put_user(self, user: User) -> None:
         previous = self._users.get(user.id)
         old_accounts = (
@@ -383,6 +435,18 @@ class InMemoryStore:
         for account_key in new_accounts - old_accounts:
             self._user_ids_by_linked_account.setdefault(account_key, {})[user.id] = None
         self._users[user.id] = user
+
+    def put_game_test_session(self, session: GameTestSession) -> None:
+        self._game_test_sessions[session.id] = session
+
+    def get_game_test_session(self, session_id: str) -> GameTestSession | None:
+        return self._game_test_sessions.get(session_id)
+
+    def list_game_test_sessions(self, *, owner_user_id: str) -> list[GameTestSession]:
+        return [s for s in self._game_test_sessions.values() if s.owner_user_id == owner_user_id]
+
+    def delete_game_test_session(self, session_id: str) -> None:
+        self._game_test_sessions.pop(session_id, None)
 
     def put_game_draft(self, draft: GameDraft) -> None:
         self._game_drafts[draft.id] = draft

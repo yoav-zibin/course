@@ -242,7 +242,7 @@ def test_users_cannot_delete_each_others_subscriptions(api: Api) -> None:
 def test_merging_accounts_moves_subscriptions_to_the_survivor(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     subscription = _subscribe_ok(api, alice, "https://push.example.com/s/1")
-    api.ok("POST", f"/users/{alice}/merge", as_user=alice, json={"into_user_id": bob})
+    api.ok("POST", f"/users/{alice}/merge", as_user=alice, json={"into_user_id": bob, "into_password": api.passwords_by_user_id[bob]})
     assert api.ok("GET", "/push/subscriptions", as_user=bob) == [subscription]
 
 

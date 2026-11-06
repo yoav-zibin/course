@@ -4,6 +4,7 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
 const root=path.join(__dirname,'../../games/audit-batch2');
+const {pageScriptOf}=require('./page-helper.cjs');
 function setup(name){
  const nodes=new Map(),sent=[];let receive;
  const element=()=>({children:[],style:{},classList:{add(){},remove(){}},disabled:false,textContent:'',
@@ -12,7 +13,7 @@ function setup(name){
  const document={getElementById(id){if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);},createElement:element};
  const parent={postMessage:message=>sent.push(message)};
  const sandbox={document,parent,addEventListener:(type,fn)=>{if(type==='message')receive=fn;}};sandbox.window=sandbox;
- vm.createContext(sandbox);vm.runInContext(fs.readFileSync(path.join(root,name+'.html'),'utf8').match(/<script[^>]*>([\s\S]*?)<\/script>/)[1],sandbox);
+ vm.createContext(sandbox);vm.runInContext(pageScriptOf(path.join(root,name+'.html'),document),sandbox);
  const server={InvalidMove:class InvalidMove extends Error{}};vm.createContext(server);vm.runInContext(fs.readFileSync(path.join(root,name+'.server.js'),'utf8')+';globalThis.auditGame=game;',server);
  const game=server.auditGame,ctx={players:[0,1].map(i=>({id:'p'+i,kind:'human',name:'P'+i,max_loss:10})),pot:20,random:()=>.5,move_count:0};
  const current=game.newMatch(ctx);

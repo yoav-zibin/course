@@ -13,6 +13,7 @@ import json
 import secrets
 import threading
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import uvicorn
@@ -66,7 +67,12 @@ def copy_catalog(store, *, run_id, copies, now):
             (base / (name + ".html")).read_text(encoding="utf-8"),
             (base / (name + ".server.js")).read_text(encoding="utf-8"),
         )
-        digest = hashlib.sha256((client + server).encode()).hexdigest()
+        schemas = json.loads(
+            (base / (name + ".schema.json")).read_text(encoding="utf-8")
+        )
+        digest = hashlib.sha256(
+            (client + server + json.dumps(schemas, sort_keys=True)).encode()
+        ).hexdigest()
         for i in range(copies):
             game_id = f"portal-catalog:{run_id}:{name}:{i}"
             existing = store.get_game(game_id)
@@ -85,6 +91,7 @@ def copy_catalog(store, *, run_id, copies, now):
                         ),
                         code=client,
                         server_code=server,
+                        game_schemas=schemas,
                         created_at=now,
                         updated_at=now,
                     )
@@ -92,6 +99,12 @@ def copy_catalog(store, *, run_id, copies, now):
             elif existing.code != client or existing.server_code != server:
                 raise ValueError(
                     "catalog run already exists with different game source"
+                )
+            elif existing.game_schemas is None:
+                store.put_game_version(replace(existing, game_schemas=schemas))
+            elif existing.game_schemas != schemas:
+                raise ValueError(
+                    "catalog run already exists with different game schemas"
                 )
             result.append({"id": game_id, "kind": name, "source_sha256": digest})
     return result

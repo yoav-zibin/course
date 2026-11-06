@@ -27,12 +27,15 @@ The same alert is written at most once per `alert_cooldown_seconds` (5 minutes).
 |---|---|---|---|
 | `signup_surge` | minor | 30+ accounts created in a minute | `top_clients`: one address means a bot |
 | `signup_flood` | major | 120+ accounts in a minute | same; consider blocking the address |
-| `server_busy` | minor | 30+ requests being handled at once | `/admin/monitoring`; the fake-user load |
-| `server_overloaded` | major | 80+ requests at once | `oldest`: what is stuck |
-| `latency_high` | minor | 95% of requests in the last minute took 1 s or more | slow requests, below |
-| `latency_critical` | major | 95% took 5 s or more | the VM's CPU and memory |
-| `error_rate_high` | minor | 5%+ of a minute's requests failed with 5xx | `http_5xx` lines |
+| `server_busy` | minor | 30+ requests being handled at once | `likely_cause`, `top_clients_by_requests`; `/admin/monitoring` |
+| `server_overloaded` | major | 80+ requests at once | `likely_cause`; `oldest`: what is stuck |
+| `latency_high` | minor | 95% of requests in the last minute took 1 s or more | `likely_cause`, `event_loop_lag_ms`, `thread_groups` |
+| `latency_critical` | major | 95% took 5 s or more | same, then the VM's CPU and memory |
+| `error_rate_high` | minor | 5%+ of a minute's requests failed with 5xx | `likely_cause` (a path?), then its `http_5xx` lines |
 | `error_rate_critical` | major | 25%+ failed | the server is broken: logs, then restart |
+| `event_loop_blocked` | minor, or major from 5 s | the server's asyncio loop took 500 ms+ (5 s+ for major) to run a tiny task: something blocks it, and every request waits (the CPU can be idle) | `blocking_frame`, `event_loop_stack`: the line that blocks |
+| `store_slow` | minor | 95% of a minute's database calls took 300 ms or more (5+ calls) | `store_slowest`: which calls |
+| `client_error_spike` | minor | 30+ error reports from browsers in a minute (`POST /client-errors`) | `top_kinds`, `top_pages`, `top_messages` |
 | `request_very_slow` | minor | one request took 5 s or more | `method`, `path`, `query`, `body`: repeat it |
 | `request_stuck` | minor | a request has run 30 s and not finished | `thread_stacks`: what each thread is doing |
 | `http_5xx` | minor | a request was answered with a 5xx | the request's arguments and `request_id` |
@@ -62,11 +65,54 @@ From Google Cloud (not the server):
 | disk used above 80% | minor | |
 | disk used above 92% | major | |
 
-Logged, but not alerts by themselves: `request_slow` (a request over 1 s, with its arguments),
+Logged, but not alerts by themselves: `client_error` (one error a browser reported: `kind`, `error_message`, `page`, `user_agent`, `client`),
+`request_slow` (a request over 1 s, with its arguments),
 `illegal_move` (a player's rejected move: `move`, `reason`, `player_id`, `match_id`),
 `game_function_slow` (a game function using half its time limit; `inputs`), `metrics` (one summary
-line a minute: requests, status classes, p50/p95/max latency, in-flight, memory, counts),
+line a minute: requests, status classes, p50/p95/max latency, in-flight, memory, CPU, `event_loop_lag_ms`, `store_*`, counts),
 `translation_done` and `translation_rejected` (a translation that lost a `{placeholder}`), `data_save_recovered`, `server_started`, `server_stopping`.
+
+## What the alerts say about the cause
+
+"Slow" is not enough to act on, so the busy, overloaded, latency and error-rate alerts (and
+`event_loop_blocked`, `store_slow`) say what is probably wrong. Start with `likely_cause`, a sentence
+chosen by simple rules over the fields beside it:
+
+| Field | What it holds |
+|---|---|
+| `likely_cause` | the rules that matched, in this order: the event loop was blocked (names the line); database calls ran on the event loop; database calls are slow; one client sent more than half of the requests (needs 10+); most 5xx are on one path (error rates only); memory is above the warn threshold (with its growth over 10 minutes); the process uses a whole CPU core; or, for latency / busy / overloaded with CPU below 50% and nothing else found, *"requests are waiting on I/O or a blocked event loop"* (look at `event_loop_lag_ms` and `thread_groups`). With no match: "no single cause found". |
+| `top_clients_by_requests`, `top_clients_by_time` | the 5 clients (addresses) with the most requests, and the most total time, in the last minute: `{client, requests, total_ms, errors_5xx}`. Requests still running count for the time so far. |
+| `top_paths_by_requests`, `top_paths_by_time` | the same for endpoints, ids replaced by `{id}`: `POST /matches/{id}/moves`. |
+| `thread_groups` | where the threads are, grouped by innermost call: `{frame, threads, example_stack}`. "12 threads in `socket.py:708 recv_into`" means 12 requests wait on the network (a database or another service). |
+| `process_cpu_percent`, `machine_cpu_percent`, `cpu_count` | CPU of the server process (100 = one core) and of the whole VM. Slow with both low means waiting, not computing. |
+| `event_loop_lag_ms` | the worst time in the last minute a tiny task waited to run on the asyncio loop. Normally under 10. Over 500 means something blocks the loop (see `event_loop_blocked`). |
+| `store_calls`, `store_total_ms`, `store_p95_ms`, `store_max_ms`, `store_slowest`, `store_calls_on_event_loop`, `store_ms_on_event_loop` | database calls (every call on the store, wrapped in `main.py`). A call made on the loop's own thread blocks every request: it should be 0. |
+
+**The incident these were added for** (2026-10-30: requests took 6 to 26 s with an idle CPU): `latency_high` would
+say *requests are waiting on I/O or a blocked event loop*, and `event_loop_blocked` would have logged
+`blocking_frame: "api.py:1840 _choose_locale"` (the `async` middleware reading Firestore on the loop) and
+`store_calls_on_event_loop` > 0.
+
+**Browser errors.** Pages report script errors, unhandled promise rejections and "device storage is
+full" (the offline cache) to the public `POST /client-errors`
+(`static/common.js`, `reportClientError(kind, message)`). The body is small JSON, at most 4 KB:
+`{"kind": "script_error", "message": "...", "page": "/static/portal.html", "user_agent": "..."}`
+(`kind` is lower-case snake_case: `script_error`, `unhandled_rejection`, `storage_full`). The server logs a
+`client_error` event (no alert). Each client may send 10 a minute (`429` after); passwords, tokens and
+codes are cut out of the text, and only the page's path is kept, not its query. Filter with
+`jsonPayload.event="client_error"`.
+
+## Thresholds added for this
+
+In `config.json` under `"monitoring"` (defaults in `config.example.json`):
+
+| Key | Default | Meaning |
+|---|---|---|
+| `event_loop_blocked_ms` | 500 | `event_loop_blocked` (minor) when the loop takes this long to run a tiny task |
+| `event_loop_blocked_critical_ms` | 5000 | the same alert, major |
+| `store_slow_p95_ms` | 300 | `store_slow` when the 95th percentile of a minute's database calls reaches this |
+| `client_errors_per_client_per_minute` | 10 | browser reports kept per client per minute; the rest get 429 |
+| `client_error_spike_per_minute` | 30 | `client_error_spike` when this many reports arrive in a minute |
 
 ## What is in a log line
 

@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { createUser, createGame, loginAs, uniqueName } from './helpers';
 
@@ -26,7 +28,16 @@ test('leave dialog quotes the game payout and ends without a replacement bot', a
     computerMove(){return {}},randomMove(){return {}},viewFor(s){return s},
     playerLeft(state,id,ctx){const other=ctx.players.find(p=>p.id!==id);return {state:{n:1},turn:null,payouts:{[id]:3,[other.id]:ctx.pot-3}}}
   };`;
-  const game = await (await request.post('/games',{headers:auth(alice),data:{name:uniqueName('Cash out'),allowed_player_counts:[2],allows_leave_mid_match:true,code:'<p>Cash out</p>',server_code:source}})).json();
+  // Exercise the normal publication gate, including required translatable text.
+  const helper = fs.readFileSync(path.resolve(__dirname, '../game_i18n_helper.js'), 'utf8');
+  const client = `<script type="application/json" id="i18n-strings">{"cash":"Cash out"}</script>
+    <p id="cash"></p><script>${helper}
+    function render(message){applyLocale(message);document.getElementById('cash').textContent=t('cash');}
+    render({});window.addEventListener('message',event=>{if(event.data.type==='state_changed')render(event.data)});
+    parent.postMessage({type:'ready'},'*');</script>`;
+  const created = await request.post('/games',{headers:auth(alice),data:{name:uniqueName('Cash out'),allowed_player_counts:[2],allows_leave_mid_match:true,code:client,server_code:source,game_schemas:{state:{type:'object',properties:{n:{type:'integer'}},required:['n'],additionalProperties:false},move:{type:'object'},view:{type:'object',properties:{n:{type:'integer'}},required:['n'],additionalProperties:false}}}});
+  expect(created.ok(), await created.text()).toBeTruthy();
+  const game = await created.json();
   const match = await (await request.post('/matches',{headers:auth(alice),data:{game_id:game.id,max_loss:10}})).json();
   expect((await request.post(`/matches/${match.id}/join`,{headers:auth(bob)})).ok()).toBeTruthy();
   expect((await request.post(`/matches/${match.id}/start`,{headers:auth(alice),data:{}})).ok()).toBeTruthy();

@@ -15,6 +15,8 @@ from pydantic import (
     StrictBool,
     model_validator,
 )
+from jsonschema.exceptions import SchemaError
+from game_platform.game_schemas import compile_game_schemas
 
 from game_platform.models import (
     Translation,
@@ -31,6 +33,7 @@ from game_platform.models import (
     InviteAcceptance,
     LinkedAccount,
     Match,
+    Feedback,
     MatchStatus,
     Move,
     Seat,
@@ -41,7 +44,7 @@ from game_platform.models import (
 )
 from game_platform.game_testing import GameTestReport, TestFailure
 from game_platform.i18n import LOCALE_CODES, Locale, get_locale, normalize_locale
-from game_platform.service import AllData, GameStrings
+from game_platform.service import AllData, GameStrings, TranslationBundle
 
 Name = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
@@ -89,6 +92,22 @@ PlayerIndices = Annotated[
 
 class _Request(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class GameSchemas(_Request):
+    """Draft 2020-12 schemas for game-defined JSON values."""
+
+    state: JsonValue
+    move: JsonValue
+    view: JsonValue
+
+    @model_validator(mode="after")
+    def _check_schemas(self) -> "GameSchemas":
+        try:
+            compile_game_schemas(self.model_dump())
+        except (SchemaError, TypeError, ValueError) as error:
+            raise ValueError(f"invalid game JSON Schema: {error}") from error
+        return self
 
 
 def _example(example: dict[str, JsonValue]) -> ConfigDict:
@@ -273,10 +292,15 @@ class VerifyCode(_Request):
 
 
 class MergeRequest(_Request):
-    model_config = _example({"into_user_id": "<user id>"})
+    model_config = _example(
+        {"into_user_id": "<user id>", "into_password": "<that user's password>"}
+    )
 
     # The account that survives. Everything of the URL's user moves into it.
     into_user_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    # The surviving account's password (its X-User-Password), proving the caller
+    # controls it too. Without it anyone could merge into any public user id.
+    into_password: Annotated[str, StringConstraints(min_length=1)]
 
 
 class AuthConfigOut(BaseModel):
@@ -415,6 +439,13 @@ class GameCreate(_Request):
     # The server code (v2 Game API, docs/server-side-game-api.md). Omit it (or
     # send null) for a v1 game whose client computes everything.
     server_code: str | None = None
+    game_schemas: GameSchemas | None = None
+
+    @model_validator(mode="after")
+    def _require_server_code_for_schemas(self) -> "GameCreate":
+        if not self.server_code and self.game_schemas is not None:
+            raise ValueError("game_schemas requires server_code")
+        return self
 
     @model_validator(mode="before")
     @classmethod
@@ -438,6 +469,7 @@ class GameUpdate(_Request):
     # The v2 names for the two parts of a game; see [GameCreate].
     client_code: str | None = None
     server_code: str | None = None
+    game_schemas: GameSchemas | None = None
 
     @model_validator(mode="after")
     def _reject_explicit_nulls(self) -> "GameUpdate":
@@ -458,6 +490,9 @@ class GameSummaryOut(BaseModel):
     allowed_player_counts: list[int]
     allows_leave_mid_match: bool
     allows_join_mid_match: bool
+    game_schemas: GameSchemas | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     created_at: dt.datetime
     updated_at: dt.datetime
     deleted: bool
@@ -476,6 +511,7 @@ class GameSummaryOut(BaseModel):
             allowed_player_counts=list(game.rules.allowed_player_counts),
             allows_leave_mid_match=game.rules.allows_leave_mid_match,
             allows_join_mid_match=game.rules.allows_join_mid_match,
+            game_schemas=game.game_schemas,
             created_at=game.created_at,
             updated_at=game.updated_at,
             deleted=game.deleted,
@@ -517,6 +553,7 @@ class GameTestRequest(_Request):
     and this run's failures are stored back on it."""
 
     server_code: str
+    game_schemas: GameSchemas | None = None
     allowed_player_counts: PlayerCounts
     allows_leave_mid_match: bool = False
     allows_join_mid_match: bool = False
@@ -556,6 +593,7 @@ class GameTestOut(BaseModel):
     moves_made: int
     too_slow: bool
     failures: list[GameTestFailureOut] = []
+    game_schemas: GameSchemas | None = None
 
     @classmethod
     def of(cls, report: GameTestReport) -> "GameTestOut":
@@ -565,6 +603,11 @@ class GameTestOut(BaseModel):
             moves_made=report.moves_made,
             too_slow=report.too_slow,
             failures=[GameTestFailureOut.of(f) for f in report.failures],
+            game_schemas=(
+                GameSchemas.model_validate(report.game_schemas)
+                if report.game_schemas is not None
+                else None
+            ),
         )
 
 
@@ -585,12 +628,22 @@ class EmulatorPlayerOut(BaseModel):
     max_loss: int
 
 
-class EmulatorResetRequest(_Request):
-    """Starts an emulated match on unsaved server code (POST /emulator/reset)."""
-
+class MatrixEmulatorResetRequest(_Request):
+    """Starts a test-only simulation on unsaved server code."""
     server_code: str
+    game_schemas: GameSchemas
     players: Annotated[list[EmulatorPlayerIn], Field(min_length=1, max_length=10)]
     seed: int = 0
+
+    @model_validator(mode="after")
+    def has_human(self):
+        if not any(p.kind == "human" for p in self.players):
+            raise ValueError("at least one human seat is required")
+        return self
+
+
+class EmulatorResetRequest(MatrixEmulatorResetRequest):
+    """Starts an emulated match on unsaved server code (POST /emulator/reset)."""
 
     @model_validator(mode="after")
     def solo_computers(self):
@@ -600,12 +653,13 @@ class EmulatorResetRequest(_Request):
         return self
 
 
-class EmulatorActRequest(EmulatorResetRequest):
+class MatrixEmulatorActRequest(MatrixEmulatorResetRequest):
     """Applies one human move in an emulated match (POST /emulator/act),
     then advances computer players until a human's turn or the end. The
     [state], [turn] and [move_count] come from the previous emulator
     response: the emulator itself keeps nothing."""
 
+    game_schemas: GameSchemas
     state: JsonValue = None
     turn: list[str] | None = None
     move_count: int = 0
@@ -613,8 +667,18 @@ class EmulatorActRequest(EmulatorResetRequest):
     move: JsonValue = None
 
 
+class EmulatorActRequest(MatrixEmulatorActRequest):
+    @model_validator(mode="after")
+    def solo_computers(self):
+        humans = sum(p.kind == "human" for p in self.players)
+        if any(p.kind == "computer" for p in self.players) and humans != 1:
+            raise ValueError("computer opponents are only supported with one human")
+        return self
+
+
 class EmulatorOut(BaseModel):
     state: JsonValue = None
+    game_schemas: GameSchemas | None = None
     # Each player's viewFor view of [state], keyed by player id.
     views: dict[str, JsonValue] = {}
     players: list[EmulatorPlayerOut] = []
@@ -639,6 +703,15 @@ class GameDraftContent(_Request):
     code: str
     # The draft's server code (v2 Game API); None while the draft is a v1 game.
     server_code: str | None = None
+    game_schemas: GameSchemas | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+
+    @model_validator(mode="after")
+    def _require_server_code_for_schemas(self) -> "GameDraftContent":
+        if not self.server_code and self.game_schemas is not None:
+            raise ValueError("game_schemas requires server_code")
+        return self
 
 
 class GameDraftSave(GameDraftContent):
@@ -664,12 +737,57 @@ class GameDraftOut(GameDraftContent):
             id=draft.id, owner_user_id=draft.owner_user_id,
             name=draft.name, description=draft.description, code=draft.code,
             server_code=draft.server_code,
+            game_schemas=draft.game_schemas,
             allowed_player_counts=list(draft.rules.allowed_player_counts),
             allows_leave_mid_match=draft.rules.allows_leave_mid_match,
             allows_join_mid_match=draft.rules.allows_join_mid_match,
             builder_workflow=draft.builder_workflow,
             revision=draft.revision, base_version=draft.base_version,
             created_at=draft.created_at, updated_at=draft.updated_at,
+        )
+
+
+class FeedbackCreate(_Request):
+    model_config = _example(
+        {"kind": "bug", "target_type": "game", "target_id": "", "text": "The board doesn't show on my phone"}
+    )
+
+    # A bug, a suggestion (or feature request), or a problem (problematic content).
+    kind: Literal["bug", "suggestion", "problem"]
+    # What it's about: a user, a game or a match by id, or the platform itself
+    # (with target_id left out or empty).
+    target_type: Literal["user", "game", "match", "platform"]
+    target_id: str = ""
+    # The feedback in the sender's words: 5 to 1000 characters after trimming
+    # (checked by the server, which answers 400 otherwise).
+    text: str
+    # The page it came from (for admins); optional.
+    page: str | None = None
+
+
+class FeedbackOut(BaseModel):
+    """Feedback as its own sender sees it."""
+
+    id: str
+    kind: str
+    target_type: str
+    target_id: str
+    text: str
+    status: str
+    created_at: dt.datetime
+    updated_at: dt.datetime
+
+    @classmethod
+    def of(cls, feedback: "Feedback") -> "FeedbackOut":
+        return cls(
+            id=feedback.id,
+            kind=feedback.kind,
+            target_type=feedback.target_type,
+            target_id=feedback.target_id,
+            text=feedback.text,
+            status=feedback.status,
+            created_at=feedback.created_at,
+            updated_at=feedback.updated_at,
         )
 
 
@@ -715,6 +833,15 @@ class MatchStart(_Request):
 
     first_turn_player_indices: PlayerIndices = [0]
     initial_state: JsonValue = None
+
+
+class PayoutAgreement(_Request):
+    """A human's answer to the pot split a v1 paid match's final move proposed."""
+
+    model_config = _example({"agree": True})
+
+    # true accepts the proposed split; false disputes it, which refunds every stake.
+    agree: bool
 
 
 class MoveCreate(_Request):
@@ -799,6 +926,15 @@ class MatchOut(BaseModel):
     pending_leave_player_id: str | None = None
     pending_leave_payout: int | None = None
     pending_leave_ends_match: bool | None = None
+    # v1 paid matches: the pot split the final move proposed, which pays out only
+    # once every human seat agrees (POST /matches/{id}/payouts). Until then
+    # [token_payouts] is None. A dispute, or no agreement by [payout_deadline],
+    # refunds every stake. [payout_outcome] is "agreed", "disputed" or "expired"
+    # once settled, None while waiting.
+    proposed_payouts: dict[int, int] | None = None
+    payout_agreed_player_indices: list[int] = []
+    payout_deadline: dt.datetime | None = None
+    payout_outcome: str | None = None
     rematch_match_id: str | None
     created_at: dt.datetime
     updated_at: dt.datetime
@@ -860,6 +996,10 @@ class MatchOut(BaseModel):
             ),
             token_pot=match.token_pot,
             token_payouts=match.token_payouts,
+            proposed_payouts=match.proposed_payouts,
+            payout_agreed_player_indices=sorted(match.payout_agreed_indices),
+            payout_deadline=match.payout_deadline,
+            payout_outcome=match.payout_outcome,
             rematch_match_id=match.rematch_match_id,
             created_at=match.created_at,
             updated_at=match.updated_at,
@@ -1103,12 +1243,12 @@ class AgentChatRequest(_Request):
     code: str = ""
     # The game's server code (v2 Game API); "" while the game has none.
     server_code: str = ""
+    game_schemas: GameSchemas | None = None
     messages: Annotated[list[AgentMessage], Field(min_length=1, max_length=50)]
     # The draft (or game) being edited, when the client knows it. The exchange
     # is recorded against this id so admins can review the conversation later;
     # clients that send no id simply stay unrecorded.
     game_id: str | None = None
-
 
 class AgentChatResponse(BaseModel):
     message: str
@@ -1116,6 +1256,9 @@ class AgentChatResponse(BaseModel):
     code: str | None = None
     # The complete updated server code (v2 Game API), or null when unchanged.
     server_code: str | None = None
+    game_schemas: GameSchemas | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     # Whether the returned server code passed its random-walk tests (the
     # agent retries with the failure report before giving up); null when no
     # server code was tested this turn.
@@ -1183,6 +1326,7 @@ class AdminGameCodeRequest(_Request):
 
     code: str | None = None
     server_code: str | None = None
+    game_schemas: GameSchemas | None = None
 
     @model_validator(mode="after")
     def _some_code(self) -> "AdminGameCodeRequest":
@@ -1426,6 +1570,54 @@ class GamesTextOut(BaseModel):
     direction: Literal["ltr", "rtl"]
     status: Literal["source", "translated", "partial", "unavailable"]
     games: dict[str, GameTextOut]
+
+
+class BundleGameOut(BaseModel):
+    """One published game's texts inside a [BundleOut]."""
+
+    # The version these texts belong to (the game's latest).
+    version: int
+    name: str
+    description: str
+    # "source", "translated", "partial" or "unavailable", for this game's texts alone.
+    status: Literal["source", "translated", "partial", "unavailable"]
+    # Whether the game has a string table (a game without one has empty `strings`).
+    translatable: bool
+    # key -> text; every key of the game's table, as the game wrote it where untranslated.
+    strings: dict[str, str]
+
+
+class BundleOut(BaseModel):
+    """Everything a frontend needs to show the platform and its games in one language."""
+
+    locale: str
+    direction: Literal["ltr", "rtl"]
+    # "source", "translated", "partial" or "unavailable" for all the games' texts together.
+    status: Literal["source", "translated", "partial", "unavailable"]
+    # The interface catalog, as GET /i18n/{locale} answers it.
+    catalog: CatalogOut
+    # Published games by id.
+    games: dict[str, BundleGameOut]
+
+    @classmethod
+    def of(cls, bundle: TranslationBundle, catalog: "CatalogOut") -> "BundleOut":
+        return cls(
+            locale=bundle.locale,
+            direction=get_locale(bundle.locale).direction,
+            status=bundle.status,  # type: ignore[arg-type]
+            catalog=catalog,
+            games={
+                game_id: BundleGameOut(
+                    version=game.version,
+                    name=game.name,
+                    description=game.description,
+                    status=game.status,  # type: ignore[arg-type]
+                    translatable=game.translatable,
+                    strings=game.strings,
+                )
+                for game_id, game in bundle.games.items()
+            },
+        )
 
 
 class TranslationOut(BaseModel):

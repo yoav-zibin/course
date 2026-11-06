@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from game_platform.game_logic import GameLogic
+from game_platform.tests.helpers import UnrestrictedGameLogic as GameLogic
 
 DIRECTORY = Path(__file__).parents[1] / 'games' / 'audit-batch2'
 NOW = dt.datetime(2026, 11, 4, tzinfo=dt.timezone.utc)

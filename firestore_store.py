@@ -29,6 +29,7 @@ To copy a data file into an empty database, or the database into a data file:
 import argparse
 import base64
 import dataclasses
+import json
 import logging
 import re
 import typing
@@ -46,6 +47,7 @@ from game_platform.observability import timed_external
 from game_platform.json_file_store import read_snapshot, write_snapshot
 from game_platform.saving_store import SavingStore
 from game_platform.store import InMemoryStore, Snapshot
+from game_platform.translation_bundle import pack, unpack
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +60,7 @@ _CHUNK_BYTES: Final = 200_000
 _COMPRESS_MIN_BYTES: Final = 1_024
 _COMPRESS_MIN_SAVING: Final = 0.10
 # Firestore's stored representation evolves independently of exported JSON files.
-_FIRESTORE_FORMAT_VERSION: Final = 11
+_FIRESTORE_FORMAT_VERSION: Final = 12
 # Firestore batches hold at most 500 writes; keep requests well under 10 MiB.
 _MAX_BATCH_WRITES: Final = 500
 _MAX_BATCH_BYTES: Final = 8_000_000
@@ -73,6 +75,8 @@ class _Kind:
     key: Callable[[Any], str]
     # A list field kept in a subcollection of the record's document, one item each.
     items_field: str | None = None
+    # Kept as one document per language instead of one per record (translation_bundle.py).
+    bundled: bool = False
 
 
 def _created(record: Any) -> tuple[Any, ...]:
@@ -85,6 +89,7 @@ _KINDS: Final = (
     _Kind(field="deleted_game_ids", key=lambda game_id: game_id),
     _Kind(field="matches", key=lambda match: match.id, items_field="moves"),
     _Kind(field="game_drafts", key=lambda draft: draft.id),
+    _Kind(field="game_test_sessions", key=lambda session: session.id),
     _Kind(field="unpublished_game_ids", key=lambda game_id: game_id),
     _Kind(
         field="agent_conversations",
@@ -95,13 +100,18 @@ _KINDS: Final = (
     _Kind(field="invites", key=lambda invite: invite.token),
     _Kind(field="game_version_errors", key=lambda error: error.id),
     _Kind(field="game_test_seeds", key=lambda record: record.game_id),
-    _Kind(field="translations", key=lambda item: f"{item.locale}@{item.source_hash}"),
+    _Kind(
+        field="translations",
+        key=lambda item: f"{item.locale}@{item.source_hash}",
+        bundled=True,
+    ),
     _Kind(field="experiments", key=lambda experiment: experiment.id),
     _Kind(
         field="experiment_assignments",
         key=lambda assignment: f"{assignment.user_id}@{assignment.experiment_id}",
     ),
     _Kind(field="experiment_events", key=lambda event: event.id),
+    _Kind(field="feedback", key=lambda feedback: feedback.id),
 )
 assert {kind.field for kind in _KINDS} == {
     field.name for field in dataclasses.fields(Snapshot)
@@ -132,8 +142,10 @@ def _sorted_like_in_memory_store(snapshot_fields: dict[str, list[Any]]) -> None:
         "users",
         "matches",
         "game_drafts",
+        "game_test_sessions",
         "push_subscriptions",
         "experiments",
+        "feedback",
     ):
         snapshot_fields[field].sort(key=_created)
     snapshot_fields["experiment_assignments"].sort(
@@ -166,6 +178,9 @@ def _sorted_like_in_memory_store(snapshot_fields: dict[str, list[Any]]) -> None:
     for field in ("deleted_game_ids", "unpublished_game_ids"):
         snapshot_fields[field].sort()
 
+
+# Where the bundled kind's documents go (the kind's own collection holds the old rows).
+_BUNDLES: Final = "translation_bundles"
 
 _UNSAFE_DOCUMENT_ID: Final = re.compile(r"^(\.\.?|__.*__|b64-.*)$|/")
 
@@ -200,7 +215,11 @@ class _Writes:
     def set(self, ref: Any, data: dict[str, Any]) -> None:
         self._batch.set(ref, data)
         self._added(
-            sum(len(value) for value in data.values() if isinstance(value, (str, bytes)))
+            sum(
+                len(value) if isinstance(value, (str, bytes)) else len(json.dumps(value, default=str))
+                for value in data.values()
+                if isinstance(value, (str, bytes, dict))
+            )
         )
 
     def delete(self, ref: Any) -> None:
@@ -300,6 +319,7 @@ class FirestoreStore(SavingStore):
         self._client = client
         self._prefix = collection_prefix
         self._check_format()
+        self._legacy_translations = False
         snapshot, self._chunk_counts = self._load()
         # What Firestore holds, per field and key: the records as of the last save.
         self._saved: dict[str, dict[str, Any]] = {
@@ -364,6 +384,15 @@ class FirestoreStore(SavingStore):
         for kind in _KINDS:
             adapter = _RECORD_ADAPTERS[kind.field]
             records = []
+            if kind.bundled:
+                with timed_external("firestore"):
+                    bundles = [doc.to_dict() for doc in self._collection(_BUNDLES).stream()]
+                if bundles:
+                    fields[kind.field] = unpack(bundles)
+                    continue
+                # No bundles yet: read the old one-row-per-record documents; the first
+                # save after this rewrites them as bundles.
+                self._legacy_translations = True
             with timed_external("firestore"):
                 documents = list(self._collection(kind.field).stream())
             for document in documents:
@@ -407,6 +436,10 @@ class FirestoreStore(SavingStore):
             adapter = _RECORD_ADAPTERS[kind.field]
             old = self._saved[kind.field]
             new = {kind.key(record): record for record in getattr(snapshot, kind.field)}
+            if kind.bundled:
+                self._save_bundles(writes, old, new)
+                saved[kind.field] = new
+                continue
             for key, record in new.items():
                 before = old.get(key)
                 if before is record or before == record:
@@ -447,13 +480,29 @@ class FirestoreStore(SavingStore):
         # Only after every batch committed: a failed save is retried in full.
         self._saved = saved
         self._chunk_counts = chunk_counts
+        self._legacy_translations = False
+
+    def _save_bundles(self, writes: _Writes, old: dict[str, Any], new: dict[str, Any]) -> None:
+        """Writes the language bundles that changed. While the old one-row-per-translation
+        documents are still there, writes every bundle and removes the old rows."""
+        collection = self._collection(_BUNDLES)
+        before = {} if self._legacy_translations else pack(old.values())
+        after = pack(new.values())
+        for name, document in after.items():
+            if before.get(name) != document:
+                writes.set(collection.document(name), document)
+        for name in before.keys() - after.keys():
+            writes.delete(collection.document(name))
+        if self._legacy_translations:
+            for document in self._collection("translations").stream():
+                writes.delete(document.reference)
 
 
 def is_empty(client: firestore.Client, *, collection_prefix: str = "") -> bool:
     """Whether the store's collections hold no records."""
     return not any(
-        any(True for _ in client.collection(f"{collection_prefix}{kind.field}").limit(1).stream())
-        for kind in _KINDS
+        any(True for _ in client.collection(f"{collection_prefix}{name}").limit(1).stream())
+        for name in [*(kind.field for kind in _KINDS), _BUNDLES]
     )
 
 

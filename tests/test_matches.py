@@ -37,6 +37,10 @@ def test_create_a_match_with_computer_opponents(api: Api) -> None:
         "pending_leave_ends_match": None,
         "token_pot": 0,
         "token_payouts": None,
+        "proposed_payouts": None,
+        "payout_agreed_player_indices": [],
+        "payout_deadline": None,
+        "payout_outcome": None,
         "rematch_match_id": None,
         "created_at": "2026-01-01T00:03:00Z",
         "updated_at": "2026-01-01T00:03:00Z",
@@ -384,7 +388,7 @@ def test_list_my_matches_with_filters(api: Api) -> None:
     )
 
 
-def test_owner_deletes_a_match_for_everyone(api: Api) -> None:
+def test_a_player_deletes_a_match_for_everyone(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game_id = api.new_game(owner=alice)
     match_id = api.new_match(owner=alice, game_id=game_id, joiners=[bob], start=True)
@@ -395,7 +399,7 @@ def test_owner_deletes_a_match_for_everyone(api: Api) -> None:
     assert api.ok("GET", "/matches", as_user=bob) == []
 
 
-def test_non_owner_can_only_hide_an_ended_match_from_their_own_list(api: Api) -> None:
+def test_only_players_delete_and_players_only_hide_an_ended_match(api: Api) -> None:
     alice, bob, carol = (
         api.new_user("alice"),
         api.new_user("bob"),
@@ -407,9 +411,9 @@ def test_non_owner_can_only_hide_an_ended_match_from_their_own_list(api: Api) ->
     def delete(as_user: str) -> httpx.Response:
         return api.request("DELETE", f"/matches/{match_id}", as_user=as_user)
 
-    assert error(delete(bob)) == (
+    assert error(delete(carol)) == (
         403,
-        "only the owner can delete a match that is not over",
+        "only a player in the match can delete it",
     )
 
     api.move(match_id, as_user=alice, next_turn=None)
@@ -421,3 +425,61 @@ def test_non_owner_can_only_hide_an_ended_match_from_their_own_list(api: Api) ->
 
     assert {"alice": listed(alice), "bob": listed(bob)} == {"alice": 1, "bob": 0}
     assert api.ok("GET", f"/matches/{match_id}")["status"] == "over"
+
+
+# A minimal v2 race game whose playerLeft hands the turn to another
+# player, so a leaver's seat is taken over and the match plays on.
+_LEAVE_AND_PLAY_ON_GAME = r"""
+const game = {
+  newMatch(ctx) {
+    return {state: {count: 0}, turn: [ctx.players[0].id]};
+  },
+  applyMove(state, playerId, move, ctx) {
+    const ids = ctx.players.map(p => p.id);
+    const next = ids[(ids.indexOf(playerId) + 1) % ids.length];
+    return {state: {count: state.count + 1}, turn: [next]};
+  },
+  computerMove(state, playerId, ctx) { return {}; },
+  randomMove(state, playerId, ctx) { return {}; },
+  viewFor(state, playerId, ctx) { return {count: state.count}; },
+  playerLeft(state, playerId, ctx) {
+    const others = ctx.players.map(p => p.id).filter(id => id !== playerId);
+    return {state: state, turn: [others[0]], payouts: {}};
+  },
+};
+"""
+
+
+def test_the_creator_who_left_cannot_delete_the_match(api: Api) -> None:
+    alice, bob, carol = (
+        api.new_user("alice"),
+        api.new_user("bob"),
+        api.new_user("carol"),
+    )
+    game = api.ok(
+        "POST",
+        "/games",
+        as_user=alice,
+        json={
+            "name": "Counter race",
+            "allowed_player_counts": [3],
+            "allows_leave_mid_match": True,
+            "code": "<div>counter</div>",
+            "server_code": _LEAVE_AND_PLAY_ON_GAME,
+        },
+    )
+    match_id = api.new_match(
+        owner=alice, game_id=game["id"], joiners=[bob, carol], start=True
+    )
+
+    api.ok("POST", f"/matches/{match_id}/maybeLeave", as_user=alice)
+    left = api.ok("POST", f"/matches/{match_id}/playerLeft", as_user=alice)
+    assert left["status"] == "ongoing"
+
+    assert error(api.request("DELETE", f"/matches/{match_id}", as_user=alice)) == (
+        403,
+        "only a player in the match can delete it",
+    )
+    assert api.ok("GET", f"/matches/{match_id}")["status"] == "ongoing"
+    assert api.request("DELETE", f"/matches/{match_id}", as_user=bob).status_code == 204
+    assert error(api.request("GET", f"/matches/{match_id}")) == (404, "match not found")

@@ -24,7 +24,7 @@ from pydantic import JsonValue
 
 import logging
 
-from game_platform import game_text, i18n, observability
+from game_platform import game_messages, game_text, i18n, observability
 from game_platform.avatars import user_avatar, USER_AVATARS, computer_avatar
 from game_platform.models import (
     AgentConversation,
@@ -45,8 +45,10 @@ from game_platform.models import (
     LinkedAccount,
     LinkedAccountKind,
     Match,
+    Feedback,
     MatchStatus,
     Move,
+    PayoutOutcome,
     SeatTimeout,
     Seat,
     Translation,
@@ -60,7 +62,12 @@ from game_platform.game_logic import (
     GameLogicTimeout,
     InvalidMoveError,
 )
-from game_platform.game_testing import GameTestReport, test_server_code
+from game_platform.game_testing import (
+    GameTestReport,
+    TestFailure,
+    infer_game_schemas,
+    test_server_code,
+)
 from game_platform.push import LogPushNotifier, PushMessage, PushNotifier
 from game_platform.store import InMemoryStore, Store
 from game_platform import translation as translation_module
@@ -101,6 +108,30 @@ class GameStrings:
 
 
 @dataclass(frozen=True, kw_only=True)
+class BundleGame:
+    """One published game's texts in a [TranslationBundle]."""
+
+    version: int
+    name: str
+    description: str
+    # "source", "translated", "partial" or "unavailable", for this game's texts alone.
+    status: str
+    # Whether the game has a string table; [strings] is empty if not.
+    translatable: bool
+    strings: dict[str, str]
+
+
+@dataclass(frozen=True, kw_only=True)
+class TranslationBundle:
+    """Everything a portal needs to show games in one language, in one piece."""
+
+    locale: str
+    # "source", "translated", "partial" or "unavailable", for all the texts together.
+    status: str
+    games: dict[str, BundleGame]
+
+
+@dataclass(frozen=True, kw_only=True)
 class AllData:
     users: list[User]
     # Every version of every game, including deleted games.
@@ -134,8 +165,60 @@ class InvalidRequestError(PlatformError):
     """The request's values don't make sense for the resource it targets."""
 
 
+class GameMessageError(InvalidRequestError):
+    """A text the game's own server code wrote (the reason of an InvalidMove): answered 400
+    like InvalidRequestError, and translated for the viewer through the game version's string
+    table (see game_messages.py). [key] and [params] are set when a template of the table
+    matches the text; [template] is that template in English."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        game_id: str,
+        game_version: int,
+        key: str | None = None,
+        template: str | None = None,
+        params: dict[str, str] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.game_id = game_id
+        self.game_version = game_version
+        self.key = key
+        self.template = template
+        self.params = params or {}
+
+
 class ConflictError(PlatformError):
     """The resource's current state doesn't allow this transition."""
+
+
+class TooManyRequestsError(PlatformError):
+    """The caller did this too often; trying again later works."""
+
+
+# Feedback: the text's length after trimming, and how many messages one person can
+# send in a rolling 24 hours (sending the same kind of feedback on the same target
+# again within 24 hours updates it instead), and how many the admin listing shows.
+FEEDBACK_TEXT_MIN: Final = 5
+FEEDBACK_TEXT_MAX: Final = 1000
+FEEDBACK_PER_DAY: Final = 20
+FEEDBACK_WINDOW: Final = dt.timedelta(hours=24)
+FEEDBACK_ADMIN_LIMIT: Final = 200
+FEEDBACK_KINDS: Final = ("bug", "suggestion", "problem")
+FEEDBACK_TARGET_TYPES: Final = ("user", "game", "match", "platform")
+
+
+@dataclass(frozen=True, kw_only=True)
+class RecentFeedback:
+    """One of a person's feedback messages in the last 24 hours: enough to apply the
+    daily limit and to find a repeat, without loading the message itself."""
+
+    id: str
+    target_type: str
+    target_id: str
+    kind: str
+    created_at: dt.datetime
 
 
 def _utc_now() -> dt.datetime:
@@ -162,6 +245,9 @@ def _new_verification_code() -> str:
 # Speed matches: the allowed seconds per move (1, 3 or 10 minutes). None is a regular
 # match with no clock. Kept as a list so more choices can be added later.
 SPEED_TURN_SECONDS: Final = (60, 180, 600)
+# How long the other humans in a v1 paid match have to agree to the pot split the
+# final move proposed. Without every agreement by then, every stake is refunded.
+PAYOUT_AGREEMENT_SECONDS: Final = 3600
 
 # playerLeft calls get a longer time budget than other game functions:
 # a playerLeft may price its payout with ctx.estimateWinChance, whose
@@ -371,8 +457,30 @@ class GamePlatform:
         computer_move_delay_seconds: float = 0.6,
         translator: Translator | None = None,
         translation_daily_character_limit: int = 200_000,
+        bundle_wait_seconds: float = 3.0,
+        bundle_games_ttl_seconds: float = 10.0,
+        require_game_strings: bool = False,
     ) -> None:
         self._store: Store = store if store is not None else InMemoryStore()
+        missing_game_schemas = sorted(
+            (game.id, game.version)
+            for game in self._store.list_all_game_versions()
+            if game.server_code is not None and game.game_schemas is None
+        )
+        if missing_game_schemas:
+            sample = ", ".join(
+                f"{game_id}@{version}"
+                for game_id, version in missing_game_schemas[:20]
+            )
+            remaining = len(missing_game_schemas) - 20
+            details = f"{sample}, and {remaining} more" if remaining > 0 else sample
+            logging.getLogger(__name__).error(
+                "%d server-side game versions are missing required game_schemas: %s. "
+                "Starting in degraded mode: schema-less game logic remains blocked; "
+                "backfill these versions before re-enabling those games.",
+                len(missing_game_schemas),
+                details,
+            )
         self._clock = clock
         self._translation = TranslationService(
             self._store,
@@ -380,6 +488,19 @@ class GamePlatform:
             clock=clock,
             daily_character_limit=translation_daily_character_limit,
         )
+        # Translation bundles (see translation_bundle): how long a request waits for the
+        # translator, and how long the list of games is reused between requests.
+        self._bundle_wait_seconds = bundle_wait_seconds
+        # translation.require_strings: refuse client code without a passing string table.
+        self._require_game_strings = require_game_strings
+        self._bundle_games_ttl_seconds = bundle_games_ttl_seconds
+        self._bundle_games: tuple[float, list[Game]] | None = None
+        self._bundle_tables: dict[tuple[str, int], tuple[dict[str, str] | None]] = {}
+        # The compiled server-text templates of each game version (game_messages.py), kept
+        # in memory: a version's code never changes.
+        self._server_templates: dict[tuple[str, int], tuple[game_messages.Template, ...]] = {}
+        self._bundle_jobs: dict[str, threading.Event] = {}
+        self._bundle_jobs_lock = threading.Lock()
         self._new_id = new_id
         self._new_password = new_password
         self._new_verification_code = new_verification_code
@@ -1418,24 +1539,39 @@ class GamePlatform:
             return self._merge_locked(source=source, into=into), merged_from
 
     def merge_users(
-        self, *, caller_id: str, from_user_id: str, into_user_id: str
+        self,
+        *,
+        caller_id: str,
+        from_user_id: str,
+        into_user_id: str,
+        into_password: str,
     ) -> User:
         """Merges [from_user_id] into [into_user_id]: games (all versions), matches
         (owner, seats, hidden flags and move authors), and linked accounts move over,
         then the source user is marked as replaced by the surviving user instead of
         being deleted, so its old credentials keep working as an alias of the
         survivor. The stronger login method always survives (google > phone >
-        email > guest); on ties the requested direction is kept. The caller must
-        authenticate as the merged-away (replaced) user, so nobody can absorb
-        someone else's account. Returns the surviving user.
+        email > guest); on ties the requested direction is kept.
+
+        The caller must prove control of BOTH accounts: they authenticate as the
+        merged-away (replaced) user, and [into_password] must be the target's
+        password. Otherwise anyone could merge their own account into a victim's
+        public user id and, since the replaced account's credentials then resolve
+        to the survivor, act as the victim. Returns the surviving user.
         """
         with self._lock:
             if from_user_id == into_user_id:
                 raise InvalidRequestError("cannot merge a user into itself")
+            source = self._require_user(from_user_id)
+            target = self._require_user(into_user_id)
+            if not hmac.compare_digest(
+                into_password.encode(), target.password.encode()
+            ):
+                raise ForbiddenError(
+                    "into_password is not the target account's password"
+                )
             source, target = self._merge_pair(
-                self._require_user(from_user_id),
-                self._require_user(into_user_id),
-                prefer_first_as_source=True,
+                source, target, prefer_first_as_source=True
             )
             if source.id != caller_id:
                 raise ForbiddenError(
@@ -1498,6 +1634,8 @@ class GamePlatform:
                 )
         for draft in self._store.list_game_drafts(owner_user_id=from_user_id):
             self._store.put_game_draft(replace(draft, owner_user_id=into_user_id))
+        for session in self._store.list_game_test_sessions(owner_user_id=from_user_id):
+            self._store.put_game_test_session(replace(session, owner_user_id=into_user_id))
         for match in self._store.list_all_matches():
             updated = match
             if match.owner_user_id == from_user_id:
@@ -1679,7 +1817,12 @@ class GamePlatform:
         description: str, rules: GameRules, code: str,
         expected_revision: int | None,
         server_code: str | None = None,
+        game_schemas: dict[str, JsonValue] | None = None,
+        _initial_workflow: dict | None = None,
     ) -> GameDraft:
+        server_code = server_code or None
+        if server_code is None and game_schemas is not None:
+            raise InvalidRequestError("game_schemas requires server_code")
         with self._lock:
             existing = self._store.get_game_draft(draft_id) if draft_id else None
             game = self._store.get_game(draft_id) if draft_id else None
@@ -1687,6 +1830,11 @@ class GamePlatform:
                 self._owned_draft(caller_id=caller_id, draft_id=existing.id)
                 if expected_revision != existing.revision:
                     raise ConflictError("draft changed in another tab; reload before saving")
+                if (
+                    server_code != existing.server_code
+                    and game_schemas == existing.game_schemas
+                ):
+                    game_schemas = None
             elif draft_id is not None:
                 if game is None or game.deleted or game.owner_user_id != caller_id:
                     raise NotFoundError("game not found")
@@ -1697,7 +1845,8 @@ class GamePlatform:
                 id=draft_id or self._new_id(), owner_user_id=caller_id,
                 name=name, description=description, rules=rules, code=code,
                 server_code=server_code,
-                builder_workflow=existing.builder_workflow if existing else game.builder_workflow if game else None,
+                builder_workflow=existing.builder_workflow if existing else game.builder_workflow if game else _initial_workflow,
+                game_schemas=game_schemas,
                 created_at=existing.created_at if existing else now, updated_at=now,
                 base_version=existing.base_version if existing else game.version if game else 0,
                 revision=existing.revision + 1 if existing else 1,
@@ -1726,6 +1875,19 @@ class GamePlatform:
             self._owned_draft(caller_id=caller_id, draft_id=draft_id)
             self._store.delete_game_draft(draft_id)
 
+    def _require_translatable(self, code: str | None, server_code: str | None = None) -> None:
+        """translation.require_strings: client code that fails game_text.lint is refused,
+        with the checker's problems in plain words. Games with no client code are exempt;
+        the admin and migration paths and example data never call this."""
+        if not self._require_game_strings or not code or not code.strip():
+            return
+        problems = game_text.lint(code, server_code)
+        if problems:
+            shown = "; ".join(problems[:5])
+            if len(problems) > 5:
+                shown += f"; and {len(problems) - 5} more"
+            raise InvalidRequestError(f"the game's texts cannot be translated: {shown}")
+
     def publish_game_draft(
         self, *, caller_id: str, draft_id: str, expected_revision: int,
     ) -> Game:
@@ -1742,16 +1904,23 @@ class GamePlatform:
             if current is None:
                 if draft.base_version != 0:
                     raise ConflictError("published game is no longer available")
+                game_schemas = draft.game_schemas
+                self._require_translatable(draft.code, draft.server_code)
                 if draft.server_code:
-                    # A new game's server code must pass its tests before
-                    # its first version can be published (Phase 5 gate).
-                    self._gate_server_code(draft.id, draft.server_code, draft.rules)
+                    if game_schemas is None:
+                        game_schemas = self._generate_game_schemas(
+                            draft.server_code, draft.rules, draft.id
+                        )
+                    self._gate_server_code(
+                        draft.id, draft.server_code, draft.rules, game_schemas
+                    )
                 game = Game(
                     id=draft.id, version=1, owner_user_id=caller_id,
                     name=draft.name.strip(), description=draft.description,
                     rules=draft.rules, code=draft.code,
                     server_code=draft.server_code,
                     builder_workflow=draft.builder_workflow,
+                    game_schemas=game_schemas,
                     created_at=self._clock(), updated_at=self._clock(),
                 )
                 self._store.add_game_version(game)
@@ -1764,6 +1933,7 @@ class GamePlatform:
                     caller_id=caller_id, game_id=draft_id, name=draft.name.strip(),
                     description=draft.description, code=draft.code,
                     server_code=draft.server_code,
+                    game_schemas=draft.game_schemas,
                     allowed_player_counts=draft.rules.allowed_player_counts,
                     allows_leave_mid_match=draft.rules.allows_leave_mid_match,
                     allows_join_mid_match=draft.rules.allows_join_mid_match,
@@ -1773,7 +1943,13 @@ class GamePlatform:
             self._store.set_game_published(game.id, True)
             game = self._get_game(game.id)
             # Keep the working copy; repeat publication cannot create duplicate games.
-            self._store.put_game_draft(replace(draft, base_version=game.version))
+            self._store.put_game_draft(
+                replace(
+                    draft,
+                    base_version=game.version,
+                    game_schemas=game.game_schemas,
+                )
+            )
             return game
 
     # Games (public versions; existing clients continue to publish with POST/PATCH).
@@ -1787,8 +1963,22 @@ class GamePlatform:
         rules: GameRules,
         code: str,
         server_code: str | None = None,
+        game_schemas: dict[str, JsonValue] | None = None,
+        _check_strings: bool = True,
     ) -> Game:
+        server_code = server_code or None
+        if _check_strings:
+            self._require_translatable(code, server_code)
+        if server_code is None and game_schemas is not None:
+            raise InvalidRequestError("game_schemas requires server_code")
         with self._lock:
+            if server_code is not None and game_schemas is None:
+                game_schemas = self._generate_game_schemas(
+                    server_code, rules, "new-game"
+                )
+                self._gate_server_code(
+                    "new-game", server_code, rules, game_schemas
+                )
             now = self._clock()
             game = Game(
                 id=self._new_id(),
@@ -1799,6 +1989,7 @@ class GamePlatform:
                 rules=rules,
                 code=code,
                 server_code=server_code,
+                game_schemas=game_schemas,
                 created_at=now,
                 updated_at=now,
             )
@@ -1884,6 +2075,151 @@ class GamePlatform:
             warnings=warnings,
         )
 
+    def _game_message_error(self, game: Game, message: str) -> GameMessageError:
+        """The 400 for a move the game's server rejected with [message]."""
+        found = None
+        try:
+            found = game_messages.match(self._templates_of(game), message)
+        except Exception:  # noqa: BLE001 - a text we cannot match is shown as written
+            logging.getLogger(__name__).exception("matching a game message failed")
+        return GameMessageError(
+            message,
+            game_id=game.id,
+            game_version=game.version,
+            key=found.key if found else None,
+            template=found.template if found else None,
+            params=found.params if found else None,
+        )
+
+    def _templates_of(self, game: Game) -> tuple[game_messages.Template, ...]:
+        cache_key = (game.id, game.version)
+        templates = self._server_templates.get(cache_key)
+        if templates is None:
+            try:
+                table = game_text.extract_strings(game.code or "")
+            except game_text.StringsError:
+                table = None
+            templates = game_messages.compile_templates(table)
+            if game.code:
+                self._server_templates[cache_key] = templates
+        return templates
+
+    def translate_game_message(self, error: GameMessageError, locale: str) -> str | None:
+        """The text of [error] in [locale] (the matching template translated, the captured
+        values put back as written), or None when it stays as the game wrote it: English, no
+        matching template, no translator, a translation that failed. Never raises."""
+        try:
+            if error.template is None or i18n.normalize_locale(locale) in (None, i18n.DEFAULT_LOCALE):
+                return None
+            translated = self._translation.translate([error.template], locale)
+            text = translated.texts.get(error.template)
+            if not text:
+                return None
+            return game_messages.fill(text, error.params)
+        except Exception:  # noqa: BLE001 - translation must never fail a request
+            logging.getLogger(__name__).exception("translating a game message failed")
+            return None
+
+    def translation_bundle(self, locale: str) -> TranslationBundle:
+        """The names, descriptions and string tables of the published games in [locale],
+        all at once. Reads only memory once the games are known (the translations are in
+        memory, and so are the tables of versions seen before). Texts without a translation
+        are asked from the translator in the background; this waits for it only for a
+        short while, and returns the originals for what is still missing, with a status."""
+        code = i18n.normalize_locale(locale)
+        if code is None:
+            raise NotFoundError(f"language not supported: {locale}")
+        games = self._bundle_published_games()
+        tables = {game.id: self._bundle_table(game) for game in games}
+        wanted = [
+            text
+            for game in games
+            for text in (game.name, game.description, *(tables[game.id] or {}).values())
+        ]
+        translated = self._translate_for_bundle(wanted, code)
+        shown = lambda text: translated.texts.get(text, text)  # noqa: E731
+
+        def status_of(texts: list[str]) -> str:
+            if translated.status == "source":
+                return "source"
+            known = [text for text in texts if text.strip() and text in translated.texts]
+            wanted_here = [text for text in texts if text.strip()]
+            if len(known) == len(wanted_here):
+                return "translated"
+            return "partial" if known else "unavailable"
+
+        entries = {}
+        for game in games:
+            table = tables[game.id]
+            texts = [game.name, game.description, *(table or {}).values()]
+            entries[game.id] = BundleGame(
+                version=game.version,
+                name=shown(game.name),
+                description=shown(game.description),
+                status=status_of(texts),
+                translatable=table is not None,
+                strings={key: shown(text) for key, text in (table or {}).items()},
+            )
+        return TranslationBundle(locale=code, status=translated.status, games=entries)
+
+    def _bundle_published_games(self) -> list[Game]:
+        now = time.monotonic()
+        cached = self._bundle_games
+        if cached is not None and now < cached[0]:
+            return cached[1]
+        # Games without their code where the store can: the code is only needed for the
+        # string table, which is remembered per version.
+        lister = getattr(self._store, "list_games_without_code", None) or self._store.list_games
+        games = self._plain_read(lambda: lister(owner_user_id=None))
+        self._bundle_games = (now + self._bundle_games_ttl_seconds, games)
+        return games
+
+    def _plain_read(self, read: Callable[[], Any]) -> Any:
+        """Runs a read of the store. A scalable store (Firestore queries) reads without a
+        transaction, so the platform lock, which would open one, is not taken for it."""
+        if getattr(self._store, "scalable", False):
+            return read()
+        with self._lock:
+            return read()
+
+    def _bundle_table(self, game: Game) -> dict[str, str] | None:
+        key = (game.id, game.version)
+        if key not in self._bundle_tables:
+            # A version's code never changes, so its table is read once.
+            code = game.code
+            if not code:
+                full = self._plain_read(lambda: self._store.get_game_version(game.id, game.version))
+                code = full.code if full is not None else ""
+            try:
+                table = game_text.extract_strings(code)
+            except game_text.StringsError:
+                table = None
+            self._bundle_tables[key] = (table,)
+        return self._bundle_tables[key][0]
+
+    def _translate_for_bundle(self, texts: list[str], code: str) -> Any:
+        """Translations of [texts], waiting at most [bundle_wait_seconds] for the
+        translator. What it translates after that is there for the next request."""
+        found = self._translation.translate(texts, code, remote=False)
+        if found.status in ("translated", "source") or not self._translation.enabled:
+            return found
+        with self._bundle_jobs_lock:
+            job = self._bundle_jobs.get(code)
+            if job is None or job.is_set():
+                job = self._bundle_jobs[code] = threading.Event()
+
+                def run(done: threading.Event = job) -> None:
+                    try:
+                        self._translation.translate(texts, code)
+                    except Exception:  # noqa: BLE001 - a background job must not die loudly
+                        logging.getLogger(__name__).exception("bundle translation failed")
+                    finally:
+                        done.set()
+
+                threading.Thread(target=run, name=f"bundle-translate-{code}", daemon=True).start()
+        job.wait(self._bundle_wait_seconds)
+        return self._translation.translate(texts, code, remote=False)
+
     def list_translations(self, locale: str | None = None) -> list[Translation]:
         """Every remembered translation (of one language), for the backoffice."""
         return sorted(self._store.list_translations(locale), key=lambda item: (item.locale, item.source))
@@ -1942,6 +2278,7 @@ class GamePlatform:
                     caller_id=caller_id, draft_id=game_id, name=game.name,
                     description=game.description, code=game.code,
                     server_code=game.server_code,
+                    game_schemas=game.game_schemas,
                     rules=game.rules, expected_revision=None,
                 )
             self._store.set_game_published(game_id, False)
@@ -2019,6 +2356,7 @@ class GamePlatform:
         allows_join_mid_match: bool | None = None,
         code: str | None = None,
         server_code: str | None | object = UNSET,
+        game_schemas: dict[str, JsonValue] | None | object = UNSET,
         _publishing: bool = False,
         _admin: bool = False,
         _builder_workflow: Any = UNSET,
@@ -2042,6 +2380,24 @@ class GamePlatform:
             )
             if not game.published and not _publishing:
                 raise ConflictError("game is unpublished; edit its private draft and Publish to share it")
+            server_code_value = (
+                game.server_code
+                if server_code is UNSET
+                else server_code or None
+            )
+            game_schemas_value = (
+                (
+                    None
+                    if server_code is not UNSET
+                    and (
+                        server_code_value is None
+                        or server_code_value != game.server_code
+                    )
+                    else game.game_schemas
+                )
+                if game_schemas is UNSET
+                else game_schemas
+            )
             rules = game.rules
             updated = replace(
                 game,
@@ -2062,27 +2418,43 @@ class GamePlatform:
                 ),
                 builder_workflow=game.builder_workflow if _builder_workflow is UNSET else _builder_workflow,
                 code=code if code is not None else game.code,
-                server_code=game.server_code
-                if server_code is UNSET
-                else server_code,
+                server_code=server_code_value,
+                game_schemas=game_schemas_value,
             )
+            if updated.server_code is None and updated.game_schemas is not None:
+                raise InvalidRequestError("game_schemas requires server_code")
+            if updated.server_code is not None and updated.game_schemas is None:
+                updated = replace(
+                    updated,
+                    game_schemas=self._generate_game_schemas(
+                        updated.server_code, updated.rules, game_id
+                    ),
+                )
             if updated == game:
                 return game
+            if not _admin and updated.code != game.code:
+                self._require_translatable(updated.code, updated.server_code)
             if game.builder_workflow and not _publishing:
                 raise ConflictError("This game has approved specifications; edit and verify it in the guided builder")
             if updated.server_code and (
                 updated.server_code != game.server_code
+                or updated.game_schemas != game.game_schemas
                 or updated.rules != game.rules
             ):
                 # New or re-ruled server code must pass its tests before
                 # the new version is published (Phase 5 gate).
+                gate_args = (
+                    game_id,
+                    updated.server_code,
+                    updated.rules,
+                    updated.game_schemas,
+                )
                 if _admin and _test_budget_seconds != 1.0:
                     self._gate_server_code(
-                        game_id, updated.server_code, updated.rules,
-                        budget_seconds=_test_budget_seconds,
+                        *gate_args, budget_seconds=_test_budget_seconds
                     )
                 else:
-                    self._gate_server_code(game_id, updated.server_code, updated.rules)
+                    self._gate_server_code(*gate_args)
             updated = replace(
                 updated, version=game.version + 1, updated_at=self._clock()
             )
@@ -2256,6 +2628,8 @@ class GamePlatform:
         once they have all their players. The caller holds the lock."""
         if match.seat_of(caller_id) is not None:
             raise ConflictError("you are already a player in this match")
+        if caller_id in match.removed_user_ids:
+            raise ForbiddenError("you were removed from this match")
         if not self._get_game(match.game_id).published:
             raise ConflictError("this game is no longer published")
         if match.status == "over":
@@ -2277,15 +2651,24 @@ class GamePlatform:
                 num_computer_opponents=match.num_computer_opponents,
             )
         game = self._store.get_game_version(match.game_id, match.game_version)
+        # A v2 match takes the joiner's stake as they join, in the waiting room
+        # and mid-match alike. A v1 match takes its players' stakes at the start
+        # (_fund_match_tokens), so only a mid-match joiner pays here. Either way
+        # the pot grows by the stake, so nobody holds a seat in a paid match (and
+        # a share of its pot, or of its refund) without having paid in.
         stake = (
             match.bet_per_player
-            if game is not None and game.server_code
+            if (game is not None and game.server_code) or match.status == "ongoing"
             else 0
         )
         if stake:
-            # A v2 match takes the joiner's stake as they join (the pot
-            # grows by it), in the waiting room and mid-match alike.
+            # Raises (before anything is saved) when the joiner can't afford it.
             self._deduct_stake(caller_id, stake)
+        elif match.bet_per_player:
+            # A waiting v1 match takes stakes only at the start, so check now that
+            # the joiner could pay: otherwise one short player would make the
+            # owner's Start fail for everyone ("a player has insufficient tokens").
+            self._check_can_stake(caller_id, match.bet_per_player)
         saved = self._save(
             replace(
                 match,
@@ -2476,10 +2859,30 @@ class GamePlatform:
     # Server-side game logic (v2 Game API, docs/server-side-game-api.md).
     # Everything in this section runs with the platform lock held.
 
+    def _generate_game_schemas(
+        self, server_code: str, rules: GameRules, game_id: str
+    ) -> dict[str, JsonValue]:
+        source = self._store.get_game_draft(game_id) or self._store.get_game(game_id)
+        workflow = getattr(source, "builder_workflow", None) or {}
+        contract = workflow.get("artifacts", {}).get("tests", {}).get("value")
+        try:
+            schemas, _ = infer_game_schemas(
+                server_code,
+                game_id=game_id,
+                rules=rules,
+                contract=contract,
+            )
+        except ValueError as error:
+            raise InvalidRequestError(
+                f"could not automatically generate JSON Schemas: {error}"
+            ) from error
+        return schemas
+
     def test_game_code(
         self,
         *,
         server_code: str,
+        game_schemas: dict[str, JsonValue] | None,
         rules: GameRules,
         game_id: str | None = None,
     ) -> GameTestReport:
@@ -2488,12 +2891,46 @@ class GamePlatform:
         When [game_id] names a game or draft, its stored failed seeds are
         replayed first and the run's failed seeds replace them."""
         with self._lock:
-            return self._run_game_tests(
-                server_code=server_code, rules=rules, game_id=game_id
+            generated_schemas = game_schemas is None
+            if game_schemas is None:
+                try:
+                    game_schemas = self._generate_game_schemas(
+                        server_code, rules, game_id or "unsaved"
+                    )
+                except InvalidRequestError as error:
+                    failure = TestFailure(
+                        function="schema_generation",
+                        message=str(error),
+                        seed=0,
+                        player_count=0,
+                        move_number=0,
+                    )
+                    return GameTestReport(
+                        passed=False,
+                        walks_completed=0,
+                        moves_made=0,
+                        too_slow=False,
+                        failures=(failure,),
+                    )
+            report = self._run_game_tests(
+                server_code=server_code,
+                game_schemas=game_schemas,
+                rules=rules,
+                game_id=game_id,
+            )
+            return (
+                replace(report, game_schemas=game_schemas)
+                if generated_schemas
+                else report
             )
 
     def _run_game_tests(
-        self, *, server_code: str, rules: GameRules, game_id: str | None,
+        self,
+        *,
+        server_code: str,
+        game_schemas: dict[str, JsonValue],
+        rules: GameRules,
+        game_id: str | None,
         budget_seconds: float = 1.0,
     ) -> GameTestReport:
         stored = (
@@ -2512,6 +2949,8 @@ class GamePlatform:
                         seed=0, player_count=0, move_number=0) for result in failures))
         report = test_server_code(
             server_code,
+            game_schemas=game_schemas,
+            game_id=game_id or "unsaved",
             rules=rules,
             regression_seeds=stored.seeds if stored else (),
             contract=contract,
@@ -2527,14 +2966,26 @@ class GamePlatform:
         return report
 
     def _gate_server_code(
-        self, game_id: str, server_code: str, rules: GameRules,
-        *, budget_seconds: float = 1.0,
+        self,
+        game_id: str,
+        server_code: str,
+        rules: GameRules,
+        game_schemas: dict[str, JsonValue] | None,
+        *,
+        budget_seconds: float = 1.0,
     ) -> None:
         """The publish gate (Phase 5): server code about to be published
         must pass the random-walk tests, or publishing is refused and the
         version stays a draft the author can keep fixing."""
+        if game_schemas is None:
+            game_schemas = self._generate_game_schemas(
+                server_code, rules, game_id
+            )
         report = self._run_game_tests(
-            server_code=server_code, rules=rules, game_id=game_id,
+            server_code=server_code,
+            game_schemas=game_schemas,
+            rules=rules,
+            game_id=game_id,
             budget_seconds=budget_seconds,
         )
         if report.passed:
@@ -2552,10 +3003,17 @@ class GamePlatform:
     # result's "error" field, verbatim, never as an exception.
 
     def emulator_reset(
-        self, *, server_code: str, players: list[dict[str, Any]], seed: int
+        self,
+        *,
+        server_code: str,
+        game_schemas: dict[str, JsonValue],
+        players: list[dict[str, Any]],
+        seed: int,
     ) -> dict[str, Any]:
         with self._lock:
-            logic = GameLogic(server_code)
+            logic = GameLogic(
+                server_code, game_schemas=game_schemas, game_id="emulator"
+            )
             roster = _emulator_roster(players)
             pot = sum(player["max_loss"] for player in roster)
             try:
@@ -2579,6 +3037,7 @@ class GamePlatform:
         self,
         *,
         server_code: str,
+        game_schemas: dict[str, JsonValue],
         players: list[dict[str, Any]],
         seed: int,
         state: Any,
@@ -2588,7 +3047,9 @@ class GamePlatform:
         move: Any,
     ) -> dict[str, Any]:
         with self._lock:
-            logic = GameLogic(server_code)
+            logic = GameLogic(
+                server_code, game_schemas=game_schemas, game_id="emulator"
+            )
             roster = _emulator_roster(players)
             pot = sum(player["max_loss"] for player in roster)
             if turn is None:
@@ -2733,12 +3194,28 @@ class GamePlatform:
         key = (game.id, game.version)
         logic = self._logic_cache.get(key)
         if logic is None:
+            if game.game_schemas is None:
+                raise GameLogicError(
+                    f"game {game.id} version {game.version} has no game_schemas; "
+                    "backfill it before enabling this game"
+                )
             contract = (game.builder_workflow or {}).get("artifacts", {}).get("tests", {}).get("value")
             if contract:
                 from game_platform.builder_validation import ContractLogic
-                logic = ContractLogic(game.server_code or "", contract)
+                logic = ContractLogic(
+                    game.server_code or "",
+                    contract,
+                    game_schemas=game.game_schemas,
+                    game_id=game.id,
+                    game_version=game.version,
+                )
             else:
-                logic = GameLogic(game.server_code or "")
+                logic = GameLogic(
+                    game.server_code or "",
+                    game_schemas=game.game_schemas,
+                    game_id=game.id,
+                    game_version=game.version,
+                )
             self._logic_cache[key] = logic
         return logic
 
@@ -3282,6 +3759,28 @@ class GamePlatform:
             )
             return started
 
+    def remove_player(self, *, caller_id: str, match_id: str, user_id: str) -> Match:
+        """The owner removes [user_id] from the waiting room, exactly as if they
+        had left it (their seat is freed, and a v2 stake taken on joining is
+        refunded), and bars them from joining this match again. This is how an
+        owner gets rid of a player who can't, or won't, let the match start."""
+        with self._lock:
+            match = self._get_owned_match(caller_id=caller_id, match_id=match_id)
+            if match.status != "waiting_for_players":
+                raise ConflictError("players can only be removed before the match starts")
+            if match.matchmaking_player_count is not None:
+                raise ConflictError("players can't be removed from a quick match")
+            if user_id == caller_id:
+                raise ConflictError(
+                    "the owner cannot remove themselves; delete the match instead"
+                )
+            if match.seat_of(user_id) is None:
+                raise NotFoundError("that user is not a player in this match")
+            left = self.leave_match(caller_id=user_id, match_id=match_id)
+            return self._save(
+                replace(left, removed_user_ids=left.removed_user_ids | {user_id})
+            )
+
     def leave_match(self, *, caller_id: str, match_id: str) -> Match:
         with self._lock:
             match = self._get_match(match_id)
@@ -3406,7 +3905,7 @@ class GamePlatform:
                 time_limit_seconds=PLAYER_LEFT_TIME_LIMIT_SECONDS,
             )
         except InvalidMoveError as error:
-            raise InvalidRequestError(error.message) from error
+            raise self._game_message_error(game, error.message) from error
         return {
             "player_id": caller_id,
             "payout": (result.get("payouts") or {}).get(match.player_id_of(self._get_seat(match, caller_id)), 0),
@@ -3669,9 +4168,7 @@ class GamePlatform:
             if next_turn_player_indices is not None and payout_player_indices is not None:
                 raise InvalidRequestError("payouts only allowed on the final move")
             if next_turn_player_indices is None:
-                if match.token_pot:
-                    if payout_player_indices is None:
-                        raise InvalidRequestError("terminal move requires pot distribution")
+                if match.token_pot and payout_player_indices is not None:
                     human_seats = {s.player_index for s in match.seats if s.kind == "human"}
                     if set(payout_player_indices) != human_seats:
                         raise InvalidRequestError("payouts must include every human seat")
@@ -3681,11 +4178,29 @@ class GamePlatform:
                         raise InvalidRequestError("payouts must total the token pot")
                 elif payout_player_indices is not None and any(payout_player_indices.values()):
                     raise InvalidRequestError("no tokens available for payout")
-            if next_turn_player_indices is None and match.token_pot:
-                for index, amount in payout_player_indices.items():
-                    uid = match.seats[index].user_id
-                    user = self._store.get_user(uid)
-                    self._store.put_user(replace(user, token_balance=user.token_balance + amount))
+            # A v1 client's claimed result can't be checked (the server runs no
+            # game code), so a paid final move only proposes the split: no tokens
+            # move until every other human agrees (agree_to_payouts).
+            proposal = (
+                dict(payout_player_indices)
+                if next_turn_player_indices is None
+                and match.token_pot
+                and payout_player_indices is not None
+                else None
+            )
+            if (
+                next_turn_player_indices is None
+                and match.token_pot
+                and payout_player_indices is None
+            ):
+                # A game that knows nothing about tokens ended a paid match: there
+                # is no result to pay out, so every human gets their stake back
+                # (an equal split of the pot) instead of the match never ending.
+                payout_player_indices = self._settle_pot(
+                    match.token_pot,
+                    {},
+                    recipients=[s for s in match.seats if s.kind == "human"],
+                )
             now = self._clock()
             move = Move(
                 move_number=len(match.moves) + 1,
@@ -3707,12 +4222,26 @@ class GamePlatform:
                     end_reason=None
                     if next_turn_player_indices is not None
                     else "finished",
-                    token_payouts=payout_player_indices if next_turn_player_indices is None else None,
+                    token_payouts=payout_player_indices
+                    if next_turn_player_indices is None and proposal is None
+                    else None,
+                    proposed_payouts=proposal,
+                    payout_agreed_indices=frozenset({seat.player_index})
+                    if proposal is not None
+                    else frozenset(),
+                    payout_deadline=now
+                    + dt.timedelta(seconds=PAYOUT_AGREEMENT_SECONDS)
+                    if proposal is not None
+                    else None,
+                    payout_outcome=None,
                     # Every accepted move restarts the clock, also when the same
                     # player moves again (a raise and its answer, chained jumps).
                     turn_started_at=now if match.turn_seconds else None,
                 )
             )
+            if proposal is not None and self._payout_agreed_by_all(saved):
+                # Only one human seat: nobody else has to agree.
+                saved = self._settle_proposed_payouts(saved, outcome="agreed")
             if saved.status == "over":
                 self._notify_match_event(
                     "notify.match_over",
@@ -3744,6 +4273,65 @@ class GamePlatform:
                 )
             return saved
 
+    def agree_to_payouts(
+        self, *, caller_id: str, match_id: str, agree: bool
+    ) -> Match:
+        """A human in a finished v1 paid match answers the pot split its final
+        move proposed. Agreeing records the caller's seat, and once every human
+        seat has agreed the pot is paid as proposed. Disputing refunds every
+        stake at once. Either answer is final for that seat."""
+        with self._lock:
+            # Reading the match applies an expired agreement deadline first.
+            match = self._get_match(match_id)
+            seat = match.seat_of(caller_id)
+            if seat is None or seat.kind != "human":
+                raise ForbiddenError("you are not a player in this match")
+            if not match.payout_pending:
+                raise ConflictError("this match has no payouts waiting for agreement")
+            if seat.player_index in match.payout_agreed_indices:
+                raise ConflictError("you already agreed to these payouts")
+            if not agree:
+                return self._settle_proposed_payouts(match, outcome="disputed")
+            saved = self._save(
+                replace(
+                    match,
+                    payout_agreed_indices=match.payout_agreed_indices
+                    | {seat.player_index},
+                )
+            )
+            if self._payout_agreed_by_all(saved):
+                saved = self._settle_proposed_payouts(saved, outcome="agreed")
+            return saved
+
+    @staticmethod
+    def _payout_human_indices(match: Match) -> frozenset[int]:
+        """The seats that must agree to a proposed split: every human seat, the
+        same seats the proposal has to pay (see make_move)."""
+        return frozenset(s.player_index for s in match.seats if s.kind == "human")
+
+    def _payout_agreed_by_all(self, match: Match) -> bool:
+        return self._payout_human_indices(match) <= match.payout_agreed_indices
+
+    def _settle_proposed_payouts(self, match: Match, *, outcome: PayoutOutcome) -> Match:
+        """Ends a pending v1 pot split: "agreed" pays it as proposed; "disputed"
+        or "expired" refunds every human's stake (an equal split of the pot).
+        Clears the pending state, so it can never pay twice. The caller holds
+        the lock."""
+        assert match.proposed_payouts is not None and match.payout_outcome is None
+        if outcome == "agreed":
+            payouts = dict(match.proposed_payouts)
+            for index, amount in payouts.items():
+                self._credit_tokens(match.seats[index].user_id or "", amount)
+        else:
+            payouts = self._settle_pot(
+                match.token_pot,
+                {},
+                recipients=[s for s in match.seats if s.kind == "human"],
+            )
+        return self._save(
+            replace(match, token_payouts=payouts, payout_outcome=outcome)
+        )
+
     def _make_move_v2(
         self,
         match: Match,
@@ -3765,7 +4353,7 @@ class GamePlatform:
                 game, match, "applyMove", match.state, match.player_id_of(seat), move
             )
         except InvalidMoveError as error:
-            raise InvalidRequestError(error.message) from error
+            raise self._game_message_error(game, error.message) from error
         saved = self._apply_logic_result(
             match,
             result=result,
@@ -3778,30 +4366,20 @@ class GamePlatform:
         return self._store.get_match(match.id) or saved
 
     def delete_match(self, *, caller_id: str, match_id: str) -> None:
-        """The owner deletes the match; other players can only hide an ended match."""
+        """A player in the match deletes it while it is not over; once it is
+        over, deleting only hides it from the caller's own list. Creating a
+        match gives no delete rights on its own: the caller must be one of
+        its players."""
         with self._lock:
             match = self._get_match(match_id)
-            if caller_id == match.owner_user_id:
-                game = self._store.get_game_version(
-                    match.game_id, match.game_version
-                )
-                if (
-                    game is not None
-                    and game.server_code
-                    and match.status == "waiting_for_players"
-                    and match.bet_per_player
-                    and match.token_pot
-                    >= match.bet_per_player * len(match.human_user_ids)
-                ):
-                    # A waiting v2 match holds its players' stakes (taken
-                    # as they joined); deleting it refunds everyone.
-                    for user_id in match.human_user_ids:
-                        self._credit_tokens(user_id, match.bet_per_player)
+            if match.status != "over" and caller_id in match.active_human_user_ids:
+                # Deleting refunds every stake the match holds (a waiting v2
+                # match's, taken as players joined, or an ongoing match's pot).
                 self._delete_match_and_invites(match_id)
                 return
             if match.status != "over":
                 raise ForbiddenError(
-                    "only the owner can delete a match that is not over"
+                    "only a player in the match can delete it"
                 )
             self._get_seat(match, caller_id)
             self._save(
@@ -3997,9 +4575,37 @@ class GamePlatform:
             raise ConflictError("the match is over")
 
     def _delete_match_and_invites(self, match_id: str) -> None:
+        """Deletes a match and its invites, first giving back any tokens it still
+        holds, so no deletion path (a player's, an admin's, deleting the owner's
+        account) can make a stake disappear. The caller holds the lock."""
+        match = self._store.get_match(match_id)
+        if match is not None:
+            self._refund_held_pot(match)
         for invite in self._store.list_invites(match_id=match_id):
             self._store.delete_invite(invite.token)
         self._store.delete_match(match_id)
+
+    @staticmethod
+    def _held_pot(match: Match) -> int:
+        """Tokens the match holds that nobody has been paid yet: the pot of a
+        waiting (v2 stakes are taken on joining) or ongoing match, or of a
+        finished v1 match whose split still waits for agreement. A settled
+        match holds nothing, even where [token_pot] still records its size."""
+        if match.status == "over" and not match.payout_pending:
+            return 0
+        return match.token_pot
+
+    def _refund_held_pot(self, match: Match) -> None:
+        """Splits what [match] still holds equally among its humans (each gets
+        their stake back), like a timeout does. The caller holds the lock and is
+        about to delete the match."""
+        held = self._held_pot(match)
+        if held <= 0:
+            return
+        humans = [s for s in match.seats if s.kind == "human"]
+        self._settle_pot(
+            held, {}, recipients=[s for s in humans if s.active] or humans
+        )
 
     # Saved games: each user's library of games to come back to
 
@@ -4468,6 +5074,211 @@ class GamePlatform:
 
     # Administration (the caller has the master password, not a user's credentials)
 
+    # Feedback: users' bugs, suggestions and reports of problems, about users, games,
+    # matches or the platform
+
+    def send_feedback(
+        self,
+        *,
+        caller_id: str,
+        kind: str,
+        target_type: str,
+        target_id: str,
+        text: str,
+        page: str | None = None,
+    ) -> tuple[Feedback, bool]:
+        """Records [caller_id]'s feedback; returns it and whether it's new. Sending the
+        same kind of feedback on the same target again within 24 hours replaces the
+        earlier text instead. Feedback is private: only admins list it."""
+        text = self._feedback_text(kind, text)
+        with self._lock:
+            caller = self._resolve_replaced(self._require_user(caller_id))
+            record = self._feedback_target_record(target_type, target_id)
+            target_id, target_name, context = self._feedback_target(caller, target_type, target_id, record)
+            now = self._clock()
+            recent = [
+                RecentFeedback(
+                    id=f.id, target_type=f.target_type, target_id=f.target_id, kind=f.kind, created_at=f.created_at
+                )
+                for f in self._store.list_recent_feedback(caller.id, since=now - FEEDBACK_WINDOW, until=now)
+            ]
+            feedback, repeat = self._new_feedback(
+                caller, kind, target_type, target_id, target_name, text, context, page, recent, now
+            )
+            self._store.put_feedback(feedback)
+            return feedback, repeat is None
+
+    @staticmethod
+    def _feedback_text(kind: str, text: str) -> str:
+        """The trimmed text; raises InvalidRequestError for a wrong kind or length."""
+        if kind not in FEEDBACK_KINDS:
+            raise InvalidRequestError("kind must be bug, suggestion or problem")
+        text = (text or "").strip()
+        if len(text) < FEEDBACK_TEXT_MIN:
+            raise InvalidRequestError("the feedback is too short: write at least 5 characters")
+        if len(text) > FEEDBACK_TEXT_MAX:
+            raise InvalidRequestError("the feedback is too long: use at most 1000 characters")
+        return text
+
+    def _feedback_target_record(self, target_type: str, target_id: str) -> User | Game | Match | None:
+        """The stored user, game or match that feedback is about (None for the platform
+        or when it doesn't exist). The caller holds the lock."""
+        if not target_id:
+            return None
+        if target_type == "user":
+            return self._store.get_user(target_id)
+        if target_type == "game":
+            return self._store.get_game(target_id)
+        if target_type == "match":
+            return self._store.get_match(target_id)
+        return None
+
+    def _feedback_target(
+        self, caller: User, target_type: str, target_id: str, record: User | Game | Match | None
+    ) -> tuple[str, str, dict]:
+        """The target's id (a merged-away user resolves to the survivor), its name and
+        the context to save; raises InvalidRequestError when it doesn't exist (for this
+        caller) or is the caller's own. [record] is what [_feedback_target_record] read."""
+        missing = InvalidRequestError("there is no such user, game or match")
+        if target_type == "platform":
+            return "", "Platform", {}
+        if target_type == "user":
+            if not isinstance(record, User):
+                raise missing
+            user = self._resolve_replaced(record)
+            if user.id == caller.id:
+                raise InvalidRequestError("you can't send feedback about yourself")
+            return user.id, user.display_name, {}
+        if target_type == "game":
+            if not isinstance(record, Game) or record.deleted or (
+                not record.published and record.owner_user_id != caller.id
+            ):
+                raise missing
+            if record.owner_user_id == caller.id:
+                raise InvalidRequestError("you can't send feedback about your own game")
+            return record.id, record.name, {"game_version": record.version}
+        if target_type == "match":
+            if not isinstance(record, Match) or (record.private and not record.involves(caller.id)):
+                raise missing
+            # A match's name needs its game: the admin page looks the games up, so
+            # sending feedback doesn't need another read.
+            return record.id, "", {
+                "game_id": record.game_id,
+                "game_version": record.game_version,
+                "move_count": len(record.moves),
+            }
+        raise InvalidRequestError("target_type must be user, game, match or platform")
+
+    def _new_feedback(
+        self,
+        caller: User,
+        kind: str,
+        target_type: str,
+        target_id: str,
+        target_name: str,
+        text: str,
+        context: dict,
+        page: str | None,
+        recent: list[RecentFeedback],
+        now: dt.datetime,
+    ) -> tuple[Feedback, RecentFeedback | None]:
+        """The feedback to save and the earlier message it replaces (None when it's new);
+        raises TooManyRequestsError past the daily limit. [recent] is the caller's
+        feedback from the last 24 hours."""
+        recent = [r for r in recent if now - r.created_at < FEEDBACK_WINDOW]
+        repeat = next(
+            (r for r in recent if (r.target_type, r.target_id, r.kind) == (target_type, target_id, kind)),
+            None,
+        )
+        if repeat is None and len(recent) >= FEEDBACK_PER_DAY:
+            raise TooManyRequestsError("you can send at most 20 feedback messages a day; try again tomorrow")
+        if page and page.strip():
+            context = {**context, "page": page.strip()[:300]}
+        feedback = Feedback(
+            id=repeat.id if repeat else self._new_id(),
+            reporter_user_id=caller.id,
+            target_type=target_type,
+            target_id=target_id,
+            kind=kind,
+            text=text,
+            created_at=repeat.created_at if repeat else now,
+            updated_at=now,
+            target_name=target_name,
+            reporter_name=caller.display_name,
+            context=context,
+        )
+        return feedback, repeat
+
+    def admin_feedback(
+        self,
+        *,
+        kind: str | None = None,
+        target_type: str | None = None,
+        target_id: str | None = None,
+        status: str | None = None,
+    ) -> dict:
+        """The newest feedback (up to 200) matching the filters (kind, target_type and
+        target_id, status), and the 20 targets with the most "problem" reports."""
+        with self._lock:
+            matching = sorted(
+                (
+                    f
+                    for f in self._store.list_feedback()
+                    if (kind is None or f.kind == kind)
+                    and (target_type is None or f.target_type == target_type)
+                    and (target_id is None or f.target_id == target_id)
+                    and (status is None or f.status == status)
+                ),
+                key=lambda f: (f.updated_at, f.id),
+                reverse=True,
+            )
+            stats: dict[tuple[str, str], dict] = {}
+            for f in sorted(self._store.list_feedback(), key=lambda f: f.created_at):
+                if f.kind != "problem":
+                    continue
+                entry = stats.setdefault(
+                    (f.target_type, f.target_id),
+                    {"target_type": f.target_type, "target_id": f.target_id, "reports": 0},
+                )
+                entry.update(reports=entry["reports"] + 1, target_name=f.target_name, last_reported_at=f.created_at)
+            return self._feedback_listing(
+                matching[:FEEDBACK_ADMIN_LIMIT], len(matching) > FEEDBACK_ADMIN_LIMIT, list(stats.values())
+            )
+
+    @staticmethod
+    def _feedback_listing(rows: list[Feedback], more: bool, stats: list[dict]) -> dict:
+        """The admin listing: [rows] newest first, whether there are [more], and the 20
+        most reported of [stats] (one {target_type, target_id, target_name, reports,
+        last_reported_at} per target)."""
+        most = sorted(
+            (s for s in stats if s["reports"] > 0),
+            key=lambda s: (-s["reports"], -s["last_reported_at"].timestamp()),
+        )[:20]
+        return {
+            "count": len(rows),
+            "more": more,
+            "most_reported": [
+                {**s, "last_reported_at": s["last_reported_at"].isoformat()} for s in most
+            ],
+            "feedback": [
+                {
+                    "id": f.id,
+                    "kind": f.kind,
+                    "target_type": f.target_type,
+                    "target_id": f.target_id,
+                    "target_name": f.target_name,
+                    "reporter_user_id": f.reporter_user_id,
+                    "reporter_name": f.reporter_name,
+                    "text": f.text,
+                    "status": f.status,
+                    "context": f.context,
+                    "created_at": f.created_at.isoformat(),
+                    "updated_at": f.updated_at.isoformat(),
+                }
+                for f in rows
+            ],
+        }
+
     def admin_delete_user(self, user_id: str) -> None:
         """Deletes a user, the matches they own and the games they own (soft-deleted,
         like a creator's delete). Elsewhere, they leave the matches they're seated in."""
@@ -4482,6 +5293,8 @@ class GamePlatform:
                     self.leave_match(caller_id=user_id, match_id=match.id)
             for draft in self._store.list_game_drafts(owner_user_id=user_id):
                 self._store.delete_game_draft(draft.id)
+            for session in self._store.list_game_test_sessions(owner_user_id=user_id):
+                self._store.delete_game_test_session(session.id)
             for subscription in self._store.list_push_subscriptions(user_id=user_id):
                 self._store.delete_push_subscription(subscription.id)
             for invite in self._store.list_invites(created_by_user_id=user_id):
@@ -4582,6 +5395,13 @@ class GamePlatform:
                 match, status="over", turn_of_player_indices=None,
                 end_reason="solo_computers_only", token_pot=0,
                 token_payouts=payouts or match.token_payouts, pending_leave=None))
+        if (
+            match.payout_pending
+            and match.payout_deadline is not None
+            and self._clock() >= match.payout_deadline
+        ):
+            # Not everyone agreed to the v1 pot split in time: refund the stakes.
+            return self._settle_proposed_payouts(match, outcome="expired")
         deadline = match.turn_deadline
         if deadline is None:
             return match

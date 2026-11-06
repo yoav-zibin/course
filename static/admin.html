@@ -11,7 +11,7 @@
       gtag('config', 'G-6CCXZQYVE7');
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Game platform · Admin</title>
+    <title data-i18n="ui.page.admin">Game platform · Admin</title>
     <link rel="stylesheet" href="/static/common.css?v=16" />
   <link rel="stylesheet" href="/static/experiments.css?v=6" />
     <style>
@@ -64,30 +64,31 @@
   </head>
   <body>
     <header class="topbar" data-app-page="admin">
-      <h1>Game platform</h1>
-      <nav aria-label="Game platform">
-        <a href="/portal">Portal</a>
-        <a href="/builder">Builder</a>
+      <h1 data-i18n="ui.app_name">Game platform</h1>
+      <nav aria-label="Game platform" data-i18n-aria-label="ui.app_name">
+        <a href="/portal" data-i18n="ui.nav.portal">Portal</a>
+        <a href="/builder" data-i18n="ui.nav.builder">Builder</a>
         <a href="/static/guided-builder.html" data-i18n="ui.nav.new_builder">New Builder</a>
-        <a href="/admin" aria-current="page">Admin</a>
+        <a href="/admin" aria-current="page" data-i18n="ui.nav.admin">Admin</a>
       </nav>
       <span class="spacer"></span>
       <span id="account-menu"></span>
     </header>
-    <div class="admin-tabs" role="tablist" aria-label="Admin tools">
-      <button type="button" role="tab" id="tab-console" aria-selected="true" data-src="/console?frame=1">API console</button>
-      <button type="button" role="tab" id="tab-browse" aria-selected="false" data-src="/browse?frame=1">Browse data</button>
-      <button type="button" role="tab" id="tab-stats" aria-selected="false" data-src="/stats?frame=1">Statistics</button>
-      <button type="button" role="tab" id="tab-invites" aria-selected="false" data-src="/invites?frame=1">Invites</button>
-      <button type="button" role="tab" id="tab-docs" aria-selected="false" data-src="/docs">API docs</button>
+    <div class="admin-tabs" role="tablist" aria-label="Admin tools" data-i18n-aria-label="ui.admin.tools_aria">
+      <button type="button" role="tab" id="tab-console" aria-selected="true" data-src="/console?frame=1" data-i18n="ui.admin.tab_console">API console</button>
+      <button type="button" role="tab" id="tab-browse" aria-selected="false" data-src="/browse?frame=1" data-i18n="ui.admin.tab_browse">Browse data</button>
+      <button type="button" role="tab" id="tab-stats" aria-selected="false" data-src="/stats?frame=1" data-i18n="ui.admin.tab_stats">Statistics</button>
+      <button type="button" role="tab" id="tab-invites" aria-selected="false" data-src="/invites?frame=1" data-i18n="ui.admin.tab_invites">Invites</button>
+      <button type="button" role="tab" id="tab-feedback" aria-selected="false" data-src="/feedback?frame=1" data-i18n="ui.admin.tab_feedback">Feedback</button>
+      <button type="button" role="tab" id="tab-docs" aria-selected="false" data-src="/docs" data-i18n="ui.admin.tab_docs">API docs</button>
     </div>
     <div id="admin-frame-wrap">
-      <div class="empty-note">Loading…</div>
+      <div class="empty-note" data-i18n="ui.state.loading">Loading…</div>
     </div>
-    <script src="/static/common.js?v=20"></script>
-    <script src="/static/i18n.js?v=3"></script>
-    <script src="/static/auth.js?v=8"></script>
+    <script src="/static/common.js?v=22"></script>
+    <script src="/static/i18n.js?v=5"></script>
+    <script src="/static/auth.js?v=9"></script>
 <script src="/static/experiments.js?v=7"></script>
-    <script src="/static/admin.js?v=2"></script>
+    <script src="/static/admin.js?v=3"></script>
   </body>
 </html>

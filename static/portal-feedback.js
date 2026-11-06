@@ -34,10 +34,9 @@
     const button = document.getElementById('match-sounds');
     if (!button) return;
     const label = () => {
-      const known = typeof I18n !== 'undefined';
       button.textContent = enabled
-        ? (known ? I18n.t("ui.match.sound_on", {}, "Sound on") : 'Sound on')
-        : (known ? I18n.t("ui.match.sound_off", {}, "Sound off") : 'Sound off');
+        ? I18n.t("ui.match.sound_on", {}, "Sound on")
+        : I18n.t("ui.match.sound_off", {}, "Sound off");
       button.setAttribute('aria-pressed', String(enabled));
     };
     label();

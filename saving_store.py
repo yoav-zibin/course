@@ -7,6 +7,7 @@ pending changes; changes made less than [min_write_interval_seconds] before a cr
 can be lost. Subclasses decide where the data goes (a JSON file, Firestore).
 """
 
+import datetime as dt
 import logging
 import threading
 from collections.abc import Sequence
@@ -21,6 +22,7 @@ from game_platform.models import (
     ExperimentEvent,
     Game,
     GameDraft,
+    GameTestSession,
     GameTestSeeds,
     Translation,
     GameVersionError,
@@ -28,6 +30,7 @@ from game_platform.models import (
     LinkedAccountKind,
     Match,
     MatchStatus,
+    Feedback,
     User,
     WebPushSubscription,
 )
@@ -162,6 +165,24 @@ class SavingStore:
     def add_game_version(self, game: Game) -> None:
         with self._lock:
             self._inner.add_game_version(game)
+            self._set_dirty()
+
+    def put_game_test_session(self, session: GameTestSession) -> None:
+        with self._lock:
+            self._inner.put_game_test_session(session)
+            self._set_dirty()
+
+    def get_game_test_session(self, session_id: str) -> GameTestSession | None:
+        with self._lock:
+            return self._inner.get_game_test_session(session_id)
+
+    def list_game_test_sessions(self, *, owner_user_id: str) -> list[GameTestSession]:
+        with self._lock:
+            return self._inner.list_game_test_sessions(owner_user_id=owner_user_id)
+
+    def delete_game_test_session(self, session_id: str) -> None:
+        with self._lock:
+            self._inner.delete_game_test_session(session_id)
             self._set_dirty()
 
     def put_game_draft(self, draft: GameDraft) -> None:
@@ -404,3 +425,22 @@ class SavingStore:
         with self._lock:
             self._inner.delete_experiment_event(event_id)
             self._set_dirty()
+
+    def put_feedback(self, feedback: Feedback) -> None:
+        with self._lock:
+            self._inner.put_feedback(feedback)
+            self._set_dirty()
+
+    def get_feedback(self, feedback_id: str) -> Feedback | None:
+        with self._lock:
+            return self._inner.get_feedback(feedback_id)
+
+    def list_feedback(self) -> list[Feedback]:
+        with self._lock:
+            return self._inner.list_feedback()
+
+    def list_recent_feedback(
+        self, reporter_user_id: str, *, since: dt.datetime, until: dt.datetime
+    ) -> list[Feedback]:
+        with self._lock:
+            return self._inner.list_recent_feedback(reporter_user_id, since=since, until=until)

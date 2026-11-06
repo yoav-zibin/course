@@ -140,7 +140,7 @@ def test_private_drafts_survive_restart_and_old_data_loads(tmp_path: Path):
 def test_merge_moves_drafts_and_deleting_game_removes_private_copy(api: Api):
     owner, target = api.new_user("owner"), api.new_user("target")
     draft = create_draft(api, owner)
-    api.ok("POST", f"/users/{owner}/merge", as_user=owner, json={"into_user_id": target})
+    api.ok("POST", f"/users/{owner}/merge", as_user=owner, json={"into_user_id": target, "into_password": api.passwords_by_user_id[target]})
     moved = api.ok("GET", f"/game-drafts/{draft['id']}", as_user=target)
     assert moved["owner_user_id"] == target
     game = publish(api, target, moved)

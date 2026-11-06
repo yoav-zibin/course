@@ -9,15 +9,22 @@ time, as regression seeds.
 """
 
 import game_platform.game_testing as game_testing
-from game_platform.game_testing import test_server_code as run_game_tests
+from game_platform.tests.helpers import run_unrestricted_server_code as _test_server_code
 from game_platform.models import GameRules
-from game_platform.tests.helpers import Api
+from game_platform.tests.helpers import Api, TEST_GAME_SCHEMAS
 
 RULES = GameRules(
     allowed_player_counts=(2, 3),
     allows_leave_mid_match=True,
     allows_join_mid_match=True,
 )
+
+
+def run_game_tests(server_code, **kwargs):
+    return _test_server_code(
+        server_code, game_schemas=TEST_GAME_SCHEMAS, **kwargs
+    )
+
 
 GOOD_GAME = """
 const SPLIT = (ctx) => {
@@ -88,7 +95,10 @@ NONDETERMINISTIC_GAME = GOOD_GAME.replace(
 
 
 def test_a_correct_game_passes():
-    report = run_game_tests(GOOD_GAME, rules=RULES, run_seed=7)
+    # Keep this a coverage check rather than a machine-specific throughput test.
+    report = run_game_tests(
+        GOOD_GAME, rules=RULES, run_seed=7, budget_seconds=2.0
+    )
     assert report.passed
     assert report.failures == ()
     assert report.failed_seeds == ()
@@ -143,6 +153,30 @@ def test_a_non_deterministic_game_fails():
     (failure,) = report.failures
     assert failure.function == "applyMove"
     assert "non-deterministic" in failure.message
+
+
+def test_non_determinism_after_the_first_move_is_detected():
+    code = GOOD_GAME.replace(
+        "const count = state.count + 1;",
+        "const count = state.count + 1 + (state.count >= 2 ? calls++ : 0);",
+    ).replace("const game = {", "let calls = 0;\nconst game = {", 1)
+    rules = GameRules(allowed_player_counts=(2,), allows_leave_mid_match=False,
+                      allows_join_mid_match=False)
+    report = run_game_tests(code, rules=rules, run_seed=7)
+    assert not report.passed
+    assert any(f.function == "applyMove" and "non-deterministic" in f.message
+               for f in report.failures)
+
+
+def test_non_deterministic_views_are_detected():
+    code = GOOD_GAME.replace(
+        "viewFor(state, playerId, ctx) { return {count: state.count}; },",
+        "viewFor(state, playerId, ctx) { return {count: calls++}; },",
+    ).replace("const game = {", "let calls = 0;\nconst game = {", 1)
+    report = run_game_tests(code, rules=RULES, run_seed=7)
+    assert not report.passed
+    assert any(f.function == "viewFor" and "non-deterministic" in f.message
+               for f in report.failures)
 
 
 def test_no_walk_completed_within_the_budget_is_reported_too_slow(monkeypatch):

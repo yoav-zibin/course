@@ -1,4 +1,5 @@
 """Reserve a worst-case charge before calling the model. Amounts are microdollars."""
+import threading
 import time
 from copy import deepcopy
 from decimal import Decimal, ROUND_CEILING
@@ -28,6 +29,10 @@ class BudgetedModel:
         self.owner = owner
         self.draft_id = draft.id
         self.revision = draft.revision
+        # One job may generate independent pieces concurrently (test cases,
+        # illustrations); the revision-guarded bookkeeping below must stay
+        # serialized even though the model calls themselves run in parallel.
+        self._lock = threading.Lock()
         self.charged = (draft.builder_workflow or {}).get("charged_microdollars", 0)
         self.job_id = job_id
         self.input_rate, self.output_rate, self.input_limit = validate_tariffs(config)
@@ -37,6 +42,10 @@ class BudgetedModel:
         return int(amount.to_integral_value(rounding=ROUND_CEILING))
 
     def record(self, delta, *, provider_overrun=False):
+        with self._lock:
+            return self._record(delta, provider_overrun=provider_overrun)
+
+    def _record(self, delta, *, provider_overrun=False):
         revision = self.revision
         if self.job_id:
             revision = self.platform.get_game_draft(caller_id=self.owner, draft_id=self.draft_id).revision
@@ -61,6 +70,10 @@ class BudgetedModel:
 
     def checkpoint(self, key, progress):
         """Keep only the latest pending operation, guarded by the draft revision."""
+        with self._lock:
+            return self._checkpoint(key, progress)
+
+    def _checkpoint(self, key, progress):
         def change(draft):
             draft.builder_workflow['pending_generation'] = {'key': key, 'progress': deepcopy(progress)}
             return draft
@@ -71,11 +84,17 @@ class BudgetedModel:
     def chat(self, messages, *, max_tokens, **options):
         reserve = self.cost(self.input_limit, max_tokens)
         self.record(reserve)
-        # An interrupted or unmetered request retains its entire reservation.
         try:
             result = self.client.chat_with_reasoning(messages, max_tokens=max_tokens, **options)
         except ModelApiError as exc:
-            self.settle(reserve, exc.usage)
+            if exc.usage is None:
+                # The provider reported no usage (a timeout, or an HTTP
+                # error before generation): the call produced nothing, so
+                # release the whole reservation instead of charging the
+                # draft the worst case for a platform-side failure.
+                self.record(-reserve)
+            else:
+                self.settle(reserve, exc.usage)
             raise
         self.settle(reserve, result)
         return result.content

@@ -59,6 +59,7 @@ def index_config(namespace):
             "visible_to": "array",
         },
         "game_drafts": {"owner_user_id": "order"},
+        "game_test_sessions": {"owner_user_id": "order"},
         "push_subscriptions": {"user_id": "order"},
         "invites": {
             "created_by_user_id": "order",
@@ -66,6 +67,14 @@ def index_config(namespace):
             "participants": "array",
         },
         "users": {"invited_by_user_id": "order"},
+        # Equality filters, newest first by document name (merged single-field indexes).
+        "feedback": {
+            "kind": "order",
+            "target_type": "order",
+            "target_id": "order",
+            "status": "order",
+        },
+        "feedback_targets": {"problem": "desc"},
         "jobs": {"due_at": "order"},
         "outbox": {"due_at": "order"},
     }

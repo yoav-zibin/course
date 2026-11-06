@@ -17,7 +17,7 @@ function setup(request=async()=>{}, hash='', search='') {
     navigator:{onLine:true},localStorage:{},PortalOffline:class {api(...args){return request(...args);}read(){return {};}write(){}} ,
     document:{getElementById:node,body:{classList:{toggle(){}}}},window:{addEventListener(){}},
     location:{hash,search,assign(url){navigations.push(url);}},history:{replaceState(){}},
-    Auth:{current:()=>({id:'owner'})},I18n:{t:(key,params,fallback)=>fallback??key,locale:()=>'en',revision:()=>0,gameName:(id,fallback)=>fallback,gameDescription:(id,fallback)=>fallback,gameText:async()=>({locale:'en',direction:'ltr'})},GameFrame:class{load(){}unload(){}send(){}},
+    Auth:{current:()=>({id:'owner'})},I18n:require('./i18n-stub.cjs'),GameFrame:class{load(){}unload(){}send(){}},
     apiRequest:request,formatTime:()=>'',shortId:x=>x,showPageError:text=>pageErrors.push(text),el:(tag,attrs={},...children)=>({...attrs,children})});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../../static/portal.js'),'utf8').replace(/main\(\);\s*$/,''),ctx);
   const run=code=>vm.runInContext(code,ctx);
@@ -461,4 +461,65 @@ test('background polls coalesce before entering the shared move lock',async()=>{
  t.run('releaseRefresh()');await first;
  const third=t.run('originalRefresh()');assert.equal(t.run('lockCalls'),2);
  t.run('releaseRefresh()');await third;
+});
+test('a language change redraws the offline line and re-sends the open game its texts at once',async()=>{
+  const {run}=setup();
+  run('globalThis.calls=[];renderPortalAccountMenu=()=>calls.push("menu");render=()=>calls.push("render");renderLibrary=()=>calls.push("library");updateMatchSetup=()=>calls.push("setup");offlineStatus=()=>calls.push("offline");syncGame=async()=>{calls.push("game")}');
+  run('redrawAfterLanguageChange()');await Promise.resolve();
+  assert.deepEqual(Array.from(run('calls')),['menu','render','library','setup','offline','game']);
+});
+test('a failing redraw does not stop the others from being asked, and a failing game sync is only logged',async()=>{
+  const {run}=setup();
+  run('globalThis.calls=[];renderPortalAccountMenu=()=>calls.push("menu");render=()=>{throw new Error("boom")};console={warn:(...a)=>calls.push("warned")};syncGame=async()=>{throw new Error("late")}');
+  run('redrawAfterLanguageChange()');await Promise.resolve();
+  assert.deepEqual(Array.from(run('calls')),['menu','warned']);
+  run('calls.length=0;render=()=>{};renderLibrary=()=>{};updateMatchSetup=()=>{};offlineStatus=()=>{}');
+  run('redrawAfterLanguageChange()');await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(Array.from(run('calls')),['menu','warned']);
+});
+test('the match lists are redrawn when only the language changed',()=>{
+  const {run,node}=setup();
+  const list=node('list-test');
+  let drawn=0;
+  list.replaceChildren=function(...children){drawn++;this.children=children;};
+  list.dataset={};
+  run('globalThis.matches=[{id:"m",game_id:"game",game_version:2,status:"ongoing",move_count:3,players:[{kind:"human",user_id:"owner",player_index:0}],turn_of_player_indices:[0]}]');
+  try{
+    run('I18n.revision=()=>1;renderMatchList(globalThis.__list,matches)'.replace('globalThis.__list','document.getElementById("list-test")'));
+    run('renderMatchList(document.getElementById("list-test"),matches)');
+    assert.equal(drawn,1); // nothing changed: not redrawn
+    run('I18n.revision=()=>2;renderMatchList(document.getElementById("list-test"),matches)');
+    assert.equal(drawn,2); // the language (its revision) changed: redrawn
+  }finally{run('I18n.revision=()=>0');}
+});
+
+test('Random never joins a match that stakes tokens or runs a clock',async()=>{
+  const joins=[];
+  const game={id:"game",version:2,name:"Duel",allowed_player_counts:[2],published:true};
+  const open=[
+    {id:"paid",game_id:"game",game_version:2,status:"waiting_for_players",bet_per_player:5,turn_seconds:null,players:[{player_index:0,kind:"human",user_id:"host"}]},
+    {id:"speed",game_id:"game",game_version:2,status:"waiting_for_players",bet_per_player:0,turn_seconds:60,players:[{player_index:0,kind:"human",user_id:"host"}]},
+    {id:"free",game_id:"game",game_version:2,status:"waiting_for_players",bet_per_player:0,turn_seconds:null,players:[{player_index:0,kind:"human",user_id:"host"}]},
+  ];
+  const {run}=setup(async(method,path)=>{
+    if(method==="GET"&&path==="/matches/open")return open;
+    if(method==="GET"&&path==="/games")return [game];
+    if(method==="POST"&&path.endsWith("/join")){joins.push(path);return {id:path.split("/")[2],status:"waiting_for_players"};}
+    return {id:"x",game_version:2,players:[]};
+  });
+  run('state.gameCache.set("game@2",{id:"game",version:2,name:"Duel",allowed_player_counts:[2],published:true})');
+  for(let i=0;i<10;i++){joins.length=0;await run('state.randomJoining=false;joinRandomMatch()');assert.deepEqual(joins,["/matches/free/join"]);}
+});
+
+test('the owner of a waiting match gets a Remove button on other players only',()=>{
+  const {node,run}=setup();
+  const removeButtons=()=>node('seats').children.map(chip=>chip.children.filter(c=>c&&c.type==="button"&&c.class==="danger").length);
+  run('state.games[0].allowed_player_counts=[2,3];state.gameCache.set("game@2",state.games[0]);'+
+      'state.match={id:"match",game_id:"game",game_version:2,owner_user_id:"owner",status:"waiting_for_players",move_count:0,'+
+      'players:[{player_index:0,kind:"human",user_id:"owner"},{player_index:1,kind:"human",user_id:"guest"}]}');
+  run('renderMatch()');assert.deepEqual(removeButtons(),[0,1]);
+  run('state.match.matchmaking_player_count=2;renderMatch()');assert.deepEqual(removeButtons(),[0,0]);
+  run('state.match.matchmaking_player_count=null;state.match.status="ongoing";state.match.turn_of_player_indices=[0];renderMatch()');
+  assert.deepEqual(removeButtons(),[0,0]);
+  run('state.match.status="waiting_for_players";state.match.owner_user_id="guest";renderMatch()');assert.deepEqual(removeButtons(),[0,0]);
 });

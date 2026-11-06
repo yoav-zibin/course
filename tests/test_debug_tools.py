@@ -57,6 +57,8 @@ def test_debug_endpoints_are_not_in_the_api_schema(api: Api) -> None:
     paths = api.ok("GET", "/openapi.json")["paths"]
     assert all(not path.startswith("/v2/admin") for path in paths)
     assert sorted(path for path in paths if not path.startswith("/v2/") and path != "/storage/capabilities") == [
+        "/agent/games",
+        "/agent/games/schema",
         "/auth/config",
         "/auth/email/start",
         "/auth/email/verify",
@@ -67,8 +69,10 @@ def test_debug_endpoints_are_not_in_the_api_schema(api: Api) -> None:
         "/builder/games",
         "/builder/games/{game_id}/open",
         "/c/{campaign_code}",
+        "/client-errors",
         "/emulator/act",
         "/emulator/reset",
+        "/feedback",
         "/game-drafts",
         "/game-drafts/{draft_id}",
         "/game-drafts/{draft_id}/publish",
@@ -83,6 +87,7 @@ def test_debug_endpoints_are_not_in_the_api_schema(api: Api) -> None:
         "/games/{game_id}/versions/{version}/cover",
         "/games/{game_id}/versions/{version}/strings",
         "/health",
+        "/i18n/bundle/{locale}",
         "/i18n/games/{locale}",
         "/i18n/locales",
         "/i18n/{locale}",
@@ -99,7 +104,9 @@ def test_debug_endpoints_are_not_in_the_api_schema(api: Api) -> None:
         "/matches/{match_id}/leave",
         "/matches/{match_id}/maybeLeave",
         "/matches/{match_id}/moves",
+        "/matches/{match_id}/payouts",
         "/matches/{match_id}/playerLeft",
+        "/matches/{match_id}/players/{user_id}",
         "/matches/{match_id}/rematch",
         "/matches/{match_id}/start",
         "/matchmaking/quick-match",

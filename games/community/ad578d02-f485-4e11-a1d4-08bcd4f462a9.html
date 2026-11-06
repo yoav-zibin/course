@@ -1,0 +1,176 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><style>
+body{font-family:sans-serif;padding:16px;max-width:640px;margin:0 auto;text-align:center}
+#pegs{display:flex;gap:12px;justify-content:center;margin:16px 0}
+.peg{flex:1;background:#f0f0f0;border:2px solid #ccc;border-radius:8px;min-height:220px;display:flex;flex-direction:column-reverse;align-items:center;padding:8px 4px 4px;cursor:pointer;position:relative}
+.peg.sel{border-color:#2196F3;background:#e3f2fd}
+.peg .label{font-size:12px;color:#666;margin-top:6px;order:-999}
+.disk{height:26px;border-radius:6px;background:#4CAF50;border:1px solid #333;margin:2px 0;color:#fff;font-size:13px;line-height:26px}
+button{padding:8px 14px;margin:4px;font-size:15px;cursor:pointer}
+button:disabled{opacity:.4;cursor:default}
+</style></head>
+<body><script type="application/json" id="i18n-strings">
+{
+ "heading": "Tower of Hanoi",
+ "choose_difficulty": "Choose difficulty to start:",
+ "disks_3": "3 disks (7 min)",
+ "disks_4": "4 disks (15 min)",
+ "disks_5": "5 disks (31 min)",
+ "moves_label": "Moves: {value}",
+ "minimal_label": "Minimal: {value}",
+ "hint": "Click a peg to select the top disk, then click a destination peg.",
+ "restart": "Restart",
+ "start_tower": "Start a new tower — pick disk count.",
+ "waiting": "Waiting…",
+ "solved": "Solved in {moves} moves! (optimal {optimal}) ",
+ "your_move": "Move disks to the right peg. Your move!",
+ "peg_a": "A",
+ "peg_b": "B",
+ "peg_c": "C (goal)",
+ "server_bad_move": "bad move",
+ "server_pick_3_5_disks": "pick 3-5 disks",
+ "server_start_first": "start first",
+ "server_already_solved": "already solved",
+ "server_pick_two_different_pegs": "pick two different pegs",
+ "server_source_empty": "source empty",
+ "server_cannot_place_larger_on_smaller": "cannot place larger on smaller",
+ "server_unknown_move": "unknown move",
+ "server_no_moves": "no moves"
+}
+</script>
+<h2>Tower of Hanoi</h2>
+<p id="status">Waiting for platform…</p>
+<div id="setup">
+<p>Choose difficulty to start:</p>
+<button data-d="3">3 disks (7 min)</button>
+<button data-d="4">4 disks (15 min)</button>
+<button data-d="5">5 disks (31 min)</button>
+</div>
+<div id="game" style="display:none">
+<p>Moves: <b id="moves">0</b> &nbsp;|&nbsp; Minimal: <b id="min">7</b></p>
+<div id="pegs"></div>
+<p style="font-size:13px;color:#555">Click a peg to select the top disk, then click a destination peg.</p>
+<button id="restart">Restart</button>
+</div>
+<script>
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// A text the game's SERVER wrote (a log line, a hand name in the match state): finds its template
+// among the `server_` texts of the table (the most specific that fits, each {name} standing for
+// any text) and shows it in the viewer's language with the same values; any other text is
+// returned as written.
+const SERVER_TEMPLATES = Object.keys(SOURCE_STRINGS)
+  .filter((key) => key.startsWith("server_") && SOURCE_STRINGS[key])
+  .map((key) => {
+    const names = [];
+    let literal = 0;
+    const source = SOURCE_STRINGS[key]
+      .split(/\{(\w+)\}/)
+      .map((piece, index) => {
+        if (index % 2) { names.push(piece); return "([\\s\\S]+?)"; }
+        literal += piece.length;
+        return piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      })
+      .join("");
+    return { key, names, literal, pattern: new RegExp("^" + source + "$") };
+  })
+  .sort((a, b) => b.literal - a.literal || a.names.length - b.names.length || (a.key > b.key ? 1 : a.key === b.key ? 0 : -1));
+
+function tx(text) {
+  if (typeof text !== "string") return text;
+  for (const template of SERVER_TEMPLATES) {
+    const found = template.pattern.exec(text);
+    if (found) {
+      const params = {};
+      template.names.forEach((name, index) => { if (!(name in params)) params[name] = found[index + 1]; });
+      return t(template.key, params);
+    }
+  }
+  return text;
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+let latest=null, sel=null;
+function applyStaticTexts(){
+  document.querySelector("h2").textContent=t("heading");
+  document.querySelector("#setup p").textContent=t("choose_difficulty");
+  const choices=document.querySelectorAll("#setup button");
+  choices[0].textContent=t("disks_3");
+  choices[1].textContent=t("disks_4");
+  choices[2].textContent=t("disks_5");
+  const marker="\u0001";
+  const movesParts=t("moves_label",{value:marker}).split(marker);
+  const minParts=t("minimal_label",{value:marker}).split(marker);
+  const line=document.querySelector("#game p");
+  const movesEl=document.getElementById("moves"),minEl=document.getElementById("min");
+  line.replaceChildren();
+  if(movesParts[0])line.append(movesParts[0]);
+  line.append(movesEl);
+  line.append(movesParts.slice(1).join("")+"  |  "+minParts[0]);
+  line.append(minEl);
+  if(minParts.slice(1).join(""))line.append(minParts.slice(1).join(""));
+  document.querySelectorAll("#game p")[1].textContent=t("hint");
+  document.getElementById("restart").textContent=t("restart");
+}
+function sendMove(move){parent.postMessage({type:"make_move",move:move},"*");}
+function render(){
+  const status=document.getElementById("status");
+  const setup=document.getElementById("setup");
+  const game=document.getElementById("game");
+  const s=latest.view;
+  const canAct=latest.status==="ongoing"&&latest.acting_for_player_index!==null;
+  const started=s&&s.phase==="play"&&s.pegs;
+  if(!started){
+    setup.style.display="";game.style.display="none";
+    status.textContent=canAct?t("start_tower"):t("waiting");
+    setup.querySelectorAll("button").forEach(b=>b.disabled=!canAct);
+    return;
+  }
+  setup.style.display="none";game.style.display="";
+  document.getElementById("moves").textContent=s.moves;
+  document.getElementById("min").textContent=Math.pow(2,s.disks)-1;
+  const solved=s.solved||latest.status==="over";
+  if(solved){status.textContent=t("solved",{moves:s.moves,optimal:Math.pow(2,s.disks)-1});}
+  else if(!canAct){status.textContent=t("waiting");}
+  else{status.textContent=t("your_move");}
+  const wrap=document.getElementById("pegs");wrap.innerHTML="";
+  const colors=["","#e53935","#FB8C00","#00897B","#3949AB","#6A1B9A"];
+  s.pegs.forEach((peg,pi)=>{
+    const div=document.createElement("div");div.className="peg"+(sel===pi?" sel":"");
+    div.style.opacity=canAct&&!solved?"1":".6";
+    div.onclick=()=>{if(!canAct||solved)return;if(sel===null){if(peg.length){sel=pi;render();}}else if(sel===pi){sel=null;render();}else{const f=sel;sel=null;sendMove({from:f,to:pi});}};
+    peg.forEach(d=>{
+      const dd=document.createElement("div");dd.className="disk";dd.textContent=d;
+      dd.style.width=(40+d*38)+"px";dd.style.background=colors[d]||"#4CAF50";
+      div.appendChild(dd);
+    });
+    const lab=document.createElement("div");lab.className="label";lab.textContent=pi===0?t("peg_a"):pi===1?t("peg_b"):t("peg_c");div.appendChild(lab);
+    wrap.appendChild(div);
+  });
+  document.getElementById("restart").disabled=!canAct;
+}
+addEventListener("message",(e)=>{
+  if(e.source!==parent||!e.data||e.data.type!=="state_changed")return;
+  applyLocale(e.data);applyStaticTexts();
+  latest=e.data;sel=null;render();
+});
+document.querySelectorAll("#setup button").forEach(b=>b.onclick=()=>{if(latest&&latest.acting_for_player_index!==null)sendMove({setup:parseInt(b.dataset.d,10)});});
+document.getElementById("restart").onclick=()=>{if(latest&&latest.acting_for_player_index!==null)sendMove({setup:(latest.view&&latest.view.disks)||3});};
+</script>
+</body>
+</html>

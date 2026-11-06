@@ -1,0 +1,92 @@
+[
+  {
+    "id": "20a83777-0f59-4105-a09e-0267b9c15e40",
+    "name": "Backgammon",
+    "expected_version": 3,
+    "client": "backgammon.html",
+    "server": "backgammon.server.js",
+    "original_client_sha256": "8a15b48504a7ffd41b45d99333993d90da088b14fd128cd8bf0e6469a9b4873e",
+    "original_server_sha256": "7e31e47aa60177863fb2e4262b53e99530716e1b4880d63a58668df7778bddea",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false
+  },
+  {
+    "id": "8d523bfd-9632-4759-98de-717fb744180e",
+    "name": "Backgammon (copy)",
+    "expected_version": 2,
+    "client": "backgammon-copy.html",
+    "server": "backgammon-copy.server.js",
+    "original_client_sha256": "8a15b48504a7ffd41b45d99333993d90da088b14fd128cd8bf0e6469a9b4873e",
+    "original_server_sha256": "7e31e47aa60177863fb2e4262b53e99530716e1b4880d63a58668df7778bddea",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false
+  },
+  {
+    "id": "5e1786fb-2a04-4cbe-8047-caf129c84a22",
+    "name": "Reversi",
+    "expected_version": 2,
+    "client": "reversi.html",
+    "server": "reversi.server.js",
+    "original_client_sha256": "fe482bc2607867ec15e7c14733c340a5477bc3da1ef1b498dc4402464a048b4c",
+    "original_server_sha256": "3493318ec547f8b366be9f52bde475833c02ae843430d648a269616e572a7148",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false
+  },
+  {
+    "id": "c435beb6-12d7-427e-80ba-2ebb619cabfa",
+    "name": "6-Card Golf",
+    "expected_version": 2,
+    "client": "six-card-golf.html",
+    "server": "six-card-golf.server.js",
+    "original_client_sha256": "7f99e9a2f20605fec0743b3be8af6a84f2c308f6548857f37fb917f710da8169",
+    "original_server_sha256": "1ee56fb111c1a05b2ce6950964e2d4931fb5b17049dac7eca82b11cbf7af7e95",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false
+  },
+  {
+    "id": "d650dbad-c760-48db-a445-c9def2134ca1",
+    "name": "Brazilian Truco",
+    "expected_version": 3,
+    "client": "brazilian-truco.html",
+    "server": "brazilian-truco.server.js",
+    "original_client_sha256": "62f375e08c71ccb0c0547815d1495a118b00632cd0151702d62571bace583f33",
+    "original_server_sha256": "45d55c177db3f181fe17fad7b1356ef6211236bdcf1eb90ff131310e6fbf3363",
+    "allowed_player_counts": [
+      2,
+      4
+    ],
+    "allows_leave_mid_match": true,
+    "allows_join_mid_match": true
+  },
+  {
+    "id": "2b02b029-eb34-436c-bf2a-0d53148a253e",
+    "name": "ERS",
+    "expected_version": 3,
+    "client": "ers.html",
+    "server": "ers.server.js",
+    "original_client_sha256": "206e30b92fe3a9ecf8f7e3bab28118bae093186343fc36a1d322362d89b49b6b",
+    "original_server_sha256": "5fee5b8e302b9ddd6249cd19777593293abc6446f75fe06535b66b4d005cd49a",
+    "allowed_player_counts": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "allows_leave_mid_match": true,
+    "allows_join_mid_match": true
+  }
+]

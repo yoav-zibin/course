@@ -1,0 +1,165 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SOS</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin:0; padding:16px; background:#f6f7fb; color:#1e2430; display:flex; justify-content:center; }
+  .wrap { width:100%; max-width:520px; background:#fff; border-radius:16px; padding:16px 16px 18px; box-shadow:0 6px 24px rgba(0,0,0,.08); }
+  h2 { margin:0 0 2px; letter-spacing:.5px; }
+  .sub { margin:0 0 10px; color:#667085; font-size:13px; }
+  #status { font-weight:700; background:#eef2ff; border:1px solid #dbe2ff; padding:8px 10px; border-radius:10px; min-height:38px; display:flex; align-items:center; }
+  .scores { display:flex; gap:8px; margin:10px 0; }
+  .score { flex:1; border:2px solid #e5e7eb; border-radius:12px; padding:8px; text-align:center; }
+  .score.active { border-color:#4f46e5; background:#eef2ff; }
+  .score .nm { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .score .pt { font-size:22px; font-weight:800; }
+  .controls { display:flex; gap:8px; align-items:center; margin:6px 0 10px; }
+  .letters { display:flex; gap:8px; }
+  .letters button { width:52px; height:44px; font-size:20px; font-weight:800; border-radius:10px; border:2px solid #d1d5db; background:#fff; cursor:pointer; }
+  .letters button.sel-S { border-color:#0ea5e9; background:#e0f2fe; }
+  .letters button.sel-O { border-color:#f59e0b; background:#fef3c7; }
+  .letters button:disabled { opacity:.45; cursor:default; }
+  .hint { font-size:12px; color:#667085; }
+  #board { display:grid; gap:6px; margin-top:4px; }
+  .cell { aspect-ratio:1/1; font-size:clamp(18px,5.5vw,28px); font-weight:800; border-radius:10px; border:2px solid #e5e7eb; background:#f8fafc; cursor:pointer; transition:transform .05s; }
+  .cell:not(:disabled):hover { transform:scale(1.04); border-color:#4f46e5; background:#fff; }
+  .cell:disabled { cursor:default; }
+  .cell.filled-S { background:#e0f2fe; border-color:#7dd3fc; color:#0369a1; }
+  .cell.filled-O { background:#fef3c7; border-color:#fcd34d; color:#92400e; }
+  .cell.win { background:#bbf7d0 !important; border-color:#22c55e !important; color:#14532d !important; }
+  .cell.last { outline:3px solid #4f46e5; outline-offset:-1px; }
+  .rules { font-size:12px; color:#667085; margin-top:10px; line-height:1.5; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h2>SOS</h2>
+  <p class="sub">Like Tic-Tac-Toe — make S-O-S lines in any direction to score. Scoring gives another turn!</p>
+  <div id="status">Waiting for the platform…</div>
+  <div class="scores" id="scores"></div>
+  <div class="controls">
+    <div class="letters">
+      <button id="btnS">S</button>
+      <button id="btnO">O</button>
+    </div>
+    <div class="hint" id="turnHint">Pick a letter, then tap an empty square.</div>
+  </div>
+  <div id="board"></div>
+  <div class="rules">Form <b>S → O → S</b> horizontally, vertically or diagonally. Each new SOS = 1 point + you go again. Most points when full wins.</div>
+</div>
+<script>
+var N = 6;
+var CELLS = N * N;
+var latest = null;
+var selected = "S";
+var sentForMove = -1;
+
+var boardEl = document.getElementById("board");
+boardEl.style.gridTemplateColumns = "repeat(" + N + ", 1fr)";
+var statusEl = document.getElementById("status");
+var scoresEl = document.getElementById("scores");
+var btnS = document.getElementById("btnS");
+var btnO = document.getElementById("btnO");
+var hintEl = document.getElementById("turnHint");
+
+btnS.onclick = function(){ selected = "S"; refreshLetterButtons(); render(); };
+btnO.onclick = function(){ selected = "O"; refreshLetterButtons(); render(); };
+function refreshLetterButtons() {
+  btnS.className = selected === "S" ? "sel-S" : "";
+  btnO.className = selected === "O" ? "sel-O" : "";
+}
+refreshLetterButtons();
+
+function view() {
+  if (!latest) return null;
+  return latest.view || latest.state || null;
+}
+function normState(s, numPlayers) {
+  var base = { board: [], scores: [], lines: [], lastMove: -1, winner: null };
+  var i;
+  for (i=0;i<CELLS;i++) base.board.push("");
+  for (i=0;i<numPlayers;i++) base.scores.push(0);
+  if (!s) return base;
+  var b = (Array.isArray(s.board) && s.board.length===CELLS) ? s.board.slice() : base.board.slice();
+  var sc = [];
+  for (i=0;i<numPlayers;i++) sc.push((s.scores && typeof s.scores[i]==="number") ? s.scores[i] : 0);
+  var ln = Array.isArray(s.lines) ? s.lines.filter(function(l){ return Array.isArray(l)&&l.length===3; }) : [];
+  return { board: b, scores: sc, lines: ln, lastMove: (typeof s.lastMove==="number"?s.lastMove:-1), winner: ((typeof s.winner==="number"||s.winner===null)?s.winner:null) };
+}
+
+function doMove(idx) {
+  if (!latest || latest.status !== "ongoing") return;
+  var acting = latest.acting_for_player_index;
+  if (acting === null || acting === undefined) return;
+  if (sentForMove === latest.move_count) return;
+  var st = normState(view(), latest.players.length);
+  if (idx<0 || idx>=CELLS || st.board[idx] !== "") return;
+  if (selected !== "S" && selected !== "O") return;
+  sentForMove = latest.move_count;
+  parent.postMessage({ type: "make_move", move: { idx: idx, letter: selected } }, "*");
+  render();
+}
+
+function render() {
+  if (!latest) return;
+  var st = normState(view(), latest.players.length);
+  var acting = latest.status === "ongoing" ? latest.acting_for_player_index : null;
+  var isOver = latest.status === "over";
+  var canAct = !isOver && acting !== null && acting !== undefined && acting === latest.my_player_index && sentForMove !== latest.move_count;
+  if (isOver) {
+    if (st.winner === -1) statusEl.textContent = "Draw! Scores tied.";
+    else if (typeof st.winner === "number" && latest.players[st.winner]) statusEl.textContent = "\uD83C\uDFC6 " + latest.players[st.winner].name + " wins!";
+    else statusEl.textContent = "Game over.";
+  } else if (acting === null || acting === undefined) {
+    statusEl.textContent = "Waiting for another player…";
+  } else {
+    var p = latest.players[acting];
+    var you = acting === latest.my_player_index ? " (you)" : "";
+    if (p.kind === "computer") statusEl.textContent = p.name + " (computer) is thinking…";
+    else if (canAct) statusEl.textContent = p.name + you + "'s turn \u2014 place " + selected;
+    else statusEl.textContent = p.name + you + "'s turn…";
+  }
+  scoresEl.innerHTML = "";
+  latest.players.forEach(function(p,i){
+    var d = document.createElement("div");
+    d.className = "score" + ((acting===i && !isOver) ? " active" : "");
+    var nm = document.createElement("div"); nm.className = "nm";
+    nm.textContent = (p.name || ("P"+(i+1))) + (p.kind==="computer"?" \uD83E\uDD16":"") + (i===latest.my_player_index?" \u2022":"");
+    var pt = document.createElement("div"); pt.className = "pt"; pt.textContent = st.scores[i] || 0;
+    d.appendChild(nm); d.appendChild(pt); scoresEl.appendChild(d);
+  });
+  btnS.disabled = !canAct;
+  btnO.disabled = !canAct;
+  refreshLetterButtons();
+  hintEl.textContent = isOver ? "Game over \u2014 well played!" : (!canAct && acting!==null && latest.players[acting] && latest.players[acting].kind==="computer" ? "Computer is moving…" : "Pick a letter, then tap an empty square.");
+  var winSet = {};
+  st.lines.forEach(function(t){ winSet[t[0]]=1; winSet[t[1]]=1; winSet[t[2]]=1; });
+  boardEl.innerHTML = "";
+  for (var i=0;i<CELLS;i++) {
+    (function(i){
+      var b = document.createElement("button");
+      b.className = "cell";
+      var v = st.board[i];
+      b.textContent = v;
+      if (v) b.classList.add(v==="S"?"filled-S":"filled-O");
+      if (winSet[i]) b.classList.add("win");
+      if (st.lastMove===i) b.classList.add("last");
+      b.disabled = !canAct || v !== "";
+      b.onclick = function(){ doMove(i); };
+      boardEl.appendChild(b);
+    })(i);
+  }
+}
+
+addEventListener("message", function(event){
+  if (event.source !== parent || !event.data || event.data.type !== "state_changed") return;
+  latest = event.data;
+  sentForMove = -1;
+  render();
+});
+</script>
+</body>
+</html>

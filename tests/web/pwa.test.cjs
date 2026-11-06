@@ -40,7 +40,7 @@ test('worker serves saved shell offline and leaves APIs and other students pages
 function install(standalone=false) {
   const events={},nodes={};
   for(const id of ['install-portal','install-help','install-message']) nodes[id]={hidden:id==='install-portal',addEventListener:(event,fn)=>events[id+event]=fn};
-  vm.runInNewContext(read('static/portal-install.js'),{document:{getElementById:id=>nodes[id]},navigator:{},window:{matchMedia:()=>({matches:standalone}),addEventListener:(event,fn)=>events[event]=fn}});
+  vm.runInNewContext(read('static/portal-install.js'),{I18n:require('./i18n-stub.cjs'),document:{getElementById:id=>nodes[id]},navigator:{},window:{matchMedia:()=>({matches:standalone}),addEventListener:(event,fn)=>events[event]=fn}});
   return {events,nodes};
 }
 test('install prompt requires a click, handles dismissal, and accepts a later prompt',async()=>{

@@ -1,0 +1,24 @@
+.test-page { max-width: 100%; padding: 1rem; }
+.test-page label { display: block; font-weight: 600; margin-top: .75rem; }
+.test-page textarea { width: 100%; font-family: monospace; }
+.test-page button, .test-page input, .test-page select { min-height: 36px; }
+.actions { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; margin-top: 1rem; }
+.replay-toolbar { position: sticky; top: 0; z-index: 20; padding: .5rem; background: var(--color-bg-2); color: var(--color-text-primary); border: 1px solid #6b7280; box-shadow: 0 2px 6px #0008; }
+.replay-controls { display: flex; gap: .5rem; align-items: center; overflow-x: auto; padding-bottom: .25rem; }
+.replay-controls > * { flex: none; }
+.replay-controls label { margin: 0; white-space: nowrap; }
+.replay-controls select { max-width: 16rem; }
+.replay-controls .follow-label { display: flex; align-items: center; gap: .25rem; }
+.replay-controls input[type="checkbox"] { min-height: 0; width: 20px; height: 20px; }
+#replay-progress { margin: .25rem 0 0; font-size: .9rem; }
+.scenario { margin: 1rem 0; border: 1px solid #6b7280; padding: 1rem; }
+.scenario.active-scenario { border: 3px solid #184b96; }
+.scenario h2 { font-size: 1.1rem; }
+.frames { display: flex; gap: 1rem; overflow: auto; align-items: start; }
+.viewport { flex: none; }
+.viewport-frame { position: relative; }
+.viewport iframe { display: block; box-sizing: content-box; border: 1px solid #333; background: white; max-width: none; }
+.click-marker { position: absolute; width: 18px; height: 18px; border: 3px solid #e11d48; border-radius: 50%; pointer-events: none; transform: translate(-50%, -50%); }
+.replaying iframe { pointer-events: none; }
+.automated iframe { pointer-events: none; }
+.error { color: #a00000; font-weight: bold; }

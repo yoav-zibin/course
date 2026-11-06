@@ -1,0 +1,75 @@
+{
+  "_comment": "allow: texts that are not for translation on purpose (console diagnostics, header names, tag names, English fallbacks of constants). ratchet: findings each file may still have (admin-only data screens and the legal privacy page); lower a number as texts are converted, never raise it. Files not listed must have none.",
+  "allow": {
+    "*": [
+      "error",
+      "warning",
+      "success",
+      "info",
+      "details",
+      "summary"
+    ],
+    "portal.js": [
+      "Join an open match of any game",
+      "Couldn't redraw after a language change:", "Couldn't send the game its new language:",
+      "Random"
+    ],
+    "portal-offline.js": [
+      "Offline",
+      "Account changed"
+    ],
+    "builder.html": [
+      "{\"state\":{\"type\":\"object\"},\"move\":{\"type\":\"object\"},\"view\":true}"
+    ],
+    "guided-builder.html": [
+      "English"
+    ],
+    "guided-builder.js": [
+      "",
+      "Suggest a name and short description based on the approved game idea.",
+      "Use the normal rules for this game, following the approved game idea and any agreed changes.",
+      "Suggest a responsive layout and controls based on the approved rules.",
+      "Teach the goal and turn order with a short interactive exercise that demonstrates a legal move and how to win.",
+      "Create a cover and start, middle and ending previews using the approved rules and layout.",
+      "Create reproducible initial, intermediate and terminal examples using the approved rules."
+    ],
+    "common.js": [
+      "New Builder",
+      "GET /debug/all-data: {}",
+      "Campaign attribution is unavailable in this browser.",
+      "Campaign attribution could not be saved in this browser.",
+      "Admin",
+      "Builder",
+      "Portal"
+    ],
+    "feedback.js": [
+      "GET /admin/feedback: {}"
+    ],
+    "invites.js": [
+      "GET /admin/invites: {}"
+    ],
+    "experiments.js": [
+      "Cached skin assignment could not be read.",
+      "Campaign attribution is unavailable in this browser.",
+      "Could not refresh the UI skin assignment.",
+      "GET skin assignment: {}",
+      "Saved skin preference could not be cleared from browser storage.",
+      "Saved skin preference could not be cleared.",
+      "Saved skin preference could not be read from browser storage.",
+      "Saved skin preference could not be read.",
+      "Saved skin preference could not be stored in browser storage.",
+      "Saved skin preference could not be stored.",
+      "Skin assignment is unavailable in this browser."
+    ],
+    "console.html": [
+      "X-User-Password"
+    ]
+  },
+  "ratchet": {
+    "privacy.html": 26,
+    "browse.js": 62,
+    "console.js": 20,
+    "feedback.js": 18,
+    "stats.js": 84
+  }
+}

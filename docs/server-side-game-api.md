@@ -82,6 +82,9 @@ const game = {
 - The platform defines a global class `InvalidMove extends Error`.
   `applyMove` throws it for a move that breaks the rules or is malformed; the
   server answers 400 with its message.
+  The 400 body is `{"detail", "code": "game_message"}`; when the game's string table has a `server_`
+  template for the message it also has `message_key` and `params`, and `detail` is translated for the viewer
+  (see docs/game-translation.md, "Texts the server writes"). A new game lists every `InvalidMove` text there.
 - Any other exception, a timeout (100 ms per call), a memory error (64 MB per
   context), or an invalid result (empty/unknown turn, payouts that don't add
   up or pay a computer, non-JSON result, oversized state) is a **bug in the
@@ -181,6 +184,108 @@ Timeouts end a match and refund its outstanding pot; they never create bots.
 Ongoing mixed rosters saved before this change end on their next read, move, or
 worker call with `end_reason: "solo_computers_only"`, refunding the remaining
 pot to active humans once. Waiting lobbies can remove their bots.
+
+## Game JSON Schemas
+
+Every published v2 game version stores a `game_schemas` object with exactly
+three Draft 2020-12 JSON Schemas: `state`, `move`, and `view`. The platform
+generates these from successful random-walk samples when a creator omits them.
+The builder runs generation as part of server-code testing and keeps the
+generated schemas with its autosaved draft; direct API create/update and draft
+publication use the same generator. Creators do not need to author JSON Schema.
+Explicit schemas remain accepted for integrations that already provide them.
+V1 games do not use these schemas.
+
+Generated schemas describe observed JSON value types, leave object properties
+optional, and allow additional object properties so unobserved game branches
+remain playable. Generation requires successful samples for state, move, and
+view, and publication still runs the schema-aware random-walk gate. Generation
+or validation errors block publication instead of falling back to an
+accept-everything schema. Since inference is sample-based, it is not a proof
+that every rare game branch has been observed; games with highly variable
+contracts should still be exercised thoroughly before publishing.
+
+The platform validates state arguments before calling game functions that
+receive state, and validates a human's `move` against the `move` schema before
+`applyMove` runs. `computerMove` and `randomMove` results use the same move
+schema; returned states and `viewFor` results use their respective schemas.
+An invalid human move is rejected with HTTP 400 without changing the match.
+Invalid game-generated values or results are game bugs: the call fails and
+the random-walk test report identifies the failing function and seed.
+
+Invalid game-defined inputs emit a warning log with the game id/version,
+function, input name, and validation message. Process-local counters are
+available at `GET /admin/game-input-metrics` (protected by the master
+password when configured); counters are grouped by game version, function,
+and input and reset when the process restarts. They are not aggregated across
+workers.
+
+Every persisted v2 version—including historical versions—must have schemas.
+V1 records are excluded. At startup, the server logs missing `game-id@version`
+entries and runs in degraded mode so non-game API functionality remains
+available. A v2 game version without schemas is still blocked from executing:
+there is no permissive runtime fallback. Backfill historical versions with the
+exact schemas for those entries before restarting a strict server deployment.
+The automatic generator is used for
+new versions; the backfill utility intentionally requires an explicit,
+complete mapping because old matches may still rely on those versions:
+
+```json
+{
+  "my-game@1": {
+    "state": {"type": "object"},
+    "move": {"type": "object"},
+    "view": {"type": "object"}
+  }
+}
+```
+
+```powershell
+python backfill_game_schemas.py --config C:\path\to\config.json --schemas C:\path\to\game-schema-backfill.json
+```
+
+Writing the map by hand for every historical version is rarely practical, so the
+utility can also fill the versions the map leaves out. It prints each missing
+`game-id@version` with the source of the schema it would get, and writes nothing
+at all unless every missing version has one:
+
+| Option | Gives |
+|---|---|
+| `--schemas FILE` | Exactly the schemas in the map (wins over everything else). |
+| `--use-repo-schemas` | `games/<id>.schema.json` for the newest missing version of a built-in game. |
+| `--infer-rest` | Schemas inferred by playing the version's server code, like the generator for new games (observed types, nothing required, extra properties allowed). Needs the QuickJS runtime, so run it where the server runs. A version that cannot be played is reported and left to the next option. |
+| `--permissive-rest` | A schema that accepts any JSON for what is still left: the behavior before schemas, a stopgap to replace later. |
+| `--dry-run` | Only prints the plan (including the inference results); writes nothing. |
+
+On the production server (Firestore query mode; the utility opens the same store the
+server does) run a dry run first, then the same command without `--dry-run`, and restart:
+
+```bash
+cd /opt/game-platform
+sudo .venv/bin/python -m game_platform.backfill_game_schemas --config /opt/game-platform/config.json --use-repo-schemas --infer-rest --permissive-rest --dry-run
+```
+
+Inference is sample-based, so a rare branch of a game that no sample reached can be
+rejected later: watch `game_function_error` / schema rejections in the log after a backfill.
+
+The utility validates the complete mapping before writing any versions and
+supports the configured JSON-file or Firestore store (including query mode). Back up the database
+before running it; schemas are versioned with the game and should describe
+that version's actual inputs and outputs, not merely allow all JSON values.
+
+To gather exact code and rules for affected versions without exporting user
+records, run `export_game_schema_inventory.py` with the production config and
+the server's read-only Firestore credentials. By default, it finds every
+server-side version missing schemas and writes only each version's name, rules,
+server code, and existing schemas:
+
+```powershell
+python export_game_schema_inventory.py --config C:\path\to\config.json --output C:\path\to\game-schema-inventory.json
+```
+
+Use the optional `--refs` text file only when exporting a specific subset.
+
+## Computer opponents on the server (Phase 3)
 
 After every change (start, a move, a player joining or leaving), while
 `turn` includes a computer and no human, the server calls `computerMove`

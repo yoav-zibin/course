@@ -10,15 +10,19 @@ same frozen time returns exactly the same result.
 import datetime as dt
 import json
 import threading
+from functools import partial
 
 import pytest
 
 from game_platform.game_logic import (
-    GameLogic,
+    GameLogic as _GameLogic,
     GameLogicError,
     GameLogicTimeout,
     InvalidMoveError,
 )
+from game_platform.tests.helpers import TEST_GAME_SCHEMAS
+
+GameLogic = partial(_GameLogic, game_schemas=TEST_GAME_SCHEMAS)
 
 COUNTER_GAME = r"""
 const game = {
@@ -321,3 +325,25 @@ def test_invalid_results_are_game_bugs():
     )
     with pytest.raises(GameLogicError, match="non-players"):
         unknown_player.call("newMatch", ctx=_ctx(), seed=1)
+
+
+@pytest.mark.parametrize('function', ['viewFor', 'computerMove', 'randomMove'])
+@pytest.mark.parametrize('payload', [
+    {'board': [None] * 9, 'turn': 'X', 'result': 'ongoing'},
+    {'turn': [], 'payouts': 'display-only', 'payout': -1},
+])
+def test_game_defined_views_and_moves_do_not_use_transition_validation(function, payload):
+    logic = GameLogic('const game = {' + function + '() { return ' + json.dumps(payload) + '; }};')
+    assert logic.call(function, {}, 'u1', ctx=_ctx()) == payload
+
+
+@pytest.mark.parametrize('function', ['newMatch', 'applyMove', 'playerJoined', 'playerLeft'])
+def test_match_transitions_still_reject_symbol_turns(function):
+    logic = GameLogic('const game = {' + function + '() { return {state: {}, turn: "X"}; }};')
+    with pytest.raises(GameLogicError, match='empty or non-list turn'):
+        if function == 'newMatch':
+            logic.call(function, ctx=_ctx())
+        elif function == 'applyMove':
+            logic.call(function, {}, 'u1', {}, ctx=_ctx())
+        else:
+            logic.call(function, {}, 'u1', ctx=_ctx())

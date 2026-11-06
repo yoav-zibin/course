@@ -1,0 +1,294 @@
+{
+  "state": {
+    "type": "object",
+    "required": [
+      "s",
+      "hist",
+      "winner"
+    ],
+    "properties": {
+      "s": {
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 23
+        },
+        "minItems": 2,
+        "maxItems": 2,
+        "uniqueItems": true
+      },
+      "hist": {
+        "type": "array",
+        "items": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "by",
+                "q",
+                "ans"
+              ],
+              "properties": {
+                "by": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "q": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 13
+                },
+                "ans": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "by",
+                "guess",
+                "correct"
+              ],
+              "properties": {
+                "by": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "guess": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 23
+                },
+                "correct": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "maxItems": 29
+      },
+      "winner": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1
+          }
+        ]
+      }
+    },
+    "additionalProperties": false,
+    "$schema": "https://json-schema.org/draft/2020-12/schema"
+  },
+  "move": {
+    "oneOf": [
+      {
+        "type": "object",
+        "required": [
+          "kind",
+          "q"
+        ],
+        "properties": {
+          "kind": {
+            "const": "ask"
+          },
+          "q": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 13
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "kind",
+          "idx"
+        ],
+        "properties": {
+          "kind": {
+            "const": "guess"
+          },
+          "idx": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 23
+          }
+        },
+        "additionalProperties": false
+      }
+    ],
+    "$schema": "https://json-schema.org/draft/2020-12/schema"
+  },
+  "view": {
+    "type": "object",
+    "required": [
+      "mySecret",
+      "oppSecret",
+      "reveal",
+      "hist",
+      "winner"
+    ],
+    "properties": {
+      "mySecret": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 23
+          }
+        ]
+      },
+      "oppSecret": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 23
+          }
+        ]
+      },
+      "reveal": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 23
+            },
+            "minItems": 2,
+            "maxItems": 2,
+            "uniqueItems": true
+          }
+        ]
+      },
+      "hist": {
+        "type": "array",
+        "items": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "by",
+                "q",
+                "ans"
+              ],
+              "properties": {
+                "by": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "q": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 13
+                },
+                "ans": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "by",
+                "guess",
+                "correct"
+              ],
+              "properties": {
+                "by": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "guess": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 23
+                },
+                "correct": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "maxItems": 29
+      },
+      "winner": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1
+          }
+        ]
+      }
+    },
+    "additionalProperties": false,
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "winner": {
+              "type": "null"
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "oppSecret": {
+              "type": "null"
+            },
+            "reveal": {
+              "type": "null"
+            }
+          }
+        },
+        "else": {
+          "properties": {
+            "reveal": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 23
+              },
+              "minItems": 2,
+              "maxItems": 2,
+              "uniqueItems": true
+            }
+          }
+        }
+      }
+    ],
+    "$schema": "https://json-schema.org/draft/2020-12/schema"
+  }
+}

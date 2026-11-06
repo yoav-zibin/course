@@ -13,6 +13,25 @@ from game_platform.push import PushNotifier
 from game_platform.senders import CodeSender
 from game_platform.service import GamePlatform
 from game_platform.store import Store
+from game_platform.game_logic import GameLogic
+
+TEST_GAME_SCHEMAS = {"state": True, "move": True, "view": True}
+
+
+class UnrestrictedGameLogic(GameLogic):
+    """Test game mechanics with explicit schemas that accept all JSON values."""
+
+    def __init__(self, server_code: str, **kwargs: Any) -> None:
+        kwargs.setdefault("game_schemas", TEST_GAME_SCHEMAS)
+        super().__init__(server_code, **kwargs)
+
+
+def run_unrestricted_server_code(*args: Any, **kwargs: Any) -> Any:
+    """Run mechanics-focused test games with explicit allow-any-JSON schemas."""
+    from game_platform.game_testing import test_server_code
+
+    kwargs.setdefault("game_schemas", TEST_GAME_SCHEMAS)
+    return test_server_code(*args, **kwargs)
 
 
 class FakeClock:
@@ -38,8 +57,11 @@ class Api:
         push_config: PushConfig | None = None,
         max_push_subscriptions_per_user: int = 10,
         computer_move_delay_seconds: float = 0,
+        require_game_strings: bool = False,
+        master_password: str | None = None,
     ) -> None:
         platform = GamePlatform(
+            require_game_strings=require_game_strings,
             store=store,
             clock=FakeClock(),
             push_notifier=push_notifier,
@@ -53,8 +75,10 @@ class Api:
                 sms_sender=sms_sender,
                 email_sender=email_sender,
                 push_config=push_config,
+                master_password=master_password,
             )
         )
+        self.platform = platform
         self._names_by_user_id: dict[str, str] = {}
         self.passwords_by_user_id: dict[str, str] = {}
 
@@ -76,6 +100,13 @@ class Api:
             password = password or self.passwords_by_user_id.get(as_user)
         if password is not None:
             headers["X-User-Password"] = password
+        if (
+            isinstance(json, dict)
+            and path != "/agent/games"  # imports derive schemas from their test contract
+            and json.get("server_code")
+            and "game_schemas" not in json
+        ):
+            json = {**json, "game_schemas": TEST_GAME_SCHEMAS}
         return self.client.request(
             method, path, headers=headers, json=json, params=params
         )

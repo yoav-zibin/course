@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><style>
+body{font-family:sans-serif;padding:16px;max-width:640px;margin:0 auto;text-align:center}
+#pegs{display:flex;gap:12px;justify-content:center;margin:16px 0}
+.peg{flex:1;background:#f0f0f0;border:2px solid #ccc;border-radius:8px;min-height:220px;display:flex;flex-direction:column-reverse;align-items:center;padding:8px 4px 4px;cursor:pointer;position:relative}
+.peg.sel{border-color:#2196F3;background:#e3f2fd}
+.peg .label{font-size:12px;color:#666;margin-top:6px;order:-999}
+.disk{height:26px;border-radius:6px;background:#4CAF50;border:1px solid #333;margin:2px 0;color:#fff;font-size:13px;line-height:26px}
+button{padding:8px 14px;margin:4px;font-size:15px;cursor:pointer}
+button:disabled{opacity:.4;cursor:default}
+</style></head>
+<body>
+<h2>Tower of Hanoi</h2>
+<p id="status">Waiting for platform…</p>
+<div id="setup">
+<p>Choose difficulty to start:</p>
+<button data-d="3">3 disks (7 min)</button>
+<button data-d="4">4 disks (15 min)</button>
+<button data-d="5">5 disks (31 min)</button>
+</div>
+<div id="game" style="display:none">
+<p>Moves: <b id="moves">0</b> &nbsp;|&nbsp; Minimal: <b id="min">7</b></p>
+<div id="pegs"></div>
+<p style="font-size:13px;color:#555">Click a peg to select the top disk, then click a destination peg.</p>
+<button id="restart">Restart</button>
+</div>
+<script>
+let latest=null, sel=null;
+function sendMove(move){parent.postMessage({type:"make_move",move:move},"*");}
+function render(){
+  const status=document.getElementById("status");
+  const setup=document.getElementById("setup");
+  const game=document.getElementById("game");
+  const s=latest.view;
+  const canAct=latest.status==="ongoing"&&latest.acting_for_player_index!==null;
+  const started=s&&s.phase==="play"&&s.pegs;
+  if(!started){
+    setup.style.display="";game.style.display="none";
+    status.textContent=canAct?"Start a new tower \u2014 pick disk count.":"Waiting\u2026";
+    setup.querySelectorAll("button").forEach(b=>b.disabled=!canAct);
+    return;
+  }
+  setup.style.display="none";game.style.display="";
+  document.getElementById("moves").textContent=s.moves;
+  document.getElementById("min").textContent=Math.pow(2,s.disks)-1;
+  const solved=s.solved||latest.status==="over";
+  if(solved){status.textContent="Solved in "+s.moves+" moves! (optimal "+(Math.pow(2,s.disks)-1)+") ";}
+  else if(!canAct){status.textContent="Waiting\u2026";}
+  else{status.textContent="Move disks to the right peg. Your move!";}
+  const wrap=document.getElementById("pegs");wrap.innerHTML="";
+  const colors=["","#e53935","#FB8C00","#00897B","#3949AB","#6A1B9A"];
+  s.pegs.forEach((peg,pi)=>{
+    const div=document.createElement("div");div.className="peg"+(sel===pi?" sel":"");
+    div.style.opacity=canAct&&!solved?"1":".6";
+    div.onclick=()=>{if(!canAct||solved)return;if(sel===null){if(peg.length){sel=pi;render();}}else if(sel===pi){sel=null;render();}else{const f=sel;sel=null;sendMove({from:f,to:pi});}};
+    peg.forEach(d=>{
+      const dd=document.createElement("div");dd.className="disk";dd.textContent=d;
+      dd.style.width=(40+d*38)+"px";dd.style.background=colors[d]||"#4CAF50";
+      div.appendChild(dd);
+    });
+    const lab=document.createElement("div");lab.className="label";lab.textContent=["A","B","C (goal)"][pi];div.appendChild(lab);
+    wrap.appendChild(div);
+  });
+  document.getElementById("restart").disabled=!canAct;
+}
+addEventListener("message",(e)=>{
+  if(e.source!==parent||!e.data||e.data.type!=="state_changed")return;
+  latest=e.data;sel=null;render();
+});
+document.querySelectorAll("#setup button").forEach(b=>b.onclick=()=>{if(latest&&latest.acting_for_player_index!==null)sendMove({setup:parseInt(b.dataset.d,10)});});
+document.getElementById("restart").onclick=()=>{if(latest&&latest.acting_for_player_index!==null)sendMove({setup:(latest.view&&latest.view.disks)||3});};
+</script>
+</body>
+</html>
