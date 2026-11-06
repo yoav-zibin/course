@@ -605,6 +605,8 @@
   "ui.builder.published_version": "Published version {version}. Everyone can play this version.",
   "ui.builder.publish_failed": "Couldn't publish: {message}",
   "ui.builder.schemas_required": "Schemas are required while this game has server code.",
+  "ui.builder.schema_samples_missing": "The game did not produce enough valid examples to generate schemas.",
+  "ui.builder.schema_test_warnings": "Schema generation completed, but random-walk checks found game issues. See the builder test report.",
   "ui.builder.schemas_shape": "Expected an object with state, move, and view schemas.",
   "ui.builder.schemas_only": "Include only state, move, and view schemas.",
   "ui.builder.invalid_json": "Invalid JSON: {message}",

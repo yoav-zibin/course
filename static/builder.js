@@ -307,13 +307,13 @@ async function startEmulatorTest(players, mode) {
       }});
       if (state.test!==test) return;
       if (!generated.game_schemas) {
-        const detail=generated.failures?.[0]?.message || "The game did not produce enough valid examples to generate schemas.";
+        const detail=generated.failures?.[0]?.message || I18n.t("ui.builder.schema_samples_missing");
         throw new Error(detail);
       }
       test.gameSchemas=generated.game_schemas;
       state.editor.game_schemas=generated.game_schemas;
       if (!generated.passed) {
-        testLog("Schema generation completed, but random-walk checks found game issues. See the builder test report.",true);
+        testLog(I18n.t("ui.builder.schema_test_warnings"),true);
       }
       scheduleAutosave();
     }

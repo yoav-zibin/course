@@ -605,6 +605,8 @@
   "ui.builder.published_version": "संस्करण {version} प्रकाशित हो गया। हर कोई यह संस्करण खेल सकता है।",
   "ui.builder.publish_failed": "प्रकाशित नहीं हो सका: {message}",
   "ui.builder.schemas_required": "जब तक इस गेम में सर्वर कोड है, स्कीमा ज़रूरी हैं।",
+  "ui.builder.schema_samples_missing": "स्कीमा बनाने के लिए गेम ने पर्याप्त मान्य उदाहरण नहीं दिए।",
+  "ui.builder.schema_test_warnings": "स्कीमा बन गए, लेकिन रैंडम-वॉक जाँच में गेम की समस्याएँ मिलीं। बिल्डर की टेस्ट रिपोर्ट देखें।",
   "ui.builder.schemas_shape": "state, move और view स्कीमा वाला ऑब्जेक्ट अपेक्षित है।",
   "ui.builder.schemas_only": "केवल state, move और view स्कीमा शामिल करें।",
   "ui.builder.invalid_json": "अमान्य JSON: {message}",

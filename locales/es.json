@@ -605,6 +605,8 @@
   "ui.builder.published_version": "Se publicó la versión {version}. Todos pueden jugar esta versión.",
   "ui.builder.publish_failed": "No se pudo publicar: {message}",
   "ui.builder.schemas_required": "Los esquemas son obligatorios mientras este juego tenga código de servidor.",
+  "ui.builder.schema_samples_missing": "El juego no produjo suficientes ejemplos válidos para generar esquemas.",
+  "ui.builder.schema_test_warnings": "Se generaron los esquemas, pero las pruebas aleatorias detectaron problemas en el juego. Consulta el informe de pruebas del creador.",
   "ui.builder.schemas_shape": "Se esperaba un objeto con los esquemas state, move y view.",
   "ui.builder.schemas_only": "Incluye solo los esquemas state, move y view.",
   "ui.builder.invalid_json": "JSON no válido: {message}",

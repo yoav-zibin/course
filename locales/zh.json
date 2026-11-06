@@ -605,6 +605,8 @@
   "ui.builder.published_version": "已发布版本 {version}，所有人都可以玩这个版本。",
   "ui.builder.publish_failed": "无法发布：{message}",
   "ui.builder.schemas_required": "只要此游戏含有服务器代码，就必须提供模式。",
+  "ui.builder.schema_samples_missing": "游戏未生成足够的有效示例来生成模式。",
+  "ui.builder.schema_test_warnings": "模式已生成，但随机测试发现游戏存在问题。请查看构建器测试报告。",
   "ui.builder.schemas_shape": "需要包含 state、move 和 view 模式的对象。",
   "ui.builder.schemas_only": "只能包含 state、move 和 view 模式。",
   "ui.builder.invalid_json": "JSON 无效：{message}",

@@ -605,6 +605,8 @@
   "ui.builder.published_version": "تم نشر النسخة {version}. يمكن للجميع لعب هذه النسخة.",
   "ui.builder.publish_failed": "تعذّر النشر: {message}",
   "ui.builder.schemas_required": "المخططات مطلوبة ما دامت للعبة شيفرة خادم.",
+  "ui.builder.schema_samples_missing": "لم تنتج اللعبة أمثلة صالحة كافية لإنشاء المخططات.",
+  "ui.builder.schema_test_warnings": "تم إنشاء المخططات، لكن اختبارات المشي العشوائي اكتشفت مشكلات في اللعبة. راجع تقرير الاختبار في أداة الإنشاء.",
   "ui.builder.schemas_shape": "المتوقع كائن يحتوي على مخططات state وmove وview.",
   "ui.builder.schemas_only": "ضمّن مخططات state وmove وview فقط.",
   "ui.builder.invalid_json": "JSON غير صالح: {message}",
