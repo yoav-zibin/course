@@ -228,7 +228,7 @@ def test_invalid_api_move_is_rejected_without_advancing_the_match(api: Api):
     assert metric["invalid_count"] >= 1
 
 
-def test_missing_persisted_schemas_are_backfilled_before_platform_start():
+def test_missing_persisted_schemas_degrade_startup_but_block_game_logic():
     now = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
     store = InMemoryStore()
     game = Game(
@@ -244,8 +244,10 @@ def test_missing_persisted_schemas_are_backfilled_before_platform_start():
         updated_at=now,
     )
     store.add_game_version(game)
-    with pytest.raises(ValueError, match="legacy-v2@1"):
-        GamePlatform(store=store)
+    platform = GamePlatform(store=store)
+    with pytest.raises(GameLogicError, match="game_schemas"):
+        platform._logic_for(game)
 
     assert backfill_game_schemas(store, {"legacy-v2@1": SCHEMAS}) == 1
-    assert GamePlatform(store=store)
+    backfilled = GamePlatform(store=store)
+    assert backfilled._logic_for(store.get_game_version("legacy-v2", 1))

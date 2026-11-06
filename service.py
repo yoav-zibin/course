@@ -434,12 +434,18 @@ class GamePlatform:
             if game.server_code is not None and game.game_schemas is None
         )
         if missing_game_schemas:
-            versions = ", ".join(
-                f"{game_id}@{version}" for game_id, version in missing_game_schemas
+            sample = ", ".join(
+                f"{game_id}@{version}"
+                for game_id, version in missing_game_schemas[:20]
             )
-            raise ValueError(
-                "server-side game versions are missing required game_schemas: "
-                f"{versions}. Backfill these versions before starting the server."
+            remaining = len(missing_game_schemas) - 20
+            details = f"{sample}, and {remaining} more" if remaining > 0 else sample
+            logging.getLogger(__name__).error(
+                "%d server-side game versions are missing required game_schemas: %s. "
+                "Starting in degraded mode: schema-less game logic remains blocked; "
+                "backfill these versions before re-enabling those games.",
+                len(missing_game_schemas),
+                details,
             )
         self._clock = clock
         self._translation = TranslationService(
