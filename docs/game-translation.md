@@ -116,7 +116,8 @@ the number of texts, is `games/community/manifest.json`; how the owner publishes
    anywhere (see the SOS rules and the War counters).
 6. **Do not change how the game plays**: rules, layout, message formats, `make_move`. Prefer logical CSS
    properties (`margin-inline-start`) for anything you touch. Texts the game's server writes into the
-   match state (a `log` string, say) stay as the server writes them; list them for the owner.
+   match state (a `log` string, say) stay as the server writes them: list them as `server_` templates and show
+   them with `tx(...)` ("Texts the server writes" below).
 7. **A local variable named `t`** (or a constant called `strings`) collides with the helper: rename it.
 8. **Check it.** `game_text.lint(code)` must return `[]` (`tests/test_community_games.py` does this for
    every converted game). `tests/web/community-games.test.cjs` loads the original and the converted
@@ -279,6 +280,92 @@ machine translation that does is discarded and the original is shown; `translati
 - **The AI forgets the block:** the game still works (and its name and description are translated); the
   `warnings` say why. Games written before this have no block.
 - **A translation reads badly:** correct it as above. It is the same text for every game that uses it.
+
+## Texts the server writes
+
+What a game's **server code** writes for the player is not in the page's own texts: the reason of
+`throw new InvalidMove('...')` (the platform returns it as the HTTP 400 `detail` of a rejected move and
+the portal shows it) and the display strings a game puts in the match state (a `log` line, a hand name, a
+label). They are translated through the same table, as **templates**.
+
+### Templates
+
+A game lists each of them in its `i18n-strings` block under a key that starts with `server_`, with
+`{placeholders}` for the parts that vary:
+
+```json
+{"server_not_your_turn": "not your turn", "server_need_cards": "need {count} more cards",
+ "server_calls": "{p1} calls {p2}."}
+```
+
+A server text is matched against the templates of its game (`game_messages.py`; the same rule is `tx` in the
+helper): **exact match**, each `{name}` standing for any text (`"need 3 more cards"` fits
+`"need {count} more cards"`), and the **most specific** template wins (the most fixed characters, then the
+fewest placeholders, then the key). A text that matches nothing is shown as written. The matching template
+is translated like any other text of the table (once, then remembered), and the captured values are put back
+**untranslated** (names, numbers). `server_` keys are not used by `t()`, so "the code never shows this key"
+does not apply to them.
+
+### What the platform answers
+
+When a game's server rejects a move (and for the `InvalidMove` of a refused leave), the 400 response's
+`detail` is the message translated for the viewer (`request.state.locale`, as other errors) through the table
+of **that game version**:
+
+```json
+{"detail": "faltan 3 cartas", "code": "game_message", "message_key": "server_need_cards", "params": {"count": "3"}}
+```
+
+- `code` is `game_message` for every text a game's server wrote (it was `unknown` before); `message_key` and
+  `params` are there when a template matched. All three are additive.
+- English, a text with no matching template, a platform with no translator, a failing or over-budget
+  translator: `detail` is the text as the game wrote it. Translation never fails a request.
+- The templates are compiled once per game version and kept in memory (`GamePlatform._server_templates`,
+  as the `_bundle_*` caches), from the code the move handler already holds: no extra store read. The
+  translation memory is the one the other game texts use (a template is translated once, whatever the values).
+- A computer's rejected move and the emulator endpoints are not affected: they are game bugs and developer
+  tools, shown as written.
+
+### The page
+
+`tx(text)` (in `game_i18n_helper.js`) finds the template of a server-written text in the page's own table and
+returns `t(key, captured values)`; any other text is returned unchanged. A page wraps every server text it
+displays: `log.textContent = tx(state.log)`, `reason: tx(s.reason)`. When one displayed string joins several
+server texts (blackjack's results, `"Win 20v18 +50 | Lose 17v19 (-25)"`), split it first and translate each
+piece. `tools/update_game_helper.py` re-pastes the current helper into every page that carries an older copy
+(`--check` only reports); `game_text.HELPER_JS`, the copy the agent is told to write, reads the same file.
+
+### Filling the tables
+
+`python tools/extract_server_texts.py` reads each `*.server.js`: the argument of `new InvalidMove(...)`
+(string literals, template literals whose `${expr}` become `{p1}`, `{p2}`..., concatenations, and
+conditionals between texts, which give one template per branch), and the display strings written into the
+state (arguments of `log(...)`/`_log(...)`/`log.push(...)`/`msgs.push(...)`, assignments to `.log`, `.msg`,
+`.message`, `.text`, `.reason` and variables called `msg`/`reason`, the properties `msg`, `text`, `label`,
+`description`, `desc`, `banner`, `title`, `message`, `note`, `summary`, `reason`; a property whose value is
+a single lowercase word is a code, such as `msg: 'refill'`, and is skipped). It adds them to the page's table
+as `server_<words>` keys (a second run adds nothing, nothing else in the page changes) and writes a review
+list (`--report`): templates whose placeholders touch each other or that have almost no fixed words, the
+state texts to wrap with `tx(...)`, and what it could **not** read (a message taken from a variable). What it
+cannot read is added by hand to `tools/server_texts_extra.json` after reading the server code. `--fetch-community
+URL` saves the server code of the community games from the public record (read-only `GET /games/{id}`) next
+to their pages as `<id>.original.server.js`, only when the record's version is the one the page was converted
+from. Without `--write` it is a dry run.
+
+Limits: the reader sees only what is written as text. A message from a variable (`new InvalidMove(err)`), text
+assembled in a helper function, hand names built from several tables (poker's `showdown, won with {p1}` takes the
+hand's own name as a value, which stays English) and a log line built from several statements cannot be
+matched whole.
+
+### New games
+
+`game_text.lint(code, server_code=None)` also reads the server code: every `InvalidMove` text and every
+player-visible server text it can read must match a template of the table, or the game is not accepted
+(`translation.require_strings`, the agent's retry loop, the guided builder's `localization` check and its final
+approval all pass the server code). `game_text.PROMPT_RULES` tells the agent to write its server texts this way,
+with an example. Not affected: admin saves, the migration and audit-batch publications, example data, games
+without a table, and edits that leave the client code unchanged, so a game from before the rule with
+unmatched texts is still accepted.
 
 ## Which built-in games are translatable
 

@@ -114,6 +114,7 @@ from game_platform.service import (
     ConflictError,
     ForbiddenError,
     GamePlatform,
+    GameMessageError,
     InvalidRequestError,
     NotFoundError,
     PlatformError,
@@ -2082,11 +2083,30 @@ def _error_body(request: Request, message: str) -> dict[str, object]:
     return body
 
 
+async def _game_message_body(request: Request, exc: GameMessageError) -> dict[str, object]:
+    """A text the game's server wrote: `detail` is translated through the game version's
+    table when a template matches (as written otherwise), `code` is `game_message`, and
+    `message_key` and `params` name the template and the values it captured."""
+    locale = getattr(request.state, "locale", i18n.DEFAULT_LOCALE)
+    platform = request.app.state.platform
+    text = None
+    if locale != i18n.DEFAULT_LOCALE and exc.template is not None:
+        text = await run_in_threadpool(platform.translate_game_message, exc, locale)
+    body: dict[str, object] = {"detail": text or str(exc), "code": "game_message"}
+    if exc.key is not None:
+        body["message_key"] = exc.key
+        if exc.params:
+            body["params"] = exc.params
+    return body
+
+
 async def _handle_platform_error(request: Request, exc: Exception) -> JSONResponse:
     status = next(
         (status for kind, status in _STATUS_OF_ERROR if isinstance(exc, kind)),
         HTTPStatus.INTERNAL_SERVER_ERROR,
     )
+    if isinstance(exc, GameMessageError):
+        return JSONResponse(status_code=status, content=await _game_message_body(request, exc))
     return JSONResponse(status_code=status, content=_error_body(request, str(exc)))
 
 

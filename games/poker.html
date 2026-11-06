@@ -72,7 +72,26 @@
   "last_hand": "Last hand (#{number}): {description}",
   "shown_player": "{name}:",
   "seat": "Seat {number}",
-  "won_amount": "{name} won {amount}"
+  "won_amount": "{name} won {amount}",
+  "server_send_an_action_type_fold_check_call_rais": "send an action: {type: \"fold\"|\"check\"|\"call\"|\"raise\", to?}",
+  "server_it_s_seat_s_turn_not_s": "it's seat {p1}'s turn, not {p2}'s",
+  "server_can_t_fold_when_checking_is_free": "can't fold when checking is free",
+  "server_can_t_check_facing_a_bet": "can't check facing a bet",
+  "server_nothing_to_call": "nothing to call",
+  "server_raise_must_be_to_between_and": "raise must be to between {p1} and {p2}",
+  "server_unknown_action": "unknown action {p1}",
+  "server_hand_seat_deals_blinds": "Hand #{p1}: seat {p2} deals; blinds {p3}/{p4}.",
+  "server_folds": "{p1} folds.",
+  "server_checks": "{p1} checks.",
+  "server_calls_all_in": "{p1} calls {p2} (all in).",
+  "server_calls": "{p1} calls {p2}.",
+  "server_raises_to_all_in": "{p1} raises to {p2} (all in).",
+  "server_raises_to": "{p1} raises to {p2}.",
+  "server_wins": "{p1} wins {p2} ({p3}).",
+  "server_joins_and_sits_out_until_the_next_hand": "{p1} joins and sits out until the next hand.",
+  "server_leaves_the_table_is_closed": "{p1} leaves. The table is closed.",
+  "server_everyone_else_folded": "everyone else folded",
+  "server_showdown_won_with": "showdown, won with {p1}"
 }
 </script>
 <script>
@@ -86,6 +105,40 @@ let strings = SOURCE_STRINGS;
 function t(key, params) {
   const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
   return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// A text the game's SERVER wrote (a log line, a hand name in the match state): finds its template
+// among the `server_` texts of the table (the most specific that fits, each {name} standing for
+// any text) and shows it in the viewer's language with the same values; any other text is
+// returned as written.
+const SERVER_TEMPLATES = Object.keys(SOURCE_STRINGS)
+  .filter((key) => key.startsWith("server_") && SOURCE_STRINGS[key])
+  .map((key) => {
+    const names = [];
+    let literal = 0;
+    const source = SOURCE_STRINGS[key]
+      .split(/\{(\w+)\}/)
+      .map((piece, index) => {
+        if (index % 2) { names.push(piece); return "([\\s\\S]+?)"; }
+        literal += piece.length;
+        return piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      })
+      .join("");
+    return { key, names, literal, pattern: new RegExp("^" + source + "$") };
+  })
+  .sort((a, b) => b.literal - a.literal || a.names.length - b.names.length || (a.key > b.key ? 1 : a.key === b.key ? 0 : -1));
+
+function tx(text) {
+  if (typeof text !== "string") return text;
+  for (const template of SERVER_TEMPLATES) {
+    const found = template.pattern.exec(text);
+    if (found) {
+      const params = {};
+      template.names.forEach((name, index) => { if (!(name in params)) params[name] = found[index + 1]; });
+      return t(template.key, params);
+    }
+  }
+  return text;
 }
 
 // Call this first in the state_changed handler, before drawing anything: the platform sends
@@ -213,12 +266,12 @@ if (typeof window !== "undefined" && window.document) {
       const shown = previous.shown.map(({ seat, cards, hand }) =>
         el("div", {}, t("shown_player", { name: players[seat]?.name ?? t("seat", { number: seat + 1 }) }), " ", ...cards.map(cardNode), ` ${hand}`));
       $("previous").replaceChildren(
-        el("div", { className: "muted", textContent: t("last_hand", { number: previous.hand_number, description: previous.description }) }),
+        el("div", { className: "muted", textContent: t("last_hand", { number: previous.hand_number, description: tx(previous.description) }) }),
         el("div", {}, ...previous.board.map(cardNode)),
         ...shown,
         el("div", { textContent: previous.won.map(({ seat, amount }) => t("won_amount", { name: players[seat]?.name ?? seat, amount })).join(", ") }));
     }
-    $("log").textContent = s.log.join("\n");
+    $("log").textContent = s.log.map(tx).join("\n");
   }
 
   window.addEventListener("message", (event) => {

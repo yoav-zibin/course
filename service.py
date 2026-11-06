@@ -24,7 +24,7 @@ from pydantic import JsonValue
 
 import logging
 
-from game_platform import game_text, i18n, observability
+from game_platform import game_messages, game_text, i18n, observability
 from game_platform.avatars import user_avatar, USER_AVATARS, computer_avatar
 from game_platform.models import (
     AgentConversation,
@@ -162,6 +162,30 @@ class NotFoundError(PlatformError):
 
 class InvalidRequestError(PlatformError):
     """The request's values don't make sense for the resource it targets."""
+
+
+class GameMessageError(InvalidRequestError):
+    """A text the game's own server code wrote (the reason of an InvalidMove): answered 400
+    like InvalidRequestError, and translated for the viewer through the game version's string
+    table (see game_messages.py). [key] and [params] are set when a template of the table
+    matches the text; [template] is that template in English."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        game_id: str,
+        game_version: int,
+        key: str | None = None,
+        template: str | None = None,
+        params: dict[str, str] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.game_id = game_id
+        self.game_version = game_version
+        self.key = key
+        self.template = template
+        self.params = params or {}
 
 
 class ConflictError(PlatformError):
@@ -468,6 +492,9 @@ class GamePlatform:
         self._bundle_games_ttl_seconds = bundle_games_ttl_seconds
         self._bundle_games: tuple[float, list[Game]] | None = None
         self._bundle_tables: dict[tuple[str, int], tuple[dict[str, str] | None]] = {}
+        # The compiled server-text templates of each game version (game_messages.py), kept
+        # in memory: a version's code never changes.
+        self._server_templates: dict[tuple[str, int], tuple[game_messages.Template, ...]] = {}
         self._bundle_jobs: dict[str, threading.Event] = {}
         self._bundle_jobs_lock = threading.Lock()
         self._new_id = new_id
@@ -1827,13 +1854,13 @@ class GamePlatform:
             self._owned_draft(caller_id=caller_id, draft_id=draft_id)
             self._store.delete_game_draft(draft_id)
 
-    def _require_translatable(self, code: str | None) -> None:
+    def _require_translatable(self, code: str | None, server_code: str | None = None) -> None:
         """translation.require_strings: client code that fails game_text.lint is refused,
         with the checker's problems in plain words. Games with no client code are exempt;
         the admin and migration paths and example data never call this."""
         if not self._require_game_strings or not code or not code.strip():
             return
-        problems = game_text.lint(code)
+        problems = game_text.lint(code, server_code)
         if problems:
             shown = "; ".join(problems[:5])
             if len(problems) > 5:
@@ -1857,7 +1884,7 @@ class GamePlatform:
                 if draft.base_version != 0:
                     raise ConflictError("published game is no longer available")
                 game_schemas = draft.game_schemas
-                self._require_translatable(draft.code)
+                self._require_translatable(draft.code, draft.server_code)
                 if draft.server_code:
                     if game_schemas is None:
                         game_schemas = self._generate_game_schemas(
@@ -1920,7 +1947,7 @@ class GamePlatform:
     ) -> Game:
         server_code = server_code or None
         if _check_strings:
-            self._require_translatable(code)
+            self._require_translatable(code, server_code)
         if server_code is None and game_schemas is not None:
             raise InvalidRequestError("game_schemas requires server_code")
         with self._lock:
@@ -2026,6 +2053,51 @@ class GamePlatform:
             translatable=table is not None,
             warnings=warnings,
         )
+
+    def _game_message_error(self, game: Game, message: str) -> GameMessageError:
+        """The 400 for a move the game's server rejected with [message]."""
+        found = None
+        try:
+            found = game_messages.match(self._templates_of(game), message)
+        except Exception:  # noqa: BLE001 - a text we cannot match is shown as written
+            logging.getLogger(__name__).exception("matching a game message failed")
+        return GameMessageError(
+            message,
+            game_id=game.id,
+            game_version=game.version,
+            key=found.key if found else None,
+            template=found.template if found else None,
+            params=found.params if found else None,
+        )
+
+    def _templates_of(self, game: Game) -> tuple[game_messages.Template, ...]:
+        cache_key = (game.id, game.version)
+        templates = self._server_templates.get(cache_key)
+        if templates is None:
+            try:
+                table = game_text.extract_strings(game.code or "")
+            except game_text.StringsError:
+                table = None
+            templates = game_messages.compile_templates(table)
+            if game.code:
+                self._server_templates[cache_key] = templates
+        return templates
+
+    def translate_game_message(self, error: GameMessageError, locale: str) -> str | None:
+        """The text of [error] in [locale] (the matching template translated, the captured
+        values put back as written), or None when it stays as the game wrote it: English, no
+        matching template, no translator, a translation that failed. Never raises."""
+        try:
+            if error.template is None or i18n.normalize_locale(locale) in (None, i18n.DEFAULT_LOCALE):
+                return None
+            translated = self._translation.translate([error.template], locale)
+            text = translated.texts.get(error.template)
+            if not text:
+                return None
+            return game_messages.fill(text, error.params)
+        except Exception:  # noqa: BLE001 - translation must never fail a request
+            logging.getLogger(__name__).exception("translating a game message failed")
+            return None
 
     def translation_bundle(self, locale: str) -> TranslationBundle:
         """The names, descriptions and string tables of the published games in [locale],
@@ -2340,7 +2412,7 @@ class GamePlatform:
             if updated == game:
                 return game
             if not _admin and updated.code != game.code:
-                self._require_translatable(updated.code)
+                self._require_translatable(updated.code, updated.server_code)
             if game.builder_workflow and not _publishing:
                 raise ConflictError("This game has approved specifications; edit and verify it in the guided builder")
             if updated.server_code and (
@@ -3779,7 +3851,7 @@ class GamePlatform:
                 time_limit_seconds=PLAYER_LEFT_TIME_LIMIT_SECONDS,
             )
         except InvalidMoveError as error:
-            raise InvalidRequestError(error.message) from error
+            raise self._game_message_error(game, error.message) from error
         return {
             "player_id": caller_id,
             "payout": (result.get("payouts") or {}).get(match.player_id_of(self._get_seat(match, caller_id)), 0),
@@ -4138,7 +4210,7 @@ class GamePlatform:
                 game, match, "applyMove", match.state, match.player_id_of(seat), move
             )
         except InvalidMoveError as error:
-            raise InvalidRequestError(error.message) from error
+            raise self._game_message_error(game, error.message) from error
         saved = self._apply_logic_result(
             match,
             result=result,

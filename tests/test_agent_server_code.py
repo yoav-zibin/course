@@ -18,7 +18,7 @@ from game_platform.schemas import AgentChatRequest
 def _texts_are_not_under_test(monkeypatch: pytest.MonkeyPatch) -> None:
     """These tests use placeholder HTML; the translation check has its own tests
     (test_translation_required.py)."""
-    monkeypatch.setattr("game_platform.agent.game_text.lint", lambda code: [])
+    monkeypatch.setattr("game_platform.agent.game_text.lint", lambda code, server_code=None: [])
 
 
 def _request(**overrides) -> AgentChatRequest:

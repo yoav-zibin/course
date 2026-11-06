@@ -27,7 +27,16 @@ button:disabled{opacity:.4;cursor:default}
  "your_move": "Move disks to the right peg. Your move!",
  "peg_a": "A",
  "peg_b": "B",
- "peg_c": "C (goal)"
+ "peg_c": "C (goal)",
+ "server_bad_move": "bad move",
+ "server_pick_3_5_disks": "pick 3-5 disks",
+ "server_start_first": "start first",
+ "server_already_solved": "already solved",
+ "server_pick_two_different_pegs": "pick two different pegs",
+ "server_source_empty": "source empty",
+ "server_cannot_place_larger_on_smaller": "cannot place larger on smaller",
+ "server_unknown_move": "unknown move",
+ "server_no_moves": "no moves"
 }
 </script>
 <h2>Tower of Hanoi</h2>
@@ -53,6 +62,40 @@ let strings = SOURCE_STRINGS;
 function t(key, params) {
   const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
   return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// A text the game's SERVER wrote (a log line, a hand name in the match state): finds its template
+// among the `server_` texts of the table (the most specific that fits, each {name} standing for
+// any text) and shows it in the viewer's language with the same values; any other text is
+// returned as written.
+const SERVER_TEMPLATES = Object.keys(SOURCE_STRINGS)
+  .filter((key) => key.startsWith("server_") && SOURCE_STRINGS[key])
+  .map((key) => {
+    const names = [];
+    let literal = 0;
+    const source = SOURCE_STRINGS[key]
+      .split(/\{(\w+)\}/)
+      .map((piece, index) => {
+        if (index % 2) { names.push(piece); return "([\\s\\S]+?)"; }
+        literal += piece.length;
+        return piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      })
+      .join("");
+    return { key, names, literal, pattern: new RegExp("^" + source + "$") };
+  })
+  .sort((a, b) => b.literal - a.literal || a.names.length - b.names.length || (a.key > b.key ? 1 : a.key === b.key ? 0 : -1));
+
+function tx(text) {
+  if (typeof text !== "string") return text;
+  for (const template of SERVER_TEMPLATES) {
+    const found = template.pattern.exec(text);
+    if (found) {
+      const params = {};
+      template.names.forEach((name, index) => { if (!(name in params)) params[name] = found[index + 1]; });
+      return t(template.key, params);
+    }
+  }
+  return text;
 }
 
 // Call this first in the state_changed handler, before drawing anything: the platform sends

@@ -60,6 +60,7 @@ for (const [prefix, spec] of Object.entries(S)) {
     assert.deepEqual([...leftovers], [], 'texts shown without translation');
     for (const [key, text] of Object.entries(table)) {
       if ((spec.skipCoverage || []).includes(key)) continue;
+      if (key.startsWith('server_')) continue; // texts the game's server writes: tests/web/server-texts.test.cjs
       const re = patternOf(text);
       assert.ok(shown.some((s) => re.test(s)), `no scenario shows the text "${key}": ${text}`);
     }
