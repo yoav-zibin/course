@@ -52,7 +52,7 @@ for (const [prefix, spec] of Object.entries(S)) {
         for (const text of c.texts()) {
           shown.push(text);
           const words = spec.names.reduce((s, n) => s.split(n).join(''), text).split(MARK).join('');
-          if (!text.includes(MARK) && needsTranslation(words) && !(spec.data || []).includes(text)) leftovers.add(text);
+          if (!text.includes(MARK) && needsTranslation(words) && !(spec.data || []).some((d) => text.trim() === d.trim())) leftovers.add(text);
         }
       }
     }

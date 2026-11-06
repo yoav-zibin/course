@@ -44,4 +44,31 @@ S['788b39a9'] = { names: ['Ana', 'Ben'], scenarios: [
   [{ msg: mine(stars(5), { players: UNNAMED }) }],
 ] };
 
+// --- Last Floe
+const ROWL = [7, 8, 7, 8, 7, 8, 7, 8];
+function floe(over2 = {}) {
+  const tiles = []; let id = 0;
+  ROWL.forEach((n, r) => { for (let k = 0; k < n; k += 1) { tiles.push({ id, row: r, fish: (id % 3) + 1, penguin: id === 4 ? 0 : id === 5 ? 1 : -1, removed: id === 9 }); id += 1; } });
+  return { tiles, scores: [2, 3], phase: 'placement', finished: false, legal: { placements: [1, 2], moves: {} }, ...over2 };
+}
+const tile = (p, r, k) => p.$('board').children[r].children[k];
+S['4f49cbdc'] = { names: ['Ana', 'Ben'], scenarios: [
+  [{ msg: msg() }, { msg: mine(floe()) }, { msg: mine(floe()), then: (p) => tile(p, 0, 1).click() }],
+  [{ msg: theirs(floe()) }, { msg: theirs(floe(), { turn_of_player_indices: [], players: UNNAMED }) }, { msg: theirs(floe({ phase: 'movement' }), { turn_of_player_indices: [0, 1] }) }],
+  [{ msg: mine(floe({ phase: 'movement', legal: { placements: [], moves: { 4: [6, 7] } } })) }, { msg: mine(floe({ phase: 'movement', legal: { placements: [], moves: { 4: [6, 7] } } })), then: (p) => { tile(p, 0, 4).click(); } }],
+  [{ msg: mine(floe({ phase: 'movement', legal: { placements: [], moves: {} } })) }, { msg: mine(floe({ phase: 'movement', legal: { placements: [], moves: {} } })), then: click('actions') }, { msg: mine(floe({ phase: 'movement', legal: { placements: [], moves: {} } })), then: (p) => p.$('actions').children[0].click() }],
+  [{ msg: over(floe({ scores: [5, 3], finished: true })) }, { msg: over(floe({ scores: [4, 4], finished: true })) }, { msg: mine(floe({ scores: [1, 0], finished: true })) }, { msg: over(floe({ scores: [9, 3], finished: true }), { players: UNNAMED }) }],
+] };
+
+// --- SOS
+const sosBoard = (cells) => { const b = Array(36).fill(''); for (const [i, v] of cells) b[i] = v; return b; };
+const sos = (cells, extra = {}) => ({ board: sosBoard(cells), scores: [1, 2], lines: [], lastMove: -1, winner: null, ...extra });
+const withComputer = [{ name: 'Ana', player_index: 0, id: 'p0' }, { name: 'Robo', player_index: 1, id: 'p1', kind: 'computer' }];
+S['a1ca4c85'] = { names: ['Ana', 'Ben', 'Robo'], data: ['S', 'O', 'SOS', ' horizontally, vertically or diagonally. Each new SOS = 1 point + you go again. Most points when full wins.'], scenarios: [
+  [{ msg: msg() }, { msg: mine(sos([[0, 'S'], [1, 'O'], [2, 'S']], { lines: [[0, 1, 2]], lastMove: 2 })) }, { msg: mine(sos([])), then: (p) => { p.$('btnO').click(); p.$('board').children[7].click(); } }],
+  [{ msg: theirs(sos([])) }, { msg: theirs(sos([]), { acting_for_player_index: 1 }) }, { msg: theirs(sos([]), { acting_for_player_index: null, turn_of_player_indices: [] }) }, { msg: spectator(sos([]), { acting_for_player_index: 1 }) }],
+  [{ msg: theirs(sos([]), { players: withComputer, acting_for_player_index: 1 }) }, { msg: mine(sos([]), { players: withComputer }) }],
+  [{ msg: over(sos([], { winner: 0 })) }, { msg: over(sos([], { winner: -1 })) }, { msg: over(sos([], { winner: null })) }, { msg: over(sos([], { winner: 5 })) }, { msg: mine(sos([]), { players: UNNAMED, my_player_index: 1 }) }],
+] };
+
 module.exports = { S, msg, mine, theirs, over, spectator, PLAYERS, UNNAMED, click };
