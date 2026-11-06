@@ -52,7 +52,39 @@ def parse_json(raw):
     return result
 
 
+def _complete_negative_cases(artifact):
+    """Fill the preservation paperwork a rejected-move case must repeat.
+
+    The tests contract defines a negative example's turn as its
+    expected_turn, its expected state and views as the pre-move values,
+    and no payouts at all. Generators systematically omit or garble those
+    copies, and a model repair rewriting the whole contract kept failing
+    to restore them (one missing field per case, case after case). The
+    copies are definitional — no other value can ever validate or pass
+    the build's example runner — so code makes them instead.
+    """
+    cases = artifact.get('cases') if isinstance(artifact, dict) else None
+    if not isinstance(cases, list):
+        return
+    for case in cases:
+        if not isinstance(case, dict) or 'expected_error' not in case:
+            continue
+        turn = case.get('expected_turn')
+        if not (isinstance(case.get('turn'), list) and case['turn']):
+            if isinstance(turn, list) and turn:
+                case['turn'] = list(turn)
+        if 'state' in case:
+            case['expected_state'] = case['state']
+        for view, expected in (('view_of_mover', 'expected_view_of_mover'),
+                               ('view_of_other', 'expected_view_of_other')):
+            if view in case:
+                case[expected] = case[view]
+        if case.get('expected_payouts'):
+            del case['expected_payouts']
+
+
 def validate_test_data(artifact):
+    _complete_negative_cases(artifact)
     cases = artifact.get('cases')
     if not isinstance(cases,list) or not all(isinstance(case,dict) for case in cases):
         raise InvalidRequestError('Test cases must be a list of example objects')

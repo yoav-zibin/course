@@ -507,6 +507,63 @@ def test_test_plan_missing_a_kind_is_completed_instead_of_failing():
     assert [c['name'] for c in artifact['cases']] == [o['name'] for o in outlines]
 
 
+def test_negative_case_paperwork_is_completed_by_code():
+    import copy
+    from game_platform.builder_jobs import validate_test_data
+    contract = copy.deepcopy(fixture()['contract'])
+    case = contract['cases'][1]
+    # A rejected-move case as generators actually produce it: the required
+    # preservation copies (turn, expected state/views, no payouts) omitted
+    # or garbled. The copies are definitional, so validation completes
+    # them instead of failing the whole proposal for a missing field.
+    case['expected_error'] = 'InvalidMove'
+    case.pop('turn', None)
+    case['expected_state'] = {'n': 999}
+    case['expected_view_of_mover'] = {'n': 999}
+    case['expected_payouts'] = {'u1': 0}
+    validate_test_data(contract)
+    assert case['turn'] == case['expected_turn'] == ['u1']
+    assert case['expected_state'] == case['state']
+    assert case['expected_view_of_mover'] == case['view_of_mover']
+    assert case['expected_view_of_other'] == case['view_of_other']
+    assert not case.get('expected_payouts')
+
+
+def test_negative_case_missing_turn_no_longer_needs_model_repair():
+    import copy
+    from game_platform.builder_jobs import propose_step
+    draft = approved_draft()
+    contract = copy.deepcopy(draft.builder_workflow['artifacts']['tests']['value'])
+    cases = contract.pop('cases')
+    originals = {case['name']: case.pop('images') for case in cases}
+    outlines = [{k: c[k] for k in ('name', 'kind', 'description')} for c in cases]
+    def expanded(name):
+        case = next(c for c in cases if c['name'] == name)
+        if name == 'Intermediate move':
+            case = {**case, 'expected_error': 'InvalidMove', 'expected_state': {'n': 999}}
+            case.pop('turn', None)
+        return case
+    class Provider:
+        def chat(self, messages, **options):
+            instruction = messages[0]['content']
+            if instruction.startswith('Plan the requested tests'):
+                return json.dumps(dict(contract, cases=outlines, message='Review the examples'))
+            if instruction.startswith('Write only the single'):
+                name = json.loads(messages[1]['content'])['outline']['name']
+                return json.dumps(expanded(name))
+            if instruction.startswith('Illustrate only this one'):
+                name = json.loads(messages[1]['content'])['example']['name']
+                return json.dumps({'images': originals[name]})
+            return '{"broken":"'
+    result = propose_step(Provider(), draft, 'tests', 'check the walls cannot fully block a dragon')
+    artifact = result.builder_workflow['artifacts']['tests']['value']
+    flow.validate_artifact('tests', artifact)
+    case = next(c for c in artifact['cases'] if c['name'] == 'Intermediate move')
+    assert case['turn'] == ['u1']
+    assert case['expected_state'] == case['state']
+    assert case['expected_view_of_mover'] == case['view_of_mover']
+
+
 @pytest.mark.parametrize('inline', [True, False])
 def test_repair_only_malformed_test_view(inline):
     import copy
