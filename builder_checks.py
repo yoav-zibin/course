@@ -1,6 +1,6 @@
 """Named verification checks: extend CHECKS without changing the build worker."""
 from game_platform import game_text
-from game_platform.builder_validation import probe_leaving, verify_examples
+from game_platform.builder_validation import probe_leaving, probe_move_agreement, verify_examples
 from game_platform.game_testing import test_server_code
 
 
@@ -19,6 +19,7 @@ Game calls have a 100 ms execution limit. Bound computer search by deterministic
 Settlement algorithm (implement exactly, with ONE settlement function used by applyMove, playerLeft and every later call): eligible(ctx) is the players who are kind human and active at call time (the departing player is still active during playerLeft). settle(winnerId) returns {} when ctx.pot is 0; otherwise, if winnerId is eligible it returns {winnerId: ctx.pot}; otherwise it splits ctx.pot equally among eligible players (integer shares, remainder one each to the first eligible players in ctx.players order); if nobody is eligible it returns {} (reachable only when the pot is 0 in any real match). When a terminal applyMove or a match-ending playerLeft first ends the match, compute payouts with this one function, STORE a copy in the state (state.finalPayouts), and return it. Prefer entries only for players receiving a positive amount; zero entries are allowed but unnecessary. A forfeit win by a computer seat therefore pays the pot to the eligible humans (in a one-human match, the departing human) — never to the computer, and never {} while a pot and an eligible human exist.
 randomMove recipe: enumerate the complete legal move list once — step moves computed directly, plus every placement whose preconditions pass an allocation-light legality test (precompute the blocked-edge set once, test paths with an iterative search over a flat visited array, never deep-copy the state per candidate) — then return moves[Math.floor(ctx.random() * moves.length)]. No weighting between move types, no probability splits, no retry sampling.
 computerMove recipe: precompute the blocked-edge set once per call. Run ONE breadth-first search from a pawn that fills a distance value for every cell (a distance map), at most one such map per side per evaluated position, and score every candidate from those maps instead of searching again per candidate. The approved node budget is a single counter for the whole computerMove call, incremented inside the search loop each time a cell is expanded; when it runs out, stop expanding and score the remaining candidates from the distances already computed — a candidate index or a loop bound is not a node budget. Every helper that tests walls or paths during the search receives the same wall set: the placed walls plus ALL extra candidate walls being considered together; a helper must apply every wall it is given, never just the first, or combined placements will be misjudged. At depth 2 and beyond, enumerate the opponent's replies with the same complete legal-move generator used for the computer's own moves (step and placement moves alike), never a step-only subset. Endgame safety: computerMove must return a legal move on every reachable state — with no placements remaining, with the pawns adjacent, or with a single legal move — and must never throw; never slice, index or destructure a list that could be empty without first falling back to any legal move.
+One legality source: implement legality ONCE, as a single total function legalMoves(state) for the seat to move that returns every move applyMove would accept right now — step moves computed directly, placements passing the same preconditions applyMove checks, including per-seat resource counts and path preservation. applyMove validates by membership in that list: a move it does not contain throws InvalidMove, and a move it contains is never rejected by a second, divergent legality implementation. computerMove and randomMove choose only from that list. Every fallback in computerMove — catch blocks, empty strategy results, exhausted budgets — returns an element of that list: never a hardcoded square, never a 'stay in place' move that is not in the list, never an unguarded index or slice of it. legalMoves never throws and never clones state per candidate; it shares the call's precomputed blocked-edge set and the allocation-light tests above. Divergence between the list and the validator, and invented fallback moves, are the defects the random walks and the computers review reject most often — this structure makes both impossible by construction.
 Difficulty channel: the platform ctx has no difficulty field. Read difficulty from state.difficulty when the game state carries it (the client sets it through the game's own setup move), branch explicitly on that value with the approved algorithm and budget per difficulty, and when it is absent use the difficulty the approved rules name as the default.
 playerLeft recipe (implement in exactly this order): 1) If the match has already ended (a result is recorded, e.g. state.finalPayouts is set), return the recorded state, with the recorded payouts re-reported for this call: omit entries for players who are not active in this ctx (the platform rejects payouts naming inactive players, even zero entries), and add any omitted positive amount to the first still-active human in ctx.players order so the total still equals the pot. The settlement stored in state never changes. 2) Otherwise, if playerId holds no seat in ctx.players, or that seat's active flag is false, return {state, turn} unchanged with no payouts — before any ending or settlement logic. 3) Otherwise, if this leave ends the match (fewer than two active humans would remain, or the approved rules end the match on a leave), record the result in state exactly as the rules say, set state.finalPayouts with the one settlement function, and return {state, turn: null, payouts: state.finalPayouts}. 4) Otherwise the match continues: return the state with the leaver excluded from every future turn — the returned turn never contains the leaver — and payouts only as the approved rules provide for a continuing leave. These behaviours are verified by deterministic probes (non-seat and duplicate leaves, forfeits, post-end leaves), not by opinion.
 Performance rules that decide pass/fail: never call ctx.estimateWinChance from computerMove, randomMove or applyMove (one estimate plays about a hundred simulated games and takes about a second — always past the 100 ms limit). A candidate legality test must not clone the state, re-run applyMove, or rebuild the board per candidate: build the blocked-edge/wall set once per call, test each candidate against that set, and run the path search on a flat array with an integer queue. Enumerating every placement with one path search each is only a few milliseconds when done this way; the timeouts seen in practice come from per-candidate copying, not from the search itself.
@@ -55,6 +56,12 @@ COVER_FIDELITY = '''Cover fidelity (applies to the catalog cover only):
 - Drama comes from color, lighting, background and framing only, never from bending the board's geometry. Recount the rows and columns before returning and fix any mismatch with the approved rules.
 '''
 
+COVER_CREATIVE = '''Creative cover (applies to the catalog cover only, when the author did not ask for the board):
+- The cover is key art, not a depiction of play: it does not show the board, a position or the interface. Evoke the game's theme, characters and mood from the approved name, description and rules — a scene, a confrontation, a world.
+- It must still be recognizably THIS game: use its named characters, objects and setting, never another game's board, pieces or branding, and never a generic scene that could advertise any game.
+- Text-free, 16:9. Composition, color and lighting are unrestricted.
+The supporting previews are unaffected by this brief: they remain faithful mockups of real positions.'''
+
 
 def examples(code, server, spec, rules):
     results = verify_examples(server, spec['tests'])
@@ -68,6 +75,14 @@ def settlement_probes(code, server, spec, rules):
                                  allows_leave_mid_match=rules.allows_leave_mid_match)
     except Exception as exc:  # a probe crash is a failed check, never a crashed build
         failures = [f'settlement probes could not run: {exc}']
+    return {'passed': not failures, 'details': failures}
+
+
+def move_agreement(code, server, spec, rules):
+    try:
+        failures = probe_move_agreement(server, spec['tests'])
+    except Exception as exc:  # a probe crash is a failed check, never a crashed build
+        failures = [f'move agreement probes could not run: {exc}']
     return {'passed': not failures, 'details': failures}
 
 
@@ -96,7 +111,7 @@ def random_walks(code, server, spec, rules):
     return {'passed': report.passed, 'details': str(report.failures)}
 
 
-CHECKS = (('approved_examples', examples), ('settlement_probes', settlement_probes), ('localization', localization), ('random_walks', random_walks))
+CHECKS = (('approved_examples', examples), ('settlement_probes', settlement_probes), ('move_agreement', move_agreement), ('localization', localization), ('random_walks', random_walks))
 REVIEW_BRIEFS = (
     ('rules', 'Check setup, legal moves, turn order and terminal conditions against the approved rules.'),
     ('privacy', 'Check hidden information and spectator views; detect information leaks in viewFor.'),

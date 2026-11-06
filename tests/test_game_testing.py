@@ -155,6 +155,30 @@ def test_a_non_deterministic_game_fails():
     assert "non-deterministic" in failure.message
 
 
+def test_non_determinism_after_the_first_move_is_detected():
+    code = GOOD_GAME.replace(
+        "const count = state.count + 1;",
+        "const count = state.count + 1 + (state.count >= 2 ? calls++ : 0);",
+    ).replace("const game = {", "let calls = 0;\nconst game = {", 1)
+    rules = GameRules(allowed_player_counts=(2,), allows_leave_mid_match=False,
+                      allows_join_mid_match=False)
+    report = run_game_tests(code, rules=rules, run_seed=7)
+    assert not report.passed
+    assert any(f.function == "applyMove" and "non-deterministic" in f.message
+               for f in report.failures)
+
+
+def test_non_deterministic_views_are_detected():
+    code = GOOD_GAME.replace(
+        "viewFor(state, playerId, ctx) { return {count: state.count}; },",
+        "viewFor(state, playerId, ctx) { return {count: calls++}; },",
+    ).replace("const game = {", "let calls = 0;\nconst game = {", 1)
+    report = run_game_tests(code, rules=RULES, run_seed=7)
+    assert not report.passed
+    assert any(f.function == "viewFor" and "non-deterministic" in f.message
+               for f in report.failures)
+
+
 def test_no_walk_completed_within_the_budget_is_reported_too_slow(monkeypatch):
     clock_values = iter((0.0, 0.3))
     monkeypatch.setattr(game_testing.time, "monotonic", lambda: next(clock_values))

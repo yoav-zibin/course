@@ -38,7 +38,9 @@ def test_existing_firestore_config_keeps_production_storage_and_has_no_demo_rout
     assert not store.list_users()
     with TestClient(apps[0]) as client:
         assert client.get("/storage/capabilities").json()["pagination"] is False
-        assert client.get("/", follow_redirects=False).headers["location"] == "/portal"
+        root = client.get("/", follow_redirects=False)
+        assert root.status_code == 200
+        assert "Game platform · Welcome" in root.text
         for path in ("/demo", "/demo/accounts", "/demo/budget", "/admin/demo-fixtures"):
             assert client.get(path).status_code == 404
     assert not store.list_users()

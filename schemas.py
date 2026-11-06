@@ -628,13 +628,22 @@ class EmulatorPlayerOut(BaseModel):
     max_loss: int
 
 
-class EmulatorResetRequest(_Request):
-    """Starts an emulated match on unsaved server code (POST /emulator/reset)."""
-
+class MatrixEmulatorResetRequest(_Request):
+    """Starts a test-only simulation on unsaved server code."""
     server_code: str
     game_schemas: GameSchemas
     players: Annotated[list[EmulatorPlayerIn], Field(min_length=1, max_length=10)]
     seed: int = 0
+
+    @model_validator(mode="after")
+    def has_human(self):
+        if not any(p.kind == "human" for p in self.players):
+            raise ValueError("at least one human seat is required")
+        return self
+
+
+class EmulatorResetRequest(MatrixEmulatorResetRequest):
+    """Starts an emulated match on unsaved server code (POST /emulator/reset)."""
 
     @model_validator(mode="after")
     def solo_computers(self):
@@ -644,7 +653,7 @@ class EmulatorResetRequest(_Request):
         return self
 
 
-class EmulatorActRequest(EmulatorResetRequest):
+class MatrixEmulatorActRequest(MatrixEmulatorResetRequest):
     """Applies one human move in an emulated match (POST /emulator/act),
     then advances computer players until a human's turn or the end. The
     [state], [turn] and [move_count] come from the previous emulator
@@ -656,6 +665,15 @@ class EmulatorActRequest(EmulatorResetRequest):
     move_count: int = 0
     player_id: str
     move: JsonValue = None
+
+
+class EmulatorActRequest(MatrixEmulatorActRequest):
+    @model_validator(mode="after")
+    def solo_computers(self):
+        humans = sum(p.kind == "human" for p in self.players)
+        if any(p.kind == "computer" for p in self.players) and humans != 1:
+            raise ValueError("computer opponents are only supported with one human")
+        return self
 
 
 class EmulatorOut(BaseModel):

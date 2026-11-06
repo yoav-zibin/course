@@ -17,7 +17,9 @@ from game_platform.models import (
     ExperimentAssignment,
     ExperimentEvent,
     Game,
+    GamePopularity,
     GameDraft,
+    GameTestSession,
     GameTestSeeds,
     Translation,
     GameVersionError,
@@ -32,6 +34,14 @@ from game_platform.models import (
 
 
 class Store(Protocol):
+    def put_game_test_session(self, session: GameTestSession) -> None: ...
+
+    def get_game_test_session(self, session_id: str) -> GameTestSession | None: ...
+
+    def list_game_test_sessions(self, *, owner_user_id: str) -> list[GameTestSession]: ...
+
+    def delete_game_test_session(self, session_id: str) -> None: ...
+
     def put_game_draft(self, draft: GameDraft) -> None: ...
 
     def get_game_draft(self, draft_id: str) -> GameDraft | None: ...
@@ -80,6 +90,14 @@ class Store(Protocol):
     def delete_game(self, game_id: str) -> None:
         """Marks the game deleted and hides it from [list_games]. Its versions are kept,
         since matches may still use them."""
+        ...
+
+    def delete_game_version(self, game_id: str, version: int, *, allow_latest: bool = False) -> None:
+        """Deletes one version of a game, permanently. Refuses (ValueError) when the
+        version does not exist, when it is the game's latest version unless
+        [allow_latest] is set, and when any match still pins that (game_id,
+        version) — callers must delete those matches first. A deleted version's
+        number is never reused: later versions keep their numbers."""
         ...
 
     def put_match(self, match: Match) -> None: ...
@@ -195,6 +213,8 @@ class Store(Protocol):
 
     def record_game_match_start(self, game_id: str, player_count: int) -> None: ...
 
+    def game_popularity_score(self, game_id: str) -> int: ...
+
     def list_popular_game_ids(self, limit: int) -> list[tuple[str, int]]: ...
 
     def put_feedback(self, feedback: Feedback) -> None: ...
@@ -221,6 +241,7 @@ class Snapshot:
     matches: tuple[Match, ...]
     # Optional so existing data files load without a migration. Never public games.
     game_drafts: tuple[GameDraft, ...] = ()
+    game_test_sessions: tuple[GameTestSession, ...] = ()
     unpublished_game_ids: tuple[str, ...] = ()
     # Optional so existing data files load without a migration. Admin-only data.
     agent_conversations: tuple[AgentConversation, ...] = ()
@@ -244,6 +265,7 @@ class Snapshot:
     experiment_events: tuple[ExperimentEvent, ...] = ()
     # Optional so existing data files load without a migration. Admin-only data.
     feedback: tuple[Feedback, ...] = ()
+    game_popularity: tuple[GamePopularity, ...] = ()
 
 
 class InMemoryStore:
@@ -255,8 +277,11 @@ class InMemoryStore:
         self._user_ids_by_linked_account: dict[
             tuple[LinkedAccountKind, str], dict[str, None]
         ] = {}
-        # All versions of each game, oldest first.
-        self._game_versions: dict[str, list[Game]] = {}
+        # All versions of each game, oldest first. A slot holds None once that
+        # version was deleted (see [delete_game_version]): slots keep every
+        # surviving version at index version - 1, so version numbers are never
+        # reused and a snapshot reload can restore the same gaps.
+        self._game_versions: dict[str, list[Game | None]] = {}
         self._deleted_game_ids: set[str] = set()
         self._matches: dict[str, Match] = {}
         self._match_ids_by_user: dict[str, set[str]] = {}
@@ -264,6 +289,7 @@ class InMemoryStore:
         self._match_order: dict[str, int] = {}
         self._next_match_order = 0
         self._game_drafts: dict[str, GameDraft] = {}
+        self._game_test_sessions: dict[str, GameTestSession] = {}
         self._unpublished_game_ids: set[str] = set()
         self._agent_conversations: dict[str, list[AgentConversationEntry]] = {}
         self._push_subscriptions: dict[str, WebPushSubscription] = {}
@@ -276,8 +302,7 @@ class InMemoryStore:
         self._experiments: dict[str, Experiment] = {}
         self._experiment_assignments: dict[tuple[str, str], ExperimentAssignment] = {}
         self._experiment_events: dict[str, ExperimentEvent] = {}
-        # Test/local fallback only. Production query mode keeps these aggregates
-        # in the dedicated Firestore game_popularity collection.
+        # One small aggregate per game, also persisted by snapshot stores.
         self._game_popularity: dict[str, tuple[int, int]] = {}
         self._feedback: dict[str, Feedback] = {}
 
@@ -287,6 +312,11 @@ class InMemoryStore:
         for user in snapshot.users:
             store.put_user(user)
         for game in snapshot.game_versions:
+            versions = store._game_versions.setdefault(game.id, [])
+            # A snapshot omits deleted versions; restore their empty slots so
+            # the surviving versions keep their numbers on reload.
+            while len(versions) < game.version - 1:
+                versions.append(None)
             store.add_game_version(replace(game, deleted=False))
         store._deleted_game_ids.update(snapshot.deleted_game_ids)
         store._unpublished_game_ids.update(snapshot.unpublished_game_ids)
@@ -294,6 +324,8 @@ class InMemoryStore:
             store.put_match(match)
         for draft in snapshot.game_drafts:
             store.put_game_draft(draft)
+        for session in snapshot.game_test_sessions:
+            store.put_game_test_session(session)
         for conversation in snapshot.agent_conversations:
             store._agent_conversations[conversation.game_id] = list(conversation.entries)
         for subscription in snapshot.push_subscriptions:
@@ -312,6 +344,10 @@ class InMemoryStore:
             store.put_experiment_event(event)
         for feedback in snapshot.feedback:
             store.put_feedback(feedback)
+        store._game_popularity = {
+            row.game_id: (row.matches_started, row.score)
+            for row in snapshot.game_popularity
+        }
         return store
 
     def snapshot(self) -> Snapshot:
@@ -319,11 +355,15 @@ class InMemoryStore:
         return Snapshot(
             users=tuple(self._users.values()),
             game_versions=tuple(
-                game for versions in self._game_versions.values() for game in versions
+                game
+                for versions in self._game_versions.values()
+                for game in versions
+                if game is not None
             ),
             deleted_game_ids=tuple(sorted(self._deleted_game_ids)),
             matches=tuple(self._matches.values()),
             game_drafts=tuple(self._game_drafts.values()),
+            game_test_sessions=tuple(self._game_test_sessions.values()),
             unpublished_game_ids=tuple(sorted(self._unpublished_game_ids)),
             agent_conversations=tuple(
                 AgentConversation(game_id=game_id, entries=tuple(entries))
@@ -338,6 +378,10 @@ class InMemoryStore:
             experiment_assignments=tuple(self._experiment_assignments.values()),
             experiment_events=tuple(self._experiment_events.values()),
             feedback=tuple(self._feedback.values()),
+            game_popularity=tuple(
+                GamePopularity(game_id=game_id, matches_started=matches, score=score)
+                for game_id, (matches, score) in sorted(self._game_popularity.items())
+            ),
         )
 
     def put_experiment(self, experiment: Experiment) -> None:
@@ -385,6 +429,9 @@ class InMemoryStore:
             key=lambda item: (-item[1], item[0]),
         )[:limit]
 
+    def game_popularity_score(self, game_id: str) -> int:
+        return self._game_popularity.get(game_id, (0, 0))[1]
+
     def put_feedback(self, feedback: Feedback) -> None:
         self._feedback[feedback.id] = feedback
 
@@ -421,6 +468,18 @@ class InMemoryStore:
         for account_key in new_accounts - old_accounts:
             self._user_ids_by_linked_account.setdefault(account_key, {})[user.id] = None
         self._users[user.id] = user
+
+    def put_game_test_session(self, session: GameTestSession) -> None:
+        self._game_test_sessions[session.id] = session
+
+    def get_game_test_session(self, session_id: str) -> GameTestSession | None:
+        return self._game_test_sessions.get(session_id)
+
+    def list_game_test_sessions(self, *, owner_user_id: str) -> list[GameTestSession]:
+        return [s for s in self._game_test_sessions.values() if s.owner_user_id == owner_user_id]
+
+    def delete_game_test_session(self, session_id: str) -> None:
+        self._game_test_sessions.pop(session_id, None)
 
     def put_game_draft(self, draft: GameDraft) -> None:
         self._game_drafts[draft.id] = draft
@@ -466,34 +525,77 @@ class InMemoryStore:
 
     def put_game_version(self, game: Game) -> None:
         versions = self._game_versions.get(game.id)
-        assert versions is not None and 1 <= game.version <= len(versions), (
+        assert (
+            versions is not None
+            and 1 <= game.version <= len(versions)
+            and versions[game.version - 1] is not None
+        ), (
             game.id,
             game.version,
         )
         versions[game.version - 1] = game
 
-    def get_game(self, game_id: str) -> Game | None:
+    def _latest_version(self, game_id: str) -> Game | None:
+        versions = self._game_versions.get(game_id, [])
+        for game in reversed(versions):
+            if game is not None:
+                return game
+        return None
+
+    def delete_game_version(
+        self, game_id: str, version: int, *, allow_latest: bool = False
+    ) -> None:
         versions = self._game_versions.get(game_id)
-        return self._with_deleted_flag(versions[-1]) if versions else None
+        if (
+            versions is None
+            or not 1 <= version <= len(versions)
+            or versions[version - 1] is None
+        ):
+            raise ValueError(f"no such game version: {game_id}@{version}")
+        latest = self._latest_version(game_id)
+        if latest is not None and version == latest.version and not allow_latest:
+            raise ValueError(
+                f"refusing to delete the latest version {game_id}@{version}; "
+                "pass allow_latest=True to delete it"
+            )
+        pinned = [
+            match
+            for match in self._matches.values()
+            if match.game_id == game_id and match.game_version == version
+        ]
+        if pinned:
+            raise ValueError(
+                f"refusing to delete {game_id}@{version}: pinned by "
+                f"{len(pinned)} match(es); delete the matches first"
+            )
+        versions[version - 1] = None
+
+    def get_game(self, game_id: str) -> Game | None:
+        latest = self._latest_version(game_id)
+        return self._with_deleted_flag(latest) if latest is not None else None
 
     def get_game_version(self, game_id: str, version: int) -> Game | None:
         versions = self._game_versions.get(game_id, [])
         if not 1 <= version <= len(versions):
             return None
-        return self._with_deleted_flag(versions[version - 1])
+        game = versions[version - 1]
+        return self._with_deleted_flag(game) if game is not None else None
 
     def _with_deleted_flag(self, game: Game) -> Game:
         return replace(game, deleted=game.id in self._deleted_game_ids,
                        published=game.id not in self._unpublished_game_ids)
 
     def list_games(self, *, owner_user_id: str | None, include_unpublished: bool = False) -> list[Game]:
-        return [
-            self._with_deleted_flag(versions[-1])
-            for game_id, versions in self._game_versions.items()
-            if game_id not in self._deleted_game_ids
-            and (include_unpublished or game_id not in self._unpublished_game_ids)
-            and (owner_user_id is None or versions[-1].owner_user_id == owner_user_id)
-        ]
+        games = []
+        for game_id, versions in self._game_versions.items():
+            latest = self._latest_version(game_id)
+            if latest is None:
+                continue
+            if game_id not in self._deleted_game_ids and (
+                include_unpublished or game_id not in self._unpublished_game_ids
+            ) and (owner_user_id is None or latest.owner_user_id == owner_user_id):
+                games.append(self._with_deleted_flag(latest))
+        return games
 
     def set_game_published(self, game_id: str, published: bool) -> None:
         if published:
@@ -575,6 +677,7 @@ class InMemoryStore:
             self._with_deleted_flag(game)
             for versions in self._game_versions.values()
             for game in versions
+            if game is not None
         ]
 
     def list_all_matches(self) -> list[Match]:

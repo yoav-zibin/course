@@ -22,6 +22,7 @@ from game_platform.models import (
     ExperimentEvent,
     Game,
     GameDraft,
+    GameTestSession,
     GameTestSeeds,
     Translation,
     GameVersionError,
@@ -137,6 +138,19 @@ class SavingStore:
 
     # [Store] interface: reads delegate; writes delegate and schedule a save.
 
+    def record_game_match_start(self, game_id: str, player_count: int) -> None:
+        with self._lock:
+            self._inner.record_game_match_start(game_id, player_count)
+            self._set_dirty()
+
+    def game_popularity_score(self, game_id: str) -> int:
+        with self._lock:
+            return self._inner.game_popularity_score(game_id)
+
+    def list_popular_game_ids(self, limit: int) -> list[tuple[str, int]]:
+        with self._lock:
+            return self._inner.list_popular_game_ids(limit)
+
     def put_user(self, user: User) -> None:
         with self._lock:
             self._inner.put_user(user)
@@ -164,6 +178,24 @@ class SavingStore:
     def add_game_version(self, game: Game) -> None:
         with self._lock:
             self._inner.add_game_version(game)
+            self._set_dirty()
+
+    def put_game_test_session(self, session: GameTestSession) -> None:
+        with self._lock:
+            self._inner.put_game_test_session(session)
+            self._set_dirty()
+
+    def get_game_test_session(self, session_id: str) -> GameTestSession | None:
+        with self._lock:
+            return self._inner.get_game_test_session(session_id)
+
+    def list_game_test_sessions(self, *, owner_user_id: str) -> list[GameTestSession]:
+        with self._lock:
+            return self._inner.list_game_test_sessions(owner_user_id=owner_user_id)
+
+    def delete_game_test_session(self, session_id: str) -> None:
+        with self._lock:
+            self._inner.delete_game_test_session(session_id)
             self._set_dirty()
 
     def put_game_draft(self, draft: GameDraft) -> None:
@@ -209,6 +241,18 @@ class SavingStore:
     def delete_game(self, game_id: str) -> None:
         with self._lock:
             self._inner.delete_game(game_id)
+            self._set_dirty()
+
+    def delete_game_version(
+        self, game_id: str, version: int, *, allow_latest: bool = False
+    ) -> None:
+        """Deletes one version via the in-memory store; the next save drops the
+        version's document (Firestore) or JSON record (file). Guards (latest,
+        pinned matches) are the inner store's."""
+        with self._lock:
+            self._inner.delete_game_version(
+                game_id, version, allow_latest=allow_latest
+            )
             self._set_dirty()
 
     def put_match(self, match: Match) -> None:

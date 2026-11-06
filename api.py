@@ -67,6 +67,8 @@ from game_platform.schemas import (
     EmulatorActRequest,
     EmulatorOut,
     EmulatorResetRequest,
+    MatrixEmulatorActRequest,
+    MatrixEmulatorResetRequest,
     GameOut,
     GameSchemas,
     GameSummaryOut,
@@ -316,6 +318,26 @@ def create_user(
 def list_saved_games(platform: Platform, caller_id: CallerId) -> list[GameOut]:
     """The caller's library of saved games, most recently saved first."""
     return [GameOut.of(g) for g in platform.list_saved_games(caller_id=caller_id)]
+
+
+@router.get("/users/me/recent-games")
+def list_recent_games(platform: Platform, caller_id: CallerId) -> list[GameSummaryOut]:
+    """The caller's recently played published games, most recent first."""
+    return [
+        GameSummaryOut.of(game)
+        for game in platform.list_recent_games(caller_id=caller_id)
+    ]
+
+
+@router.post("/users/me/recent-games/{game_id}")
+def record_recent_game(
+    platform: Platform, caller_id: CallerId, game_id: str
+) -> list[GameSummaryOut]:
+    """Records a local practice game and returns the updated recent-games row."""
+    return [
+        GameSummaryOut.of(game)
+        for game in platform.record_recent_game(caller_id=caller_id, game_id=game_id)
+    ]
 
 
 @router.get("/users/me/experiments/skin")
@@ -773,6 +795,33 @@ def emulator_act(
     )
 
 
+@router.post("/game-test-emulator/reset")
+def matrix_emulator_reset(
+    platform: Platform, caller_id: CallerId, body: MatrixEmulatorResetRequest
+) -> EmulatorOut:
+    """Simulate test rosters, including combinations unavailable in real matches."""
+    game_schemas = body.game_schemas.model_dump()
+    result = platform.emulator_reset(
+        server_code=body.server_code, game_schemas=game_schemas,
+        players=[player.model_dump() for player in body.players], seed=body.seed,
+    )
+    result["game_schemas"] = game_schemas
+    return EmulatorOut.model_validate(result)
+
+
+@router.post("/game-test-emulator/act")
+def matrix_emulator_act(
+    platform: Platform, caller_id: CallerId, body: MatrixEmulatorActRequest
+) -> EmulatorOut:
+    """Apply a move in a test-only roster; no real match is created."""
+    return EmulatorOut.model_validate(platform.emulator_act(
+        server_code=body.server_code, game_schemas=body.game_schemas.model_dump(),
+        players=[player.model_dump() for player in body.players], seed=body.seed,
+        state=body.state, turn=body.turn, move_count=body.move_count,
+        player_id=body.player_id, move=body.move,
+    ))
+
+
 @router.get("/games")
 def list_games(
     platform: Platform,
@@ -791,6 +840,19 @@ def list_games(
 def list_popular_games(platform: Platform, limit: int = 8) -> list[GameSummaryOut]:
     """The bounded top games by cumulative players in started matches."""
     return [GameSummaryOut.of(game) for game in platform.list_popular_games(limit=limit)]
+
+
+@router.get("/games/{game_id}/popularity", include_in_schema=False)
+def game_popularity_score(
+    platform: Platform, game_id: str, caller_id: OptionalCallerId
+) -> dict[str, int | str]:
+    """Small debugging read for a game's current aggregate popularity score."""
+    return {
+        "game_id": game_id,
+        "score": platform.game_popularity_score(
+            game_id=game_id, caller_id=caller_id
+        ),
+    }
 
 
 @router.get("/builder/games")
@@ -1435,8 +1497,9 @@ MasterPassword = Depends(_check_master_password)
 
 
 @debug_router.get("/")
-def index() -> RedirectResponse:
-    return RedirectResponse("/portal")
+def index() -> FileResponse:
+    """Serve the welcome page; its browser-side account check forwards signed-in players."""
+    return FileResponse(_STATIC_DIR / "welcome.html")
 
 
 @debug_router.get("/console")
@@ -1452,6 +1515,11 @@ def new_builder_page() -> FileResponse:
 @debug_router.get("/builder")
 def builder() -> FileResponse:
     return FileResponse(_STATIC_DIR / "builder.html")
+
+
+@debug_router.get("/game-test")
+def game_test_page() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "game-test.html")
 
 
 @debug_router.get("/portal")
@@ -2399,7 +2467,7 @@ def create_app(
     ai_max_fix_attempts: int = 3,
     monitor: observability.Monitor | None = None,
 ) -> FastAPI:
-    """[debug_tools] adds the web pages (/portal, /builder, /admin, /console, /browse)
+    """[debug_tools] adds the web pages (/, /portal, /builder, /admin, /console, /browse)
     and /debug/all-data, which exposes everything (including users' passwords),
     and the backoffice's /stats and /admin/* endpoints. /admin, /browse, /stats,
     /debug/all-data and /admin/* need [master_password], unless it is empty.
@@ -2453,6 +2521,8 @@ def create_app(
     app.include_router(make_router(_get_platform, _get_caller_id))
     from game_platform.agent_import import make_router as make_import_router
     app.include_router(make_import_router(_get_platform, _get_caller_id))
+    from game_platform.test_session_api import make_router as make_test_session_router
+    app.include_router(make_test_session_router(_get_platform, _get_caller_id))
     app.include_router(router)
     from game_platform.scaling_api import install as install_scaling_api
     install_scaling_api(app, debug_tools=debug_tools)

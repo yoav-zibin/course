@@ -4,7 +4,7 @@ const vm=require('node:vm');
 const fs=require('node:fs');
 const path=require('node:path');
 
-function setup(request=async()=>{}, hash='', search='') {
+function setup(request=async()=>{}, hash='', search='', storage) {
   const nodes=new Map();
   const node=id=>{
     if(!nodes.has(id)) nodes.set(id,{value:'',hidden:false,disabled:false,dataset:{},children:[],classList:{toggle(){}},
@@ -14,7 +14,7 @@ function setup(request=async()=>{}, hash='', search='') {
   const navigations=[];
   const pageErrors=[];
   const ctx=vm.createContext({StoragePages:{enabled:async()=>false,list:(request,path,options)=>request("GET",path,options),controls(){},search(){return false;}},console,Map,Set,URLSearchParams,
-    navigator:{onLine:true},localStorage:{},PortalOffline:class {api(...args){return request(...args);}read(){return {};}write(){}} ,
+    navigator:{onLine:true},localStorage:storage || {},PortalOffline:class {api(...args){return request(...args);}read(){return {};}write(){} writeCache(data){this.write(data);} async submitMove(match,body){const result=this.enqueue(match,body);await this.sync({force:true});return result;}} ,
     document:{getElementById:node,body:{classList:{toggle(){}}}},window:{addEventListener(){}},
     location:{hash,search,assign(url){navigations.push(url);}},history:{replaceState(){}},
     Auth:{current:()=>({id:'owner'})},I18n:require('./i18n-stub.cjs'),GameFrame:class{load(){}unload(){}send(){}},
@@ -29,7 +29,7 @@ function setup(request=async()=>{}, hash='', search='') {
 test('creating a solo-only game starts one human immediately',async()=>{
   const calls=[];
   const {node,run}=setup(async(method,path,opts)=>{
-    calls.push([method,path,opts.body]);
+    if(method==='POST') calls.push([method,path,opts.body]);
     return {id:'match',game_version:2,players:[{kind:'human',user_id:'owner'}]};
   });
   await run('createMatch()');
@@ -41,9 +41,19 @@ test('creating a solo-only game starts one human immediately',async()=>{
   assert.equal(node('create').textContent,'Play solo ↗');
 });
 
+test('ranked games retain server order and open even outside the current catalog page',()=>{
+  const {node,run,navigations}=setup();
+  run('state.popularGames=[{id:"leader",name:"Most popular",version:1,allowed_player_counts:[2]}, {id:"runner-up",name:"Next game",version:1,allowed_player_counts:[2]}];renderPopularGames()');
+  const cards=node('popular-games').children;
+  assert.equal(cards.length,2);
+  assert.equal(cards[0].children[0].textContent,'1');
+  cards[0].onclick();
+  assert.equal(navigations[0],'/static/portal.html?game=leader');
+});
+
 test('multiplayer and mixed-mode games retain their lobby',async()=>{
   for(const counts of ['[2]','[1,2]']) {
-    const calls=[];const {run}=setup(async(method,path)=>{calls.push(path);return {id:'match',game_version:2,players:[{}]};});
+    const calls=[];const {run}=setup(async(method,path)=>{if(method==='POST') calls.push(path);return {id:'match',game_version:2,players:[{}]};});
     run(`state.games[0].allowed_player_counts=${counts}`);await run('createMatch()');
     assert.deepEqual(calls,['/matches']);
   }
@@ -76,10 +86,10 @@ test('multiplayer cannot join solo bots or reuse a departed identity',()=>{
   assert.equal(run('isJoinable(state.match,"new")'),true);
 });
 
-test('computer controls appear only in solo lobbies and offer legacy cleanup',()=>{
+test('online lobbies offer no computer stepper, even while the host waits alone',()=>{
   const {node,run}=setup();
   run('state.games[0].allowed_player_counts=[2,3,4];state.gameCache.set("game@2",state.games[0]);state.match={id:"match",game_id:"game",game_version:2,owner_user_id:"owner",status:"waiting_for_players",players:[{player_index:0,kind:"human",user_id:"owner"}],move_count:0};renderMatch()');
-  assert.ok(node('actions').children.some(child=>child.class==='computer-stepper'));
+  assert.ok(!node('actions').children.some(child=>child.class==='computer-stepper'));
   run('state.match.players.push({player_index:1,kind:"human",user_id:"other"});renderMatch()');
   assert.ok(!node('actions').children.some(child=>child.class==='computer-stepper'));
   run('state.match.players.push({player_index:2,kind:"computer"});renderMatch()');
@@ -522,4 +532,12 @@ test('the owner of a waiting match gets a Remove button on other players only',(
   run('state.match.matchmaking_player_count=null;state.match.status="ongoing";state.match.turn_of_player_indices=[0];renderMatch()');
   assert.deepEqual(removeButtons(),[0,0]);
   run('state.match.status="waiting_for_players";state.match.owner_user_id="guest";renderMatch()');assert.deepEqual(removeButtons(),[0,0]);
+});
+
+test('the portal boots when storage methods deny access',()=>{
+  const denied=()=>{const e=new Error('denied');e.name='SecurityError';throw e;};
+  const {run}=setup(async()=>{},'','',{getItem:denied,setItem:denied,removeItem:denied});
+  assert.equal(run('typeof offline'),'object');
+  assert.equal(run('typeof portalStorage'),'function');
+  assert.equal(run('portalStorage()===localStorage'),true);
 });

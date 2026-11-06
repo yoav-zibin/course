@@ -290,6 +290,10 @@ def begin_build(draft):
     if reusable:
         for key in ('verified_code_digest','checks','server_reviews'):
             flow['job'][key] = previous[key]
+    if previous.get('failure_summary') and previous.get('spec_digest') == spec_digest(flow):
+        # The last build's findings warn the next build of the same spec
+        # from its first generation (see _summarize_failures).
+        flow['job']['failure_summary'] = previous['failure_summary']
     if previous.get('server_checkpoint') and previous.get('spec_digest') == spec_digest(flow):
         # A server that passed every check and review in an earlier build
         # stays verified for the same approved specification, even when

@@ -33,9 +33,11 @@ test('v2 computer practice initializes, rejects illegal moves atomically, and su
  m=await t.offline.practiceMove(m,{cell:0});
  assert.equal(m.move_count,2);assert.equal(m.state.board.filter(Boolean).length,2);
  assert.equal(m.turn_of_player_indices[0],0);
- const saved=JSON.stringify(t.offline.read());
+ const saved=JSON.stringify(t.offline.read().local);
  await assert.rejects(t.offline.practiceMove(m,{cell:0}),/taken/);
- assert.equal(JSON.stringify(t.offline.read()),saved);
+ // An illegal move must not change the saved practice match. (Cache
+ // recency may still advance: reading the game rules touches it.)
+ assert.equal(JSON.stringify(t.offline.read().local),saved);
  const restored=new t.offline.constructor(t.storage,()=>{throw new Error('network');},()=>({id:'alice'}),()=>false);
  m=await restored.get(`/matches/${m.id}`);
  const cell=m.state.board.findIndex(x=>!x);

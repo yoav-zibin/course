@@ -19,16 +19,27 @@ const Auth = (() => {
   const ACCOUNTS_KEY = "game-platform.accounts.v1";
   const CURRENT_KEY = "game-platform.current-account.v1";
 
+  // When this browser denies storage entirely (private mode, blocked
+  // cookies), accounts live in memory for this page load instead: login
+  // still works and online play is unaffected; only persistence is lost.
+  let memoryAccounts = null;
+  let memoryCurrentId = undefined;
+
   function load() {
     try {
       return JSON.parse(localStorage.getItem(ACCOUNTS_KEY)) ?? [];
     } catch {
-      return [];
+      return memoryAccounts ?? [];
     }
   }
 
   function save(accounts) {
-    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+    try {
+      localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+      memoryAccounts = null;
+    } catch {
+      memoryAccounts = accounts;
+    }
   }
 
   function changed() {
@@ -40,15 +51,26 @@ const Auth = (() => {
     return load();
   }
 
-  /** The current account, or null when logged out. */
+  /** The current account, or null when logged out. Never throws: denied
+   * storage reads as logged out (or the in-memory current account). */
   function current() {
-    const id = localStorage.getItem(CURRENT_KEY);
+    let id;
+    try {
+      id = localStorage.getItem(CURRENT_KEY);
+    } catch {
+      id = memoryCurrentId ?? null;
+    }
     return load().find((account) => account.id === id) ?? null;
   }
 
   function setCurrent(id) {
-    if (id) localStorage.setItem(CURRENT_KEY, id);
-    else localStorage.removeItem(CURRENT_KEY);
+    try {
+      if (id) localStorage.setItem(CURRENT_KEY, id);
+      else localStorage.removeItem(CURRENT_KEY);
+      memoryCurrentId = undefined;
+    } catch {
+      memoryCurrentId = id ?? null;
+    }
     changed();
   }
 
@@ -405,19 +427,8 @@ const Auth = (() => {
     const input = el("input", { placeholder: I18n.t("ui.auth.guest_name", {}, "Guest name"), "aria-label": I18n.t("ui.auth.guest_name", {}, "Guest name") });
     const button = el("button", { type: "button", textContent: I18n.t("ui.auth.continue_as_guest", {}, "Continue as guest") });
     button.onclick = async () => {
-      const name = input.value.trim() || I18n.t("ui.auth.guest_default_name", { number: accounts().length + 1 }, `Guest ${accounts().length + 1}`);
       try {
-        const user = await apiRequest("POST", "/users", {
-          body: newAccountBody({ display_name: name }),
-        });
-        finishLogin(dialog, {
-          user_id: user.id,
-          display_name: user.display_name,
-          password: user.password,
-          referral_code: user.referral_code,
-          linked_accounts: [],
-          merged_from_user_id: null,
-        });
+        finishLogin(dialog, await createGuest(input.value));
       } catch (error) {
         dialogFailed(dialog, error);
       }
@@ -426,6 +437,21 @@ const Auth = (() => {
       el("label", { class: "inline" }, `${I18n.t("ui.auth.guest", {}, "Guest")} `, input),
       button
     );
+  }
+
+  async function createGuest(displayName = "") {
+    const name = displayName.trim() || I18n.t("ui.auth.guest_default_name", { number: accounts().length + 1 }, `Guest ${accounts().length + 1}`);
+    const user = await apiRequest("POST", "/users", {
+      body: newAccountBody({ display_name: name }),
+    });
+    return {
+      user_id: user.id,
+      display_name: user.display_name,
+      password: user.password,
+      referral_code: user.referral_code,
+      linked_accounts: [],
+      merged_from_user_id: null,
+    };
   }
 
   /** An <img> for a stored picture URL, or null when there is none. */
@@ -554,6 +580,7 @@ const Auth = (() => {
     setReferralCode,
     setPicture,
     newAccountBody,
+    createGuest,
     openDialog,
     closeDialog,
     renderMenu,

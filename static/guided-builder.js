@@ -17,6 +17,8 @@ const draftName=d=>d.builder_workflow?.artifacts?.identity?.value?.display_name 
 let editName=false;
 if(window.matchMedia('(max-width:850px)').matches)$('library').open=false;
 let draft=null, selected=0, working=false, poll=null, renderedRevision=null;
+const matrixLink=el('a',{id:'game-test-matrix',href:'/game-test',target:'_blank',rel:'noopener',textContent:I18n.t("ui.guided.test_matrix",{},"Open game test matrix"),hidden:true});
+$('emulator').after(matrixLink);
 const me=()=>Auth.current();
 const request=(method,path,body)=>apiRequest(method,path,{user:me(),...(body?{body}:{})});
 function error(e){showPageError(e.message||String(e));}
@@ -84,8 +86,18 @@ async function act(action){
 function preview(image){
  let svg=image.svg||'';
  // An SVG shown through an <img> only renders when its root declares the SVG
- // namespace; older generated images may omit it, so add it before encoding.
- if(svg.includes('<svg')&&!svg.split('>',1)[0].includes('xmlns'))svg=svg.replace('<svg','<svg xmlns="http://www.w3.org/2000/svg"');
+ // namespace, and only scales to fit with a viewBox; older generated images
+ // may omit either, so add what is missing before encoding (the viewBox is
+ // derived from the root's width/height). Without a viewBox the browser
+ // shows a fixed corner of the drawing — usually just its background.
+ if(svg.includes('<svg')){
+  const opening=svg.split('>',1)[0];
+  if(!opening.includes('xmlns'))svg=svg.replace('<svg','<svg xmlns="http://www.w3.org/2000/svg"');
+  if(!opening.includes('viewBox')){
+   const w=/\bwidth="(\d+(?:\.\d+)?)"/.exec(opening),h=/\bheight="(\d+(?:\.\d+)?)"/.exec(opening);
+   if(w&&h)svg=svg.replace('<svg',`<svg viewBox="0 0 ${w[1]} ${h[1]}"`);
+  }
+ }
  const img=el('img',{src:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg),alt:image.caption});
  const figure=el('figure',{},img,el('figcaption',{textContent:image.caption}));
  img.addEventListener('error',()=>{img.replaceWith(el('div',{class:'preview-missing',textContent:I18n.t("ui.guided.preview_failed",{},"Preview could not be displayed — reopen this step and regenerate to redraw it.")}));},{once:true});
@@ -177,11 +189,7 @@ function render(){
  const labels=[I18n.t("ui.guided.label.understanding",{},"Idea"),I18n.t("ui.guided.label.identity",{},"Name"),I18n.t("ui.guided.label.logic",{},"Rules"),I18n.t("ui.guided.label.ui",{},"Layout"),I18n.t("ui.guided.label.tutorial",{},"Tutorial"),I18n.t("ui.guided.label.images",{},"Images"),I18n.t("ui.guided.label.tests",{},"Tests"),I18n.t("ui.guided.label.build",{},"Build & verify")];
  const buildView=selected===steps.length;
  const all=count===steps.length;
- const completed=count+Number(f.job?.status==='ready');
  $('step-position').textContent=I18n.t("ui.guided.step_position",{step:selected+1,total:labels.length},"Step {step} of {total}");
- $('step-count').textContent=I18n.t("ui.guided.step_count",{done:completed,total:labels.length},"{done} of {total} complete");
- $('progress').max=labels.length;
- $('progress').value=completed;
  $('steps').replaceChildren(...labels.map((label,i)=>{
   const build=i===steps.length;
   const done=build?f.job?.status==='ready':f.artifacts[steps[i]]?.status==='approved';
@@ -212,6 +220,8 @@ function render(){
  $('emulator').hidden=!playable;
  if(playable)$('emulator').href='/static/builder.html'+location.search+'#'+encodeURIComponent(draft.id);
  else $('emulator').removeAttribute('href');
+ matrixLink.hidden=!playable;
+ if(playable)matrixLink.href='/game-test?draft='+encodeURIComponent(draft.id);
  $('build-status').textContent=f.job?`${f.job.stage}${f.job.error?' — '+f.job.error:''}`:$('build-error').textContent?'':I18n.t("ui.guided.ready_to_build",{},"All specifications approved. Ready to build.");
  $('build-log').textContent=(f.job?.log||[]).join('\n');
  const shots=f.job?.screenshots||[];
@@ -251,4 +261,4 @@ document.addEventListener('auth-changed',()=>{clearTimeout(poll);draft=null;rend
 Auth.renderMenu($('account-menu'));loadDrafts().then(()=>{if(me()&&location.hash.length>1)return select(decodeURIComponent(location.hash.slice(1)));}).catch(error);
 
 request('GET','/i18n/locales').then(data=>{const picker=$('language');picker.replaceChildren(...data.locales.map(l=>el('option',{value:l.code,textContent:l.name})));picker.value=typeof I18n.locale==='function'&&data.locales.some(l=>l.code===I18n.locale())?I18n.locale():data.default;}).catch(()=>{});
-document.addEventListener('i18n-changed',()=>{renderedRevision=null;render();loadDrafts().catch(error);});
+document.addEventListener('i18n-changed',()=>{matrixLink.textContent=I18n.t("ui.guided.test_matrix",{},"Open game test matrix");renderedRevision=null;render();loadDrafts().catch(error);});

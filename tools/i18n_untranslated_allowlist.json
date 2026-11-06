@@ -16,7 +16,16 @@
     ],
     "portal-offline.js": [
       "Offline",
-      "Account changed"
+      "Account changed",
+      "Could not save cache access order:",
+      "Could not read cache access order:",
+      "no usable storage",
+      "storage probe mismatch",
+      "Could not parse saved portal data:",
+      "Could not read portal storage:",
+      "Could not migrate all portal storage:",
+      "Could not migrate portal storage:",
+      "Could not save portal data:"
     ],
     "builder.html": [
       "{\"state\":{\"type\":\"object\"},\"move\":{\"type\":\"object\"},\"view\":true}"
@@ -32,6 +41,13 @@
       "Teach the goal and turn order with a short interactive exercise that demonstrates a legal move and how to win.",
       "Create a cover and start, middle and ending previews using the approved rules and layout.",
       "Create reproducible initial, intermediate and terminal examples using the approved rules."
+    ],
+    "game-test.js": [
+      "Laptop",
+      "Tablet",
+      "Small phone",
+      "Phone",
+      "Large phone"
     ],
     "common.js": [
       "New Builder",

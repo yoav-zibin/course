@@ -136,7 +136,7 @@ test('the service worker loads the page from the network first and reloads pages
   const sw=read('portal-sw.js');
   assert.match(sw,/url\.pathname === "\/static\/portal\.html"[\s\S]*fetch\(event\.request/);
   assert.match(sw,/caches\.delete/);
-  assert.match(sw,/page\.navigate\(page\.url\)/);
+  assert.match(sw,/page\.postMessage\(\{type:"portal-shell-updated"\}\)/);
 });
 
 test('the timed-out player gets their own message; the others see who was replaced',()=>{

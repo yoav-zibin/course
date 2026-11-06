@@ -7,7 +7,8 @@ random seed per walk. After every call it makes the checks the contract
 requires — results the runner accepts, views for every player, payouts
 that sum to the pot and go to humans only — and it fuzzes `applyMove`
 with malformed moves, which must be rejected with InvalidMove (or
-return a valid result), never crash. Some calls are run twice with
+return a valid result), never crash. Game state transitions, generated moves
+and views are run twice with
 identical arguments and seed: the results must be identical, because
 game logic must be deterministic given `ctx.random`.
 
@@ -423,10 +424,12 @@ class _Walk:
     def _check_views(self, state: JsonValue) -> bool:
         """viewFor must answer for every player and for a spectator."""
         for player_id in [*(p["id"] for p in self._players), None]:
-            ok, _ = self._call_or_fail(
+            ok, result = self._call_or_fail(
                 "viewFor", state, player_id, state=state, player_id=player_id
             )
             if not ok:
+                return False
+            if not self._check_deterministic("viewFor", result, state, player_id, state=state):
                 return False
         return True
 
@@ -466,7 +469,7 @@ class _Walk:
             return True
         state: JsonValue = result.get("state")
         turn: list[str] | None = result.get("turn")
-        if turn is not None and not self._check_views(state):
+        if not self._check_views(state):
             return True
         steps = 0
         while turn is not None:
@@ -556,10 +559,13 @@ class _Walk:
         if not ok:
             self._players.pop()
             return True, state, None
+        if not self._check_deterministic("playerJoined", result, state, joiner["id"], state=state):
+            self._players.pop()
+            return True, state, None
         self._pot += joiner["max_loss"]
         new_state: JsonValue = result.get("state")
         new_turn: list[str] | None = result.get("turn")
-        if new_turn is not None and not self._check_views(new_state):
+        if not self._check_views(new_state):
             return True, state, None
         return False, new_state, new_turn
 
@@ -590,6 +596,8 @@ class _Walk:
         )
         if not ok:
             return False, state, turn
+        if not self._check_deterministic(source, move, state, mover, state=state):
+            return False, state, turn
         try:
             result = self._call("applyMove", state, mover, move)
         except InvalidMoveError as error:
@@ -614,7 +622,7 @@ class _Walk:
             return False, state, turn
         if self._sample_observer is not None:
             self._sample_observer("applyMove", (state, mover, move), result)
-        if self.move_count == 0 and not self._check_deterministic(
+        if not self._check_deterministic(
             "applyMove", result, state, mover, move, state=state
         ):
             return False, state, turn
@@ -623,7 +631,7 @@ class _Walk:
         self._last_moves.append({"player_id": mover, "move": move})
         new_state: JsonValue = result.get("state")
         new_turn: list[str] | None = result.get("turn")
-        if new_turn is not None and not self._check_views(new_state):
+        if not self._check_views(new_state):
             return False, state, turn
         return True, new_state, new_turn
 

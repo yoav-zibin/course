@@ -21,6 +21,9 @@ DEBUG_PATHS = (
     "/console",
     "/builder",
     "/portal",
+    "/static/welcome.html",
+    "/static/welcome.css",
+    "/static/welcome.js",
     "/browse",
     "/static/common.css",
     "/static/common.js",
@@ -36,9 +39,10 @@ def test_debug_pages_are_served(api: Api, path: str) -> None:
     assert api.request("GET", path).status_code == 200
 
 
-def test_root_redirects_to_the_portal(api: Api) -> None:
+def test_root_serves_the_welcome_page(api: Api) -> None:
     response = api.client.get("/", follow_redirects=False)
-    assert (response.status_code, response.headers["location"]) == (307, "/portal")
+    assert response.status_code == 200
+    assert "Game platform · Welcome" in response.text
 
 
 def test_debug_tools_can_be_disabled() -> None:
@@ -74,6 +78,10 @@ def test_debug_endpoints_are_not_in_the_api_schema(api: Api) -> None:
         "/game-drafts/{draft_id}/publish",
         "/game-drafts/{draft_id}/workflow/images/{filename}",
         "/game-drafts/{draft_id}/workflow/{action}",
+        "/game-test-emulator/act",
+        "/game-test-emulator/reset",
+        "/game-test-sessions",
+        "/game-test-sessions/{session_id}",
         "/games",
         "/games/test",
         "/games/versions",
@@ -113,6 +121,8 @@ def test_debug_endpoints_are_not_in_the_api_schema(api: Api) -> None:
         "/users",
         "/users/me/experiments/skin",
         "/users/me/invites",
+        "/users/me/recent-games",
+        "/users/me/recent-games/{game_id}",
         "/users/me/referrals",
         "/users/me/saved-games",
         "/users/me/saved-games/{game_id}",

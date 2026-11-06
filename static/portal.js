@@ -11,7 +11,7 @@ const $ = (id) => document.getElementById(id);
 const POLL_MS = 2000;
 async function portalTransport(method, path, { body, user, requestId } = {}) {
   const controller = new AbortController(),
-    timer = setTimeout(() => controller.abort(), 6000);
+    timer = setTimeout(() => controller.abort(), 20000);
   try {
     const headers = {};
     if (requestId) headers["Idempotency-Key"] = requestId;
@@ -43,9 +43,25 @@ async function portalTransport(method, path, { body, user, requestId } = {}) {
     clearTimeout(timer);
   }
 }
-const offline = new PortalOffline(localStorage, portalTransport, () =>
+// Browsers that deny storage entirely (private mode, blocked cookies)
+// must not brick the portal: PortalOffline falls back to an in-memory
+// store when the global itself, or its probe, is unavailable. Online play
+// still works; only saving for offline use is lost.
+function portalStorage() {
+  try {
+    if (typeof localStorage === "undefined") return null;
+    return localStorage;
+  } catch {
+    return null;
+  }
+}
+const offline = new PortalOffline(portalStorage(), portalTransport, () =>
   Auth.current(),
 );
+if ("serviceWorker" in navigator)
+  navigator.serviceWorker.addEventListener("message", event => {
+    if (event.data?.type === "portal-shell-updated") location.reload();
+  });
 const portalRequest = (method, path, options = {}) =>
   offline.api(method, path, { user: Auth.current(), ...options });
 const portalLock = (run) =>
@@ -75,6 +91,7 @@ function offlineStatus() {
   ];
   if (conflicts) parts.push(I18n.plural("ui.offline.conflicts", conflicts, {}, { one: "1 sync conflict", many: `${conflicts} sync conflicts` }));
   parts.push(shellReady ? I18n.t("ui.offline.saved", {}, "Portal saved for offline") : I18n.t("ui.offline.not_ready", {}, "Offline setup not ready"));
+  if (offline.notice) parts.push(offline.notice);
   $("offline-status").textContent = parts.join(" · ");
 }
 
@@ -95,6 +112,15 @@ function currentPushSubscription() {
 
 const state = {
   games: [], // latest versions, from GET /games
+  recentGames: [], // this account's bounded, most-recent-first game list
+  recentGamesFetchedAt: 0,
+  recentGamesRequestVersion: 0,
+  recentGamesForceRefresh: true,
+  recentGamesUserId: null,
+  gamePopularityScores: new Map(),
+  gamePopularityFetchedAt: new Map(),
+  gamePopularityRequests: new Map(),
+  gamePopularityVersions: new Map(),
   popularGames: [], // bounded server ranking; refreshes after starts and at most once per minute otherwise
   popularGamesFetchedAt: 0,
   popularGamesRequestVersion: 0,
@@ -516,6 +542,78 @@ function invalidatePopularGames() {
   if (state.refreshing) state.refreshAgain = true;
 }
 
+function invalidateRecentGames() {
+  state.recentGamesFetchedAt = 0;
+  state.recentGamesForceRefresh = true;
+  state.recentGamesRequestVersion += 1;
+  if (state.refreshing) state.refreshAgain = true;
+}
+
+function invalidateGamePopularity(gameId) {
+  if (!gameId) return;
+  state.gamePopularityVersions.set(
+    gameId,
+    (state.gamePopularityVersions.get(gameId) || 0) + 1,
+  );
+  state.gamePopularityScores.delete(gameId);
+  state.gamePopularityFetchedAt.delete(gameId);
+  state.gamePopularityRequests.delete(gameId);
+}
+
+function selectedSetupGame() {
+  const id = state.detailGameId || $("new-game").value;
+  return state.games.find(game => game.id === id) || null;
+}
+
+function renderGamePopularity(game, score) {
+  const label = $("selected-game-popularity");
+  label.hidden = !game;
+  if (!game) return;
+  label.textContent = score === null
+    ? I18n.t("ui.games.popularity_score_unavailable", {}, "Popularity score: unavailable")
+    : I18n.t("ui.games.popularity_score", {score: I18n.number(score)}, `Popularity score: ${score}`);
+}
+
+function updateGamePopularity(game) {
+  const label = $("selected-game-popularity");
+  if (!game || isRandomGame(game)) {
+    label.hidden = true;
+    return;
+  }
+  const fetchedAt = state.gamePopularityFetchedAt.get(game.id) || 0;
+  if (state.gamePopularityScores.has(game.id) && Date.now() - fetchedAt < 60_000) {
+    renderGamePopularity(game, state.gamePopularityScores.get(game.id));
+    return;
+  }
+  label.hidden = false;
+  label.textContent = I18n.t("ui.games.popularity_loading", {}, "Popularity score: loading…");
+  if (state.gamePopularityRequests.has(game.id)) return;
+  const version = state.gamePopularityVersions.get(game.id) || 0;
+  state.gamePopularityVersions.set(game.id, version);
+  const request = portalRequest(
+    "GET",
+    `/games/${encodeURIComponent(game.id)}/popularity`,
+    {user: me()},
+  ).then(result => {
+    if (state.gamePopularityVersions.get(game.id) !== version) return;
+    const score = Number.isSafeInteger(result?.score) && result.score >= 0 ? result.score : 0;
+    state.gamePopularityScores.set(game.id, score);
+    state.gamePopularityFetchedAt.set(game.id, Date.now());
+    if (selectedSetupGame()?.id === game.id)
+      renderGamePopularity(game, score);
+  }).catch(() => {
+    if (state.gamePopularityVersions.get(game.id) !== version) return;
+    state.gamePopularityScores.set(game.id, null);
+    state.gamePopularityFetchedAt.set(game.id, Date.now());
+    if (selectedSetupGame()?.id === game.id)
+      renderGamePopularity(game, null);
+  }).finally(() => {
+    if (state.gamePopularityVersions.get(game.id) === version)
+      state.gamePopularityRequests.delete(game.id);
+  });
+  state.gamePopularityRequests.set(game.id, request);
+}
+
 async function refreshLocked() {
   if (state.refreshing) {
     // Refresh again once the current one finishes, so it sees the latest changes.
@@ -546,20 +644,41 @@ async function refreshLocked() {
       return;
     }
     if (!user) $("token-wallet").hidden = true;
+    if (!user) {
+      state.recentGames = [];
+      state.recentGamesFetchedAt = 0;
+      state.recentGamesForceRefresh = true;
+      state.recentGamesUserId = null;
+    } else if (state.recentGamesUserId !== user.id) {
+      state.recentGames = [];
+      state.recentGamesFetchedAt = 0;
+      state.recentGamesForceRefresh = true;
+      state.recentGamesUserId = user.id;
+    }
     await offline.sync();
     const popularityDue = state.popularGamesForceRefresh || Date.now() - state.popularGamesFetchedAt >= 60_000;
     const popularityRequestVersion = state.popularGamesRequestVersion;
-    const [games, myMatches, openMatches, popularGames] = await Promise.all([
+    const recentGamesDue = Boolean(user) && (state.recentGamesForceRefresh || Date.now() - state.recentGamesFetchedAt >= 60_000);
+    const recentGamesRequestVersion = state.recentGamesRequestVersion;
+    const [games, myMatches, openMatches, popularGames, recentGames] = await Promise.all([
       StoragePages.list(portalRequest, "/games", {user}),
       user ? StoragePages.list(portalRequest, "/matches", {user}) : [],
       StoragePages.list(portalRequest, "/matches/open", {user}),
       popularityDue
         ? portalRequest("GET", "/games/popular?limit=8", {user}).catch(() => null)
         : null,
+      recentGamesDue
+        ? portalRequest("GET", "/users/me/recent-games", {user}).catch(() => null)
+        : null,
     ]);
     state.games = games;
     state.myMatches = myMatches;
     state.openMatches = openMatches;
+    if (recentGamesDue && recentGamesRequestVersion === state.recentGamesRequestVersion && user?.id === me()?.id) {
+      state.recentGamesFetchedAt = Date.now();
+      state.recentGamesForceRefresh = false;
+      if (Array.isArray(recentGames)) state.recentGames = recentGames;
+    }
     if (popularityDue && popularityRequestVersion === state.popularGamesRequestVersion) {
       state.popularGamesFetchedAt = Date.now();
       state.popularGamesForceRefresh = false;
@@ -713,7 +832,8 @@ function renderLists() {
 }
 
 function openGamePage(id) {
-  if (!state.games.some((game) => game.id === id)) return;
+  if (![state.games, state.popularGames, state.recentGames].some(games =>
+    games.some(game => game.id === id))) return;
   const route = new URLSearchParams({ game: id });
   const skin = new URLSearchParams(location.search).get("skin");
   if (skin) route.set("skin", skin);
@@ -753,7 +873,11 @@ async function joinRandomMatch() {
     for (const match of candidates) {
       try {
         const joined = await portalRequest("POST", `/matches/${match.id}/join`, {user});
-        if (joined?.status === "ongoing") invalidatePopularGames();
+        if (joined?.status === "ongoing") {
+          invalidatePopularGames();
+          invalidateRecentGames();
+          invalidateGamePopularity(joined.game_id);
+        }
         selectMatch(match.id);
         return;
       } catch (error) {
@@ -811,6 +935,7 @@ function catalogGameLabel(game) {
 }
 
 function renderLibrary() {
+  renderRecentGames();
   renderPopularGames();
   const games = libraryGames();
   const selected = $("new-game").value;
@@ -841,6 +966,44 @@ function renderLibrary() {
   }));
 }
 
+function renderRecentGames() {
+  const section = $("recent-games-section");
+  if (!section) return;
+  const row = $("recent-games");
+  const games = me()
+    ? state.recentGames.filter(game => game.published !== false)
+    : [];
+  section.hidden = games.length === 0;
+  const gameIds = games.map(game => game.id).join("\u0000");
+  if (row.dataset.gameIds !== gameIds) {
+    row.dataset.gameIds = gameIds;
+    row.scrollLeft = 0;
+  }
+  row.replaceChildren(...gameCarouselCards(games));
+  scheduleGamesCarouselUpdate("recent-games");
+}
+
+function gameCarouselCards(games, ranked = false) {
+  return games.map((game, index) => {
+    const hue = Array.from(game.id).reduce((value, letter) => value + letter.charCodeAt(0), 0) % 360;
+    const name = catalogGameLabel(game);
+    const initials = name.trim().split(/\s+/).slice(0, 2).map(word => Array.from(word)[0] || "").join("");
+    return el("button", {
+      type: "button",
+      class: "popular-game-card",
+      "aria-label": I18n.t("ui.games.open_aria", {name, players: gameCountLabel(game)}, `Open ${name}, ${gameCountLabel(game)}`),
+      onclick: () => openGamePage(game.id),
+    },
+      ...(ranked ? [el("span", {class: "popular-game-rank", textContent: String(index + 1)})] : []),
+      el("span", {class: "popular-game-art", style: `--art-hue:${hue}`, "aria-hidden": "true"},
+        el("span", {class: "popular-game-monogram", textContent: initials})),
+      el("span", {class: "popular-game-copy"},
+        el("span", {class: "popular-game-title", textContent: name}),
+        el("span", {class: "popular-game-players", textContent: gameCountLabel(game)}),
+        el("span", {class: "popular-game-open", textContent: I18n.t("ui.games.open_game", {}, "Play game ↗")})));
+  });
+}
+
 function renderPopularGames() {
   const section = $("popular-games-section");
   if (!section) return;
@@ -848,8 +1011,7 @@ function renderPopularGames() {
   const previousScrollLeft = row.scrollLeft;
   // The API returns Firestore's descending score order. Keep it intact so
   // rank 1 is always the first card in the carousel.
-  const rankedGames = state.popularGames.filter(game =>
-    state.games.some(current => current.id === game.id && current.published !== false));
+  const rankedGames = state.popularGames.filter(game => game.published !== false);
   const hasRanking = rankedGames.length > 0;
   // The aggregate is intentionally populated from match starts. Before its first
   // score arrives, keep this row useful with catalog games and explain the state.
@@ -863,34 +1025,21 @@ function renderPopularGames() {
     : state.popularGamesStatus === "unavailable"
       ? I18n.t("ui.games.popularity_unavailable", {}, "Showing games while popularity data loads.")
       : I18n.t("ui.games.popularity_collecting", {}, "Popularity rankings will appear as matches start.");
-  row.replaceChildren(...games.map((game, index) => {
-    const hue = Array.from(game.id).reduce((value, letter) => value + letter.charCodeAt(0), 0) % 360;
-    const name = catalogGameLabel(game);
-    const initials = name.trim().split(/\s+/).slice(0, 2).map(word => Array.from(word)[0] || "").join("");
-    return el("button", {
-      type: "button",
-      class: `popular-game-card${hasRanking ? "" : " is-unranked"}`,
-      "aria-label": I18n.t("ui.games.open_aria", {name, players: gameCountLabel(game)}, `Open ${name}, ${gameCountLabel(game)}`),
-      onclick: () => openGamePage(game.id),
-    },
-      ...(hasRanking ? [el("span", {class: "popular-game-rank", textContent: String(index + 1)})] : []),
-      el("span", {class: "popular-game-art", style: `--art-hue:${hue}`, "aria-hidden": "true"},
-        el("span", {class: "popular-game-monogram", textContent: initials})),
-      el("span", {class: "popular-game-copy"},
-        el("span", {class: "popular-game-title", textContent: name}),
-        el("span", {class: "popular-game-players", textContent: gameCountLabel(game)}),
-        el("span", {class: "popular-game-open", textContent: I18n.t("ui.games.open_game", {}, "Play game ↗")})));
-  }));
+  row.replaceChildren(...gameCarouselCards(games, hasRanking));
   row.scrollLeft = previousScrollLeft;
-  schedulePopularGamesCarouselUpdate?.();
+  scheduleGamesCarouselUpdate("popular-games");
 }
 
-let schedulePopularGamesCarouselUpdate = null;
+const gamesCarouselSchedulers = new Map();
 
-function updatePopularGamesCarousel() {
-  const row = $("popular-games");
-  const previous = $("popular-games-prev");
-  const next = $("popular-games-next");
+function scheduleGamesCarouselUpdate(id) {
+  gamesCarouselSchedulers.get(id)?.();
+}
+
+function updateGamesCarousel(id) {
+  const row = $(id);
+  const previous = $(`${id}-prev`);
+  const next = $(`${id}-next`);
   if (!row || !previous || !next) return;
   const maxScroll = Math.max(0, row.scrollWidth - row.clientWidth);
   const canScroll = maxScroll > 2;
@@ -899,29 +1048,35 @@ function updatePopularGamesCarousel() {
   next.disabled = !canScroll || row.scrollLeft >= maxScroll - 2;
 }
 
-function setupPopularGamesCarousel() {
-  const row = $("popular-games");
-  const previous = $("popular-games-prev");
-  const next = $("popular-games-next");
+function setupGamesCarousel(id) {
+  const row = $(id);
+  const previous = $(`${id}-prev`);
+  const next = $(`${id}-next`);
   if (!row || !previous || !next) return;
   let updateFrame = 0;
-  schedulePopularGamesCarouselUpdate = () => {
+  const schedule = () => {
     if (updateFrame) return;
     updateFrame = requestAnimationFrame(() => {
       updateFrame = 0;
-      updatePopularGamesCarousel();
+      updateGamesCarousel(id);
     });
   };
+  gamesCarouselSchedulers.set(id, schedule);
   const scroll = direction => {
     const distance = Math.max(row.clientWidth * 0.8, 180);
     row.scrollBy({left: direction * distance, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"});
   };
   previous.addEventListener("click", () => scroll(-1));
   next.addEventListener("click", () => scroll(1));
-  row.addEventListener("scroll", schedulePopularGamesCarouselUpdate, {passive: true});
-  window.addEventListener("resize", schedulePopularGamesCarouselUpdate, {passive: true});
-  if ("ResizeObserver" in window) new ResizeObserver(schedulePopularGamesCarouselUpdate).observe(row);
-  schedulePopularGamesCarouselUpdate();
+  row.addEventListener("scroll", schedule, {passive: true});
+  window.addEventListener("resize", schedule, {passive: true});
+  if ("ResizeObserver" in window) new ResizeObserver(schedule).observe(row);
+  schedule();
+}
+
+function setupPopularGamesCarousel() {
+  setupGamesCarousel("recent-games");
+  setupGamesCarousel("popular-games");
 }
 
 function renderGameSearch() {
@@ -1032,6 +1187,7 @@ function updateMatchSetup() {
     state.detailCreatorInitialized = false;
   }
   const game = state.games.find((game) => game.id === (detailPage ? state.detailGameId : $("new-game").value));
+  updateGamePopularity(detailPage && !state.selectedId ? game : null);
   const browsingGames = detailPage && $("match-creator").open;
   document.body?.classList.toggle("game-detail-mode", detailPage);
   $("game-catalog").hidden = detailPage && !browsingGames;
@@ -1057,7 +1213,7 @@ function updateMatchSetup() {
   $("selected-game-name").textContent = (game && I18n.gameName(game.id, game.name)) || I18n.t("ui.games.choose", {}, "Choose a game");
   $("selected-game-description").textContent = (game && I18n.gameDescription(game.id, game.description)) || "";
   $("selected-game-mode").textContent = solo ? I18n.t("ui.games.solo_label", {}, "1 player · solo") : game ? I18n.t("ui.portal.mode_players", {counts: game.allowed_player_counts.join(", ")}, `${game.allowed_player_counts.join(", ")} players`) : "";
-  $("create-hint").textContent = solo ? I18n.t("ui.portal.hint_solo", {}, "Starts immediately. No opponent needed.") : game ? I18n.t("ui.portal.hint_create", {}, "Create a match, then invite friends or add computers in the lobby.") : state.games.length ? I18n.t("ui.portal.hint_choose", {}, "Choose a game from the search results to continue.") : I18n.t("ui.portal.hint_publish", {}, "Publish a game in the builder to make it available here.");
+  $("create-hint").textContent = solo ? I18n.t("ui.portal.hint_solo", {}, "Starts immediately. No opponent needed.") : game ? I18n.t("ui.portal.hint_invite_friends", {}, "Create a match, then invite friends to join.") : state.games.length ? I18n.t("ui.portal.hint_choose", {}, "Choose a game from the search results to continue.") : I18n.t("ui.portal.hint_publish", {}, "Publish a game in the builder to make it available here.");
 }
 
 function selectMatch(id) {
@@ -1067,7 +1223,7 @@ function selectMatch(id) {
   if (id) $("game-box").textContent = I18n.t("ui.portal.loading_game", {}, "Loading game…");
   const saved = offline.read();
   saved.selectedId = id;
-  offline.write(saved);
+  offline.writeCache(saved);
   state.replay = null;
   state.match = null;
   state.armed = null;
@@ -1281,8 +1437,11 @@ function renderMatch() {
     async () => {
       const result = await portalRequest(method, path + suffix, {user, body});
       if ((method === "POST" && suffix === "/start") ||
-          (method === "POST" && suffix === "/join" && result?.status === "ongoing"))
+          (method === "POST" && suffix === "/join" && result?.status === "ongoing")) {
         invalidatePopularGames();
+        invalidateRecentGames();
+        invalidateGamePopularity(result?.game_id);
+      }
       if (method === "DELETE") selectMatch(null);
       return result;
     };
@@ -1303,17 +1462,8 @@ function renderMatch() {
       }
       const computers = match.players.filter((player) => player.kind === "computer").length;
       const paidMatch = (match.bet_per_player ?? 0) > 0;
-      const max = Math.max(...counts, 0);
       const humanCount = match.players.filter(player => player.kind === "human" && player.active !== false).length;
-      if (!paidMatch && humanCount === 1 && match.matchmaking_player_count == null) {
-        const minus = actionButton("−", call("PATCH", "", {num_computer_opponents: computers - 1}), {disabled:computers === 0});
-        const plus = actionButton("+", call("PATCH", "", {num_computer_opponents: computers + 1}), {disabled:match.players.length >= max});
-        minus.setAttribute?.("aria-label", I18n.t("ui.match.remove_computer_aria", {}, "Remove computer opponent"));
-        plus.setAttribute?.("aria-label", I18n.t("ui.match.add_computer_aria", {}, "Add computer opponent"));
-        actions.push(el("div", {class:"computer-stepper", role:"group", "aria-label":I18n.t("ui.match.computer_opponents", {}, "Computer opponents")},
-          el("span", {class:"stepper-label", textContent:I18n.t("ui.match.solo_computers", {}, "Single-player computers")}), minus,
-          el("span", {class:"stepper-count", textContent:String(computers), "aria-label":I18n.t("ui.match.computers_count_aria", {count: computers}, `${computers} computer opponents`)}), plus));
-      } else if (paidMatch) {
+      if (paidMatch) {
         actions.push(el("p", {class:"paid-lobby-hint", textContent: computers ?
           I18n.t("ui.match.paid_needs_humans", {}, "Paid matches need human opponents. Remove the computer to continue.") :
           I18n.t("ui.match.paid_invite_human", {}, "Invite a human player to join this token match.")}));
@@ -1466,7 +1616,7 @@ function renderMatch() {
       ? (seated === 1 ? I18n.t("ui.match.ready_one", {}, "Ready to start with 1 player.") : I18n.t("ui.match.ready_many", {count: seated}, `Ready to start with ${seated} players.`)) +
         " " + (isOwner ? I18n.t("ui.match.press_start", {}, "Press Start to play.") : ownerStarts)
       : I18n.t("ui.match.waiting_players_info", {seated, allowed}, `Waiting for players: ${seated} seated, this game plays with ${allowed}.`) +
-        " " + (isOwner ? I18n.t("ui.match.add_or_wait", {}, "Add computers or wait for others to join, then start.") : ownerStarts);
+        " " + (isOwner ? I18n.t("ui.match.wait_then_start", {}, "Invite others to join, then start.") : ownerStarts);
     if (latest && latest.version > match.game_version) {
       $("waiting").textContent += " " + I18n.t("ui.match.newer_version", {match_version: match.game_version, latest_version: latest.version},
         `This match uses version ${match.game_version}; the latest game is version ${latest.version}. Create a new match to use its updated rules.`);
@@ -1677,12 +1827,11 @@ async function onMakeMove(move) {
           await offline.sync({ force: true });
           return;
         }
-        state.match = offline.enqueue(match, {
+        state.match = await offline.submitMove(match, {
           move: move.move,
           expected_move_count: match.move_count,
         });
         state.lastSent = null;
-        await offline.sync({ force: true });
         return;
       }
       const next = move.next_turn_player_indices;
@@ -1691,12 +1840,11 @@ async function onMakeMove(move) {
         throw new Error(I18n.t("ui.portal.invalid_next_player", {}, "The game sent an invalid next player. Your move was not queued. Restart or repair this game in Builder."));
       if (!match || !user || actingFor(match, user.id) === null)
         throw new Error(I18n.t("ui.error.not_your_turn", {}, "It isn't your turn."));
-      state.match = offline.enqueue(match, {
+      state.match = await offline.submitMove(match, {
         ...move,
         expected_move_count: match.move_count,
       });
       state.lastSent = null;
-      await offline.sync({ force: true });
     });
   } catch (error) {
     showMessage(error.message, "error");
@@ -1727,6 +1875,18 @@ async function practice() {
     );
     match = await offline.practice(full, $("practice-mode").value);
     state.gameCache.set(`${full.id}@${full.version}`, full);
+    if (navigator.onLine) {
+      try {
+        await portalRequest(
+          "POST",
+          `/users/me/recent-games/${encodeURIComponent(game.id)}`,
+          {user},
+        );
+        invalidateRecentGames();
+      } catch {
+        // Local practice remains playable if account history cannot be saved.
+      }
+    }
     $("create-message").textContent = "";
     selectMatch(match.id);
   } catch (error) {
@@ -1777,6 +1937,8 @@ async function createMatch() {
     if (game && game.version === match.game_version && game.allowed_player_counts.length === 1 && game.allowed_player_counts[0] === 1 && match.players.length === 1) {
       match = await portalRequest("POST", `/matches/${match.id}/start`, {user, body: {first_turn_player_indices: [0]}});
       invalidatePopularGames();
+      invalidateRecentGames();
+      invalidateGamePopularity(match.game_id);
     }
     $("create-message").textContent = "";
     selectMatch(match.id);
@@ -1823,6 +1985,8 @@ async function playWithAllComputers() {
     match=await portalRequest("POST","/matches",{user,body:{game_id:game.id,num_computer_opponents:playerCount-1,bet_per_player:0}});
     match=await portalRequest("POST",`/matches/${match.id}/start`,{user,body:{first_turn_player_indices:[0]}});
     invalidatePopularGames();
+    invalidateRecentGames();
+    invalidateGamePopularity(match.game_id);
     $("create-message").textContent="";
     selectMatch(match.id);
   } catch(error) {
@@ -1866,18 +2030,25 @@ async function main() {
   $("notify-toggle").addEventListener("click", toggleNotifications);
   document.addEventListener("i18n-changed", redrawAfterLanguageChange);
   document.addEventListener("auth-changed", () => {
+    const invitedMatch = new URLSearchParams(location.hash.slice(1)).get("match");
     renderPortalAccountMenu();
     state.armed = null;
     state.lastSent = null;
-    state.selectedId = null;
+    state.selectedId = me() && invitedMatch ? invitedMatch : null;
     state.match = null;
     state.myMatches = [];
     state.gameCache.clear();
     state.nameCache.clear();
     state.pictureCache.clear();
+    state.recentGames = [];
+    state.recentGamesFetchedAt = 0;
+    state.recentGamesForceRefresh = true;
+    state.recentGamesUserId = null;
+    state.recentGamesRequestVersion += 1;
     frame.unload();
     state.loaded = null;
-    history.replaceState(null, "", state.detailGameId ? `#game=${encodeURIComponent(state.detailGameId)}` : "#");
+    if (!state.selectedId)
+      history.replaceState(null, "", state.detailGameId ? `#game=${encodeURIComponent(state.detailGameId)}` : "#");
     showMessage("");
     refresh();
     setupNotifications();
@@ -1888,6 +2059,52 @@ async function main() {
     offline.retryAfter = 0;
     state.lastSent = null;
     refresh();
+  });
+  const storageDetails = async () => {
+    try {
+      const info = offline.storageInfo();
+      const estimate = navigator.storage?.estimate ? await navigator.storage.estimate() : null;
+      const kb = bytes => `${(bytes / 1024).toFixed(1)} KiB`;
+      const {total, cache, queued, practice, archives} = Object.fromEntries(
+        ["total", "cache", "queued", "practice", "archives"].map(key => [key, kb(info[key])]),
+      );
+      let text = I18n.t("ui.offline.storage_breakdown", {total, cache, queued, practice, archives, entries:info.entries},
+        `This account: ${total}; cached responses ${cache} (${info.entries} entries); queued moves ${queued}; practice ${practice}; archives ${archives}.`) +
+        (estimate?.quota
+          ? I18n.t("ui.offline.storage_origin", {usage:kb(estimate.usage || 0), quota:kb(estimate.quota)}, ` Browser origin: ${kb(estimate.usage || 0)} of ${kb(estimate.quota)} (estimated, includes other site data).`)
+          : I18n.t("ui.offline.storage_estimate_unavailable", {}, " Browser-wide estimate unavailable."));
+      const list = items => items.map(item => `${item.path || item.key || item.id} (${kb(item.bytes)})`).join(", ");
+      if (info.largest?.length)
+        text += I18n.t("ui.offline.storage_largest", {list: list(info.largest)}, ` Largest responses: ${list(info.largest)}.`);
+      if (info.nextToEvict)
+        text += I18n.t("ui.offline.storage_next_evict", {path: info.nextToEvict}, ` Next to evict: ${info.nextToEvict}.`);
+      if (info.perMatchQueue?.length)
+        text += I18n.t("ui.offline.storage_queues", {list: list(info.perMatchQueue)}, ` Queued moves by match: ${list(info.perMatchQueue)}.`);
+      if (info.perPractice?.length)
+        text += I18n.t("ui.offline.storage_practice", {list: list(info.perPractice)}, ` Practice by match: ${list(info.perPractice)}.`);
+      if (info.accounts?.length)
+        text += I18n.t("ui.offline.storage_accounts", {list: list(info.accounts)}, ` All accounts on this device: ${list(info.accounts)}.`);
+      if (info.otherKeys?.length)
+        text += I18n.t("ui.offline.storage_other", {list: list(info.otherKeys)}, ` Other saved data: ${list(info.otherKeys)}.`);
+      try {
+        const sw = await offline.swCacheInfo?.();
+        if (sw)
+          text += I18n.t("ui.offline.storage_sw", {entries: sw.entries, size: kb(sw.bytes)}, ` Service worker cache: ${sw.entries} files, ${kb(sw.bytes)}.`);
+      } catch {
+        // The worker cache is diagnostics only; the account numbers stand.
+      }
+      $("storage-details").textContent = text;
+    } catch (error) {
+      $("storage-details").textContent = I18n.t("ui.offline.storage_inspection_failed", {message:error.message}, `Storage inspection failed: ${error.message}`);
+    }
+  };
+  $("storage-refresh").addEventListener("click", storageDetails);
+  $("storage-clear-cache").addEventListener("click", () => portalLock(async () => {
+    offline.clearCache();
+    await storageDetails();
+  }).catch(error => { $("storage-details").textContent = I18n.t("ui.offline.storage_clear_failed", {message:error.message}, `Could not clear cache: ${error.message}`); }));
+  document.querySelector(".offline-storage").addEventListener("toggle", event => {
+    if (event.currentTarget.open) storageDetails();
   });
   window.addEventListener("online", () => {
     offline.retryAfter = 0;

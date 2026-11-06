@@ -104,7 +104,21 @@ print(draft['id'], draft['revision'])
    player/spectator views. Never expose secret state through `viewFor`.
 4. Write independent rule assertions and illegal-move/privacy tests, plus the
    required initial/intermediate/terminal examples. Generated replay snapshots
-   alone do not establish rule correctness. Run random walks and local UI checks.
+   alone do not establish rule correctness. Run random walks to completion and
+   local UI checks using `/game-test` across supported player modes, phone, tablet
+   and laptop sizes, in portrait and landscape. Enter both game files, select
+   each supported player count in turn, and play several randomly chosen matches
+   to completion in each scenario. Check clickable targets are at least
+   30 by 30 CSS pixels and contrast is at least 4.5:1 for normal text and 3:1
+   for large text and essential control boundaries. Repeat logic calls with
+   identical inputs, context and random seed to check determinism; applying a
+   move twice to successive states is not an equivalent idempotence test. Report
+   what was actually tested, including any untested modes or viewports. Save the
+   recording, wait for the server confirmation, then reload and replay the
+   recording by ID to verify persistence. The matrix's sticky replay bar can
+   follow the active scenario or focus one at a time. Browser access must be
+   provided to the agent separately; the text-only generation API cannot itself
+   operate the page.
 5. Submit only to the agreed isolated test instance with your assigned account.
    Record response ID/revision and validation results. Never claim publication
    based on a 201 draft response.

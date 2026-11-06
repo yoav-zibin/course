@@ -3,10 +3,9 @@
 Stakes are taken as each human joins a paid v2 match (and refunded in
 the waiting room). Mid-match, the game's playerLeft decides what a
 leaver is paid; the maybeLeave/playerLeft endpoints preview and then
-apply exactly that payout; when at most one human remains, the rest of
-the pot is settled to them and the match plays on with nothing at stake;
-and a game that does not decide payouts ends the match with the pot
-split equally, so no stake is ever stranded.
+apply the complete result exactly once. Legacy scalar handlers end and
+settle the match without a bot replacement. Games without a handler use
+the same result path with an equal split, so no stake is stranded.
 """
 
 from game_platform.tests.helpers import Api, error

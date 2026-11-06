@@ -29,6 +29,15 @@ ExperimentEventKind = Literal[
 
 
 @dataclass(frozen=True, kw_only=True)
+class GamePopularity:
+    """All-time started-match totals; score sums the seats present at each start."""
+
+    game_id: str
+    matches_started: int
+    score: int
+
+
+@dataclass(frozen=True, kw_only=True)
 class LinkedAccount:
     """A third-party login linked to a user: a Google subject, a verified
     phone number (E.164), or a verified email address (lowercased)."""
@@ -84,6 +93,9 @@ class User:
     # Games the user saved to their library, most recently saved last. Defaults to
     # empty so older data files load.
     saved_game_ids: tuple[str, ...] = ()
+    # Recently played games, most recent first, with each game appearing once.
+    # Defaults to empty so older account records load unchanged.
+    recent_game_ids: tuple[str, ...] = ()
     token_balance: int = 0
     last_token_grant_day: str | None = None
     created_at: dt.datetime
@@ -173,6 +185,18 @@ class Game:
     deleted: bool = False
     # Current game-wide visibility, applied to every version read from the store.
     published: bool = True
+
+
+@dataclass(frozen=True, kw_only=True)
+class GameTestSession:
+    """Private, bounded recording of a game test."""
+
+    id: str
+    owner_user_id: str
+    created_at: dt.datetime
+    updated_at: dt.datetime
+    revision: int
+    data: str
 
 
 @dataclass(frozen=True, kw_only=True)

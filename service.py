@@ -442,6 +442,8 @@ def _replace_seat(seats: tuple[Seat, ...], new_seat: Seat) -> tuple[Seat, ...]:
 
 
 class GamePlatform:
+    RECENT_GAME_LIMIT = 8
+
     def __init__(
         self,
         *,
@@ -1634,6 +1636,8 @@ class GamePlatform:
                 )
         for draft in self._store.list_game_drafts(owner_user_id=from_user_id):
             self._store.put_game_draft(replace(draft, owner_user_id=into_user_id))
+        for session in self._store.list_game_test_sessions(owner_user_id=from_user_id):
+            self._store.put_game_test_session(replace(session, owner_user_id=into_user_id))
         for match in self._store.list_all_matches():
             updated = match
             if match.owner_user_id == from_user_id:
@@ -1726,6 +1730,9 @@ class GamePlatform:
             ),
             replaced_user_ids=replaced_ids,
             saved_game_ids=_dedupe((*into.saved_game_ids, *source.saved_game_ids)),
+            recent_game_ids=_dedupe(
+                (*into.recent_game_ids, *source.recent_game_ids)
+            )[: self.RECENT_GAME_LIMIT],
             invited_by_user_id=invited_by,
             invited_via_invite_token=into.invited_via_invite_token
             or source.invited_via_invite_token,
@@ -2343,11 +2350,35 @@ class GamePlatform:
                     games.append(game)
             return games
 
+    def game_popularity_score(
+        self, *, game_id: str, caller_id: str | None = None
+    ) -> int:
+        """Returns a visible game's cumulative player count in started matches."""
+        game = self.get_game(game_id, caller_id=caller_id)
+        reader = getattr(self._store, "game_popularity_score", None)
+        return int(reader(game.id)) if reader is not None else 0
+
     def _record_game_match_start(self, match: Match) -> None:
         """Adds this start once, in the same storage unit of work as the match."""
         recorder = getattr(self._store, "record_game_match_start", None)
         if recorder is not None:
             recorder(match.game_id, len(match.seats))
+        for user_id in match.human_user_ids:
+            self._record_recent_game_for_user(user_id, match.game_id, occurred_at=match.updated_at)
+
+    def _record_recent_game_for_user(
+        self, user_id: str, game_id: str, *, occurred_at: dt.datetime | None = None
+    ) -> None:
+        """Moves [game_id] to the front of a user's bounded recent-game list."""
+        user = self._store.get_user(user_id)
+        if user is None:
+            return
+        user = self._resolve_replaced(user)
+        recent = _dedupe((game_id, *user.recent_game_ids))[: self.RECENT_GAME_LIMIT]
+        if recent != user.recent_game_ids:
+            self._store.put_user(
+                replace(user, recent_game_ids=recent, updated_at=occurred_at or self._clock())
+            )
 
     def update_game(
         self,
@@ -2711,6 +2742,7 @@ class GamePlatform:
                         turn_of_player_indices=self._turn_indices(saved, result),
                     )
                 )
+            self._record_recent_game_for_user(caller_id, saved.game_id, occurred_at=saved.updated_at)
         joiner = self._store.get_user(caller_id)
         self._notify_match_event(
             "notify.player_joined",
@@ -3469,6 +3501,7 @@ class GamePlatform:
         mover_seat: Seat,
         move: JsonValue,
         made_by_user_id: str,
+        leaving: bool = False,
     ) -> Match:
         """Saves the match a logic result describes: the new state, the move
         that produced it, the next turn, and — when the match ends — the
@@ -3490,14 +3523,21 @@ class GamePlatform:
             replace(
                 match,
                 state=result.get("state"),
+                seats=(
+                    _replace_seat(match.seats, replace(mover_seat, active=False))
+                    if leaving else match.seats
+                ),
                 moves=append_move(match.moves, record),
                 turn_of_player_indices=turn_indices,
                 status="ongoing" if turn_indices is not None else "over",
-                end_reason=None if turn_indices is not None else "finished",
+                end_reason=(
+                    None if turn_indices is not None
+                    else "player_left" if leaving else "finished"
+                ),
                 token_pot=pot,
                 token_payouts=payouts_by_index,
                 pending_leave=None,
-                turn_started_at=now if match.turn_seconds else None,
+                turn_started_at=now if turn_indices is not None and match.turn_seconds else None,
             )
         )
 
@@ -3867,8 +3907,8 @@ class GamePlatform:
     ) -> Match:
         """Leaving a v2 match. In the waiting room the leaver's stake is
         refunded and their seat freed. Mid-match, the game's playerLeft
-        decides the leaver's payout when the game allows leaving;
-        otherwise the match ends and the pot is split equally."""
+        decides the complete result; without that handler the match ends
+        and the pot is split equally."""
         if match.status == "waiting_for_players":
             if caller_id == match.owner_user_id:
                 raise ConflictError(
@@ -3900,33 +3940,41 @@ class GamePlatform:
                     pending_leave=None,
                 )
             )
-        if self._logic_for(game).has("playerLeft"):
-            preview = self._compute_leave_preview(match, game, caller_id)
-            return self._apply_leave_preview(
-                match, seat=seat, caller_id=caller_id, preview=preview
-            )
-        return self._end_match_by_leave(match, caller_id=caller_id)
+        preview = self._compute_leave_preview(match, game, caller_id)
+        return self._apply_leave_preview(
+            match, seat=seat, caller_id=caller_id, preview=preview
+        )
 
     def _compute_leave_preview(
         self, match: Match, game: Game, caller_id: str
     ) -> dict[str, Any]:
-        """Runs the game's playerLeft for [caller_id] without changing
-        the match: the payout leaving would give them, and the state and
+        """Computes the game's playerLeft (or default split) for [caller_id]
+        without changing the match: their payout, and the state and
         turn it would produce. This is what maybeLeave stores on the
         match and what leaving applies, so a confirmed leave pays exactly
         what was previewed. A game bug is recorded and answered 500; a
         game refusing the leave with InvalidMove is answered 400."""
-        try:
-            result = self._call_logic(
-                game,
-                match,
-                "playerLeft",
-                match.state,
-                match.player_id_of(self._get_seat(match, caller_id)),
-                time_limit_seconds=PLAYER_LEFT_TIME_LIMIT_SECONDS,
-            )
-        except InvalidMoveError as error:
-            raise self._game_message_error(game, error.message) from error
+        if self._logic_for(game).has("playerLeft"):
+            try:
+                result = self._call_logic(
+                    game,
+                    match,
+                    "playerLeft",
+                    match.state,
+                    match.player_id_of(self._get_seat(match, caller_id)),
+                    time_limit_seconds=PLAYER_LEFT_TIME_LIMIT_SECONDS,
+                )
+            except InvalidMoveError as error:
+                raise self._game_message_error(game, error.message) from error
+        else:
+            # Games without a leave hook use the same result and commit path.
+            # Quote the complete split, including remainder tokens, up front.
+            humans = [s for s in match.seats if s.kind == "human" and s.active]
+            share, extra = divmod(match.token_pot, len(humans))
+            result = {"state": match.state, "turn": None, "payouts": {
+                match.player_id_of(s): share + (i < extra)
+                for i, s in enumerate(humans)
+            }}
         return {
             "player_id": caller_id,
             "payout": (result.get("payouts") or {}).get(match.player_id_of(self._get_seat(match, caller_id)), 0),
@@ -3942,7 +3990,8 @@ class GamePlatform:
         """Apply the complete quoted result once, without creating a bot."""
         if preview.get("move_count", len(match.moves)) != len(match.moves):
             raise ConflictError("the match changed since this leave was previewed")
-        result = {"state": preview.get("state"), "turn": preview.get("turn"),
+        result = {"state": match.state if preview.get("end") else preview.get("state"),
+                  "turn": preview.get("turn"),
                   "payouts": preview.get("payouts", {})}
         if "payouts" not in preview:
             # A preview persisted before this release used the legacy contract.
@@ -3957,22 +4006,10 @@ class GamePlatform:
         turn = self._turn_indices(match, result)
         if turn is not None and (seat.player_index in turn or len(match.active_human_user_ids) < 3):
             raise PlatformError("playerLeft must exclude the leaver and end when fewer than two humans remain")
-        pot, payouts = self._pay_logic_result(match, result)
-        now = self._clock()
-        record = Move(move_number=len(match.moves) + 1, player_index=seat.player_index,
-                      made_by_user_id=caller_id, created_at=now,
-                      new_state=result["state"], next_turn_player_indices=turn,
-                      move={"type": "player_left"}, player_id=match.player_id_of(seat))
-        saved = self._save(replace(
-            match, state=result["state"],
-            seats=_replace_seat(match.seats, replace(seat, active=False)),
-            moves=append_move(match.moves, record),
-            status="over" if turn is None else "ongoing",
-            turn_of_player_indices=turn,
-            end_reason="player_left" if turn is None else None,
-            token_pot=pot, token_payouts=payouts, pending_leave=None,
-            turn_started_at=now if turn is not None and match.turn_seconds else None,
-        ))
+        saved = self._apply_logic_result(
+            match, result=result, mover_seat=seat, made_by_user_id=caller_id,
+            move={"type": "player_left"}, leaving=True,
+        )
         self._notify_leave(saved, caller_id=caller_id)
         return saved
 
@@ -4024,8 +4061,8 @@ class GamePlatform:
     def _end_match_by_leave(
         self, match: Match, *, caller_id: str, leaver_share: int | None = None
     ) -> Match:
-        """Ends a v2 match because a player left and the game does not
-        decide leaver payouts (it defines no playerLeft): the pot is split equally among the
+        """Ends a client-side (v1) match because a player left.
+        The pot is split equally among the
         humans in the match, the leaver included, so no stake is
         stranded. [leaver_share] pays the leaver exactly that amount (a
         preview promised it) and splits the rest among the others."""
@@ -4094,17 +4131,7 @@ class GamePlatform:
                 raise ConflictError(
                     "only a server-side (v2) game has a leave preview"
                 )
-            if self._logic_for(game).has("playerLeft"):
-                preview: dict[str, Any] = self._compute_leave_preview(
-                    match, game, caller_id
-                )
-            else:
-                humans = [s for s in match.seats if s.kind == "human" and s.active]
-                preview = {
-                    "player_id": caller_id,
-                    "payout": match.token_pot // len(humans) if humans else 0,
-                    "end": True,
-                }
+            preview = self._compute_leave_preview(match, game, caller_id)
             return self._save(replace(match, pending_leave=preview))
 
     def confirm_leave(self, *, caller_id: str, match_id: str) -> Match:
@@ -4123,12 +4150,6 @@ class GamePlatform:
             if not isinstance(preview, dict) or preview.get("player_id") != caller_id:
                 raise ConflictError(
                     "you have no leave to confirm; preview it with maybeLeave first"
-                )
-            if preview.get("end"):
-                return self._end_match_by_leave(
-                    match,
-                    caller_id=caller_id,
-                    leaver_share=int(preview.get("payout") or 0),
                 )
             return self._apply_leave_preview(
                 match, seat=seat, caller_id=caller_id, preview=preview
@@ -4664,6 +4685,30 @@ class GamePlatform:
     def list_saved_games(self, *, caller_id: str) -> list[Game]:
         with self._lock:
             return self._saved_games(self._require_user(caller_id))
+
+    def list_recent_games(self, *, caller_id: str) -> list[Game]:
+        """Returns the user's recently played, currently published games."""
+        with self._lock:
+            user = self._resolve_replaced(self._require_user(caller_id))
+            games = (
+                self._store.get_game(game_id)
+                for game_id in user.recent_game_ids[: self.RECENT_GAME_LIMIT]
+            )
+            return [
+                game
+                for game in games
+                if game is not None and game.published and not game.deleted
+            ]
+
+    def record_recent_game(self, *, caller_id: str, game_id: str) -> list[Game]:
+        """Records a local practice game in the user's server-side history."""
+        with self._lock:
+            game = self._get_live_game(game_id)
+            if not game.published and game.owner_user_id != caller_id:
+                raise NotFoundError("game not found")
+            self._require_user(caller_id)
+            self._record_recent_game_for_user(caller_id, game.id)
+            return self.list_recent_games(caller_id=caller_id)
 
     def _saved_games(self, user: User) -> list[Game]:
         """The user's saved games that can still be played, most recently saved
@@ -5314,6 +5359,8 @@ class GamePlatform:
                     self.leave_match(caller_id=user_id, match_id=match.id)
             for draft in self._store.list_game_drafts(owner_user_id=user_id):
                 self._store.delete_game_draft(draft.id)
+            for session in self._store.list_game_test_sessions(owner_user_id=user_id):
+                self._store.delete_game_test_session(session.id)
             for subscription in self._store.list_push_subscriptions(user_id=user_id):
                 self._store.delete_push_subscription(subscription.id)
             for invite in self._store.list_invites(created_by_user_id=user_id):

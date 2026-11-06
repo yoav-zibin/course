@@ -26,6 +26,46 @@ def api_for(store):
     return api
 
 
+def test_popularity_ranking_is_atomic_durable_and_preserved_in_rollback(store):
+    from game_platform.tests.test_popularity import exercise_popularity
+    from game_platform.scaling_cutover import rollback_snapshot
+
+    first, second = exercise_popularity(api_for(store))
+    with pytest.raises(RuntimeError):
+        with store.atomic():
+            store.record_game_match_start(first, 10)
+            raise RuntimeError("roll back the start")
+    restarted = QueryStore(store.client, namespace=store.namespace)
+    assert restarted.game_popularity_score(first) == 4
+    assert restarted.list_popular_game_ids(8) == [(first, 4), (second, 3)]
+    snapshot = rollback_snapshot(restarted)
+    assert {row.game_id: row.score for row in snapshot.game_popularity} == {first: 4, second: 3}
+
+
+def test_private_test_recording_survives_query_store_restart(store):
+    from game_platform.tests.test_test_sessions import recording
+
+    api = api_for(store)
+    owner, other = api.new_user("matrix-owner"), api.new_user("matrix-other")
+    saved = api.ok("POST", "/game-test-sessions", as_user=owner,
+                   json={"revision": 0, "recording": recording()})
+    second = QueryStore(store.client, namespace=store.namespace)
+    from game_platform.test_session_api import _unpack
+    assert _unpack(second.get_game_test_session(saved["id"]).data) == recording()
+    path = "/game-test-sessions/" + saved["id"]
+    updated = recording()
+    updated["events"].append({"type": "click", "at": 50, "scenario": "0"})
+    assert api.ok("PUT", path, as_user=owner, json={"revision": 1, "recording": updated})["revision"] == 2
+    assert api.request("PUT", path, as_user=owner,
+                       json={"revision": 1, "recording": recording()}).status_code == 409
+    assert _unpack(second.get_game_test_session(saved["id"]).data) == updated
+    assert api.request("GET", path, as_user=other).status_code == 404
+    assert api.request("PUT", path, as_user=other, json={"revision": 2, "recording": updated}).status_code == 404
+    assert api.ok("GET", "/game-test-sessions", as_user=owner)["items"][0]["id"] == saved["id"]
+    from game_platform.scaling_cutover import rollback_snapshot
+    assert rollback_snapshot(second).game_test_sessions[0].id == saved["id"]
+
+
 @pytest.fixture
 def store():
     assert os.environ["FIRESTORE_EMULATOR_HOST"].startswith(
@@ -37,10 +77,15 @@ def store():
     )
 
 
-def test_leave_payout_contract_is_atomic_and_survives_restart(store):
+@pytest.mark.parametrize("with_handler", [True, False])
+def test_leave_payout_contract_is_atomic_and_survives_restart(store, with_handler):
     from game_platform.tests.test_leave_result_contract import test_leave_uses_game_distribution_and_pays_exactly_once
     api = api_for(store)
-    test_leave_uses_game_distribution_and_pays_exactly_once(api)
+    if with_handler:
+        test_leave_uses_game_distribution_and_pays_exactly_once(api)
+    else:
+        from game_platform.tests.test_server_leaving import test_maybe_leave_previews_the_equal_split_without_player_left
+        test_maybe_leave_previews_the_equal_split_without_player_left(api)
     second = QueryStore(store.client, namespace=store.namespace)
     records = list(store._query("matches", [], limit=10))
     assert len(records) == 1

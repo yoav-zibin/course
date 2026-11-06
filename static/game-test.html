@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="ui.game_test.title">Game test matrix</title>
+  <link rel="stylesheet" href="/static/common.css?v=16">
+  <link rel="stylesheet" href="/static/game-test.css?v=3">
+</head>
+<body>
+<header class="topbar" data-app-page="builder">
+  <h1 data-i18n="ui.app_name">Game platform</h1>
+  <nav aria-label="Game platform" data-i18n-aria-label="ui.app_name"></nav>
+  <span class="spacer"></span>
+  <span id="account-menu"></span>
+</header>
+<main class="test-page">
+  <h1 data-i18n="ui.game_test.title">Game test matrix</h1>
+  <p data-i18n="ui.game_test.privacy">Sign in to record. Recordings are private to your account and include game code, moves and every player's views. Do not enter real secrets.</p>
+  <p data-i18n="ui.game_test.instructions">Test one supported seat count at a time. Mixed human/computer scenarios are simulations only; the Portal does not support them. Complete several randomly chosen matches in each applicable scenario; verify every clicked target is at least 30 × 30 CSS pixels and text and controls have sufficient contrast.</p>
+  <p data-i18n="ui.game_test.random_help">Random play tries visible buttons and reports when a game requires manual interaction. It does not replace browser-agent or Portal testing; contrast that cannot be measured needs manual review.</p>
+  <button id="load-draft" type="button" hidden data-i18n="ui.game_test.load_draft">Load the selected Builder draft</button>
+  <label for="client-code" data-i18n="ui.game_test.client_code">Client HTML (iframe game code)</label>
+  <textarea id="client-code" rows="8" spellcheck="false"></textarea>
+  <label for="server-code" data-i18n="ui.game_test.server_code">Server JavaScript</label>
+  <textarea id="server-code" rows="8" spellcheck="false"></textarea>
+  <label for="counts" data-i18n="ui.game_test.counts">Supported player counts (comma-separated)</label>
+  <input id="counts" value="2">
+  <label for="count" data-i18n="ui.game_test.count">Seat count to test</label>
+  <input id="count" type="number" min="1" max="10" value="2">
+  <div class="actions">
+    <button id="start" type="button" data-i18n="ui.game_test.start">Start and record matrix</button>
+    <button id="random-play" type="button" disabled data-i18n="ui.game_test.random">Play 3 random matches per scenario</button>
+    <button id="stop-random" type="button" disabled data-i18n="ui.game_test.random_stop">Stop random play</button>
+    <button id="save" type="button" disabled data-i18n="ui.game_test.save">Save recording now</button>
+    <button id="download" type="button" disabled data-i18n="ui.game_test.download">Download recording backup</button>
+    <button id="end" type="button" disabled data-i18n="ui.game_test.end">End current session</button>
+    <button id="refresh" type="button" data-i18n="ui.game_test.refresh">Refresh recordings</button>
+    <button id="delete" type="button" data-i18n="ui.game_test.delete">Delete selected recording</button>
+  </div>
+  <p id="status" role="status" aria-live="polite"></p>
+  <p id="checks" role="status"></p>
+  <p id="random-status" role="status" aria-live="polite"></p>
+  <section class="replay-toolbar" aria-label="Replay and scenario controls" data-i18n-aria-label="ui.game_test.replay_controls">
+    <div class="replay-controls">
+    <button id="replay" type="button" data-i18n="ui.game_test.replay">Replay</button>
+    <button id="pause-replay" type="button" disabled data-i18n-managed>Pause</button>
+    <button id="stop-replay" type="button" disabled data-i18n="ui.game_test.stop_replay">Stop replay</button>
+    <label for="speed" data-i18n="ui.game_test.speed">Replay speed</label>
+    <select id="speed"><option value="1">1×</option><option value="10">10×</option><option value="100">100×</option></select>
+    <label for="recordings" data-i18n="ui.game_test.recordings">Saved recordings</label>
+    <select id="recordings"><option value="" data-i18n-managed>Select a recording</option></select>
+    </div>
+    <div class="replay-controls">
+    <label for="scenario-filter" data-i18n="ui.game_test.view">View</label>
+    <select id="scenario-filter"><option value="" data-i18n-managed>All scenarios</option></select>
+    <button id="previous-scenario" type="button" disabled data-i18n="ui.game_test.previous">Previous</button>
+    <button id="next-scenario" type="button" disabled data-i18n="ui.game_test.next">Next</button>
+    <label class="follow-label"><input id="replay-selected" type="checkbox" disabled> <span data-i18n="ui.game_test.selected_only">Replay only this scenario</span></label>
+    <label class="follow-label"><input id="follow-replay" type="checkbox" checked> <span data-i18n="ui.game_test.follow">Follow replay</span></label>
+    <button id="jump-active" type="button" disabled data-i18n="ui.game_test.active">Show active</button>
+    </div>
+    <p id="replay-progress" role="status" aria-live="off" data-i18n-managed>Choose a recording and press Replay. Scroll the controls horizontally on smaller screens.</p>
+  </section>
+  <div id="matrix"></div>
+</main>
+<script src="/static/common.js?v=24"></script>
+<script src="/static/i18n.js?v=5"></script>
+<script src="/static/auth.js?v=11"></script>
+<script src="/static/game-test.js?v=8"></script>
+</body>
+</html>

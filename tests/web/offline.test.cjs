@@ -19,6 +19,7 @@ function setup(request) {
   const storage = {
     getItem: (k) => map.get(k) || null,
     setItem: (k, v) => map.set(k, v),
+    removeItem: (k) => map.delete(k),
   };
   let user = { id: "alice", password: "test" },
     online = false;
@@ -32,6 +33,7 @@ function setup(request) {
   return {
     o,
     storage,
+    map,
     setOnline: (v) => (online = v),
     setUser: (v) => (user = v),
   };
@@ -132,22 +134,38 @@ function fullStorage(limit) {
       if (v.length > limit) throw Error("quota");
       map.set(k, v);
     },
+    removeItem: (k) => map.delete(k),
   };
 }
+/** Storage with a quota on total stored bytes (a realistic quota model for
+ * per-key storage, where no single value is large). */
+function totalQuotaStorage(limit) {
+  const map = new Map();
+  const store = {
+    map,
+    limit,
+    setLimit: (next) => { store.limit = next; },
+    storedBytes: () => [...map.values()].reduce((n, v) => n + v.length, 0),
+    getItem: (k) => map.get(k) || null,
+    setItem: (k, v) => {
+      const next = new Map(map);
+      next.set(k, v);
+      if ([...next.values()].reduce((n, x) => n + x.length, 0) > store.limit) throw Error("quota");
+      map.set(k, v);
+    },
+    removeItem: (k) => map.delete(k),
+  };
+  return store;
+}
 test("a full cache of server answers is pruned so a move is still saved", () => {
-  const storage = fullStorage(5000);
+  // Per-key storage never builds one giant value, so the quota binds on
+  // total stored bytes: seed a cache that nearly fills it, then enqueue.
+  const storage = totalQuotaStorage(1_000_000);
   const o = new Offline(storage, undefined, () => ({ id: "alice", password: "t" }), () => false);
   o.save("/matches/match", base);
-  for (let i = 0; i < 20; i++) {
-    const data = o.read();
-    data.responses[`/games/g${i}/versions/1`] = { code: "x".repeat(150) };
-    storage.setItem(o.key(), JSON.stringify(data));
-  }
-  assert.ok(JSON.stringify(o.read()).length > 3000);
-  storage.setItem = ((original) => (k, v) => {
-    if (v.length > 2500) throw Error("quota");
-    original(k, v);
-  })(storage.setItem);
+  for (let i = 0; i < 20; i++) o.save(`/games/g${i}/versions/1`, { code: "x".repeat(4000) });
+  assert.ok(storage.storedBytes() > 80000);
+  storage.setLimit(storage.storedBytes() + 100);
   const shown = o.enqueue(base, body);
   assert.equal(shown.pending, 1);
   assert.equal(o.read().queues.match.length, 1);
@@ -159,6 +177,91 @@ test("caching a fetched answer never fails the page when storage is full", async
   const o = new Offline(storage, async () => [base], () => ({ id: "alice", password: "t" }), () => true);
   const list = await o.get("/matches");
   assert.equal(list[0].id, "match");
+});
+test("least recently used recoverable entries are evicted before protected data", () => {
+  const storage = totalQuotaStorage(1_000_000);
+  const o = new Offline(storage, undefined, () => ({ id: "alice", password: "t" }), () => false);
+  o.save("/matches/match", base);
+  o.save("/old", "a".repeat(300));
+  o.save("/recent", "b".repeat(300));
+  o.cached("/old");
+  o.enqueue(base, body);
+  // Tighten the quota so the next save must make room for one more entry.
+  storage.setLimit(storage.storedBytes() + 100);
+  o.save("/new", "c".repeat(300));
+  const after = o.read();
+  assert.equal(after.responses["/recent"], undefined);
+  assert.ok(after.responses["/old"]);
+  assert.ok(after.responses["/matches/match"]);
+  assert.equal(after.queues.match.length, 1);
+});
+test("clear cache preserves queued and local practice dependencies", () => {
+  const { o } = setup();
+  const data = o.read();
+  data.local["local-1"] = {game_id: "g", game_version: 2};
+  data.responses["/games/g/versions/2"] = {code: "game"};
+  data.responses["/other"] = "discard";
+  data.archives = [{moves: [body]}];
+  o.write(data);
+  o.enqueue(base, body);
+  o.clearCache();
+  const saved = o.read();
+  assert.ok(saved.responses["/matches/match"]);
+  assert.ok(saved.responses["/games/g/versions/2"]);
+  assert.equal(saved.responses["/other"], undefined);
+  assert.equal(saved.archives[0].moves.length, 1);
+  assert.equal(saved.queues.match.length, 1);
+  assert.ok(o.storageInfo().queued > 0);
+});
+test("online move is sent when queue storage is full", async () => {
+  let posts = 0;
+  const { o, storage, setOnline } = setup(async (method, path, options) => {
+    assert.equal(method, "POST");
+    assert.equal(path, "/matches/match/moves");
+    assert.ok(options.requestId);
+    posts++;
+    return {...base, move_count: 1};
+  });
+  storage.setItem = () => { throw Error("quota"); };
+  setOnline(true);
+  const result = await o.submitMove(base, {move: {type: "play"}, expected_move_count: 0});
+  assert.equal(result.move_count, 1);
+  assert.equal(posts, 1);
+  assert.deepEqual(o.read().queues, {});
+  assert.ok(o.notice);
+});
+test("storage failure never bypasses an existing pending queue", async () => {
+  let posts = 0;
+  const { o, storage, setOnline } = setup(async () => { posts++; });
+  o.enqueue(base, body);
+  storage.setItem = () => { throw Error("quota"); };
+  setOnline(true);
+  await assert.rejects(o.submitMove({...base, move_count: 1}, {...body, expected_move_count: 1}), /not saved/);
+  assert.equal(posts, 0);
+  assert.equal(o.read().queues.match.length, 1);
+});
+test("lost acknowledgement on direct online fallback is not retried automatically", async () => {
+  let posts = 0;
+  const { o, storage, setOnline } = setup(async () => { posts++; throw new TypeError("lost response"); });
+  storage.setItem = () => { throw Error("quota"); };
+  setOnline(true);
+  await assert.rejects(o.submitMove(base, {move:{type:"play"}, expected_move_count:0}), /may have received/);
+  assert.equal(posts, 1);
+});
+test("a committed move remains queued if updating storage fails", async () => {
+  let posts = 0;
+  const { o, storage, setOnline } = setup(async (method) => {
+    if (method === "GET") return base;
+    posts++;
+    storage.setItem = () => { throw Error("quota"); };
+    return {...base, move_count:1};
+  });
+  o.enqueue(base, {move:{type:"play"}, expected_move_count:0});
+  setOnline(true);
+  await o.sync();
+  assert.equal(posts, 1);
+  assert.equal(o.read().queues.match.length, 1);
+  assert.match(o.notice, /saved queue/);
 });
 test("all listed matches become available individually offline", async () => {
   const { o, setOnline } = setup(async () => [base, { ...base, id: "second" }]);
@@ -261,4 +364,214 @@ test('deleting an already missing owned match clears its cached ghost',async()=>
   const {o,setOnline}=setup(async()=>{throw Object.assign(new Error('not found'),{status:404});});setOnline(true);
   o.save('/matches/match',{...base,owner_user_id:'alice'});
   await o.api('DELETE','/matches/match');assert.equal(o.cached('/matches/match'),undefined);
+});
+
+function deniedStorage() {
+  const error = () => Object.assign(new Error("denied"), { name: "SecurityError" });
+  return {
+    getItem: () => { throw error(); },
+    setItem: () => { throw error(); },
+    removeItem: () => { throw error(); },
+  };
+}
+function mapStorage(map = new Map()) {
+  return {
+    map,
+    getItem: (k) => map.get(k) || null,
+    setItem: (k, v) => map.set(k, v),
+    removeItem: (k) => map.delete(k),
+  };
+}
+
+test("denied localStorage never bricks the portal and online play still works", async () => {
+  let posts = 0;
+  const o = new Offline(deniedStorage(), async (method, path) => {
+    if (method === "GET") return base;
+    posts++;
+    return { ...base, move_count: 1 };
+  }, () => ({ id: "alice", password: "t" }), () => true);
+  assert.deepEqual(o.read(), { responses: {}, queues: {}, conflicts: {}, local: {}, archives: [], archivedMatches: [], selectedId: null, cacheAccess: {}, cacheClock: 0 });
+  assert.match(o.notice, /unavailable/);
+  assert.equal(o.cached("/matches/match"), undefined);
+  assert.doesNotThrow(() => o.save("/matches/match", base));
+  const result = await o.submitMove(base, { move: { type: "play" }, expected_move_count: 0 });
+  assert.equal(result.move_count, 1);
+  assert.equal(posts, 1);
+});
+test("reads that start denying storage return empty state instead of throwing", () => {
+  const { o, storage } = setup();
+  storage.getItem = () => { throw Object.assign(new Error("denied"), { name: "SecurityError" }); };
+  assert.deepEqual(o.read().queues, {});
+  assert.match(o.notice, /unavailable/);
+});
+test("a corrupt legacy blob reads as empty and keeps the backup for inspection", () => {
+  const storage = mapStorage(new Map([[ "game-platform.portal.v1.alice", "not-json{"]]));
+  const o = new Offline(storage, undefined, () => ({ id: "alice" }), () => false);
+  assert.deepEqual(o.read().queues, {});
+  assert.match(o.notice, /unavailable/);
+  assert.equal(storage.map.get("game-platform.portal.v1.alice"), "not-json{");
+});
+test("a corrupt cached response only loses that response", () => {
+  const { o, map } = setup();
+  o.save("/good", { ok: 1 });
+  o.save("/bad", { ok: 2 });
+  map.set(`game-platform.portal.v1.alice.r.${encodeURIComponent("/bad")}`, "{broken");
+  assert.equal(o.cached("/good").ok, 1);
+  assert.equal(o.cached("/bad"), undefined);
+  assert.ok(o.read().responses["/good"]);
+  assert.equal(o.read().responses["/bad"], undefined);
+});
+test("a legacy single-JSON blob migrates to per-key pieces and keeps the backup", () => {
+  const legacy = {
+    responses: { "/matches/match": base, "/games/g/versions/1": { code: "x" } },
+    queues: { match: [{ body }] },
+    conflicts: {},
+    local: {},
+    archives: [],
+    archivedMatches: [],
+    selectedId: "match",
+    cacheAccess: { "/matches/match": 5, "/games/g/versions/1": 3 },
+    cacheClock: 5,
+  };
+  const storage = mapStorage(new Map([
+    ["game-platform.portal.v1.alice", JSON.stringify(legacy)],
+    ["game-platform.portal.v1.alice.lru", JSON.stringify({ "/games/g/versions/1": 9 })],
+  ]));
+  const o = new Offline(storage, undefined, () => ({ id: "alice" }), () => false);
+  const data = o.read();
+  assert.equal(data.responses["/matches/match"].id, "match");
+  assert.equal(data.queues.match.length, 1);
+  assert.equal(data.selectedId, "match");
+  assert.equal(data.cacheAccess["/games/g/versions/1"], 9);
+  assert.equal(storage.map.get("game-platform.portal.v1.alice"), JSON.stringify(legacy));
+  assert.equal(JSON.parse(storage.map.get("game-platform.portal.v1.alice.meta")).migrated, true);
+  assert.ok(storage.map.has(`game-platform.portal.v1.alice.r.${encodeURIComponent("/matches/match")}`));
+  assert.equal(storage.map.has("game-platform.portal.v1.alice.lru"), false);
+  const reloaded = new Offline(storage, undefined, () => ({ id: "alice" }), () => false);
+  assert.equal(reloaded.read().queues.match.length, 1);
+  assert.equal(reloaded.read().selectedId, "match");
+});
+test("eviction counts UTF-8 bytes, not characters", () => {
+  const { o } = setup();
+  o.save("/a", "é".repeat(400000)); // 400k chars, 800k bytes
+  o.save("/b", "é".repeat(400000)); // ~1.6M bytes total, over the 1M budget
+  const kept = Object.keys(o.read().responses).filter((p) => p !== "/matches/match");
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0], "/b");
+});
+test("never-touched entries evict before touched ones", () => {
+  const storage = totalQuotaStorage(1_000_000);
+  const o = new Offline(storage, undefined, () => ({ id: "alice", password: "t" }), () => false);
+  o.save("/matches/match", base);
+  o.save("/touched", "t".repeat(300));
+  const key = o.key();
+  storage.map.set(`${key}.r.${encodeURIComponent("/untouched")}`, JSON.stringify("u".repeat(300)));
+  const meta = JSON.parse(storage.map.get(`${key}.meta`));
+  meta.responses.push("/untouched");
+  storage.map.set(`${key}.meta`, JSON.stringify(meta));
+  assert.equal(o.read().responses["/untouched"], "u".repeat(300));
+  assert.equal(o.storageInfo().evictionOrder[0], "/untouched");
+  storage.setLimit(storage.storedBytes() + 100);
+  o.save("/new", "n".repeat(300));
+  const after = o.read();
+  assert.equal(after.responses["/untouched"], undefined);
+  assert.ok(after.responses["/touched"]);
+  assert.ok(after.responses["/new"]);
+});
+test("storage info reports largest entries, eviction order and per-match sizes", () => {
+  const { o } = setup();
+  o.save("/big", "x".repeat(500));
+  o.save("/small", "y".repeat(10));
+  o.enqueue(base, body);
+  const info = o.storageInfo();
+  assert.equal(info.budgetBytes, 1_000_000);
+  assert.equal(info.entries, 3);
+  assert.equal(info.largest[0].path, "/big");
+  assert.ok(info.largest[0].bytes > 500);
+  assert.deepEqual(info.evictionOrder, ["/big", "/small"]);
+  assert.equal(info.nextToEvict, "/big");
+  assert.equal(info.perMatchQueue[0].id, "match");
+  assert.equal(info.perMatchQueue[0].moves, 1);
+  assert.ok(info.perMatchQueue[0].bytes > 0);
+  assert.deepEqual(info.perPractice, []);
+  assert.equal(info.accounts[0].key, o.key());
+  assert.ok(info.accounts[0].bytes > 0);
+  assert.deepEqual(info.otherKeys, []);
+  assert.ok(info.total >= info.cache);
+});
+test("per-key delete removes only unprotected responses", () => {
+  const { o } = setup();
+  o.save("/drop", "x");
+  assert.equal(o.deleteCached("/drop"), true);
+  assert.equal(o.cached("/drop"), undefined);
+  assert.equal(o.deleteCached("/drop"), false);
+  o.enqueue(base, body);
+  assert.equal(o.deleteCached("/matches/match"), false);
+  assert.ok(o.cached("/matches/match"));
+});
+test("clear cache also removes the superseded recency side key", () => {
+  const { o, storage } = setup();
+  storage.setItem(`${o.key()}.lru`, JSON.stringify({ "/x": 1 }));
+  o.clearCache();
+  assert.equal(storage.getItem(`${o.key()}.lru`), null);
+});
+test("service worker cache info is null without the Cache API", async () => {
+  const { o } = setup();
+  assert.equal(await o.swCacheInfo(), null);
+});
+test("service worker cache info counts shell entries", async () => {
+  const { o } = setup();
+  const responses = new Map([
+    ["/static/portal.js", { headers: { get: () => "1200" } }],
+    ["/static/portal.css", { headers: { get: () => "300" } }],
+  ]);
+  globalThis.caches = {
+    keys: async () => ["playroom-portal-shell-v113", "other-cache"],
+    open: async () => ({
+      keys: async () => ["/static/portal.js", "/static/portal.css"],
+      match: async (request) => responses.get(request),
+    }),
+  };
+  try {
+    const info = await o.swCacheInfo();
+    assert.equal(info.entries, 2);
+    assert.equal(info.bytes, 1500);
+  } finally {
+    delete globalThis.caches;
+  }
+});
+test("a failed archive write after a server delete does not throw", async () => {
+  const { o, storage, setOnline } = setup(async () => null);
+  setOnline(true);
+  o.save("/matches", [base]);
+  o.enqueue(base, body);
+  storage.setItem = () => { throw Error("quota"); };
+  await o.api("DELETE", "/matches/match");
+  assert.match(o.notice, /could not be updated/);
+  assert.equal(o.read().queues.match.length, 1);
+});
+test("resolving a conflict when storage is full keeps the conflict and reports it", () => {
+  const { o, storage } = setup();
+  const d = o.read();
+  d.conflicts.match = { remote: null, message: "x" };
+  o.write(d);
+  storage.setItem = () => { throw Error("quota"); };
+  o.resolve("match");
+  assert.match(o.notice, /could not be updated/);
+  assert.ok(o.read().conflicts.match);
+});
+test("ending practice when storage is full reports instead of throwing", () => {
+  const { o, storage } = setup();
+  const d = o.read();
+  d.local["local-a"] = { ...base, id: "local-a" };
+  o.write(d);
+  storage.setItem = () => { throw Error("quota"); };
+  o.endPractice("local-a");
+  assert.match(o.notice, /could not be updated/);
+});
+test("writeCache swallows a denied-storage error instead of failing the page", () => {
+  const { o, storage } = setup();
+  storage.setItem = () => { throw Object.assign(new Error("boom"), { name: "SecurityError" }); };
+  assert.doesNotThrow(() => o.save("/new", { x: 1 }));
+  assert.match(o.notice, /unavailable/);
 });

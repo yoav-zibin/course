@@ -210,3 +210,142 @@ def test_contract_states_the_recipe_and_performance_rules():
                    'must not clone the state'):
         assert phrase in PLATFORM_CONTRACT, phrase
     assert 'do not fail code for a leaving or settlement scenario the probes already verify' in REVIEW_DISCIPLINE
+
+
+# --- Move-agreement probes -------------------------------------------------
+# The same reference game, judged on one approved opening position: its
+# generators return {type:'pass'}, which its applyMove accepts, so a
+# correct game agrees with itself. Each broken variant reproduces one
+# failure class from real guided builds.
+
+from game_platform.builder_validation import probe_move_agreement
+
+AGREEMENT_CONTRACT = {**CONTRACT, 'cases': [{
+    'name': 'opening', 'kind': 'initial',
+    'ctx': {'players': [{'id': 'human-1', 'kind': 'human', 'display_name': 'A', 'picture_url': '', 'max_loss': 0},
+                        {'id': 'human-2', 'kind': 'human', 'display_name': 'B', 'picture_url': '', 'max_loss': 0}],
+            'pot': 0, 'move_count': 0, 'seed': 7},
+    'state': {'moves': 0, 'turnSeat': 0, 'left': [], 'winner': None, 'finalPayouts': None},
+    'player_id': 'human-1',
+}]}
+
+DIVERGENT_RANDOM = REFERENCE.replace(
+    "randomMove(state, playerId, ctx) { return {type: 'pass'}; }",
+    "randomMove(state, playerId, ctx) { return {type: 'cheat'}; }",
+).replace(
+    "const s = {...state, moves: state.moves + 1, left: [...state.left]};",
+    "if (move.type === 'cheat') throw new Error('InvalidMove: cheat');\n"
+    "    const s = {...state, moves: state.moves + 1, left: [...state.left]};",
+)
+
+THROWING_COMPUTER = REFERENCE.replace(
+    "computerMove(state, playerId, ctx) { return {type: 'pass'}; }",
+    "computerMove(state, playerId, ctx) { throw new Error('no moves'); }",
+)
+
+
+def test_move_agreement_reference_game_agrees():
+    assert probe_move_agreement(REFERENCE, AGREEMENT_CONTRACT) == []
+
+
+def test_move_agreement_catches_divergent_random_move():
+    failures = probe_move_agreement(DIVERGENT_RANDOM, AGREEMENT_CONTRACT)
+    assert any('randomMove returned a move applyMove rejects' in failure for failure in failures)
+
+
+def test_move_agreement_catches_throwing_computer_move():
+    failures = probe_move_agreement(THROWING_COMPUTER, AGREEMENT_CONTRACT)
+    assert any('computerMove raised instead of returning a legal move' in failure for failure in failures)
+
+
+def test_move_agreement_is_a_registered_check():
+    assert 'move_agreement' in dict(CHECKS)
+
+
+# A setup move that is legal only before the first move, but the generator
+# keeps offering it once the game is under way — invisible from the
+# approved (opening) states, exactly what the played-out position is for.
+SETUP_MOVE_DIVERGENCE = REFERENCE.replace(
+    "randomMove(state, playerId, ctx) { return {type: 'pass'}; }",
+    "randomMove(state, playerId, ctx) { return state.moves >= 2 ? {type: 'setup'} : {type: 'pass'}; }",
+).replace(
+    "const s = {...state, moves: state.moves + 1, left: [...state.left]};",
+    "if (move.type === 'setup' && state.moves > 0) throw new Error('InvalidMove: locked after first move');\n"
+    "    const s = {...state, moves: state.moves + 1, left: [...state.left]};",
+)
+
+
+def test_move_agreement_catches_setup_move_offered_mid_game():
+    failures = probe_move_agreement(SETUP_MOVE_DIVERGENCE, AGREEMENT_CONTRACT)
+    assert any('applyMove rejects' in failure for failure in failures), failures
+
+
+# A computerMove whose hard branch returns an illegal move. Walks never
+# change difficulty, so without a difficulty sweep only a reviewer
+# reading the code would ever see this branch run.
+DIFFICULTY_CONTRACT = {**AGREEMENT_CONTRACT, 'cases': [{
+    **AGREEMENT_CONTRACT['cases'][0],
+    'state': {**AGREEMENT_CONTRACT['cases'][0]['state'], 'difficulty': 'medium'},
+}]}
+
+HARD_DIVERGENT = REFERENCE.replace(
+    "computerMove(state, playerId, ctx) { return {type: 'pass'}; }",
+    "computerMove(state, playerId, ctx) { return state.difficulty === 'hard' ? {type: 'cheat'} : {type: 'pass'}; }",
+).replace(
+    "const s = {...state, moves: state.moves + 1, left: [...state.left]};",
+    "if (move.type === 'cheat') throw new Error('InvalidMove: cheat');\n"
+    "    const s = {...state, moves: state.moves + 1, left: [...state.left]};",
+)
+
+
+def test_move_agreement_sweeps_difficulty_branches():
+    failures = probe_move_agreement(HARD_DIVERGENT, DIFFICULTY_CONTRACT)
+    assert any('difficulty hard' in failure and 'computerMove returned a move applyMove rejects' in failure
+               for failure in failures), failures
+    assert probe_move_agreement(REFERENCE, DIFFICULTY_CONTRACT) == []
+
+
+# A generator drawing from a private counter instead of ctx.random:
+# seeded calls must be reproducible, and only ctx.random is seeded.
+NONDETERMINISTIC_RANDOM = 'let probeCounter = 0;\n' + REFERENCE.replace(
+    "randomMove(state, playerId, ctx) { return {type: 'pass'}; }",
+    "randomMove(state, playerId, ctx) { return {type: 'pass', n: ++probeCounter}; }",
+)
+
+
+def test_move_agreement_catches_unseeded_randomness():
+    failures = probe_move_agreement(NONDETERMINISTIC_RANDOM, AGREEMENT_CONTRACT)
+    assert any('randomMove is not deterministic' in failure for failure in failures), failures
+
+
+# A game whose schema admits only easy/hard difficulty. The sweep must
+# use the schema's levels: inventing 'medium' manufactures a state the
+# game's own schema rejects, which failed sound code on every attempt
+# of a real build (Cat vs Dog Tic Tac Toe, 2026-11-06).
+TWO_LEVEL_CONTRACT = {
+    'state_schema': {'type': 'object',
+                     'properties': {'difficulty': {'enum': ['easy', 'hard']}}},
+    'view_schema': {'type': 'object'},
+    'move_schema': {'type': 'object'},
+    'cases': [{
+        **AGREEMENT_CONTRACT['cases'][0],
+        'state': {**AGREEMENT_CONTRACT['cases'][0]['state'], 'difficulty': 'hard'},
+    }],
+}
+
+EASY_DIVERGENT = REFERENCE.replace(
+    "computerMove(state, playerId, ctx) { return {type: 'pass'}; }",
+    "computerMove(state, playerId, ctx) { return state.difficulty === 'easy' ? {type: 'cheat'} : {type: 'pass'}; }",
+).replace(
+    "const s = {...state, moves: state.moves + 1, left: [...state.left]};",
+    "if (move.type === 'cheat') throw new Error('InvalidMove: cheat');\n"
+    "    const s = {...state, moves: state.moves + 1, left: [...state.left]};",
+)
+
+
+def test_move_agreement_sweeps_only_schema_difficulty_levels():
+    assert probe_move_agreement(REFERENCE, TWO_LEVEL_CONTRACT) == []
+    failures = probe_move_agreement(EASY_DIVERGENT, TWO_LEVEL_CONTRACT)
+    assert any('difficulty easy' in failure and 'computerMove returned a move applyMove rejects' in failure
+               for failure in failures), failures
+    assert not any('state_schema' in failure for failure in failures), failures

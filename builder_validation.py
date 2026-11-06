@@ -1,4 +1,6 @@
 """Schema and approved-example validation shared by runtime and guided builds."""
+import json
+
 from jsonschema import Draft202012Validator
 from game_platform.game_logic import GameLogic, GameLogicError, InvalidMoveError
 
@@ -110,6 +112,162 @@ def verify_examples(code, contract):
         except Exception as exc:
             results.append({'name':case['name'],'passed':False,'error':str(exc)})
     return results
+
+
+def probe_move_agreement(code, contract, *, samples=24):
+    """Deterministic agreement between the move generators and applyMove.
+
+    Random walks found these only by luck of the seed: a randomMove that
+    returns moves its own applyMove rejects (a second, divergent legality
+    implementation), and generators that throw or crawl on ordinary
+    positions. The probe samples randomMove (and calls computerMove once)
+    on every approved example's before-state and on one played-out
+    mid-game position reached with the game's own generator, and
+    requires every returned move to be accepted by applyMove. The
+    played-out position matters: preconditions that only bite later —
+    a setup move offered mid-game, a resource-gated move offered with
+    none left — are invisible from the early approved states. Sampling
+    also calls computerMove at every difficulty the game's state schema
+    admits (walks never change difficulty, so those branches are
+    otherwise exercised only by review), calls each generator twice
+    with one seed to prove seeded determinism, and times generator
+    calls at the platform's own 100 ms limit. Returns failure strings;
+    an empty list means agreement."""
+    logic = ContractLogic(code, contract)
+    if not logic.has('randomMove') and not logic.has('computerMove'):
+        return []
+    failures = []
+    # The difficulty branches worth sweeping are the ones the game's own
+    # state schema admits. Inventing values the schema forbids — a game
+    # with only easy/hard has no 'medium' — makes the probe manufacture
+    # invalid states and fail sound code on every attempt. Without a
+    # declared enum, fall back to the platform's usual levels.
+    difficulty_field = ((contract.get('state_schema') or {}).get('properties') or {}).get('difficulty')
+    declared = difficulty_field.get('enum') if isinstance(difficulty_field, dict) else None
+    if isinstance(declared, list) and declared and all(isinstance(level, str) for level in declared):
+        difficulty_levels = tuple(declared)
+    else:
+        difficulty_levels = ('easy', 'medium', 'hard')
+
+    def accepted(state, mover, move, ctx, seed):
+        try:
+            logic.call('applyMove', state, mover, move, ctx=ctx, seed=seed)
+            return True
+        except Exception:
+            return False
+
+    def sample_state(state, mover, ctx, label):
+        if logic.has('randomMove'):
+            distinct = []
+            for i in range(samples):
+                try:
+                    move = logic.call('randomMove', state, mover, ctx=ctx, seed=7300 + i,
+                                      time_limit_seconds=0.1)
+                except Exception as exc:
+                    failures.append(f'{label}: randomMove failed on an approved position: {exc}')
+                    break
+                if move is None:
+                    failures.append(f'{label}: randomMove returned no move on a live approved position')
+                    break
+                if not any(move == other for other in distinct):
+                    distinct.append(move)
+            for move in distinct:
+                if not accepted(state, mover, move, ctx, 7400):
+                    failures.append(f'{label}: randomMove returned a move applyMove rejects: '
+                                    f'{json.dumps(move, default=str)} — the move generator and '
+                                    'the validator disagree about legality')
+            try:
+                first = logic.call('randomMove', state, mover, ctx=ctx, seed=7399,
+                                   time_limit_seconds=0.1)
+                second = logic.call('randomMove', state, mover, ctx=ctx, seed=7399,
+                                    time_limit_seconds=0.1)
+                if first != second:
+                    failures.append(f'{label}: randomMove is not deterministic for a fixed seed '
+                                    '(it must draw only from ctx.random)')
+            except Exception:
+                pass
+        if logic.has('computerMove'):
+            variants = [(state, label)]
+            if isinstance(state, dict) and 'difficulty' in state:
+                variants += [({**state, 'difficulty': level}, f'{label} (difficulty {level})')
+                             for level in difficulty_levels
+                             if level != state.get('difficulty')]
+            for variant_index, (variant, variant_label) in enumerate(variants):
+                try:
+                    move = logic.call('computerMove', variant, mover, ctx=ctx, seed=7500,
+                                      time_limit_seconds=0.1)
+                    again = logic.call('computerMove', variant, mover, ctx=ctx, seed=7500,
+                                       time_limit_seconds=0.1)
+                except Exception as exc:
+                    # A synthetic variant the game's own schema rejects says
+                    # nothing about the game — the probe invented that state.
+                    if variant_index and 'state_schema' in str(exc):
+                        continue
+                    failures.append(f'{variant_label}: computerMove raised instead of returning a legal move: {exc}')
+                    continue
+                if move != again:
+                    failures.append(f'{variant_label}: computerMove is not deterministic for a fixed seed '
+                                    '(it must draw only from ctx.random)')
+                if move is None:
+                    failures.append(f'{variant_label}: computerMove returned no move on a live approved position')
+                elif not accepted(variant, mover, move, ctx, 7500):
+                    failures.append(f'{variant_label}: computerMove returned a move applyMove rejects: '
+                                    f'{json.dumps(move, default=str)}')
+
+    seen = []
+    for case in contract['cases']:
+        if len(failures) >= 6:
+            break
+        if 'expected_error' in case:
+            continue
+        state = case['state']
+        if any(state == other for other in seen):
+            continue
+        seen.append(state)
+        ctx = {k: v for k, v in case['ctx'].items() if k != 'seed'}
+        sample_state(state, case['player_id'], ctx, f"example '{case['name']}'")
+
+    if contract['cases'] and len(failures) < 6:
+        # Play a short game with the game's own generator, keeping only
+        # moves applyMove accepts, then sample at the reached position.
+        generator = 'randomMove' if logic.has('randomMove') else 'computerMove'
+        ctx = {k: v for k, v in contract['cases'][0]['ctx'].items() if k != 'seed'}
+        try:
+            opening = logic.call('newMatch', ctx=ctx, seed=4242, time_limit_seconds=2.0)
+            state, turn = opening['state'], opening['turn']
+        except Exception:
+            state, turn = None, None
+        plies = 0
+        while state is not None and turn and plies < 24:
+            mover = turn[0]
+            move = None
+            for seed in range(7600, 7608):
+                try:
+                    candidate = logic.call(generator, state, mover, ctx=ctx, seed=seed,
+                                           time_limit_seconds=0.5)
+                except Exception:
+                    candidate = None
+                if candidate is None:
+                    continue
+                if accepted(state, mover, candidate, ctx, seed):
+                    move = candidate
+                    break
+                failures.append(f'played-out position (ply {plies}): {generator} returned a move '
+                                f'applyMove rejects: {json.dumps(candidate, default=str)} — the '
+                                'move generator and the validator disagree about legality')
+                break
+            if move is None:
+                break
+            try:
+                result = logic.call('applyMove', state, mover, move, ctx=ctx, seed=7700 + plies)
+            except Exception:
+                break
+            state, turn = result['state'], result['turn']
+            ctx = {**ctx, 'move_count': ctx.get('move_count', 0) + 1}
+            plies += 1
+        if state is not None and turn and plies >= 4 and len(failures) < 6:
+            sample_state(state, turn[0], ctx, f'played-out position after {plies} moves')
+    return failures
 
 
 def probe_leaving(code, contract, *, allowed_player_counts, allows_leave_mid_match):

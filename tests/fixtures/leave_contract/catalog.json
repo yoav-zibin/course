@@ -1,0 +1,8592 @@
+[
+  {
+    "id": "f8d1a658-3af8-483a-8555-0e02e7212be4",
+    "version": 4,
+    "name": "3 Minute Chess",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "bMs": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "board": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "castling": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "ep": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "full": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "half": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "history": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "lastMove": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "rep": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "side": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "stamp": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "wMs": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "fc": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "fr": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "promo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tc": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "tr": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "bMs": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "board": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "castling": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "ep": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "full": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "half": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "history": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "lastMove": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "side": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "stamp": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "wMs": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch2/3-minute-chess.server.js"
+  },
+  {
+    "id": "87a0d4f0-7020-4397-9358-82daa3452960",
+    "version": 7,
+    "name": "4 player chess",
+    "allowed_player_counts": [
+      4
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "board": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "eliminated": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "lastMove": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "ply": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winnerTeam": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "fc": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "fr": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tc": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "tr": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "board": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "checkKings": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "eliminated": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "inCheck": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "lastMove": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "legalMoves": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "ply": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winnerTeam": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch2/4-player-chess.server.js"
+  },
+  {
+    "id": "4d15d9d7-0788-4304-9b30-9b5c2bd7f487",
+    "version": 3,
+    "name": "4x5 tictactoe",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "board": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "lastMove": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "toMove": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winningLine": {
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "cell": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "board": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "lastMove": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "toMove": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winningLine": {
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/community/4d15d9d7-0788-4304-9b30-9b5c2bd7f487.original.server.js"
+  },
+  {
+    "id": "c435beb6-12d7-427e-80ba-2ebb619cabfa",
+    "version": 4,
+    "name": "6-Card Golf",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "discard": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "drew": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "flipTurn": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "hands": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "knocker": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "lastChance": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "log": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "scores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "stock": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "turn": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "turnsLeft": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "from": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "idx": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "idxs": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "cur": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "discard": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "drew": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "flipTurn": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "flipTurnIdx": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "hands": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "knocker": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "lastChance": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "log": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "scores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "stockCount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "turn": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "turnsLeft": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch3/six-card-golf.server.js"
+  },
+  {
+    "id": "20a83777-0f59-4105-a09e-0267b9c15e40",
+    "version": 5,
+    "name": "Backgammon",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "bar": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "cnt": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "cur": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "dice": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "moves": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "n": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "needRoll": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "off": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "owner": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "action": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "from": {
+            "type": [
+              "null",
+              "number",
+              "string"
+            ]
+          },
+          "to": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "bar": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "cnt": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "cur": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "dice": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "legalMoves": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "moves": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "n": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "needRoll": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "off": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "owner": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch3/backgammon.server.js"
+  },
+  {
+    "id": "77181f30-f03a-4524-b662-33c1f6131389",
+    "version": 11,
+    "name": "Battleship",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "attacks": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "boards": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "last": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "moves": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "turnIdx": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winnerIdx": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "ships": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "x": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "y": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "attacks": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "boards": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "last": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "moves": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "turnIdx": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winnerIdx": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch1/battleship.server.js"
+  },
+  {
+    "id": "5119b8b8-44b7-415b-b0d8-07c9e36fc273",
+    "version": 4,
+    "name": "Beat the Landlord",
+    "allowed_player_counts": [
+      3
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "bidTurn": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "bids": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "bot": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hands": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "highBid": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "landlord": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "last": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "passes": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "turn": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "bid": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "cards": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "bidTurn": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "bids": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "bot": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "curSeat": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "hand": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "handCounts": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "highBid": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "landlord": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "last": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "passes": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "turnSeat": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch1/beat-the-landlord.server.js"
+  },
+  {
+    "id": "9069ae35-61f3-4a38-8e5c-480e53f289b8",
+    "version": 5,
+    "name": "Blackjack Table",
+    "allowed_player_counts": [
+      1,
+      2,
+      3
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "cards0": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "chips": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "curH": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "curP": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "customNames": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "dealer": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "deck": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "freshMsg": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hands": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "needBet": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "pendingBets": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "results": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "round": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "six": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "winners": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "amount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "names": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "six": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "chips": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "curH": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "curP": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "customNames": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "dealer": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "deckCount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "freshMsg": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hands": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "holeHidden": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "needBet": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "pendingBets": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "results": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "round": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "six": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "winners": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch4/blackjack-table.server.js"
+  },
+  {
+    "id": "3a6438c0-c712-4301-ade9-eb4b60346658",
+    "version": 4,
+    "name": "Blokus",
+    "allowed_player_counts": [
+      2,
+      4
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "available": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "board": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "colorDone": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "colorOwners": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "currentPlayer": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "finished": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "lastPlayed": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "moveNumber": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "passed": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "playerCount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "scores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winners": {
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "col": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "color": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "ori": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "pass": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "piece": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "row": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "available": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "board": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "colorOwners": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "currentPlayer": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "finished": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "moveNumber": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "playerCount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "scores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "seat": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winners": {
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch2/blokus.server.js"
+  },
+  {
+    "id": "d650dbad-c760-48db-a445-c9def2134ca1",
+    "version": 5,
+    "name": "Brazilian Truco",
+    "allowed_player_counts": [
+      2,
+      4
+    ],
+    "allows_leave_mid_match": true,
+    "allows_join_mid_match": true,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "dealer": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "hand_no": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "hands": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "last_hand": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "last_raise_by": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "last_trick": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "n": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "raise": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "raise_log": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "scores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "trick": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "tricks": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "turn": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "turned": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "value": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "card": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "can_raise": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "dealer": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "hand": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hand_counts": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hand_no": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "hands": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "last_hand": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "last_raise_by": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "last_trick": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "n": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "raise": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "raise_log": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "scores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "trick": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "tricks": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "turn": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "turn_seat": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "turned": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "value": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch3/brazilian-truco.server.js"
+  },
+  {
+    "id": "916ab616-6abf-4c92-83c5-43cbdd4c8ab9",
+    "version": 2,
+    "name": "Bulls and Cows (Bulgarian)",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "feedback": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "guesses": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "secrets": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "guess": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "secret": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "feedback": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "guesses": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "myFeedback": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "myGuesses": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "mySecret": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "oppFeedback": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "oppGuesses": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "oppSecret": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "secrets": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "secretsSet": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/community/916ab616-6abf-4c92-83c5-43cbdd4c8ab9.original.server.js"
+  },
+  {
+    "id": "8f692b3e-5f36-41b8-8942-38f5c7b3dc14",
+    "version": 4,
+    "name": "Cheat (BS)",
+    "allowed_player_counts": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "current": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "declined": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hands": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "lastResult": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "pending": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pile": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "rankIdx": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "cards": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "counts": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "current": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "lastResult": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "myHand": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "pending": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pileCount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "rankIdx": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "reqRank": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch4/cheat-bs.server.js"
+  },
+  {
+    "id": "f4e55ca5-464e-4ad0-9aae-79f8cc3e7cad",
+    "version": 5,
+    "name": "Checkers",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "board": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "chain": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "draw": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "lastMove": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "noCap": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "toMove": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "from": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "to": {
+            "type": [
+              "null",
+              "object"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "board": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "chain": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "draw": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "lastMove": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "moves": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "noCap": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "toMove": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch4/checkers.server.js"
+  },
+  {
+    "id": "076f078a-56cd-44b3-8930-81abc488508a",
+    "version": 7,
+    "name": "Chess",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": [
+          "bd",
+          "turn",
+          "castling",
+          "ep",
+          "half",
+          "full",
+          "winner",
+          "reason",
+          "history",
+          "rep",
+          "lastMove"
+        ],
+        "properties": {
+          "bd": {
+            "type": "array",
+            "minItems": 64,
+            "maxItems": 64,
+            "items": {
+              "type": "integer",
+              "minimum": -6,
+              "maximum": 6
+            }
+          },
+          "turn": {
+            "enum": [
+              "w",
+              "b"
+            ]
+          },
+          "castling": {
+            "type": "object",
+            "required": [
+              "K",
+              "Q",
+              "k",
+              "q"
+            ],
+            "properties": {
+              "K": {
+                "type": "boolean"
+              },
+              "Q": {
+                "type": "boolean"
+              },
+              "k": {
+                "type": "boolean"
+              },
+              "q": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
+          "ep": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 63
+              }
+            ]
+          },
+          "half": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "full": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "winner": {
+            "enum": [
+              null,
+              -1,
+              0,
+              1
+            ]
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            ]
+          },
+          "history": {
+            "type": "array",
+            "maxItems": 240,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32
+            }
+          },
+          "rep": {
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^[0-9]{1,10}\\.[0-9]{1,10}$"
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "lastMove": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "fr",
+                  "fc",
+                  "tr",
+                  "tc"
+                ],
+                "properties": {
+                  "fr": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 7
+                  },
+                  "fc": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 7
+                  },
+                  "tr": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 7
+                  },
+                  "tc": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 7
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "fr",
+              "fc",
+              "tr",
+              "tc"
+            ],
+            "properties": {
+              "fr": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              },
+              "fc": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              },
+              "tr": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              },
+              "tc": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              },
+              "promo": {
+                "enum": [
+                  "Q",
+                  "R",
+                  "B",
+                  "N"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "resign"
+            ],
+            "properties": {
+              "resign": {
+                "const": true
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": [
+          "bd",
+          "castling",
+          "ep",
+          "half",
+          "full",
+          "winner",
+          "reason",
+          "history",
+          "lastMove",
+          "toMove"
+        ],
+        "properties": {
+          "bd": {
+            "type": "array",
+            "minItems": 64,
+            "maxItems": 64,
+            "items": {
+              "type": "integer",
+              "minimum": -6,
+              "maximum": 6
+            }
+          },
+          "castling": {
+            "type": "object",
+            "required": [
+              "K",
+              "Q",
+              "k",
+              "q"
+            ],
+            "properties": {
+              "K": {
+                "type": "boolean"
+              },
+              "Q": {
+                "type": "boolean"
+              },
+              "k": {
+                "type": "boolean"
+              },
+              "q": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
+          "ep": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 63
+              }
+            ]
+          },
+          "half": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "full": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "winner": {
+            "enum": [
+              null,
+              -1,
+              0,
+              1
+            ]
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            ]
+          },
+          "history": {
+            "type": "array",
+            "maxItems": 240,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32
+            }
+          },
+          "lastMove": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "fr",
+                  "fc",
+                  "tr",
+                  "tc"
+                ],
+                "properties": {
+                  "fr": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 7
+                  },
+                  "fc": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 7
+                  },
+                  "tr": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 7
+                  },
+                  "tc": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 7
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
+          "toMove": {
+            "enum": [
+              "w",
+              "b"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "server": "games/audit-batch5/chess.server.js"
+  },
+  {
+    "id": "a5a16425-bc14-4260-9946-763b11f0739b",
+    "version": 1,
+    "name": "Chopsticks",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": true,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "hands": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "turnIndex": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winnerIndex": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "from": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "to": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "hands": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "turnIndex": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winnerIndex": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/community/a5a16425-bc14-4260-9946-763b11f0739b.original.server.js"
+  },
+  {
+    "id": "cbd19f63-bc51-49a9-bb45-858ec9b12828",
+    "version": 4,
+    "name": "Chutes & Ladders",
+    "allowed_player_counts": [
+      2,
+      3,
+      4
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "lastAngle": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "lastEvent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastFrom": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "lastSpin": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "lastTo": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "log": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pieces": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "positions": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "rolloffSpins": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "rolloffTurn": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "selectIdx": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "selectOrder": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "selectTurn": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "turnOrder": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "turnPos": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "emoji": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "lastAngle": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "lastEvent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastFrom": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "lastSpin": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "lastTo": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "log": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pieces": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "positions": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "rolloffSpins": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "rolloffTurn": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "selectIdx": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "selectOrder": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "selectTurn": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "turnOrder": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "turnPos": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/community/cbd19f63-bc51-49a9-bb45-858ec9b12828.original.server.js"
+  },
+  {
+    "id": "7bed6e20-99b4-4749-888e-43b0e90ba866",
+    "version": 2,
+    "name": "Connect Four",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": true,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "board": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "toMove": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winningCells": {
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "col": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "board": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "toMove": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winningCells": {
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/community/7bed6e20-99b4-4749-888e-43b0e90ba866.original.server.js"
+  },
+  {
+    "id": "22260b8e-cd94-4664-98e6-de8db8173ef9",
+    "version": 5,
+    "name": "Crazy Eights",
+    "allowed_player_counts": [
+      2,
+      3,
+      4
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "deck": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "discard": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "done": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "hands": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "passes": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "suit": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "turnIdx": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "string",
+          "null"
+        ],
+        "properties": {
+          "card": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "chosenSuit": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "counts": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "deckCount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "done": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "hand": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "playable": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "suit": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "top": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "turnIdx": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch1/crazy-eights.server.js"
+  },
+  {
+    "id": "debug",
+    "version": 2,
+    "name": "Debug game",
+    "allowed_player_counts": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "allows_leave_mid_match": true,
+    "allows_join_mid_match": true,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "null",
+          "boolean",
+          "number",
+          "string",
+          "array",
+          "object"
+        ]
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": [
+          "new_state",
+          "next_turn_player_indices"
+        ],
+        "properties": {
+          "new_state": {
+            "type": [
+              "null",
+              "boolean",
+              "number",
+              "string",
+              "array",
+              "object"
+            ]
+          },
+          "next_turn_player_indices": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            ]
+          },
+          "payouts": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "null",
+          "boolean",
+          "number",
+          "string",
+          "array",
+          "object"
+        ]
+      }
+    },
+    "server": "games/debug.server.js"
+  },
+  {
+    "id": "fc63dfc7-d091-460f-b9f9-5877851d64fa",
+    "version": 2,
+    "name": "Dots & Boxes",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "boxes": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "edges": {
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "edge": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "boxes": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "edges": {
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "tests/fixtures/leave_contract/dots-and-boxes-v2.server.js"
+  },
+  {
+    "id": "8b87f4a0-3735-442b-bf9c-e1b24aaf2df8",
+    "version": 3,
+    "name": "Dragonimo",
+    "allowed_player_counts": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "total": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "add": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "total": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/community/8b87f4a0-3735-442b-bf9c-e1b24aaf2df8.original.server.js"
+  },
+  {
+    "id": "2b02b029-eb34-436c-bf2a-0d53148a253e",
+    "version": 5,
+    "name": "ERS",
+    "allowed_player_counts": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "allows_leave_mid_match": true,
+    "allows_join_mid_match": true,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "challenge": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "flips": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "hands": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "log": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "pile": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "slap": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "turn": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "challenge": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "counts": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "flipper": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "flips": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "log": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "pile": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "slap": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch3/ers.server.js"
+  },
+  {
+    "id": "c8039b20-7c3e-4993-bae1-f59dfacd1ccc",
+    "version": 3,
+    "name": "Fox and Geese",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": true,
+    "allows_join_mid_match": true,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "captured": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "draw": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "fox": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "geese": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "jumping": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "last_move": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "quiet_moves": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "toMove": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "capture": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "from": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "stop": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "to": {
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "captured": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "draw": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "fox": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "geese": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "jumping": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "last_move": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "moves": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "quiet_moves": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "toMove": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "youAre": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/community/c8039b20-7c3e-4993-bae1-f59dfacd1ccc.original.server.js"
+  },
+  {
+    "id": "f7a5f84d-dfed-496c-b1d3-fafda5cea92c",
+    "version": 4,
+    "name": "Go Fish",
+    "allowed_player_counts": [
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "books": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "deck": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hands": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "last": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "log": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winners": {
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "rank": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "target": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "books": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "counts": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "deckCount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "hand": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "last": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "log": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winners": {
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch1/go-fish.server.js"
+  },
+  {
+    "id": "b59b79d7-660b-4823-8a81-159e0a6a2809",
+    "version": 3,
+    "name": "Gomoku",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "board": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "last": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "next": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winLine": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "cell": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "board": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "last": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winLine": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/community/b59b79d7-660b-4823-8a81-159e0a6a2809.original.server.js"
+  },
+  {
+    "id": "3e816ad0-0823-4068-946f-cab07a8f7126",
+    "version": 5,
+    "name": "Guandan",
+    "allowed_player_counts": [
+      4
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "finishOrder": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hands": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "round": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "teamLevel": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "tribute": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "trick": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "trumpRank": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "turn": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "cards": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "pass": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "counts": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "current": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "finishOrder": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "gameOver": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "hand": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "round": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "teamLevel": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "tribute": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "trick": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "trumpRank": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winnerTeam": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch2/guandan.server.js"
+  },
+  {
+    "id": "78fd2784-c810-4f2a-8166-92776a817b7f",
+    "version": 6,
+    "name": "Guess Who?",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "type": "object",
+        "required": [
+          "s",
+          "hist",
+          "winner"
+        ],
+        "properties": {
+          "s": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 23
+            },
+            "minItems": 2,
+            "maxItems": 2,
+            "uniqueItems": true
+          },
+          "hist": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "by",
+                    "q",
+                    "ans"
+                  ],
+                  "properties": {
+                    "by": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "q": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 13
+                    },
+                    "ans": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "by",
+                    "guess",
+                    "correct"
+                  ],
+                  "properties": {
+                    "by": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "guess": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 23
+                    },
+                    "correct": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "maxItems": 29
+          },
+          "winner": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      },
+      "move": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "kind",
+              "q"
+            ],
+            "properties": {
+              "kind": {
+                "const": "ask"
+              },
+              "q": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 13
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "kind",
+              "idx"
+            ],
+            "properties": {
+              "kind": {
+                "const": "guess"
+              },
+              "idx": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 23
+              }
+            },
+            "additionalProperties": false
+          }
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      },
+      "view": {
+        "type": "object",
+        "required": [
+          "mySecret",
+          "oppSecret",
+          "reveal",
+          "hist",
+          "winner"
+        ],
+        "properties": {
+          "mySecret": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 23
+              }
+            ]
+          },
+          "oppSecret": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 23
+              }
+            ]
+          },
+          "reveal": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 23
+                },
+                "minItems": 2,
+                "maxItems": 2,
+                "uniqueItems": true
+              }
+            ]
+          },
+          "hist": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "by",
+                    "q",
+                    "ans"
+                  ],
+                  "properties": {
+                    "by": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "q": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 13
+                    },
+                    "ans": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "by",
+                    "guess",
+                    "correct"
+                  ],
+                  "properties": {
+                    "by": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "guess": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 23
+                    },
+                    "correct": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "maxItems": 29
+          },
+          "winner": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "winner": {
+                  "type": "null"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "oppSecret": {
+                  "type": "null"
+                },
+                "reveal": {
+                  "type": "null"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "reveal": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 23
+                  },
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "uniqueItems": true
+                }
+              }
+            }
+          }
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      }
+    },
+    "server": "games/audit-batch5/guess-who.server.js"
+  },
+  {
+    "id": "d66436fd-b19c-4fcb-8280-9ae7fb75daf6",
+    "version": 4,
+    "name": "Hearts",
+    "allowed_player_counts": [
+      4
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "hands": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "heartsBroken": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "leader": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "shooter": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "taken": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "trick": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "trickNum": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "card": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "counts": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "cur": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "hand": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "heartsBroken": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "leader": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "legal": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "shooter": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "taken": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "trick": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "trickNum": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch4/hearts.server.js"
+  },
+  {
+    "id": "4f49cbdc-cf96-4657-a50e-3082935e1cdf",
+    "version": 6,
+    "name": "Last Floe",
+    "allowed_player_counts": [
+      4
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "coordToId": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "currentPlayer": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "finished": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "penguinsPerPlayer": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "penguinsPlaced": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "playerCount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "scores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "tiles": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winners": {
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "from": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "id": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "to": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "currentPlayer": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "finished": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "legal": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "penguinsPerPlayer": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "penguinsPlaced": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "playerCount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "scores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "tiles": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winners": {
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/community/4f49cbdc-cf96-4657-a50e-3082935e1cdf.original.server.js"
+  },
+  {
+    "id": "db3a74e1-0df1-44bf-a060-4da18b3a7e6e",
+    "version": 5,
+    "name": "Lost Cities",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "current": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "deck": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "discards": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "exps": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hands": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "last": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "scores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "turnNum": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "color": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dest": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "handIndex": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "source": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "current": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "deckCount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "discards": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "exps": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hand": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "handCounts": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "last": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "myIndex": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "scores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch1/lost-cities.server.js"
+  },
+  {
+    "id": "affb52d8-f070-4600-bc10-580af8bc06e0",
+    "version": 4,
+    "name": "Mancala",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "captured": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "extraTurn": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "gameOver": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "lastPlayer": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "lastPos": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pits": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "stores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "pit": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "captured": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "extraTurn": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "gameOver": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "lastPlayer": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "lastPos": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pits": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "stores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch4/mancala.server.js"
+  },
+  {
+    "id": "dbf85e1d-cacc-4845-9bb4-de349e13b005",
+    "version": 4,
+    "name": "Mini Golf Duels",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "cur": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hist": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hole": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "lastShot": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "par": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "pos": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "sunk": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "tot": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "vx": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "vy": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "course": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "cur": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hist": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hole": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "lastShot": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "par": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "pos": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "sunk": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "tot": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch2/mini-golf-duels.server.js"
+  },
+  {
+    "id": "571c1cc4-a48d-40be-88fd-df1d5cc21d10",
+    "version": 2,
+    "name": "Nim",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "piles": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winnerIndex": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "count": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "pile": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "myIndex": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "piles": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winnerIndex": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/community/571c1cc4-a48d-40be-88fd-df1d5cc21d10.original.server.js"
+  },
+  {
+    "id": "79830aee-0a91-406d-a2f7-c103002203f7",
+    "version": 3,
+    "name": "Nine Stars",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "cells": {
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "cell": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "cells": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "lines": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "scores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/community/79830aee-0a91-406d-a2f7-c103002203f7.original.server.js"
+  },
+  {
+    "id": "788b39a9-6358-4598-9903-92ce97aa5502",
+    "version": 4,
+    "name": "Nine Stars (Demo)",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "stars": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winnerId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "take": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "stars": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winnerId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/community/788b39a9-6358-4598-9903-92ce97aa5502.original.server.js"
+  },
+  {
+    "id": "poker",
+    "version": 7,
+    "name": "Poker",
+    "allowed_player_counts": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "allows_leave_mid_match": true,
+    "allows_join_mid_match": true,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "bets": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "big_blind": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "board": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "chips": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "contributed": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "current_bet": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "dealer": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "deck": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hand_number": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "hole": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "in_hand": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "log": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "min_raise": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "needs_action": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "previous_hand": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "small_blind": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "street": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "to_act": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "to": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "bets": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "big_blind": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "board": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "chips": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "contributed": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "current_bet": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "dealer": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "dealt_in": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "deck": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hand_number": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "hole": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "in_hand": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "legal": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "log": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "min_raise": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "needs_action": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "previous_hand": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "small_blind": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "street": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "to_act": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "your_seat": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "tests/fixtures/leave_contract/poker-v7.server.js"
+  },
+  {
+    "id": "97b92313-84a8-4c0e-9a3c-9e23c270c970",
+    "version": 8,
+    "name": "President",
+    "allowed_player_counts": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "finished": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hands": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "lastEvent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "leader": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "matchWinner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "passed": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "pile": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "pileCount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "pileRank": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "prevOrder": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "round": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "scores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "target": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "totalMoves": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "tradeInfo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "trickCount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "trickRankCount": {
+            "type": [
+              "null",
+              "object"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "cards": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "pass": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "counts": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "finished": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hand": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "lastEvent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "leader": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "matchWinner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "passed": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "pile": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "pileCount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "pileRank": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "prevOrder": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "round": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "scores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "tableCount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "target": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "tradeInfo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch1/president.server.js"
+  },
+  {
+    "id": "b7e3617b-5592-4fa2-ab91-dcb9a42364c1",
+    "version": 6,
+    "name": "Quoridor",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": true,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "pawns": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "turnIdx": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "walls": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "wallsLeft": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "c": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "r": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "legalMoves": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "pawns": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "turnIdx": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "walls": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "wallsLeft": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch2/quoridor.server.js"
+  },
+  {
+    "id": "5e1786fb-2a04-4cbe-8047-caf129c84a22",
+    "version": 4,
+    "name": "Reversi",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "board": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "done": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "turn": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "cell": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "black": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "board": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "done": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "legalMoves": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "turn": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "white": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch3/reversi.server.js"
+  },
+  {
+    "id": "d1e3d28c-cb11-4f91-91b5-f746c8440cf6",
+    "version": 5,
+    "name": "Rummy 500",
+    "allowed_player_counts": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "allows_leave_mid_match": true,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "actor": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "ban": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dealer": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "deck": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "discard": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "endReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hands": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "log": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "matchWinner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "meldSeq": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "melds": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "pending": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "roundNum": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "roundScores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "scores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "v": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "card_id": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "card_ids": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "index": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "meld_id": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "ban": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "counts": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "current": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "dealer": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "deckCount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "discard": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "endReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hand": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "log": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "matchWinner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "melds": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "pending": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "roundNum": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "roundScores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "scores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/audit-batch4/rummy-500.server.js"
+  },
+  {
+    "id": "a1ca4c85-b8a5-4b63-a9dc-f01c87a0d65f",
+    "version": 2,
+    "name": "SOS",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "board": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "lastMove": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "lines": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "scores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "idx": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "letter": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "board": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "lastMove": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "lines": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "scores": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/community/a1ca4c85-b8a5-4b63-a9dc-f01c87a0d65f.original.server.js"
+  },
+  {
+    "id": "569fac2e-82eb-486b-9446-6afae3984efe",
+    "version": 3,
+    "name": "Solo Countdown (deployment check)",
+    "allowed_player_counts": [
+      1
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "stars": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "take": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "stars": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/community/569fac2e-82eb-486b-9446-6afae3984efe.original.server.js"
+  },
+  {
+    "id": "875244c9-937c-481b-9883-16085f4f10f7",
+    "version": 4,
+    "name": "Spades",
+    "allowed_player_counts": [
+      4
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "type": "object",
+        "required": [
+          "hands",
+          "trick",
+          "tricksWon",
+          "lastWin",
+          "leader",
+          "current",
+          "pendingWin",
+          "aiMode",
+          "over",
+          "dealer"
+        ],
+        "properties": {
+          "hands": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^(?:[2-9]|1[0-4])[SHDC]$"
+              },
+              "maxItems": 13,
+              "uniqueItems": true
+            },
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "trick": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "seat",
+                "card"
+              ],
+              "properties": {
+                "seat": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 3
+                },
+                "card": {
+                  "type": "string",
+                  "pattern": "^(?:[2-9]|1[0-4])[SHDC]$"
+                }
+              },
+              "additionalProperties": false
+            },
+            "maxItems": 4
+          },
+          "tricksWon": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 13
+            },
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "lastWin": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              }
+            ]
+          },
+          "leader": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "current": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "pendingWin": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              }
+            ]
+          },
+          "aiMode": {
+            "enum": [
+              "random",
+              "smart"
+            ]
+          },
+          "over": {
+            "type": "boolean"
+          },
+          "dealer": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      },
+      "move": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "card"
+            ],
+            "properties": {
+              "card": {
+                "type": "string",
+                "pattern": "^(?:[2-9]|1[0-4])[SHDC]$"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "collect"
+            ],
+            "properties": {
+              "collect": {
+                "const": true
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "aiMode"
+            ],
+            "properties": {
+              "aiMode": {
+                "enum": [
+                  "random",
+                  "smart"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "newGame"
+            ],
+            "properties": {
+              "newGame": {
+                "const": true
+              },
+              "aiMode": {
+                "enum": [
+                  "random",
+                  "smart"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      },
+      "view": {
+        "type": "object",
+        "required": [
+          "hands",
+          "hand",
+          "counts",
+          "trick",
+          "tricksWon",
+          "lastWin",
+          "leader",
+          "current",
+          "pendingWin",
+          "aiMode",
+          "over",
+          "dealer",
+          "me"
+        ],
+        "properties": {
+          "hands": {
+            "type": "null"
+          },
+          "hand": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(?:[2-9]|1[0-4])[SHDC]$"
+                },
+                "maxItems": 13,
+                "uniqueItems": true
+              }
+            ]
+          },
+          "counts": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 13
+            },
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "trick": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "seat",
+                "card"
+              ],
+              "properties": {
+                "seat": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 3
+                },
+                "card": {
+                  "type": "string",
+                  "pattern": "^(?:[2-9]|1[0-4])[SHDC]$"
+                }
+              },
+              "additionalProperties": false
+            },
+            "maxItems": 4
+          },
+          "tricksWon": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 13
+            },
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "lastWin": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              }
+            ]
+          },
+          "leader": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "current": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "pendingWin": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              }
+            ]
+          },
+          "aiMode": {
+            "enum": [
+              "random",
+              "smart"
+            ]
+          },
+          "over": {
+            "type": "boolean"
+          },
+          "dealer": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "me": {
+            "type": "integer",
+            "minimum": -1,
+            "maximum": 3
+          }
+        },
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "me": {
+                  "const": -1
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "hand": {
+                  "type": "null"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "hand": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^(?:[2-9]|1[0-4])[SHDC]$"
+                  },
+                  "maxItems": 13,
+                  "uniqueItems": true
+                }
+              }
+            }
+          }
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      }
+    },
+    "server": "games/audit-batch5/spades.server.js"
+  },
+  {
+    "id": "58bd6827-f156-4cd2-ac31-53953b6df61a",
+    "version": 3,
+    "name": "Spoons",
+    "allowed_player_counts": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "alive": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "dealer": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "deck": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hands": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "letters": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "loser": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "moves": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "pending": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "round": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "spoons": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "trash": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "card": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "alive": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "aliveCount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "dealer": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "deckCount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "hand": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "handCounts": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "letters": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "loser": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "passed": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "passedCount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "round": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "spoons": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "spoonsLeft": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "trashCount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/community/58bd6827-f156-4cd2-ac31-53953b6df61a.original.server.js"
+  },
+  {
+    "id": "36e5f0d8-4806-439f-af08-b28c593347c1",
+    "version": 9,
+    "name": "Stack Duel",
+    "allowed_player_counts": [
+      2,
+      3,
+      4
+    ],
+    "allows_leave_mid_match": true,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "type": "object",
+        "required": [
+          "board",
+          "current",
+          "next",
+          "scores",
+          "lines",
+          "last_move",
+          "winners",
+          "turnSeat",
+          "over"
+        ],
+        "properties": {
+          "board": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": -1,
+                "maximum": 3
+              },
+              "minItems": 8,
+              "maxItems": 8
+            },
+            "minItems": 10,
+            "maxItems": 10
+          },
+          "current": {
+            "enum": [
+              "I",
+              "O",
+              "T",
+              "S",
+              "Z",
+              "J",
+              "L"
+            ]
+          },
+          "next": {
+            "enum": [
+              "I",
+              "O",
+              "T",
+              "S",
+              "Z",
+              "J",
+              "L"
+            ]
+          },
+          "scores": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "minItems": 2,
+            "maxItems": 4
+          },
+          "lines": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "last_move": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "seat",
+                  "piece",
+                  "cleared"
+                ],
+                "properties": {
+                  "seat": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3
+                  },
+                  "piece": {
+                    "enum": [
+                      "I",
+                      "O",
+                      "T",
+                      "S",
+                      "Z",
+                      "J",
+                      "L"
+                    ]
+                  },
+                  "cleared": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
+          "winners": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 3
+                },
+                "minItems": 1,
+                "maxItems": 4,
+                "uniqueItems": true
+              }
+            ]
+          },
+          "turnSeat": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "over": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      },
+      "move": {
+        "type": "object",
+        "required": [
+          "rot",
+          "col"
+        ],
+        "properties": {
+          "rot": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "col": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 7
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      },
+      "view": {
+        "type": "object",
+        "required": [
+          "board",
+          "current",
+          "next",
+          "scores",
+          "lines",
+          "last_move",
+          "winners"
+        ],
+        "properties": {
+          "board": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": -1,
+                "maximum": 3
+              },
+              "minItems": 8,
+              "maxItems": 8
+            },
+            "minItems": 10,
+            "maxItems": 10
+          },
+          "current": {
+            "enum": [
+              "I",
+              "O",
+              "T",
+              "S",
+              "Z",
+              "J",
+              "L"
+            ]
+          },
+          "next": {
+            "enum": [
+              "I",
+              "O",
+              "T",
+              "S",
+              "Z",
+              "J",
+              "L"
+            ]
+          },
+          "scores": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "minItems": 2,
+            "maxItems": 4
+          },
+          "lines": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "last_move": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "seat",
+                  "piece",
+                  "cleared"
+                ],
+                "properties": {
+                  "seat": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3
+                  },
+                  "piece": {
+                    "enum": [
+                      "I",
+                      "O",
+                      "T",
+                      "S",
+                      "Z",
+                      "J",
+                      "L"
+                    ]
+                  },
+                  "cleared": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
+          "winners": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 3
+                },
+                "minItems": 1,
+                "maxItems": 4,
+                "uniqueItems": true
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      }
+    },
+    "server": "games/audit-batch6/stack-duel.server.js"
+  },
+  {
+    "id": "aac01cd8-9436-456b-9e8b-a5f87b815e07",
+    "version": 4,
+    "name": "Star Count",
+    "allowed_player_counts": [
+      1
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "count": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "add": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "count": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/community/aac01cd8-9436-456b-9e8b-a5f87b815e07.original.server.js"
+  },
+  {
+    "id": "d00a8d7b-320e-43bc-824f-ff899ff93687",
+    "version": 1,
+    "name": "Tap to 10 (TEST GAME)",
+    "allowed_player_counts": [
+      1
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "score": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "target": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "action": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "score": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "target": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/community/d00a8d7b-320e-43bc-824f-ff899ff93687.original.server.js"
+  },
+  {
+    "id": "tictactoe",
+    "version": 4,
+    "name": "Tic-tac-toe",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "board": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "draw": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "cell": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "board": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "draw": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "line": {
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/tictactoe.server.js"
+  },
+  {
+    "id": "ad578d02-f485-4e11-a1d4-08bcd4f462a9",
+    "version": 3,
+    "name": "Tower of Hanoi",
+    "allowed_player_counts": [
+      1
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "disks": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "moves": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "pegs": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "from": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "setup": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "to": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "disks": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "min": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "moves": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "pegs": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "phase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "solved": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/community/ad578d02-f485-4e11-a1d4-08bcd4f462a9.original.server.js"
+  },
+  {
+    "id": "42d06892-449c-44d2-9251-7b9448ce4ddc",
+    "version": 3,
+    "name": "War",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "game_schemas": {
+      "state": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "decks": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "faceUp": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "log": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pids": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "pot": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "revealed": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "round": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "warDepth": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "move": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "flip": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "view": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "counts": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "faceUp": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "log": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "potCount": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "revealed": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "round": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "warDepth": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "winner": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "server": "games/community/42d06892-449c-44d2-9251-7b9448ce4ddc.original.server.js"
+  }
+]

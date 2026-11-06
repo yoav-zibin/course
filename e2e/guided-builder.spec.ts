@@ -168,4 +168,6 @@ test('build panel explains notification failure and lets the user build without 
  await expect(page.locator('#build-status')).toHaveText('Ready to play');
  await expect(page.locator('#build-error')).toBeEmpty();
  await expect(page.locator('#emulator')).toHaveAttribute('href','/static/builder.html#'+id);
+ await expect(page.locator('#game-test-matrix')).toBeVisible();
+ await expect(page.locator('#game-test-matrix')).toHaveAttribute('href','/game-test?draft='+id);
 });
