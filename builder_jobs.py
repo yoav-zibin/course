@@ -760,6 +760,16 @@ def propose_step(client, draft, step, correction, *, feedback=False):
                 title = Title(); title.feed(html)
                 summary = ''.join(title.parts).strip() or 'Interactive tutorial'
                 reply = {'message':summary, 'artifact':{'text':summary, 'html':html}}
+            # Strings the page provably never shows, when they are the
+            # document's only problem, are dead weight with a determined
+            # fix — drop them in code instead of spending the one repair
+            # (or the user's patience) on a model regeneration.
+            artifact = reply.get('artifact') or {}
+            if artifact.get('html'):
+                from game_platform.game_text import absorb_unshown_strings
+                pruned_html, removed_keys = absorb_unshown_strings(artifact['html'])
+                if removed_keys:
+                    reply = {**reply, 'artifact': {**artifact, 'html': pruned_html}}
             try:
                 flow.validate_artifact('tutorial', reply.get('artifact'))
                 break

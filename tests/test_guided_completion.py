@@ -1540,3 +1540,22 @@ def test_begin_build_carries_failure_summary_only_for_the_same_spec():
     draft = replace(draft, builder_workflow=workflow)
     rebuilt = flow.begin_build(draft)
     assert 'failure_summary' not in rebuilt.builder_workflow['job']
+
+
+TUTORIAL_WITH_DEAD_STRING = """<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Learn</title>
+<script type="application/json" id="i18n-strings">{"welcome": "Welcome", "exercise_prompt2": "Never rendered"}</script>
+</head><body><p id="w"></p><script>
+function show() { document.getElementById("w").textContent = t("welcome"); }
+window.addEventListener("message", function (e) { if (e.data && e.data.type === "tutorial_locale") show(); });
+show();
+</script></body></html>"""
+
+
+def test_tutorial_dead_strings_are_pruned_not_rejected():
+    from game_platform.game_text import absorb_unshown_strings
+    artifact = {'text': 'Learn the game', 'html': TUTORIAL_WITH_DEAD_STRING}
+    with pytest.raises(InvalidRequestError, match='never shows'):
+        flow.validate_artifact('tutorial', artifact)
+    pruned, removed = absorb_unshown_strings(TUTORIAL_WITH_DEAD_STRING)
+    assert removed == ['exercise_prompt2']
+    flow.validate_artifact('tutorial', {'text': 'Learn the game', 'html': pruned})

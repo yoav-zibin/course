@@ -130,10 +130,7 @@ def lint(code: str, server_code: str | None = None) -> list[str]:
     used = set(_USED.findall(code))
     for key in sorted(used - table.keys()):
         warnings.append(f"the code uses t({key!r}) but the strings block has no {key!r}")
-    for key in sorted(table.keys() - used):
-        if key.startswith(game_messages.KEY_PREFIX):
-            continue  # a template for a text the server writes: matched, never shown by key
-        warnings.append(f"the strings block has {key!r}, which the code never shows")
+    warnings.extend(_unshown_warnings(table, used))
     hard_coded, joined = [], []
     for assignment in _ASSIGNMENT.finditer(_without_block(code)):
         value = assignment.group(1)
@@ -199,6 +196,77 @@ def lint(code: str, server_code: str | None = None) -> list[str]:
     if server_code:
         warnings.extend(server_text_problems(table, server_code))
     return warnings
+
+
+def _unshown_warnings(table: dict[str, str], used: set[str]) -> list[str]:
+    # Server templates are matched against texts the server writes, never
+    # shown by key, so they are exempt from the every-key-is-shown rule.
+    return [
+        f"the strings block has {key!r}, which the code never shows"
+        for key in sorted(table.keys() - used)
+        if not key.startswith(game_messages.KEY_PREFIX)
+    ]
+
+
+def prune_unshown_strings(code: str) -> tuple[str, list[str]]:
+    """Remove string-table entries the code provably never shows.
+
+    A key is provably dead when no literal t("key") call shows it and the key
+    is mentioned nowhere in the document outside the strings block. A key the
+    code mentions anywhere else — even one it reaches dynamically — is kept:
+    only a regeneration can decide how showing it should work. Server
+    templates (server_…) are kept too: they are matched against texts the
+    server writes, never shown by key. Removing a provably dead key cannot
+    change anything a player sees, so a generated document should never fail
+    a check over one. Returns the possibly updated code and the removed keys.
+    """
+    try:
+        table = extract_strings(code)
+    except StringsError:
+        return code, []
+    if not table:
+        return code, []
+    used = set(_USED.findall(code))
+    outside = _without_block(code)
+    dead = {
+        key
+        for key in table
+        if key not in used
+        and not key.startswith(game_messages.KEY_PREFIX)
+        and key not in outside
+    }
+    if not dead:
+        return code, []
+    match = _BLOCK.search(code)
+    if match is None:  # extract_strings found a block, so this cannot happen
+        return code, []
+    kept = {key: text for key, text in table.items() if key not in dead}
+    start, end = match.span(1)
+    pruned = code[:start] + json.dumps(kept, ensure_ascii=False) + code[end:]
+    return pruned, sorted(dead)
+
+
+def absorb_unshown_strings(code: str) -> tuple[str, list[str]]:
+    """Drop provably dead strings when they are the document's only problem.
+
+    When anything else is also wrong, an unshown string may be a symptom of
+    the real defect — a hard-coded sentence where a t() call belongs leaves
+    its string unshown — so the document is returned untouched and the
+    precise lint diagnosis reaches the repair unchanged.
+    """
+    problems = lint(code)
+    if not problems:
+        return code, []
+    try:
+        table = extract_strings(code)
+    except StringsError:
+        return code, []
+    if not table:
+        return code, []
+    unshown = _unshown_warnings(table, set(_USED.findall(code)))
+    if not unshown or set(problems) != set(unshown):
+        return code, []
+    return prune_unshown_strings(code)
 
 
 def server_text_problems(table: dict[str, str], server_code: str) -> list[str]:
