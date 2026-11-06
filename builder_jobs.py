@@ -1167,6 +1167,7 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
             messages.append({'role':'user','content':'A previous build of this same approved specification failed with the findings below. Treat them as defects to avoid from the first line of code, not as feedback to rediscover after generating: '+json.dumps(prior_failures)})
 
         errors=[]; generated=None
+        memory=[]
         attempt = 0
         scores = []
         while attempt < 5:
@@ -1385,9 +1386,14 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
             stage('Verification attempt complete', checks=checks, server_reviews=reviews)
             if not errors: break
             messages.extend([{'role':'assistant','content':server}, {'role':'user','content':'Fix the implementation without changing approved tests. The previous code is above: change only what the failures require and preserve every behavior that already passed — the checks and reviews that passed must still pass. Do not restructure working functions or rewrite a working strategy; a rewrite that trades one listed defect for another wastes the attempt. Address every listed failure in the platform contract terms given above; do not resubmit code that still has a listed defect. Return the complete raw server JavaScript first; client HTML will be requested separately. Failures: '+json.dumps(errors)}])
+            for item in _summarize_failures(errors):
+                if item not in memory: memory.append(item)
             scores.append(_verification_progress(errors)); attempt += 1
         if errors:
-            summary = _summarize_failures(errors)
+            # The stored summary accumulates every attempt's distinct
+            # findings: the last attempt alone may be a regression whose
+            # failures hide the richer findings of the best attempt.
+            summary = memory[:8] or _summarize_failures(errors)
             def remember(d):
                 if (d.builder_workflow.get('job') or {}).get('id') == job_id:
                     d.builder_workflow['job']['failure_summary'] = summary
