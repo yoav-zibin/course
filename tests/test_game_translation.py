@@ -341,6 +341,19 @@ t("missing");
     assert "draws text on a canvas" in text
 
 
+def test_symbol_only_literals_need_no_translation() -> None:
+    table = '<script type="application/json" id="i18n-strings">{"a": "A"}</script>'
+    # A piece drawn as an emoji displays no letters, raw or written with
+    # escapes: it is the same in every language, so it passes.
+    assert game_text.lint(table + '<script>cell.textContent = "🐶"; other.textContent = t("a");</script>') == []
+    assert game_text.lint(table + r'<script>cell.textContent = "\uD83D\uDC36"; other.textContent = t("a");</script>') == []
+    # Words still fail: mixed with symbols, or partly spelled with escapes.
+    assert any("instead of the strings block" in w for w in
+               game_text.lint(table + '<script>cell.textContent = "Dog 🐶"; other.textContent = t("a");</script>'))
+    assert any("instead of the strings block" in w for w in
+               game_text.lint(table + r'<script>cell.textContent = "caf\u00E9"; other.textContent = t("a");</script>'))
+
+
 def test_the_helper_games_include_is_the_one_the_agent_is_told_about() -> None:
     assert "function t(key, params)" in game_text.HELPER_JS and "function applyLocale(message)" in game_text.HELPER_JS
     assert game_text.HELPER_JS in agent.SYSTEM_PROMPT

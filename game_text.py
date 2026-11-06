@@ -109,6 +109,29 @@ _ASSIGNMENT: Final = re.compile(
 )
 _LITERAL_WITH_WORDS: Final = re.compile(r"""(["'`])((?:\\.|(?!\1).)*?[A-Za-z]{3,}(?:\\.|(?!\1).)*?)\1""")
 _PLACEHOLDER: Final = re.compile(r"\{(\w+)\}")
+_JS_ESCAPE: Final = re.compile(r"\\u\{([0-9A-Fa-f]+)\}|\\u([0-9A-Fa-f]{4})|\\x([0-9A-Fa-f]{2})")
+
+
+def _displayed(literal: str) -> str:
+    """The text a string literal actually shows, with JavaScript escapes
+    resolved — an emoji written as \\uD83D\\uDC36 reads as the emoji."""
+    def resolve(match: re.Match[str]) -> str:
+        digits = next(group for group in match.groups() if group is not None)
+        try:
+            return chr(int(digits, 16))
+        except (ValueError, OverflowError):
+            return match.group(0)
+    return _JS_ESCAPE.sub(resolve, literal)
+
+
+def _only_symbols(literal: str) -> bool:
+    """True when a literal's displayed text has no letters at all: an emoji,
+    a symbol, digits. Such text is identical in every language, so it needs
+    no translation and does not belong in the strings block — flagging it
+    only costs a repair round-trip (a piece drawn as 🐶 is a picture the
+    author chose, not a sentence). A word written with escapes still has
+    letters once displayed, so escapes open no loophole."""
+    return not any(character.isalpha() for character in _displayed(literal))
 
 
 def lint(code: str, server_code: str | None = None) -> list[str]:
@@ -139,7 +162,8 @@ def lint(code: str, server_code: str | None = None) -> list[str]:
         # A conditional may choose between complete translated messages. Mask
         # literal lookup keys before searching for untranslated display text.
         display_value = _USED.sub("t(KEY", value)
-        literals = [m.group(2) for m in _LITERAL_WITH_WORDS.finditer(display_value)]
+        literals = [m.group(2) for m in _LITERAL_WITH_WORDS.finditer(display_value)
+                    if not _only_symbols(m.group(2))]
         if (literals or _USED.search(value)) and re.search(r"""["'`]\s*\+|\+\s*["'`]""", value):
             joined.append(value.strip()[:70])
         elif literals and not value.lstrip().startswith("t("):
@@ -165,7 +189,8 @@ def lint(code: str, server_code: str | None = None) -> list[str]:
         value = call.group(1)
         if re.match(r"\s*t\(", value) and not _JOIN.search(value):
             continue
-        if _LITERAL_WITH_WORDS.search(_USED.sub("t(KEY", value)):
+        if any(not _only_symbols(m.group(2))
+               for m in _LITERAL_WITH_WORDS.finditer(_USED.sub("t(KEY", value))):
             canvas.append(value.strip()[:50])
     if canvas:
         warnings.append(
@@ -176,6 +201,7 @@ def lint(code: str, server_code: str | None = None) -> list[str]:
         next(g for g in m.groups() if g is not None)
         for m in _ATTRIBUTE.finditer(body)
         if re.search(r"[A-Za-z]{3,}", next((g for g in m.groups() if g is not None), ""))
+        and not _only_symbols(next(g for g in m.groups() if g is not None))
     ]
     if attributes:
         shown = ", ".join(repr(text[:40]) for text in attributes[:3])
@@ -187,7 +213,8 @@ def lint(code: str, server_code: str | None = None) -> list[str]:
     shown_texts = [
         m.group(1).strip()[:50]
         for m in _DIALOG.finditer(body)
-        if _LITERAL_WITH_WORDS.search(_USED.sub("t(KEY", m.group(1)))
+        if any(not _only_symbols(found.group(2))
+               for found in _LITERAL_WITH_WORDS.finditer(_USED.sub("t(KEY", m.group(1))))
     ]
     if shown_texts:
         warnings.append(
