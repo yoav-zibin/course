@@ -261,6 +261,29 @@ def test_the_digest_puts_alerts_errors_and_slow_requests_first() -> None:
     assert "r-boom" in digest_tool.render(result)
 
 
+def test_the_digest_shows_likely_causes_event_loop_lag_and_browser_errors() -> None:
+    cause = "requests are waiting on I/O or a blocked event loop, not on the CPU"
+    text = log_lines(
+        ("latency_high", logging.WARNING, "minor", {"latency_p95_ms": 9000, "likely_cause": cause}),
+        ("latency_high", logging.WARNING, "minor", {"latency_p95_ms": 9500, "likely_cause": cause}),
+        ("event_loop_blocked", logging.WARNING, "minor",
+         {"event_loop_lag_ms": 6000, "blocking_frame": "api.py:1840 _choose_locale",
+          "event_loop_stack": ["api.py:1840 _choose_locale"], "likely_cause": "a blocking call on the event loop"}),
+        ("metrics", logging.INFO, None, {"requests": 40, "event_loop_lag_ms": 6000}),
+        ("metrics", logging.INFO, None, {"requests": 90, "event_loop_lag_ms": 3}),
+        ("client_error", logging.WARNING, None,
+         {"kind": "storage_full", "error_message": "Device storage is full", "page": "/static/portal.html"}),
+    )
+    result = digest_tool.digest(digest_tool.read_entries(text.splitlines(keepends=True)))
+    assert result["likely_causes"][0] == {"event": "latency_high", "likely_cause": cause, "count": 2}
+    assert result["alerts"][0]["latest"]["likely_cause"] == cause
+    assert result["event_loop"]["max_lag_ms"] == 6000
+    assert result["event_loop"]["blocked"][0]["blocking_frame"] == "api.py:1840 _choose_locale"
+    assert result["browser_errors"] == {"storage_full: Device storage is full (/static/portal.html)": 1}
+    rendered = digest_tool.render(result)
+    assert "blocked event loop" in rendered and "_choose_locale" in rendered and "max_lag_ms" in rendered
+
+
 def test_a_flood_of_the_same_alert_is_one_entry() -> None:
     flood = [("signup_flood", logging.CRITICAL, "major", {"signups_last_minute": n}) for n in range(9, 40)]
     result = digest_tool.digest(digest_tool.read_entries(log_lines(*flood).splitlines(keepends=True)))

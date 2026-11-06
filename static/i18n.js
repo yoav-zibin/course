@@ -9,6 +9,11 @@
 // Scripts use I18n.t(key, {name: "x"}, "English fallback") for generated text, and
 // listen for the "i18n-changed" event to redraw what they generated.
 //
+// A language is loaded as one bundle (GET /i18n/bundle/<language>): the catalog, the
+// published games' names and descriptions, and their translated string tables, in a single
+// request that answers 304 while nothing changed. If the bundle can't be had, the separate
+// requests (catalog, game names, one request per game version) are used as before.
+//
 // The choice is saved in this browser (localStorage) and, for a logged-in account, on
 // the account (PATCH /users/{id}), so it follows the person to other devices.
 
@@ -19,6 +24,10 @@ const I18n = (() => {
   const CATALOG_KEY = "game-platform.i18n-catalog.v1:"; // + language code
   const LOCALES_KEY = "game-platform.i18n-locales.v1";
   const GAMES_KEY = "game-platform.i18n-games.v1:"; // + language code
+  const BUNDLE_KEY = "game-platform.i18n-bundle.v1:"; // + language code: {etag, data}
+  // The browser's storage is small and shared with the offline cache (portal-offline.js):
+  // a bundle bigger than this is saved without the games' string tables.
+  const MAX_STORED_CHARS = 200_000;
   const DEFAULT = "en";
   // Used until /i18n/locales answers (and offline), so the picker always works. The
   // server's list is the source of truth and replaces this one.
@@ -43,8 +52,17 @@ const I18n = (() => {
   const write = (key, value) => {
     try {
       localStorage.setItem(key, JSON.stringify(value));
+      return true;
     } catch {
       // Private mode or a full disk: the choice just doesn't persist.
+      return false;
+    }
+  };
+  const remove = (key) => {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // nothing to remove from
     }
   };
 
@@ -57,6 +75,9 @@ const I18n = (() => {
   let gamesText = {};
   // A game version's translations are asked for once per language, then kept.
   const gameStrings = new Map();
+  // The bundle of the current language, when one was loaded: {locale, games: id -> {version,
+  // name, description, status, translatable, strings}}. null when the separate requests are used.
+  let bundle = null;
   let revision = 0; // changes whenever the texts do, for scripts that skip unchanged redraws
 
   /** "es-MX" -> "es"; null when the language isn't supported. */
@@ -118,6 +139,9 @@ const I18n = (() => {
    * changed. English needs none (its texts are in the HTML). */
   async function load(language) {
     if (language === DEFAULT) return {};
+    const fromBundle = await loadBundle(language);
+    if (fromBundle) return fromBundle;
+    bundle = null;
     const saved = read(CATALOG_KEY + language);
     const fetched = fetchCatalog(language, saved?.version);
     if (saved) {
@@ -131,6 +155,84 @@ const I18n = (() => {
       return saved.messages;
     }
     return (await fetched)?.messages ?? {};
+  }
+
+  // The bundle: the saved copy right away, then the server's if it changed (a 304 costs
+  // almost nothing). Resolves to the messages, or null when there is no bundle to be had
+  // (the server doesn't have the endpoint, or is down and nothing is saved).
+  async function loadBundle(language) {
+    const saved = read(BUNDLE_KEY + language);
+    const usable = saved?.data?.catalog?.messages ? saved : null;
+    const fetched = fetchBundle(language, usable);
+    if (usable) {
+      adoptBundle(language, usable.data);
+      fetched.then((fresh) => {
+        if (fresh && language === code) {
+          adoptBundle(language, fresh);
+          apply();
+          announce();
+        }
+      });
+      return usable.data.catalog.messages;
+    }
+    const fresh = await fetched;
+    if (!fresh) return null;
+    adoptBundle(language, fresh);
+    return fresh.catalog.messages;
+  }
+
+  /** The new bundle of [language] if the server has a different one than [saved], else null. */
+  async function fetchBundle(language, saved) {
+    try {
+      const headers = saved?.etag ? { "If-None-Match": saved.etag } : {};
+      const response = await fetch(`/i18n/bundle/${encodeURIComponent(language)}`, { headers });
+      if (!response.ok) return null; // includes 304: the saved copy is current
+      const data = await response.json();
+      if (!data?.catalog?.messages || !data.games) return null;
+      // Nothing could be translated just now: keep the games' texts saved earlier.
+      if (data.status === "unavailable" && saved?.data?.games) data.games = saved.data.games;
+      saveBundle(language, response.headers?.get?.("ETag") ?? null, data);
+      return data;
+    } catch {
+      return null; // offline: whatever is saved (or English) stays
+    }
+  }
+
+  function adoptBundle(language, data) {
+    messages = data.catalog.messages;
+    bundle = { locale: language, games: data.games };
+    gamesText = {};
+    for (const [id, game] of Object.entries(data.games)) {
+      gamesText[id] = { name: game.name, description: game.description };
+    }
+  }
+
+  /** Keeps the bundle for the next visit, small: without the string tables if it is big,
+   * and in place of the older separate copies of the catalog and the game names. */
+  function saveBundle(language, etag, data) {
+    const entry = {
+      etag,
+      data: {
+        status: data.status,
+        catalog: { version: data.catalog.version, messages: data.catalog.messages },
+        games: data.games,
+      },
+    };
+    const withoutStrings = () => {
+      const games = {};
+      for (const [id, game] of Object.entries(data.games)) {
+        const { strings, ...rest } = game; // eslint-disable-line no-unused-vars
+        games[id] = rest;
+      }
+      return { ...entry, data: { ...entry.data, games } };
+    };
+    const big = JSON.stringify(entry).length > MAX_STORED_CHARS;
+    // The older separate copies are not needed any more, and free space for this one.
+    remove(CATALOG_KEY + language);
+    remove(GAMES_KEY + language);
+    if (!write(BUNDLE_KEY + language, big ? withoutStrings() : entry) && !big) {
+      write(BUNDLE_KEY + language, withoutStrings());
+    }
   }
 
   async function fetchCatalog(language, knownVersion) {
@@ -169,7 +271,7 @@ const I18n = (() => {
   /** Fetches the games' names and descriptions in the current language. */
   async function loadGamesText() {
     const asked = code;
-    if (asked === DEFAULT) return;
+    if (asked === DEFAULT || bundle?.locale === asked) return; // the bundle has them
     const saved = read(GAMES_KEY + asked);
     if (saved && code === asked && !Object.keys(gamesText).length) {
       gamesText = saved;
@@ -208,6 +310,15 @@ const I18n = (() => {
     const direction = locales.find((item) => item.code === asked)?.direction ?? "ltr";
     const plain = { locale: asked, direction };
     if (asked === DEFAULT) return plain;
+    const inBundle = bundle?.locale === asked ? bundle.games[gameId] : null;
+    if (
+      inBundle &&
+      inBundle.version === Number(version) &&
+      (inBundle.status === "translated" || inBundle.status === "source") &&
+      (!inBundle.translatable || inBundle.strings)
+    ) {
+      return { ...plain, ...(inBundle.translatable ? { strings: inBundle.strings } : {}) };
+    }
     const key = `${asked}|${gameId}@${version}`;
     const known = gameStrings.get(key);
     if (known && Date.now() < known.until) return known.value;
@@ -232,6 +343,7 @@ const I18n = (() => {
     if (next === code && picker?.value === next) return;
     code = next;
     gamesText = {};
+    bundle = null;
     messages = await load(next);
     if (code !== next) return; // another switch happened meanwhile
     setDocument();
@@ -341,8 +453,10 @@ const I18n = (() => {
 
   // Start: the saved choice, else the browser's language, else English.
   code = startingLanguage();
-  const saved = code === DEFAULT ? null : read(CATALOG_KEY + code);
-  if (saved) messages = saved.messages;
+  const savedBundle = code === DEFAULT ? null : read(BUNDLE_KEY + code);
+  const saved = code === DEFAULT || savedBundle ? null : read(CATALOG_KEY + code);
+  if (savedBundle?.data?.catalog?.messages) messages = savedBundle.data.catalog.messages;
+  else if (saved) messages = saved.messages;
   setDocument();
   addPicker();
   apply();
