@@ -1,0 +1,44 @@
+[
+  {
+    "id": "875244c9-937c-481b-9883-16085f4f10f7",
+    "name": "Spades",
+    "expected_version": 2,
+    "client": "spades.html",
+    "server": "spades.server.js",
+    "original_client_sha256": "7692fdeb87da7751508598306dccee760e56123f3697ad500b1ceefcb0f3964c",
+    "original_server_sha256": "757cc9123364227bc261ac1a44b4bfe589acc92603f110be64e63e027e54fafd",
+    "allowed_player_counts": [
+      4
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false
+  },
+  {
+    "id": "78fd2784-c810-4f2a-8166-92776a817b7f",
+    "name": "Guess Who?",
+    "expected_version": 4,
+    "client": "guess-who.html",
+    "server": "guess-who.server.js",
+    "original_client_sha256": "592651fd9ae5e0a8b2a0aa81cb4ff92bdec6170e40fcc2906d959cfccca7fd58",
+    "original_server_sha256": "06b1390befd828202db1e72ed5d41de181d94a93125fa7954fcf8a6ba3fe8835",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false
+  },
+  {
+    "id": "076f078a-56cd-44b3-8930-81abc488508a",
+    "name": "Chess",
+    "expected_version": 5,
+    "client": "chess.html",
+    "server": "chess.server.js",
+    "original_client_sha256": "00e10c19f3547a27f957846423be0fdbf6006e50d2133a69c94674a224e0c23b",
+    "original_server_sha256": "c482a4dc3fafba9e707111dee28cddf8c7a6e52393d48249e92e69b0b1e07839",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false
+  }
+]
