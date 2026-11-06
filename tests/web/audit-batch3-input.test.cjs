@@ -4,15 +4,14 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
 const root=path.join(__dirname,'../../games/audit-batch3');
+const {pageScriptOf,fakeDom}=require('./page-helper.cjs');
+// The markup a rendered node would produce: enough to check classes, text and inline handlers.
+function ser(node){if(!node)return '';if(node.tag==='br')return '<br>';if(node.children===undefined)return node.textContent||'';const cls=node.className?` class="${node.className}"`:'';const on=node.attributes&&node.attributes.onclick?` onclick="${node.attributes.onclick}"`:'';return `<${node.tag}${cls}${on}>`+(node.textContent||'')+node.children.map(ser).join('')+`</${node.tag}>`;}
 function setup(name){
- const nodes=new Map(),sent=[];let receive;
- const element=()=>({children:[],style:{},disabled:false,textContent:'',innerHTML:'',classList:{add(){},remove(){}},
-  setAttribute(){},append(...items){this.children.push(...items);},replaceChildren(...items){this.children=items;},
-  querySelectorAll(){return [];},addEventListener(type,fn){this['on'+type]=fn;}});
- const document={getElementById(id){if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);},createElement:element};
+ const sent=[];let receive;const {document,ids:nodes}=fakeDom();
  const parent={postMessage:message=>sent.push(message)};
  const sandbox={document,parent,addEventListener:(type,fn)=>{if(type==='message')receive=fn;}};sandbox.window=sandbox;
- vm.createContext(sandbox);vm.runInContext(fs.readFileSync(path.join(root,name+'.html'),'utf8').match(/<script[^>]*>([\s\S]*?)<\/script>/)[1],sandbox);
+ vm.createContext(sandbox);vm.runInContext(pageScriptOf(path.join(root,name+'.html'),document),sandbox);
  const server={InvalidMove:class InvalidMove extends Error{}};vm.createContext(server);
  vm.runInContext(fs.readFileSync(path.join(root,name+'.server.js'),'utf8')+';globalThis.auditGame=game;',server);
  let seed=20261105;
@@ -29,17 +28,17 @@ function setup(name){
  function send(extra={},viewer){receive({source:parent,data:message(extra,viewer)});}
  function advance(move){current=game.applyMove(JSON.parse(JSON.stringify(current.state)),current.turn[0],move,ctx);ctx.move_count++;return current;}
  function startPlay(){advance({kind:'flip',idxs:[0,1]});advance({kind:'flip',idxs:[0,1]});send();}
- function clickInline(node,action){const html=nodes.get(node).innerHTML;const handler=[...html.matchAll(/onclick="([^"]+)"/g)].map(m=>m[1]).find(h=>h===action);assert.ok(handler,`${action} should be an actual rendered handler`);vm.runInContext(handler,sandbox);}
- return {nodes,sent,sandbox,game,ctx,message,send,advance,startPlay,clickInline,
+ function clickInline(node,action){const html=ser(nodes.get(node));const handler=[...html.matchAll(/onclick="([^"]+)"/g)].map(m=>m[1]).find(h=>h===action);assert.ok(handler,`${action} should be an actual rendered handler`);vm.runInContext(handler,sandbox);}
+ return {nodes,html:id=>ser(nodes.get(id)),sent,sandbox,game,ctx,message,send,advance,startPlay,clickInline,
   current:()=>current,foreign:extra=>receive({source:{},data:message(extra)})};
 }
 test('Golf public discard and own drawn cards render their actual faces',()=>{
  const t=setup('six-card-golf');t.startPlay();
- assert.doesNotMatch(t.nodes.get('piles').innerHTML,/Discard<br><div class="card back/);
+ assert.doesNotMatch(t.html('piles'),/Discard<br><div class="card back/);
  t.clickInline('actions','window.clickStock()');t.advance(t.sent[0].move);t.send();
- assert.doesNotMatch(t.nodes.get('piles').innerHTML,/Drawn<br><div class="card back/);
- assert.match(t.nodes.get('piles').innerHTML,/Drawn<br><div class="card(?: red)?"/);
- assert.match(t.nodes.get('hands').innerHTML,/class="card back/); // unrevealed hand cards stay hidden
+ assert.doesNotMatch(t.html('piles'),/Drawn<br><div class="card back/);
+ assert.match(t.html('piles'),/Drawn<br><div class="card(?: red)?"/);
+ assert.match(t.html('hands'),/class="card back/); // unrevealed hand cards stay hidden
 });
 test('Golf draw submissions lock until an authoritative response, including same-count rejection',()=>{
  const t=setup('six-card-golf');t.startPlay();const action='window.clickStock()';
@@ -62,12 +61,12 @@ test('Golf ignores stale or illegal phase actions and never flips a face-up card
  vm.runInContext('window.clickReplace(0);window.clickFlipSpot(0);window.confirmFlip();',t.sandbox);assert.equal(t.sent.length,0);
  t.clickInline('actions','window.clickDisc()');t.advance(t.sent[0].move);t.send();
  vm.runInContext('window.clickFlipSpot(2);window.armFlip();window.clickStock();',t.sandbox);assert.equal(t.sent.length,1);
- assert.doesNotMatch(t.nodes.get('actions').innerHTML,/Now click/);
+ assert.doesNotMatch(t.html('actions'),/Now click/);
 });
 test('Golf spectators do not see stock-drawn card or get action handlers',()=>{
  const t=setup('six-card-golf');t.startPlay();t.advance({kind:'draw',from:'stock'});t.send({},null);
- assert.match(t.nodes.get('piles').innerHTML,/Drawn<br><div class="card back">\?<\/div>/);
- assert.doesNotMatch(t.nodes.get('actions').innerHTML,/onclick=/);
+ assert.match(t.html('piles'),/Drawn<br><div class="card back">\?<\/div>/);
+ assert.doesNotMatch(t.html('actions'),/onclick=/);
  vm.runInContext('window.clickStock();window.clickReplace(0);',t.sandbox);assert.equal(t.sent.length,0);
 });
 test('Golf displays all tied low scorers instead of naming an exclusive winner',()=>{

@@ -23,6 +23,12 @@ TRANSLATABLE = [
     "audit-batch2/guandan.html",
     "audit-batch2/mini-golf-duels.html",
     "audit-batch2/quoridor.html",
+    "audit-batch3/backgammon-copy.html",
+    "audit-batch3/backgammon.html",
+    "audit-batch3/brazilian-truco.html",
+    "audit-batch3/ers.html",
+    "audit-batch3/reversi.html",
+    "audit-batch3/six-card-golf.html",
 ]
 
 

@@ -1,11 +1,12 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const {pageScript}=require('./page-helper.cjs');
 function setup(name, state){
  const html=fs.readFileSync(path.join(__dirname,'../../games/audit-batch3',name+'.html'),'utf8');
  const handlers={},elements={},messages=[];
  function el(){return {children:[],style:{},_classes:new Set(),appendChild(c){this.children.push(c)},set innerHTML(v){this.children=[]},get innerHTML(){return ''},set className(v){this._classes=new Set(v.split(' '))},get classList(){let self=this;return {add(c){self._classes.add(c)},remove(c){self._classes.delete(c)},contains(c){return self._classes.has(c)}}}};}
  const document={getElementById(id){return elements[id]??=el()},createElement:el};
  const parent={postMessage(m){messages.push(JSON.parse(JSON.stringify(m)))}};
- const sb={document,parent,addEventListener:(event,cb)=>handlers[event]=cb};vm.createContext(sb);vm.runInContext(html.match(/<script>([\s\S]*?)<\/script>/)[1],sb);
+ const sb={document,parent,addEventListener:(event,cb)=>handlers[event]=cb};vm.createContext(sb);vm.runInContext(pageScript(html,document),sb);
  function update(count=1){handlers.message({source:parent,data:{type:'state_changed',status:'ongoing',move_count:count,acting_for_player_index:0,my_player_index:0,players:[{name:'A'},{name:'B'}],view:state}})}
  update();
  function point(idx){return [...elements.left.children,...elements.right.children].find(e=>Number(e.children[0].textContent)===idx+1)}

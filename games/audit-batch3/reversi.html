@@ -1,24 +1,63 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reversi</title><style>body{margin:0;padding:16px;background:#101827;color:#edf2ff;font:16px system-ui}*{box-sizing:border-box}h1{font-size:23px;margin:0 0 8px}p{line-height:1.5}#status{font-weight:650;margin:12px 0;color:#8ee7cd}#scores{font-size:14px;margin:12px 0}button{font:inherit;min-height:44px;border:1px solid #64748b;border-radius:8px;background:#25344e;color:white;cursor:pointer;touch-action:manipulation}button:disabled{cursor:default}button:focus-visible{outline:3px solid #fcd34d}.reversi{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));max-width:440px;gap:2px}.square{aspect-ratio:1;min-height:0;padding:0;border-radius:3px;background:#17604b;font-size:clamp(23px,6vw,42px);line-height:1}.square.p0{color:#071016}.square.p1{color:white}.rules{font-size:14px;color:#bec9dc}</style></head><body><h1>Reversi</h1><p class="rules">Black moves first. Place a disc to trap and flip an unbroken line of opposing discs. Turns with no legal moves are skipped. Most discs at the end wins.</p><div id="status">Waiting for the platform…</div><div id="scores"></div><div id="board"></div><script>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reversi</title><style>body{margin:0;padding:16px;background:#101827;color:#edf2ff;font:16px system-ui}*{box-sizing:border-box}h1{font-size:23px;margin:0 0 8px}p{line-height:1.5}#status{font-weight:650;margin:12px 0;color:#8ee7cd}#scores{font-size:14px;margin:12px 0;display:flex;flex-wrap:wrap;gap:4px 14px}button{font:inherit;min-height:44px;border:1px solid #64748b;border-radius:8px;background:#25344e;color:white;cursor:pointer;touch-action:manipulation}button:disabled{cursor:default}button:focus-visible{outline:3px solid #fcd34d}.reversi{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));max-width:440px;gap:2px}.square{aspect-ratio:1;min-height:0;padding:0;border-radius:3px;background:#17604b;font-size:clamp(23px,6vw,42px);line-height:1}.square.p0{color:#071016}.square.p1{color:white}.rules{font-size:14px;color:#bec9dc}</style></head><body><h1 id="title"></h1><p class="rules" id="rules"></p><div id="status" role="status" aria-live="polite"></div><div id="scores"></div><div id="board"></div><script type="application/json" id="i18n-strings">
+{
+"title": "Reversi",
+"rules": "Black moves first. Place a disc to trap and flip an unbroken line of opposing discs. Turns with no legal moves are skipped. Most discs at the end wins.",
+"waiting_platform": "Waiting for the platform…",
+"player_n": "Player {n}",
+"draw": "Draw!",
+"wins": "{name} wins!",
+"saving": "Saving move…",
+"your_turn_black": "{name} — your turn (Black ●)",
+"your_turn_white": "{name} — your turn (White ○)",
+"waiting_black": "Waiting for {name} (Black)",
+"waiting_white": "Waiting for {name} (White)",
+"discs": "{name}: {count} discs",
+"cell": "Row {row}, column {column}"
+}
+</script>
+<script>
 "use strict";
+
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+
+
 let latest=null,sent=false;
 const $=id=>document.getElementById(id);
+$('status').textContent=t('waiting_platform');
 function button(text,action,disabled){const b=document.createElement('button');b.textContent=text;b.disabled=!!disabled;b.onclick=action;return b}
 function submit(cell){if(sent||!latest||latest.status!=='ongoing'||latest.acting_for_player_index===null)return;sent=true;parent.postMessage({type:'make_move',move:{cell}},'*');render()}
 function viewTurnIndex(v,players){if(!v)return 0;let t=v.turn;if(Array.isArray(t))t=t.length?t[0]:null;if(t===null||t===undefined)return null;if(typeof t==='number')return t;const i=(players||[]).findIndex(p=>p.player_id===t||p.id===t);return i>=0?i:null}
-function render(){if(!latest)return;const v=latest.view||{board:Array(64).fill(null),turn:[0],done:false,winner:null,legalMoves:[],black:2,white:2};const seat=latest.acting_for_player_index;const name=i=>latest.players[i]?.name||('Player '+(i+1));
+function render(){if(!latest)return;const v=latest.view||{board:Array(64).fill(null),turn:[0],done:false,winner:null,legalMoves:[],black:2,white:2};const seat=latest.acting_for_player_index;const name=i=>latest.players[i]?.name||t('player_n',{n:i+1});
+$('title').textContent=t('title');$('rules').textContent=t('rules');
 const vt=viewTurnIndex(v,latest.players);
 const canAct=seat!==null&&latest.status==='ongoing'&&!sent;
-if(latest.status==='over'||v.done){$('status').textContent=(v.winner===null||v.winner===undefined)?'Draw!':(name(v.winner)+' wins!');}
-else if(sent){$('status').textContent='Saving move…';}
-else if(canAct){$('status').textContent=name(seat)+' — your turn ('+(seat===0?'Black ●':'White ○')+')';}
-else{const tn=(vt!==null&&vt!==undefined)?name(vt):'—';$('status').textContent='Waiting for '+tn+' ('+(vt===0?'Black':'White')+')';}
+if(latest.status==='over'||v.done){$('status').textContent=(v.winner===null||v.winner===undefined)?t('draw'):t('wins',{name:name(v.winner)});}
+else if(sent){$('status').textContent=t('saving');}
+else if(canAct){$('status').textContent=seat===0?t('your_turn_black',{name:name(seat)}):t('your_turn_white',{name:name(seat)});}
+else{const tn=(vt!==null&&vt!==undefined)?name(vt):'—';$('status').textContent=vt===0?t('waiting_black',{name:tn}):t('waiting_white',{name:tn});}
 const bCount=v.black!==undefined?v.black:(v.board||[]).filter(x=>x===0).length;
 const wCount=v.white!==undefined?v.white:(v.board||[]).filter(x=>x===1).length;
-$('scores').textContent=latest.players.map((p,i)=>p.name+': '+((i===0?bCount:wCount)+' discs')).join(' · ');
+$('scores').replaceChildren(...latest.players.map((p,i)=>{const s=document.createElement('span');s.textContent=t('discs',{name:p.name,count:i===0?bCount:wCount});return s;}));
 const board=$('board');board.replaceChildren();board.className='reversi';
 const opts=new Set(canAct?(v.legalMoves||[]):[]);
-(v.board||[]).forEach((owner,i)=>{const isHint=owner===null&&opts.has(i);const b=button(owner===null?(isHint?'·':''):owner===0?'●':'○',()=>submit(i),!(canAct&&isHint));b.className='square p'+owner;b.setAttribute('aria-label','Row '+(Math.floor(i/8)+1)+', column '+(i%8+1));board.append(b);});
+(v.board||[]).forEach((owner,i)=>{const isHint=owner===null&&opts.has(i);const b=button(owner===null?(isHint?'·':''):owner===0?'●':'○',()=>submit(i),!(canAct&&isHint));b.className='square p'+owner;b.setAttribute('aria-label',t('cell',{row:Math.floor(i/8)+1,column:i%8+1}));board.append(b);});
 }
-addEventListener('message',e=>{if(e.source!==parent||e.data?.type!=='state_changed')return;latest=e.data;sent=false;render()});
+addEventListener('message',e=>{if(e.source!==parent||e.data?.type!=='state_changed')return;applyLocale(e.data);latest=e.data;sent=false;render()});
 </script></body></html>

@@ -118,5 +118,78 @@ const CASES = {
       ],
     };
   })(),
+
+  'audit-batch3/reversi.html': {
+    messages: [
+      { ...base, view: { board: [...Array(27).fill(null), 1, 0, ...Array(35).fill(null)], turn: [0], done: false, winner: null, legalMoves: [19, 26], black: 2, white: 1 } },
+      { ...base, acting_for_player_index: null, turn_of_player_indices: [1], view: { board: Array(64).fill(null), turn: [1], done: false, winner: null, legalMoves: [], black: 2, white: 2 } },
+      { ...base, status: 'over', view: { board: Array(64).fill(0), turn: [0], done: true, winner: 0, legalMoves: [], black: 64, white: 0 } },
+      { ...base, status: 'over', view: { board: Array(64).fill(1), turn: [0], done: true, winner: null, legalMoves: [], black: 32, white: 32 } },
+    ],
+  },
+  'audit-batch3/ers.html': {
+    messages: [
+      { ...base, players: [{ name: 'Ann' }, { name: 'Bob', kind: 'computer' }], view: { pile: [{ r: 5, s: 'H' }, { r: 99, s: '' }, { r: 12, s: 'S' }, { r: 4, s: 'C' }, { r: 3, s: 'D' }, { r: 14, s: 'S' }], counts: [20, 26], flipper: 0, challenge: { by: 1, left: 2 }, winner: null, log: ['L1'] } },
+      { ...base, players: [{ name: 'Ann' }, { name: 'Bob' }], view: { pile: [], counts: [20, 26], flipper: 1, winner: null, log: [] } },
+      { ...base, players: [{ name: 'Ann' }, { name: 'Bob' }], view: { pile: [{ r: 5, s: 'H' }], counts: [20, 26], flipper: 1, slap: { reason: 'R1' }, winner: null, log: [] } },
+      { ...base, status: 'over', players: [{ name: 'Ann' }, { name: 'Bob' }], view: { pile: [], counts: [52, 0], flipper: 0, winner: 0, log: [] } },
+    ],
+  },
+  'audit-batch3/brazilian-truco.html': {
+    messages: [
+      { ...base, view: { hand_no: 2, scores: [3, 6], value: 3, turned: '5D', tricks: [{ side: -1, seat: 0 }, { side: 0, seat: 2 }], last_hand: { side: 0, points: 3, how: 'H1' }, raise_log: { value: 3, result: 'R1' }, hand_counts: [3, 3], trick: [{ seat: 1, card: '7H' }], hand: ['4C', '6D'], raise: null, can_raise: true, winner: null } },
+      { ...base, view: { hand_no: 2, scores: [3, 6], value: 3, turned: '5D', tricks: [], last_hand: { side: null, how: 'H2' }, hand_counts: [3, 3], trick: [], hand: ['4C'], raise: { to: 6 }, can_raise: false, winner: null } },
+      { ...base, acting_for_player_index: null, turn_of_player_indices: [1, 3], view: { hand_no: 1, scores: [0, 0], value: 1, turned: 'KS', tricks: [], hand_counts: [3, 3], trick: [], hand: [], winner: null } },
+      { ...base, status: 'over', view: { hand_no: 5, scores: [12, 3], value: 1, turned: 'KS', tricks: [], hand_counts: [0, 0], trick: [], hand: [], winner: 0 } },
+      { ...base, status: 'over', view: { hand_no: 5, scores: [3, 12], value: 1, turned: 'KS', tricks: [], hand_counts: [0, 0], trick: [], hand: [], winner: 1 } },
+    ],
+  },
+  'audit-batch3/six-card-golf.html': (() => {
+    const hand = (up) => Array.from({ length: 6 }, (_, i) => ({ r: i + 1, s: i % 4, up: up > i }));
+    const view = { phase: 'play', hands: [hand(2), hand(6)], cur: 0, flipTurnIdx: 0, stockCount: 30, discard: [{ r: 9, s: 1 }], drew: null, log: 'L1', scores: [10, 12], lastChance: false };
+    return {
+      messages: [
+        { ...base, view: { ...view, phase: 'flip', hands: [hand(0), hand(0)] } },
+        { ...base, view },
+        { ...base, view: { ...view, drew: { r: 4, s: 2, from: 'stock' }, lastChance: true, knocker: 1 } },
+        { ...base, my_player_index: 1, view: { ...view, drew: { hidden: true, from: 'stock' } } },
+        { ...base, acting_for_player_index: null, turn_of_player_indices: [1], view },
+        { ...base, status: 'over', acting_for_player_index: null, view: { ...view, phase: 'over', scores: [8, 8] } },
+        { ...base, status: 'over', acting_for_player_index: null, view: { ...view, phase: 'over', scores: [5, 8] } },
+      ],
+    };
+  })(),
+
+  'audit-batch3/backgammon.html': (() => {
+    const owner = Array(24).fill(-1), cnt = Array(24).fill(0);
+    owner[23] = 0; cnt[23] = 2; owner[0] = 1; cnt[0] = 2; owner[12] = 0; cnt[12] = 7;
+    const view = { owner, cnt, bar: [1, 0], off: [2, 3], cur: 0, dice: [3, 4], moves: [3, 4], needRoll: false, winner: null, legalMoves: [{ from: 23, to: 20, die: 3 }] };
+    return {
+      messages: [
+        { ...base, view },
+        { ...base, view: { ...view, needRoll: true, dice: [], moves: [] } },
+        { ...base, view: { ...view, legalMoves: [] } },
+        { ...base, my_player_index: 1, view: { ...view, cur: 1 } },
+        { ...base, acting_for_player_index: null, view },
+        { ...base, status: 'over', view: { ...view, winner: 0, off: [15, 4] } },
+      ],
+    };
+  })(),
+
+  'audit-batch3/backgammon-copy.html': (() => {
+    const owner = Array(24).fill(-1), cnt = Array(24).fill(0);
+    owner[23] = 0; cnt[23] = 2; owner[0] = 1; cnt[0] = 2; owner[12] = 0; cnt[12] = 7;
+    const view = { owner, cnt, bar: [1, 0], off: [2, 3], cur: 0, dice: [3, 4], moves: [3, 4], needRoll: false, winner: null, legalMoves: [{ from: 23, to: 20, die: 3 }] };
+    return {
+      messages: [
+        { ...base, view },
+        { ...base, view: { ...view, needRoll: true, dice: [], moves: [] } },
+        { ...base, view: { ...view, legalMoves: [] } },
+        { ...base, my_player_index: 1, view: { ...view, cur: 1 } },
+        { ...base, acting_for_player_index: null, view },
+        { ...base, status: 'over', view: { ...view, winner: 0, off: [15, 4] } },
+      ],
+    };
+  })(),
 };
 module.exports = { CASES, players2, base, grid };

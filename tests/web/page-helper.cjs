@@ -30,7 +30,7 @@ function fakeDom() {
   const ids = new Map();
   const make = (tag) => {
     const node = {
-      tag, children: [], style: {}, dataset: {}, attributes: {}, className: '', textContent: '', innerHTML: '',
+      tag, children: [], style: {}, dataset: {}, attributes: {}, className: '', textContent: '',
       disabled: false, value: '', title: '', hidden: false,
       classList: {
         add(...c) { node.className = [...new Set((node.className + ' ' + c.join(' ')).split(/\s+/).filter(Boolean))].join(' '); },
@@ -38,6 +38,9 @@ function fakeDom() {
         toggle(c, on) { if (on === false || (on === undefined && node.className.split(/\s+/).includes(c))) this.remove(c); else this.add(c); },
         contains(c) { return node.className.split(/\s+/).includes(c); },
       },
+      _html: '',
+      get innerHTML() { return node._html; },
+      set innerHTML(value) { node._html = value; if (value === '') node.children = []; },
       append(...items) { node.children.push(...items); },
       appendChild(item) { node.children.push(item); return item; },
       prepend(...items) { node.children.unshift(...items); },
@@ -57,7 +60,7 @@ function fakeDom() {
   };
   const document = {
     getElementById(id) { if (!ids.has(id)) ids.set(id, make('#' + id)); return ids.get(id); },
-    createElement: make, createElementNS: (_, tag) => make(tag), createTextNode: (text) => ({ textContent: text, children: [] }),
+    createElement: make, createElementNS: (_, tag) => make(tag), createTextNode: (text) => ({ textContent: text }),
     documentElement: {}, body: make('body'), addEventListener() {}, querySelector: () => null, querySelectorAll: () => [],
   };
   return { document, ids };
