@@ -7,9 +7,9 @@ const SHELL = [
   "/static/portal.html",
   "/static/common.css?v=16",
   "/static/portal.css?v=33",
-  "/static/common.js?v=23",
+  "/static/common.js?v=24",
   "/static/i18n.js?v=5",
-  "/static/auth.js?v=10",
+  "/static/auth.js?v=11",
   "/static/experiments.js?v=7",
   "/static/experiments.css?v=6",
   "/static/push-notifications.js?v=2",
@@ -32,10 +32,19 @@ const SHELL = [
 ];
 self.addEventListener("install", (event) =>
   event.waitUntil(
-    caches
-      .open(CACHE)
-      .then((c) => c.addAll(SHELL))
-      .then(() => self.skipWaiting()),
+    caches.open(CACHE).then(async (c) => {
+      // One failed asset (a deploy mid-install, a flaky entry) must not
+      // fail the whole offline shell: install what can be installed and
+      // let the next load retry the rest.
+      const results = await Promise.allSettled(SHELL.map((url) => c.add(url)));
+      const failed = SHELL.filter((_, i) => results[i].status === "rejected");
+      if (failed.length) {
+        try {
+          console.warn("Portal shell partially installed; retry on next load:", failed);
+        } catch {}
+      }
+      await self.skipWaiting();
+    }),
   ),
 );
 // An update deletes older shells and asks open portal pages to reload.

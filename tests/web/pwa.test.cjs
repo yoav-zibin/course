@@ -73,6 +73,20 @@ function install(standalone=false) {
   vm.runInNewContext(read('static/portal-install.js'),{I18n:require('./i18n-stub.cjs'),document:{getElementById:id=>nodes[id]},navigator:{},window:{matchMedia:()=>({matches:standalone}),addEventListener:(event,fn)=>events[event]=fn}});
   return {events,nodes};
 }
+test('worker install completes when one shell asset fails to cache', async () => {
+  const { context, handlers, shell } = worker();
+  const added = [];
+  let skipped = false;
+  context.caches = { open: async () => ({ add: async (url) => { if (url.includes('portal.js')) throw Error('flaky'); added.push(url); } }) };
+  context.self.skipWaiting = async () => { skipped = true; };
+  context.console = { warn() {} };
+  let installation;
+  handlers.install({ waitUntil: (promise) => { installation = promise; } });
+  await installation;
+  assert.equal(skipped, true);
+  assert.equal(added.length, shell.length - 1);
+  assert.ok(!added.some((url) => url.includes('portal.js')));
+});
 test('install prompt requires a click, handles dismissal, and accepts a later prompt',async()=>{
   const {events,nodes}=install();let calls=0,prevented=false;
   const prompt={preventDefault(){prevented=true},prompt:async()=>calls++,userChoice:Promise.resolve({outcome:'dismissed'})};

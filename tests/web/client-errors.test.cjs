@@ -78,7 +78,14 @@ test("a full device storage is reported to the server as storage_full", () => {
   const reports = [];
   globalThis.reportClientError = (kind, message) => reports.push({ kind, message });
   try {
-    const storage = { getItem: () => null, setItem: () => { throw Error("quota"); } };
+    // The probe is a 1-byte write, so a denied store falls back to memory
+    // instead: a quota is a store that accepts tiny writes and refuses
+    // larger ones.
+    const map = new Map();
+    const storage = {
+      getItem: (k) => map.get(k) || null,
+      setItem: (k, v) => { if (v.length > 10) throw Error("quota"); map.set(k, v); },
+    };
     const o = new Offline(storage, undefined, () => ({ id: "alice", password: "t" }), () => false);
     assert.throws(() => o.write({ responses: {}, queues: {}, archives: [] }), /Device storage is full/);
     assert.equal(reports[0].kind, "storage_full");
@@ -90,7 +97,11 @@ test("a full device storage is reported to the server as storage_full", () => {
 
 test("the offline cache works on pages that have no error reporting", () => {
   delete globalThis.reportClientError;
-  const storage = { getItem: () => null, setItem: () => { throw Error("quota"); } };
+  const map = new Map();
+  const storage = {
+    getItem: (k) => map.get(k) || null,
+    setItem: (k, v) => { if (v.length > 10) throw Error("quota"); map.set(k, v); },
+  };
   const o = new Offline(storage, undefined, () => ({ id: "alice", password: "t" }), () => false);
   assert.throws(() => o.write({ responses: {}, queues: {}, archives: [] }), /Device storage is full/);
 });

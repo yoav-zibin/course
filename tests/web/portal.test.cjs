@@ -4,7 +4,7 @@ const vm=require('node:vm');
 const fs=require('node:fs');
 const path=require('node:path');
 
-function setup(request=async()=>{}, hash='', search='') {
+function setup(request=async()=>{}, hash='', search='', storage) {
   const nodes=new Map();
   const node=id=>{
     if(!nodes.has(id)) nodes.set(id,{value:'',hidden:false,disabled:false,dataset:{},children:[],classList:{toggle(){}},
@@ -14,7 +14,7 @@ function setup(request=async()=>{}, hash='', search='') {
   const navigations=[];
   const pageErrors=[];
   const ctx=vm.createContext({StoragePages:{enabled:async()=>false,list:(request,path,options)=>request("GET",path,options),controls(){},search(){return false;}},console,Map,Set,URLSearchParams,
-    navigator:{onLine:true},localStorage:{},PortalOffline:class {api(...args){return request(...args);}read(){return {};}write(){} writeCache(data){this.write(data);} async submitMove(match,body){const result=this.enqueue(match,body);await this.sync({force:true});return result;}} ,
+    navigator:{onLine:true},localStorage:storage || {},PortalOffline:class {api(...args){return request(...args);}read(){return {};}write(){} writeCache(data){this.write(data);} async submitMove(match,body){const result=this.enqueue(match,body);await this.sync({force:true});return result;}} ,
     document:{getElementById:node,body:{classList:{toggle(){}}}},window:{addEventListener(){}},
     location:{hash,search,assign(url){navigations.push(url);}},history:{replaceState(){}},
     Auth:{current:()=>({id:'owner'})},I18n:require('./i18n-stub.cjs'),GameFrame:class{load(){}unload(){}send(){}},
@@ -522,4 +522,12 @@ test('the owner of a waiting match gets a Remove button on other players only',(
   run('state.match.matchmaking_player_count=null;state.match.status="ongoing";state.match.turn_of_player_indices=[0];renderMatch()');
   assert.deepEqual(removeButtons(),[0,0]);
   run('state.match.status="waiting_for_players";state.match.owner_user_id="guest";renderMatch()');assert.deepEqual(removeButtons(),[0,0]);
+});
+
+test('the portal boots when storage methods deny access',()=>{
+  const denied=()=>{const e=new Error('denied');e.name='SecurityError';throw e;};
+  const {run}=setup(async()=>{},'','',{getItem:denied,setItem:denied,removeItem:denied});
+  assert.equal(run('typeof offline'),'object');
+  assert.equal(run('typeof portalStorage'),'function');
+  assert.equal(run('portalStorage()===localStorage'),true);
 });

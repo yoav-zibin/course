@@ -43,7 +43,19 @@ async function portalTransport(method, path, { body, user, requestId } = {}) {
     clearTimeout(timer);
   }
 }
-const offline = new PortalOffline(localStorage, portalTransport, () =>
+// Browsers that deny storage entirely (private mode, blocked cookies)
+// must not brick the portal: PortalOffline falls back to an in-memory
+// store when the global itself, or its probe, is unavailable. Online play
+// still works; only saving for offline use is lost.
+function portalStorage() {
+  try {
+    if (typeof localStorage === "undefined") return null;
+    return localStorage;
+  } catch {
+    return null;
+  }
+}
+const offline = new PortalOffline(portalStorage(), portalTransport, () =>
   Auth.current(),
 );
 if ("serviceWorker" in navigator)
@@ -2050,11 +2062,32 @@ async function main() {
       const {total, cache, queued, practice, archives} = Object.fromEntries(
         ["total", "cache", "queued", "practice", "archives"].map(key => [key, kb(info[key])]),
       );
-      $("storage-details").textContent = I18n.t("ui.offline.storage_breakdown", {total, cache, queued, practice, archives, entries:info.entries},
+      let text = I18n.t("ui.offline.storage_breakdown", {total, cache, queued, practice, archives, entries:info.entries},
         `This account: ${total}; cached responses ${cache} (${info.entries} entries); queued moves ${queued}; practice ${practice}; archives ${archives}.`) +
         (estimate?.quota
           ? I18n.t("ui.offline.storage_origin", {usage:kb(estimate.usage || 0), quota:kb(estimate.quota)}, ` Browser origin: ${kb(estimate.usage || 0)} of ${kb(estimate.quota)} (estimated, includes other site data).`)
           : I18n.t("ui.offline.storage_estimate_unavailable", {}, " Browser-wide estimate unavailable."));
+      const list = items => items.map(item => `${item.path || item.key || item.id} (${kb(item.bytes)})`).join(", ");
+      if (info.largest?.length)
+        text += I18n.t("ui.offline.storage_largest", {list: list(info.largest)}, ` Largest responses: ${list(info.largest)}.`);
+      if (info.nextToEvict)
+        text += I18n.t("ui.offline.storage_next_evict", {path: info.nextToEvict}, ` Next to evict: ${info.nextToEvict}.`);
+      if (info.perMatchQueue?.length)
+        text += I18n.t("ui.offline.storage_queues", {list: list(info.perMatchQueue)}, ` Queued moves by match: ${list(info.perMatchQueue)}.`);
+      if (info.perPractice?.length)
+        text += I18n.t("ui.offline.storage_practice", {list: list(info.perPractice)}, ` Practice by match: ${list(info.perPractice)}.`);
+      if (info.accounts?.length)
+        text += I18n.t("ui.offline.storage_accounts", {list: list(info.accounts)}, ` All accounts on this device: ${list(info.accounts)}.`);
+      if (info.otherKeys?.length)
+        text += I18n.t("ui.offline.storage_other", {list: list(info.otherKeys)}, ` Other saved data: ${list(info.otherKeys)}.`);
+      try {
+        const sw = await offline.swCacheInfo?.();
+        if (sw)
+          text += I18n.t("ui.offline.storage_sw", {entries: sw.entries, size: kb(sw.bytes)}, ` Service worker cache: ${sw.entries} files, ${kb(sw.bytes)}.`);
+      } catch {
+        // The worker cache is diagnostics only; the account numbers stand.
+      }
+      $("storage-details").textContent = text;
     } catch (error) {
       $("storage-details").textContent = I18n.t("ui.offline.storage_inspection_failed", {message:error.message}, `Storage inspection failed: ${error.message}`);
     }

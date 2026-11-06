@@ -18,7 +18,14 @@
       "Offline",
       "Account changed",
       "Could not save cache access order:",
-      "Could not read cache access order:"
+      "Could not read cache access order:",
+      "no usable storage",
+      "storage probe mismatch",
+      "Could not parse saved portal data:",
+      "Could not read portal storage:",
+      "Could not migrate all portal storage:",
+      "Could not migrate portal storage:",
+      "Could not save portal data:"
     ],
     "builder.html": [
       "{\"state\":{\"type\":\"object\"},\"move\":{\"type\":\"object\"},\"view\":true}"

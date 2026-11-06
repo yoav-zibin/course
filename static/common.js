@@ -235,14 +235,21 @@ const ACTING_USER_KEY = "game-platform.user-id";
 
 /** Fills [select] with [users] and calls [onChange] when the choice changes. */
 function setUpActAs(select, users, onChange) {
-  const current = select.value || localStorage.getItem(ACTING_USER_KEY);
+  let current = select.value || "";
+  try {
+    current = select.value || localStorage.getItem(ACTING_USER_KEY) || "";
+  } catch {
+    // Denied storage: the choice just isn't remembered across pages.
+  }
   select.replaceChildren(
     el("option", { value: "", textContent: I18n.t("ui.common.choose_user", {}, "(choose a user)") }),
     ...users.map((user) => el("option", { value: user.id, textContent: user.display_name })),
   );
   select.value = users.some((user) => user.id === current) ? current : "";
   select.onchange = () => {
-    localStorage.setItem(ACTING_USER_KEY, select.value);
+    try {
+      localStorage.setItem(ACTING_USER_KEY, select.value);
+    } catch {}
     onChange();
   };
 }

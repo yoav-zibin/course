@@ -19,16 +19,27 @@ const Auth = (() => {
   const ACCOUNTS_KEY = "game-platform.accounts.v1";
   const CURRENT_KEY = "game-platform.current-account.v1";
 
+  // When this browser denies storage entirely (private mode, blocked
+  // cookies), accounts live in memory for this page load instead: login
+  // still works and online play is unaffected; only persistence is lost.
+  let memoryAccounts = null;
+  let memoryCurrentId = undefined;
+
   function load() {
     try {
       return JSON.parse(localStorage.getItem(ACCOUNTS_KEY)) ?? [];
     } catch {
-      return [];
+      return memoryAccounts ?? [];
     }
   }
 
   function save(accounts) {
-    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+    try {
+      localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+      memoryAccounts = null;
+    } catch {
+      memoryAccounts = accounts;
+    }
   }
 
   function changed() {
@@ -40,15 +51,26 @@ const Auth = (() => {
     return load();
   }
 
-  /** The current account, or null when logged out. */
+  /** The current account, or null when logged out. Never throws: denied
+   * storage reads as logged out (or the in-memory current account). */
   function current() {
-    const id = localStorage.getItem(CURRENT_KEY);
+    let id;
+    try {
+      id = localStorage.getItem(CURRENT_KEY);
+    } catch {
+      id = memoryCurrentId ?? null;
+    }
     return load().find((account) => account.id === id) ?? null;
   }
 
   function setCurrent(id) {
-    if (id) localStorage.setItem(CURRENT_KEY, id);
-    else localStorage.removeItem(CURRENT_KEY);
+    try {
+      if (id) localStorage.setItem(CURRENT_KEY, id);
+      else localStorage.removeItem(CURRENT_KEY);
+      memoryCurrentId = undefined;
+    } catch {
+      memoryCurrentId = id ?? null;
+    }
     changed();
   }
 

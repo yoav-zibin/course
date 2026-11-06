@@ -230,6 +230,18 @@ class SavingStore:
             self._inner.delete_game(game_id)
             self._set_dirty()
 
+    def delete_game_version(
+        self, game_id: str, version: int, *, allow_latest: bool = False
+    ) -> None:
+        """Deletes one version via the in-memory store; the next save drops the
+        version's document (Firestore) or JSON record (file). Guards (latest,
+        pinned matches) are the inner store's."""
+        with self._lock:
+            self._inner.delete_game_version(
+                game_id, version, allow_latest=allow_latest
+            )
+            self._set_dirty()
+
     def put_match(self, match: Match) -> None:
         with self._lock:
             self._inner.put_match(match)

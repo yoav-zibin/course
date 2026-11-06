@@ -1000,6 +1000,47 @@ class QueryStore:
             if game:
                 self._put("games", game_id, replace(game, deleted=True))
 
+    def delete_game_version(self, game_id, version, *, allow_latest=False):
+        """Deletes one game_versions/<id>@<version> document (tombstoned; its
+        body chunks are cleaned by maintenance, like other deletions). Refuses
+        (ValueError) when the version does not exist, when it is the latest
+        version unless [allow_latest] is set, and when any match still pins
+        that (game_id, version) — callers must delete those matches first.
+        Deleting the latest version repoints games/<id> at the previous
+        surviving version, or tombstones it when none survives."""
+        with self.atomic():
+            game = self.get_game_version(game_id, version)
+            if game is None:
+                raise ValueError(f"no such game version: {game_id}@{version}")
+            current = self.get_game(game_id)
+            is_latest = current is not None and version == current.version
+            if is_latest and not allow_latest:
+                raise ValueError(
+                    f"refusing to delete the latest version {game_id}@{version}; "
+                    "pass allow_latest=True to delete it"
+                )
+            pinned = self._query(
+                "matches",
+                [("game_id", "==", game_id), ("game_version", "==", version)],
+                limit=1,
+            )
+            if pinned:
+                raise ValueError(
+                    f"refusing to delete {game_id}@{version}: pinned by a match; "
+                    "delete the matches first"
+                )
+            self._delete("game_versions", f"{game_id}@{version}")
+            if is_latest:
+                previous = None
+                for earlier in range(version - 1, 0, -1):
+                    previous = self.get_game_version(game_id, earlier)
+                    if previous is not None:
+                        break
+                if previous is not None:
+                    self._put("games", game_id, previous)
+                else:
+                    self._delete("games", game_id)
+
     def put_invite(self, invite):
         self._put(
             "invites",
