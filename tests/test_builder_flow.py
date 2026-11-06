@@ -156,6 +156,60 @@ def test_build_survives_a_malformed_diagnosis_reply(monkeypatch):
     assert saved.builder_workflow['job']['status']=='ready_for_review',saved.builder_workflow['job']
 
 
+def _build_with_model(monkeypatch, model):
+    from game_platform.builder_jobs import run_build
+    from game_platform import builder_render
+    f=fixture();d=flow.begin_build(approved_draft());store=InMemoryStore();store.put_game_draft(d)
+    platform=GamePlatform(store=store)
+    user=platform.create_user(display_name='Builder');store.put_user(replace(user,id=d.owner_user_id))
+    monkeypatch.setattr('game_platform.builder_visual.review_views',lambda *args:[])
+    monkeypatch.setattr(builder_render,'render_game',lambda *args,**kwargs:[])
+    run_build(platform,model,d.owner_user_id,d.id,d.builder_workflow['job']['id'])
+    return f,platform.get_game_draft(caller_id=d.owner_user_id,draft_id=d.id)
+
+
+def test_build_retries_a_timed_out_model_call(monkeypatch):
+    import json
+    from game_platform.model_api import ModelApiError
+    f=fixture()
+    calls=[]
+    class Model:
+        def chat(self,messages,**kwargs):
+            calls.append(1)
+            if len(calls)==1:
+                raise ModelApiError('Muse timed out. Please try again with a smaller change.',retryable=False)
+            system=messages[0]['content'] if isinstance(messages[0]['content'],str) else ''
+            if 'Review game server' in system or isinstance(messages[0]['content'],list):
+                return json.dumps({'passed':True,'issues':[]})
+            return json.dumps({'code':f['code'],'server_code':f['server_code']})
+    _,saved=_build_with_model(monkeypatch,Model())
+    # The first call timed out and was retried inside the same attempt;
+    # the build completed instead of stopping with the timeout message.
+    assert saved.builder_workflow['job']['status']=='ready_for_review',saved.builder_workflow['job']
+
+
+def test_build_absorbs_a_persistent_timeout_as_a_failed_attempt(monkeypatch):
+    import json
+    from game_platform.model_api import ModelApiError
+    f=fixture()
+    servers=[]
+    class Model:
+        def chat(self,messages,**kwargs):
+            system=messages[0]['content'] if isinstance(messages[0]['content'],str) else ''
+            if 'Review game server' in system or isinstance(messages[0]['content'],list):
+                return json.dumps({'passed':True,'issues':[]})
+            if any('complete executable server JavaScript' in str(m.get('content','')) for m in messages):
+                servers.append(1)
+                if len(servers)<=2:
+                    raise ModelApiError('Muse timed out. Please try again with a smaller change.',retryable=False)
+            return json.dumps({'code':f['code'],'server_code':f['server_code']})
+    _,saved=_build_with_model(monkeypatch,Model())
+    # Generation timed out twice on attempt 1 (the call and its in-call
+    # retry): that consumed the attempt, and attempt 2 completed the build.
+    assert len(servers)==3
+    assert saved.builder_workflow['job']['status']=='ready_for_review',saved.builder_workflow['job']
+
+
 def test_cancellation_and_code_changes_block_publish():
     d=flow.begin_build(approved_draft())
     with pytest.raises(ConflictError):flow.propose(d,'understanding',{'text':'Different'},'Changed')
