@@ -72,7 +72,7 @@ def settlement_probes(code, server, spec, rules):
 
 
 def localization(code, server, spec, rules):
-    errors = game_text.lint(code)
+    errors = game_text.lint(code, server)
     if 'applyLocale(' not in code:
         errors.append('Missing applyLocale(message) integration')
     return {'passed': not errors, 'details': errors}

@@ -82,6 +82,9 @@ const game = {
 - The platform defines a global class `InvalidMove extends Error`.
   `applyMove` throws it for a move that breaks the rules or is malformed; the
   server answers 400 with its message.
+  The 400 body is `{"detail", "code": "game_message"}`; when the game's string table has a `server_`
+  template for the message it also has `message_key` and `params`, and `detail` is translated for the viewer
+  (see docs/game-translation.md, "Texts the server writes"). A new game lists every `InvalidMove` text there.
 - Any other exception, a timeout (100 ms per call), a memory error (64 MB per
   context), or an invalid result (empty/unknown turn, payouts that don't add
   up or pay a computer, non-JSON result, oversized state) is a **bug in the

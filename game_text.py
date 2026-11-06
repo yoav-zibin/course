@@ -21,6 +21,8 @@ import re
 from pathlib import Path
 from typing import Final
 
+from game_platform import game_messages, game_server_texts
+
 MAX_KEYS: Final = 400
 MAX_TEXT_LENGTH: Final = 1000
 _KEY: Final = re.compile(r"^[A-Za-z0-9_.\-]{1,64}$")
@@ -63,6 +65,7 @@ write "Moves: {count}", not "{count} move(s)".
 - Player names come from `players` and are not translated. Do not put display text in the \
 match state or in `make_move`: store codes ("X", "draw") and turn them into text with t() \
 when drawing, because players in one match may use different languages.
+- TEXTS THE SERVER WRITES. The reason of every `throw new InvalidMove(...)` in the server code (the player sees it when a move is refused) and any display text the server puts in the match state (a log line, a label) must be listed in the SAME block as a template, under a key that starts with `server_`: `"server_not_your_turn": "not your turn"`, `"server_need_cards": "need {count} more cards"`. Write the reason in the server code as a plain string literal, a template literal or a concatenation of literals and values (`throw new InvalidMove("need " + n + " more cards")`), never taken from a variable, and make it match its template exactly: each {name} stands for the value written there, so `"need 3 more cards"` fits `"need {count} more cards"`. Show a server text in the client with tx(text) (it finds the template and returns the translation, or the text itself if there is none): `log.textContent = tx(state.log)`. `server_` keys are not used by t() calls, so the "every key is used" rule does not apply to them. The checker rejects a game whose server code writes a text that has no template.
 - Let the layout survive longer text and right-to-left languages: no fixed widths for \
 text, allow wrapping, and use CSS logical properties (margin-inline-start, text-align: \
 start, inset-inline-end) with flex or grid instead of left/right.
@@ -108,9 +111,11 @@ _LITERAL_WITH_WORDS: Final = re.compile(r"""(["'`])((?:\\.|(?!\1).)*?[A-Za-z]{3,
 _PLACEHOLDER: Final = re.compile(r"\{(\w+)\}")
 
 
-def lint(code: str) -> list[str]:
+def lint(code: str, server_code: str | None = None) -> list[str]:
     """Problems that stop a game from being translated well, in plain words. Empty when the
-    game looks fine. The checks are heuristics: they find the common mistakes."""
+    game looks fine. The checks are heuristics: they find the common mistakes. With
+    [server_code], every text the server writes (the reason of an `InvalidMove`, a log line or
+    a label in the match state) must also match a `server_` template of the table."""
     try:
         table = extract_strings(code)
     except StringsError as error:
@@ -126,6 +131,8 @@ def lint(code: str) -> list[str]:
     for key in sorted(used - table.keys()):
         warnings.append(f"the code uses t({key!r}) but the strings block has no {key!r}")
     for key in sorted(table.keys() - used):
+        if key.startswith(game_messages.KEY_PREFIX):
+            continue  # a template for a text the server writes: matched, never shown by key
         warnings.append(f"the strings block has {key!r}, which the code never shows")
     hard_coded, joined = [], []
     for assignment in _ASSIGNMENT.finditer(_without_block(code)):
@@ -150,7 +157,9 @@ def lint(code: str) -> list[str]:
             "word order differs between languages, so use one string with {placeholders}"
         )
     for key, text in table.items():
-        if re.search(r"[<>]|&\w+;", text):
+        # A server text is what the game wrote (it may say "a -> b"): only tags and entities count.
+        pattern = r"<[A-Za-z/!]|&\w+;" if key.startswith(game_messages.KEY_PREFIX) else r"[<>]|&\w+;"
+        if re.search(pattern, text):
             warnings.append(f"the text of {key!r} contains markup; strings are plain text")
             break
     body = _without_block(code)
@@ -187,7 +196,27 @@ def lint(code: str) -> list[str]:
         warnings.append(
             f"text written in alert/confirm/prompt/createTextNode instead of the strings block: {shown_texts[0]!r}"
         )
+    if server_code:
+        warnings.extend(server_text_problems(table, server_code))
     return warnings
+
+
+def server_text_problems(table: dict[str, str], server_code: str) -> list[str]:
+    """The texts the server code writes that no `server_` template of [table] matches."""
+    templates = game_messages.compile_templates(table)
+    missing: list[str] = []
+    for found in game_server_texts.extract(server_code).found:
+        if game_messages.match(templates, found.template) is None and found.template not in missing:
+            missing.append(found.template)
+    if not missing:
+        return []
+    shown = ", ".join(repr(text[:50]) for text in missing[:3])
+    more = f" (and {len(missing) - 3} more)" if len(missing) > 3 else ""
+    return [
+        f"the server writes texts that the strings block has no template for: {shown}{more}: "
+        'add each as a "server_..." text (with {placeholders} for the parts that vary, e.g. '
+        '"server_not_your_turn": "not your turn") so it can be translated'
+    ]
 
 
 _JOIN: Final = re.compile(r"""["'`]\s*\+|\+\s*["'`]""")

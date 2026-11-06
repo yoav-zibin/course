@@ -25,7 +25,7 @@ def test_converted_game_has_no_lint_problems(entry: dict) -> None:
     code = (COMMUNITY / entry["converted"]).read_text(encoding="utf-8")
     assert game_text.lint(code) == []
     table = game_text.extract_strings(code)
-    assert table is not None and len(table) == entry["texts"]
+    assert table is not None and len([k for k in table if not k.startswith("server_")]) == entry["texts"]
     helper = game_text.HELPER_JS.strip()
     assert helper in code, "the platform helper is pasted unchanged"
 
