@@ -1267,3 +1267,9 @@ out the pushed `main` on the VM (`git fetch` + `git reset --hard origin/main` un
 `/opt/game-platform/game_platform`), installs `requirements.txt` into the server venv, and
 restarts `game-platform.service`. So every push to `main` that passes the unit and UI tests
 now deploys to https://buildplay.fun automatically — no manual VM step needed.
+
+## Agent game imports
+
+Agents can submit a complete game package through authenticated `POST /agent/games`.
+Imports create private drafts with server-verified artifacts and code; they do not
+publish or overwrite games. See [API usage and agent instructions](docs/agent-game-import.md).

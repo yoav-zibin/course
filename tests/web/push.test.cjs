@@ -98,7 +98,7 @@ function setup({
     abort() {}
   }
   const ctx = vm.createContext({
-    console, Map, Set, URLSearchParams, Promise, JSON, Math, Date, Number, String,
+    I18n: require('./i18n-stub.cjs'), console, Map, Set, URLSearchParams, Promise, JSON, Math, Date, Number, String,
     Boolean, Array, Object, Uint8Array, atob, encodeURIComponent, setTimeout,
     clearTimeout, AbortController: AbortControllerStub, fetch,
     navigator: {

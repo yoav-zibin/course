@@ -11,7 +11,8 @@
       4
     ],
     "allows_leave_mid_match": false,
-    "allows_join_mid_match": false
+    "allows_join_mid_match": false,
+    "schemas": "spades.schema.json"
   },
   {
     "id": "78fd2784-c810-4f2a-8166-92776a817b7f",
@@ -25,7 +26,8 @@
       2
     ],
     "allows_leave_mid_match": false,
-    "allows_join_mid_match": false
+    "allows_join_mid_match": false,
+    "schemas": "guess-who.schema.json"
   },
   {
     "id": "076f078a-56cd-44b3-8930-81abc488508a",
@@ -39,6 +41,7 @@
       2
     ],
     "allows_leave_mid_match": false,
-    "allows_join_mid_match": false
+    "allows_join_mid_match": false,
+    "schemas": "chess.schema.json"
   }
 ]

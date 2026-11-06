@@ -8,7 +8,7 @@ const {PRACTICE_PRELUDE,practiceWorker}=require('../../static/portal-practice.js
 const root=path.join(__dirname,'../..');
 function setup(gameName='tictactoe',mode='computer') {
  const writes=new Map();let requests=0;
- const ctx=vm.createContext({console,crypto:webcrypto,Uint32Array,
+ const ctx=vm.createContext({I18n:require('./i18n-stub.cjs'),console,crypto:webcrypto,Uint32Array,
   PortalPractice:{async call(game,name,args,match){
    let reply;
    const self={postMessage:value=>{reply=value;}};

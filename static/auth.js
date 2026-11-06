@@ -201,7 +201,7 @@ const Auth = (() => {
       script.async = true;
       script.defer = true;
       script.onload = resolve;
-      script.onerror = () => reject(new Error("couldn't load Google's login script"));
+      script.onerror = () => reject(new Error(I18n.t("ui.auth.google_script_failed", {}, "Couldn't load Google's login script")));
       document.head.appendChild(script);
     });
     return googleLoading.then(() => {
@@ -370,7 +370,7 @@ const Auth = (() => {
     const callButton = kind === "phone" && canCall
       ? el("button", {
           type: "button",
-          textContent: "Call me with a code",
+          textContent: I18n.t("ui.auth.call_me", {}, "Call me with a code"),
           onclick: () => send("call"),
         })
       : null;
@@ -477,7 +477,7 @@ const Auth = (() => {
     if (account) {
       panel.append(el("div", { class: "auth-menu-heading" },
         avatarImg(account.picture_url),
-        `Logged in as ${account.display_name}`));
+        I18n.t("ui.auth.logged_in_as", { name: account.display_name }, `Logged in as ${account.display_name}`)));
       if (account.linked.length) {
         panel.append(
           el("div", { class: "auth-menu-section" },
@@ -493,7 +493,7 @@ const Auth = (() => {
         el("button", {
           type: "button",
           textContent: I18n.t("ui.auth.copy_invite", {}, "Copy my invite link"),
-          title: "Everyone who signs up through this link counts as invited by you",
+          title: I18n.t("ui.auth.invite_hint", {}, "Everyone who signs up through this link counts as invited by you"),
           onclick: () => {
             hidePanel();
             navigator.clipboard

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "36e5f0d8-4806-439f-af08-b28c593347c1",
+    "name": "Stack Duel",
+    "expected_version": 7,
+    "client": "stack-duel.html",
+    "server": "stack-duel.server.js",
+    "schemas": "stack-duel.schema.json",
+    "original_schema_sha256": "1eb9d044d2af2ccbb3e0635666864503e89868ed52b2d361326531ddb44cf562",
+    "original_client_sha256": "b187b9afdec61af6e1642fa6cbdbfa07faa131639836e9b8e5955531186cd2de",
+    "original_server_sha256": "5c5ed6879f2b2b3d5c816b7fae21d2da83c024bb3f5ae006d9006b457b4fa64f",
+    "allowed_player_counts": [
+      2,
+      3,
+      4
+    ],
+    "allows_leave_mid_match": true,
+    "allows_join_mid_match": false
+  }
+]

@@ -1,5 +1,6 @@
 const { test } = require("node:test"),
   assert = require("node:assert/strict");
+globalThis.I18n = require("./i18n-stub.cjs");
 const Offline = require("../../static/portal-offline.js");
 const base = {
   id: "match",

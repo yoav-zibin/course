@@ -11,7 +11,7 @@
       gtag('config', 'G-6CCXZQYVE7');
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Game platform · Statistics</title>
+    <title data-i18n="ui.page.stats">Game platform · Statistics</title>
     <link rel="stylesheet" href="/static/common.css?v=16" />
     <link rel="stylesheet" href="/static/experiments.css?v=6" />
     <script>
@@ -229,23 +229,24 @@
   </head>
   <body>
     <header class="topbar">
-      <h1>Game platform</h1>
-      <nav>
-        <a href="/portal">Portal</a>
-        <a href="/builder">Builder</a>
-        <a href="/admin">Admin</a>
+      <h1 data-i18n="ui.app_name">Game platform</h1>
+      <nav aria-label="Game platform" data-i18n-aria-label="ui.app_name">
+        <a href="/portal" data-i18n="ui.nav.portal">Portal</a>
+        <a href="/builder" data-i18n="ui.nav.builder">Builder</a>
+        <a href="/admin" data-i18n="ui.nav.admin">Admin</a>
       </nav>
     </header>
     <main>
       <div class="toolbar">
-        <button id="refresh">Refresh</button>
+        <button id="refresh" data-i18n="ui.action.refresh">Refresh</button>
         <span id="freshness" class="muted"></span>
         <span id="error"></span>
       </div>
       <div id="content"></div>
     </main>
-    <script src="/static/common.js?v=21"></script>
+    <script src="/static/common.js?v=22"></script>
+    <script src="/static/i18n.js?v=5"></script>
     <script src="/static/experiments.js?v=7"></script>
-    <script src="/static/stats.js?v=8"></script>
+    <script src="/static/stats.js?v=9"></script>
   </body>
 </html>

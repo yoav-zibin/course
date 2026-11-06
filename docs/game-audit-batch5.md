@@ -46,12 +46,27 @@ passes all11 metrics tests. Full CI remains the release gate. The exact saved th
 passed the real guarded update_game publication gate locally with its five
 second batch budget and normal100ms call limits: target versions3/5/6, then
 three unchanged results on a second run. Original versions, metadata and
-schemas were preserved. Mechanics fixtures explicitly use permissive schemas
-in tests; production schemas are retained and checked by the normal gate.
+existing schemas were preserved. Mechanics fixtures explicitly use permissive
+schemas in tests. Following the concurrent mandatory-schema platform change,
+this release adds reviewed structural Draft2020-12 state/move/view schemas.
+Only a missing schema is supplied for a new guarded version; existing author
+schemas and historical versions are not overwritten. A second local rehearsal
+with genuinely schema-less originals passed the actual gate for all three,
+then returned unchanged on repeat. An additional51 production-GameLogic schema
+tests cover complete matches, all viewer states, special legal positions and
+malformed/leaking shapes. No permissive boolean schema is deployed.
 
 Twelve seeded random/computer walks reach engine termination:1202 moves,
 7068 calls, 245 typed Move mutations and 202 repeatability checks,
-with no runtime/fuzz/replay error. Intrinsic game caps are not natural wins.
+with no runtime/fuzz/replay error before adding the structural schemas.
+The first strict-schema replay while a full suite was running had one Chess
+computerMove100ms interruption; the concurrent full suite also had100ms
+interruptions in existing Rummy and Chess. These are retained as observations:
+serial reruns pass all20 Rummy/Chess full-match tests and all12 strict-schema
+replays (1202 moves,245 mutations,202 repeatability checks). Runtime limits
+were not raised. The concurrent full suite had1228 passed/62 skipped and the
+two timing failures; remote CI runs each suite in its own runner. Intrinsic game caps
+are not natural wins.
 UI fixtures run real scripts in a minimal DOM, not a manual browser game.
 
 ```sh

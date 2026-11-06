@@ -431,6 +431,7 @@ class GamePlatform:
         translation_daily_character_limit: int = 200_000,
         bundle_wait_seconds: float = 3.0,
         bundle_games_ttl_seconds: float = 10.0,
+        require_game_strings: bool = False,
     ) -> None:
         self._store: Store = store if store is not None else InMemoryStore()
         missing_game_schemas = sorted(
@@ -462,6 +463,8 @@ class GamePlatform:
         # Translation bundles (see translation_bundle): how long a request waits for the
         # translator, and how long the list of games is reused between requests.
         self._bundle_wait_seconds = bundle_wait_seconds
+        # translation.require_strings: refuse client code without a passing string table.
+        self._require_game_strings = require_game_strings
         self._bundle_games_ttl_seconds = bundle_games_ttl_seconds
         self._bundle_games: tuple[float, list[Game]] | None = None
         self._bundle_tables: dict[tuple[str, int], tuple[dict[str, str] | None]] = {}
@@ -1767,6 +1770,7 @@ class GamePlatform:
         expected_revision: int | None,
         server_code: str | None = None,
         game_schemas: dict[str, JsonValue] | None = None,
+        _initial_workflow: dict | None = None,
     ) -> GameDraft:
         server_code = server_code or None
         if server_code is None and game_schemas is not None:
@@ -1793,7 +1797,7 @@ class GamePlatform:
                 id=draft_id or self._new_id(), owner_user_id=caller_id,
                 name=name, description=description, rules=rules, code=code,
                 server_code=server_code,
-                builder_workflow=existing.builder_workflow if existing else game.builder_workflow if game else None,
+                builder_workflow=existing.builder_workflow if existing else game.builder_workflow if game else _initial_workflow,
                 game_schemas=game_schemas,
                 created_at=existing.created_at if existing else now, updated_at=now,
                 base_version=existing.base_version if existing else game.version if game else 0,
@@ -1823,6 +1827,19 @@ class GamePlatform:
             self._owned_draft(caller_id=caller_id, draft_id=draft_id)
             self._store.delete_game_draft(draft_id)
 
+    def _require_translatable(self, code: str | None) -> None:
+        """translation.require_strings: client code that fails game_text.lint is refused,
+        with the checker's problems in plain words. Games with no client code are exempt;
+        the admin and migration paths and example data never call this."""
+        if not self._require_game_strings or not code or not code.strip():
+            return
+        problems = game_text.lint(code)
+        if problems:
+            shown = "; ".join(problems[:5])
+            if len(problems) > 5:
+                shown += f"; and {len(problems) - 5} more"
+            raise InvalidRequestError(f"the game's texts cannot be translated: {shown}")
+
     def publish_game_draft(
         self, *, caller_id: str, draft_id: str, expected_revision: int,
     ) -> Game:
@@ -1840,6 +1857,7 @@ class GamePlatform:
                 if draft.base_version != 0:
                     raise ConflictError("published game is no longer available")
                 game_schemas = draft.game_schemas
+                self._require_translatable(draft.code)
                 if draft.server_code:
                     if game_schemas is None:
                         game_schemas = self._generate_game_schemas(
@@ -1898,8 +1916,11 @@ class GamePlatform:
         code: str,
         server_code: str | None = None,
         game_schemas: dict[str, JsonValue] | None = None,
+        _check_strings: bool = True,
     ) -> Game:
         server_code = server_code or None
+        if _check_strings:
+            self._require_translatable(code)
         if server_code is None and game_schemas is not None:
             raise InvalidRequestError("game_schemas requires server_code")
         with self._lock:
@@ -2164,6 +2185,7 @@ class GamePlatform:
                     caller_id=caller_id, draft_id=game_id, name=game.name,
                     description=game.description, code=game.code,
                     server_code=game.server_code,
+                    game_schemas=game.game_schemas,
                     rules=game.rules, expected_revision=None,
                 )
             self._store.set_game_published(game_id, False)
@@ -2317,6 +2339,8 @@ class GamePlatform:
                 )
             if updated == game:
                 return game
+            if not _admin and updated.code != game.code:
+                self._require_translatable(updated.code)
             if game.builder_workflow and not _publishing:
                 raise ConflictError("This game has approved specifications; edit and verify it in the guided builder")
             if updated.server_code and (

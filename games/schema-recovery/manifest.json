@@ -1,0 +1,794 @@
+[
+  {
+    "id": "076f078a-56cd-44b3-8930-81abc488508a",
+    "name": "Chess",
+    "version": 4,
+    "client_sha256": "00e10c19f3547a27f957846423be0fdbf6006e50d2133a69c94674a224e0c23b",
+    "server_sha256": "ca86c6e8b02a63eed49a51230b4fb993d08d9c7ad0e4817720585528362d80df",
+    "contract": "076f078a-56cd-44b3-8930-81abc488508a@4"
+  },
+  {
+    "id": "076f078a-56cd-44b3-8930-81abc488508a",
+    "name": "Chess",
+    "version": 5,
+    "client_sha256": "00e10c19f3547a27f957846423be0fdbf6006e50d2133a69c94674a224e0c23b",
+    "server_sha256": "c482a4dc3fafba9e707111dee28cddf8c7a6e52393d48249e92e69b0b1e07839",
+    "contract": "076f078a-56cd-44b3-8930-81abc488508a@5"
+  },
+  {
+    "id": "20a83777-0f59-4105-a09e-0267b9c15e40",
+    "name": "Backgammon",
+    "version": 2,
+    "client_sha256": "206491b8e76b042ac9f3aaf3f91aeab61e800dfc2ea4f4b29f4ded2a3fe92b03",
+    "server_sha256": "7e31e47aa60177863fb2e4262b53e99530716e1b4880d63a58668df7778bddea",
+    "contract": "20a83777-0f59-4105-a09e-0267b9c15e40@2"
+  },
+  {
+    "id": "20a83777-0f59-4105-a09e-0267b9c15e40",
+    "name": "Backgammon",
+    "version": 3,
+    "client_sha256": "8a15b48504a7ffd41b45d99333993d90da088b14fd128cd8bf0e6469a9b4873e",
+    "server_sha256": "7e31e47aa60177863fb2e4262b53e99530716e1b4880d63a58668df7778bddea",
+    "contract": "20a83777-0f59-4105-a09e-0267b9c15e40@3"
+  },
+  {
+    "id": "20a83777-0f59-4105-a09e-0267b9c15e40",
+    "name": "Backgammon",
+    "version": 4,
+    "client_sha256": "0ee8962deceee2cf8cf278481e284b68e423d90ac312bfc7b96d0ccec98d3293",
+    "server_sha256": "0206fffd96b1447a457f63431d013c6de5d5337dfc40285157304a95204b3c4e",
+    "contract": "20a83777-0f59-4105-a09e-0267b9c15e40@4"
+  },
+  {
+    "id": "22260b8e-cd94-4664-98e6-de8db8173ef9",
+    "name": "Crazy Eights",
+    "version": 2,
+    "client_sha256": "c1c8862776f135d9b076017776272f6640fc052d858825702ee4f1f0a88de9ae",
+    "server_sha256": "5eeb46fabeb70c5ef370b0e40dbbee94fde35cd2926ad24630f3bac9517ac5a8",
+    "contract": "22260b8e-cd94-4664-98e6-de8db8173ef9@2"
+  },
+  {
+    "id": "22260b8e-cd94-4664-98e6-de8db8173ef9",
+    "name": "Crazy Eights",
+    "version": 3,
+    "client_sha256": "3e2814dd6492686a28ef1f49c5bb600e51faae561b11b367ff1e29a362fb45b2",
+    "server_sha256": "5eeb46fabeb70c5ef370b0e40dbbee94fde35cd2926ad24630f3bac9517ac5a8",
+    "contract": "22260b8e-cd94-4664-98e6-de8db8173ef9@3"
+  },
+  {
+    "id": "22260b8e-cd94-4664-98e6-de8db8173ef9",
+    "name": "Crazy Eights",
+    "version": 4,
+    "client_sha256": "4d1e23a7da0dd85c1ddbd9f1439baed1b63002bc13efa20cdeae951bc268bc6d",
+    "server_sha256": "5eeb46fabeb70c5ef370b0e40dbbee94fde35cd2926ad24630f3bac9517ac5a8",
+    "contract": "22260b8e-cd94-4664-98e6-de8db8173ef9@4"
+  },
+  {
+    "id": "2b02b029-eb34-436c-bf2a-0d53148a253e",
+    "name": "ERS",
+    "version": 3,
+    "client_sha256": "206e30b92fe3a9ecf8f7e3bab28118bae093186343fc36a1d322362d89b49b6b",
+    "server_sha256": "5fee5b8e302b9ddd6249cd19777593293abc6446f75fe06535b66b4d005cd49a",
+    "contract": "2b02b029-eb34-436c-bf2a-0d53148a253e@3"
+  },
+  {
+    "id": "2b02b029-eb34-436c-bf2a-0d53148a253e",
+    "name": "ERS",
+    "version": 4,
+    "client_sha256": "206e30b92fe3a9ecf8f7e3bab28118bae093186343fc36a1d322362d89b49b6b",
+    "server_sha256": "98d1deb711a9912d1ee000f2d74071fa603c49588713d597687554588f0fc3a2",
+    "contract": "2b02b029-eb34-436c-bf2a-0d53148a253e@4"
+  },
+  {
+    "id": "36e5f0d8-4806-439f-af08-b28c593347c1",
+    "name": "Stack Duel",
+    "version": 6,
+    "client_sha256": "f6a5c59ccf4fc81c34fc55154f30038ee20171b840708278b9b70c7fd02792dd",
+    "server_sha256": "5c5ed6879f2b2b3d5c816b7fae21d2da83c024bb3f5ae006d9006b457b4fa64f",
+    "contract": "36e5f0d8-4806-439f-af08-b28c593347c1@6"
+  },
+  {
+    "id": "36e5f0d8-4806-439f-af08-b28c593347c1",
+    "name": "Stack Duel",
+    "version": 7,
+    "client_sha256": "b187b9afdec61af6e1642fa6cbdbfa07faa131639836e9b8e5955531186cd2de",
+    "server_sha256": "5c5ed6879f2b2b3d5c816b7fae21d2da83c024bb3f5ae006d9006b457b4fa64f",
+    "contract": "36e5f0d8-4806-439f-af08-b28c593347c1@7"
+  },
+  {
+    "id": "39a5e1f5-c20c-40b1-a633-a8457d273eaf",
+    "name": "Gomoku",
+    "version": 3,
+    "client_sha256": "75a1c192c933115ad4311a36eda8d93fe58fbba681b902c7536d035a0be19bf9",
+    "server_sha256": "27770125b06c26c3ed92959600314d553cf9d64bde7ad9fb5330bfd5f627f617",
+    "contract": "39a5e1f5-c20c-40b1-a633-a8457d273eaf@3"
+  },
+  {
+    "id": "3a6438c0-c712-4301-ade9-eb4b60346658",
+    "name": "Blokus",
+    "version": 2,
+    "client_sha256": "b5166d1b8e8641b9f2cf5fd086adfcea2822cfcf00d7068f82f963a16f08b519",
+    "server_sha256": "be651f2bae7e9722abbe09669ba22833a0f62c9715ec6c98c6930c53135b4831",
+    "contract": "3a6438c0-c712-4301-ade9-eb4b60346658@2"
+  },
+  {
+    "id": "3a6438c0-c712-4301-ade9-eb4b60346658",
+    "name": "Blokus",
+    "version": 3,
+    "client_sha256": "339148084bfa956f3758acac184acd770e0a3077bbc4f688589a5f96045d9910",
+    "server_sha256": "a7dc1d713ab98a5bb99eec110aa1331ec81f39fe45e296634f3fa16fe9a878e4",
+    "contract": "3a6438c0-c712-4301-ade9-eb4b60346658@3"
+  },
+  {
+    "id": "3acab71b-7f71-41eb-88a9-864272c12c37",
+    "name": "Tic Tac Toe",
+    "version": 2,
+    "client_sha256": "2ba5393ce06fc3e5352faed64fcf012ec3c9a7d783ebc916d4b9bbda1037933c",
+    "server_sha256": "1d3ad8bb623810a1ab8dd392088b0f1178d4563b7bc8d7b0ccaf30ee8f75a782",
+    "contract": "3acab71b-7f71-41eb-88a9-864272c12c37@2"
+  },
+  {
+    "id": "3acab71b-7f71-41eb-88a9-864272c12c37",
+    "name": "Tic Tac Toe",
+    "version": 3,
+    "client_sha256": "efcc14ffa3572280d141714745526adef99002a63ccc6a338831fd1a9fecc739",
+    "server_sha256": "1d3ad8bb623810a1ab8dd392088b0f1178d4563b7bc8d7b0ccaf30ee8f75a782",
+    "contract": "3acab71b-7f71-41eb-88a9-864272c12c37@3"
+  },
+  {
+    "id": "3e816ad0-0823-4068-946f-cab07a8f7126",
+    "name": "Guandan",
+    "version": 3,
+    "client_sha256": "7ccf85bfecb1b2b1bbe7c4013c8475414e5899cd4479111c5e4e580ebce6523f",
+    "server_sha256": "d97b9f0ecd4ee3b09f7ea04d07d0aa712b73a3b58cafbf26d5dab1a7b2dd1dea",
+    "contract": "3e816ad0-0823-4068-946f-cab07a8f7126@3"
+  },
+  {
+    "id": "3e816ad0-0823-4068-946f-cab07a8f7126",
+    "name": "Guandan",
+    "version": 4,
+    "client_sha256": "200310fb215a460f0be9d5759b2d12c0837047f08dcdbd6a0388ca58961da074",
+    "server_sha256": "d6bb288910471d82d821fa445162616fe7cfd73b1692783325c803f0e9a6e2ed",
+    "contract": "3e816ad0-0823-4068-946f-cab07a8f7126@4"
+  },
+  {
+    "id": "42d06892-449c-44d2-9251-7b9448ce4ddc",
+    "name": "War",
+    "version": 3,
+    "client_sha256": "66a8e4f694f880a142dba5ad1b536f56477a724e42e429a64f994c753de2076f",
+    "server_sha256": "1ee4f0100b4f0ab04817a3f5111d43c481e01b4cf77983bb289166d9f08f43fd",
+    "contract": "42d06892-449c-44d2-9251-7b9448ce4ddc@3"
+  },
+  {
+    "id": "4d15d9d7-0788-4304-9b30-9b5c2bd7f487",
+    "name": "4x5 tictactoe",
+    "version": 2,
+    "client_sha256": "ff0381722f80887fc1e8df9f1611f52b9e60d2f93459783fa17136e83f3e6ad8",
+    "server_sha256": "4914965715d37e291e169d93e7babd3542b3163273d2def382776d41e1647eaa",
+    "contract": "4d15d9d7-0788-4304-9b30-9b5c2bd7f487@2"
+  },
+  {
+    "id": "4d15d9d7-0788-4304-9b30-9b5c2bd7f487",
+    "name": "4x5 tictactoe",
+    "version": 3,
+    "client_sha256": "2e78c4340c5007bd5a72514954dda0ff1db93d1f26f0dba565c719433bec4d5f",
+    "server_sha256": "4914965715d37e291e169d93e7babd3542b3163273d2def382776d41e1647eaa",
+    "contract": "4d15d9d7-0788-4304-9b30-9b5c2bd7f487@3"
+  },
+  {
+    "id": "4f49cbdc-cf96-4657-a50e-3082935e1cdf",
+    "name": "Last Floe",
+    "version": 5,
+    "client_sha256": "a3c7836834bb44a2eb7453ecbd0525bd2f0fe17f7c49790fdb82684c17e9063d",
+    "server_sha256": "9b848838b0dffe63f5c959d6e6fc3bcced261b2efe45908e43c43282a53bdbfe",
+    "contract": "4f49cbdc-cf96-4657-a50e-3082935e1cdf@5"
+  },
+  {
+    "id": "4f49cbdc-cf96-4657-a50e-3082935e1cdf",
+    "name": "Last Floe",
+    "version": 6,
+    "client_sha256": "f2620d28665aa83fc42bb6b46e5818b31c7629345e82c1fd86b7326e4934b828",
+    "server_sha256": "9b848838b0dffe63f5c959d6e6fc3bcced261b2efe45908e43c43282a53bdbfe",
+    "contract": "4f49cbdc-cf96-4657-a50e-3082935e1cdf@6"
+  },
+  {
+    "id": "5119b8b8-44b7-415b-b0d8-07c9e36fc273",
+    "name": "Beat the Landlord",
+    "version": 2,
+    "client_sha256": "df6143b028c5d3b7d426be7f655fe1d13b23dd5237676ef261e117587a1c8911",
+    "server_sha256": "4bd7c8fb53c4291aeabc12d5ad1034ec1d922fd1a45e46df4aab2553789809aa",
+    "contract": "5119b8b8-44b7-415b-b0d8-07c9e36fc273@2"
+  },
+  {
+    "id": "5119b8b8-44b7-415b-b0d8-07c9e36fc273",
+    "name": "Beat the Landlord",
+    "version": 3,
+    "client_sha256": "ad93cb030b44a23417e567d59456ab6dac20523b97f8b021ea1d7d2aef305888",
+    "server_sha256": "4bd7c8fb53c4291aeabc12d5ad1034ec1d922fd1a45e46df4aab2553789809aa",
+    "contract": "5119b8b8-44b7-415b-b0d8-07c9e36fc273@3"
+  },
+  {
+    "id": "569fac2e-82eb-486b-9446-6afae3984efe",
+    "name": "Solo Countdown (deployment check)",
+    "version": 2,
+    "client_sha256": "4dcf81bd0f4560940b829e00e97ac6637abf8ca11dae50c9fcf3dd1338b0139d",
+    "server_sha256": "56920d7381282638e11b796e771b7e58a6692a371145a7cd31126b526d09cd69",
+    "contract": "569fac2e-82eb-486b-9446-6afae3984efe@2"
+  },
+  {
+    "id": "569fac2e-82eb-486b-9446-6afae3984efe",
+    "name": "Solo Countdown (deployment check)",
+    "version": 3,
+    "client_sha256": "1e74db4fe3111e950dfd705227cc10a07f6d229f81720717682fc45675f970cf",
+    "server_sha256": "56920d7381282638e11b796e771b7e58a6692a371145a7cd31126b526d09cd69",
+    "contract": "569fac2e-82eb-486b-9446-6afae3984efe@3"
+  },
+  {
+    "id": "571c1cc4-a48d-40be-88fd-df1d5cc21d10",
+    "name": "Nim",
+    "version": 2,
+    "client_sha256": "d0821dcb1176ee91db84a65b43d9ce2b206cbbd5cacc24a4175169b61c86f100",
+    "server_sha256": "2db49380eb56182a9ba6ccbe2ea4085e83fb1119c1a2a83b9052d35eb569ec35",
+    "contract": "571c1cc4-a48d-40be-88fd-df1d5cc21d10@2"
+  },
+  {
+    "id": "58bd6827-f156-4cd2-ac31-53953b6df61a",
+    "name": "Spoons",
+    "version": 2,
+    "client_sha256": "722dd08f989958a8de60c450ada34d05ecf40cdc84341eb2b105e94865b54f5b",
+    "server_sha256": "5cd0e4c334c8d0491c2a067083f33b55e750f5d0da7f9d9a29e90cd03e08f0bd",
+    "contract": "58bd6827-f156-4cd2-ac31-53953b6df61a@2"
+  },
+  {
+    "id": "58bd6827-f156-4cd2-ac31-53953b6df61a",
+    "name": "Spoons",
+    "version": 3,
+    "client_sha256": "58a1c58b6f8684997921554b38eeb9dbb87eaed4f45df1571f01c74da3a96b5f",
+    "server_sha256": "5cd0e4c334c8d0491c2a067083f33b55e750f5d0da7f9d9a29e90cd03e08f0bd",
+    "contract": "58bd6827-f156-4cd2-ac31-53953b6df61a@3"
+  },
+  {
+    "id": "5e1786fb-2a04-4cbe-8047-caf129c84a22",
+    "name": "Reversi",
+    "version": 2,
+    "client_sha256": "fe482bc2607867ec15e7c14733c340a5477bc3da1ef1b498dc4402464a048b4c",
+    "server_sha256": "3493318ec547f8b366be9f52bde475833c02ae843430d648a269616e572a7148",
+    "contract": "5e1786fb-2a04-4cbe-8047-caf129c84a22@2"
+  },
+  {
+    "id": "77181f30-f03a-4524-b662-33c1f6131389",
+    "name": "Battleship",
+    "version": 9,
+    "client_sha256": "dfe35acb99f37cfc6a64fa8a5e194e9a8826bcadc1b34126a7f5220725b16415",
+    "server_sha256": "87774e03d3ce7f316789f0632a2d9cee4e166ba693f4b66fe46377a9a4b1e900",
+    "contract": "77181f30-f03a-4524-b662-33c1f6131389@9"
+  },
+  {
+    "id": "77181f30-f03a-4524-b662-33c1f6131389",
+    "name": "Battleship",
+    "version": 10,
+    "client_sha256": "dfe35acb99f37cfc6a64fa8a5e194e9a8826bcadc1b34126a7f5220725b16415",
+    "server_sha256": "06c582599d905ed3229031eadbe77cf5021fd2742d9e6a6a4feae9184e3cdec5",
+    "contract": "77181f30-f03a-4524-b662-33c1f6131389@10"
+  },
+  {
+    "id": "788b39a9-6358-4598-9903-92ce97aa5502",
+    "name": "Nine Stars (Demo)",
+    "version": 3,
+    "client_sha256": "c86273e07de36bb2f0b8c88b48fbc743572d8259cf64f166bd42644b93264aa4",
+    "server_sha256": "83005b25855be4a252734b927add2fa034329e93abd914da73a28b273c7ddcdf",
+    "contract": "788b39a9-6358-4598-9903-92ce97aa5502@3"
+  },
+  {
+    "id": "788b39a9-6358-4598-9903-92ce97aa5502",
+    "name": "Nine Stars (Demo)",
+    "version": 4,
+    "client_sha256": "24ba6af0d74f5e6d2dca52373c8ccdf25443217512bd4f09a273521b56735e81",
+    "server_sha256": "83005b25855be4a252734b927add2fa034329e93abd914da73a28b273c7ddcdf",
+    "contract": "788b39a9-6358-4598-9903-92ce97aa5502@4"
+  },
+  {
+    "id": "78fd2784-c810-4f2a-8166-92776a817b7f",
+    "name": "Guess Who?",
+    "version": 4,
+    "client_sha256": "592651fd9ae5e0a8b2a0aa81cb4ff92bdec6170e40fcc2906d959cfccca7fd58",
+    "server_sha256": "06b1390befd828202db1e72ed5d41de181d94a93125fa7954fcf8a6ba3fe8835",
+    "contract": "78fd2784-c810-4f2a-8166-92776a817b7f@4"
+  },
+  {
+    "id": "79830aee-0a91-406d-a2f7-c103002203f7",
+    "name": "Nine Stars",
+    "version": 3,
+    "client_sha256": "92259f03633a6a8648e66cfc8ecf942d08e251b7261c6d256280ebcd77de894f",
+    "server_sha256": "1f4803ed1f628fc6d995ffdab1508a17f81ccc2714ed4ca7ed43677cbdfc1dae",
+    "contract": "79830aee-0a91-406d-a2f7-c103002203f7@3"
+  },
+  {
+    "id": "7bed6e20-99b4-4749-888e-43b0e90ba866",
+    "name": "Connect Four",
+    "version": 2,
+    "client_sha256": "af11db7ecc911c0e368408a0e7e296716d8d13be2e43619dd2f7c9c6474a4421",
+    "server_sha256": "a76a250ba9c09d616a3e82984690a0caf9aa87c19e14c97718dee13db0e49268",
+    "contract": "7bed6e20-99b4-4749-888e-43b0e90ba866@2"
+  },
+  {
+    "id": "875244c9-937c-481b-9883-16085f4f10f7",
+    "name": "Spades",
+    "version": 2,
+    "client_sha256": "7692fdeb87da7751508598306dccee760e56123f3697ad500b1ceefcb0f3964c",
+    "server_sha256": "757cc9123364227bc261ac1a44b4bfe589acc92603f110be64e63e027e54fafd",
+    "contract": "875244c9-937c-481b-9883-16085f4f10f7@2"
+  },
+  {
+    "id": "87a0d4f0-7020-4397-9358-82daa3452960",
+    "name": "4 player chess",
+    "version": 4,
+    "client_sha256": "026fe84ca6f7a6648b5d3b197cde7724600a646580216ac3a334ae36cd7f06eb",
+    "server_sha256": "7e3259499a350ad20373cdb6fb4b617bd698f78812711e6dbf5e796922d119cc",
+    "contract": "87a0d4f0-7020-4397-9358-82daa3452960@4"
+  },
+  {
+    "id": "87a0d4f0-7020-4397-9358-82daa3452960",
+    "name": "4 player chess",
+    "version": 5,
+    "client_sha256": "eadaf6e98ede4e087b5ffabdc7100552e7fb7dfa12c430b9fec78ea2b3234642",
+    "server_sha256": "7e3259499a350ad20373cdb6fb4b617bd698f78812711e6dbf5e796922d119cc",
+    "contract": "87a0d4f0-7020-4397-9358-82daa3452960@5"
+  },
+  {
+    "id": "87a0d4f0-7020-4397-9358-82daa3452960",
+    "name": "4 player chess",
+    "version": 6,
+    "client_sha256": "99fab8b30eb0e85c258179ae9efe3a1e6d5639214b6e5d069bacc4400fb34961",
+    "server_sha256": "1cbef1ad4dfcb11cd909b127646503ab29e067529e9848ce610bf2b50ede35a0",
+    "contract": "87a0d4f0-7020-4397-9358-82daa3452960@6"
+  },
+  {
+    "id": "8b87f4a0-3735-442b-bf9c-e1b24aaf2df8",
+    "name": "Dragonimo",
+    "version": 2,
+    "client_sha256": "57f484e4d34d55a8303189c1dc5a048152c23dc65f234529c9cbfcb6b2b91c9b",
+    "server_sha256": "1540b77c0b1a9ba1e718a1c2752d0516974bab1d495db73cf4f8b80026d18421",
+    "contract": "8b87f4a0-3735-442b-bf9c-e1b24aaf2df8@2"
+  },
+  {
+    "id": "8b87f4a0-3735-442b-bf9c-e1b24aaf2df8",
+    "name": "Dragonimo",
+    "version": 3,
+    "client_sha256": "213ff5ce3dde686f4a39f8432e15f0068351a1358747fde7b33690bb3960c2a8",
+    "server_sha256": "1540b77c0b1a9ba1e718a1c2752d0516974bab1d495db73cf4f8b80026d18421",
+    "contract": "8b87f4a0-3735-442b-bf9c-e1b24aaf2df8@3"
+  },
+  {
+    "id": "8d523bfd-9632-4759-98de-717fb744180e",
+    "name": "Backgammon (copy)",
+    "version": 2,
+    "client_sha256": "8a15b48504a7ffd41b45d99333993d90da088b14fd128cd8bf0e6469a9b4873e",
+    "server_sha256": "7e31e47aa60177863fb2e4262b53e99530716e1b4880d63a58668df7778bddea",
+    "contract": "8d523bfd-9632-4759-98de-717fb744180e@2"
+  },
+  {
+    "id": "8d523bfd-9632-4759-98de-717fb744180e",
+    "name": "Backgammon (copy)",
+    "version": 3,
+    "client_sha256": "0ee8962deceee2cf8cf278481e284b68e423d90ac312bfc7b96d0ccec98d3293",
+    "server_sha256": "0206fffd96b1447a457f63431d013c6de5d5337dfc40285157304a95204b3c4e",
+    "contract": "8d523bfd-9632-4759-98de-717fb744180e@3"
+  },
+  {
+    "id": "8f692b3e-5f36-41b8-8942-38f5c7b3dc14",
+    "name": "Cheat (BS)",
+    "version": 2,
+    "client_sha256": "65eb00015131a23873719feac7d572ec320e580ff611bcaf52e21839c3191aaa",
+    "server_sha256": "9ff4e3a89f8132b26a8a178e822849495254c1beeba7b01e15b948ddf2740f17",
+    "contract": "8f692b3e-5f36-41b8-8942-38f5c7b3dc14@2"
+  },
+  {
+    "id": "8f692b3e-5f36-41b8-8942-38f5c7b3dc14",
+    "name": "Cheat (BS)",
+    "version": 3,
+    "client_sha256": "b9a69ae3ba11afb6e59de0e42634bcf9856dbd3dbb06f0d3425f98a7bba716e6",
+    "server_sha256": "9ff4e3a89f8132b26a8a178e822849495254c1beeba7b01e15b948ddf2740f17",
+    "contract": "8f692b3e-5f36-41b8-8942-38f5c7b3dc14@3"
+  },
+  {
+    "id": "9069ae35-61f3-4a38-8e5c-480e53f289b8",
+    "name": "Blackjack Table",
+    "version": 2,
+    "client_sha256": "91835ac084405854ccf5f2c9c4d8fc630e4b78efb40b2d91062497bcdd26340f",
+    "server_sha256": "b110140a330d42b2b5da72df2d2fbaf661a3afcf8ee8968ae61fbde80bbc8859",
+    "contract": "9069ae35-61f3-4a38-8e5c-480e53f289b8@2"
+  },
+  {
+    "id": "9069ae35-61f3-4a38-8e5c-480e53f289b8",
+    "name": "Blackjack Table",
+    "version": 3,
+    "client_sha256": "556eea2e44de1f3bae5c6ade2325bdec8d66de76be7a3dfabd4c458d11ef658d",
+    "server_sha256": "b110140a330d42b2b5da72df2d2fbaf661a3afcf8ee8968ae61fbde80bbc8859",
+    "contract": "9069ae35-61f3-4a38-8e5c-480e53f289b8@3"
+  },
+  {
+    "id": "9069ae35-61f3-4a38-8e5c-480e53f289b8",
+    "name": "Blackjack Table",
+    "version": 4,
+    "client_sha256": "1b1a8443fd1349ec6afe3177c5faf114113f5486c5f0d61e97641c865da30fd7",
+    "server_sha256": "437c20441b7158e8d3c1f93ac49c38032e252fdbf6d3d7ffc0cf269850b43e44",
+    "contract": "9069ae35-61f3-4a38-8e5c-480e53f289b8@4"
+  },
+  {
+    "id": "916ab616-6abf-4c92-83c5-43cbdd4c8ab9",
+    "name": "Bulls and Cows (Bulgarian)",
+    "version": 2,
+    "client_sha256": "722551062e0333285c44d4c16483f32846458771cbb6ad08348ab272a2714758",
+    "server_sha256": "19732ac053d52908339e4b02e89c0cb58a6a74d69db303a27ed75dea1692d886",
+    "contract": "916ab616-6abf-4c92-83c5-43cbdd4c8ab9@2"
+  },
+  {
+    "id": "97b92313-84a8-4c0e-9a3c-9e23c270c970",
+    "name": "President",
+    "version": 5,
+    "client_sha256": "cce3e9da36943ff67333b5e74c4bd60def20f10a96013b8537c81da636ffb905",
+    "server_sha256": "fbfb76fceeccc28191e7027c477f0360fc9372a9bd2e6f42b25e88bddd232701",
+    "contract": "97b92313-84a8-4c0e-9a3c-9e23c270c970@5"
+  },
+  {
+    "id": "97b92313-84a8-4c0e-9a3c-9e23c270c970",
+    "name": "President",
+    "version": 6,
+    "client_sha256": "9f8199ac1a03e0fd7f85bcbb9dcc18c5a58f49dcf1227913799ff38e4a9cc0f9",
+    "server_sha256": "fbfb76fceeccc28191e7027c477f0360fc9372a9bd2e6f42b25e88bddd232701",
+    "contract": "97b92313-84a8-4c0e-9a3c-9e23c270c970@6"
+  },
+  {
+    "id": "97b92313-84a8-4c0e-9a3c-9e23c270c970",
+    "name": "President",
+    "version": 7,
+    "client_sha256": "9f8199ac1a03e0fd7f85bcbb9dcc18c5a58f49dcf1227913799ff38e4a9cc0f9",
+    "server_sha256": "173ac1c218da256ea8ba750c8598769ac79df725b533a3ff414417f352d3a581",
+    "contract": "97b92313-84a8-4c0e-9a3c-9e23c270c970@7"
+  },
+  {
+    "id": "a1ca4c85-b8a5-4b63-a9dc-f01c87a0d65f",
+    "name": "SOS",
+    "version": 2,
+    "client_sha256": "7fa7109ccc11d2a2758f5a7656ed20ff4eb2bcf281a3f7bd07d3e889b6b4863c",
+    "server_sha256": "a6b68ded4dc0e449c23608af84f8fa55faf9d31bfda301b136d81c2c5b84b092",
+    "contract": "a1ca4c85-b8a5-4b63-a9dc-f01c87a0d65f@2"
+  },
+  {
+    "id": "a5a16425-bc14-4260-9946-763b11f0739b",
+    "name": "Chopsticks",
+    "version": 1,
+    "client_sha256": "9a19f777bb684cfe9b2df200db84394d92e2df3c43be553ff8fe49ee3e589970",
+    "server_sha256": "996576f1aa8c43cbf35d6c4d8add6ce455d63c53ef44340164217f86249ee079",
+    "contract": "a5a16425-bc14-4260-9946-763b11f0739b@1"
+  },
+  {
+    "id": "aac01cd8-9436-456b-9e8b-a5f87b815e07",
+    "name": "Star Count",
+    "version": 3,
+    "client_sha256": "9fb703385a2c62e8d6eab926ad92333080907ec8f40b4a0be90396d034d0aa9d",
+    "server_sha256": "36b86758d3d4fb4765cd0d044449d6cdf92857e2bea3f83e2654cca070b2c908",
+    "contract": "aac01cd8-9436-456b-9e8b-a5f87b815e07@3"
+  },
+  {
+    "id": "aac01cd8-9436-456b-9e8b-a5f87b815e07",
+    "name": "Star Count",
+    "version": 4,
+    "client_sha256": "c582ab92e00c76b7484a943a53fb58e2fd61ed62fa528eda6f63e8db1b95fe9d",
+    "server_sha256": "36b86758d3d4fb4765cd0d044449d6cdf92857e2bea3f83e2654cca070b2c908",
+    "contract": "aac01cd8-9436-456b-9e8b-a5f87b815e07@4"
+  },
+  {
+    "id": "ad578d02-f485-4e11-a1d4-08bcd4f462a9",
+    "name": "Tower of Hanoi",
+    "version": 3,
+    "client_sha256": "d575eccb86f20dd86b9f8f1661be020bba98324a87296173e5b235bd7c927106",
+    "server_sha256": "c292272ba349c40801f79ee08236ae021837399b66c4ef27ee16909fffd62faa",
+    "contract": "ad578d02-f485-4e11-a1d4-08bcd4f462a9@3"
+  },
+  {
+    "id": "affb52d8-f070-4600-bc10-580af8bc06e0",
+    "name": "Mancala",
+    "version": 2,
+    "client_sha256": "83ae54e348f54af8ef3005a4b2e98c5b2e8d912e55ec808f8ef61f0231b93435",
+    "server_sha256": "d37c1d4ec5241889920ff8c49ea050188bc5146763059216d606ef7817b5352c",
+    "contract": "affb52d8-f070-4600-bc10-580af8bc06e0@2"
+  },
+  {
+    "id": "affb52d8-f070-4600-bc10-580af8bc06e0",
+    "name": "Mancala",
+    "version": 3,
+    "client_sha256": "5993dfe28d6960ebbda0d26682c236b749fb58182c6f79c2f62c63fd6ce6d038",
+    "server_sha256": "d37c1d4ec5241889920ff8c49ea050188bc5146763059216d606ef7817b5352c",
+    "contract": "affb52d8-f070-4600-bc10-580af8bc06e0@3"
+  },
+  {
+    "id": "b59b79d7-660b-4823-8a81-159e0a6a2809",
+    "name": "Gomoku",
+    "version": 2,
+    "client_sha256": "cd6aaa5fb99131d8c99c767b7c1ba38f8eb9e7e123f07bdae252dc9cef037acb",
+    "server_sha256": "17f62fa448679cd6fdb6a7728a6d0cffa80bae9fe05d5776e2dd78071abee738",
+    "contract": "b59b79d7-660b-4823-8a81-159e0a6a2809@2"
+  },
+  {
+    "id": "b59b79d7-660b-4823-8a81-159e0a6a2809",
+    "name": "Gomoku",
+    "version": 3,
+    "client_sha256": "fa1ff6212cab897198ae45c7f91051efc63b1dd65905d8bb6b961c61b2377469",
+    "server_sha256": "17f62fa448679cd6fdb6a7728a6d0cffa80bae9fe05d5776e2dd78071abee738",
+    "contract": "b59b79d7-660b-4823-8a81-159e0a6a2809@3"
+  },
+  {
+    "id": "b7e3617b-5592-4fa2-ab91-dcb9a42364c1",
+    "name": "Quoridor",
+    "version": 3,
+    "client_sha256": "25dd28ad55b0b4f7fb11d843f4333f8c43bb97eb38de6551e79adf0516e335b4",
+    "server_sha256": "51bc616b9fde14d6edf9e0986e2ec068e8f327f157082d6b57747c4e5fa4bb5f",
+    "contract": "b7e3617b-5592-4fa2-ab91-dcb9a42364c1@3"
+  },
+  {
+    "id": "b7e3617b-5592-4fa2-ab91-dcb9a42364c1",
+    "name": "Quoridor",
+    "version": 4,
+    "client_sha256": "ba140f0a20f309b563db61dc90568db3195bcf7667d7bc13ed2ddbce2f1e0590",
+    "server_sha256": "51bc616b9fde14d6edf9e0986e2ec068e8f327f157082d6b57747c4e5fa4bb5f",
+    "contract": "b7e3617b-5592-4fa2-ab91-dcb9a42364c1@4"
+  },
+  {
+    "id": "b7e3617b-5592-4fa2-ab91-dcb9a42364c1",
+    "name": "Quoridor",
+    "version": 5,
+    "client_sha256": "83b22d499c0b1f006151de41137f243903797ab0bfdab25e00689d86d8ec864d",
+    "server_sha256": "51bc616b9fde14d6edf9e0986e2ec068e8f327f157082d6b57747c4e5fa4bb5f",
+    "contract": "b7e3617b-5592-4fa2-ab91-dcb9a42364c1@5"
+  },
+  {
+    "id": "c435beb6-12d7-427e-80ba-2ebb619cabfa",
+    "name": "6-Card Golf",
+    "version": 2,
+    "client_sha256": "7f99e9a2f20605fec0743b3be8af6a84f2c308f6548857f37fb917f710da8169",
+    "server_sha256": "1ee56fb111c1a05b2ce6950964e2d4931fb5b17049dac7eca82b11cbf7af7e95",
+    "contract": "c435beb6-12d7-427e-80ba-2ebb619cabfa@2"
+  },
+  {
+    "id": "c435beb6-12d7-427e-80ba-2ebb619cabfa",
+    "name": "6-Card Golf",
+    "version": 3,
+    "client_sha256": "085fb4b2982f855692f246e2f7ba73e1612602f4570fc010ebe96a69147c5b36",
+    "server_sha256": "1ee56fb111c1a05b2ce6950964e2d4931fb5b17049dac7eca82b11cbf7af7e95",
+    "contract": "c435beb6-12d7-427e-80ba-2ebb619cabfa@3"
+  },
+  {
+    "id": "c8039b20-7c3e-4993-bae1-f59dfacd1ccc",
+    "name": "Fox and Geese",
+    "version": 2,
+    "client_sha256": "f60a0522224295e0006853038e8d4051686d25fe7e24d4e2528aa92ba22020fb",
+    "server_sha256": "8a000db33605c0792f7d07902448eb4edc8160adb7cee2c7c39e8a6e446928e3",
+    "contract": "c8039b20-7c3e-4993-bae1-f59dfacd1ccc@2"
+  },
+  {
+    "id": "c8039b20-7c3e-4993-bae1-f59dfacd1ccc",
+    "name": "Fox and Geese",
+    "version": 3,
+    "client_sha256": "3f4356ba1e711953866fe7925e3551c335bb243f88c891b63d9cdb0fc6ce6aa3",
+    "server_sha256": "8a000db33605c0792f7d07902448eb4edc8160adb7cee2c7c39e8a6e446928e3",
+    "contract": "c8039b20-7c3e-4993-bae1-f59dfacd1ccc@3"
+  },
+  {
+    "id": "cbd19f63-bc51-49a9-bb45-858ec9b12828",
+    "name": "Chutes & Ladders",
+    "version": 3,
+    "client_sha256": "018475bcd7cf9d444abd0801e1c8b653ad9c186a665458dcb83b2c1247b4124d",
+    "server_sha256": "405174346c643e35dcf993bfee7b64a522fcf2d2453d29d48e78a90b7e19cb4e",
+    "contract": "cbd19f63-bc51-49a9-bb45-858ec9b12828@3"
+  },
+  {
+    "id": "cbd19f63-bc51-49a9-bb45-858ec9b12828",
+    "name": "Chutes & Ladders",
+    "version": 4,
+    "client_sha256": "7727ef8c639622c3f4bcd564a378036d5e36303b24b9f6516573ca97e8242a8b",
+    "server_sha256": "405174346c643e35dcf993bfee7b64a522fcf2d2453d29d48e78a90b7e19cb4e",
+    "contract": "cbd19f63-bc51-49a9-bb45-858ec9b12828@4"
+  },
+  {
+    "id": "d00a8d7b-320e-43bc-824f-ff899ff93687",
+    "name": "Tap to 10 (TEST GAME)",
+    "version": 1,
+    "client_sha256": "317172f3e8b3f4ea32d7c7bb1752a31996c47d269c4af490b1d7512a8adcb903",
+    "server_sha256": "e1f87be313deba3570a4c93ac83e79dc552793f2f81d687276a23c1e6ee488c7",
+    "contract": "d00a8d7b-320e-43bc-824f-ff899ff93687@1"
+  },
+  {
+    "id": "d1e3d28c-cb11-4f91-91b5-f746c8440cf6",
+    "name": "Rummy 500",
+    "version": 3,
+    "client_sha256": "4de3286849024221055c053dde0496188cf348d56b7656a95cbc119eefc20638",
+    "server_sha256": "2b08d2a2556368a027c9c1a0c485844c857f006626659c9a32eed652fb0a4ae6",
+    "contract": "d1e3d28c-cb11-4f91-91b5-f746c8440cf6@3"
+  },
+  {
+    "id": "d1e3d28c-cb11-4f91-91b5-f746c8440cf6",
+    "name": "Rummy 500",
+    "version": 4,
+    "client_sha256": "8456fe3fee2ea302b1998bdff9b2cc0cd8074d80d8c2f3e15b000885f2d876ed",
+    "server_sha256": "5bf251cbe8e3d1830b931d95763761328e653ad86594f534d9919a79ffbd9c80",
+    "contract": "d1e3d28c-cb11-4f91-91b5-f746c8440cf6@4"
+  },
+  {
+    "id": "d650dbad-c760-48db-a445-c9def2134ca1",
+    "name": "Brazilian Truco",
+    "version": 2,
+    "client_sha256": "88dc758f19bafb9cb7142f9218a095ed9697c5a74fa81241b852473f87440e89",
+    "server_sha256": "45d55c177db3f181fe17fad7b1356ef6211236bdcf1eb90ff131310e6fbf3363",
+    "contract": "d650dbad-c760-48db-a445-c9def2134ca1@2"
+  },
+  {
+    "id": "d650dbad-c760-48db-a445-c9def2134ca1",
+    "name": "Brazilian Truco",
+    "version": 3,
+    "client_sha256": "62f375e08c71ccb0c0547815d1495a118b00632cd0151702d62571bace583f33",
+    "server_sha256": "45d55c177db3f181fe17fad7b1356ef6211236bdcf1eb90ff131310e6fbf3363",
+    "contract": "d650dbad-c760-48db-a445-c9def2134ca1@3"
+  },
+  {
+    "id": "d66436fd-b19c-4fcb-8280-9ae7fb75daf6",
+    "name": "Hearts",
+    "version": 2,
+    "client_sha256": "35f1189db95a580ba329a22594f51ea405c2d644fb11fb118465195712825edf",
+    "server_sha256": "030a16036a5fc1dc66b88992dbaa3e8b1c8a980b9071f95d53f18a1d8319e43d",
+    "contract": "d66436fd-b19c-4fcb-8280-9ae7fb75daf6@2"
+  },
+  {
+    "id": "d66436fd-b19c-4fcb-8280-9ae7fb75daf6",
+    "name": "Hearts",
+    "version": 3,
+    "client_sha256": "a136b084c7afe8cbf0ba1dd58480efc78db653e8f7cab13acdafb4d5a48690ab",
+    "server_sha256": "030a16036a5fc1dc66b88992dbaa3e8b1c8a980b9071f95d53f18a1d8319e43d",
+    "contract": "d66436fd-b19c-4fcb-8280-9ae7fb75daf6@3"
+  },
+  {
+    "id": "db3a74e1-0df1-44bf-a060-4da18b3a7e6e",
+    "name": "Lost Cities",
+    "version": 3,
+    "client_sha256": "7f3db17150797e2f526325d8ff7b0157434e71f81954672fc571316740a351ea",
+    "server_sha256": "9f868f321066e4d84628bb425cc7703a8b86ae148dae954729a98594d140f2a7",
+    "contract": "db3a74e1-0df1-44bf-a060-4da18b3a7e6e@3"
+  },
+  {
+    "id": "db3a74e1-0df1-44bf-a060-4da18b3a7e6e",
+    "name": "Lost Cities",
+    "version": 4,
+    "client_sha256": "7f3db17150797e2f526325d8ff7b0157434e71f81954672fc571316740a351ea",
+    "server_sha256": "dff09558c47cccee19add063c846a1034e17651bcdb2b1eed1ea1c088d82bfde",
+    "contract": "db3a74e1-0df1-44bf-a060-4da18b3a7e6e@4"
+  },
+  {
+    "id": "dbf85e1d-cacc-4845-9bb4-de349e13b005",
+    "name": "Mini Golf Duels",
+    "version": 2,
+    "client_sha256": "1b19a1ac28e2bd08c9efef5c3870131e84b61da4e01560dd8878c5f5231a9292",
+    "server_sha256": "93c778c4f3869f1a6c30e507a6b40b49a7381260f658b79d3ff946ffd4e78ea6",
+    "contract": "dbf85e1d-cacc-4845-9bb4-de349e13b005@2"
+  },
+  {
+    "id": "dbf85e1d-cacc-4845-9bb4-de349e13b005",
+    "name": "Mini Golf Duels",
+    "version": 3,
+    "client_sha256": "221c4147309674cef0ccfc9ed6e0ef5b19b44a3df145b61c4442dd04dea95aef",
+    "server_sha256": "89837bc19c6102db678b46d84d10e513f3319c342fb1557513696d271087bb12",
+    "contract": "dbf85e1d-cacc-4845-9bb4-de349e13b005@3"
+  },
+  {
+    "id": "debug",
+    "name": "Debug game",
+    "version": 2,
+    "client_sha256": "678e09f6ba82ba4d01260e65381728aef9f60e90776ca825f488bc5bf328710f",
+    "server_sha256": "4653795dad198fbdfc63de0aed09768f165124a8439343fd71cc7fbaff334266",
+    "contract": "debug@2"
+  },
+  {
+    "id": "f4e55ca5-464e-4ad0-9aae-79f8cc3e7cad",
+    "name": "Checkers",
+    "version": 3,
+    "client_sha256": "deb451d11ab795c22b1dd36650038b447d50cb4194dd50c24e71f2de9026e32a",
+    "server_sha256": "a1d81a4bb355803bc168b71bce632af0b0438b0919d5e75ec8c77046980cafd4",
+    "contract": "f4e55ca5-464e-4ad0-9aae-79f8cc3e7cad@3"
+  },
+  {
+    "id": "f4e55ca5-464e-4ad0-9aae-79f8cc3e7cad",
+    "name": "Checkers",
+    "version": 4,
+    "client_sha256": "e4499f9d6537d126557f096f88b0be2c5f99d3d4671e3391b4a2592b5029e2b5",
+    "server_sha256": "91fb9b2bba483ee054032792f604f0b6afa073730cb784dbd2b4b5a163f9757e",
+    "contract": "f4e55ca5-464e-4ad0-9aae-79f8cc3e7cad@4"
+  },
+  {
+    "id": "f7a5f84d-dfed-496c-b1d3-fafda5cea92c",
+    "name": "Go Fish",
+    "version": 2,
+    "client_sha256": "75fa15c9eda5ca5c3ea424596b375f26d6bb692e3fbfc90fe6c5c85df111d209",
+    "server_sha256": "1c042264a60c5062436a903e26ac35177dabbc3edc00bedd17f1652e65c6e35c",
+    "contract": "f7a5f84d-dfed-496c-b1d3-fafda5cea92c@2"
+  },
+  {
+    "id": "f7a5f84d-dfed-496c-b1d3-fafda5cea92c",
+    "name": "Go Fish",
+    "version": 3,
+    "client_sha256": "75fa15c9eda5ca5c3ea424596b375f26d6bb692e3fbfc90fe6c5c85df111d209",
+    "server_sha256": "07ac8e9ac280930599f98ff65aab36c5ea44320816602e2cf81d3601baed2373",
+    "contract": "f7a5f84d-dfed-496c-b1d3-fafda5cea92c@3"
+  },
+  {
+    "id": "f8d1a658-3af8-483a-8555-0e02e7212be4",
+    "name": "3 Minute Chess",
+    "version": 2,
+    "client_sha256": "9b5eec19b40864d6c321f2a1a5903ccb8305d12af07536485d1280f524709ade",
+    "server_sha256": "d88e585f10c105924d1574df190312b2b5b08f9feed97e382807f58535693c04",
+    "contract": "f8d1a658-3af8-483a-8555-0e02e7212be4@2"
+  },
+  {
+    "id": "f8d1a658-3af8-483a-8555-0e02e7212be4",
+    "name": "3 Minute Chess",
+    "version": 3,
+    "client_sha256": "9b5eec19b40864d6c321f2a1a5903ccb8305d12af07536485d1280f524709ade",
+    "server_sha256": "7c47fca10450b602b89571a8f99e151126591c2bba747b4b3b60cf942f0a17b0",
+    "contract": "f8d1a658-3af8-483a-8555-0e02e7212be4@3"
+  },
+  {
+    "id": "fc63dfc7-d091-460f-b9f9-5877851d64fa",
+    "name": "Dots & Boxes",
+    "version": 2,
+    "client_sha256": "fec0a3032ec51d9809f617b3d16420ea014a26e7f270909dc31cfd1ed843cdbc",
+    "server_sha256": "6cc679360e8c590df7dde42f468f1e0d6c355dad88f0a532b57692fc05b84908",
+    "contract": "fc63dfc7-d091-460f-b9f9-5877851d64fa@2"
+  },
+  {
+    "id": "poker",
+    "name": "Poker",
+    "version": 3,
+    "client_sha256": "20140f00fcb71db24f3e43ef63482db3a5d1e6a361cf52671c273f4326427db8",
+    "server_sha256": "a549a4e5dfc0c4d0def5d774a99a991235181101034ab5c3da8fd4cb607eb289",
+    "contract": "poker@3"
+  },
+  {
+    "id": "poker",
+    "name": "Poker",
+    "version": 4,
+    "client_sha256": "c2cb12f0ef9357e304f8026f2dafb84c6bfddfd91016baf44a5f474c17c455e5",
+    "server_sha256": "a76d7afb86ae9f9de899694ba96ba15dd382fb1406b760ce8fccfba8ef8363d1",
+    "contract": "poker@4"
+  },
+  {
+    "id": "poker",
+    "name": "Poker",
+    "version": 5,
+    "client_sha256": "c2cb12f0ef9357e304f8026f2dafb84c6bfddfd91016baf44a5f474c17c455e5",
+    "server_sha256": "277a71809352c8dc3150088cb1debe1247e3e8e96108fdf6e4e1386f8d19bb26",
+    "contract": "poker@5"
+  },
+  {
+    "id": "poker",
+    "name": "Poker",
+    "version": 6,
+    "client_sha256": "ee8057c8de5786b8a04b03397d9f4510372f0bd5be22d75761680b97219156a3",
+    "server_sha256": "277a71809352c8dc3150088cb1debe1247e3e8e96108fdf6e4e1386f8d19bb26",
+    "contract": "poker@6"
+  },
+  {
+    "id": "tictactoe",
+    "name": "Tic-tac-toe",
+    "version": 2,
+    "client_sha256": "78d6847bd47702b1edb93b044c7b43177a8112b9f713e35dab5ba88a68f3ff3a",
+    "server_sha256": "b12a6b043adc1761fd2acf21c84b5f0553cea0fbc3947f3e242905911ecac9a7",
+    "contract": "tictactoe@2"
+  },
+  {
+    "id": "tictactoe",
+    "name": "Tic-tac-toe",
+    "version": 3,
+    "client_sha256": "55c9298ed4e66b1748b07949fc04c1cef61cfbc0eeec82b99d02771c8cb178a0",
+    "server_sha256": "b12a6b043adc1761fd2acf21c84b5f0553cea0fbc3947f3e242905911ecac9a7",
+    "contract": "tictactoe@3"
+  }
+]

@@ -17,6 +17,7 @@ function setup() {
     sent = [],
     banner = { textContent: "", hidden: true };
   const context = vm.createContext({
+    I18n: require('./i18n-stub.cjs'),
     window: { addEventListener: (type, fn) => (listeners[type] = fn) },
     document: {
       getElementById: () => banner,

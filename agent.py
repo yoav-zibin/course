@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from pydantic import TypeAdapter, ValidationError
 
 from game_platform.game_testing import GameTestReport
+from game_platform import game_text
 from game_platform.game_text import PROMPT_RULES
 from game_platform.model_api import ModelApiClient, ModelApiError
 from game_platform.schemas import (
@@ -384,6 +385,19 @@ def _format_test_report(report: GameTestReport) -> str:
     return "\n".join(lines)
 
 
+def _format_text_problems(problems: list[str]) -> str:
+    """The checker's findings as feedback for the model."""
+    lines = [
+        "The platform rejected your client code because its texts cannot be translated. "
+        "Fix the client code and return the complete JSON response (the server code "
+        "unchanged). The game must contain ONE i18n-strings block listing every text, show "
+        "every text only through t(), and include the helper exactly as given in the "
+        "TRANSLATION rules. Problems:"
+    ]
+    lines.extend(f"- {problem}" for problem in problems[:10])
+    return "\n".join(lines)
+
+
 def chat_with_agent(
     client: ModelApiClient,
     request: AgentChatRequest,
@@ -452,6 +466,19 @@ def chat_with_agent(
             messages.append({"role": "assistant", "content": result.content})
             messages.append({"role": "user", "content": f"Please correct the response: {exc} Return the complete JSON response including code and matching allowed_player_counts. Reply with the JSON object only — no prose before or after it, and no markdown fences."})
             continue
+        if response.code:
+            # The texts must be translatable: a game without a passing string table is a
+            # failure like a failing test, fixed by the model within the same retries.
+            problems = game_text.lint(response.code)
+            if problems:
+                last_error = AgentError(
+                    "The game's client code cannot be translated: " + "; ".join(problems[:5])
+                )
+                notes.append(f"attempt {attempt}: translation check failed ({len(problems)} problems)")
+                logger.warning("Builder attempt %d failed the translation check: %s", attempt, problems[:5])
+                messages.append({"role": "assistant", "content": result.content})
+                messages.append({"role": "user", "content": _format_text_problems(problems)})
+                continue
         if response.server_code and server_tester is not None:
             report = None
             try:

@@ -58,6 +58,8 @@ word order differs between languages, so NEVER build a sentence from pieces \
 ("your_turn", "their_turn") and pick between whole texts.
 - Keys use only letters, digits, _ . - ; texts are plain text, no HTML. Do not make plurals: \
 write "Moves: {count}", not "{count} move(s)".
+- Every place text can hide must go through t() (the platform's checker rejects the game otherwise, for the attributes, dialogs and canvas text): `aria-label`, `title`, `alt` and `placeholder` attributes (write them as empty or leave them out in the HTML and set them in the script: el.setAttribute("aria-label", t("key"))), words written between tags in the HTML (leave such elements empty and fill them with `.textContent = t("key")`), `alert`/`confirm`/`prompt`, and canvas text (`ctx.fillText(t("key", {n: 3}), x, y)`, never `ctx.fillText("Score: " + n, x, y)`).
+- Use literal keys only, t("your_turn"), never t(someVariable) or t("prefix_" + x): the checker must be able to see every key. Every key in the block must be used by a t() call, and every t() key must be in the block. Symbols and numbers alone (X, O, 3, arrows) need no key.
 - Player names come from `players` and are not translated. Do not put display text in the \
 match state or in `make_move`: store codes ("X", "draw") and turn them into text with t() \
 when drawing, because players in one match may use different languages.
@@ -151,10 +153,50 @@ def lint(code: str) -> list[str]:
         if re.search(r"[<>]|&\w+;", text):
             warnings.append(f"the text of {key!r} contains markup; strings are plain text")
             break
-    if re.search(r"fillText|strokeText", code):
-        warnings.append("the game draws text on a canvas: make sure it comes from t(), "
-                        "and leave room for longer words")
+    body = _without_block(code)
+    canvas = []
+    for call in _CANVAS_TEXT.finditer(body):
+        value = call.group(1)
+        if re.match(r"\s*t\(", value) and not _JOIN.search(value):
+            continue
+        if _LITERAL_WITH_WORDS.search(_USED.sub("t(KEY", value)):
+            canvas.append(value.strip()[:50])
+    if canvas:
+        warnings.append(
+            "the game draws text on a canvas without t() (e.g. " + repr(canvas[0]) + "): "
+            "draw only t(...) results, one whole string each, and leave room for longer words"
+        )
+    attributes = [
+        next(g for g in m.groups() if g is not None)
+        for m in _ATTRIBUTE.finditer(body)
+        if re.search(r"[A-Za-z]{3,}", next((g for g in m.groups() if g is not None), ""))
+    ]
+    if attributes:
+        shown = ", ".join(repr(text[:40]) for text in attributes[:3])
+        warnings.append(
+            f"text written in an aria-label, placeholder, title or alt attribute: {shown}"
+            f"{f' (and {len(attributes) - 3} more)' if len(attributes) > 3 else ''}: "
+            "set these from t() in the code (el.setAttribute('aria-label', t('key')))"
+        )
+    shown_texts = [
+        m.group(1).strip()[:50]
+        for m in _DIALOG.finditer(body)
+        if _LITERAL_WITH_WORDS.search(_USED.sub("t(KEY", m.group(1)))
+    ]
+    if shown_texts:
+        warnings.append(
+            f"text written in alert/confirm/prompt/createTextNode instead of the strings block: {shown_texts[0]!r}"
+        )
     return warnings
+
+
+_JOIN: Final = re.compile(r"""["'`]\s*\+|\+\s*["'`]""")
+_CANVAS_TEXT: Final = re.compile(r"\b(?:fillText|strokeText)\s*\(([^;\n]*)")
+_ATTRIBUTE: Final = re.compile(
+    r"""\b(?:aria-label|aria-description|aria-placeholder|placeholder|title|alt)\b\s*=\s*\\?(?:"([^"\\]*)"|'([^'\\]*)')"""
+    r"""|setAttribute\(\s*["'](?:aria-[a-z]+|placeholder|title|alt)["']\s*,\s*(?:"([^"\\]*)"|'([^'\\]*)')\s*\)"""
+)
+_DIALOG: Final = re.compile(r"\b(?:alert|confirm|prompt|createTextNode)\s*\(([^;\n]*)")
 
 
 def _without_block(code: str) -> str:
