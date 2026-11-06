@@ -100,4 +100,31 @@ S['571c1cc4'] = { names: ['Ana', 'Ben', 'Robo'], scenarios: [
   [{ msg: over(nim([0, 0, 0], 1)) }, { msg: over(nim([0, 0, 0], null)) }, { msg: over(nim([0, 0, 0], 1), { players: robo }) }, { msg: msg({ view: null }) }],
 ] };
 
+// --- Stack Duel
+const stackBoard = (cells = []) => { const b = Array.from({ length: 10 }, () => Array(8).fill(-1)); for (const [r, c, v] of cells) b[r][c] = v; return b; };
+const stack = (extra = {}) => ({ current: 'T', next: 'I', board: stackBoard([[9, 0, 0], [9, 1, 1], [8, 0, 2]]), scores: [1, 0], lines: 1, winners: null, ...extra });
+S['36e5f0d8'] = { names: ['Ana', 'Ben'], scenarios: [
+  [{ msg: msg() }, { msg: mine(stack()) }, { msg: mine(stack()), then: (p) => { p.$('rotate').click(); p.$('cols').children[2].onmouseenter(); p.$('cols').children[2].click(); } }, { msg: mine(stack({ current: 'O' })), then: (p) => p.$('cols').children[0].onmouseenter() }],
+  [{ msg: theirs(stack()) }, { msg: theirs(stack(), { turn_of_player_indices: [], players: UNNAMED }) }, { msg: mine(stack({ scores: [] }), { players: UNNAMED }) }],
+  [{ msg: over(stack({ winners: [0] })) }, { msg: over(stack({ winners: [0, 1] })) }, { msg: over(stack({ winners: [1] }), { players: UNNAMED }) }, { msg: msg({ view: null }) }],
+] };
+
+// --- Fox and Geese
+const fox = (extra = {}) => ({ fox: [3, 3], geese: [[5, 2], [5, 3], [6, 3]], toMove: 0, captured: 2, moves: [], winner: null, draw: false, ...extra });
+const foxMoves = [{ from: [3, 3], to: [3, 4] }, { from: [3, 3], to: [4, 3] }];
+S['c8039b20'] = { names: ['Ana', 'Ben'], scenarios: [
+  [{ msg: msg() }, { msg: mine(fox({ moves: foxMoves })) }, { msg: mine(fox({ moves: foxMoves })), then: (p) => { p.$('board').children[3 * 7 + 3].click(); p.$('board').children[3 * 7 + 4].click(); } }, { msg: mine(fox({ moves: [{ from: [3, 3], to: [3, 5] }, { stop: true }] })), then: (p) => p.$('extra').children[0].click() }, { msg: mine(fox({ toMove: 1, moves: [{ from: [5, 2], to: [6, 2] }] }), { move_count: 8 }) }],
+  [{ msg: theirs(fox({ toMove: 1 })) }, { msg: theirs(fox({ toMove: 0 }), { players: UNNAMED }) }],
+  [{ msg: over(fox({ winner: 0 })) }, { msg: over(fox({ winner: 1 })) }, { msg: over(fox({ draw: true })) }, { msg: over(fox({ winner: 1 }), { players: UNNAMED }) }, { msg: msg({ view: null }) }],
+] };
+
+// --- Gomoku (second version)
+const gb = (cells = []) => { const b = Array.from({ length: 15 }, () => Array(15).fill(0)); for (const [r, c, v] of cells) b[r][c] = v; return b; };
+const gm = (extra = {}, cells = [[7, 7, 1], [7, 8, 2]]) => ({ board: gb(cells), last: { r: 7, c: 8 }, winner: null, winLine: null, draw: false, ...extra });
+S['39a5e1f5'] = { names: ['Ana', 'Ben'], skipCoverage: ['waiting_platform'], scenarios: [
+  [{ msg: null }, { msg: mine(gm()) }, { msg: mine(gm()), then: (p) => { const cell = p.$('board').children[0]; cell.dispatchEvent({ type: 'mouseenter' }); cell.click(); } }, { msg: mine(gm({}, []), { acting_for_player_index: 1, my_player_index: 1 }) }],
+  [{ msg: theirs(gm()) }, { msg: theirs(gm(), { turn_of_player_indices: [] }) }, { msg: theirs(gm(), { turn_of_player_indices: [0] }) }, { msg: theirs(gm(), { turn_of_player_indices: [5] }) }, { msg: spectator(gm(), { players: [], turn_of_player_indices: [] }) }, { msg: spectator(gm(), { acting_for_player_index: 5 }) }],
+  [{ msg: over(gm({ winner: 0, winLine: [{ r: 7, c: 7 }, { r: 7, c: 8 }] })) }, { msg: over(gm({ winner: 1 })) }, { msg: over(gm({ winner: 4 })) }, { msg: over(gm({ draw: true })) }, { msg: over(gm()) }, { msg: msg({ view: null }) }],
+] };
+
 module.exports = { S, msg, mine, theirs, over, spectator, PLAYERS, UNNAMED, click };

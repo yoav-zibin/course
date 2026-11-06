@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Stack Duel</title><style>body{margin:0;padding:16px;background:#101827;color:#edf2ff;font:16px system-ui}*{box-sizing:border-box}h1{font-size:23px;margin:0 0 8px}#status{font-weight:650;margin:12px 0;color:#8ee7cd}.wrap{display:flex;gap:18px;flex-wrap:wrap}.board{display:grid;grid-template-columns:repeat(8,30px);gap:2px}.cell{height:30px;border-radius:4px;background:#1d2942}.s0{background:#478ebd}.s1{background:#a15bb7}.s2{background:#4caf7d}.s3{background:#d9a441}.piece{display:grid;gap:2px;margin:6px 0}.piece .cell{width:22px;height:22px;background:#fcd34d}.cols{display:flex;gap:4px;margin-top:8px}.cols button{flex:1;min-height:42px}button{font:inherit;border:1px solid #64748b;border-radius:8px;background:#25344e;color:white;cursor:pointer}button:disabled{cursor:default;opacity:.45}.meta{font-size:14px;color:#bec9dc}.rules{font-size:14px;color:#bec9dc;max-width:460px}</style></head><body><script type="application/json" id="i18n-strings">
+{
+ "page_title": "Stack Duel",
+ "heading": "Stack Duel",
+ "rules": "Everyone stacks pieces on one shared tower. On your turn, rotate the falling piece and choose its column — it drops straight down. Full rows clear and score for the player who placed the piece. The game ends when a new piece no longer fits.",
+ "current_piece": "Current piece:",
+ "next_piece": "Next piece:",
+ "rotate": "↻ Rotate",
+ "over_one": "Game over — {names} wins! Lines cleared: {lines}",
+ "over_many": "Game over — {names} win! Lines cleared: {lines}",
+ "place_piece": "{name} — place the {piece} piece",
+ "score_line": "{name}: {lines} lines",
+ "scores_total": "{scores} · total lines {total}",
+ "waiting": "Waiting…",
+ "saving": "Saving move…",
+ "waiting_for": "Waiting for {names}",
+ "player_n": "Player {number}"
+}
+</script><h1>Stack Duel</h1><p class="rules">Everyone stacks pieces on one shared tower. On your turn, rotate the falling piece and choose its column — it drops straight down. Full rows clear and score for the player who placed the piece. The game ends when a new piece no longer fits.</p><div id="status">Waiting for the platform…</div><div class="wrap"><div><div class="board" id="board"></div><div class="cols" id="cols"></div></div><div><div class="meta" id="scores"></div><div class="meta">Current piece:</div><div class="piece" id="cur"></div><button id="rotate">↻ Rotate</button><div class="meta" style="margin-top:10px">Next piece:</div><div class="piece" id="nxt"></div></div></div><script>
+"use strict";
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+let latest=null,sentFor=-1,rot=0;
+function applyStaticTexts(){
+ document.title=t("page_title");
+ document.querySelector("h1").textContent=t("heading");
+ document.querySelector(".rules").textContent=t("rules");
+ const metas=document.querySelectorAll(".meta");
+ metas[1].textContent=t("current_piece");
+ metas[2].textContent=t("next_piece");
+ $("rotate").textContent=t("rotate");
+}
+const $=id=>document.getElementById(id);
+const PIECES={I:[[0,0],[0,1],[0,2],[0,3]],O:[[0,0],[0,1],[1,0],[1,1]],T:[[0,0],[0,1],[0,2],[1,1]],S:[[0,1],[0,2],[1,0],[1,1]],Z:[[0,0],[0,1],[1,1],[1,2]],J:[[0,0],[1,0],[1,1],[1,2]],L:[[0,2],[1,0],[1,1],[1,2]]};
+function rotations(p){const norm=cs=>{const r0=Math.min(...cs.map(c=>c[0])),c0=Math.min(...cs.map(c=>c[1]));return cs.map(([r,c])=>[r-r0,c-c0]).sort((a,b)=>a[0]-b[0]||a[1]-b[1]);};const out=[norm(PIECES[p])];for(let i=1;i<4;i++)out.push(norm(out[i-1].map(([r,c])=>[c,-r])));return out;}
+function width(cs){return Math.max(...cs.map(c=>c[1]))+1;}
+function fits(board,cs,row,col){for(const [r,c] of cs){const y=r+row,x=c+col;if(y<0||y>=10||x<0||x>=8||board[y][x]!==-1)return false;}return true;}
+function landing(board,cs,col){if(!fits(board,cs,0,col))return -1;let row=0;while(fits(board,cs,row+1,col))row++;return row;}
+function moveCount(){return latest?(latest.move_count??latest.moveCount??0):0;}
+function myTurn(){return latest&&latest.status==="ongoing"&&latest.acting_for_player_index!==null&&latest.acting_for_player_index!==undefined;}
+function send(col){if(!myTurn()||sentFor===moveCount())return;sentFor=moveCount();parent.postMessage({type:"make_move",move:{rot,col}},"*");render();}
+function drawPiece(el,letter){el.replaceChildren();if(!letter)return;const cs=rotations(letter)[0];const w=width(cs);el.style.gridTemplateColumns="repeat("+w+",22px)";const set=new Set(cs.map(([r,c])=>r+","+c));const h=Math.max(...cs.map(c=>c[0]))+1;for(let r=0;r<h;r++)for(let c=0;c<w;c++){const d=document.createElement("div");d.className="cell";d.style.background=set.has(r+","+c)?"#fcd34d":"transparent";el.append(d);}}
+function render(){
+ if(!latest)return;
+ const v=latest.view,status=$("status"),board=$("board");
+ const name=i=>(latest.players&&latest.players[i]&&latest.players[i].name)||t("player_n",{number:i+1});
+ if(!v){status.textContent=t("waiting");return;}
+ const over=latest.status==="over"||v.winners!==null&&v.winners!==undefined;
+ if(over){const list=v.winners.map(name).join(", "),many=v.winners.length>1;status.textContent=many?t("over_many",{names:list,lines:v.lines}):t("over_one",{names:list,lines:v.lines});}
+ else if(sentFor===moveCount())status.textContent=t("saving");
+ else if(myTurn())status.textContent=t("place_piece",{name:name(latest.acting_for_player_index),piece:v.current});
+ else{const turns=latest.turn_of_player_indices||latest.turn;status.textContent=turns&&turns.length?t("waiting_for",{names:turns.map(name).join(", ")}):t("waiting");}
+ $("scores").textContent=t("scores_total",{scores:(latest.players||[]).map((p,i)=>t("score_line",{name:p.name,lines:v.scores[i]||0})).join(" · "),total:v.lines});
+ board.replaceChildren();
+ const cells=rotations(v.current)[rot];
+ const ghost=new Set();
+ if(myTurn()&&!over){for(let col=0;col+width(cells)<=8;col++){const row=landing(v.board,cells,col);if(row>=0&&col===ghostCol){cells.forEach(([r,c])=>ghost.add((r+row)+","+(c+col)));}}}
+ for(let r=0;r<10;r++)for(let c=0;c<8;c++){
+   const d=document.createElement("div");const s=v.board[r][c];
+   d.className="cell"+(s===-1?"":" s"+(s%4));
+   if(ghost.has(r+","+c))d.style.background="#fcd34d88";
+   board.append(d);
+ }
+ drawPiece($("cur"),v.current);drawPiece($("nxt"),v.next);
+ // re-draw current with the chosen rotation
+ const cur=$("cur");cur.replaceChildren();const w=width(cells);cur.style.gridTemplateColumns="repeat("+w+",22px)";
+ const set=new Set(cells.map(([r,c])=>r+","+c));const h=Math.max(...cells.map(c=>c[0]))+1;
+ for(let r=0;r<h;r++)for(let c=0;c<w;c++){const d=document.createElement("div");d.className="cell";d.style.background=set.has(r+","+c)?"#fcd34d":"transparent";cur.append(d);}
+ const cols=$("cols");cols.replaceChildren();
+ for(let col=0;col<8;col++){
+   const b=document.createElement("button");b.textContent=col+1;
+   const ok=myTurn()&&!over&&col+width(cells)<=8&&landing(v.board,cells,col)>=0;
+   b.disabled=!ok||sentFor===moveCount();
+   b.onmouseenter=()=>{ghostCol=col;render();};
+   b.onclick=()=>send(col);cols.append(b);
+ }
+ $("rotate").disabled=!myTurn()||over;
+}
+let ghostCol=0;
+$("rotate").onclick=()=>{rot=(rot+1)%4;render();};
+addEventListener("message",e=>{if(e.source!==parent||!e.data||e.data.type!=="state_changed")return;applyLocale(e.data);applyStaticTexts();latest=e.data;rot=0;ghostCol=0;render();});
+</script></body></html>

@@ -89,8 +89,8 @@ class Element {
   get innerHTML() { return this.childNodes.map((n) => serialize(n)).join(''); }
   set innerHTML(html) { this.childNodes.forEach((n) => { n.parentNode = null; }); this.childNodes = []; parseInto(String(html), this, this.ownerDocument); }
   get outerHTML() { return serialize(this); }
-  setAttribute(k, v) { this.attrs[k] = String(v); }
-  getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
+  setAttribute(k, v) { if (k === 'style') { for (const key of Object.keys(this._style)) delete this._style[key]; for (const decl of String(v).split(';')) { const i = decl.indexOf(':'); if (i > 0) this._style[decl.slice(0, i).trim()] = decl.slice(i + 1).trim(); } return; } this.attrs[k] = String(v); }
+  getAttribute(k) { if (k === 'style') return this.style.cssText || null; return k in this.attrs ? this.attrs[k] : null; }
   removeAttribute(k) { delete this.attrs[k]; }
   hasAttribute(k) { return k in this.attrs; }
   toggleAttribute(k, force) { const on = force === undefined ? !(k in this.attrs) : !!force; on ? (this.attrs[k] = '') : delete this.attrs[k]; return on; }
@@ -172,7 +172,7 @@ function parseInto(html, parent, doc) {
     if (m[2]) {
       const tag = m[2].toLowerCase();
       const el = doc.createElement(tag);
-      for (const a of m[3].matchAll(/([^\s=>\/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g)) el.attrs[a[1].toLowerCase()] = decode(a[2] ?? a[3] ?? a[4] ?? '');
+      for (const a of m[3].matchAll(/([^\s=>\/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g)) el.setAttribute(a[1].toLowerCase(), decode(a[2] ?? a[3] ?? a[4] ?? ''));
       top.appendChild(el);
       if (tag === 'script' || tag === 'style') {
         const end = html.toLowerCase().indexOf('</' + tag, re.lastIndex);
