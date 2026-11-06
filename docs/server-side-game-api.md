@@ -241,8 +241,32 @@ complete mapping because old matches may still rely on those versions:
 python backfill_game_schemas.py --config C:\path\to\config.json --schemas C:\path\to\game-schema-backfill.json
 ```
 
+Writing the map by hand for every historical version is rarely practical, so the
+utility can also fill the versions the map leaves out. It prints each missing
+`game-id@version` with the source of the schema it would get, and writes nothing
+at all unless every missing version has one:
+
+| Option | Gives |
+|---|---|
+| `--schemas FILE` | Exactly the schemas in the map (wins over everything else). |
+| `--use-repo-schemas` | `games/<id>.schema.json` for the newest missing version of a built-in game. |
+| `--infer-rest` | Schemas inferred by playing the version's server code, like the generator for new games (observed types, nothing required, extra properties allowed). Needs the QuickJS runtime, so run it where the server runs. A version that cannot be played is reported and left to the next option. |
+| `--permissive-rest` | A schema that accepts any JSON for what is still left: the behavior before schemas, a stopgap to replace later. |
+| `--dry-run` | Only prints the plan (including the inference results); writes nothing. |
+
+On the production server (Firestore query mode; the utility opens the same store the
+server does) run a dry run first, then the same command without `--dry-run`, and restart:
+
+```bash
+cd /opt/game-platform
+sudo .venv/bin/python -m game_platform.backfill_game_schemas --config /opt/game-platform/config.json --use-repo-schemas --infer-rest --permissive-rest --dry-run
+```
+
+Inference is sample-based, so a rare branch of a game that no sample reached can be
+rejected later: watch `game_function_error` / schema rejections in the log after a backfill.
+
 The utility validates the complete mapping before writing any versions and
-supports the configured JSON-file or Firestore store. Back up the database
+supports the configured JSON-file or Firestore store (including query mode). Back up the database
 before running it; schemas are versioned with the game and should describe
 that version's actual inputs and outputs, not merely allow all JSON values.
 
