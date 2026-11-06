@@ -1,8 +1,48 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Stack Duel</title><style>body{margin:0;padding:16px;background:#101827;color:#edf2ff;font:16px system-ui}*{box-sizing:border-box}h1{font-size:23px;margin:0 0 8px}#status{font-weight:650;margin:12px 0;color:#8ee7cd}.wrap{display:flex;gap:18px;flex-wrap:wrap}.board{display:grid;grid-template-columns:repeat(8,30px);gap:2px}.cell{height:30px;border-radius:4px;background:#1d2942}.s0{background:#478ebd}.s1{background:#a15bb7}.s2{background:#4caf7d}.s3{background:#d9a441}.piece{display:grid;gap:2px;margin:6px 0}.piece .cell{width:22px;height:22px;background:#fcd34d}.cols{display:flex;gap:4px;margin-top:8px}.cols button{flex:1;min-height:42px}button{font:inherit;border:1px solid #64748b;border-radius:8px;background:#25344e;color:white;cursor:pointer}button:disabled{cursor:default;opacity:.45}.meta{font-size:14px;color:#bec9dc}.rules{font-size:14px;color:#bec9dc;max-width:460px}</style></head><body><h1>Stack Duel</h1><p class="rules">Everyone stacks pieces on one shared tower. On your turn, rotate the falling piece and choose its column — it drops straight down. Full rows clear and score for the player who placed the piece. The game ends when a new piece no longer fits.</p><div id="status">Waiting for the platform…</div><div class="wrap"><div><div class="board" id="board"></div><div class="cols" id="cols"></div></div><div><div class="meta" id="scores"></div><div class="meta">Current piece:</div><div class="piece" id="cur"></div><button id="rotate">↻ Rotate</button><div class="meta" style="margin-top:10px">Next piece:</div><div class="piece" id="nxt"></div></div></div><script>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Stack Duel</title><style>body{margin:0;padding:16px;background:#101827;color:#edf2ff;font:16px system-ui}*{box-sizing:border-box}h1{font-size:23px;margin:0 0 8px}#status{font-weight:650;margin:12px 0;color:#8ee7cd}.wrap{display:flex;gap:18px;flex-wrap:wrap}.board{display:grid;grid-template-columns:repeat(8,30px);gap:2px}.cell{height:30px;border-radius:4px;background:#1d2942}.s0{background:#478ebd}.s1{background:#a15bb7}.s2{background:#4caf7d}.s3{background:#d9a441}.piece{display:grid;gap:2px;margin:6px 0}.piece .cell{width:22px;height:22px;background:#fcd34d}.cols{display:flex;gap:4px;margin-top:8px}.cols button{flex:1;min-height:42px}button{font:inherit;border:1px solid #64748b;border-radius:8px;background:#25344e;color:white;cursor:pointer}button:disabled{cursor:default;opacity:.45}.meta{font-size:14px;color:#bec9dc}.rules{font-size:14px;color:#bec9dc;max-width:460px}</style></head><body><h1 id="title">Stack Duel</h1><p class="rules" id="rules">Everyone stacks pieces on one shared tower. On your turn, rotate the falling piece and choose its column — it drops straight down. Full rows clear and score for the player who placed the piece. The game ends when a new piece no longer fits.</p><div id="status">Waiting for the platform…</div><div class="wrap"><div><div class="board" id="board"></div><div class="cols" id="cols"></div></div><div><div class="meta" id="scores"></div><div class="meta" id="curLabel">Current piece:</div><div class="piece" id="cur"></div><button id="rotate">↻ Rotate</button><div class="meta" id="nxtLabel" style="margin-top:10px">Next piece:</div><div class="piece" id="nxt"></div></div></div><script type="application/json" id="i18n-strings">
+{
+  "title": "Stack Duel",
+  "rules": "Everyone stacks pieces on one shared tower. On your turn, rotate the falling piece and choose its column — it drops straight down. Full rows clear and score for the player who placed the piece. The game ends when a new piece no longer fits.",
+  "waiting_platform": "Waiting for the platform…",
+  "waiting": "Waiting…",
+  "waiting_for": "Waiting for {names}",
+  "saving": "Saving move…",
+  "place_piece": "{name} — place the {piece} piece",
+  "game_over_one": "Game over — {names} wins! Lines cleared: {lines}",
+  "game_over_many": "Game over — {names} win! Lines cleared: {lines}",
+  "ended_left": "Game ended — a player left. Lines cleared: {lines}",
+  "ended": "Game ended. Lines cleared: {lines}",
+  "score_line": "{name}: {lines} lines",
+  "scores_total": "{scores} · total lines {lines}",
+  "player_n": "Player {number}",
+  "current_piece": "Current piece:",
+  "next_piece": "Next piece:",
+  "rotate": "↻ Rotate"
+}
+</script>
+<script>
 "use strict";
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
 let latest=null,sentFor=-1,rot=0;
 const $=id=>document.getElementById(id);
+function applyStaticTexts(){document.title=t("title");$("title").textContent=t("title");$("rules").textContent=t("rules");$("curLabel").textContent=t("current_piece");$("nxtLabel").textContent=t("next_piece");$("rotate").textContent=t("rotate");}
+$("status").textContent=t("waiting_platform");
 const PIECES={I:[[0,0],[0,1],[0,2],[0,3]],O:[[0,0],[0,1],[1,0],[1,1]],T:[[0,0],[0,1],[0,2],[1,1]],S:[[0,1],[0,2],[1,0],[1,1]],Z:[[0,0],[0,1],[1,1],[1,2]],J:[[0,0],[1,0],[1,1],[1,2]],L:[[0,2],[1,0],[1,1],[1,2]]};
 function rotations(p){const norm=cs=>{const r0=Math.min(...cs.map(c=>c[0])),c0=Math.min(...cs.map(c=>c[1]));return cs.map(([r,c])=>[r-r0,c-c0]).sort((a,b)=>a[0]-b[0]||a[1]-b[1]);};const out=[norm(PIECES[p])];for(let i=1;i<4;i++)out.push(norm(out[i-1].map(([r,c])=>[c,-r])));return out;}
 function width(cs){return Math.max(...cs.map(c=>c[1]))+1;}
@@ -15,19 +55,21 @@ function drawPiece(el,letter){el.replaceChildren();if(!letter)return;const cs=ro
 function render(){
  if(!latest)return;
  const v=latest.view,status=$("status"),board=$("board");
- const name=i=>(latest.players&&latest.players[i]&&latest.players[i].name)||("Player "+(i+1));
- if(!v){status.textContent="Waiting…";return;}
+ const name=i=>(latest.players&&latest.players[i]&&latest.players[i].name)||t("player_n",{number:i+1});
+ if(!v){status.textContent=t("waiting");return;}
  const over=latest.status==="over"||v.winners!==null&&v.winners!==undefined;
  if(over){
    const winners=Array.isArray(v.winners)?v.winners:[];
-   status.textContent=winners.length
-     ? "Game over — "+winners.map(name).join(", ")+" win"+(winners.length>1?"":"s")+"! Lines cleared: "+v.lines
-     : (latest.end_reason==="player_left"?"Game ended — a player left.":"Game ended.")+" Lines cleared: "+v.lines;
+   const names=winners.map(name).join(", ");
+   if(winners.length>1)status.textContent=t("game_over_many",{names,lines:v.lines});
+   else if(winners.length)status.textContent=t("game_over_one",{names,lines:v.lines});
+   else if(latest.end_reason==="player_left")status.textContent=t("ended_left",{lines:v.lines});
+   else status.textContent=t("ended",{lines:v.lines});
  }
- else if(sentFor===moveCount())status.textContent="Saving move…";
- else if(myTurn())status.textContent=name(latest.acting_for_player_index)+" — place the "+v.current+" piece";
- else{const t=latest.turn_of_player_indices||latest.turn;status.textContent=t&&t.length?("Waiting for "+t.map(name).join(", ")):"Waiting…";}
- $("scores").textContent=(latest.players||[]).map((p,i)=>p.name+": "+(v.scores[i]||0)+" lines").join(" · ")+" · total lines "+v.lines;
+ else if(sentFor===moveCount())status.textContent=t("saving");
+ else if(myTurn())status.textContent=t("place_piece",{name:name(latest.acting_for_player_index),piece:v.current});
+ else{const turn=latest.turn_of_player_indices||latest.turn;if(turn&&turn.length)status.textContent=t("waiting_for",{names:turn.map(name).join(", ")});else status.textContent=t("waiting");}
+ $("scores").textContent=t("scores_total",{scores:(latest.players||[]).map((p,i)=>t("score_line",{name:p.name,lines:v.scores[i]||0})).join(" · "),lines:v.lines});
  board.replaceChildren();
  const cells=rotations(v.current)[rot];
  const ghost=new Set();
@@ -55,5 +97,5 @@ function render(){
 }
 let ghostCol=0;
 $("rotate").onclick=()=>{rot=(rot+1)%4;render();};
-addEventListener("message",e=>{if(e.source!==parent||!e.data||e.data.type!=="state_changed")return;latest=e.data;rot=0;ghostCol=0;render();});
+addEventListener("message",e=>{if(e.source!==parent||!e.data||e.data.type!=="state_changed")return;applyLocale(e.data);applyStaticTexts();latest=e.data;rot=0;ghostCol=0;render();});
 </script></body></html>

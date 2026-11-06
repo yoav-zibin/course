@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Last Floe</title><style>body{margin:0;padding:16px;background:#101827;color:#edf2ff;font:16px system-ui}*{box-sizing:border-box}h1{font-size:23px;margin:0 0 8px}#status{font-weight:650;margin:12px 0;color:#8ee7cd}.row{display:flex;gap:4px;margin-bottom:4px}.row.off{margin-left:26px}.tile{width:48px;height:48px;border-radius:10px;border:1px solid #475569;background:#1e3a5f;font-size:12px;color:#bae6fd;display:grid;place-items:center;cursor:default;padding:0;position:relative}.tile.gone{background:transparent;border:0}.tile.legal{outline:3px solid #22c55e;cursor:pointer}.tile.sel{outline:3px solid #fcd34d}.tile .pg{font-size:19px;line-height:1}.s0{box-shadow:inset 0 0 0 3px #f87171}.s1{box-shadow:inset 0 0 0 3px #60a5fa}.s2{box-shadow:inset 0 0 0 3px #4ade80}.s3{box-shadow:inset 0 0 0 3px #facc15}.meta{font-size:14px;color:#bec9dc}button.act{font:inherit;min-height:46px;padding:0 18px;border:1px solid #64748b;border-radius:8px;background:#25344e;color:white;cursor:pointer;margin-top:8px}button.act:disabled{opacity:.5;cursor:default}.rules{font-size:14px;color:#bec9dc;max-width:520px}</style></head><body><script type="application/json" id="i18n-strings">
+{
+ "page_title": "Last Floe",
+ "heading": "Last Floe",
+ "rules": "Penguins on melting ice. First everyone places their penguins on 1-fish tiles. Then, on your turn, slide one penguin in a straight line across open tiles — it keeps the fish from the tile it leaves, and that tile melts away. Stranded penguins are stuck; when nobody can move, every penguin still on the ice scores its tile. Most fish wins.",
+ "score_line": "{name}: {fish} fish",
+ "winner_one": "🏆 {names} wins with {fish} fish!",
+ "winner_many": "🏆 {names} win with {fish} fish!",
+ "place_turn": "{name} — place a penguin on a 1-fish tile",
+ "slide_turn": "{name} — slide a penguin",
+ "waiting_place": "Waiting for {names} to place",
+ "waiting_slide": "Waiting for {names} to slide",
+ "pass": "No slides left — pass",
+ "waiting": "Waiting…",
+ "saving": "Saving move…",
+ "player_n": "Player {number}"
+}
+</script><h1>Last Floe</h1><p class="rules">Penguins on melting ice. First everyone places their penguins on 1-fish tiles. Then, on your turn, slide one penguin in a straight line across open tiles — it keeps the fish from the tile it leaves, and that tile melts away. Stranded penguins are stuck; when nobody can move, every penguin still on the ice scores its tile. Most fish wins.</p><div id="status">Waiting for the platform…</div><div class="meta" id="scores"></div><div id="board"></div><div id="actions"></div><script>
+"use strict";
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+let latest=null,sentFor=-1,selected=null;
+function applyStaticTexts(){
+ document.title=t("page_title");
+ document.querySelector("h1").textContent=t("heading");
+ document.querySelector(".rules").textContent=t("rules");
+}
+const $=id=>document.getElementById(id);
+const ROWL=[7,8,7,8,7,8,7,8];
+function moveCount(){return latest?(latest.move_count??latest.moveCount??0):0;}
+function myTurn(){return latest&&latest.status==="ongoing"&&latest.acting_for_player_index!==null&&latest.acting_for_player_index!==undefined;}
+function send(move){if(!myTurn()||sentFor===moveCount())return;sentFor=moveCount();selected=null;parent.postMessage({type:"make_move",move},"*");render();}
+function render(){
+ if(!latest)return;
+ const v=latest.view,status=$("status"),board=$("board");
+ const name=i=>(latest.players&&latest.players[i]&&latest.players[i].name)||t("player_n",{number:i+1});
+ if(!v){status.textContent=t("waiting");return;}
+ const over=latest.status==="over"||v.finished;
+ $("scores").textContent=(latest.players||[]).map((p,i)=>t("score_line",{name:p.name,fish:v.scores[i]})).join(" · ");
+ if(over){
+   const best=Math.max(...v.scores);
+   const winners=(latest.players||[]).map((p,i)=>i).filter(i=>v.scores[i]===best).map(name);
+   {const list=winners.join(" & "),many=winners.length>1;status.textContent=many?t("winner_many",{names:list,fish:best}):t("winner_one",{names:list,fish:best});}
+ }else if(sentFor===moveCount())status.textContent=t("saving");
+ else if(myTurn()){const who=name(latest.acting_for_player_index),placing=v.phase==="placement";status.textContent=placing?t("place_turn",{name:who}):t("slide_turn",{name:who});}
+ else{const turns=latest.turn_of_player_indices||latest.turn;{const names=turns&&turns.length?turns.map(name).join(", "):"…",placing=v.phase==="placement";status.textContent=placing?t("waiting_place",{names}):t("waiting_slide",{names});}}
+ const legal=v.legal||{placements:[],moves:{}};
+ const placements=new Set(legal.placements||[]);
+ const moves=legal.moves||{};
+ const dests=selected!=null?new Set((moves[selected]||[]).map(Number)):new Set();
+ board.replaceChildren();
+ const byRow={};
+ for(const t of v.tiles)(byRow[t.row]=byRow[t.row]||[]).push(t);
+ for(let r=0;r<8;r++){
+   const row=document.createElement("div");row.className="row"+(ROWL[r]===8?" off":"");
+   for(const t of (byRow[r]||[])){
+     const b=document.createElement("button");
+     if(t.removed){b.className="tile gone";b.disabled=true;row.append(b);continue;}
+     b.className="tile"+(t.penguin>=0?" s"+t.penguin:"")+(selected===t.id?" sel":"");
+     if(t.penguin>=0){const pg=document.createElement("span");pg.className="pg";pg.textContent="🐧";b.append(pg);}
+     const fish=document.createElement("span");fish.textContent="🐟".repeat(t.fish);b.append(fish);
+     const canPlace=myTurn()&&v.phase==="placement"&&placements.has(t.id);
+     const canFrom=myTurn()&&v.phase==="movement"&&Object.prototype.hasOwnProperty.call(moves,t.id);
+     const canTo=myTurn()&&v.phase==="movement"&&dests.has(t.id);
+     if(canPlace){b.classList.add("legal");b.onclick=()=>send({kind:"place",id:t.id});}
+     else if(canTo){b.classList.add("legal");b.onclick=()=>send({kind:"move",from:selected,to:t.id});}
+     else if(canFrom){b.onclick=()=>{selected=t.id;render();};}
+     else b.disabled=true;
+     row.append(b);
+   }
+   board.append(row);
+ }
+ const actions=$("actions");actions.replaceChildren();
+ if(myTurn()&&!over&&v.phase==="movement"&&Object.keys(moves).length===0){
+   const p=document.createElement("button");p.className="act";p.textContent=t("pass");
+   p.disabled=sentFor===moveCount();p.onclick=()=>send({kind:"pass"});actions.append(p);
+ }
+}
+addEventListener("message",e=>{if(e.source!==parent||!e.data||e.data.type!=="state_changed")return;applyLocale(e.data);applyStaticTexts();latest=e.data;selected=null;render();});
+</script></body></html>

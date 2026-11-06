@@ -1,13 +1,13 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+const {pageScript,pageScriptOf,fakeDom,texts}=require('./page-helper.cjs');
 const ROOT=path.join(__dirname,'../../games/audit-batch4');
 function setup(name){
  const server={};vm.createContext(server);vm.runInContext(fs.readFileSync(path.join(ROOT,name+'.server.js'),'utf8')+';globalThis.api=game;',server);
  const ctx={players:[{id:'p0',kind:'human'},{id:'p1',kind:'human'}],pot:20,move_count:0,random:()=>0.25};
  const state=server.api.newMatch(ctx).state,view=server.api.viewFor(state,'p0',ctx);
- const elements={},handlers={},messages=[];
- function element(){return {children:[],childNodes:[{textContent:''}],style:{},appendChild(c){this.children.push(c)},set innerHTML(v){this.children=[]},get classList(){return {add(){},remove(){},toggle(){}}}}}
+ const fd=fakeDom(),handlers={},messages=[];const elements=new Proxy({},{get:(_,id)=>fd.document.getElementById(id)});
  const parent={postMessage(m){messages.push(JSON.parse(JSON.stringify(m)))}};
- const sb={parent,document:{getElementById(id){return elements[id]??=element()},createElement:element},addEventListener:(n,cb)=>handlers[n]=cb};vm.createContext(sb);vm.runInContext(fs.readFileSync(path.join(ROOT,name+'.html'),'utf8').match(/<script>([\s\S]*?)<\/script>/)[1],sb);
+ const sb={parent,document:fd.document,addEventListener:(n,cb)=>handlers[n]=cb};vm.createContext(sb);vm.runInContext(pageScriptOf(path.join(ROOT,name+'.html'),fd.document),sb);
  const data={type:'state_changed',status:'ongoing',move_count:0,acting_for_player_index:0,my_player_index:0,players:[{name:'A'},{name:'B'}],view};
  function update(source=parent,extra={}){handlers.message({source,data:{...data,...extra}})}
  update();

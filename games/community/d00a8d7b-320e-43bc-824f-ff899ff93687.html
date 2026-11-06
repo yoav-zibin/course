@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0f172a;color:#f8fafc}main{background:#1e293b;padding:32px;border-radius:16px;text-align:center;max-width:320px;width:90vw}h1{margin:0 0 8px;font-size:22px}.score{font-size:64px;font-weight:800;margin:8px 0}.bar{height:10px;background:#334155;border-radius:99px;overflow:hidden;margin:12px 0}i{display:block;height:100%;background:#22c55e;transition:width .15s}button{font-size:24px;font-weight:700;padding:16px 32px;border-radius:12px;border:0;background:#22c55e;color:#052e16;cursor:pointer;width:100%}button:disabled{opacity:.4;cursor:default}button:not(:disabled):active{transform:scale(.96)}.sub{font-size:13px;color:#94a3b8;margin-top:12px;min-height:18px}</style></head><body><script type="application/json" id="i18n-strings">
+{
+ "heading": "Tap to 10",
+ "tap": "+1 TAP",
+ "win": "🎉 You win!",
+ "game_over": "Game over",
+ "your_turn": "Your turn — tap!",
+ "waiting": "Waiting…"
+}
+</script><main><h1>Tap to 10</h1><div class="score" id="s">0 / 10</div><div class="bar"><i id="b" style="width:0%"></i></div><button id="btn">+1 TAP</button><div class="sub" id="t"></div></main><script>// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+let canAct=false;const btn=document.getElementById('btn'),s=document.getElementById('s'),b=document.getElementById('b'),sub=document.getElementById('t');
+function applyStaticTexts(){document.querySelector('h1').textContent=t("heading");btn.textContent=t("tap");}btn.addEventListener('click',()=>{if(!canAct)return;canAct=false;btn.disabled=true;parent.postMessage({type:'make_move',move:{action:'tap'}},'*');});window.addEventListener('message',e=>{const m=e.data||{};const d=m.type==='state_changed'?m:(m.view!==undefined?m:null);if(!d)return;applyLocale(d);applyStaticTexts();const v=d.view||{score:0,target:10};s.textContent=v.score+' / '+v.target;b.style.width=(100*v.score/v.target)+'%';if(d.status==='over'){canAct=false;btn.disabled=true;sub.textContent=(v.score>=v.target)?t("win"):t("game_over");}else{canAct=d.acting_for_player_index!==null&&d.acting_for_player_index!==undefined;sub.textContent=canAct?t("your_turn"):t("waiting");btn.disabled=!canAct;}});parent.postMessage({type:'ready'},'*');</script></body></html>

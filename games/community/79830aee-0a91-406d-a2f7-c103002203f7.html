@@ -1,0 +1,186 @@
+<!doctype html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;min-height:100vh;background:radial-gradient(1200px 600px at 50% -10%,#2b3a6b 0%,#131a33 55%,#0a0e22 100%);color:#eef2ff;display:flex;justify-content:center;padding:20px}
+  .wrap{width:100%;max-width:480px;text-align:center}
+  h1{margin:6px 0 0;letter-spacing:2px;font-size:28px}
+  .sub{opacity:.75;margin:4px 0 12px;font-size:14px}
+  #status{background:#ffffff14;border:1px solid #ffffff22;border-radius:12px;padding:10px 12px;min-height:44px;display:flex;align-items:center;justify-content:center;font-weight:600}
+  .scores{display:flex;gap:10px;margin:12px 0}
+  .card{flex:1;background:#ffffff10;border:1px solid #ffffff22;border-radius:14px;padding:10px}
+  .card.me{border-color:#ffd75e;box-shadow:0 0 0 1px #ffd75e66}
+  .card .nm{font-size:13px;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card .sc{font-size:26px;font-weight:800}
+  .card .ln{font-size:12px;opacity:.7}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  #board{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:8px 0 12px}
+  .star{aspect-ratio:1;border-radius:16px;border:1px solid #ffffff2a;background:linear-gradient(180deg,#232c55,#161c3a);color:#fff;cursor:pointer;font-size:26px;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:transform .08s}
+  .star:not(:disabled):hover{transform:scale(1.04);border-color:#ffd75e}
+  .star:disabled{cursor:default;opacity:.95}
+  .star .v{font-size:11px;opacity:.8;background:#0008;padding:2px 8px;border-radius:20px;margin-top:4px}
+  .star.p0{background:linear-gradient(180deg,#6b4a00,#3a2a00);border-color:#ffd75e;box-shadow:0 0 18px #ffd75e55}
+  .star.p1{background:linear-gradient(180deg,#0e5a8a,#0a2f4a);border-color:#5ec8ff;box-shadow:0 0 18px #5ec8ff55}
+  .star.empty{opacity:.9}
+  .legend{font-size:13px;opacity:.8;line-height:1.6;background:#0005;border-radius:12px;padding:10px}
+  .turn-gold{color:#ffd75e}.turn-blue{color:#5ec8ff}
+  button:focus-visible{outline:2px solid #ffd75e}
+</style>
+</head>
+<body><script type="application/json" id="i18n-strings">
+{
+ "heading": "✨ NINE STARS ✨",
+ "sub": "Claim stars • lines give +2 bonus • most points wins",
+ "legend_1": "🌟 Each star is worth 1–3 points.",
+ "legend_2": "Complete any row / column / diagonal with your color for {bonus} each.",
+ "legend_3": "Gold moves first. After all 9 are claimed, highest total wins.",
+ "waiting_platform": "Waiting for the platform…",
+ "player_n": "Player {number}",
+ "dealing": "✨ Dealing the nine stars…",
+ "line_bonus": "+{bonus} line bonus ({count}×)",
+ "no_lines": "no lines yet",
+ "points": "{points} pts",
+ "tie": "🤝 Tie at {a}–{b}!",
+ "wins": "🏆 {name} wins {a}–{b}!",
+ "game_over": "Game over",
+ "waiting": "Waiting…",
+ "turn_you": "{name} (you)'s turn — pick a star",
+ "turn_computer": "{name} 🤖's turn — pick a star",
+ "turn_plain": "{name}'s turn — pick a star"
+}
+</script>
+<div class="wrap">
+  <h1>✨ NINE STARS ✨</h1>
+  <div class="sub">Claim stars • lines give +2 bonus • most points wins</div>
+  <div id="status">Waiting for the platform…</div>
+  <div class="scores">
+    <div class="card" id="card0"><div class="nm" id="name0">Player 1</div><div class="sc" id="score0">0</div><div class="ln" id="line0"></div></div>
+    <div class="card" id="card1"><div class="nm" id="name1">Player 2</div><div class="sc" id="score1">0</div><div class="ln" id="line1"></div></div>
+  </div>
+  <div id="board"></div>
+  <div class="legend">🌟 Each star is worth 1–3 points.<br>Complete any row / column / diagonal with your color for <b>+2</b> each.<br>Gold moves first. After all 9 are claimed, highest total wins.</div>
+</div>
+<script>
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+let latest=null;
+function applyStaticTexts(){
+  document.querySelector("h1").textContent=t("heading");
+  document.querySelector(".sub").textContent=t("sub");
+  const legend=document.querySelector(".legend");
+  const bonusParts=t("legend_2",{bonus:"\u0001"}).split("\u0001");
+  legend.replaceChildren();
+  legend.append(t("legend_1"),document.createElement("br"),bonusParts[0]);
+  if(bonusParts.length>1){const bold=document.createElement("b");bold.textContent="+2";legend.append(bold,bonusParts.slice(1).join(""));}
+  legend.append(document.createElement("br"),t("legend_3"));
+}
+function setName(id,color,text){
+  const el=document.getElementById(id);
+  const dot=document.createElement("span");dot.className="dot";dot.style.background=color;
+  el.replaceChildren(dot,document.createTextNode(text));
+}
+let sentForMove=-1;
+function canAct(){
+  if(!latest||latest.status!=="ongoing") return false;
+  return latest.acting_for_player_index!==null && latest.acting_for_player_index!==undefined;
+}
+function claim(i){
+  if(!latest||!canAct()) return;
+  const v=latest.view;
+  if(!v||!v.cells) return;
+  if(v.cells[i].o!==null && v.cells[i].o!==undefined) return;
+  if(sentForMove===latest.move_count) return;
+  sentForMove=latest.move_count;
+  parent.postMessage({type:"make_move",move:{cell:i}},"*");
+}
+function render(){
+  const statusEl=document.getElementById("status");
+  const boardEl=document.getElementById("board");
+  boardEl.replaceChildren();
+  if(!latest){statusEl.textContent=t("waiting_platform");return;}
+  const players=latest.players||[];
+  const n0=players[0]?players[0].name:t("player_n",{number:1});
+  const n1=players[1]?players[1].name:t("player_n",{number:2});
+  const robot0=players[0]&&players[0].kind==="computer"?" 🤖":"";
+  const robot1=players[1]&&players[1].kind==="computer"?" 🤖":"";
+  setName("name0","#ffd75e",n0+robot0);
+  setName("name1","#5ec8ff",n1+robot1);
+  //'<span class="dot" style="background:#5ec8ff"></span>'+escapeHtml(n1)+(players[1]&&players[1].kind==="computer"?" 🤖":"");
+  document.getElementById("card0").classList.toggle("me",latest.my_player_index===0);
+  document.getElementById("card1").classList.toggle("me",latest.my_player_index===1);
+  const v=latest.view;
+  if(!v||!v.cells){
+    statusEl.textContent=t("dealing");
+    document.getElementById("score0").textContent="0";
+    document.getElementById("score1").textContent="0";
+    document.getElementById("line0").textContent="";
+    document.getElementById("line1").textContent="";
+    for(let i=0;i<9;i++){const d=document.createElement("div");d.className="star empty";d.textContent="✦";boardEl.appendChild(d);}
+    return;
+  }
+  const cells=v.cells;
+  const s=v.scores||[0,0];
+  const lc=v.lines||[0,0];
+  document.getElementById("score0").textContent=s[0];
+  document.getElementById("score1").textContent=s[1];
+  document.getElementById("line0").textContent=lc[0]?t("line_bonus",{bonus:lc[0]*2,count:lc[0]}):t("no_lines");
+  document.getElementById("line1").textContent=lc[1]?t("line_bonus",{bonus:lc[1]*2,count:lc[1]}):t("no_lines");
+  const active=canAct();
+  cells.forEach((c,i)=>{
+    const b=document.createElement("button");
+    let cls="star ";
+    if(c.o===0) cls+="p0"; else if(c.o===1) cls+="p1"; else cls+="empty";
+    b.className=cls;
+    b.disabled=(c.o!==null&&c.o!==undefined)||!active;
+    const icon=(c.o===0||c.o===1)?"★":"✦";
+    const iconEl=document.createElement("span");iconEl.style.fontSize="30px";iconEl.textContent=icon;
+    const pointsEl=document.createElement("span");pointsEl.className="v";pointsEl.textContent=t("points",{points:c.v});
+    b.append(iconEl,pointsEl);
+    b.onclick=()=>claim(i);
+    boardEl.appendChild(b);
+  });
+  if(latest.status==="over"||v.winner!==null&&v.winner!==undefined){
+    const w=v.winner;
+    if(w===-1) statusEl.textContent=t("tie",{a:s[0],b:s[1]});
+    else if(players[w]) statusEl.textContent=t("wins",{name:players[w].name,a:s[w],b:s[w===0?1:0]});
+    else statusEl.textContent=t("game_over");
+  } else {
+    const acting=(latest.turn_of_player_indices&&latest.turn_of_player_indices.length)?latest.turn_of_player_indices[0]:null;
+    if(acting===null||acting===undefined){statusEl.textContent=t("waiting");}
+    else{
+      const nm=players[acting]?players[acting].name:t("player_n",{number:acting+1});
+      const text=acting===latest.my_player_index?t("turn_you",{name:nm}):(players[acting]&&players[acting].kind==="computer"?t("turn_computer",{name:nm}):t("turn_plain",{name:nm}));
+      const mark=document.createElement("span");mark.className=acting===0?"turn-gold":"turn-blue";mark.textContent="●";
+      statusEl.replaceChildren(mark,document.createTextNode(" "+text));
+      //'<span class="'+cls+'">●</span>&nbsp;'+escapeHtml(nm)+escapeHtml(you)+"'s turn — pick a star";
+    }
+  }
+}
+function escapeHtml(x){return String(x).replace(/[&<>\"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+addEventListener("message",(event)=>{
+  if(event.source!==parent||!event.data||event.data.type!=="state_changed") return;
+  applyLocale(event.data);
+  applyStaticTexts();
+  latest=event.data;
+  render();
+});
+</script>
+</body>
+</html>

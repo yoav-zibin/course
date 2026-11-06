@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Spoons</title><style>body{margin:0;padding:16px;background:#101827;color:#edf2ff;font:16px system-ui}*{box-sizing:border-box}h1{font-size:23px;margin:0 0 8px}#status{font-weight:650;margin:12px 0;color:#8ee7cd}.hand{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}.card{min-width:52px;min-height:66px;padding:6px;border-radius:8px;border:1px solid #64748b;background:#f8fafc;color:#0f172a;font-weight:700;font-size:17px;cursor:pointer}.card.red{color:#dc2626}.card:disabled{cursor:default;opacity:.45}.meta{font-size:14px;color:#bec9dc;white-space:pre-line}button.act{font:inherit;min-height:50px;padding:0 22px;border:1px solid #64748b;border-radius:8px;background:#b45309;color:white;cursor:pointer;font-weight:700}button.act:disabled{opacity:.5;cursor:default}.rules{font-size:14px;color:#bec9dc;max-width:480px}</style></head><body><h1>Spoons</h1><p class="rules">Everyone passes one card to the next player at the same time; the dealer draws fresh. Collect four of a kind, then grab a spoon — once one spoon goes, everyone else must grab too. The player left without a spoon earns a letter (S-P-O-O-N-S); spell it all and you're out.</p><div id="status">Waiting for the platform…</div><div class="meta" id="meta"></div><div class="hand" id="hand"></div><div id="actions"></div><script>
+"use strict";
+let latest=null,sentFor=-1,iPassed=false;
+const $=id=>document.getElementById(id);
+function moveCount(){return latest?(latest.move_count??latest.moveCount??0):0;}
+function acting(){return latest&&latest.status==="ongoing"&&latest.acting_for_player_index!==null&&latest.acting_for_player_index!==undefined;}
+function send(move){if(sentFor===moveCount())return;sentFor=moveCount();parent.postMessage({type:"make_move",move},"*");render();}
+function fourKind(hand){if(!hand||hand.length<4)return false;const r=hand[0].slice(0,-1);return hand.every(c=>c.slice(0,-1)===r);}
+function render(){
+ if(!latest)return;
+ const v=latest.view,status=$("status");
+ const name=i=>(latest.players&&latest.players[i]&&latest.players[i].name)||("Player "+(i+1));
+ if(!v){status.textContent="Waiting…";return;}
+ $("meta").textContent="Round "+v.round+" · deck "+v.deckCount+" · spoons left: "+v.spoonsLeft+"\n"+
+   (latest.players||[]).map((p,i)=>p.name+": "+(v.alive[i]?(v.handCounts[i]+" cards · "+(v.letters[i]||"no letters")):"ELIMINATED ("+(v.letters[i]||"")+")")+(v.passed[i]?" · passed ✓":"")+(v.spoons.includes(i)?" · 🥄 has spoon":"")+(v.dealer===i?" · dealer":"")).join("\n")+
+   (v.loser!==null&&v.loser!==undefined?"\n"+name(v.loser)+" missed the spoon and got a letter!":"");
+ const over=latest.status==="over"||v.phase==="gameOver";
+ if(over)status.textContent=name(v.winner)+" wins Spoons! 🏆";
+ else if(v.phase==="grab")status.textContent="🥄 A spoon was grabbed! Grab yours before they run out!";
+ else if(v.phase==="roundEnd")status.textContent="Round over — "+(acting()?"start the next round when ready.":"waiting for the dealer to start the next round.");
+ else if(sentFor===moveCount()&&iPassed)status.textContent="Card passed — waiting for everyone else…";
+ else status.textContent=acting()?"Pass one card to the next player.":"Waiting for the other players to pass…";
+ const hand=$("hand");hand.replaceChildren();
+ for(const c of (v.hand||[])){
+   const b=document.createElement("button");
+   b.className="card"+((c.endsWith("♥")||c.endsWith("♦"))?" red":"");
+   b.textContent=c;
+   b.disabled=!(v.phase==="pass"&&acting())||sentFor===moveCount();
+   b.onclick=()=>{iPassed=true;send({kind:"pass",card:c});};
+   hand.append(b);
+ }
+ const actions=$("actions");actions.replaceChildren();
+ const grab=document.createElement("button");grab.className="act";grab.textContent="🥄 GRAB A SPOON";
+ const canGrab=!over&&acting()&&(v.phase==="grab"||(v.phase==="pass"&&fourKind(v.hand)));
+ grab.disabled=!canGrab||sentFor===moveCount();
+ grab.onclick=()=>send({kind:"grab"});
+ actions.append(grab);
+ if(v.phase==="roundEnd"&&acting()){
+   const nx=document.createElement("button");nx.className="act";nx.textContent="Deal the next round";
+   nx.disabled=sentFor===moveCount();nx.onclick=()=>send({kind:"next"});actions.append(nx);
+ }
+}
+addEventListener("message",e=>{if(e.source!==parent||!e.data||e.data.type!=="state_changed")return;const prev=latest;latest=e.data;if(!prev||moveCount()!==sentFor)iPassed=false;render();});
+</script></body></html>

@@ -38,23 +38,73 @@ button:disabled{opacity:.4;cursor:default}
 </head>
 <body>
 <div id="wrap">
-<h2 style="margin:4px 0">&#9822; Chess &mdash; 3 min each</h2>
+<h2 style="margin:4px 0" id="title"></h2>
 <div id="clocks">
-<div class="clock" id="clockW"><div class="nm" id="clockWName">&#9898; White</div><div class="tm" id="clockWTime">3:00</div><div class="sub">White clock</div></div>
-<div class="clock" id="clockB"><div class="nm" id="clockBName">&#9899; Black</div><div class="tm" id="clockBTime">3:00</div><div class="sub">Black clock</div></div>
+<div class="clock" id="clockW"><div class="nm" id="clockWName"></div><div class="tm" id="clockWTime">3:00</div><div class="sub" id="clockWLabel"></div></div>
+<div class="clock" id="clockB"><div class="nm" id="clockBName"></div><div class="tm" id="clockBTime">3:00</div><div class="sub" id="clockBLabel"></div></div>
 </div>
-<div id="status">Waiting for platform&hellip;</div>
+<div id="status" role="status" aria-live="polite"></div>
 <div id="board"></div>
 <div id="meta">
-<div class="card"><b>Captured</b><div id="cap">-</div><div style="margin-top:6px"><button id="resign">Resign</button> <button id="newview">Flip</button></div></div>
-<div class="card"><b>Moves</b><div id="hist">-</div></div>
+<div class="card"><b id="capLabel"></b><div id="cap">-</div><div style="margin-top:6px"><button id="resign"></button> <button id="newview"></button></div></div>
+<div class="card"><b id="movesLabel"></b><div id="hist">-</div></div>
 </div>
-<div style="font-size:12px;opacity:.7">White: <span id="wn"></span> &bull; Black: <span id="bn"></span></div>
+<div style="font-size:12px;opacity:.7" id="players"></div>
 </div>
-<div id="promo"><div id="promoBox"><div>Promote to:</div><div id="promoBtns"></div></div></div>
+<div id="promo"><div id="promoBox"><div id="promoLabel"></div><div id="promoBtns"></div></div></div>
+<script type="application/json" id="i18n-strings">
+{
+"title": "♞ Chess — 3 min each",
+"white_clock": "White clock",
+"black_clock": "Black clock",
+"waiting_platform": "Waiting for platform…",
+"captured": "Captured",
+"moves": "Moves",
+"resign": "Resign",
+"flip": "Flip",
+"promote_to": "Promote to:",
+"white": "White",
+"black": "Black",
+"clock_white": "⚪ {name}",
+"clock_black": "⚫ {name}",
+"players_line": "White: {white} • Black: {black}",
+"draw": "Draw — {reason}",
+"wins": "🏆 {name} wins",
+"wins_reason": "🏆 {name} wins ({reason})",
+"game_over": "Game over.",
+"to_move_white": "⚪ {name} to move",
+"to_move_black": "⚫ {name} to move",
+"to_move_white_check": "⚪ {name} to move — CHECK!",
+"to_move_black_check": "⚫ {name} to move — CHECK!",
+"status_waiting": "{text} (waiting…)",
+"captured_line": "White took: {white} | Black took: {black}"
+}
+</script>
 <script>
+
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+
+
 var latest=null, sel=null, flipped=null, timeoutSentFor=null;
 var START_MS=3*60*1000;
+function moveLine(i,hist){var parts=[String(i/2+1).concat('.'),hist[i]];if(hist[i+1])parts.push(hist[i+1]);return parts.join(' ');}
+var FILES=['a','b','c','d','e','f','g','h'];
 var SOLID={K:'\u265A',Q:'\u265B',R:'\u265C',B:'\u265D',N:'\u265E',P:'\u265F'};
 function inB(r,c){return r>=0&&r<8&&c>=0&&c<8;}
 function opp(c){return c==='w'?'b':'w';}
@@ -99,7 +149,13 @@ function legalHints(r,c){var s=st();if(!s||s.winner!=null)return [];var sd=sideO
 function liveMs(color){var s=st();if(!s)return START_MS;var base=color==='w'?(s.wMs!=null?s.wMs:START_MS):(s.bMs!=null?s.bMs:START_MS);if(latest.status==='ongoing'&&s.winner==null&&sideOf(s)===color){base-=Math.max(0,Date.now()-(s.stamp||Date.now()));}return Math.max(0,base);}
 function fmt(ms){ms=Math.max(0,Math.ceil(ms/100)*100);var s=Math.floor(ms/1000);var m=Math.floor(s/60);var sec=s%60;var tenths=Math.floor((ms%1000)/100);return m+':'+String(sec).padStart(2,'0')+'.'+tenths;}
 function fmtShort(ms){ms=Math.max(0,Math.ceil(ms/100)*100);var s=Math.floor(ms/1000);var m=Math.floor(s/60);var sec=s%60;return m+':'+String(sec).padStart(2,'0');}
-function render(){var s=st();if(!s)return;var sd=sideOf(s);var boardEl=document.getElementById('board');boardEl.innerHTML='';var flip=flipped;if(flip===null)flip=(latest.my_player_index===1);var order=[];for(var r=0;r<8;r++)for(var c=0;c<8;c++)order.push([flip?7-r:r,flip?7-c:c]);var chkK=null;if(inCheck(s.board,sd)&&s.winner==null)chkK=findKing(s.board,sd);
+function staticTexts(){
+document.getElementById('title').textContent=t('title');document.getElementById('clockWLabel').textContent=t('white_clock');document.getElementById('clockBLabel').textContent=t('black_clock');
+document.getElementById('capLabel').textContent=t('captured');document.getElementById('movesLabel').textContent=t('moves');document.getElementById('resign').textContent=t('resign');document.getElementById('newview').textContent=t('flip');document.getElementById('promoLabel').textContent=t('promote_to');}
+staticTexts();
+document.getElementById('status').textContent=t('waiting_platform');
+document.getElementById('clockWName').textContent=t('clock_white',{name:t('white')});document.getElementById('clockBName').textContent=t('clock_black',{name:t('black')});
+function render(){var s=st();if(!s)return;staticTexts();var sd=sideOf(s);var boardEl=document.getElementById('board');boardEl.innerHTML='';var flip=flipped;if(flip===null)flip=(latest.my_player_index===1);var order=[];for(var r=0;r<8;r++)for(var c=0;c<8;c++)order.push([flip?7-r:r,flip?7-c:c]);var chkK=null;if(inCheck(s.board,sd)&&s.winner==null)chkK=findKing(s.board,sd);
 var hints=sel?legalHints(sel[0],sel[1]):[];var dests={};for(var hi=0;hi<hints.length;hi++){var k=hints[hi].tr+','+hints[hi].tc;if(!dests[k])dests[k]=[];dests[k].push(hints[hi]);}
 for(var oi=0;oi<order.length;oi++){var rr=order[oi][0],cc=order[oi][1];(function(r,c){
 var d=document.createElement('div');d.className='sq '+(((r+c)%2===0)?'light':'dark');
@@ -112,22 +168,27 @@ var dk=r+','+c;
 if(dests[dk]){var isCap=!!s.board[r][c];if(!isCap){for(var zi=0;zi<dests[dk].length;zi++)if(dests[dk][zi].ep)isCap=true;}
 var dot=document.createElement('div');dot.className=isCap?'cap':'dot';d.appendChild(dot);}
 if(c===0){var lab=document.createElement('span');lab.className='coord fc';lab.textContent=(8-r);lab.style.color=((r+c)%2===0)?'#b58863':'#f0d9b5';d.appendChild(lab);}
-if(r===(flip?0:7)){var lab2=document.createElement('span');lab2.className='coord rc';lab2.textContent='abcdefgh'[c];lab2.style.color=((r+c)%2===0)?'#b58863':'#f0d9b5';d.appendChild(lab2);}
+if(r===(flip?0:7)){var lab2=document.createElement('span');lab2.className='coord rc';lab2.textContent=FILES[c];lab2.style.color=((r+c)%2===0)?'#b58863':'#f0d9b5';d.appendChild(lab2);}
 d.onclick=function(){onSq(r,c);};
 boardEl.appendChild(d);})(rr,cc);}
 var names=latest.players.map(function(p){return p.name;});
-document.getElementById('wn').textContent=names[0]||'White';document.getElementById('bn').textContent=names[1]||'Black';
-document.getElementById('clockWName').textContent='\u26AA '+(names[0]||'White');document.getElementById('clockBName').textContent='\u26AB '+(names[1]||'Black');
+var whiteName=names[0]||t('white'),blackName=names[1]||t('black');
+document.getElementById('players').textContent=t('players_line',{white:whiteName,black:blackName});
+document.getElementById('clockWName').textContent=t('clock_white',{name:whiteName});document.getElementById('clockBName').textContent=t('clock_black',{name:blackName});
 updateClocks();var status='';
-if(s.winner!==null&&s.winner!==undefined){if(s.winner===-1)status='Draw \u2014 '+(s.reason||'');else status='\uD83C\uDFC6 '+(latest.players[s.winner]?latest.players[s.winner].name:s.winner)+' wins'+(s.reason?' ('+s.reason+')':'');}
-else if(latest.status==='over')status='Game over.';
-else{var seat=sd==='w'?0:1;var nm=latest.players[seat]?latest.players[seat].name:(sd==='w'?'White':'Black');status=(sd==='w'?'\u26AA ':'\u26AB ')+nm+' to move';if(inCheck(s.board,sd))status+=' \u2014 CHECK!';if(!canAct())status+=' (waiting\u2026)';}
+if(s.winner!==null&&s.winner!==undefined){if(s.winner===-1)status=t('draw',{reason:s.reason||''});else{var wq={name:latest.players[s.winner]?latest.players[s.winner].name:s.winner,reason:s.reason};status=s.reason?t('wins_reason',wq):t('wins',wq);}}
+else if(latest.status==='over')status=t('game_over');
+else{var seat=sd==='w'?0:1;var nq={name:latest.players[seat]?latest.players[seat].name:(sd==='w'?t('white'):t('black'))};var chk=inCheck(s.board,sd);
+if(sd==='w')status=chk?t('to_move_white_check',nq):t('to_move_white',nq);else status=chk?t('to_move_black_check',nq):t('to_move_black',nq);
+if(!canAct())status=t('status_waiting',{text:status});}
 document.getElementById('status').textContent=status;
-var h='-';if(s.history&&s.history.length){h='';for(var i=0;i<s.history.length;i+=2){h+=(i/2+1)+'. '+s.history[i]+(s.history[i+1]?' '+s.history[i+1]:'')+'<br>';}}
-document.getElementById('hist').innerHTML=h;
+var histEl=document.getElementById('hist');
+if(s.history&&s.history.length){var rows=[];for(var i=0;i<s.history.length;i+=2){var row=document.createElement('div');row.textContent=moveLine(i,s.history);rows.push(row);}histEl.replaceChildren.apply(histEl,rows);}
+else histEl.textContent='-';
 var counts={};for(var cr=0;cr<8;cr++)for(var cc2=0;cc2<8;cc2++){var pp=s.board[cr][cc2];if(pp)counts[pp]=(counts[pp]||0)+1;}
 var start={wP:8,wN:2,wB:2,wR:2,wQ:1,bP:8,bN:2,bB:2,bR:2,bQ:1};var capW='',capB='';for(var kk in start){var missing=start[kk]-(counts[kk]||0);for(var mi=0;mi<missing;mi++){var ch=SOLID[kk[1]];if(kk[0]==='w')capB+=ch+' ';else capW+=ch+' ';}}
-document.getElementById('cap').textContent=(capW||capB)?('White took: '+(capW||'-')+' | Black took: '+(capB||'-')):'-';
+var takenW=capW||'-',takenB=capB||'-';
+document.getElementById('cap').textContent=(capW||capB)?t('captured_line',{white:takenW,black:takenB}):'-';
 document.getElementById('resign').disabled=!canAct()||s.winner!==null;}
 function updateClocks(){var s=st();if(!s)return;var sd=sideOf(s);var w=liveMs('w'),b=liveMs('b');document.getElementById('clockWTime').textContent=(w<20000?fmt(w):fmtShort(w));document.getElementById('clockBTime').textContent=(b<20000?fmt(b):fmtShort(b));var cw=document.getElementById('clockW'),cb=document.getElementById('clockB');cw.classList.toggle('active',s.winner==null&&latest.status==='ongoing'&&sd==='w');cb.classList.toggle('active',s.winner==null&&latest.status==='ongoing'&&sd==='b');cw.classList.toggle('low',w<30000&&s.winner==null);cb.classList.toggle('low',b<30000&&s.winner==null);cw.classList.toggle('out',w<=0);cb.classList.toggle('out',b<=0);}
 setInterval(function(){if(!latest||latest.status!=='ongoing')return;var s=st();if(!s||s.winner!=null)return;updateClocks();if(canAct()&&timeoutSentFor!==latest.move_count){var mine=myColor();if(mine&&sideOf(s)===mine&&liveMs(mine)<=0){timeoutSentFor=latest.move_count;parent.postMessage({type:'make_move',move:{timeout:true}},'*');}}},200);
@@ -139,7 +200,7 @@ render();}
 function showPromo(opts){var box=document.getElementById('promo');var btns=document.getElementById('promoBtns');btns.innerHTML='';var col=sideOf(st());for(var i=0;i<opts.length;i++){(function(m){var b=document.createElement('button');b.textContent=SOLID[m.promo];if(col==='w'){b.style.color='#fff';b.style.textShadow='-1px -1px 0 #222,1px -1px 0 #222,-1px 1px 0 #222,1px 1px 0 #222';}else{b.style.color='#111';}
 b.onclick=function(){box.style.display='none';sendMove(m);};btns.appendChild(b);})(opts[i]);}box.style.display='flex';}
 function sendMove(m){sel=null;parent.postMessage({type:'make_move',move:{fr:m.fr,fc:m.fc,tr:m.tr,tc:m.tc,promo:m.promo||null}},'*');}
-addEventListener('message',function(e){if(e.source!==parent||!e.data||e.data.type!=='state_changed')return;latest=e.data;sel=null;timeoutSentFor=null;document.getElementById('promo').style.display='none';render();});
+addEventListener('message',function(e){if(e.source!==parent||!e.data||e.data.type!=='state_changed')return;applyLocale(e.data);latest=e.data;sel=null;timeoutSentFor=null;document.getElementById('promo').style.display='none';render();});
 document.getElementById('resign').onclick=function(){if(!canAct())return;parent.postMessage({type:'make_move',move:{resign:true}},'*');};
 document.getElementById('newview').onclick=function(){flipped=flipped===null?!(latest&&latest.my_player_index===1):!flipped;if(flipped===null)flipped=true;render();};
 </script>

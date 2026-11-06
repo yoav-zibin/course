@@ -4,17 +4,14 @@ const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
 const games=path.join(__dirname,'../../games/audit-batch1');
+const {pageScriptOf,fakeDom,texts}=require('./page-helper.cjs');
 
 function setup(name){
-  const nodes=new Map(),sent=[];let receive;
-  const element=()=>({children:[],style:{},textContent:'',innerHTML:'',disabled:false,
-    append(...items){this.children.push(...items);},replaceChildren(...items){this.children=items;},
-    querySelectorAll(){return [];},addEventListener(type,fn){this['on'+type]=fn;}});
-  const document={getElementById(id){if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);},createElement:element};
+  const sent=[];let receive;const {document,ids:nodes}=fakeDom();
   const parent={postMessage:message=>sent.push(message)};
   const sandbox={document,parent,addEventListener:(type,fn)=>{if(type==='message')receive=fn;}};
   sandbox.window=sandbox;
-  const code=fs.readFileSync(path.join(games,name+'.html'),'utf8').match(/<script[^>]*>([\s\S]*?)<\/script>/)[1];
+  const code=pageScriptOf(path.join(games,name+'.html'),document);
   vm.runInNewContext(code,sandbox);
   return {nodes,sent,send:message=>receive({source:parent,data:message}),otherSend:message=>receive({source:{},data:message})};
 }
@@ -60,5 +57,5 @@ test('Beat the Landlord client parses and renders actual server views',()=>{
   const ctx={players:[0,1,2].map(i=>({id:'p'+i,kind:'human',display_name:'Player'+i})),pot:60,move_count:0,random:()=>.5};
   const game=sandbox.auditGame,initial=game.newMatch(ctx),view=game.viewFor(initial.state,'p0',ctx);
   const t=setup('beat-the-landlord');t.send({...message,players:ctx.players.map(p=>({name:p.display_name})),view});
-  assert.match(t.nodes.get('t').innerHTML,/Bidding/);assert.match(t.nodes.get('t').innerHTML,/Player0/);
+  const shown=texts(t.nodes.get('t')).join('|');assert.match(shown,/Bidding/);assert.match(shown,/Player0/);
 });

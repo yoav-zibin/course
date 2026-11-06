@@ -30,18 +30,68 @@ button:disabled{opacity:.4;cursor:default}
 </head>
 <body>
 <div id="wrap">
-<h2 style="margin:4px 0">♞ Chess</h2>
-<div id="status">Waiting for platform…</div>
+<h2 style="margin:4px 0" id="title"></h2>
+<div id="status" role="status" aria-live="polite"></div>
 <div id="board"></div>
 <div id="meta">
-<div class="card"><b>Captured</b><div id="cap">-</div><div style="margin-top:6px"><button id="resign">Resign</button> <button id="newview">Flip</button></div></div>
-<div class="card"><b>Moves</b><div id="hist">-</div></div>
+<div class="card"><b id="capLabel"></b><div id="cap">-</div><div style="margin-top:6px"><button id="resign"></button> <button id="newview"></button></div></div>
+<div class="card"><b id="movesLabel"></b><div id="hist">-</div></div>
 </div>
-<div style="font-size:12px;opacity:.7">White: <span id="wn"></span> • Black: <span id="bn"></span></div>
+<div style="font-size:12px;opacity:.7" id="players"></div>
 </div>
-<div id="promo"><div id="promoBox"><div>Promote to:</div><div id="promoBtns"></div></div></div>
+<div id="promo"><div id="promoBox"><div id="promoLabel"></div><div id="promoBtns"></div></div></div>
+<script type="application/json" id="i18n-strings">
+{
+"title": "♞ Chess",
+"captured": "Captured",
+"moves": "Moves",
+"resign": "Resign",
+"flip": "Flip",
+"promote_to": "Promote to:",
+"waiting_platform": "Waiting for platform…",
+"white": "White",
+"black": "Black",
+"players_line": "White: {white} • Black: {black}",
+"draw": "Draw — {reason}",
+"wins": "🏆 {name} wins",
+"wins_reason": "🏆 {name} wins ({reason})",
+"game_over": "Game over.",
+"to_move_white": "⚪ {name} to move",
+"to_move_black": "⚫ {name} to move",
+"to_move_white_check": "⚪ {name} to move — CHECK!",
+"to_move_black_check": "⚫ {name} to move — CHECK!",
+"status_waiting": "{text} (waiting…)",
+"status_thinking": "{text} (computer thinking…)",
+"captured_line": "White took: {white} | Black took: {black}"
+}
+</script>
 <script>
+
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+
+
 let latest=null, sel=null, legalCache=[], flipped=null, sentFor=-1;
+const FILES=['a','b','c','d','e','f','g','h'];
+function moveLine(i,hist){const parts=[String(i/2+1).concat('.'),hist[i]];if(hist[i+1])parts.push(hist[i+1]);return parts.join(' ');}
+function staticTexts(){document.getElementById('title').textContent=t('title');document.getElementById('capLabel').textContent=t('captured');document.getElementById('movesLabel').textContent=t('moves');document.getElementById('resign').textContent=t('resign');document.getElementById('newview').textContent=t('flip');document.getElementById('promoLabel').textContent=t('promote_to');}
+staticTexts();
+document.getElementById('status').textContent=t('waiting_platform');
 const SOLID={1:"♟",2:"♞",3:"♝",4:"♜",5:"♛",6:"♚"};
 const TYPE_LETTER=["","","N","B","R","Q","K"];
 const KNIGHT_OFFS=[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
@@ -102,7 +152,7 @@ function mySeat(){return latest?latest.my_player_index:null;}
 function canAct(){return latest&&latest.status==="ongoing"&&latest.acting_for_player_index!==null&&latest.acting_for_player_index===mySeat();}
 function myColor(){const s=mySeat();return s===0?"w":s===1?"b":null;}
 function render(){
-  if(!latest||!view())return;const s=st();const boardEl=document.getElementById("board");boardEl.innerHTML="";
+  if(!latest||!view())return;staticTexts();const s=st();const boardEl=document.getElementById("board");boardEl.replaceChildren();
   let flip=flipped;if(flip===null)flip=(mySeat()===1);
   const order=[];for(let r=0;r<8;r++)for(let c=0;c<8;c++)order.push([flip?7-r:r,flip?7-c:c]);
   const turnWhite=s.turn==="w";
@@ -117,21 +167,25 @@ function render(){
     if(p){const sp=document.createElement("span");sp.className="pc";sp.textContent=SOLID[Math.abs(p)];if(p>0){sp.style.color="#ffffff";sp.style.textShadow="-1px -1px 0 #222,1px -1px 0 #222,-1px 1px 0 #222,1px 1px 0 #222,0 0 2px #222";}else{sp.style.color="#111111";sp.style.textShadow="0 0 2px rgba(255,255,255,.6)";}d.appendChild(sp);}
     if(dests.has(r+","+c)){const isCap=!!s.bd[r*8+c]||dests.get(r+","+c).some(m=>m.enPassant);const dot=document.createElement("div");dot.className=isCap?"cap":"dot";d.appendChild(dot);}
     if(c===0){const lab=document.createElement("span");lab.className="coord fc";lab.textContent=(8-r);lab.style.color=((r+c)%2===0)?"#b58863":"#f0d9b5";d.appendChild(lab);}
-    if(r===(flip?0:7)){const lab=document.createElement("span");lab.className="coord rc";lab.textContent="abcdefgh"[c];lab.style.color=((r+c)%2===0)?"#b58863":"#f0d9b5";d.appendChild(lab);}
+    if(r===(flip?0:7)){const lab=document.createElement("span");lab.className="coord rc";lab.textContent=FILES[c];lab.style.color=((r+c)%2===0)?"#b58863":"#f0d9b5";d.appendChild(lab);}
     d.onclick=()=>onSq(r,c);
     boardEl.appendChild(d);}
-  const names=latest.players.map(p=>p.name);document.getElementById("wn").textContent=names[0]||"White";document.getElementById("bn").textContent=names[1]||"Black";
+  const names=latest.players.map(p=>p.name);document.getElementById("players").textContent=t("players_line",{white:names[0]||t("white"),black:names[1]||t("black")});
   let status="";
-  if(s.winner!==null&&s.winner!==undefined){if(s.winner===-1)status="Draw — "+(s.reason||"");else status="🏆 "+(latest.players[s.winner]?latest.players[s.winner].name:s.winner)+" wins"+(s.reason?" ("+s.reason+")":"");}
-  else if(latest.status==="over")status="Game over.";
-  else{const seat=s.turn==="w"?0:1;const nm=latest.players[seat]?latest.players[seat].name:(s.turn==="w"?"White":"Black");status=(s.turn==="w"?"⚪ ":"⚫ ")+nm+" to move";if(inCheck(s.bd,turnWhite))status+=" — CHECK!";if(!canAct())status+=" (waiting…)";else if(latest.players[latest.acting_for_player_index]&&latest.players[latest.acting_for_player_index].kind==="computer")status+=" (computer thinking…)";}
+  if(s.winner!==null&&s.winner!==undefined){if(s.winner===-1)status=t("draw",{reason:s.reason||""});else{const wq={name:latest.players[s.winner]?latest.players[s.winner].name:s.winner,reason:s.reason};status=s.reason?t("wins_reason",wq):t("wins",wq);}}
+  else if(latest.status==="over")status=t("game_over");
+  else{const seat=s.turn==="w"?0:1;const nq={name:latest.players[seat]?latest.players[seat].name:(s.turn==="w"?t("white"):t("black"))};const chk=inCheck(s.bd,turnWhite);
+    if(s.turn==="w")status=chk?t("to_move_white_check",nq):t("to_move_white",nq);else status=chk?t("to_move_black_check",nq):t("to_move_black",nq);
+    if(!canAct())status=t("status_waiting",{text:status});else if(latest.players[latest.acting_for_player_index]&&latest.players[latest.acting_for_player_index].kind==="computer")status=t("status_thinking",{text:status});}
   document.getElementById("status").textContent=status;
-  const hist=s.history;let h="-";if(hist&&hist.length){h="";for(let i=0;i<hist.length;i+=2){h+=(i/2+1)+". "+hist[i]+(hist[i+1]?" "+hist[i+1]:"")+"<br>";}}
-  document.getElementById("hist").innerHTML=h;
+  const hist=s.history;const histEl=document.getElementById("hist");
+  if(hist&&hist.length){const rows=[];for(let i=0;i<hist.length;i+=2){const row=document.createElement("div");row.textContent=moveLine(i,hist);rows.push(row);}histEl.replaceChildren.apply(histEl,rows);}
+  else histEl.textContent="-";
   const counts={};for(let i=0;i<64;i++){const p=s.bd[i];if(p)counts[p]=(counts[p]||0)+1;}
   const start={1:8,2:2,3:2,4:2,5:1,"-1":8,"-2":2,"-3":2,"-4":2,"-5":1};let capW="",capB="";
   for(const k in start){const missing=start[k]-(counts[k]||0);for(let i=0;i<missing;i++){const ch=SOLID[Math.abs(+k)];if(+k>0)capB+=ch+" ";else capW+=ch+" ";}}
-  document.getElementById("cap").textContent=(capW||capB)?("White took: "+(capW||"-")+" | Black took: "+(capB||"-")):"-";
+  const takenW=capW||"-",takenB=capB||"-";
+  document.getElementById("cap").textContent=(capW||capB)?t("captured_line",{white:takenW,black:takenB}):"-";
   document.getElementById("resign").disabled=!canAct()||s.winner!==null;}
 function onSq(r,c){
   if(!canAct())return;const s=st();if(s.winner!==null)return;
@@ -144,7 +198,7 @@ function onSq(r,c){
   else{sel=null;legalCache=[];}
   render();}
 function showPromo(opts){
-  const box=document.getElementById("promo");const btns=document.getElementById("promoBtns");btns.innerHTML="";
+  const box=document.getElementById("promo");const btns=document.getElementById("promoBtns");btns.replaceChildren();
   const col=st().turn;
   for(const m of opts){const b=document.createElement("button");b.textContent=SOLID[m.promo];if(col==="w"){b.style.color="#fff";b.style.textShadow="-1px -1px 0 #222,1px -1px 0 #222,-1px 1px 0 #222,1px 1px 0 #222";}else{b.style.color="#111";}b.onclick=()=>{box.style.display="none";sendMove(m);};btns.appendChild(b);}
   box.style.display="flex";}
@@ -157,7 +211,7 @@ function sendMove(move){
   render();}
 addEventListener("message",e=>{
   if(e.source!==parent||!e.data||e.data.type!=="state_changed")return;
-  latest=e.data;sel=null;legalCache=[];
+  applyLocale(e.data);latest=e.data;sel=null;legalCache=[];
   document.getElementById("promo").style.display="none";
   render();});
 document.getElementById("resign").onclick=()=>{

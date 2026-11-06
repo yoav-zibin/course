@@ -86,13 +86,15 @@ def plan_schema_map(
     supplied: Mapping[str, Mapping[str, Any]],
     *,
     shipped: Mapping[str, Mapping[str, Any]] | None = None,
+    inferred: Mapping[str, Mapping[str, Any]] | None = None,
     permissive_rest: bool = False,
 ) -> tuple[dict[str, Mapping[str, Any]], dict[str, str]]:
     """The schemas to write for each missing version, and where each came from.
 
     A version in [supplied] uses it. Otherwise the newest missing version of a game with a
-    shipped schema file uses that file (older versions may have had other shapes), and the
-    rest get permissive schemas only when [permissive_rest] is set.
+    shipped schema file uses that file (older versions may have had other shapes); then a
+    version in [inferred] (see [infer_schemas]) uses that; the rest get permissive schemas
+    only when [permissive_rest] is set.
     """
     newest: dict[str, int] = {}
     for game_id, version in missing:
@@ -105,9 +107,28 @@ def plan_schema_map(
             plan[key], source[key] = supplied[key], "the schema map"
         elif shipped and game_id in shipped and version == newest[game_id]:
             plan[key], source[key] = shipped[game_id], f"games/{game_id}.schema.json"
+        elif inferred and key in inferred:
+            plan[key], source[key] = inferred[key], "inferred from sample games (not a proof)"
         elif permissive_rest:
             plan[key], source[key] = PERMISSIVE_SCHEMAS, "permissive (no validation)"
     return plan, source
+
+
+def infer_schemas(store: Store, keys: list[str], *, log=print) -> dict[str, dict[str, Any]]:
+    """Schemas inferred by playing each version's server code (the platform's generator for
+    new games, game_testing.infer_game_schemas). Needs the QuickJS runtime, as on the server.
+    A version that cannot be exercised is reported and left out."""
+    from game_platform.game_testing import infer_game_schemas
+
+    games = {version_key(game.id, game.version): game for game in store.list_all_game_versions()}
+    found: dict[str, dict[str, Any]] = {}
+    for key in keys:
+        game = games[key]
+        try:
+            found[key], _ = infer_game_schemas(game.server_code, game_id=game.id, rules=game.rules)
+        except Exception as error:
+            log(f"{key}: could not infer schemas ({error})")
+    return found
 
 
 def open_store(config: Config) -> SavingStore:
@@ -155,6 +176,11 @@ def main() -> None:
         help="use games/<id>.schema.json for the newest missing version of a built-in game",
     )
     parser.add_argument(
+        "--infer-rest",
+        action="store_true",
+        help="for the other versions, infer schemas by playing their server code (sample-based)",
+    )
+    parser.add_argument(
         "--permissive-rest",
         action="store_true",
         help="give every other missing version schemas that accept any JSON (a stopgap)",
@@ -171,8 +197,13 @@ def main() -> None:
         missing = missing_versions(store)
         supplied = _load_schema_map(args.schemas) if args.schemas else {}
         shipped = repo_schemas(Path(__file__).with_name("games")) if args.use_repo_schemas else None
+        plan, source = plan_schema_map(missing, supplied, shipped=shipped)
+        inferred: dict[str, dict[str, Any]] = {}
+        if args.infer_rest:
+            left = [version_key(*version) for version in missing if version_key(*version) not in plan]
+            inferred = infer_schemas(store, left)
         plan, source = plan_schema_map(
-            missing, supplied, shipped=shipped, permissive_rest=args.permissive_rest
+            missing, supplied, shipped=shipped, inferred=inferred, permissive_rest=args.permissive_rest
         )
         for game_id, version in missing:
             key = version_key(game_id, version)
