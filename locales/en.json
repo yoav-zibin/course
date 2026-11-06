@@ -45,6 +45,7 @@
   "error.game_schemas_required": "game_schemas is required when server_code is provided",
   "error.game_schemas_requires_server": "game_schemas requires server_code",
   "error.game_schemas_required_for_server_code": "game_schemas is required for server_code",
+  "error.game_schemas_generation_failed": "could not automatically generate JSON Schemas: {detail}",
   "error.refactor_job_running": "A refactor job is already running; wait for it to finish.",
   "error.refactor_job_not_found": "No such refactor job.",
   "error.match_not_ongoing": "the match is not ongoing",

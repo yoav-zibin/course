@@ -165,7 +165,7 @@ def test_gate_rejection_keeps_both_code_parts_and_continues(patch_case, monkeypa
     ]))
     results = getattr(migrations, f"apply_audit_batch{batch}")(platform)
     assert [r["status"] for r in results] == ["error", "updated"]
-    assert "failed its tests" in results[0]["detail"]
+    assert "could not automatically generate JSON Schemas" in results[0]["detail"]
     assert store.get_game(original.id) == original
     assert store.get_game_version(original.id, 10) is None
     assert store.get_game(following.id).version == 10

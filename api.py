@@ -714,7 +714,9 @@ def test_game(
     this before publishing, which is gated on the same tests."""
     report = platform.test_game_code(
         server_code=body.server_code,
-        game_schemas=body.game_schemas.model_dump(),
+        game_schemas=(
+            body.game_schemas.model_dump() if body.game_schemas is not None else None
+        ),
         rules=GameRules(
             allowed_player_counts=tuple(body.allowed_player_counts),
             allows_leave_mid_match=body.allows_leave_mid_match,
@@ -731,14 +733,15 @@ def emulator_reset(
 ) -> EmulatorOut:
     """Starts an emulated match on unsaved server code (the builder's test
     play): runs newMatch and advances any computer players."""
-    return EmulatorOut.model_validate(
-        platform.emulator_reset(
-            server_code=body.server_code,
-            game_schemas=body.game_schemas.model_dump(),
-            players=[player.model_dump() for player in body.players],
-            seed=body.seed,
-        )
+    game_schemas = body.game_schemas.model_dump()
+    result = platform.emulator_reset(
+        server_code=body.server_code,
+        game_schemas=game_schemas,
+        players=[player.model_dump() for player in body.players],
+        seed=body.seed,
     )
+    result["game_schemas"] = game_schemas
+    return EmulatorOut.model_validate(result)
 
 
 @router.post("/emulator/act")
@@ -1704,7 +1707,7 @@ async def agent_chat(
 
     def server_tester(
         server_code: str,
-        game_schemas: dict,
+        game_schemas: dict | None,
         allowed_player_counts: list[int],
         allows_leave_mid_match: bool,
         allows_join_mid_match: bool,

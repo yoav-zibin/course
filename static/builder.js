@@ -5,7 +5,7 @@ const EMPTY = {name:"",description:"",code:"",server_code:"",game_schemas:null,a
 const content = value => Object.fromEntries(Object.keys(EMPTY).map(key => [key, value[key] ?? EMPTY[key]]));
 const copy = value => JSON.parse(JSON.stringify(value));
 const state = {games:[],drafts:[],starters:[],starterLoading:false,starterRequest:0,selectedId:null,editor:copy(EMPTY),baseline:null,session:0,
-  savePromise:null,saveTimer:null,saveError:"",schemaError:"",publishing:false,restoring:false,deleteArmed:false,
+  savePromise:null,saveTimer:null,saveError:"",publishing:false,restoring:false,deleteArmed:false,
   agentRequest:null,agentSending:false,agentDebug:false,messages:[],log:[],undo:[],test:null,
   aiOpen:true,panelPosition:null,saveWarning:"",ownerId:null};
 const frame = new GameFrame($("test-frame"), onTestMove, problem => testLog(problem,true));
@@ -70,7 +70,7 @@ async function select(id) {
   if (!me() || state.selectedId === id || state.publishing || state.restoring) return;
   if (isDirty() && !(await flushAutosave())) return;
   clearTimeout(state.saveTimer); clearAgent(); state.session++;
-  state.selectedId=id; state.ownerId=me()?.id; state.undo=[]; state.deleteArmed=false; state.saveError="";state.saveWarning="";state.schemaError="";
+  state.selectedId=id; state.ownerId=me()?.id; state.undo=[]; state.deleteArmed=false; state.saveError="";state.saveWarning="";
   state.messages=[];state.log=[]; state.aiOpen=true;
   if (id !== "new" && await StoragePages.enabled()) {
     const user=me(),session=state.session;
@@ -148,7 +148,6 @@ function scheduleAutosave() {
 }
 async function flushAutosave() {
   clearTimeout(state.saveTimer);
-  if (state.schemaError) return false;
   if (state.savePromise) {
     const succeeded=await state.savePromise;
     return succeeded && isDirty() ? flushAutosave() : succeeded;
@@ -199,23 +198,6 @@ async function publishVersion() {
 function changeName() {
   state.editor.name=$("game-name").value;state.deleteArmed=false;scheduleAutosave();
 }
-function changeGameSchemas() {
-  const text=$("game-schemas").value.trim();
-  if (!text) {
-    if (state.editor.server_code) {
-      state.schemaError="Schemas are required while this game has server code.";renderStatus();return;
-    }
-    state.editor.game_schemas=null;state.schemaError="";scheduleAutosave();return;
-  }
-  try {
-    const schemas=JSON.parse(text);
-    if (!schemas||typeof schemas!=="object"||Array.isArray(schemas)) throw new Error("Expected an object with state, move, and view schemas.");
-    if (Object.keys(schemas).length!==3 || !["state","move","view"].every(key=>Object.prototype.hasOwnProperty.call(schemas,key))) throw new Error("Include only state, move, and view schemas.");
-    state.editor.game_schemas=schemas;state.schemaError="";scheduleAutosave();
-  } catch(error) {
-    state.schemaError="Invalid JSON: "+error.message;renderStatus();
-  }
-}
 function renderLibrary() {
   const library=new Map(state.games.map(game=>[game.id,game]));
   for (const draft of state.drafts) library.set(draft.id,draft);
@@ -229,7 +211,7 @@ function renderLibrary() {
 function renderStatus() {
   const game=selectedGame();
   const changed=!game || game.published===false || JSON.stringify(content(game))!==JSON.stringify(state.editor);
-  $("publish").disabled=!state.editor.code || !state.editor.name.trim() || !changed || state.publishing || state.agentSending || state.restoring || Boolean(state.schemaError);
+  $("publish").disabled=!state.editor.code || !state.editor.name.trim() || !changed || state.publishing || state.agentSending || state.restoring;
   $("publish").textContent=state.publishing ? I18n.t("ui.builder.publishing",{},"Publishing…"):I18n.t("ui.action.publish",{},"Publish");
   $("save-status").textContent=state.saveError || state.saveWarning || (state.savePromise ? "Saving…":isDirty()?"Saving…":state.selectedId && state.editor.code?"Autosaved":"");
   $("save-status").className="save-status"+((state.saveError||state.saveWarning)?" error":"");
@@ -248,9 +230,6 @@ function renderStatus() {
   $("game-summary").textContent=state.editor.description;
   $("server-code-box").hidden=!state.editor.server_code;
   $("server-code").textContent=state.editor.server_code || "";
-  $("game-schemas-box").hidden=!state.editor.server_code;
-  $("game-schemas-error").textContent=state.schemaError;
-  if (document.activeElement!==$("game-schemas")) $("game-schemas").value=state.editor.game_schemas ? JSON.stringify(state.editor.game_schemas,null,2) : "";
   $("game-version").textContent=game ? "v"+game.version:"First version";
   $("play-game").hidden=!game || game.published===false;
   if (game) $("play-game").href="/portal#game="+encodeURIComponent(game.id);
@@ -318,6 +297,26 @@ async function startEmulatorTest(players, mode) {
   state.test=test;
   frame.load(state.editor.code);
   try {
+    if (!test.gameSchemas) {
+      const generated=await apiRequest("POST","/games/test",{user:me(),body:{
+        server_code:test.serverCode,
+        allowed_player_counts:state.editor.allowed_player_counts,
+        allows_leave_mid_match:state.editor.allows_leave_mid_match,
+        allows_join_mid_match:state.editor.allows_join_mid_match,
+        game_id:state.selectedId==="new"?null:state.selectedId,
+      }});
+      if (state.test!==test) return;
+      if (!generated.game_schemas) {
+        const detail=generated.failures?.[0]?.message || "The game did not produce enough valid examples to generate schemas.";
+        throw new Error(detail);
+      }
+      test.gameSchemas=generated.game_schemas;
+      state.editor.game_schemas=generated.game_schemas;
+      if (!generated.passed) {
+        testLog("Schema generation completed, but random-walk checks found game issues. See the builder test report.",true);
+      }
+      scheduleAutosave();
+    }
     const reply=await apiRequest("POST","/emulator/reset",{user:me(),body:{
       server_code:test.serverCode,
       game_schemas:test.gameSchemas,
@@ -325,6 +324,11 @@ async function startEmulatorTest(players, mode) {
       seed:test.seed,
     }});
     if (state.test!==test) return;
+    if (reply.game_schemas) {
+      test.gameSchemas=reply.game_schemas;
+      state.editor.game_schemas=reply.game_schemas;
+      scheduleAutosave();
+    }
     // The server assigned the player ids (human-1..., computer-1...).
     test.players=reply.players.map((p,seat)=>({player_index:seat,player_id:p.id,kind:p.kind,name:p.name}));
     applyEmulatorReply(test,reply);
@@ -613,7 +617,10 @@ async function sendAgentMessage() {
       } else {
         state.undo.push(editorValues());state.undo=state.undo.slice(-8);
         state.editor={...state.editor,code:reply.code,server_code:reply.server_code ?? state.editor.server_code,
-          game_schemas:reply.game_schemas ?? state.editor.game_schemas,allowed_player_counts:counts,
+          game_schemas:reply.game_schemas ?? (
+            reply.server_code && reply.server_code !== state.editor.server_code
+              ? null : state.editor.game_schemas
+          ),allowed_player_counts:counts,
           allows_leave_mid_match:reply.allows_leave_mid_match ?? state.editor.allows_leave_mid_match,
           allows_join_mid_match:reply.allows_join_mid_match ?? state.editor.allows_join_mid_match,
           name:reply.name || state.editor.name || input.split("\n")[0].slice(0,80),description:reply.description ?? state.editor.description};
@@ -689,7 +696,7 @@ function initFloatingPanel() {
 async function onUserChanged() {
   clearTimeout(state.saveTimer);clearAgent();state.session++;
   state.starterRequest++;state.starterLoading=false;state.starters=[];
-  state.selectedId=null;state.baseline=null;state.editor=copy(EMPTY);state.savePromise=null;state.saveError="";state.saveWarning="";state.schemaError="";
+  state.selectedId=null;state.baseline=null;state.editor=copy(EMPTY);state.savePromise=null;state.saveError="";state.saveWarning="";
   state.ownerId=null;state.publishing=false;state.restoring=false;state.games=[];state.drafts=[];
   state.messages=[];state.log=[];state.undo=[];stopTest();render();
   try{await loadGames();await resumeWorkspace();}catch(error){showPageError("Couldn't load games: "+error.message);}
@@ -708,7 +715,6 @@ async function main() {
   $("welcome-action").addEventListener("click",()=>me()?select("new"):Auth.openDialog("login"));
   $("publish").addEventListener("click",publishVersion);$("retry-save").addEventListener("click",()=>flushAutosave());
   $("game-name").addEventListener("input",changeName);$("undo-ai-change").addEventListener("click",undoAppliedChange);
-  $("game-schemas").addEventListener("input",changeGameSchemas);
   $("play-mode").addEventListener("change",startTest);$("restart").addEventListener("click",startTest);
   $("pause-test").addEventListener("click",pauseTest);
   $("step-test").addEventListener("click",stepTest);

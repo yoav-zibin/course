@@ -95,6 +95,7 @@ def test_the_prompt_teaches_the_server_contract() -> None:
     assert "viewFor" in system
     assert "InvalidMove" in system
     assert "ctx.random" in system
+    assert "Do not author schemas" in system
     # The current server code rides along in the context.
     assert "current server code" in messages[1]["content"]
     assert "/* old */" in messages[1]["content"]
@@ -106,6 +107,16 @@ def test_server_code_is_parsed_from_a_reply() -> None:
     assert response.server_code == GOOD_CODE
     # No tester was given, so nothing was tested.
     assert response.server_test_passed is None
+
+
+def test_server_code_does_not_require_agent_authored_schemas() -> None:
+    reply = json.loads(_reply(GOOD_CODE))
+    reply["game_schemas"] = None
+    response = chat_with_agent(
+        _SequenceClient([json.dumps(reply)]), _request(game_schemas=None)
+    )
+    assert response.server_code == GOOD_CODE
+    assert response.game_schemas is None
 
 
 def test_a_client_only_reply_still_parses() -> None:

@@ -45,6 +45,7 @@
   "error.game_schemas_required": "提供 server_code 时必须提供 game_schemas",
   "error.game_schemas_requires_server": "game_schemas 需要 server_code",
   "error.game_schemas_required_for_server_code": "server_code 必须提供 game_schemas",
+  "error.game_schemas_generation_failed": "无法自动生成 JSON Schema：{detail}",
   "error.refactor_job_running": "已有一个重构任务正在运行；请等待它完成。",
   "error.refactor_job_not_found": "没有这样的重构任务。",
   "error.match_not_ongoing": "对局尚未进行",

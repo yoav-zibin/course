@@ -61,7 +61,12 @@ from game_platform.game_logic import (
     GameLogicTimeout,
     InvalidMoveError,
 )
-from game_platform.game_testing import GameTestReport, test_server_code
+from game_platform.game_testing import (
+    GameTestReport,
+    TestFailure,
+    infer_game_schemas,
+    test_server_code,
+)
 from game_platform.push import LogPushNotifier, PushMessage, PushNotifier
 from game_platform.store import InMemoryStore, Store
 from game_platform import translation as translation_module
@@ -1764,10 +1769,6 @@ class GamePlatform:
         game_schemas: dict[str, JsonValue] | None = None,
     ) -> GameDraft:
         server_code = server_code or None
-        if server_code is not None and game_schemas is None:
-            raise InvalidRequestError(
-                "game_schemas is required when server_code is provided"
-            )
         if server_code is None and game_schemas is not None:
             raise InvalidRequestError("game_schemas requires server_code")
         with self._lock:
@@ -1777,6 +1778,11 @@ class GamePlatform:
                 self._owned_draft(caller_id=caller_id, draft_id=existing.id)
                 if expected_revision != existing.revision:
                     raise ConflictError("draft changed in another tab; reload before saving")
+                if (
+                    server_code != existing.server_code
+                    and game_schemas == existing.game_schemas
+                ):
+                    game_schemas = None
             elif draft_id is not None:
                 if game is None or game.deleted or game.owner_user_id != caller_id:
                     raise NotFoundError("game not found")
@@ -1833,11 +1839,14 @@ class GamePlatform:
             if current is None:
                 if draft.base_version != 0:
                     raise ConflictError("published game is no longer available")
+                game_schemas = draft.game_schemas
                 if draft.server_code:
-                    # A new game's server code must pass its tests before
-                    # its first version can be published (Phase 5 gate).
+                    if game_schemas is None:
+                        game_schemas = self._generate_game_schemas(
+                            draft.server_code, draft.rules, draft.id
+                        )
                     self._gate_server_code(
-                        draft.id, draft.server_code, draft.rules, draft.game_schemas
+                        draft.id, draft.server_code, draft.rules, game_schemas
                     )
                 game = Game(
                     id=draft.id, version=1, owner_user_id=caller_id,
@@ -1845,7 +1854,7 @@ class GamePlatform:
                     rules=draft.rules, code=draft.code,
                     server_code=draft.server_code,
                     builder_workflow=draft.builder_workflow,
-                    game_schemas=draft.game_schemas,
+                    game_schemas=game_schemas,
                     created_at=self._clock(), updated_at=self._clock(),
                 )
                 self._store.add_game_version(game)
@@ -1868,7 +1877,13 @@ class GamePlatform:
             self._store.set_game_published(game.id, True)
             game = self._get_game(game.id)
             # Keep the working copy; repeat publication cannot create duplicate games.
-            self._store.put_game_draft(replace(draft, base_version=game.version))
+            self._store.put_game_draft(
+                replace(
+                    draft,
+                    base_version=game.version,
+                    game_schemas=game.game_schemas,
+                )
+            )
             return game
 
     # Games (public versions; existing clients continue to publish with POST/PATCH).
@@ -1885,13 +1900,16 @@ class GamePlatform:
         game_schemas: dict[str, JsonValue] | None = None,
     ) -> Game:
         server_code = server_code or None
-        if server_code is not None and game_schemas is None:
-            raise InvalidRequestError(
-                "game_schemas is required when server_code is provided"
-            )
         if server_code is None and game_schemas is not None:
             raise InvalidRequestError("game_schemas requires server_code")
         with self._lock:
+            if server_code is not None and game_schemas is None:
+                game_schemas = self._generate_game_schemas(
+                    server_code, rules, "new-game"
+                )
+                self._gate_server_code(
+                    "new-game", server_code, rules, game_schemas
+                )
             now = self._clock()
             game = Game(
                 id=self._new_id(),
@@ -2255,7 +2273,11 @@ class GamePlatform:
             game_schemas_value = (
                 (
                     None
-                    if server_code is not UNSET and server_code_value is None
+                    if server_code is not UNSET
+                    and (
+                        server_code_value is None
+                        or server_code_value != game.server_code
+                    )
                     else game.game_schemas
                 )
                 if game_schemas is UNSET
@@ -2284,12 +2306,15 @@ class GamePlatform:
                 server_code=server_code_value,
                 game_schemas=game_schemas_value,
             )
-            if updated.server_code is not None and updated.game_schemas is None:
-                raise InvalidRequestError(
-                    "game_schemas is required when server_code is provided"
-                )
             if updated.server_code is None and updated.game_schemas is not None:
                 raise InvalidRequestError("game_schemas requires server_code")
+            if updated.server_code is not None and updated.game_schemas is None:
+                updated = replace(
+                    updated,
+                    game_schemas=self._generate_game_schemas(
+                        updated.server_code, updated.rules, game_id
+                    ),
+                )
             if updated == game:
                 return game
             if game.builder_workflow and not _publishing:
@@ -2706,11 +2731,30 @@ class GamePlatform:
     # Server-side game logic (v2 Game API, docs/server-side-game-api.md).
     # Everything in this section runs with the platform lock held.
 
+    def _generate_game_schemas(
+        self, server_code: str, rules: GameRules, game_id: str
+    ) -> dict[str, JsonValue]:
+        source = self._store.get_game_draft(game_id) or self._store.get_game(game_id)
+        workflow = getattr(source, "builder_workflow", None) or {}
+        contract = workflow.get("artifacts", {}).get("tests", {}).get("value")
+        try:
+            schemas, _ = infer_game_schemas(
+                server_code,
+                game_id=game_id,
+                rules=rules,
+                contract=contract,
+            )
+        except ValueError as error:
+            raise InvalidRequestError(
+                f"could not automatically generate JSON Schemas: {error}"
+            ) from error
+        return schemas
+
     def test_game_code(
         self,
         *,
         server_code: str,
-        game_schemas: dict[str, JsonValue],
+        game_schemas: dict[str, JsonValue] | None,
         rules: GameRules,
         game_id: str | None = None,
     ) -> GameTestReport:
@@ -2719,11 +2763,37 @@ class GamePlatform:
         When [game_id] names a game or draft, its stored failed seeds are
         replayed first and the run's failed seeds replace them."""
         with self._lock:
-            return self._run_game_tests(
+            generated_schemas = game_schemas is None
+            if game_schemas is None:
+                try:
+                    game_schemas = self._generate_game_schemas(
+                        server_code, rules, game_id or "unsaved"
+                    )
+                except InvalidRequestError as error:
+                    failure = TestFailure(
+                        function="schema_generation",
+                        message=str(error),
+                        seed=0,
+                        player_count=0,
+                        move_number=0,
+                    )
+                    return GameTestReport(
+                        passed=False,
+                        walks_completed=0,
+                        moves_made=0,
+                        too_slow=False,
+                        failures=(failure,),
+                    )
+            report = self._run_game_tests(
                 server_code=server_code,
                 game_schemas=game_schemas,
                 rules=rules,
                 game_id=game_id,
+            )
+            return (
+                replace(report, game_schemas=game_schemas)
+                if generated_schemas
+                else report
             )
 
     def _run_game_tests(
@@ -2780,7 +2850,9 @@ class GamePlatform:
         must pass the random-walk tests, or publishing is refused and the
         version stays a draft the author can keep fixing."""
         if game_schemas is None:
-            raise InvalidRequestError("game_schemas is required for server_code")
+            game_schemas = self._generate_game_schemas(
+                server_code, rules, game_id
+            )
         report = self._run_game_tests(
             server_code=server_code,
             game_schemas=game_schemas,

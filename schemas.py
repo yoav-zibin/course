@@ -437,9 +437,7 @@ class GameCreate(_Request):
     game_schemas: GameSchemas | None = None
 
     @model_validator(mode="after")
-    def _require_server_schemas(self) -> "GameCreate":
-        if self.server_code and self.game_schemas is None:
-            raise ValueError("game_schemas is required when server_code is provided")
+    def _require_server_code_for_schemas(self) -> "GameCreate":
         if not self.server_code and self.game_schemas is not None:
             raise ValueError("game_schemas requires server_code")
         return self
@@ -473,12 +471,6 @@ class GameUpdate(_Request):
         for field in sorted(self.model_fields_set):
             if getattr(self, field) is None:
                 raise ValueError(f"{field} cannot be null")
-        if (
-            "server_code" in self.model_fields_set
-            and self.server_code
-            and self.game_schemas is None
-        ):
-            raise ValueError("game_schemas is required when server_code is provided")
         return self
 
 
@@ -556,7 +548,7 @@ class GameTestRequest(_Request):
     and this run's failures are stored back on it."""
 
     server_code: str
-    game_schemas: GameSchemas
+    game_schemas: GameSchemas | None = None
     allowed_player_counts: PlayerCounts
     allows_leave_mid_match: bool = False
     allows_join_mid_match: bool = False
@@ -596,6 +588,7 @@ class GameTestOut(BaseModel):
     moves_made: int
     too_slow: bool
     failures: list[GameTestFailureOut] = []
+    game_schemas: GameSchemas | None = None
 
     @classmethod
     def of(cls, report: GameTestReport) -> "GameTestOut":
@@ -605,6 +598,11 @@ class GameTestOut(BaseModel):
             moves_made=report.moves_made,
             too_slow=report.too_slow,
             failures=[GameTestFailureOut.of(f) for f in report.failures],
+            game_schemas=(
+                GameSchemas.model_validate(report.game_schemas)
+                if report.game_schemas is not None
+                else None
+            ),
         )
 
 
@@ -647,6 +645,7 @@ class EmulatorActRequest(EmulatorResetRequest):
     [state], [turn] and [move_count] come from the previous emulator
     response: the emulator itself keeps nothing."""
 
+    game_schemas: GameSchemas
     state: JsonValue = None
     turn: list[str] | None = None
     move_count: int = 0
@@ -656,6 +655,7 @@ class EmulatorActRequest(EmulatorResetRequest):
 
 class EmulatorOut(BaseModel):
     state: JsonValue = None
+    game_schemas: GameSchemas | None = None
     # Each player's viewFor view of [state], keyed by player id.
     views: dict[str, JsonValue] = {}
     players: list[EmulatorPlayerOut] = []
@@ -685,9 +685,7 @@ class GameDraftContent(_Request):
     )
 
     @model_validator(mode="after")
-    def _require_server_schemas(self) -> "GameDraftContent":
-        if self.server_code and self.game_schemas is None:
-            raise ValueError("game_schemas is required when server_code is provided")
+    def _require_server_code_for_schemas(self) -> "GameDraftContent":
         if not self.server_code and self.game_schemas is not None:
             raise ValueError("game_schemas requires server_code")
         return self
@@ -1207,13 +1205,6 @@ class AgentChatRequest(_Request):
     # clients that send no id simply stay unrecorded.
     game_id: str | None = None
 
-    @model_validator(mode="after")
-    def _require_server_schemas(self) -> "AgentChatRequest":
-        if self.server_code.strip() and self.game_schemas is None:
-            raise ValueError("game_schemas is required when server_code is provided")
-        return self
-
-
 class AgentChatResponse(BaseModel):
     message: str
     # The complete updated HTML document, or null when the code is unchanged.
@@ -1296,8 +1287,6 @@ class AdminGameCodeRequest(_Request):
     def _some_code(self) -> "AdminGameCodeRequest":
         if self.code is None and self.server_code is None:
             raise ValueError("provide code, server_code, or both")
-        if self.server_code is not None and self.game_schemas is None:
-            raise ValueError("game_schemas is required when server_code is provided")
         return self
 
 
