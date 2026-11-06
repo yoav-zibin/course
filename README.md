@@ -1263,6 +1263,9 @@ Do not treat a local file-store test as proof that production Firestore is ready
 
 #### Outstanding game-test work
 
+- [ ] Translate the `ui.game_test.*` dynamic status, error, and scenario labels
+  into each supported language. These catalog entries currently fall back to
+  English; the matrix's static controls have translations.
 - [ ] Run the private recording create, update, conflict, ownership, restart
   and replay checks against an isolated Firestore emulator in query mode.
   Local file-store and browser tests do not verify Firestore persistence.

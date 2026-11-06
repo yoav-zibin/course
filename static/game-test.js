@@ -1,6 +1,7 @@
 "use strict";
 
 const $ = id => document.getElementById(id);
+// Device names are persisted recording identifiers, not display text.
 const devices = [
   ["Laptop", 1366, 768], ["Tablet", 768, 1024],
   ["Small phone", 320, 568], ["Phone", 390, 844], ["Large phone", 430, 932],
@@ -17,7 +18,7 @@ const status = (text, error = false) => {
 const copy = value => JSON.parse(JSON.stringify(value));
 const user = () => {
   const account = Auth.current();
-  if (!account) throw new Error("Sign in before using the test matrix.");
+  if (!account) throw new Error(I18n.t("ui.game_test.sign_in", {}, "Sign in before using the test matrix."));
   return account;
 };
 const draftId = new URLSearchParams(location.search).get("draft");
@@ -25,26 +26,26 @@ if (draftId) $("load-draft").hidden = false;
 async function loadDraft() {
   const owner = user();
   const draft = await apiRequest("GET", "/game-drafts/" + encodeURIComponent(draftId), {user:owner});
-  if (user().id !== owner.id) throw new Error("The signed-in account changed before the draft loaded.");
+  if (user().id !== owner.id) throw new Error(I18n.t("ui.game_test.draft_account_changed", {}, "The signed-in account changed before the draft loaded."));
   if (!draft.code || !draft.server_code || !draft.allowed_player_counts?.length)
-    throw new Error("This draft does not yet contain a complete server-side game.");
+    throw new Error(I18n.t("ui.game_test.draft_incomplete", {}, "This draft does not yet contain a complete server-side game."));
   if (($("client-code").value || $("server-code").value) &&
-      !confirm("Replace the code currently in the test matrix with this draft?")) return;
+      !confirm(I18n.t("ui.game_test.replace_draft", {}, "Replace the code currently in the test matrix with this draft?"))) return;
   $("client-code").value = draft.code;
   $("server-code").value = draft.server_code;
   $("counts").value = draft.allowed_player_counts.join(",");
   $("count").value = String(draft.allowed_player_counts[0]);
-  status("Builder draft loaded. Start the matrix to test it.");
+  status(I18n.t("ui.game_test.draft_loaded", {}, "Builder draft loaded. Start the matrix to test it."));
 }
 $("load-draft").addEventListener("click", () => loadDraft().catch(showError));
 function sessionUser(current) {
   const account = user();
-  if (account.id !== current.owner.id) throw new Error("The signed-in account changed. Switch back to save or continue this session.");
+  if (account.id !== current.owner.id) throw new Error(I18n.t("ui.game_test.session_account_changed", {}, "The signed-in account changed. Switch back to save or continue this session."));
   return account;
 }
 
 // Runs in the same opaque sandbox as the game, never in the host page.
-function clickProbe() {
+function clickProbe(texts) {
   function parse(value) {
     const m = value.match(/^rgba?\(\s*([\d.]+)[, ]+([\d.]+)[, ]+([\d.]+)(?:\s*[,/]\s*([\d.]+))?\s*\)$/);
     return m ? [Number(m[1]), Number(m[2]), Number(m[3]), m[4] === undefined ? 1 : Number(m[4])] : null;
@@ -99,7 +100,7 @@ function clickProbe() {
           rect.right <= innerWidth && rect.bottom <= innerHeight && (hit === node || node.contains(hit));
       });
     if (!candidates.length) {
-      parent.postMessage({type:"test_random_result", id:event.data.id, error:"No visible enabled button is available."}, "*");
+      parent.postMessage({type:"test_random_result", id:event.data.id, error:texts.noButton}, "*");
       return;
     }
     const node = candidates[Math.floor(Math.random() * candidates.length)];
@@ -108,8 +109,8 @@ function clickProbe() {
     if (metrics.width < 30 || metrics.height < 30 ||
         metrics.contrast === null || metrics.contrast < metrics.minimumContrast) {
       parent.postMessage({type:"test_random_result", id:event.data.id,
-        error:metrics.contrast === null ? "Cannot determine contrast for a selected button." :
-          `Selected button: ${metrics.width.toFixed(1)}×${metrics.height.toFixed(1)} pixels, contrast ${metrics.contrast.toFixed(2)}:1 (minimum ${metrics.minimumContrast}:1).`}, "*");
+        error:metrics.contrast === null ? texts.unknownContrast :
+          texts.badMetrics.replace("{width}", metrics.width.toFixed(1)).replace("{height}", metrics.height.toFixed(1)).replace("{contrast}", metrics.contrast.toFixed(2)).replace("{minimum}", metrics.minimumContrast)}, "*");
       return;
     }
     node.click();
@@ -122,7 +123,13 @@ function documentSource(code) {
   const head = /<head(?:\s[^>]*)?>/i.exec(code);
   const doctype = /^\s*<!doctype\s+html[^>]*>/i.exec(code);
   const index = head ? head.index + head[0].length : doctype ? doctype[0].length : 0;
-  return code.slice(0, index) + csp + code.slice(index) + "<script>(" + clickProbe.toString() + ")()<" + "/script>";
+  const texts = {
+    noButton:I18n.t("ui.game_test.no_button", {}, "No visible enabled button is available."),
+    unknownContrast:I18n.t("ui.game_test.unknown_contrast", {}, "Cannot determine contrast for a selected button."),
+    badMetrics:I18n.t("ui.game_test.bad_metrics", {}, "Selected button: {width}×{height} pixels, contrast {contrast}:1 (minimum {minimum}:1)."),
+  };
+  const safeTexts = JSON.stringify(texts).replace(/</g, "\\u003c");
+  return code.slice(0, index) + csp + code.slice(index) + "<script>(" + clickProbe.toString() + ")(" + safeTexts + ")<" + "/script>";
 }
 
 function createScenarios(count) {
@@ -154,17 +161,21 @@ function buildMatrix(recording, replaying) {
   const states = new Map(), frames = new Map();
   for (const config of recording.scenarios) {
     const card = el("section", {class:"scenario"});
-    const label = {solo:"Solo", computer:"One human vs computers", pass:"Pass-and-play", multiplayer:"Human multiplayer",
-      mixed:`Mixed simulation (${config.computers} computer${config.computers === 1 ? "" : "s"}; not supported in Portal)`}[config.mode];
-    const title = el("h2", {textContent:`${label} · ${config.device} · ${config.orientation} · ${config.width}×${config.height}`});
-    const note = el("p", {textContent:"Waiting for a match."});
-    const restart = el("button", {type:"button", textContent:"Restart match", disabled:replaying});
+    const label = {solo:I18n.t("ui.game_test.mode_solo", {}, "Solo"), computer:I18n.t("ui.game_test.mode_computer", {}, "One human vs computers"), pass:I18n.t("ui.mode.pass_and_play", {}, "Pass and play"), multiplayer:I18n.t("ui.game_test.mode_multiplayer", {}, "Human multiplayer"),
+      mixed:I18n.t("ui.game_test.mode_mixed", {count:config.computers}, `Mixed simulation (${config.computers} computers; not supported in Portal)`)}[config.mode];
+    const names = [I18n.t("ui.game_test.device_laptop", {}, "Laptop"), I18n.t("ui.game_test.device_tablet", {}, "Tablet"), I18n.t("ui.game_test.device_small", {}, "Small phone"), I18n.t("ui.game_test.device_phone", {}, "Phone"), I18n.t("ui.game_test.device_large", {}, "Large phone")];
+    const index = devices.findIndex(([name]) => name === config.device);
+    const device = index < 0 ? config.device : names[index];
+    const orientation = config.orientation === "portrait" ? I18n.t("ui.game_test.portrait", {}, "Portrait") : I18n.t("ui.game_test.landscape", {}, "Landscape");
+    const title = el("h2", {textContent:`${label} · ${device} · ${orientation} · ${config.width}×${config.height}`});
+    const note = el("p", {textContent:I18n.t("ui.game_test.waiting", {}, "Waiting for a match.")});
+    const restart = el("button", {type:"button", textContent:I18n.t("ui.game_test.restart", {}, "Restart match"), disabled:replaying});
     const wrapper = el("div", {class:"frames"});
     const frameList = [];
     const frameCount = config.mode === "multiplayer" || config.mode === "mixed"
       ? config.players.filter(player => player.kind === "human").length : 1;
     for (let seat = 0; seat < frameCount; seat++) {
-      const frame = el("iframe", {title:`${title.textContent} · player ${seat + 1}`});
+      const frame = el("iframe", {title:I18n.t("ui.game_test.frame_title", {title:title.textContent, number:seat + 1}, `${title.textContent} · player ${seat + 1}`)});
       frame.setAttribute("sandbox", "allow-scripts");
       frame.style.width = config.width + "px";
       frame.style.height = config.height + "px";
@@ -173,7 +184,7 @@ function buildMatrix(recording, replaying) {
       const marker = el("span", {class:"click-marker", hidden:true});
       const item = {frame, ready, seat, marker};
       frameList.push(item);
-      wrapper.append(el("div", {class:"viewport"}, el("strong", {textContent:config.mode === "multiplayer" || config.mode === "mixed" ? `Player ${seat + 1}` : "Shared screen"}), el("div", {class:"viewport-frame"}, frame, marker)));
+      wrapper.append(el("div", {class:"viewport"}, el("strong", {textContent:config.mode === "multiplayer" || config.mode === "mixed" ? I18n.t("ui.match.player_n", {number:seat + 1}, `Player ${seat + 1}`) : I18n.t("ui.game_test.shared_screen", {}, "Shared screen")}), el("div", {class:"viewport-frame"}, frame, marker)));
     }
     const state = {config, card, title:title.textContent, note, restart, frames:frameList, reply:null, busy:false};
     restart.addEventListener("click", () => {
@@ -188,7 +199,7 @@ function buildMatrix(recording, replaying) {
   }
   frames.delete(null);
   const selected = $("scenario-filter").value;
-  $("scenario-filter").replaceChildren(el("option", {value:"", textContent:"All scenarios"}),
+  $("scenario-filter").replaceChildren(el("option", {value:"", textContent:I18n.t("ui.game_test.all_scenarios", {}, "All scenarios")}),
     ...[...states.values()].map(state => el("option", {value:state.config.id, textContent:state.title})));
   $("scenario-filter").value = states.has(selected) ? selected : "";
   return {states, frames};
@@ -225,16 +236,16 @@ function showActiveScenario() {
 
 function showError(error) {
   if (run?.randomPlaying) run.randomError = error;
-  status((run?.dirty ? "Unsaved recording: " : "") + (error.message || String(error)), true);
+  status((run?.dirty ? I18n.t("ui.game_test.unsaved", {}, "Unsaved recording: ") : "") + (error.message || String(error)), true);
 }
 
 function noteClick(event) {
   const m = event.metrics;
   const problems = [];
-  if (m.width < 30 || m.height < 30) problems.push(`target ${m.width.toFixed(1)}×${m.height.toFixed(1)} is below 30×30`);
-  if (m.contrast === null) problems.push("contrast needs manual review (transparent or image background)");
-  else if (m.contrast < m.minimumContrast) problems.push(`text contrast ${m.contrast.toFixed(2)}:1 is below ${m.minimumContrast}:1`);
-  $("checks").textContent = problems.length ? "Click warning: " + problems.join("; ") : `Last clicked ${m.tag}: ${m.width.toFixed(1)}×${m.height.toFixed(1)}, text contrast ${m.contrast.toFixed(2)}:1. Check control boundaries separately.`;
+  if (m.width < 30 || m.height < 30) problems.push(I18n.t("ui.game_test.target_small", {width:m.width.toFixed(1),height:m.height.toFixed(1)}, `target ${m.width.toFixed(1)}×${m.height.toFixed(1)} is below 30×30`));
+  if (m.contrast === null) problems.push(I18n.t("ui.game_test.manual_contrast", {}, "contrast needs manual review (transparent or image background)"));
+  else if (m.contrast < m.minimumContrast) problems.push(I18n.t("ui.game_test.low_contrast", {contrast:m.contrast.toFixed(2),minimum:m.minimumContrast}, `text contrast ${m.contrast.toFixed(2)}:1 is below ${m.minimumContrast}:1`));
+  $("checks").textContent = problems.length ? I18n.t("ui.game_test.click_warning", {}, "Click warning: ") + problems.join("; ") : I18n.t("ui.game_test.click_ok", {tag:m.tag,width:m.width.toFixed(1),height:m.height.toFixed(1),contrast:m.contrast.toFixed(2)}, `Last clicked ${m.tag}: ${m.width.toFixed(1)}×${m.height.toFixed(1)}, text contrast ${m.contrast.toFixed(2)}:1. Check control boundaries separately.`);
 }
 
 function record(event) {
@@ -257,9 +268,9 @@ async function save() {
     {user:owner, body}).then(result => {
       current.revision = result.revision;
       current.dirty -= version;
-      if (run === current) status(current.dirty ? "Saving recording…" : `Recording saved · ${current.id}`);
+      if (run === current) status(current.dirty ? I18n.t("ui.game_test.saving", {}, "Saving recording…") : I18n.t("ui.game_test.saved", {id:current.id}, `Recording saved · ${current.id}`));
     }).catch(error => {
-      if (run === current) status(`Recording not saved: ${error.message}. Use Save recording now to retry.`, true);
+      if (run === current) status(I18n.t("ui.game_test.save_failed", {message:error.message}, `Recording not saved: ${error.message}. Use Save recording now to retry.`), true);
       throw error;
     }).finally(() => { current.saving = null; });
   await current.saving;
@@ -281,7 +292,7 @@ function playerMessage(state, item) {
 
 async function displayReply(state, reply) {
   state.reply = reply;
-  state.note.textContent = reply.error ? `Error: ${reply.error}` : `${reply.status} · ${reply.move_count} moves · turn: ${(reply.turn || []).join(", ") || "none"}`;
+  state.note.textContent = reply.error ? I18n.t("ui.game_test.error", {message:reply.error}, `Error: ${reply.error}`) : I18n.t("ui.game_test.match_status", {status:reply.status, moves:reply.move_count, turn:(reply.turn || []).join(", ") || I18n.t("ui.game_test.none", {}, "none")}, `${reply.status} · ${reply.move_count} moves · turn: ${(reply.turn || []).join(", ") || "none"}`);
   state.note.className = reply.error ? "error" : "";
   if (!reply.players.every(p => Object.hasOwn(reply.views, p.id))) return;
   await Promise.all(state.frames.map(async item => {
@@ -363,7 +374,7 @@ function randomClick(item) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       randomRequests.delete(id);
-      reject(new Error("The game did not respond to the random-click request."));
+      reject(new Error(I18n.t("ui.game_test.random_timeout", {}, "The game did not respond to the random-click request.")));
     }, 5000);
     randomRequests.set(id, {source, resolve, reject, timer});
     source.postMessage({type:"test_random_click", id}, "*");
@@ -391,41 +402,41 @@ async function playRandomMatches() {
   try {
     for (const state of current.matrix.states.values()) {
       for (let match = 1; match <= 3; match++) {
-        $("random-status").textContent = `Random play: ${completed} matches completed; ${state.config.device} ${state.config.orientation}, ${state.config.mode}, match ${match}/3.`;
-        if (current.randomStop) throw new Error("Random play stopped by user.");
+        $("random-status").textContent = I18n.t("ui.game_test.random_progress", {completed, scenario:state.title, match}, `Random play: ${completed} matches completed; ${state.title}, match ${match}/3.`);
+        if (current.randomStop) throw new Error(I18n.t("ui.game_test.random_stopped", {}, "Random play stopped by user."));
         await resetScenario(state);
         if (state.reply.error) throw new Error(state.reply.error);
         let unchanged = 0;
         for (let clicks = 0; state.reply.status !== "over"; clicks++) {
-          if (current.randomStop) throw new Error("Random play stopped by user.");
+          if (current.randomStop) throw new Error(I18n.t("ui.game_test.random_stopped", {}, "Random play stopped by user."));
           if (current.randomError) throw current.randomError;
-          if (clicks >= 200) throw new Error("Match did not finish within 200 clicks.");
+          if (clicks >= 200) throw new Error(I18n.t("ui.game_test.click_limit", {}, "Match did not finish within 200 clicks."));
           const item = state.frames.find(frame => playerMessage(state, frame).acting_for_player_index !== null);
-          if (!item) throw new Error("No human screen can act on the current turn.");
+          if (!item) throw new Error(I18n.t("ui.game_test.no_human_turn", {}, "No human screen can act on the current turn."));
           const before = state.reply.move_count;
           await randomClick(item);
           const deadline = performance.now() + 3000;
           do {
-            if (current.randomStop) throw new Error("Random play stopped by user.");
+            if (current.randomStop) throw new Error(I18n.t("ui.game_test.random_stopped", {}, "Random play stopped by user."));
             if (current.randomError) throw current.randomError;
             if (!state.busy && (state.reply.move_count !== before || state.reply.error)) break;
             await delay(50);
           } while (performance.now() < deadline);
           if (state.reply.error) throw new Error(state.reply.error);
-          if (state.busy) throw new Error("The move did not complete in time.");
+          if (state.busy) throw new Error(I18n.t("ui.game_test.move_timeout", {}, "The move did not complete in time."));
           unchanged = state.reply.move_count === before ? unchanged + 1 : 0;
-          if (unchanged >= 8) throw new Error("Eight clicks made no move; this game needs manual testing.");
+          if (unchanged >= 8) throw new Error(I18n.t("ui.game_test.no_move", {}, "Eight clicks made no move; this game needs manual testing."));
         }
         completed++;
         record({type:"random_match", scenario:state.config.id, match, result:"completed"});
-        $("random-status").textContent = `Random play: ${completed} matches completed.`;
+        $("random-status").textContent = I18n.t("ui.game_test.random_count", {completed}, `Random play: ${completed} matches completed.`);
       }
     }
     await save();
-    $("random-status").textContent = `Random play complete: ${completed} matches finished and recorded. Review click and contrast warnings.`;
+    $("random-status").textContent = I18n.t("ui.game_test.random_complete", {completed}, `Random play complete: ${completed} matches finished and recorded. Review click and contrast warnings.`);
   } catch (error) {
     record({type:"random_failure", completed, message:String(error.message || error).slice(0, 1000)});
-    $("random-status").textContent = `Random play incomplete after ${completed} matches: ${error.message || error}`;
+    $("random-status").textContent = I18n.t("ui.game_test.random_failed", {completed, message:error.message || error}, `Random play incomplete after ${completed} matches: ${error.message || error}`);
     $("random-status").className = "error";
     try { await save(); } catch (saveError) { showError(saveError); }
   } finally {
@@ -445,13 +456,13 @@ async function start() {
   const owner = user(), client = $("client-code").value, server = $("server-code").value;
   const counts = $("counts").value.split(",").map(x => Number(x.trim()));
   const count = Number($("count").value);
-  if (!client.trim() || !server.trim()) throw new Error("Enter both client HTML and server JavaScript.");
-  if (!counts.length || counts.some(n => !Number.isInteger(n) || n < 1 || n > 10) || new Set(counts).size !== counts.length || !counts.includes(count)) throw new Error("Enter unique supported counts from 1 to 10 and choose one of them.");
-  status("Testing server logic and generating schemas…");
+  if (!client.trim() || !server.trim()) throw new Error(I18n.t("ui.game_test.enter_code", {}, "Enter both client HTML and server JavaScript."));
+  if (!counts.length || counts.some(n => !Number.isInteger(n) || n < 1 || n > 10) || new Set(counts).size !== counts.length || !counts.includes(count)) throw new Error(I18n.t("ui.game_test.invalid_counts", {}, "Enter unique supported counts from 1 to 10 and choose one of them."));
+  status(I18n.t("ui.game_test.testing_server", {}, "Testing server logic and generating schemas…"));
   const report = await apiRequest("POST", "/games/test", {user:owner, body:{server_code:server,
     allowed_player_counts:counts, allows_leave_mid_match:false, allows_join_mid_match:false}});
-  if (!report.passed || !report.game_schemas) throw new Error("Server tests failed: " + (report.failures?.[0]?.message || "No schemas generated."));
-  if (user().id !== owner.id) throw new Error("The signed-in account changed before the session started.");
+  if (!report.passed || !report.game_schemas) throw new Error(I18n.t("ui.game_test.server_failed", {}, "Server tests failed: ") + (report.failures?.[0]?.message || I18n.t("ui.game_test.no_schemas", {}, "No schemas generated.")));
+  if (user().id !== owner.id) throw new Error(I18n.t("ui.game_test.start_account_changed", {}, "The signed-in account changed before the session started."));
   const recording = {client_code:client, server_code:server, scenarios:createScenarios(count), events:[]};
   const saved = await apiRequest("POST", "/game-test-sessions", {user:owner, body:{revision:0, recording}});
   replayToken++;
@@ -465,7 +476,7 @@ async function start() {
   $("end").disabled = false;
   $("random-status").textContent = "";
   $("random-status").className = "";
-  status(`Recording ${saved.id}: starting ${recording.scenarios.length} scenarios…`);
+  status(I18n.t("ui.game_test.starting_scenarios", {id:saved.id, count:recording.scenarios.length}, `Recording ${saved.id}: starting ${recording.scenarios.length} scenarios…`));
   for (const state of current.matrix.states.values()) {
     if (run !== current) return;
     await resetScenario(state);
@@ -485,7 +496,7 @@ async function refresh() {
     rows.push(...response.items); cursor = response.next_cursor;
   } while (cursor);
   const previous = $("recordings").value;
-  $("recordings").replaceChildren(el("option", {value:"", textContent:"Select a recording"}),
+  $("recordings").replaceChildren(el("option", {value:"", textContent:I18n.t("ui.game_test.select_recording", {}, "Select a recording")}),
     ...rows.map(row => el("option", {value:row.id, textContent:`${row.updated_at} · ${row.id}`})));
   $("recordings").value = rows.some(row => row.id === previous) ? previous : "";
 }
@@ -493,7 +504,7 @@ async function refresh() {
 async function replay() {
   if (run && !run.replaying) await save();
   const id = $("recordings").value;
-  if (!id) throw new Error("Select a recording.");
+  if (!id) throw new Error(I18n.t("ui.game_test.select_recording_error", {}, "Select a recording."));
   const owner = user(), saved = await apiRequest("GET", "/game-test-sessions/" + encodeURIComponent(id), {user:owner});
   const selected = $("replay-selected").checked ? $("scenario-filter").value : "";
   const token = ++replayToken, recording = saved.recording;
@@ -505,9 +516,9 @@ async function replay() {
   $("random-play").disabled = true;
   $("stop-replay").disabled = false;
   $("pause-replay").disabled = false;
-  $("pause-replay").textContent = "Pause";
+  $("pause-replay").textContent = I18n.t("ui.builder.pause", {}, "Pause");
   $("jump-active").disabled = true;
-  status("Replaying recorded state changes; frames are read-only.");
+  status(I18n.t("ui.game_test.replaying", {}, "Replaying recorded state changes; frames are read-only."));
   let last = 0, lastIndex = -1;
   for (const [index, event] of recording.events.entries()) {
     if (selected && event.scenario !== selected) continue;
@@ -526,7 +537,7 @@ async function replay() {
         $("jump-active").disabled = false;
         if ($("follow-replay").checked && !$("scenario-filter").value) showActiveScenario();
       }
-      $("replay-progress").textContent = `${(event.at / 1000).toFixed(1)}s · event ${index + 1}/${recording.events.length} · ${state.title}`;
+      $("replay-progress").textContent = I18n.t("ui.game_test.replay_progress", {seconds:(event.at / 1000).toFixed(1), index:index + 1, total:recording.events.length, title:state.title}, `${(event.at / 1000).toFixed(1)}s · event ${index + 1}/${recording.events.length} · ${state.title}`);
     }
     if (event.type === "click") {
       noteClick(event);
@@ -544,7 +555,7 @@ async function replay() {
     }
   }
   $("pause-replay").disabled = true;
-  status("Replay complete.");
+  status(I18n.t("ui.game_test.replay_complete", {}, "Replay complete."));
 }
 
 async function waitForReplay(milliseconds, token) {
@@ -568,7 +579,7 @@ async function waitForReplay(milliseconds, token) {
 async function switchRun(action) {
   if (switching) return;
   if (run && !run.replaying && [...run.matrix.states.values()].some(state => state.busy)) {
-    status("Wait for the current move or restart to finish before switching sessions.", true);
+    status(I18n.t("ui.game_test.wait_switch", {}, "Wait for the current move or restart to finish before switching sessions."), true);
     return;
   }
   switching = true;
@@ -599,10 +610,10 @@ $("download").addEventListener("click", () => {
 $("end").addEventListener("click", () => {
   if (!run || run.replaying || switching) return;
   if (run.saving || [...run.matrix.states.values()].some(state => state.busy)) {
-    status("Wait for the current save or move to finish.", true);
+    status(I18n.t("ui.game_test.wait_end", {}, "Wait for the current save or move to finish."), true);
     return;
   }
-  if (run.dirty && !confirm("Unsaved events will be lost from the server. Download a backup first if needed. End this session?")) return;
+  if (run.dirty && !confirm(I18n.t("ui.game_test.end_confirm", {}, "Unsaved events will be lost from the server. Download a backup first if needed. End this session?"))) return;
   clearTimeout(run.timer);
   run = null;
   $("matrix").replaceChildren();
@@ -610,25 +621,25 @@ $("end").addEventListener("click", () => {
   $("download").disabled = true;
   $("end").disabled = true;
   $("random-play").disabled = true;
-  $("scenario-filter").replaceChildren(el("option", {value:"", textContent:"All scenarios"}));
+  $("scenario-filter").replaceChildren(el("option", {value:"", textContent:I18n.t("ui.game_test.all_scenarios", {}, "All scenarios")}));
   $("previous-scenario").disabled = true;
   $("next-scenario").disabled = true;
   $("replay-selected").disabled = true;
   $("jump-active").disabled = true;
-  $("replay-progress").textContent = "Choose a recording and press Replay.";
-  status("Session ended. Previously saved events remain on the server.");
+  $("replay-progress").textContent = I18n.t("ui.game_test.choose_replay", {}, "Choose a recording and press Replay.");
+  status(I18n.t("ui.game_test.ended", {}, "Session ended. Previously saved events remain on the server."));
 });
 $("refresh").addEventListener("click", () => refresh().catch(showError));
 $("replay").addEventListener("click", () => switchRun(replay));
 $("pause-replay").addEventListener("click", () => {
   if (!run?.replaying) return;
   run.paused = !run.paused;
-  $("pause-replay").textContent = run.paused ? "Resume" : "Pause";
-  status(run.paused ? "Replay paused." : "Replaying recorded state changes; frames are read-only.");
+  $("pause-replay").textContent = run.paused ? I18n.t("ui.builder.resume", {}, "Resume") : I18n.t("ui.builder.pause", {}, "Pause");
+  status(run.paused ? I18n.t("ui.game_test.replay_paused", {}, "Replay paused.") : I18n.t("ui.game_test.replaying", {}, "Replaying recorded state changes; frames are read-only."));
   wakeReplay?.();
 });
 $("speed").addEventListener("change", () => wakeReplay?.());
-$("stop-replay").addEventListener("click", () => { replayToken++; wakeReplay?.(); status("Replay stopped."); });
+$("stop-replay").addEventListener("click", () => { replayToken++; wakeReplay?.(); status(I18n.t("ui.game_test.replay_stopped", {}, "Replay stopped.")); });
 $("scenario-filter").addEventListener("change", filterScenarios);
 $("previous-scenario").addEventListener("click", () => chooseScenario(-1));
 $("next-scenario").addEventListener("click", () => chooseScenario(1));
@@ -636,11 +647,11 @@ $("jump-active").addEventListener("click", showActiveScenario);
 $("delete").addEventListener("click", async () => {
   try {
     const id = $("recordings").value;
-    if (!id) throw new Error("Select a recording.");
-    if (run?.id === id && !run.replaying) throw new Error("Cannot delete the active recording. Start a different session first.");
+    if (!id) throw new Error(I18n.t("ui.game_test.select_recording_error", {}, "Select a recording."));
+    if (run?.id === id && !run.replaying) throw new Error(I18n.t("ui.game_test.delete_active", {}, "Cannot delete the active recording. Start a different session first."));
     await apiRequest("DELETE", "/game-test-sessions/" + encodeURIComponent(id), {user:user()});
     await refresh();
-    status("Recording deleted.");
+    status(I18n.t("ui.game_test.deleted", {}, "Recording deleted."));
   } catch (error) { showError(error); }
 });
 window.addEventListener("beforeunload", event => {
@@ -649,10 +660,20 @@ window.addEventListener("beforeunload", event => {
 function renderAccountMenu() {
   Auth.renderMenu($("account-menu"));
 }
-document.addEventListener("i18n-changed", renderAccountMenu);
+document.addEventListener("i18n-changed", () => {
+  renderAccountMenu();
+  $("pause-replay").textContent = run?.paused
+    ? I18n.t("ui.builder.resume", {}, "Resume")
+    : I18n.t("ui.builder.pause", {}, "Pause");
+  const all = $("scenario-filter").querySelector('option[value=""]');
+  if (all) all.textContent = I18n.t("ui.game_test.all_scenarios", {}, "All scenarios");
+  const placeholder = $("recordings").querySelector('option[value=""]');
+  if (placeholder) placeholder.textContent = I18n.t("ui.game_test.select_recording", {}, "Select a recording");
+  if (!run) $("replay-progress").textContent = I18n.t("ui.game_test.choose_replay", {}, "Choose a recording and press Replay.");
+});
 document.addEventListener("auth-changed", () => {
   renderAccountMenu();
-  $("recordings").replaceChildren(el("option", {value:"", textContent:"Select a recording"}));
+  $("recordings").replaceChildren(el("option", {value:"", textContent:I18n.t("ui.game_test.select_recording", {}, "Select a recording")}));
   if (Auth.current()) refresh().catch(showError);
 });
 renderAccountMenu();

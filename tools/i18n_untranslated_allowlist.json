@@ -33,6 +33,13 @@
       "Create a cover and start, middle and ending previews using the approved rules and layout.",
       "Create reproducible initial, intermediate and terminal examples using the approved rules."
     ],
+    "game-test.js": [
+      "Laptop",
+      "Tablet",
+      "Small phone",
+      "Phone",
+      "Large phone"
+    ],
     "common.js": [
       "New Builder",
       "GET /debug/all-data: {}",

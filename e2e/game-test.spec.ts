@@ -3,6 +3,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createUser, loginAs, TICTACTOE, TICTACTOE_SERVER } from './helpers';
 
+test('matrix controls follow the selected language without losing entered code', async ({page}) => {
+  await page.goto('/game-test');
+  await page.locator('#client-code').fill('<p>draft</p>');
+  await page.locator('#language-picker').selectOption('es');
+  await expect(page.locator('main h1')).toHaveText('Matriz de pruebas de juegos');
+  await expect(page.locator('#start')).toHaveText('Iniciar y grabar la matriz');
+  await expect(page.locator('#client-code')).toHaveValue('<p>draft</p>');
+  await page.locator('#language-picker').selectOption('en');
+  await expect(page.locator('main h1')).toHaveText('Game test matrix');
+});
+
 test('sticky replay controls follow, pause, filter, and reopen saved events', async ({page, request}) => {
   const owner = await createUser(request, 'Replay controls tester');
   const headers = {'X-User-Id':owner.id, 'X-User-Password':owner.password};

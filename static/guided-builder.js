@@ -255,4 +255,4 @@ document.addEventListener('auth-changed',()=>{clearTimeout(poll);draft=null;rend
 Auth.renderMenu($('account-menu'));loadDrafts().then(()=>{if(me()&&location.hash.length>1)return select(decodeURIComponent(location.hash.slice(1)));}).catch(error);
 
 request('GET','/i18n/locales').then(data=>{const picker=$('language');picker.replaceChildren(...data.locales.map(l=>el('option',{value:l.code,textContent:l.name})));picker.value=typeof I18n.locale==='function'&&data.locales.some(l=>l.code===I18n.locale())?I18n.locale():data.default;}).catch(()=>{});
-document.addEventListener('i18n-changed',()=>{renderedRevision=null;render();loadDrafts().catch(error);});
+document.addEventListener('i18n-changed',()=>{matrixLink.textContent=I18n.t("ui.guided.test_matrix",{},"Open game test matrix");renderedRevision=null;render();loadDrafts().catch(error);});
