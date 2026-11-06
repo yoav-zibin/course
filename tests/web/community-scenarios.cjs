@@ -107,6 +107,7 @@ S['36e5f0d8'] = { names: ['Ana', 'Ben'], scenarios: [
   [{ msg: msg() }, { msg: mine(stack()) }, { msg: mine(stack()), then: (p) => { p.$('rotate').click(); p.$('cols').children[2].onmouseenter(); p.$('cols').children[2].click(); } }, { msg: mine(stack({ current: 'O' })), then: (p) => p.$('cols').children[0].onmouseenter() }],
   [{ msg: theirs(stack()) }, { msg: theirs(stack(), { turn_of_player_indices: [], players: UNNAMED }) }, { msg: mine(stack({ scores: [] }), { players: UNNAMED }) }],
   [{ msg: over(stack({ winners: [0] })) }, { msg: over(stack({ winners: [0, 1] })) }, { msg: over(stack({ winners: [1] }), { players: UNNAMED }) }, { msg: msg({ view: null }) }],
+  [{ msg: over(stack({ winners: null })) }, { msg: over(stack({ winners: null }), { end_reason: 'player_left' }) }, { msg: msg({ status: 'ongoing', view: stack({ winners: undefined }) }) }],
 ] };
 
 // --- Fox and Geese

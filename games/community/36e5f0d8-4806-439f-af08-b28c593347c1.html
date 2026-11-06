@@ -4,6 +4,8 @@
  "page_title": "Stack Duel",
  "heading": "Stack Duel",
  "rules": "Everyone stacks pieces on one shared tower. On your turn, rotate the falling piece and choose its column — it drops straight down. Full rows clear and score for the player who placed the piece. The game ends when a new piece no longer fits.",
+ "ended_left": "Game ended — a player left. Lines cleared: {lines}",
+ "ended": "Game ended. Lines cleared: {lines}",
  "current_piece": "Current piece:",
  "next_piece": "Next piece:",
  "rotate": "↻ Rotate",
@@ -62,7 +64,12 @@ function render(){
  const name=i=>(latest.players&&latest.players[i]&&latest.players[i].name)||t("player_n",{number:i+1});
  if(!v){status.textContent=t("waiting");return;}
  const over=latest.status==="over"||v.winners!==null&&v.winners!==undefined;
- if(over){const list=v.winners.map(name).join(", "),many=v.winners.length>1;status.textContent=many?t("over_many",{names:list,lines:v.lines}):t("over_one",{names:list,lines:v.lines});}
+if(over){
+   const winners=Array.isArray(v.winners)?v.winners:[];
+   const left=latest.end_reason==="player_left";
+   if(winners.length){const list=winners.map(name).join(", "),many=winners.length>1;status.textContent=many?t("over_many",{names:list,lines:v.lines}):t("over_one",{names:list,lines:v.lines});}
+   else status.textContent=left?t("ended_left",{lines:v.lines}):t("ended",{lines:v.lines});
+ }
  else if(sentFor===moveCount())status.textContent=t("saving");
  else if(myTurn())status.textContent=t("place_piece",{name:name(latest.acting_for_player_index),piece:v.current});
  else{const turns=latest.turn_of_player_indices||latest.turn;status.textContent=turns&&turns.length?t("waiting_for",{names:turns.map(name).join(", ")}):t("waiting");}

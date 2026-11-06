@@ -18,7 +18,12 @@ function render(){
  const name=i=>(latest.players&&latest.players[i]&&latest.players[i].name)||("Player "+(i+1));
  if(!v){status.textContent="Waiting…";return;}
  const over=latest.status==="over"||v.winners!==null&&v.winners!==undefined;
- if(over)status.textContent="Game over — "+v.winners.map(name).join(", ")+" win"+(v.winners.length>1?"":"s")+"! Lines cleared: "+v.lines;
+ if(over){
+   const winners=Array.isArray(v.winners)?v.winners:[];
+   status.textContent=winners.length
+     ? "Game over — "+winners.map(name).join(", ")+" win"+(winners.length>1?"":"s")+"! Lines cleared: "+v.lines
+     : (latest.end_reason==="player_left"?"Game ended — a player left.":"Game ended.")+" Lines cleared: "+v.lines;
+ }
  else if(sentFor===moveCount())status.textContent="Saving move…";
  else if(myTurn())status.textContent=name(latest.acting_for_player_index)+" — place the "+v.current+" piece";
  else{const t=latest.turn_of_player_indices||latest.turn;status.textContent=t&&t.length?("Waiting for "+t.map(name).join(", ")):"Waiting…";}

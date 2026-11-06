@@ -1,0 +1,238 @@
+{
+  "about": "Community games made translatable (docs/game-translation.md, 'Converting an existing game'). original = the exact client code fetched from production at version_fetched; converted = same game with an i18n-strings block. texts = number of keys in the block.",
+  "fetched_from": "https://buildplay.fun/games?limit=100",
+  "fetched_on": "2026-11-06",
+  "games": [
+    {
+      "id": "4d15d9d7-0788-4304-9b30-9b5c2bd7f487",
+      "name": "4x5 tictactoe",
+      "owner_user_id": "33000cab-fed4-4768-bbe7-f1f227af7dd9",
+      "version_fetched": 3,
+      "texts": 12,
+      "original": "4d15d9d7-0788-4304-9b30-9b5c2bd7f487.original.html",
+      "converted": "4d15d9d7-0788-4304-9b30-9b5c2bd7f487.html",
+      "original_sha256": "2e78c4340c5007bd5a72514954dda0ff1db93d1f26f0dba565c719433bec4d5f",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER 4d15d9d7-0788-4304-9b30-9b5c2bd7f487"
+    },
+    {
+      "id": "916ab616-6abf-4c92-83c5-43cbdd4c8ab9",
+      "name": "Bulls and Cows (Bulgarian)",
+      "owner_user_id": "43cf9d61-6d98-4bad-9a64-3b083d7a7094",
+      "version_fetched": 2,
+      "texts": 19,
+      "original": "916ab616-6abf-4c92-83c5-43cbdd4c8ab9.original.html",
+      "converted": "916ab616-6abf-4c92-83c5-43cbdd4c8ab9.html",
+      "original_sha256": "722551062e0333285c44d4c16483f32846458771cbb6ad08348ab272a2714758",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER 916ab616-6abf-4c92-83c5-43cbdd4c8ab9"
+    },
+    {
+      "id": "a5a16425-bc14-4260-9946-763b11f0739b",
+      "name": "Chopsticks",
+      "owner_user_id": "b9f47964-58bf-4478-b400-1fdd5f573131",
+      "version_fetched": 1,
+      "texts": 41,
+      "original": "a5a16425-bc14-4260-9946-763b11f0739b.original.html",
+      "converted": "a5a16425-bc14-4260-9946-763b11f0739b.html",
+      "original_sha256": "9a19f777bb684cfe9b2df200db84394d92e2df3c43be553ff8fe49ee3e589970",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER a5a16425-bc14-4260-9946-763b11f0739b"
+    },
+    {
+      "id": "cbd19f63-bc51-49a9-bb45-858ec9b12828",
+      "name": "Chutes & Ladders",
+      "owner_user_id": "6a750fa7-77ea-4c74-b9ed-a34100f2feff",
+      "version_fetched": 4,
+      "texts": 16,
+      "original": "cbd19f63-bc51-49a9-bb45-858ec9b12828.original.html",
+      "converted": "cbd19f63-bc51-49a9-bb45-858ec9b12828.html",
+      "original_sha256": "7727ef8c639622c3f4bcd564a378036d5e36303b24b9f6516573ca97e8242a8b",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER cbd19f63-bc51-49a9-bb45-858ec9b12828"
+    },
+    {
+      "id": "7bed6e20-99b4-4749-888e-43b0e90ba866",
+      "name": "Connect Four",
+      "owner_user_id": "b9f47964-58bf-4478-b400-1fdd5f573131",
+      "version_fetched": 2,
+      "texts": 21,
+      "original": "7bed6e20-99b4-4749-888e-43b0e90ba866.original.html",
+      "converted": "7bed6e20-99b4-4749-888e-43b0e90ba866.html",
+      "original_sha256": "af11db7ecc911c0e368408a0e7e296716d8d13be2e43619dd2f7c9c6474a4421",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER 7bed6e20-99b4-4749-888e-43b0e90ba866"
+    },
+    {
+      "id": "8b87f4a0-3735-442b-bf9c-e1b24aaf2df8",
+      "name": "Dragonimo",
+      "owner_user_id": "user1",
+      "version_fetched": 3,
+      "texts": 11,
+      "original": "8b87f4a0-3735-442b-bf9c-e1b24aaf2df8.original.html",
+      "converted": "8b87f4a0-3735-442b-bf9c-e1b24aaf2df8.html",
+      "original_sha256": "213ff5ce3dde686f4a39f8432e15f0068351a1358747fde7b33690bb3960c2a8",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER 8b87f4a0-3735-442b-bf9c-e1b24aaf2df8"
+    },
+    {
+      "id": "c8039b20-7c3e-4993-bae1-f59dfacd1ccc",
+      "name": "Fox and Geese",
+      "owner_user_id": "086c193a-d626-4c17-b087-ac529d11103f",
+      "version_fetched": 3,
+      "texts": 14,
+      "original": "c8039b20-7c3e-4993-bae1-f59dfacd1ccc.original.html",
+      "converted": "c8039b20-7c3e-4993-bae1-f59dfacd1ccc.html",
+      "original_sha256": "3f4356ba1e711953866fe7925e3551c335bb243f88c891b63d9cdb0fc6ce6aa3",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER c8039b20-7c3e-4993-bae1-f59dfacd1ccc"
+    },
+    {
+      "id": "39a5e1f5-c20c-40b1-a633-a8457d273eaf",
+      "name": "Gomoku",
+      "owner_user_id": "9cfbf4f8-7c2d-43eb-b9fc-2bd0672241d7",
+      "version_fetched": 3,
+      "texts": 23,
+      "original": "39a5e1f5-c20c-40b1-a633-a8457d273eaf.original.html",
+      "converted": "39a5e1f5-c20c-40b1-a633-a8457d273eaf.html",
+      "original_sha256": "75a1c192c933115ad4311a36eda8d93fe58fbba681b902c7536d035a0be19bf9",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER 39a5e1f5-c20c-40b1-a633-a8457d273eaf"
+    },
+    {
+      "id": "b59b79d7-660b-4823-8a81-159e0a6a2809",
+      "name": "Gomoku",
+      "owner_user_id": "user2",
+      "version_fetched": 3,
+      "texts": 12,
+      "original": "b59b79d7-660b-4823-8a81-159e0a6a2809.original.html",
+      "converted": "b59b79d7-660b-4823-8a81-159e0a6a2809.html",
+      "original_sha256": "fa1ff6212cab897198ae45c7f91051efc63b1dd65905d8bb6b961c61b2377469",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER b59b79d7-660b-4823-8a81-159e0a6a2809"
+    },
+    {
+      "id": "4f49cbdc-cf96-4657-a50e-3082935e1cdf",
+      "name": "Last Floe",
+      "owner_user_id": "4c513a14-6339-4e02-8f3f-8faf3ad222cb",
+      "version_fetched": 6,
+      "texts": 14,
+      "original": "4f49cbdc-cf96-4657-a50e-3082935e1cdf.original.html",
+      "converted": "4f49cbdc-cf96-4657-a50e-3082935e1cdf.html",
+      "original_sha256": "f2620d28665aa83fc42bb6b46e5818b31c7629345e82c1fd86b7326e4934b828",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER 4f49cbdc-cf96-4657-a50e-3082935e1cdf"
+    },
+    {
+      "id": "571c1cc4-a48d-40be-88fd-df1d5cc21d10",
+      "name": "Nim",
+      "owner_user_id": "4c513a14-6339-4e02-8f3f-8faf3ad222cb",
+      "version_fetched": 2,
+      "texts": 17,
+      "original": "571c1cc4-a48d-40be-88fd-df1d5cc21d10.original.html",
+      "converted": "571c1cc4-a48d-40be-88fd-df1d5cc21d10.html",
+      "original_sha256": "d0821dcb1176ee91db84a65b43d9ce2b206cbbd5cacc24a4175169b61c86f100",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER 571c1cc4-a48d-40be-88fd-df1d5cc21d10"
+    },
+    {
+      "id": "79830aee-0a91-406d-a2f7-c103002203f7",
+      "name": "Nine Stars",
+      "owner_user_id": "9cfbf4f8-7c2d-43eb-b9fc-2bd0672241d7",
+      "version_fetched": 3,
+      "texts": 18,
+      "original": "79830aee-0a91-406d-a2f7-c103002203f7.original.html",
+      "converted": "79830aee-0a91-406d-a2f7-c103002203f7.html",
+      "original_sha256": "92259f03633a6a8648e66cfc8ecf942d08e251b7261c6d256280ebcd77de894f",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER 79830aee-0a91-406d-a2f7-c103002203f7"
+    },
+    {
+      "id": "788b39a9-6358-4598-9903-92ce97aa5502",
+      "name": "Nine Stars (Demo)",
+      "owner_user_id": "969248fc-1c6c-4c02-be2d-3f0c767fc29f",
+      "version_fetched": 4,
+      "texts": 12,
+      "original": "788b39a9-6358-4598-9903-92ce97aa5502.original.html",
+      "converted": "788b39a9-6358-4598-9903-92ce97aa5502.html",
+      "original_sha256": "24ba6af0d74f5e6d2dca52373c8ccdf25443217512bd4f09a273521b56735e81",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER 788b39a9-6358-4598-9903-92ce97aa5502"
+    },
+    {
+      "id": "569fac2e-82eb-486b-9446-6afae3984efe",
+      "name": "Solo Countdown (deployment check)",
+      "owner_user_id": "923f13b3-6080-4b15-834a-67bd924eb52e",
+      "version_fetched": 3,
+      "texts": 9,
+      "original": "569fac2e-82eb-486b-9446-6afae3984efe.original.html",
+      "converted": "569fac2e-82eb-486b-9446-6afae3984efe.html",
+      "original_sha256": "1e74db4fe3111e950dfd705227cc10a07f6d229f81720717682fc45675f970cf",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER 569fac2e-82eb-486b-9446-6afae3984efe"
+    },
+    {
+      "id": "a1ca4c85-b8a5-4b63-a9dc-f01c87a0d65f",
+      "name": "SOS",
+      "owner_user_id": "7269ec5c-c6ad-474b-91a0-22c7ac04d321",
+      "version_fetched": 2,
+      "texts": 16,
+      "original": "a1ca4c85-b8a5-4b63-a9dc-f01c87a0d65f.original.html",
+      "converted": "a1ca4c85-b8a5-4b63-a9dc-f01c87a0d65f.html",
+      "original_sha256": "7fa7109ccc11d2a2758f5a7656ed20ff4eb2bcf281a3f7bd07d3e889b6b4863c",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER a1ca4c85-b8a5-4b63-a9dc-f01c87a0d65f"
+    },
+    {
+      "id": "58bd6827-f156-4cd2-ac31-53953b6df61a",
+      "name": "Spoons",
+      "owner_user_id": "ba155962-98f3-490f-b18f-4d9c40694189",
+      "version_fetched": 3,
+      "texts": 22,
+      "original": "58bd6827-f156-4cd2-ac31-53953b6df61a.original.html",
+      "converted": "58bd6827-f156-4cd2-ac31-53953b6df61a.html",
+      "original_sha256": "58a1c58b6f8684997921554b38eeb9dbb87eaed4f45df1571f01c74da3a96b5f",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER 58bd6827-f156-4cd2-ac31-53953b6df61a"
+    },
+    {
+      "id": "36e5f0d8-4806-439f-af08-b28c593347c1",
+      "name": "Stack Duel",
+      "owner_user_id": "086c193a-d626-4c17-b087-ac529d11103f",
+      "version_fetched": 8,
+      "texts": 17,
+      "original": "36e5f0d8-4806-439f-af08-b28c593347c1.original.html",
+      "converted": "36e5f0d8-4806-439f-af08-b28c593347c1.html",
+      "original_sha256": "a3c9007765d75787d2564d8d869b1a6717186e7e702465b3ab4d53281c98fd88",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER 36e5f0d8-4806-439f-af08-b28c593347c1"
+    },
+    {
+      "id": "aac01cd8-9436-456b-9e8b-a5f87b815e07",
+      "name": "Star Count",
+      "owner_user_id": "923f13b3-6080-4b15-834a-67bd924eb52e",
+      "version_fetched": 4,
+      "texts": 8,
+      "original": "aac01cd8-9436-456b-9e8b-a5f87b815e07.original.html",
+      "converted": "aac01cd8-9436-456b-9e8b-a5f87b815e07.html",
+      "original_sha256": "c582ab92e00c76b7484a943a53fb58e2fd61ed62fa528eda6f63e8db1b95fe9d",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER aac01cd8-9436-456b-9e8b-a5f87b815e07"
+    },
+    {
+      "id": "d00a8d7b-320e-43bc-824f-ff899ff93687",
+      "name": "Tap to 10 (TEST GAME)",
+      "owner_user_id": "b9f47964-58bf-4478-b400-1fdd5f573131",
+      "version_fetched": 1,
+      "texts": 6,
+      "original": "d00a8d7b-320e-43bc-824f-ff899ff93687.original.html",
+      "converted": "d00a8d7b-320e-43bc-824f-ff899ff93687.html",
+      "original_sha256": "317172f3e8b3f4ea32d7c7bb1752a31996c47d269c4af490b1d7512a8adcb903",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER d00a8d7b-320e-43bc-824f-ff899ff93687"
+    },
+    {
+      "id": "ad578d02-f485-4e11-a1d4-08bcd4f462a9",
+      "name": "Tower of Hanoi",
+      "owner_user_id": "9cfbf4f8-7c2d-43eb-b9fc-2bd0672241d7",
+      "version_fetched": 3,
+      "texts": 16,
+      "original": "ad578d02-f485-4e11-a1d4-08bcd4f462a9.original.html",
+      "converted": "ad578d02-f485-4e11-a1d4-08bcd4f462a9.html",
+      "original_sha256": "d575eccb86f20dd86b9f8f1661be020bba98324a87296173e5b235bd7c927106",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER ad578d02-f485-4e11-a1d4-08bcd4f462a9"
+    },
+    {
+      "id": "42d06892-449c-44d2-9251-7b9448ce4ddc",
+      "name": "War",
+      "owner_user_id": "201f750d-48f7-4ede-9633-8bbb844bab2d",
+      "version_fetched": 3,
+      "texts": 32,
+      "original": "42d06892-449c-44d2-9251-7b9448ce4ddc.original.html",
+      "converted": "42d06892-449c-44d2-9251-7b9448ce4ddc.html",
+      "original_sha256": "66a8e4f694f880a142dba5ad1b536f56477a724e42e429a64f994c753de2076f",
+      "publish_command": "python tools/publish_game_code.py --target https://buildplay.fun --password MASTER 42d06892-449c-44d2-9251-7b9448ce4ddc"
+    }
+  ]
+}

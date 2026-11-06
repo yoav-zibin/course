@@ -60,6 +60,49 @@ Rules (the game-building agent is told the same ones, `game_text.PROMPT_RULES`):
 text written in the code, sentences joined from pieces, markup, text on a canvas); the endpoint below
 returns them as `warnings`. A game with no block still has its **name and description** translated.
 
+## Converting an existing game
+
+Games built before the rules above have no `i18n-strings` block, so only their name and description
+are translated. `games/community/` holds 21 of them, converted by hand (the list, with versions and
+the number of texts, is `games/community/manifest.json`; how the owner publishes them is
+`tools/community_games_publish.md`). The same steps convert any other game:
+
+1. **Save the exact current code.** `GET /games/{id}` (public) returns the latest version's
+   `client_code`. Keep it as `games/community/<id>.original.html` and record the version in the manifest:
+   a game in the database only changes when a new version is saved, and the owner may have saved one
+   since (`tools/community_games_check.py` compares the file with production, read-only).
+2. **List every text the player reads**, in English, with `{placeholders}`: status lines, buttons,
+   labels, hints, errors, results, `aria-label`s and placeholders, the page `<title>`, and the texts that are
+   written in the page's own HTML (the heading, the rules). Keep data as data: pieces, cards, suits,
+   emoji used as pictures and numbers are not texts. Player names are not translated.
+3. **Add the block and the helper**, call `applyLocale(message)` first in the `state_changed` handler,
+   and show every text through `t()`. Texts in the page's HTML cannot be changed by the helper, so
+   write a small `applyStaticTexts()` that sets them with `t()` and call it right after `applyLocale`;
+   the HTML keeps the English text, so the page reads the same until a translation arrives.
+4. **One key per sentence.** A sentence built from pieces (`name + " wins"`), a plural made with a
+   ternary (`"star" + (n === 1 ? "" : "s")`) or a word chosen inside a sentence becomes whole sentences
+   and a choice between them: `n === 1 ? t("one_star_left") : t("stars_left", {count: n})`. A text that
+   continues an existing sentence (a status followed by "(spectating)") becomes a template with the sentence
+   as a placeholder: `"{status} (spectating)"`. `game_text.lint` reads `t("key"` literally, so
+   choose between two `t("…")` calls, never `t(cond ? "a" : "b")`, and keep data codes such as
+   `"placement"` or `"computer"` out of the expression that sets a text (compute a variable first).
+5. **Markup inside a sentence** (a bold word, a line break) cannot be in a string. Split the sentence
+   at a placeholder (`"Form {pattern} in a line"`), fill the placeholder with a marker character, and
+   build the text and the `<b>` around it with `createElement`, so a translation can put the bold part
+   anywhere (see the SOS rules and the War counters).
+6. **Do not change how the game plays**: rules, layout, message formats, `make_move`. Prefer logical CSS
+   properties (`margin-inline-start`) for anything you touch. Texts the game's server writes into the
+   match state (a `log` string, say) stay as the server writes them; list them for the owner.
+7. **A local variable named `t`** (or a constant called `strings`) collides with the helper: rename it.
+8. **Check it.** `game_text.lint(code)` must return `[]` (`tests/test_community_games.py` does this for
+   every converted game). `tests/web/community-games.test.cjs` loads the original and the converted
+   page in a fake page (`tests/web/fake-page.cjs`), sends the same `state_changed` messages
+   (`tests/web/community-scenarios.cjs`) and checks that (a) in English both pages have the same
+   text, attributes and classes, and send the same moves, (b) with a translation that marks every
+   text, nothing the player reads is left untranslated, apart from player names and data, and (c) every
+   key of the block is shown by some message. A game whose English output cannot be kept identical, or
+   whose texts the server decides, is left out and listed with the reason.
+
 ## The API (additive: nothing existing changes)
 
 | Endpoint | Description |
@@ -217,8 +260,10 @@ machine translation that does is discarded and the original is shown; `translati
 
 - **The game builder's preview** does not send translations: a creator tests in English. A language picker
   for the preview (translating the unsaved code) is the next step.
-- **Games that exist today have no block.** Options: ask the agent to "make this game translatable" as a new
-  version, or translate the page's text from outside the game (which cannot work for text built from pieces).
+- **Games that exist today have no block.** Those in `games/community/` are converted and wait for the owner to
+  publish them ("Converting an existing game"); for the others, ask the agent to "make this game translatable" as a
+  new version, or convert them by hand the same way. Translating the page's text from outside the game cannot
+  work for text built from pieces.
 - **The Google calls were written against Google's documentation and tested with a fake HTTP layer; they have
   not been run against Google from here.** The first real request is the test: check
   `jsonPayload.event="translation_done"` (or `translation_failed`) in the log.
