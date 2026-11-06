@@ -41,6 +41,7 @@ for (const [prefix, spec] of Object.entries(S)) {
       const c = loadPage(path.join(DIR, file));
       for (const { msg, then } of scenario) {
         step += 1;
+        if (msg === null) { assert.equal(b.snapshot(), a.snapshot(), 'English page differs before any message'); continue; }
         a.send(msg); b.send(msg);
         assert.equal(b.snapshot(), a.snapshot(), `English page differs from the original at step ${step}`);
         if (then) { then(a); then(b); assert.equal(b.snapshot(), a.snapshot(), `English page differs after the action at step ${step}`); }

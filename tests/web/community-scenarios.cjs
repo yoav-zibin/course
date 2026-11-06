@@ -71,4 +71,33 @@ S['a1ca4c85'] = { names: ['Ana', 'Ben', 'Robo'], skipCoverage: ['rules'], data: 
   [{ msg: over(sos([], { winner: 0 })) }, { msg: over(sos([], { winner: -1 })) }, { msg: over(sos([], { winner: null })) }, { msg: over(sos([], { winner: 5 })) }, { msg: mine(sos([]), { players: UNNAMED, my_player_index: 1 }) }],
 ] };
 
+// --- Connect Four
+const grid = (cells = []) => { const b = Array.from({ length: 6 }, () => Array(7).fill(0)); for (const [r, c, v] of cells) b[r][c] = v; return b; };
+const c4 = (extra = {}, cells = []) => ({ status: 'IN_PROGRESS', toMove: 1, board: grid(cells), winningCells: [], ...extra });
+const fullCol = [[0, 0, 1], [1, 0, 2], [2, 0, 1], [3, 0, 2], [4, 0, 1], [5, 0, 2]];
+S['7bed6e20'] = { names: ['Ana', 'Ben'], skipCoverage: ['waiting_platform'], scenarios: [
+  [{ msg: null }, { msg: mine(c4()) }, { msg: mine(c4()), then: (p) => p.$('dropRow').children[3].click() }, { msg: mine(c4({}, fullCol), { move_count: 9 }), then: (p) => p.$('board').children[0].children[0].click() }, { msg: mine(c4({ toMove: 2 }, [[5, 3, 1]]), { move_count: 10 }) }],
+  [{ msg: theirs(c4({ toMove: 2 })) }, { msg: theirs(c4({ toMove: 1 }), { turn_of_player_indices: [] }) }, { msg: theirs(c4({ toMove: 2 }), { acting_for_player_index: 1 }) }, { msg: theirs(c4({ toMove: 1 }), { acting_for_player_index: 1 }) }, { msg: spectator(c4({ toMove: 2 }), { acting_for_player_index: 1 }) }, { msg: theirs(c4({ toMove: 2 }), { turn_of_player_indices: [1], players: UNNAMED }) }],
+  [{ msg: over(c4({ status: 'WINNER_P1', winningCells: [[5, 0], [5, 1], [5, 2], [5, 3]] }, [[5, 0, 1], [5, 1, 1], [5, 2, 1], [5, 3, 1]])) }, { msg: over(c4({ status: 'WINNER_P2' })) }, { msg: over(c4({ status: 'DRAW' }), { players: UNNAMED }) }, { msg: over(c4(), { end_reason: 'player_left' }) }, { msg: over(c4({ status: 'WINNER_P2' }), { players: UNNAMED }) }],
+  [{ msg: msg({ view: null }) }, { msg: msg({ view: null, status: 'over' }) }, { msg: mine(c4({ toMove: 7 })) }, { msg: mine(c4({ toMove: 1 }), { status: 'over' }) }],
+] };
+
+// --- Chutes & Ladders
+const chutes = (extra = {}) => ({ phase: 'play', positions: [1, 16], pieces: { 0: '\u{1F451}', 1: '\u{1F3A9}' }, winner: null, lastSpin: null, log: [], ...extra });
+S['cbd19f63'] = { names: ['Ana', 'Ben'], data: ['Ana rolled 3\nBen fell down a chute'], scenarios: [
+  [{ msg: msg() }, { msg: mine(chutes({ phase: 'rolloff', lastSpin: 3 })) }, { msg: mine(chutes({ phase: 'rolloff' })) }, { msg: mine(chutes({ phase: 'select', pieces: {} })), then: (p) => p.$('actions').children[2].click() }],
+  [{ msg: theirs(chutes({ phase: 'rolloff', lastSpin: 4 })) }, { msg: theirs(chutes({ phase: 'select' })) }, { msg: theirs(chutes({ lastSpin: 6 })) }, { msg: theirs(chutes(), { turn_of_player_indices: [] }) }, { msg: theirs(chutes({ phase: 'rolloff' }), { players: UNNAMED }) }],
+  [{ msg: mine(chutes({ lastSpin: 2, log: ['Ana rolled 3', 'Ben fell down a chute'] })) }, { msg: mine(chutes({ positions: [0, 0] })), then: (p) => p.$('actions').children[0].click() }, { msg: mine(chutes({ positions: [0, 5] }), { players: UNNAMED }) }, { msg: mine(chutes({ positions: [9, 98], pieces: {} })) }],
+  [{ msg: over(chutes({ winner: 1 })) }, { msg: over(chutes({ winner: 0 }), { players: UNNAMED }) }, { msg: msg({ view: null }) }],
+] };
+
+// --- Nim
+const nim = (piles, winnerIndex = null) => ({ piles, winnerIndex });
+const robo = [{ name: 'Ana', player_index: 0, id: 'p0' }, { name: 'Robo', player_index: 1, id: 'p1', kind: 'computer' }];
+S['571c1cc4'] = { names: ['Ana', 'Ben', 'Robo'], scenarios: [
+  [{ msg: msg() }, { msg: mine(nim([3, 5, 7])) }, { msg: mine(nim([3, 5, 7])), then: (p) => p.$('board').children[0].children[1].children[1].click() }, { msg: mine(nim([3, 5, 7])), then: (p) => { p.$('board').children[1].children[1].children[0].click(); p.$('board').children[1].children[2].click(); } }, { msg: mine(nim([0, 2, 1])) }],
+  [{ msg: theirs(nim([3, 5, 7])) }, { msg: theirs(nim([3, 5, 7]), { turn_of_player_indices: [] }) }, { msg: theirs(nim([3, 5, 7]), { players: robo, turn_of_player_indices: [1] }) }, { msg: mine(nim([3, 5, 7]), { players: UNNAMED }) }, { msg: theirs(nim([1, 1, 1]), { players: UNNAMED }) }],
+  [{ msg: over(nim([0, 0, 0], 1)) }, { msg: over(nim([0, 0, 0], null)) }, { msg: over(nim([0, 0, 0], 1), { players: robo }) }, { msg: msg({ view: null }) }],
+] };
+
 module.exports = { S, msg, mine, theirs, over, spectator, PLAYERS, UNNAMED, click };
