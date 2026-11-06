@@ -38,6 +38,15 @@ STEP_PROMPTS['images'] += '\n' + ILLUSTRATION_ACCURACY + '\n' + COVER_FIDELITY
 # The screenshot verification measures real elements, so the specification
 # gets the same numbers the checker enforces instead of leaving the
 # generator to invent sizes the client cannot satisfy.
+STEP_PROMPTS['logic'] += ('\nLength: about one page (roughly 600-900 words). Be complete, not expansive. '
+                          'Do not restate the platform contract appended to this instruction — settlement '
+                          'mechanics, computer-move recipes and execution limits are supplied to the code '
+                          'generator and the reviewers separately; state only what is specific to this '
+                          'game. Cut words, never rulings: every move, condition, ending and edge case the '
+                          'game has must still be ruled on, with at least one worked example per move.')
+STEP_PROMPTS['ui'] += ('\nLength: about one page. Specify this game\'s screens, layout, controls and '
+                       'states; mention generic platform behavior (themes, RTL mirroring, accessibility '
+                       'mechanics) only where this game\'s choices differ from the obvious default.')
 STEP_PROMPTS['ui'] += ('\nPlatform constraint: the finished client is screenshot-verified at phone portrait, '
                        'phone landscape (844x390) and desktop sizes, and every interactive element '
                        '(button, input, select, or role=button element) must measure at least 30px in '
@@ -334,7 +343,11 @@ _AUDIT_INSTRUCTION = (
     'approved sources; flag disagreements. (3) Load-bearing facts restated from the sources '
     '(goal rows, starting positions, move names and payload shapes, geometry rules, '
     'difficulty rules) must match the sources; flag mismatches. (4) If two passages govern '
-    'the same situation differently, flag the pair. Report each problem once: "where" names '
+    'the same situation differently, flag the pair. (5) Completeness: flag anything the step '
+    'must rule on that the draft omits — for rules: setup, every move\'s legality and effects, '
+    'endings, leaving, views and computer strategy; for a UI specification: every screen state '
+    'the approved rules imply. An omission is "mechanical" when the approved sources determine '
+    'the missing ruling, otherwise "decision". Report each problem once: "where" names '
     'the section, "claim" quotes the draft, "expected" states what the draft\'s own rules or '
     'the sources require. Return {"findings":[]} when nothing is wrong.')
 

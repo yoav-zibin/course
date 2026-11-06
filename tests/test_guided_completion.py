@@ -1490,3 +1490,15 @@ def test_ui_audit_sees_logic_source_and_platform_constraints():
     payload = json.loads(audit_user['content'])
     assert payload['approved_sources']['logic'] == logic
     assert '30px' in generation_instructions[0] and '844x390' in generation_instructions[0]
+
+
+def test_prose_prompts_carry_length_budget_and_audit_checks_completeness():
+    # The rules/layout prompts target about a page and forbid restating the
+    # platform contract (the build injects it separately), while the audit
+    # checklist gains the completeness item: shorter must not mean skipped.
+    from game_platform.builder_jobs import STEP_PROMPTS, _AUDIT_INSTRUCTION
+    assert 'about one page' in STEP_PROMPTS['logic']
+    assert 'Do not restate the platform contract' in STEP_PROMPTS['logic']
+    assert 'Cut words, never rulings' in STEP_PROMPTS['logic']
+    assert 'about one page' in STEP_PROMPTS['ui']
+    assert 'Completeness' in _AUDIT_INSTRUCTION
