@@ -38,6 +38,9 @@ TRANSLATABLE = [
     "audit-batch5/chess.html",
     "audit-batch5/guess-who.html",
     "audit-batch5/spades.html",
+    "playroom/crazy-eights.html",
+    "playroom/dots-and-boxes.html",
+    "playroom/reversi.html",
 ]
 
 

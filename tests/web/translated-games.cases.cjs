@@ -329,5 +329,33 @@ const CASES = {
       ],
     };
   })(),
+
+  'playroom/dots-and-boxes.html': {
+    messages: [
+      { ...base, token_pot: 0, state: null },
+      { ...base, state: { edges: [0, ...Array(23).fill(null)], boxes: [0, 1, ...Array(7).fill(null)], turn: 0, winner: null, done: false } },
+      { ...base, acting_for_player_index: null, state: { edges: Array(24).fill(null), boxes: Array(9).fill(null), turn: 1, winner: null, done: false } },
+      { ...base, status: 'over', state: { edges: Array(24).fill(0), boxes: Array(9).fill(0), turn: 0, winner: 0, done: true } },
+      { ...base, status: 'over', state: { edges: Array(24).fill(0), boxes: Array(9).fill(0), turn: 0, winner: null, done: true } },
+      { ...base, status: 'over', state: { edges: Array(24).fill(null), boxes: Array(9).fill(null), turn: 0, winner: null, done: false } },
+    ],
+  },
+  'playroom/reversi.html': {
+    messages: [
+      { ...base, state: null },
+      { ...base, state: { board: [...Array(27).fill(null), 1, 0, ...Array(7).fill(null), 0, 1, ...Array(27).fill(null)], turn: 0, done: false, winner: null } },
+      { ...base, acting_for_player_index: null, state: { board: Array(64).fill(null), turn: 1, done: false, winner: null } },
+      { ...base, status: 'over', state: { board: Array(64).fill(0), turn: 0, done: true, winner: 0 } },
+      { ...base, status: 'over', state: { board: Array(64).fill(1), turn: 0, done: true, winner: null } },
+    ],
+  },
+  'playroom/crazy-eights.html': {
+    messages: [
+      { ...base, state: null },
+      { ...base, state: { hands: [[1, 2, 20], [3, 4, 5]], deck: [9, 10], discard: [7], suit: 0, turn: 0, done: false, winner: null, passes: 0 } },
+      { ...base, my_player_index: null, acting_for_player_index: null, state: { hands: [[1], [3]], deck: [9], discard: [7], suit: 1, turn: 1, done: false, winner: null, passes: 0 } },
+      { ...base, status: 'over', state: { hands: [[], [3]], deck: [], discard: [7], suit: 1, turn: 0, done: true, winner: 0, passes: 0 } },
+    ],
+  },
 };
 module.exports = { CASES, players2, base, grid };

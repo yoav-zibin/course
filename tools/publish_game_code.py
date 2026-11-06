@@ -9,6 +9,11 @@ the game are kept). A game whose live code is already the file's is skipped.
     python3 tools/publish_game_code.py --target https://buildplay.fun --password MASTER tictactoe poker
     python3 tools/publish_game_code.py --target https://buildplay.fun --dry-run tictactoe poker
 
+A game is named by its id on the server. The built-in tictactoe, poker and debug have their file
+name as id; the games of games/audit-batch*/ have the UUID of their manifest.json entry (the
+tool finds the file there); any other game is given as ID=FILE, for example
+77181f30-f03a-4524-b662-33c1f6131389=games/audit-batch1/battleship.html.
+
 Standard library only. Needs the master password, except with --dry-run (which only reads).
 """
 
@@ -46,13 +51,37 @@ def game_file(game_id: str) -> Path | None:
     return None
 
 
+def manifest_file(game_id: str) -> Path | None:
+    """The client file of a game listed in games/audit-batch*/manifest.json under this server id."""
+    for manifest in sorted(GAMES_DIR.glob("*/manifest.json")):
+        try:
+            entries = json.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        for entry in entries if isinstance(entries, list) else []:
+            if isinstance(entry, dict) and entry.get("id") == game_id and entry.get("client"):
+                candidate = manifest.parent / entry["client"]
+                if candidate.is_file():
+                    return candidate
+    return None
+
+
+def resolve(argument: str) -> tuple[str, Path | None]:
+    """(server game id, client file) for a command-line argument: ID, or ID=FILE."""
+    if "=" in argument:
+        game_id, _, name = argument.partition("=")
+        path = Path(name)
+        return game_id, path if path.is_file() else None
+    return argument, game_file(argument) or manifest_file(argument)
+
+
 def normalized(text: str) -> str:
     return text.replace("\r\n", "\n")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("games", nargs="+", help="game ids, such as tictactoe poker")
+    parser.add_argument("games", nargs="+", help="game ids (tictactoe, poker, a UUID of games/audit-batch*/manifest.json) or ID=FILE")
     parser.add_argument("--target", required=True, help="the server's address")
     parser.add_argument("--password", default="", help="the server's master password")
     parser.add_argument("--dry-run", action="store_true", help="say what would change; write nothing")
@@ -62,10 +91,10 @@ def main() -> None:
         sys.exit("--password is needed unless --dry-run")
 
     failed = False
-    for game_id in args.games:
-        file = game_file(game_id)
+    for argument in args.games:
+        game_id, file = resolve(argument)
         if file is None:
-            print(f"{game_id}: no file games/{game_id}.html here")
+            print(f"{game_id}: no client file for it here (games/{game_id}.html, a manifest.json id, or ID=FILE)")
             failed = True
             continue
         code = file.read_text(encoding="utf-8")

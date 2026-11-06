@@ -2,7 +2,8 @@
 // `i18n-strings` JSON block) plus a `document` that can serve that block to the translation helper.
 const fs = require('node:fs');
 const STRINGS = /<script type="application\/json" id="i18n-strings">([\s\S]*?)<\/script>/;
-const SCRIPT = /<script(?![^>]*application\/json)[^>]*>([\s\S]*?)<\/script>/;
+const NL = String.fromCharCode(10);
+const SCRIPTS = /<script(?![^>]*application\/json)[^>]*>([\s\S]*?)<\/script>/g;
 
 // The page's strings block as an object ({} when the page has none).
 function stringsOf(html) {
@@ -18,7 +19,8 @@ function pageScript(html, document) {
     document.getElementById = (id) => (id === 'i18n-strings' ? { textContent: match[1] } : original(id));
     if (!document.documentElement) document.documentElement = {};
   }
-  return html.match(SCRIPT)[1];
+  // Every plain script of the page, in order (a page may keep its translation helper in a script of its own).
+  return [...html.matchAll(SCRIPTS)].map((m) => m[1]).join(NL);
 }
 
 function pageScriptOf(file, document) {
