@@ -224,10 +224,19 @@ def test_referrals_and_linked_identity_survive_restart(store):
     assert second.user_for_referral(user.referral_code) == alice
 
 
-def test_startup_never_lists_collections(store):
+def test_startup_only_lists_game_versions_for_schema_preflight(store):
     second = QueryStore(store.client, namespace=store.namespace)
-    with patch.object(second, "_list", side_effect=AssertionError("startup scan")):
+    original_list = second._list
+    listed = []
+
+    def list_for_startup(kind, *args, **kwargs):
+        assert kind == "game_versions", "startup must not scan unrelated collections"
+        listed.append(kind)
+        return original_list(kind, *args, **kwargs)
+
+    with patch.object(second, "_list", side_effect=list_for_startup):
         Api(store=second)
+    assert listed == ["game_versions"]
 
 
 def test_idempotent_move_does_not_append_or_pay_twice(store):
