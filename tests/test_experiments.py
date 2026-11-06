@@ -86,6 +86,7 @@ def test_match_start_tracking_uses_match_timestamp_without_advancing_clock() -> 
 
     assert clock_reads == 6
     assert match_start_event.occurred_at == started.updated_at
+    assert platform._store.get_user(user.id).updated_at == started.updated_at
 
 
 def test_skin_assignment_merge_keeps_survivor_then_inherits_source() -> None:

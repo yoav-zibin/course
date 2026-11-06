@@ -2357,9 +2357,11 @@ class GamePlatform:
         if recorder is not None:
             recorder(match.game_id, len(match.seats))
         for user_id in match.human_user_ids:
-            self._record_recent_game_for_user(user_id, match.game_id)
+            self._record_recent_game_for_user(user_id, match.game_id, occurred_at=match.updated_at)
 
-    def _record_recent_game_for_user(self, user_id: str, game_id: str) -> None:
+    def _record_recent_game_for_user(
+        self, user_id: str, game_id: str, *, occurred_at: dt.datetime | None = None
+    ) -> None:
         """Moves [game_id] to the front of a user's bounded recent-game list."""
         user = self._store.get_user(user_id)
         if user is None:
@@ -2368,7 +2370,7 @@ class GamePlatform:
         recent = _dedupe((game_id, *user.recent_game_ids))[: self.RECENT_GAME_LIMIT]
         if recent != user.recent_game_ids:
             self._store.put_user(
-                replace(user, recent_game_ids=recent, updated_at=self._clock())
+                replace(user, recent_game_ids=recent, updated_at=occurred_at or self._clock())
             )
 
     def update_game(
@@ -2726,7 +2728,7 @@ class GamePlatform:
                         turn_of_player_indices=self._turn_indices(saved, result),
                     )
                 )
-            self._record_recent_game_for_user(caller_id, saved.game_id)
+            self._record_recent_game_for_user(caller_id, saved.game_id, occurred_at=saved.updated_at)
         joiner = self._store.get_user(caller_id)
         self._notify_match_event(
             "notify.player_joined",
