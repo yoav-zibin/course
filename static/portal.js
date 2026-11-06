@@ -11,7 +11,7 @@ const $ = (id) => document.getElementById(id);
 const POLL_MS = 2000;
 async function portalTransport(method, path, { body, user, requestId } = {}) {
   const controller = new AbortController(),
-    timer = setTimeout(() => controller.abort(), 6000);
+    timer = setTimeout(() => controller.abort(), 20000);
   try {
     const headers = {};
     if (requestId) headers["Idempotency-Key"] = requestId;
