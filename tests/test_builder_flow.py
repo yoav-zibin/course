@@ -124,6 +124,38 @@ def test_build_job_persists_ready_code_and_does_not_publish(monkeypatch):
     with pytest.raises(ConflictError):flow.require_publishable(saved)
 
 
+def test_build_survives_a_malformed_diagnosis_reply(monkeypatch):
+    import json
+    from game_platform.builder_jobs import run_build
+    from game_platform import builder_render
+    f=fixture();d=flow.begin_build(approved_draft());store=InMemoryStore();store.put_game_draft(d)
+    platform=GamePlatform(store=store)
+    user=platform.create_user(display_name='Builder');store.put_user(replace(user,id=d.owner_user_id))
+    broken=f['server_code'].replace('n:0','n:1').replace('n: 0','n: 1')
+    assert broken != f['server_code']
+    servers=[]
+    class Model:
+        def chat(self,messages,**kwargs):
+            system=messages[0]['content'] if isinstance(messages[0]['content'],str) else ''
+            if system.startswith('Determine whether the code or an example'):
+                return '{"broken":'
+            if 'Review game server' in system or isinstance(messages[0]['content'],list):
+                return json.dumps({'passed':True,'issues':[]})
+            if any('complete executable server JavaScript' in str(m.get('content','')) for m in messages):
+                servers.append(1)
+                return json.dumps({'code':f['code'],'server_code':broken if len(servers)==1 else f['server_code']})
+            return json.dumps({'code':f['code'],'server_code':f['server_code']})
+    monkeypatch.setattr('game_platform.builder_visual.review_views',lambda *args:[])
+    monkeypatch.setattr(builder_render,'render_game',lambda *args,**kwargs:[])
+    run_build(platform,Model(),d.owner_user_id,d.id,d.builder_workflow['job']['id'])
+    saved=platform.get_game_draft(caller_id=d.owner_user_id,draft_id=d.id)
+    # The first attempt's examples failed and the diagnosis reply was not
+    # JSON; the build treated it as a code defect and finished on attempt 2
+    # instead of stopping with the raw parse error.
+    assert len(servers)==2
+    assert saved.builder_workflow['job']['status']=='ready_for_review',saved.builder_workflow['job']
+
+
 def test_cancellation_and_code_changes_block_publish():
     d=flow.begin_build(approved_draft())
     with pytest.raises(ConflictError):flow.propose(d,'understanding',{'text':'Different'},'Changed')
