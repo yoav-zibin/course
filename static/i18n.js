@@ -103,6 +103,48 @@ const I18n = (() => {
     return text.replace(/\{(\w+)\}/g, (match, name) => (name in params ? params[name] : match));
   }
 
+  /** A sentence that depends on a count. The catalog has one key per form: `<key>_one`
+   * and `<key>_many` (plus `_zero`, `_two`, `_few` where a language needs them); the
+   * form comes from the language's plural rules. [fallbacks] are the English sentences,
+   * e.g. {one: "1 game", many: "{count} games"}. {count} is filled in. */
+  function plural(key, count, params = {}, fallbacks = {}) {
+    let category = "other";
+    try {
+      category = new Intl.PluralRules(code).select(count);
+    } catch {
+      category = count === 1 ? "one" : "other";
+    }
+    const form = category === "other" ? "many" : category;
+    const english = count === 1 ? fallbacks.one : fallbacks.many;
+    const text =
+      messages[`${key}_${form}`] ??
+      (form === "one" ? undefined : messages[`${key}_many`]) ??
+      (code === DEFAULT ? english : undefined) ??
+      english ??
+      key;
+    return t(key, { count: number(count), ...params }, text);
+  }
+
+  /** A number written the way the current language writes it. */
+  function number(value, options = undefined) {
+    try {
+      return new Intl.NumberFormat(code, options).format(value);
+    } catch {
+      return String(value);
+    }
+  }
+
+  /** A date or time (a Date, a timestamp or an ISO string) in the current language. */
+  function date(value, options = { dateStyle: "medium", timeStyle: "short" }) {
+    const when = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(when.getTime())) return "";
+    try {
+      return new Intl.DateTimeFormat(code, options).format(when);
+    } catch {
+      return when.toLocaleString();
+    }
+  }
+
   // Translating the page
 
   const ATTRIBUTES = ["placeholder", "title", "aria-label"];
@@ -419,8 +461,8 @@ const I18n = (() => {
     picker.id = "language-picker";
     picker.setAttribute("data-i18n-aria-label", "ui.language");
     picker.setAttribute("data-i18n-title", "ui.language");
-    picker.setAttribute("aria-label", "Language");
-    picker.title = "Language";
+    picker.setAttribute("aria-label", t("ui.language", {}, "Language"));
+    picker.title = t("ui.language", {}, "Language");
     picker.addEventListener("change", () => choose(picker.value));
     const wrapper = document.createElement("label");
     wrapper.className = "language-picker";
@@ -473,5 +515,5 @@ const I18n = (() => {
   })();
   document.addEventListener("auth-changed", syncWithAccount);
 
-  return { t, apply, choose, ready, locale: () => code, revision: () => revision, gameName, gameDescription, gameText };
+  return { t, plural, number, date, apply, choose, ready, locale: () => code, revision: () => revision, gameName, gameDescription, gameText };
 })();

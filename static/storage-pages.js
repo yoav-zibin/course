@@ -43,7 +43,7 @@ window.StoragePages = (() => {
     if (!bar?.classList.contains("storage-pagination")) {
       bar = document.createElement("nav");
       bar.className = "storage-pagination";
-      bar.setAttribute("aria-label", "Result pages");
+      bar.setAttribute("aria-label", I18n.t("ui.storage.result_pages", {}, "Result pages"));
       bar.tabIndex = -1;
       container.after(bar);
     }
@@ -54,9 +54,9 @@ window.StoragePages = (() => {
     }
     const [back,next,label]=bar._pageControls;
     back.type = next.type = "button";
-    back.textContent = "Previous page"; next.textContent = "Next page";
+    back.textContent = I18n.t("ui.storage.previous_page", {}, "Previous page"); next.textContent = I18n.t("ui.storage.next_page", {}, "Next page");
     back.disabled = !page.previous.length; next.disabled = !page.next;
-    label.textContent = " Page " + (page.previous.length + 1) + " · up to 50 results ";
+    label.textContent = " " + I18n.t("ui.storage.page_info", {page: page.previous.length + 1}, "Page " + (page.previous.length + 1) + " · up to 50 results") + " ";
     async function change(direction) {
       // Keep focus inside dropdowns while their buttons are disabled/refreshed.
       bar.focus({preventScroll:true});

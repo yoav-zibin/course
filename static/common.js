@@ -3,6 +3,20 @@
 
 "use strict";
 
+// Pages that don't load i18n.js get English: the fallback text passed to I18n.t. (When
+// i18n.js loads after this file, its own I18n replaces this one.)
+if (typeof I18n === "undefined") {
+  const fill = (text, params) => text.replace(/\{(\w+)\}/g, (match, name) => (name in params ? params[name] : match));
+  globalThis.I18n = {
+    t: (key, params = {}, fallback = key) => fill(fallback, params),
+    plural: (key, count, params = {}, fallbacks = {}) =>
+      fill((count === 1 ? fallbacks.one : fallbacks.many) ?? key, { count, ...params }),
+    number: (value) => String(value),
+    date: (value) => new Date(value).toLocaleString(),
+    revision: () => 0,
+  };
+}
+
 /** Creates an element. [attrs] values go to properties, except "class" and data-*. */
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
