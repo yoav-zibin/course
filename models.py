@@ -372,6 +372,9 @@ class Match:
     # How a proposal ended: "agreed" (paid as proposed), "disputed" or "expired"
     # (stakes refunded). None while it waits, or when nothing was proposed.
     payout_outcome: PayoutOutcome | None = None
+    # Users the owner removed from the waiting room; they can't join this match
+    # again (so they can't keep taking a seat to block its start).
+    removed_user_ids: frozenset[str] = frozenset()
 
     @property
     def payout_pending(self) -> bool:

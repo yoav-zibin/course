@@ -492,3 +492,34 @@ test('the match lists are redrawn when only the language changed',()=>{
     assert.equal(drawn,2); // the language (its revision) changed: redrawn
   }finally{run('I18n.revision=()=>0');}
 });
+
+test('Random never joins a match that stakes tokens or runs a clock',async()=>{
+  const joins=[];
+  const game={id:"game",version:2,name:"Duel",allowed_player_counts:[2],published:true};
+  const open=[
+    {id:"paid",game_id:"game",game_version:2,status:"waiting_for_players",bet_per_player:5,turn_seconds:null,players:[{player_index:0,kind:"human",user_id:"host"}]},
+    {id:"speed",game_id:"game",game_version:2,status:"waiting_for_players",bet_per_player:0,turn_seconds:60,players:[{player_index:0,kind:"human",user_id:"host"}]},
+    {id:"free",game_id:"game",game_version:2,status:"waiting_for_players",bet_per_player:0,turn_seconds:null,players:[{player_index:0,kind:"human",user_id:"host"}]},
+  ];
+  const {run}=setup(async(method,path)=>{
+    if(method==="GET"&&path==="/matches/open")return open;
+    if(method==="GET"&&path==="/games")return [game];
+    if(method==="POST"&&path.endsWith("/join")){joins.push(path);return {id:path.split("/")[2],status:"waiting_for_players"};}
+    return {id:"x",game_version:2,players:[]};
+  });
+  run('state.gameCache.set("game@2",{id:"game",version:2,name:"Duel",allowed_player_counts:[2],published:true})');
+  for(let i=0;i<10;i++){joins.length=0;await run('state.randomJoining=false;joinRandomMatch()');assert.deepEqual(joins,["/matches/free/join"]);}
+});
+
+test('the owner of a waiting match gets a Remove button on other players only',()=>{
+  const {node,run}=setup();
+  const removeButtons=()=>node('seats').children.map(chip=>chip.children.filter(c=>c&&c.type==="button"&&c.class==="danger").length);
+  run('state.games[0].allowed_player_counts=[2,3];state.gameCache.set("game@2",state.games[0]);'+
+      'state.match={id:"match",game_id:"game",game_version:2,owner_user_id:"owner",status:"waiting_for_players",move_count:0,'+
+      'players:[{player_index:0,kind:"human",user_id:"owner"},{player_index:1,kind:"human",user_id:"guest"}]}');
+  run('renderMatch()');assert.deepEqual(removeButtons(),[0,1]);
+  run('state.match.matchmaking_player_count=2;renderMatch()');assert.deepEqual(removeButtons(),[0,0]);
+  run('state.match.matchmaking_player_count=null;state.match.status="ongoing";state.match.turn_of_player_indices=[0];renderMatch()');
+  assert.deepEqual(removeButtons(),[0,0]);
+  run('state.match.status="waiting_for_players";state.match.owner_user_id="guest";renderMatch()');assert.deepEqual(removeButtons(),[0,0]);
+});

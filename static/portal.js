@@ -313,6 +313,13 @@ function canReportPlayer(match, player, user) {
   return Boolean(user && !match.localMode && player.kind === "human" && player.user_id && player.user_id !== user.id);
 }
 
+/** The owner of a (non-quick) match that hasn't started may remove other humans. */
+function canRemovePlayer(match, player, user) {
+  return Boolean(user && !match.localMode && match.status === "waiting_for_players" &&
+    match.owner_user_id === user.id && match.matchmaking_player_count == null &&
+    player.kind === "human" && player.user_id && player.user_id !== user.id);
+}
+
 /** Opens the feedback dialog for [target] {type, id, name}: a fixed [kind], or the
  * sender's choice of bug, suggestion or problem. */
 function openFeedback(target, {kind = "bug", chooseKind = true} = {}) {
@@ -735,7 +742,10 @@ async function joinRandomMatch() {
     state.openMatches = openMatches;
     state.games = games;
     await ensureDetails();
-    const candidates = state.openMatches.filter((match) => isJoinable(match, user.id));
+    // A random join must not commit the player to anything they didn't pick:
+    // skip matches that stake tokens or run a move clock.
+    const candidates = state.openMatches.filter((match) => isJoinable(match, user.id) &&
+      !(match.bet_per_player > 0) && match.turn_seconds == null);
     for (let i = candidates.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
@@ -1196,7 +1206,12 @@ function renderMatch() {
         onerror: event => { event.target.hidden = true; }}), el("span", {textContent:
           `${playerName(player)}${player === mySeat ? " · " + I18n.t("ui.match.seat_you", {}, "You") : ""}` +
           `${turn.includes(player.player_index) ? " — " + I18n.t("ui.match.to_move", {}, "to move") : ""}`,
-      }), canReportPlayer(match, player, user) ? el("button", {
+      }), canRemovePlayer(match, player, user) ? actionButton(
+        I18n.t("ui.match.remove_player", {}, "Remove"),
+        async () => portalRequest("DELETE", `/matches/${match.id}/players/${player.user_id}`, {user}),
+        {danger: true, confirm: I18n.t("ui.match.remove_player_confirm", {name: playerName(player)},
+          `Remove ${playerName(player)} from this match? They can't join it again.`)},
+      ) : null, canReportPlayer(match, player, user) ? el("button", {
         type: "button", class: "feedback-report", textContent: I18n.t("ui.feedback.report_short", {}, "⚑ Report"),
         title: I18n.t("ui.feedback.report_player", {}, "Report player"),
         "aria-label": I18n.t("ui.feedback.report_player_named", {name: playerName(player)}, `Report player ${playerName(player)}`),

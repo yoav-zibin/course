@@ -1082,6 +1082,16 @@ def make_move(
     return _match_out(platform, match, caller_id=caller_id)
 
 
+@router.delete("/matches/{match_id}/players/{user_id}")
+def remove_player(
+    platform: Platform, caller_id: CallerId, match_id: str, user_id: str
+) -> MatchOut:
+    """The owner removes a player from a match that hasn't started (like that
+    player leaving), and they can't join it again."""
+    match = platform.remove_player(caller_id=caller_id, match_id=match_id, user_id=user_id)
+    return _match_out(platform, match, caller_id=caller_id)
+
+
 @router.post("/matches/{match_id}/payouts")
 def agree_to_payouts(
     platform: Platform, caller_id: CallerId, match_id: str, body: PayoutAgreement

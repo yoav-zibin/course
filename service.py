@@ -2626,6 +2626,8 @@ class GamePlatform:
         once they have all their players. The caller holds the lock."""
         if match.seat_of(caller_id) is not None:
             raise ConflictError("you are already a player in this match")
+        if caller_id in match.removed_user_ids:
+            raise ForbiddenError("you were removed from this match")
         if not self._get_game(match.game_id).published:
             raise ConflictError("this game is no longer published")
         if match.status == "over":
@@ -2660,6 +2662,11 @@ class GamePlatform:
         if stake:
             # Raises (before anything is saved) when the joiner can't afford it.
             self._deduct_stake(caller_id, stake)
+        elif match.bet_per_player:
+            # A waiting v1 match takes stakes only at the start, so check now that
+            # the joiner could pay: otherwise one short player would make the
+            # owner's Start fail for everyone ("a player has insufficient tokens").
+            self._check_can_stake(caller_id, match.bet_per_player)
         saved = self._save(
             replace(
                 match,
@@ -3749,6 +3756,28 @@ class GamePlatform:
                 occurred_at=started.updated_at,
             )
             return started
+
+    def remove_player(self, *, caller_id: str, match_id: str, user_id: str) -> Match:
+        """The owner removes [user_id] from the waiting room, exactly as if they
+        had left it (their seat is freed, and a v2 stake taken on joining is
+        refunded), and bars them from joining this match again. This is how an
+        owner gets rid of a player who can't, or won't, let the match start."""
+        with self._lock:
+            match = self._get_owned_match(caller_id=caller_id, match_id=match_id)
+            if match.status != "waiting_for_players":
+                raise ConflictError("players can only be removed before the match starts")
+            if match.matchmaking_player_count is not None:
+                raise ConflictError("players can't be removed from a quick match")
+            if user_id == caller_id:
+                raise ConflictError(
+                    "the owner cannot remove themselves; delete the match instead"
+                )
+            if match.seat_of(user_id) is None:
+                raise NotFoundError("that user is not a player in this match")
+            left = self.leave_match(caller_id=user_id, match_id=match_id)
+            return self._save(
+                replace(left, removed_user_ids=left.removed_user_ids | {user_id})
+            )
 
     def leave_match(self, *, caller_id: str, match_id: str) -> Match:
         with self._lock:

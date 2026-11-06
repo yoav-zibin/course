@@ -253,3 +253,58 @@ def test_a_joiner_who_cannot_afford_the_stake_is_turned_away() -> None:
     match = api.ok("GET", f"/matches/{match_id}", as_user=alice)
     assert len(match["players"]) == 2
     assert match["token_pot"] == 2 * STAKE
+
+
+def broke(api: Api, user_id: str) -> None:
+    """Spends [user_id]'s tokens, today's grant included."""
+    store = api.platform._store
+    user = store.get_user(user_id)
+    assert user is not None
+    store.put_user(
+        dataclasses.replace(
+            user,
+            token_balance=0,
+            last_token_grant_day=api.platform.now().date().isoformat(),
+        )
+    )
+
+
+def test_a_player_who_cannot_afford_the_stake_cannot_join_the_waiting_room() -> None:
+    # Regression: anyone could join, and the owner's Start then failed for everyone.
+    api = Api()
+    alice, stranger, bob = (api.new_user(n) for n in ("alice", "stranger", "bob"))
+    game_id = api.new_game(owner=alice, allowed_player_counts=(2,))
+    match = api.ok(
+        "POST", "/matches", as_user=alice, json={"game_id": game_id, "bet_per_player": STAKE}
+    )
+    broke(api, stranger)
+    response = api.request("POST", f"/matches/{match['id']}/join", as_user=stranger)
+    assert (response.status_code, response.json()["detail"]) == (
+        409,
+        "a player has insufficient tokens",
+    )
+    # The seat stays free: someone who can pay joins, and the match starts.
+    api.ok("POST", f"/matches/{match['id']}/join", as_user=bob)
+    started = api.ok("POST", f"/matches/{match['id']}/start", as_user=alice)
+    assert (started["status"], started["token_pot"]) == ("ongoing", 2 * STAKE)
+
+
+def test_joining_checks_the_stake_but_takes_it_only_at_the_start() -> None:
+    api = Api()
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game_id = api.new_game(owner=alice, allowed_player_counts=(2,))
+    match = api.ok(
+        "POST", "/matches", as_user=alice, json={"game_id": game_id, "bet_per_player": STAKE}
+    )
+    api.ok("POST", f"/matches/{match['id']}/join", as_user=bob)
+    assert balance(api, bob) == 0  # nothing taken (or granted) by the join
+    api.ok("POST", f"/matches/{match['id']}/start", as_user=alice)
+    assert balance(api, bob) == 10 - STAKE
+
+
+def test_free_matches_let_anyone_join() -> None:
+    api = Api()
+    alice, stranger = api.new_user("alice"), api.new_user("stranger")
+    broke(api, stranger)
+    match_id = api.new_match(owner=alice, game_id=api.new_game(owner=alice))
+    api.ok("POST", f"/matches/{match_id}/join", as_user=stranger)

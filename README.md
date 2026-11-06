@@ -295,6 +295,7 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `POST /matches/{id}/leave` | yes | Leave the match |
 | `POST /matches/{id}/moves` | yes | Make a move `{new_state, next_turn_player_indices, expected_move_count?}` |
 | `POST /matches/{id}/payouts` | yes | Agree to (`{agree: true}`) or dispute (`{agree: false}`) a v1 paid match's proposed pot split |
+| `DELETE /matches/{id}/players/{user_id}` | yes | Owner removes a player before the match starts (like them leaving; a v2 stake is refunded); they can't join it again. Not for quick matches |
 | `GET /matches/{id}/moves` |  | Full move history |
 | `DELETE /matches/{id}` | yes | Owner: delete the match. Other players: hide an ended match from their list |
 | `GET /users/me/saved-games` | yes | The caller's saved games, most recently saved first |
@@ -358,6 +359,9 @@ Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct
   first computer seat, or adds a seat if the game's maximum player count allows it.
   In a paid match the joiner stakes `bet_per_player` like everyone else (it is added to
   `token_pot`); a joiner who can't afford it is turned away (409).
+- Joining a paid match that hasn't started checks that the joiner can afford the stake
+  (counting today's grant); it is taken when the match starts. The owner can remove a
+  waiting player (the portal shows a Remove button), who then can't rejoin that match.
 
 ### Feedback
 

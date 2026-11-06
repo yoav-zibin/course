@@ -102,6 +102,7 @@ def test_debug_endpoints_are_not_in_the_api_schema(api: Api) -> None:
         "/matches/{match_id}/moves",
         "/matches/{match_id}/payouts",
         "/matches/{match_id}/playerLeft",
+        "/matches/{match_id}/players/{user_id}",
         "/matches/{match_id}/rematch",
         "/matches/{match_id}/start",
         "/matchmaking/quick-match",
