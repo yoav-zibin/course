@@ -198,6 +198,13 @@ def main() -> None:
         ]
         if any(result["status"] == "updated" for result in patch_results):
             store.flush()
+        # Retire only the three reviewed duplicate catalog entries. This keeps
+        # drafts/history and journals completion so an author can republish.
+        from game_platform.catalog_deduplication import apply_catalog_deduplication
+
+        catalog_results = apply_catalog_deduplication(platform)
+        if any(result["status"] == "unpublished" for result in catalog_results):
+            store.flush()
         platform.resume_computer_moves()
         warn_about_insecure_setup(config, platform)
         app = create_app(
