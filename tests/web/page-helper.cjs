@@ -50,7 +50,8 @@ function fakeDom() {
       removeAttribute(k) { delete node.attributes[k]; },
       addEventListener(type, fn) { node['on' + type] = fn; },
       removeEventListener() {},
-      querySelectorAll() { return []; }, querySelector() { return null; },
+      _q: {},
+      querySelectorAll() { return []; }, querySelector(q) { return (node._q[q] ??= make(q)); },
       getContext() { return new Proxy({}, { get: (_, key) => (key === 'measureText' ? () => ({ width: 10 }) : () => {}), set: () => true }); },
       getBoundingClientRect() { return { left: 0, top: 0, width: 100, height: 100 }; },
       focus() {}, blur() {}, click() { if (node.onclick) node.onclick({ preventDefault() {}, target: node }); },
@@ -61,7 +62,7 @@ function fakeDom() {
   const document = {
     getElementById(id) { if (!ids.has(id)) ids.set(id, make('#' + id)); return ids.get(id); },
     createElement: make, createElementNS: (_, tag) => make(tag), createTextNode: (text) => ({ textContent: text }),
-    documentElement: {}, body: make('body'), addEventListener() {}, querySelector: () => null, querySelectorAll: () => [],
+    documentElement: {}, body: make('body'), addEventListener() {}, querySelector: (q) => document.getElementById(q), querySelectorAll: () => [],
   };
   return { document, ids };
 }
@@ -74,6 +75,7 @@ function texts(node, out = []) {
   for (const key of ['aria-label', 'placeholder', 'alt']) if (node.attributes && node.attributes[key]) out.push(node.attributes[key]);
   if (node.title) out.push(node.title);
   for (const child of node.children || []) texts(child, out);
+  for (const child of Object.values(node._q || {})) texts(child, out);
   return out;
 }
 

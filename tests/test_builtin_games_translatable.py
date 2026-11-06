@@ -29,6 +29,12 @@ TRANSLATABLE = [
     "audit-batch3/ers.html",
     "audit-batch3/reversi.html",
     "audit-batch3/six-card-golf.html",
+    "audit-batch4/blackjack-table.html",
+    "audit-batch4/cheat-bs.html",
+    "audit-batch4/checkers.html",
+    "audit-batch4/hearts.html",
+    "audit-batch4/mancala.html",
+    "audit-batch4/rummy-500.html",
 ]
 
 

@@ -3,14 +3,13 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
+const {pageScript,pageScriptOf,fakeDom,texts}=require('./page-helper.cjs');
 const root=path.join(__dirname,'../../games/audit-batch4');
 function setup(){
- const nodes=new Map(),sent=[];let receive;
- const element=()=>({children:[],style:{},disabled:false,textContent:'',get innerHTML(){return this.html||'';},set innerHTML(x){this.html=x;this.children=[];},classList:{add(){}},appendChild(x){this.children.push(x);},insertAdjacentHTML(){}});
- const document={getElementById(id){if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);},createElement:element};
+ const sent=[];let receive;const {document,ids:nodes}=fakeDom();
  const parent={postMessage:x=>sent.push(x)};
  const sandbox={document,parent,alert(){},addEventListener:(type,fn)=>{if(type==='message')receive=fn;}};
- vm.createContext(sandbox);vm.runInContext(fs.readFileSync(path.join(root,'rummy-500.html'),'utf8').match(/<script>([\s\S]*?)<\/script>/)[1],sandbox);
+ vm.createContext(sandbox);vm.runInContext(pageScriptOf(path.join(root,'rummy-500.html'),document),sandbox);
  const server={InvalidMove:class InvalidMove extends Error{}};vm.createContext(server);
  vm.runInContext(fs.readFileSync(path.join(root,'rummy-500.server.js'),'utf8')+';globalThis.auditGame=game;',server);
  let seed=1;const ctx={players:[0,1].map(i=>({id:'p'+i,display_name:'P'+i,kind:'human',max_loss:10})),pot:20,move_count:0,random(){seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;}};
@@ -37,7 +36,7 @@ test('Rummy illegal layoff is blocked and a legal discard remains usable',()=>{
 });
 test('Rummy submits once until parent response and recovers at the same move count',()=>{
  const t=setup();t.deliver();t.run('doDrawStock();doDrawStock()');assert.equal(t.sent.length,1);
- assert.match(t.nodes.get('status').innerHTML,/Saving move/);
+ assert.match(texts(t.nodes.get('status')).join(' '),/Saving move/);
  t.deliver({error:'rejected'},{});t.run('doDrawStock()');assert.equal(t.sent.length,1);
  t.deliver({error:'rejected'});t.run('doDrawStock()');assert.equal(t.sent.length,2);
  assert.doesNotThrow(()=>t.apply(t.sent[1].move));t.deliver();

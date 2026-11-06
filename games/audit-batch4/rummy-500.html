@@ -22,18 +22,104 @@ button:disabled{opacity:.4;cursor:default}
 </head>
 <body>
 <div id="app">
-<h2 style="margin:4px 0">Rummy 500 <span class="small">(simplified: no out-of-turn Rummy calls)</span></h2>
-<div id="status" class="bar">Waiting for platform…</div>
+<h2 style="margin:4px 0"><span id="title"></span> <span class="small" id="subtitle"></span></h2>
+<div id="status" class="bar" role="status" aria-live="polite"></div>
 <div id="scores" class="bar"></div>
 <div id="table"></div>
 <div id="controls" class="bar"></div>
 <div id="myarea" class="bar"></div>
 </div>
+<script type="application/json" id="i18n-strings">
+{
+"title": "Rummy 500",
+"subtitle": "(simplified: no out-of-turn Rummy calls)",
+"waiting_platform": "Waiting for platform…",
+"joker": "JOKER",
+"alert_deepest": "The deepest discard must be melded or laid off.",
+"alert_invalid_meld": "Not a valid meld (need 3+ set same rank, or 3+ run same suit, Ace low). Jokers wild.",
+"alert_no_extend": "That card does not extend the meld.",
+"alert_meld_first": "You must meld the deep card first!",
+"alert_no_discard_top": "You cannot discard the single top card you just took.",
+"match_over": "Match over! Winner: {name}",
+"round_over_out": "A player went out! (scores below) — {name} starts next round.",
+"round_over_stock": "Stock closed the round. (scores below) — {name} starts next round.",
+"status_saving": "Round {round} • Dealer {dealer} • Saving move…",
+"status_waiting": "Round {round} • Dealer {dealer} • Waiting…",
+"status_turn": "Round {round} • Dealer {dealer} • {name}'s turn • Phase: {phase}",
+"status_turn_you": "Round {round} • Dealer {dealer} • {name}'s turn (you) • Phase: {phase}",
+"phase_draw": "draw",
+"phase_play": "play",
+"with_must_meld": "{text} • MUST MELD deep card!",
+"scores_label": "Scores (target 500):",
+"score_item": "{name}: {score}",
+"score_cpu": "{name}: {score} [CPU]",
+"last_round": "Last round: {list}",
+"round_score": "{name} {score}",
+"stock_line": "Stock: {count} cards",
+"discard_label": "Discard pile ({count}):",
+"discard_hint": "click a card to take it + everything on top (draw phase)",
+"take_from_here": "Take from here ({count} cards)",
+"empty": "empty",
+"owner_n": "#{n}",
+"meld_by": "(by {owner}):",
+"laid_by": "laid by {name}",
+"meld_title": "meld by {owner}",
+"no_melds": "No melds yet.",
+"players_label": "Players:",
+"name_you": "{name} (you)",
+"kind_computer": "computer",
+"kind_human": "human",
+"player_line": "{name} [{kind}] — hand: {count} cards",
+"with_dealer": "{text} (D)",
+"match_winner": "{name} wins the match with {score}!",
+"start_next": "Start Next Round",
+"wait_start": "Waiting for {name} to start it.",
+"wait_start_next": "Waiting for the next player to start it.",
+"waiting_for": "Waiting for {name}…",
+"other_player": "other player",
+"draw_stock": "Draw Stock ({count})",
+"end_round": "End Round (stock dry)",
+"draw_hint": "or click a discard card above to take it.",
+"meld_selected": "Meld Selected (3+)",
+"lay_off": "Lay Off Selected",
+"lay_off_on": "Lay Off Selected on {id}",
+"discard_selected": "Discard Selected",
+"sort_rank": "Sort: rank",
+"sort_suit": "Sort: suit",
+"select_hint": "Select cards in your hand below.",
+"must_meld_deep": "MUST meld deep card {card} before discarding.",
+"cannot_discard_taken": "Cannot discard the just-taken top card.",
+"spectating": "Spectating — hands hidden.",
+"your_hand": "Your hand ({name}):"
+}
+</script>
 <script>
+
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+
+
 let latest=null, sel=new Set(), selMeld=null, sortMode='rank', sentFor=-1;
+function el(tag,text,cls,parent){ const e=document.createElement(tag); if(text!==undefined&&text!==null) e.textContent=text; if(cls) e.className=cls; if(parent) parent.appendChild(e); return e; }
+document.getElementById('status').textContent=t('waiting_platform');
 const S={H:'\u2665',D:'\u2666',C:'\u2663',S:'\u2660'};
 function isJ(c){ return c.r===0; }
-function cStr(c){ if(isJ(c)) return 'JOKER'; const r=c.r===1?'A':c.r===11?'J':c.r===12?'Q':c.r===13?'K':''+c.r; return r+S[c.s]; }
+function cStr(c){ if(isJ(c)) return t('joker'); const r=c.r===1?'A':c.r===11?'J':c.r===12?'Q':c.r===13?'K':''+c.r; return r+S[c.s]; }
 function cColor(c){ return (c.s==='H'||c.s==='D')?'red':''; }
 function isValidMeld(cards){
  if(!cards||cards.length<3) return false;
@@ -98,7 +184,7 @@ function doDrawStock(){ const v=view(); if(canAct()&&v.phase==='draw'&&v.deckCou
 function doDrawDiscard(idx){
  const v=view(); if(!canAct()||v.phase!=='draw'||!Number.isInteger(idx)||idx<0||idx>=v.discard.length) return;
  const taken=v.discard.slice(idx);
- if(taken.length>1&&!canUseRequiredCard(v.hand.concat(taken),v.melds,taken[0].id)){alert('The deepest discard must be melded or laid off.');return;}
+ if(taken.length>1&&!canUseRequiredCard(v.hand.concat(taken),v.melds,taken[0].id)){alert(t('alert_deepest'));return;}
  send({type:'draw_discard',index:idx});
 }
 function doEndStock(){ const v=view(); if(canAct()&&v.phase==='draw'&&v.deckCount===0) send({type:'end_round'}); }
@@ -107,75 +193,86 @@ function doMeld(ids){
  const v=view(); if(!v||!canAct()||v.phase!=='play'||!Array.isArray(ids)||new Set(ids).size!==ids.length) return;
  const cards=ids.map(id=>v.hand.find(c=>c.id===id)).filter(Boolean);
  if(cards.length<3||cards.length!==ids.length) return;
- if(!isValidMeld(cards)){ alert('Not a valid meld (need 3+ set same rank, or 3+ run same suit, Ace low). Jokers wild.'); return; }
+ if(!isValidMeld(cards)){ alert(t('alert_invalid_meld')); return; }
  sel.clear(); send({type:'meld',card_ids:ids});
 }
 function doLayoff(cardId,meldId){
  const v=view(); if(!canAct()||v.phase!=='play') return;
  const card=v.hand.find(c=>c.id===cardId),meld=v.melds.find(m=>m.id===meldId);
- if(!card||!meld||!isValidMeld(meld.cards.concat(meld.exts.map(e=>e.card),[card]))){alert('That card does not extend the meld.');return;}
+ if(!card||!meld||!isValidMeld(meld.cards.concat(meld.exts.map(e=>e.card),[card]))){alert(t('alert_no_extend'));return;}
  sel.clear(); send({type:'layoff',card_id:cardId,meld_id:meldId});
 }
 function doDiscard(cardId){
  const v=view(); if(!v||!canAct()||v.phase!=='play'||!v.hand.some(c=>c.id===cardId)) return;
- if(v.pending){ alert('You must meld the deep card first!'); return; }
- if(v.ban===cardId&&v.hand.length>1){ alert('You cannot discard the single top card you just took.'); return; }
+ if(v.pending){ alert(t('alert_meld_first')); return; }
+ if(v.ban===cardId&&v.hand.length>1){ alert(t('alert_no_discard_top')); return; }
  sel.clear(); send({type:'discard',card_id:cardId});
 }
 function render(){
  const statusEl=document.getElementById('status'), scEl=document.getElementById('scores'), tEl=document.getElementById('table'), cEl=document.getElementById('controls'), mEl=document.getElementById('myarea');
- if(!latest||!view()){ statusEl.textContent='Waiting for platform…'; return; }
+ document.getElementById('title').textContent=t('title');document.getElementById('subtitle').textContent=t('subtitle');
+ if(!latest||!view()){ statusEl.textContent=t('waiting_platform'); return; }
  const v=view(), pls=latest.players, a=latest.status==='ongoing'?actor():null, me=myIdx();
  const over=v.matchWinner!=null;
- let status='Round '+v.roundNum+' • Dealer '+pls[v.dealer%pls.length].name+' • ';
- if(latest.status==='over'||over) status='Match over! Winner: '+pls[v.matchWinner].name;
- else if(v.phase==='roundOver') status=(v.endReason==='went out'?'A player went out!':'Stock closed the round.')+' (scores below) — '+(a!=null?pls[a].name:'…')+' starts next round.';
- else if(sentFor===latest.move_count) status+='Saving move…';
- else status+=(a==null?'Waiting…':pls[a].name+"'s turn"+(a===me?' (you)':''))+' • Phase: '+v.phase+(v.pending?' • MUST MELD deep card!':'');
- statusEl.innerHTML=status+'<br><span class="small">'+(v.log||'')+'</span>';
- scEl.innerHTML='<b>Scores (target 500):</b> '+pls.map((p,i)=>p.name+': '+(v.scores[i]||0)+(p.kind==='computer'?' [CPU]':'')).join(' • ')+(v.roundScores?'<br><span class="small">Last round: '+v.roundScores.map((t,i)=>pls[i].name+' '+(t>=0?'+':'')+t).join(' • ')+'</span>':'');
- tEl.innerHTML='';
- const bar=document.createElement('div'); bar.className='bar';
- bar.innerHTML='<b>Stock:</b> '+v.deckCount+' cards <b style="margin-left:12px">Discard pile ('+v.discard.length+'):</b> <span class="small">click a card to take it + everything on top (draw phase)</span>';
- tEl.appendChild(bar);
- const pile=document.createElement('div'); pile.className='pile';
- v.discard.forEach((c,idx)=>{ const d=document.createElement('div'); d.className='card '+cColor(c)+((v.phase==='draw'&&canAct())?' clickable':''); d.textContent=cStr(c); d.title='Take from here ('+(v.discard.length-idx)+' cards)'; if(v.phase==='draw'&&canAct()){ d.onclick=()=>doDrawDiscard(idx); } pile.appendChild(d); });
- if(!v.discard.length) pile.innerHTML='<span class="small">empty</span>';
- tEl.appendChild(pile);
- const mh=document.createElement('div');
- v.melds.forEach(m=>{ const d=document.createElement('div'); d.className='meld'+(selMeld===m.id?' selM':''); const owner=pls[m.owner]?pls[m.owner].name:'#'+m.owner;
-  d.innerHTML='<b>'+m.id+'</b> (by '+owner+'): '; const span=document.createElement('span');
-  const extIds={}; m.exts.forEach(e=>{ extIds[e.card.id]=e.by; });
-  m.cards.concat(m.exts.map(e=>e.card)).forEach(c=>{ const cd=document.createElement('div'); cd.className='card '+cColor(c); cd.style.width='44px';cd.style.height='60px';cd.style.fontSize='12px'; cd.textContent=cStr(c); cd.title=(extIds[c.id]!=null?'laid by '+pls[extIds[c.id]].name:'meld by '+owner); span.appendChild(cd); });
-  d.appendChild(span); d.style.cursor='pointer'; d.onclick=()=>{ selMeld=(selMeld===m.id?null:m.id); render(); };
-  mh.appendChild(d); });
- if(!v.melds.length) mh.innerHTML='<div class="small">No melds yet.</div>';
- tEl.appendChild(mh);
- let oppHtml='<div class="bar"><b>Players:</b><br>';
- pls.forEach((p,i)=>{ oppHtml+=(a===i?'▶ ':'')+p.name+(i===me?' (you)':'')+' ['+p.kind+'] — hand: '+(v.counts[i]||0)+' cards'+(i===v.dealer?' (D)':'')+'<br>'; });
- oppHtml+='</div>';
- tEl.insertAdjacentHTML('beforeend',oppHtml);
- cEl.innerHTML='';
- if(over){ cEl.innerHTML='<b>'+pls[v.matchWinner].name+' wins the match with '+v.scores[v.matchWinner]+'!</b>'; }
- else if(v.phase==='roundOver'){ const b=document.createElement('button'); b.textContent='Start Next Round'; b.disabled=!canAct(); b.onclick=doNextRound; cEl.appendChild(b); if(!canAct()) cEl.insertAdjacentHTML('beforeend','<span class="small"> Waiting for '+(a!=null?pls[a].name:'the next player')+' to start it.</span>'); }
- else if(!canAct()){ cEl.innerHTML='<span class="small">Waiting for '+(a!=null?pls[a].name:'other player')+'…</span>'; }
- else if(v.phase==='draw'){ const b1=document.createElement('button'); b1.textContent='Draw Stock ('+v.deckCount+')'; b1.disabled=!v.deckCount; b1.onclick=doDrawStock; cEl.appendChild(b1);
-  if(v.deckCount===0){ const b2=document.createElement('button'); b2.textContent='End Round (stock dry)'; b2.onclick=doEndStock; cEl.appendChild(b2); }
-  cEl.insertAdjacentHTML('beforeend','<span class="small"> or click a discard card above to take it.</span>'); }
- else if(v.phase==='play'){ const bM=document.createElement('button'); bM.textContent='Meld Selected (3+)'; bM.onclick=()=>doMeld([...sel]); cEl.appendChild(bM);
-  const bL=document.createElement('button'); bL.textContent='Lay Off Selected'+(selMeld?' on '+selMeld:''); bL.disabled=sel.size!==1||!selMeld; bL.onclick=()=>doLayoff([...sel][0],selMeld); cEl.appendChild(bL);
-  const bD=document.createElement('button'); bD.textContent='Discard Selected'; bD.disabled=sel.size!==1; bD.onclick=()=>doDiscard([...sel][0]); cEl.appendChild(bD);
-  const bS=document.createElement('button'); bS.textContent='Sort: '+sortMode; bS.onclick=()=>{ sortMode=sortMode==='rank'?'suit':'rank'; render(); }; cEl.appendChild(bS);
-  let hint='<div class="small">Select cards in your hand below.'; if(v.pending){ const pc=v.hand.find(c=>c.id===v.pending); hint+=' MUST meld deep card '+(pc?cStr(pc):'')+' before discarding.'; } if(v.ban) hint+=' Cannot discard the just-taken top card.'; hint+='</div>'; cEl.insertAdjacentHTML('beforeend',hint);
+ const head={round:v.roundNum,dealer:pls[v.dealer%pls.length].name};
+ let status;
+ if(latest.status==='over'||over) status=t('match_over',{name:pls[v.matchWinner].name});
+ else if(v.phase==='roundOver') status=v.endReason==='went out'?t('round_over_out',{name:a!=null?pls[a].name:'…'}):t('round_over_stock',{name:a!=null?pls[a].name:'…'});
+ else if(sentFor===latest.move_count) status=t('status_saving',head);
+ else if(a==null) status=t('status_waiting',head);
+ else{
+  const q={...head,name:pls[a].name,phase:v.phase==='draw'?t('phase_draw'):v.phase==='play'?t('phase_play'):v.phase};
+  status=a===me?t('status_turn_you',q):t('status_turn',q);
+  if(v.pending) status=t('with_must_meld',{text:status});
  }
- mEl.innerHTML='';
- if(me==null){ mEl.innerHTML='<span class="small">Spectating — hands hidden.</span>'; }
- else { const mh2=document.createElement('div'); mh2.innerHTML='<b>Your hand ('+pls[me].name+'):</b> '; const wrap=document.createElement('div'); wrap.id='hand';
-  sorted(v.hand||[]).forEach(c=>{ const d=document.createElement('div'); d.className='card '+cColor(c)+(sel.has(c.id)?' sel':''); d.textContent=cStr(c); if(canAct()&&v.phase==='play'){ d.classList.add('clickable'); d.onclick=()=>{ if(sel.has(c.id)) sel.delete(c.id); else sel.add(c.id); render(); }; } wrap.appendChild(d); });
-  mEl.appendChild(mh2); mEl.appendChild(wrap);
+ statusEl.replaceChildren(document.createTextNode(status),el('br'),el('span',v.log||'','small'));
+ scEl.replaceChildren(el('b',t('scores_label')),document.createTextNode(' '+pls.map((p,i)=>p.kind==='computer'?t('score_cpu',{name:p.name,score:v.scores[i]||0}):t('score_item',{name:p.name,score:v.scores[i]||0})).join(' • ')));
+ if(v.roundScores){ scEl.appendChild(el('br')); scEl.appendChild(el('span',t('last_round',{list:v.roundScores.map((n,i)=>t('round_score',{name:pls[i].name,score:(n>=0?'+':'')+n})).join(' • ')}),'small')); }
+ tEl.replaceChildren();
+ const bar=el('div',null,'bar',tEl);
+ el('b',t('stock_line',{count:v.deckCount}),null,bar);
+ el('b',t('discard_label',{count:v.discard.length}),null,bar).style.marginInlineStart='12px';
+ el('span',' '+t('discard_hint'),'small',bar);
+ const pile=el('div',null,'pile',tEl);
+ v.discard.forEach((c,idx)=>{ const d=el('div',cStr(c),'card '+cColor(c)+((v.phase==='draw'&&canAct())?' clickable':''),pile); d.title=t('take_from_here',{count:v.discard.length-idx}); if(v.phase==='draw'&&canAct()){ d.onclick=()=>doDrawDiscard(idx); } });
+ if(!v.discard.length) el('span',t('empty'),'small',pile);
+ const mh=el('div',null,null,tEl);
+ v.melds.forEach(m=>{ const d=el('div',null,'meld'+(selMeld===m.id?' selM':''),mh); const owner=pls[m.owner]?pls[m.owner].name:t('owner_n',{n:m.owner});
+  el('b',m.id,null,d); d.appendChild(document.createTextNode(' '+t('meld_by',{owner:owner})+' ')); const span=el('span',null,null,d);
+  const extIds={}; m.exts.forEach(e=>{ extIds[e.card.id]=e.by; });
+  m.cards.concat(m.exts.map(e=>e.card)).forEach(c=>{ const cd=el('div',cStr(c),'card '+cColor(c),span); cd.style.width='44px';cd.style.height='60px';cd.style.fontSize='12px'; cd.title=extIds[c.id]!=null?t('laid_by',{name:pls[extIds[c.id]].name}):t('meld_title',{owner:owner}); });
+  d.style.cursor='pointer'; d.onclick=()=>{ selMeld=(selMeld===m.id?null:m.id); render(); }; });
+ if(!v.melds.length) el('div',t('no_melds'),'small',mh);
+ const oppBar=el('div',null,'bar',tEl);
+ el('b',t('players_label'),null,oppBar); el('br',null,null,oppBar);
+ pls.forEach((p,i)=>{
+  const nm=i===me?t('name_you',{name:p.name}):p.name;
+  const kind=p.kind==='computer'?t('kind_computer'):p.kind==='human'?t('kind_human'):p.kind;
+  let line=t('player_line',{name:nm,kind:kind,count:v.counts[i]||0});
+  if(i===v.dealer) line=t('with_dealer',{text:line});
+  oppBar.appendChild(document.createTextNode((a===i?'▶ ':'')+line)); el('br',null,null,oppBar); });
+ cEl.replaceChildren();
+ if(over){ el('b',t('match_winner',{name:pls[v.matchWinner].name,score:v.scores[v.matchWinner]}),null,cEl); }
+ else if(v.phase==='roundOver'){ const b=el('button',t('start_next'),null,cEl); b.disabled=!canAct(); b.onclick=doNextRound; if(!canAct()) el('span',a!=null?t('wait_start',{name:pls[a].name}):t('wait_start_next'),'small',cEl); }
+ else if(!canAct()){ el('span',t('waiting_for',{name:a!=null?pls[a].name:t('other_player')}),'small',cEl); }
+ else if(v.phase==='draw'){ const b1=el('button',t('draw_stock',{count:v.deckCount}),null,cEl); b1.disabled=!v.deckCount; b1.onclick=doDrawStock;
+  if(v.deckCount===0){ const b2=el('button',t('end_round'),null,cEl); b2.onclick=doEndStock; }
+  el('span',t('draw_hint'),'small',cEl); }
+ else if(v.phase==='play'){ const bM=el('button',t('meld_selected'),null,cEl); bM.onclick=()=>doMeld([...sel]);
+  const bL=el('button',selMeld?t('lay_off_on',{id:selMeld}):t('lay_off'),null,cEl); bL.disabled=sel.size!==1||!selMeld; bL.onclick=()=>doLayoff([...sel][0],selMeld);
+  const bD=el('button',t('discard_selected'),null,cEl); bD.disabled=sel.size!==1; bD.onclick=()=>doDiscard([...sel][0]);
+  const bS=el('button',sortMode==='rank'?t('sort_rank'):t('sort_suit'),null,cEl); bS.onclick=()=>{ sortMode=sortMode==='rank'?'suit':'rank'; render(); };
+  const hint=el('div',null,'small',cEl); hint.appendChild(document.createTextNode(t('select_hint')));
+  if(v.pending){ const pc=v.hand.find(c=>c.id===v.pending); hint.appendChild(document.createTextNode(' '+t('must_meld_deep',{card:pc?cStr(pc):''}))); }
+  if(v.ban) hint.appendChild(document.createTextNode(' '+t('cannot_discard_taken')));
+ }
+ mEl.replaceChildren();
+ if(me==null){ el('span',t('spectating'),'small',mEl); }
+ else { const mh2=el('div',null,null,mEl); el('b',t('your_hand',{name:pls[me].name}),null,mh2); const wrap=el('div',null,null,mEl); wrap.id='hand';
+  sorted(v.hand||[]).forEach(c=>{ const d=el('div',cStr(c),'card '+cColor(c)+(sel.has(c.id)?' sel':''),wrap); if(canAct()&&v.phase==='play'){ d.classList.add('clickable'); d.onclick=()=>{ if(sel.has(c.id)) sel.delete(c.id); else sel.add(c.id); render(); }; } });
  }
 }
-addEventListener('message',(ev)=>{ if(ev.source!==parent||!ev.data||ev.data.type!=='state_changed') return; latest=ev.data; sentFor=-1;
+addEventListener('message',(ev)=>{ if(ev.source!==parent||!ev.data||ev.data.type!=='state_changed') return; applyLocale(ev.data); latest=ev.data; sentFor=-1;
  const v=latest.view;
  if(v){ const handIds=new Set((v.hand||[]).map(c=>c.id)); [...sel].forEach(id=>{ if(!handIds.has(id)) sel.delete(id); }); if(selMeld&&!v.melds.some(m=>m.id===selMeld)) selMeld=null; }
  render(); });

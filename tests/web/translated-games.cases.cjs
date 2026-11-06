@@ -191,5 +191,97 @@ const CASES = {
       ],
     };
   })(),
+
+  'audit-batch4/blackjack-table.html': (() => {
+    const card = (r, s) => ({ r, s });
+    const view = { phase: 'play', customNames: ['', ''], round: 3, deckCount: 40, chips: [900, 750], dealer: [card(1, 'S'), card(10, 'H')], holeHidden: true, hands: [[{ cards: [card(8, 'C'), card(8, 'D')], bet: 50, done: false }], []], results: ['', 'R1'], pendingBets: {}, needBet: [false, false], curP: 0, curH: 0, winners: null, freshMsg: 'F1' };
+    return {
+      messages: [
+        { ...base, view },
+        { ...base, view: { ...view, phase: 'setup', hands: [], dealer: [] } },
+        { ...base, view: { ...view, phase: 'betting', pendingBets: { 0: 25 }, needBet: [true, true], hands: [[], []], dealer: [] } },
+        { ...base, view: { ...view, phase: 'roundOver', holeHidden: false } },
+        { ...base, acting_for_player_index: null, view: { ...view, phase: 'betting', hands: [[], []], dealer: [] } },
+        { ...base, status: 'over', view: { ...view, phase: 'gameOver', winners: 0, holeHidden: false } },
+      ],
+    };
+  })(),
+  'audit-batch4/checkers.html': (() => {
+    const board = Array.from({ length: 8 }, () => Array(8).fill(null));
+    board[5][0] = { c: 0, k: false }; board[2][1] = { c: 1, k: true };
+    const view = { board, toMove: 0, moves: [{ from: { r: 5, c: 0 }, to: { r: 4, c: 1 }, cap: false }], lastMove: { from: { r: 2, c: 3 }, to: { r: 3, c: 2 } }, winner: null, draw: false };
+    return {
+      messages: [
+        { ...base, view },
+        { ...base, view: { ...view, chain: { r: 5, c: 0 }, moves: [{ from: { r: 5, c: 0 }, to: { r: 3, c: 2 }, cap: true }] } },
+        { ...base, acting_for_player_index: null, turn_of_player_indices: [1], view: { ...view, toMove: 1 } },
+        { ...base, my_player_index: 1, acting_for_player_index: 1, view: { ...view, toMove: 1 } },
+        { ...base, status: 'over', view: { ...view, winner: 1 } },
+        { ...base, status: 'over', view: { ...view, draw: true } },
+        { ...base, status: 'over', view: { ...view } },
+      ],
+    };
+  })(),
+  'audit-batch4/mancala.html': (() => {
+    const view = { pits: [4, 4, 4, 4, 4, 4, 4, 4, 11, 4, 4, 4], stores: [3, 5], lastPos: 'p3', lastPlayer: 0, extraTurn: false, captured: 0, winner: null, gameOver: false };
+    return {
+      messages: [
+        { ...base, view },
+        { ...base, view: { ...view, extraTurn: true, lastPos: 's0', captured: 0 } },
+        { ...base, view: { ...view, lastPos: 'p2', captured: 6 } },
+        { ...base, my_player_index: 1, acting_for_player_index: 1, view },
+        { ...base, my_player_index: null, acting_for_player_index: null, view },
+        { ...base, acting_for_player_index: null, view },
+        { ...base, status: 'over', view: { ...view, gameOver: true, winner: 1 } },
+        { ...base, status: 'over', view: { ...view, gameOver: true, winner: -1 } },
+        { ...base, status: 'over', view: { ...view, gameOver: true, winner: null } },
+      ],
+    };
+  })(),
+  'audit-batch4/hearts.html': (() => {
+    const players = [{ name: 'Ann' }, { name: 'Bob' }, { name: 'Dee' }, { name: 'Eve' }];
+    const view = { phase: 'play', cur: 0, taken: [0, 3, 0, 2], trickNum: 0, heartsBroken: false, trick: [{ player: 1, card: '2C' }], counts: [13, 12, 13, 13], hand: ['3C', '4H'], legal: ['3C'], shooter: -1 };
+    return {
+      messages: [
+        { ...base, players, view },
+        { ...base, players, view: { ...view, trickNum: 4, heartsBroken: true, trick: [] } },
+        { ...base, players, acting_for_player_index: null, view: { ...view, cur: 2 } },
+        { ...base, players, my_player_index: null, acting_for_player_index: null, view },
+        { ...base, players, status: 'over', view: { ...view, phase: 'over', taken: [0, 26, 0, 0], shooter: 1, trick: [], hand: [] } },
+        { ...base, players, status: 'over', view: { ...view, phase: 'over', taken: [5, 0, 8, 13], shooter: -1, trick: [], hand: [] } },
+      ],
+    };
+  })(),
+  'audit-batch4/cheat-bs.html': (() => {
+    const players = [{ name: 'Ann' }, { name: 'Bob' }, { name: 'Dee' }];
+    const view = { reqRank: 3, current: 0, phase: 'play', pending: null, lastResult: { text: 'L1', bluff: true, cards: [4, 9] }, pileCount: 6, counts: [5, 6, 7], myHand: [8, 1, 12], winner: null };
+    return {
+      messages: [
+        { ...base, players, view },
+        { ...base, players, view: { ...view, lastResult: null, pileCount: 0 } },
+        { ...base, players, acting_for_player_index: 1, my_player_index: 1, view: { ...view, phase: 'challenge', current: 1, pending: { player: 0, count: 2, claimed: 3 }, lastResult: null } },
+        { ...base, players, my_player_index: null, acting_for_player_index: null, view },
+        { ...base, players, status: 'over', view: { ...view, winner: 1 } },
+        { ...base, players, status: 'over', view: { ...view, winner: null } },
+      ],
+    };
+  })(),
+  'audit-batch4/rummy-500.html': (() => {
+    const players = [{ name: 'Ann', kind: 'human' }, { name: 'Bob', kind: 'computer' }];
+    const c = (id, r, s) => ({ id, r, s });
+    const view = { roundNum: 2, dealer: 1, phase: 'draw', pending: null, ban: null, log: 'L1', scores: [40, 60], roundScores: [10, -5], deckCount: 20, discard: [c(1, 5, 'H'), c(2, 0, null)], melds: [{ id: 'M1', owner: 1, cards: [c(3, 7, 'S'), c(4, 7, 'H'), c(5, 7, 'D')], exts: [{ card: c(6, 7, 'C'), by: 0 }] }], counts: [7, 8], hand: [c(10, 3, 'S'), c(11, 12, 'D')], matchWinner: null, endReason: null };
+    return {
+      messages: [
+        { ...base, players, view },
+        { ...base, players, view: { ...view, phase: 'play', pending: 1, ban: 2, roundScores: null } },
+        { ...base, players, view: { ...view, deckCount: 0 } },
+        { ...base, players, acting_for_player_index: 1, my_player_index: 0, view: { ...view, phase: 'play' } },
+        { ...base, players, my_player_index: null, acting_for_player_index: null, view: { ...view, melds: [] , discard: [] } },
+        { ...base, players, view: { ...view, phase: 'roundOver', endReason: 'went out' } },
+        { ...base, players, acting_for_player_index: 1, view: { ...view, phase: 'roundOver', endReason: 'stock' } },
+        { ...base, players, status: 'over', view: { ...view, matchWinner: 0, phase: 'roundOver' } },
+      ],
+    };
+  })(),
 };
 module.exports = { CASES, players2, base, grid };
