@@ -337,7 +337,7 @@ function practiceWorker(prelude) {
 
 class PortalPractice {
   static call(game, name, args, match) {
-    if (!game.game_schemas) return Promise.reject(new Error("Game schemas are unavailable for local practice."));
+    if (!game.game_schemas) return Promise.reject(new Error(I18n.t("ui.practice.schemas_unavailable", {}, "Game schemas are unavailable for local practice.")));
     const payload = {code:game.server_code, game_schemas:game.game_schemas, name, args,
       ctx:{players:match.players.map(p=>({id:p.id,kind:p.kind,
         display_name:p.name || `Player ${p.player_index+1}`,picture_url:"",max_loss:0})),
@@ -348,7 +348,7 @@ class PortalPractice {
       const frame=document.createElement("iframe");
       frame.hidden=true;
       frame.setAttribute("sandbox","allow-scripts");
-      frame.setAttribute("title","Local practice rules");
+      frame.setAttribute("title",I18n.t("ui.practice.rules_title", {}, "Local practice rules"));
       const workerSource=`(${practiceWorker.toString()})(${JSON.stringify(PRACTICE_PRELUDE)})`;
       // JSON encoding plus '<' escaping prevents game source from ending srcdoc's script.
       const script=`const worker=new Worker(URL.createObjectURL(new Blob([${JSON.stringify(workerSource)}],{type:"text/javascript"})));window.onmessage=e=>{if(e.source===parent)worker.postMessage(e.data);};worker.onmessage=e=>parent.postMessage(e.data,"*");worker.onerror=()=>parent.postMessage({ok:false,message:"Local game failed to run"},"*");`;
@@ -362,12 +362,12 @@ class PortalPractice {
         if(event.source!==frame.contentWindow)return;
         const reply=event.data;
         if(!reply || typeof reply.ok!=="boolean")return;
-        finish(reply.ok ? null : new Error(reply.message || "Local game failed"),reply.result);
+        finish(reply.ok ? null : new Error(reply.message || I18n.t("ui.practice.failed", {}, "Local game failed")),reply.result);
       };
       window.addEventListener("message",receive);
       frame.onload=()=>frame.contentWindow.postMessage(payload,"*");
       // Terminating the iframe also terminates a Worker stuck in game code.
-      timer=setTimeout(()=>finish(new Error("Local game took too long. Your last saved position is unchanged.")),3000);
+      timer=setTimeout(()=>finish(new Error(I18n.t("ui.practice.timeout", {}, "Local game took too long. Your last saved position is unchanged."))),3000);
       document.body.append(frame);
     });
   }

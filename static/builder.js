@@ -26,7 +26,7 @@ function rememberWork() {
     localStorage.setItem("game-platform.builder.last.v2."+me().id,state.selectedId);
     state.saveWarning="";
   }
-  catch { state.saveWarning="Device recovery is unavailable. Keep this page open until autosave succeeds."; }
+  catch { state.saveWarning=I18n.t("ui.builder.recovery_unavailable", {}, "Device recovery is unavailable. Keep this page open until autosave succeeds."); }
 }
 function restoreWork() {
   try {
@@ -39,7 +39,7 @@ function restoreWork() {
         state.saveWarning="A newer copy was saved elsewhere. Your recovered edits are kept on this device; reload before editing.";
       } else { state.editor=content(record.values); state.baseline=record.baseline; }
     }
-  } catch { state.saveWarning="Couldn't restore this device's working copy."; }
+  } catch { state.saveWarning=I18n.t("ui.builder.restore_failed", {}, "Couldn't restore this device's working copy."); }
 }
 async function loadGames() {
   const user=me();
@@ -83,13 +83,13 @@ async function select(id) {
       // A working copy and its published version can be on different pages.
       const [draft,game]=await Promise.all([get("/game-drafts/"),get("/games/")]);
       if (!currentSession(session,user)) return;
-      if(!draft && !game)throw new Error("This game or draft is no longer available.");
+      if(!draft && !game)throw new Error(I18n.t("ui.builder.err_unavailable", {}, "This game or draft is no longer available."));
       state.drafts=[...state.drafts.filter(item=>item.id!==id),...(draft?[draft]:[])];
       state.games=[...state.games.filter(item=>item.id!==id),...(game?[game]:[])];
     } catch(error) {
       if(currentSession(session,user)) {
         state.selectedId=null;state.baseline=null;state.editor=copy(EMPTY);
-        stopTest();render();showPageError("Couldn't load game: "+error.message);
+        stopTest();render();showPageError(I18n.t("ui.builder.err_load_game",{message:error.message},"Couldn't load game: "+error.message));
       }
       return;
     } finally {if(currentSession(session,user)){state.restoring=false;renderStatus();}}
@@ -106,7 +106,7 @@ function renderStarters() {
   const query=$("starter-search").value.trim().toLocaleLowerCase();
   const games=state.starters.filter(game=>(game.name+" "+(game.description || "")).toLocaleLowerCase().includes(query));
   const previous=$("starter-game").value;
-  $("starter-game").replaceChildren(...games.map(game=>el("option",{value:game.id,textContent:game.name+" · v"+game.version})));
+  $("starter-game").replaceChildren(...games.map(game=>el("option",{value:game.id,textContent:I18n.t("ui.builder.starter_option",{name:game.name,version:game.version},game.name+" · v"+game.version)})));
   $("starter-game").value=games.some(game=>game.id===previous)?previous:games[0]?.id || "";
   $("load-starters").disabled=state.starterLoading;
   $("starter-game").disabled=state.starterLoading;
@@ -114,15 +114,15 @@ function renderStarters() {
 }
 async function loadStarters() {
   const request=++state.starterRequest,user=me();
-  state.starterLoading=true;renderStarters();setMessage("starter-message","Loading games…");
+  state.starterLoading=true;renderStarters();setMessage("starter-message",I18n.t("ui.builder.loading_games", {}, "Loading games…"));
   try {
     const games=await StoragePages.list(apiRequest,"/games",{user});
     if (request!==state.starterRequest || me()?.id!==user?.id) return;
     state.starters=games;
     StoragePages.controls("/games",user,$("starter-game"),loadStarters);
-    setMessage("starter-message",games.length?"Browse all "+games.length+" games or search to narrow the list.":"No games are available yet.");
+    setMessage("starter-message",games.length?I18n.plural("ui.builder.browse_count",games.length,{},{one:"Browse all 1 game or search to narrow the list.",many:"Browse all "+games.length+" games or search to narrow the list."}):I18n.t("ui.builder.no_games", {}, "No games are available yet."));
   } catch(error) {
-    if(request===state.starterRequest)setMessage("starter-message","Couldn't load games: "+error.message,"error");
+    if(request===state.starterRequest)setMessage("starter-message",I18n.t("ui.builder.err_load_games",{message:error.message},"Couldn't load games: "+error.message),"error");
   } finally {
     if(request===state.starterRequest){state.starterLoading=false;renderStarters();}
   }
@@ -134,10 +134,10 @@ async function useStarter() {
   const session=state.session, user=me(), editor=state.editor;
   game=await apiRequest("GET","/games/"+encodeURIComponent(game.id)+"/versions/"+game.version,{user:me()});
   if (session!==state.session || user?.id!==me()?.id || state.selectedId!=="new" || state.editor!==editor || state.editor.code) return;
-  state.editor=content({...game,name:game.name+" (copy)",description:(game.description || game.name)+" · Based on "+game.name+" v"+game.version+"."});
+  state.editor=content({...game,name:I18n.t("ui.builder.copy_name",{name:game.name},game.name+" (copy)"),description:(game.description || game.name)+" · "+I18n.t("ui.builder.based_on",{name:game.name,version:game.version},"Based on "+game.name+" v"+game.version+".")});
   state.messages=[];state.log=[];state.undo=[];state.aiOpen=true;
   render();renderPlayModes();startTest();scheduleAutosave();
-  agentLog("system","Started your own copy of "+game.name+" v"+game.version+". Ask AI to change it, or publish when ready.");
+  agentLog("system",I18n.t("ui.builder.started_copy",{name:game.name,version:game.version},"Started your own copy of "+game.name+" v"+game.version+". Ask AI to change it, or publish when ready."));
   rememberWork();
 }
 function scheduleAutosave() {
@@ -168,7 +168,7 @@ async function flushAutosave() {
       if (id !== draft.id) {try {localStorage.removeItem(recoveryKey(id,user));} catch {}}
       rememberWork(); renderLibrary(); return true;
     } catch(error) {
-      if (currentSession(session,user)) {state.saveError="Autosave failed: "+error.message;rememberWork();}
+      if (currentSession(session,user)) {state.saveError=I18n.t("ui.builder.autosave_failed",{message:error.message},"Autosave failed: "+error.message);rememberWork();}
       return false;
     }
   })();
@@ -191,9 +191,9 @@ async function publishVersion() {
     if (!currentSession(session,user)) return;
     state.games=[game,...state.games.filter(item=>item.id!==game.id)];
     state.drafts=state.drafts.map(item=>item.id===game.id ? {...item,base_version:game.version}:item);
-    agentLog("system","Published version "+game.version+". Everyone can play this version.");
+    agentLog("system",I18n.t("ui.builder.published_version",{version:game.version},"Published version "+game.version+". Everyone can play this version."));
     rememberWork();render();
-  } catch(error) {if (currentSession(session,user)) state.saveError="Couldn't publish: "+error.message;}
+  } catch(error) {if (currentSession(session,user)) state.saveError=I18n.t("ui.builder.publish_failed",{message:error.message},"Couldn't publish: "+error.message);}
   finally {if(currentSession(session,user)){state.publishing=false;renderStatus();}}
 }
 function changeName() {
@@ -203,27 +203,27 @@ function changeGameSchemas() {
   const text=$("game-schemas").value.trim();
   if (!text) {
     if (state.editor.server_code) {
-      state.schemaError="Schemas are required while this game has server code.";renderStatus();return;
+      state.schemaError=I18n.t("ui.builder.schemas_required", {}, "Schemas are required while this game has server code.");renderStatus();return;
     }
     state.editor.game_schemas=null;state.schemaError="";scheduleAutosave();return;
   }
   try {
     const schemas=JSON.parse(text);
-    if (!schemas||typeof schemas!=="object"||Array.isArray(schemas)) throw new Error("Expected an object with state, move, and view schemas.");
-    if (Object.keys(schemas).length!==3 || !["state","move","view"].every(key=>Object.prototype.hasOwnProperty.call(schemas,key))) throw new Error("Include only state, move, and view schemas.");
+    if (!schemas||typeof schemas!=="object"||Array.isArray(schemas)) throw new Error(I18n.t("ui.builder.schemas_shape", {}, "Expected an object with state, move, and view schemas."));
+    if (Object.keys(schemas).length!==3 || !["state","move","view"].every(key=>Object.prototype.hasOwnProperty.call(schemas,key))) throw new Error(I18n.t("ui.builder.schemas_only", {}, "Include only state, move, and view schemas."));
     state.editor.game_schemas=schemas;state.schemaError="";scheduleAutosave();
   } catch(error) {
-    state.schemaError="Invalid JSON: "+error.message;renderStatus();
+    state.schemaError=I18n.t("ui.builder.invalid_json",{message:error.message},"Invalid JSON: "+error.message);renderStatus();
   }
 }
 function renderLibrary() {
   const library=new Map(state.games.map(game=>[game.id,game]));
   for (const draft of state.drafts) library.set(draft.id,draft);
   const items=[...library.values()].map(item=>el("button",{type:"button",class:"list-item","aria-selected":String(item.id===state.selectedId),onclick:()=>select(item.id)},
-    el("span",{class:"title",textContent:item.name || "Untitled game"}),
-    el("span",{class:"sub",textContent:state.games.find(game=>game.id===item.id)?.version ? "v"+state.games.find(game=>game.id===item.id).version:"In progress"})));
-  if (state.selectedId==="new") items.push(el("button",{type:"button",class:"list-item","aria-selected":"true",textContent:"New game"}));
-  if (!items.length) items.push(el("p",{class:"muted",textContent:me()?"Your games will appear here.":"Sign in to build a game."}));
+    el("span",{class:"title",textContent:item.name || I18n.t("ui.builder.untitled", {}, "Untitled game")}),
+    el("span",{class:"sub",textContent:state.games.find(game=>game.id===item.id)?.version ? I18n.t("ui.builder.version_short",{version:state.games.find(game=>game.id===item.id).version},"v"+state.games.find(game=>game.id===item.id).version):I18n.t("ui.builder.in_progress", {}, "In progress")})));
+  if (state.selectedId==="new") items.push(el("button",{type:"button",class:"list-item","aria-selected":"true",textContent:I18n.t("ui.builder.new_game", {}, "New game")}));
+  if (!items.length) items.push(el("p",{class:"muted",textContent:me()?I18n.t("ui.builder.games_appear", {}, "Your games will appear here."):I18n.t("ui.builder.sign_in_to_build", {}, "Sign in to build a game.")}));
   $("games").replaceChildren(...items);
 }
 function renderStatus() {
@@ -231,7 +231,7 @@ function renderStatus() {
   const changed=!game || game.published===false || JSON.stringify(content(game))!==JSON.stringify(state.editor);
   $("publish").disabled=!state.editor.code || !state.editor.name.trim() || !changed || state.publishing || state.agentSending || state.restoring || Boolean(state.schemaError);
   $("publish").textContent=state.publishing ? I18n.t("ui.builder.publishing",{},"Publishing…"):I18n.t("ui.action.publish",{},"Publish");
-  $("save-status").textContent=state.saveError || state.saveWarning || (state.savePromise ? "Saving…":isDirty()?"Saving…":state.selectedId && state.editor.code?"Autosaved":"");
+  $("save-status").textContent=state.saveError || state.saveWarning || (state.savePromise ? I18n.t("ui.builder.saving", {}, "Saving…"):isDirty()?I18n.t("ui.builder.saving", {}, "Saving…"):state.selectedId && state.editor.code?I18n.t("ui.builder.autosaved", {}, "Autosaved"):"");
   $("save-status").className="save-status"+((state.saveError||state.saveWarning)?" error":"");
   $("retry-save").hidden=!state.saveError;
   $("undo-ai-change").disabled=!state.undo.length || state.agentSending || state.publishing || state.restoring;
@@ -242,7 +242,7 @@ function renderStatus() {
   $("agent-send").disabled=state.agentSending || state.publishing || state.restoring;
   $("agent-send").textContent=state.agentSending?I18n.t("ui.builder.working",{},"Working…"):state.editor.code?I18n.t("ui.builder.update_game",{},"Update game"):I18n.t("ui.builder.create_game",{},"Create game");
   $("open-ai").hidden=!state.editor.code || state.aiOpen;
-  $("open-ai").textContent=state.agentSending?I18n.t("ui.builder.ai_working",{},"AI is working…"):I18n.t("ui.builder.ask_ai",{},"Ask AI");
+  $("open-ai").textContent=state.agentSending?I18n.t("ui.builder.ai_working",{},I18n.t("ui.builder.ai_working", {}, "AI is working…")):I18n.t("ui.builder.ask_ai",{},"Ask AI");
   $("agent-stop").hidden=!state.agentSending;
   renderStarters();
   $("game-summary").textContent=state.editor.description;
@@ -251,7 +251,7 @@ function renderStatus() {
   $("game-schemas-box").hidden=!state.editor.server_code;
   $("game-schemas-error").textContent=state.schemaError;
   if (document.activeElement!==$("game-schemas")) $("game-schemas").value=state.editor.game_schemas ? JSON.stringify(state.editor.game_schemas,null,2) : "";
-  $("game-version").textContent=game ? "v"+game.version:"First version";
+  $("game-version").textContent=game ? I18n.t("ui.builder.version_short",{version:game.version},"v"+game.version):I18n.t("ui.builder.first_version", {}, "First version");
   $("play-game").hidden=!game || game.published===false;
   if (game) $("play-game").href="/portal#game="+encodeURIComponent(game.id);
 }
@@ -267,13 +267,13 @@ function render() {
   const host=$(playable?"ai-panel-body":"starter-agent-home");
   if ($("agent-tools").parentNode!==host) host.append($("agent-tools"));
   $("game-name").value=state.editor.name;
-  $("agent-input").placeholder=playable?"Change a rule, add a feature, or fix a bug…":"Describe the game you want to play…";
+  $("agent-input").placeholder=playable?I18n.t("ui.builder.agent_placeholder_change", {}, "Change a rule, add a feature, or fix a bug…"):I18n.t("ui.builder.describe_placeholder", {}, "Describe the game you want to play…");
   const log=$("agent-log");
   log.hidden=!state.log.length;
   log.replaceChildren(...state.log.map(item=>el("div",{class:"msg "+item.role,textContent:item.text})));
   log.scrollTop=log.scrollHeight;
   const game=selectedGame();
-  $("versions").replaceChildren(...(game?Array.from({length:game.version},(_,i)=>el("option",{value:game.version-i,textContent:"Version "+(game.version-i)})):[]));
+  $("versions").replaceChildren(...(game?Array.from({length:game.version},(_,i)=>el("option",{value:game.version-i,textContent:I18n.t("ui.builder.version_n",{version:game.version-i},"Version "+(game.version-i))})):[]));
   $("version-history").hidden=!game;
   renderStatus();
 }
@@ -294,8 +294,8 @@ function focusPreview(focused) {
 }
 function renderPlayModes() {
   const choices=state.editor.allowed_player_counts.flatMap(count=>count===1
-    ? [{value:"1:solo",label:"Solo"}]
-    : [{value:count+":computer",label:count+" players · vs computers"},{value:count+":human",label:count+" players · pass and play"}]);
+    ? [{value:"1:solo",label:I18n.t("ui.mode.solo", {}, "Solo")}]
+    : [{value:count+":computer",label:I18n.t("ui.builder.mode_vs_computers",{count},count+" players · vs computers")},{value:count+":human",label:I18n.t("ui.builder.mode_pass_play",{count},count+" players · pass and play")}]);
   const previous=$("play-mode").value;
   $("play-mode").replaceChildren(...choices.map(choice=>el("option",{value:choice.value,textContent:choice.label})));
   $("play-mode").value=choices.some(choice=>choice.value===previous)?previous:choices[0]?.value || "";
@@ -304,7 +304,7 @@ function startTest() {
   if (!state.editor.code) return;
   const [countText,mode]=$("play-mode").value.split(":");const count=Number(countText);
   if (!state.editor.allowed_player_counts.includes(count)) return;
-  const players=Array.from({length:count},(_,seat)=>({player_index:seat,kind:mode==="computer"&&seat>0?"computer":"human",name:mode==="computer"&&seat>0?"Computer "+seat:"Player "+(seat+1)}));
+  const players=Array.from({length:count},(_,seat)=>({player_index:seat,kind:mode==="computer"&&seat>0?"computer":"human",name:mode==="computer"&&seat>0?I18n.t("ui.match.computer_name",{number:seat},"Computer "+seat):I18n.t("ui.match.player_n",{number:seat+1},"Player "+(seat+1))}));
   // A game with server code is test-played through the emulator: the
   // server runs its logic (see /emulator/reset and /emulator/act).
   if (state.editor.server_code) { startEmulatorTest(players, mode); return; }
@@ -375,8 +375,8 @@ function sendTestState() {
   frame.send(message);
   setMessage("test-status",
     test.status === "over"
-      ? `The game ended after ${test.moves.length} moves.`
-      : `${test.paused ? "Paused · " : ""}Move ${test.moves.length + 1}: ${test.turn.map((seat) => test.players[seat].name).join(", ")}'s turn.`,
+      ? I18n.plural("ui.builder.test_ended", test.moves.length, {}, {one: "The game ended after 1 move.", many: `The game ended after ${test.moves.length} moves.`})
+      : I18n.t(test.paused ? "ui.builder.test_turn_paused" : "ui.builder.test_turn", {move: test.moves.length + 1, names: test.turn.map((seat) => test.players[seat].name).join(", ")}, `${test.paused ? "Paused · " : ""}Move ${test.moves.length + 1}: ${test.turn.map((seat) => test.players[seat].name).join(", ")}'s turn.`),
     test.status === "over" ? "ok" : "");
   testLog(`sent state_changed: move_count=${test.moves.length} turn=${JSON.stringify(test.turn)} status=${test.status}`);
 }
@@ -410,8 +410,8 @@ function sendEmulatorState() {
   frame.send(message);
   setMessage("test-status",
     test.status === "over"
-      ? `The game ended after ${test.moveCount} moves.`
-      : `${test.paused ? "Paused · " : ""}Move ${test.moveCount + 1}: ${turnSeats.map(p => p.name).join(", ")}'s turn.`,
+      ? I18n.plural("ui.builder.test_ended", test.moveCount, {}, {one: "The game ended after 1 move.", many: `The game ended after ${test.moveCount} moves.`})
+      : I18n.t(test.paused ? "ui.builder.test_turn_paused" : "ui.builder.test_turn", {move: test.moveCount + 1, names: turnSeats.map(p => p.name).join(", ")}, `${test.paused ? "Paused · " : ""}Move ${test.moveCount + 1}: ${turnSeats.map(p => p.name).join(", ")}'s turn.`),
     test.status === "over" ? "ok" : "");
   testLog(`sent state_changed (emulator): move_count=${test.moveCount} turn=${JSON.stringify(test.turnIds)} status=${test.status}`);
 }
@@ -527,10 +527,10 @@ function generationActivity(phase, started) {
   $("agent-activity").hidden = false;
   if ($("agent-phase").textContent !== phase) $("agent-phase").textContent = phase;
   const seconds = Math.floor((Date.now() - started) / 1000);
-  $("agent-elapsed").textContent = `${Math.floor(seconds / 60)}m ${seconds % 60}s elapsed`;
+  $("agent-elapsed").textContent = I18n.t("ui.builder.elapsed", {minutes: Math.floor(seconds / 60), seconds: seconds % 60}, `${Math.floor(seconds / 60)}m ${seconds % 60}s elapsed`);
   $("agent-wait-note").textContent = seconds >= 60
-    ? "Still waiting for AI. You can stop waiting and keep your current game."
-    : "Your current game stays available while AI works.";
+    ? I18n.t("ui.builder.wait_still", {}, "Still waiting for AI. You can stop waiting and keep your current game.")
+    : I18n.t("ui.builder.wait_stays", {}, "Your current game stays available while AI works.");
 }
 
 function stopAgentWaiting() {
@@ -538,13 +538,13 @@ function stopAgentWaiting() {
   if (!request) return;
   request.cancelled = true;
   request.controller.abort();
-  setMessage("agent-message", "Stopping this browser's wait…");
+  setMessage("agent-message", I18n.t("ui.builder.stopping_wait", {}, "Stopping this browser's wait…"));
 }
 
 async function requestAgentReply(user, body, isCurrent, request) {
   const started = Date.now();
   const options = {user, signal: request.controller.signal};
-  let phase = "Asking AI…";
+  let phase = I18n.t("ui.builder.asking_ai", {}, "Asking AI…");
   generationActivity(phase, started);
   const ticker = setInterval(() => {
     if (isCurrent() && !request.cancelled) generationActivity(phase, started);
@@ -553,15 +553,15 @@ async function requestAgentReply(user, body, isCurrent, request) {
     let reply = await apiRequest("POST", "/agent/chat", {...options, body});
     const deadline = started + 16 * 60 * 1000;
     while (reply?.preview_job_id) {
-      if (!isCurrent() || request.cancelled) throw new Error("Waiting stopped.");
-      if (Date.now() > deadline) throw new Error("Generation is taking too long. Please try again later.");
-      phase = "AI is working…";
+      if (!isCurrent() || request.cancelled) throw new Error(I18n.t("ui.builder.err_wait_stopped", {}, "Waiting stopped."));
+      if (Date.now() > deadline) throw new Error(I18n.t("ui.builder.err_too_long", {}, "Generation is taking too long. Please try again later."));
+      phase = I18n.t("ui.builder.ai_working", {}, "AI is working…");
       generationActivity(phase, started);
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      if (request.cancelled) throw new Error("Waiting stopped.");
+      if (request.cancelled) throw new Error(I18n.t("ui.builder.err_wait_stopped", {}, "Waiting stopped."));
       reply = await apiRequest("GET", `/preview/jobs/${encodeURIComponent(reply.preview_job_id)}`, options);
     }
-    if (request.cancelled) throw new Error("Waiting stopped.");
+    if (request.cancelled) throw new Error(I18n.t("ui.builder.err_wait_stopped", {}, "Waiting stopped."));
     return reply;
   } finally {
     clearInterval(ticker);
@@ -595,7 +595,7 @@ async function sendAgentMessage() {
     let gameId = null;
     try { gameId = await ensureDraftId(user, session); } catch { gameId = null; }
     if (!isCurrent()) return;
-    if (request.cancelled) throw new Error("Waiting stopped.");
+    if (request.cancelled) throw new Error(I18n.t("ui.builder.err_wait_stopped", {}, "Waiting stopped."));
     const reply=await requestAgentReply(user,{game_name:values.name,game_description:values.description,
       allowed_player_counts:values.allowed_player_counts,player_count_mode:"auto",
       allows_leave_mid_match:values.allows_leave_mid_match,allows_join_mid_match:values.allows_join_mid_match,
@@ -603,13 +603,13 @@ async function sendAgentMessage() {
     if (!isCurrent()||request.cancelled) return;
     state.messages=[...messages,{role:"assistant",content:reply.message}];
     agentLog("assistant",reply.message);
-    if (reply.server_test_passed === false) agentLog("system","The AI's server code still fails its random-walk tests, so it can't be published yet. Ask the AI to fix the tests.");
+    if (reply.server_test_passed === false) agentLog("system",I18n.t("ui.builder.ai_tests_fail", {}, "The AI's server code still fails its random-walk tests, so it can't be published yet. Ask the AI to fix the tests."));
     if (reply.code) {
       const counts=reply.allowed_player_counts;
-      if (!Array.isArray(counts)||!counts.length||new Set(counts).size!==counts.length||counts.some(n=>!Number.isInteger(n)||n<1||n>10)) throw new Error("The AI did not return valid player counts. Please ask it to try again.");
-      if ([reply.allows_leave_mid_match,reply.allows_join_mid_match].some(value=>value!=null && typeof value!=="boolean")) throw new Error("The AI did not return valid mid-match rules. Please ask it to try again.");
+      if (!Array.isArray(counts)||!counts.length||new Set(counts).size!==counts.length||counts.some(n=>!Number.isInteger(n)||n<1||n>10)) throw new Error(I18n.t("ui.builder.ai_bad_counts", {}, "The AI did not return valid player counts. Please ask it to try again."));
+      if ([reply.allows_leave_mid_match,reply.allows_join_mid_match].some(value=>value!=null && typeof value!=="boolean")) throw new Error(I18n.t("ui.builder.ai_bad_rules", {}, "The AI did not return valid mid-match rules. Please ask it to try again."));
       if (JSON.stringify(state.editor)!==base) {
-        agentLog("system","The game changed while the AI was working, so this update wasn't applied. Ask again using the latest game.");
+        agentLog("system",I18n.t("ui.builder.game_changed_meanwhile", {}, "The game changed while the AI was working, so this update wasn't applied. Ask again using the latest game."));
       } else {
         state.undo.push(editorValues());state.undo=state.undo.slice(-8);
         state.editor={...state.editor,code:reply.code,server_code:reply.server_code ?? state.editor.server_code,
@@ -618,13 +618,13 @@ async function sendAgentMessage() {
           allows_join_mid_match:reply.allows_join_mid_match ?? state.editor.allows_join_mid_match,
           name:reply.name || state.editor.name || input.split("\n")[0].slice(0,80),description:reply.description ?? state.editor.description};
         render();renderPlayModes();startTest();scheduleAutosave();
-        agentLog("system","Updated the game. Play it now, ask for another change, or publish a version when ready.");
+        agentLog("system",I18n.t("ui.builder.updated_game", {}, "Updated the game. Play it now, ask for another change, or publish a version when ready."));
       }
     }
     rememberWork();
   } catch(error) {
     if (!isCurrent()) return;
-    setMessage("agent-message",request.cancelled?"Stopped waiting. Your game is unchanged; the server may still finish this request.":"The agent couldn't reply: "+error.message,"error");
+    setMessage("agent-message",request.cancelled?I18n.t("ui.builder.stopped_waiting", {}, "Stopped waiting. Your game is unchanged; the server may still finish this request."):I18n.t("ui.builder.agent_failed",{message:error.message},"The agent couldn't reply: "+error.message),"error");
     if (!$("agent-input").value.trim()) $("agent-input").value=input;
   } finally {
     if (isCurrent()) {state.agentSending=false;state.agentRequest=null;$("agent-activity").hidden=true;renderStatus();}
@@ -633,7 +633,7 @@ async function sendAgentMessage() {
 function undoAppliedChange() {
   if (!state.undo.length||state.agentSending||state.publishing||state.restoring) return;
   state.editor=state.undo.pop();render();renderPlayModes();startTest();scheduleAutosave();
-  agentLog("system","Undid the last AI change.");
+  agentLog("system",I18n.t("ui.builder.undid_ai", {}, "Undid the last AI change."));
 }
 async function restoreVersion() {
   if (state.agentSending||state.publishing||state.restoring||!selectedGame()) return;
@@ -644,13 +644,13 @@ async function restoreVersion() {
     const value=await apiRequest("GET","/games/"+encodeURIComponent(id)+"/versions/"+version,{user});
     if (!currentSession(session,user)) return;
     state.undo.push(editorValues());state.editor=content(value);render();renderPlayModes();startTest();scheduleAutosave();
-    agentLog("system","Loaded version "+version+". Publish to release it as the next version.");
-  } catch(error){if(currentSession(session,user))state.saveError="Couldn't load the version: "+error.message;}
+    agentLog("system",I18n.t("ui.builder.loaded_version",{version},"Loaded version "+version+". Publish to release it as the next version."));
+  } catch(error){if(currentSession(session,user))state.saveError=I18n.t("ui.builder.load_version_failed",{message:error.message},"Couldn't load the version: "+error.message);}
   finally {if(currentSession(session,user)){state.restoring=false;renderStatus();}}
 }
 async function deleteGame() {
   if (state.publishing||state.agentSending||state.savePromise||!state.selectedId) return;
-  if (!state.deleteArmed) {state.deleteArmed=true;setMessage("workspace-message","Click Delete game again to remove it. Existing matches retain their history.","error");return;}
+  if (!state.deleteArmed) {state.deleteArmed=true;setMessage("workspace-message",I18n.t("ui.builder.delete_again", {}, "Click Delete game again to remove it. Existing matches retain their history."),"error");return;}
   const user=me(),session=state.session,id=state.selectedId;
   try {
     clearTimeout(state.saveTimer);
@@ -659,7 +659,7 @@ async function deleteGame() {
     try{localStorage.removeItem(recoveryKey());}catch{}
     state.selectedId=null;state.baseline=null;state.editor=copy(EMPTY);state.session++;stopTest();clearAgent();
     await loadGames();render();
-  } catch(error){setMessage("workspace-message","Couldn't delete: "+error.message,"error");}
+  } catch(error){setMessage("workspace-message",I18n.t("ui.builder.delete_failed",{message:error.message},"Couldn't delete: "+error.message),"error");}
 }
 function clampPanel(x,y,width,height,viewportWidth,viewportHeight) {
   return {x:Math.max(8,Math.min(x,viewportWidth-width-8)),y:Math.max(8,Math.min(y,viewportHeight-Math.min(height,viewportHeight-16)-8))};
@@ -692,7 +692,7 @@ async function onUserChanged() {
   state.selectedId=null;state.baseline=null;state.editor=copy(EMPTY);state.savePromise=null;state.saveError="";state.saveWarning="";state.schemaError="";
   state.ownerId=null;state.publishing=false;state.restoring=false;state.games=[];state.drafts=[];
   state.messages=[];state.log=[];state.undo=[];stopTest();render();
-  try{await loadGames();await resumeWorkspace();}catch(error){showPageError("Couldn't load games: "+error.message);}
+  try{await loadGames();await resumeWorkspace();}catch(error){showPageError(I18n.t("ui.builder.err_load_games",{message:error.message},"Couldn't load games: "+error.message));}
 }
 async function resumeWorkspace() {
   let last;
@@ -741,6 +741,6 @@ async function main() {
   Auth.renderMenu($("account-menu"));initFloatingPanel();
   $("notify-toggle").addEventListener("click",()=>PushNotifications.toggle($("notify-toggle"),apiRequest));
   PushNotifications.setup($("notify-toggle"),apiRequest);
-  try {await loadGames();await resumeWorkspace();}catch(error){showPageError("Couldn't load games: "+error.message);}
+  try {await loadGames();await resumeWorkspace();}catch(error){showPageError(I18n.t("ui.builder.err_load_games",{message:error.message},"Couldn't load games: "+error.message));}
 }
 main();

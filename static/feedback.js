@@ -90,9 +90,9 @@ async function refresh() {
     const data = await response.json();
     render(data, await matchNames(data.feedback));
     $("error").textContent = "";
-    $("freshness").textContent = `Loaded ${formatTime(new Date().toISOString())}`;
+    $("freshness").textContent = I18n.t("ui.admin.loaded", { time: formatTime(new Date().toISOString()) }, "Loaded {time}");
   } catch (error) {
-    $("error").textContent = `Couldn't load the feedback: ${error.message}`;
+    $("error").textContent = I18n.t("ui.admin.feedback_load_failed", { message: error.message }, "Couldn't load the feedback: {message}");
   }
 }
 

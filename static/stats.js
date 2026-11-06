@@ -441,9 +441,9 @@ async function refresh() {
       if (!experiments) throw new Error(`GET /admin/experiments: ${experimentsResponse.status}`);
       render(stats, experiments);
     }
-    $("freshness").textContent = `Loaded ${formatTime(stats.generated_at)}`;
+    $("freshness").textContent = I18n.t("ui.admin.loaded", { time: formatTime(stats.generated_at) }, "Loaded {time}");
   } catch (error) {
-    $("error").textContent = `Couldn't load statistics: ${error.message}`;
+    $("error").textContent = I18n.t("ui.admin.stats_load_failed", { message: error.message }, "Couldn't load statistics: {message}");
   }
 }
 

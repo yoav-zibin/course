@@ -46,7 +46,7 @@ window.PortalMatchLayout = (() => {
     else if (active && !online) notices.push(match.localMode ? "Offline · playing on this device" : "Offline · moves save on this device");
     if (match?.speedNotice) notices.push(match.speedNotice); // speed matches: time ran out
     if (match?.joinNotice) notices.push(match.joinNotice); // why this match can't be joined
-    if (match?.status === "over") notices.push($("match-result").textContent || "Match finished");
+    if (match?.status === "over") notices.push($("match-result").textContent || I18n.t("ui.match.finished", {}, "Match finished"));
     $("match-play-notice").textContent = notices.join(" · ");
     $("match-play-notice").hidden = notices.length === 0;
     $("match-play-notice").classList.toggle("error", Boolean(error || match?.conflict));
