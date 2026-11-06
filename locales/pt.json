@@ -936,5 +936,15 @@
   "ui.admin.create_user_failed": "Não foi possível criar o usuário: {message}",
   "ui.admin.missing_path_param": "Parâmetro de caminho ausente: {name}",
   "ui.admin.choose_operation": "Escolha uma operação.",
-  "ui.admin.no_matches": "Sem correspondências"
+  "ui.admin.no_matches": "Sem correspondências",
+  "ui.guided.test_matrix": "Abrir matriz de testes do jogo",
+  "ui.welcome.page_title": "Plataforma de jogos · Boas-vindas",
+  "ui.welcome.eyebrow": "JOGUE COM OUTRAS PESSOAS",
+  "ui.welcome.title": "Encontre seu próximo jogo",
+  "ui.welcome.intro": "Entre para continuar de onde parou ou prossiga como visitante e comece a jogar.",
+  "ui.welcome.login_title": "Entrar",
+  "ui.welcome.login_description": "Acesse seus jogos e partidas por esta conta.",
+  "ui.welcome.guest_title": "Continuar como visitante",
+  "ui.welcome.guest_description": "Escolha um nome de exibição e vá direto para os jogos.",
+  "ui.welcome.guest_error": "Não foi possível criar uma conta de visitante. Tente novamente."
 }

@@ -936,5 +936,15 @@
   "ui.admin.create_user_failed": "Couldn't create user: {message}",
   "ui.admin.missing_path_param": "Missing path parameter {name}",
   "ui.admin.choose_operation": "Choose an operation.",
-  "ui.admin.no_matches": "No matches"
+  "ui.admin.no_matches": "No matches",
+  "ui.guided.test_matrix": "Open game test matrix",
+  "ui.welcome.page_title": "Game platform · Welcome",
+  "ui.welcome.eyebrow": "PLAY TOGETHER",
+  "ui.welcome.title": "Find your next game",
+  "ui.welcome.intro": "Log in to pick up where you left off, or continue as a guest and start playing.",
+  "ui.welcome.login_title": "Log in",
+  "ui.welcome.login_description": "Access your games and matches from this account.",
+  "ui.welcome.guest_title": "Continue as guest",
+  "ui.welcome.guest_description": "Choose a display name and head straight to the games.",
+  "ui.welcome.guest_error": "We couldn't create a guest account. Please try again."
 }

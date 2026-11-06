@@ -936,5 +936,15 @@
   "ui.admin.create_user_failed": "उपयोगकर्ता नहीं बन सका: {message}",
   "ui.admin.missing_path_param": "पाथ पैरामीटर {name} गायब है",
   "ui.admin.choose_operation": "कोई ऑपरेशन चुनें।",
-  "ui.admin.no_matches": "कोई मेल नहीं"
+  "ui.admin.no_matches": "कोई मेल नहीं",
+  "ui.guided.test_matrix": "गेम परीक्षण मैट्रिक्स खोलें",
+  "ui.welcome.page_title": "गेम प्लेटफ़ॉर्म · स्वागत है",
+  "ui.welcome.eyebrow": "साथ खेलें",
+  "ui.welcome.title": "अपना अगला गेम खोजें",
+  "ui.welcome.intro": "जहाँ छोड़ा था वहाँ से जारी रखने के लिए लॉग इन करें, या अतिथि के रूप में आगे बढ़कर खेलना शुरू करें।",
+  "ui.welcome.login_title": "लॉग इन करें",
+  "ui.welcome.login_description": "इस खाते से अपने गेम और मैच देखें।",
+  "ui.welcome.guest_title": "अतिथि के रूप में जारी रखें",
+  "ui.welcome.guest_description": "एक डिस्प्ले नाम चुनें और सीधे गेम पर जाएँ।",
+  "ui.welcome.guest_error": "अतिथि खाता नहीं बनाया जा सका। कृपया फिर से कोशिश करें।"
 }

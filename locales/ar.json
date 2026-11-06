@@ -936,5 +936,15 @@
   "ui.admin.create_user_failed": "تعذّر إنشاء المستخدم: {message}",
   "ui.admin.missing_path_param": "معامل المسار {name} مفقود",
   "ui.admin.choose_operation": "اختر عملية.",
-  "ui.admin.no_matches": "لا توجد نتائج مطابقة"
+  "ui.admin.no_matches": "لا توجد نتائج مطابقة",
+  "ui.guided.test_matrix": "فتح مصفوفة اختبار اللعبة",
+  "ui.welcome.page_title": "منصة الألعاب · مرحبًا",
+  "ui.welcome.eyebrow": "العبوا معًا",
+  "ui.welcome.title": "اعثر على لعبتك التالية",
+  "ui.welcome.intro": "سجّل الدخول للمتابعة من حيث توقفت، أو تابع كضيف وابدأ اللعب.",
+  "ui.welcome.login_title": "تسجيل الدخول",
+  "ui.welcome.login_description": "يمكنك الوصول إلى ألعابك ومبارياتك من هذا الحساب.",
+  "ui.welcome.guest_title": "المتابعة كضيف",
+  "ui.welcome.guest_description": "اختر اسمًا للعرض وانتقل مباشرة إلى الألعاب.",
+  "ui.welcome.guest_error": "تعذّر إنشاء حساب ضيف. يُرجى المحاولة مرة أخرى."
 }

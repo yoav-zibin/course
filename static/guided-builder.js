@@ -17,7 +17,7 @@ const draftName=d=>d.builder_workflow?.artifacts?.identity?.value?.display_name 
 let editName=false;
 if(window.matchMedia('(max-width:850px)').matches)$('library').open=false;
 let draft=null, selected=0, working=false, poll=null, renderedRevision=null;
-const matrixLink=el('a',{id:'game-test-matrix',href:'/game-test',target:'_blank',rel:'noopener',textContent:'Open game test matrix',hidden:true});
+const matrixLink=el('a',{id:'game-test-matrix',href:'/game-test',target:'_blank',rel:'noopener',textContent:I18n.t("ui.guided.test_matrix",{},"Open game test matrix"),hidden:true});
 $('emulator').after(matrixLink);
 const me=()=>Auth.current();
 const request=(method,path,body)=>apiRequest(method,path,{user:me(),...(body?{body}:{})});

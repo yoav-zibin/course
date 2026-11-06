@@ -936,5 +936,15 @@
   "ui.admin.create_user_failed": "No se pudo crear el usuario: {message}",
   "ui.admin.missing_path_param": "Falta el parámetro de ruta {name}",
   "ui.admin.choose_operation": "Elige una operación.",
-  "ui.admin.no_matches": "Sin coincidencias"
+  "ui.admin.no_matches": "Sin coincidencias",
+  "ui.guided.test_matrix": "Abrir matriz de pruebas del juego",
+  "ui.welcome.page_title": "Plataforma de juegos · Te damos la bienvenida",
+  "ui.welcome.eyebrow": "JUEGA CON OTRAS PERSONAS",
+  "ui.welcome.title": "Encuentra tu próximo juego",
+  "ui.welcome.intro": "Inicia sesión para retomar donde lo dejaste, o continúa como invitado y empieza a jugar.",
+  "ui.welcome.login_title": "Iniciar sesión",
+  "ui.welcome.login_description": "Accede a tus juegos y partidas desde esta cuenta.",
+  "ui.welcome.guest_title": "Continuar como invitado",
+  "ui.welcome.guest_description": "Elige un nombre y ve directamente a los juegos.",
+  "ui.welcome.guest_error": "No pudimos crear una cuenta de invitado. Inténtalo de nuevo."
 }

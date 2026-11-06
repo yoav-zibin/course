@@ -29,7 +29,7 @@
       Auth.upsert(await Auth.createGuest(guestInput.value));
       continueToGames();
     } catch (error) {
-      message.textContent = error?.message || "We couldn't create a guest account. Please try again.";
+      message.textContent = error?.message || I18n.t("ui.welcome.guest_error", {}, "We couldn't create a guest account. Please try again.");
       guestButton.disabled = false;
     }
   });

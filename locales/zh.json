@@ -936,5 +936,15 @@
   "ui.admin.create_user_failed": "无法创建用户：{message}",
   "ui.admin.missing_path_param": "缺少路径参数 {name}",
   "ui.admin.choose_operation": "请选择一个操作。",
-  "ui.admin.no_matches": "没有匹配项"
+  "ui.admin.no_matches": "没有匹配项",
+  "ui.guided.test_matrix": "打开游戏测试矩阵",
+  "ui.welcome.page_title": "游戏平台 · 欢迎",
+  "ui.welcome.eyebrow": "一起玩",
+  "ui.welcome.title": "找到你的下一款游戏",
+  "ui.welcome.intro": "登录以继续之前的进度，或以访客身份开始游戏。",
+  "ui.welcome.login_title": "登录",
+  "ui.welcome.login_description": "通过此账户访问你的游戏和对局。",
+  "ui.welcome.guest_title": "以访客身份继续",
+  "ui.welcome.guest_description": "选择一个显示名称，然后直接进入游戏。",
+  "ui.welcome.guest_error": "无法创建访客账户。请重试。"
 }

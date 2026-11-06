@@ -936,5 +936,15 @@
   "ui.admin.create_user_failed": "Der Nutzer konnte nicht angelegt werden: {message}",
   "ui.admin.missing_path_param": "Pfadparameter {name} fehlt",
   "ui.admin.choose_operation": "Wähle eine Operation.",
-  "ui.admin.no_matches": "Keine Treffer"
+  "ui.admin.no_matches": "Keine Treffer",
+  "ui.guided.test_matrix": "Spieltestmatrix öffnen",
+  "ui.welcome.page_title": "Spieleplattform · Willkommen",
+  "ui.welcome.eyebrow": "GEMEINSAM SPIELEN",
+  "ui.welcome.title": "Finde dein nächstes Spiel",
+  "ui.welcome.intro": "Melde dich an, um dort weiterzumachen, wo du aufgehört hast, oder fahre als Gast fort und spiele los.",
+  "ui.welcome.login_title": "Anmelden",
+  "ui.welcome.login_description": "Greife mit diesem Konto auf deine Spiele und Partien zu.",
+  "ui.welcome.guest_title": "Als Gast fortfahren",
+  "ui.welcome.guest_description": "Wähle einen Anzeigenamen und gehe direkt zu den Spielen.",
+  "ui.welcome.guest_error": "Gastkonto konnte nicht erstellt werden. Bitte versuche es erneut."
 }

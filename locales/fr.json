@@ -936,5 +936,15 @@
   "ui.admin.create_user_failed": "Impossible de créer l'utilisateur : {message}",
   "ui.admin.missing_path_param": "Paramètre de chemin manquant : {name}",
   "ui.admin.choose_operation": "Choisissez une opération.",
-  "ui.admin.no_matches": "Aucune correspondance"
+  "ui.admin.no_matches": "Aucune correspondance",
+  "ui.guided.test_matrix": "Ouvrir la matrice de test du jeu",
+  "ui.welcome.page_title": "Plateforme de jeux · Bienvenue",
+  "ui.welcome.eyebrow": "JOUONS ENSEMBLE",
+  "ui.welcome.title": "Trouvez votre prochain jeu",
+  "ui.welcome.intro": "Connectez-vous pour reprendre là où vous en étiez, ou continuez en tant qu’invité pour jouer.",
+  "ui.welcome.login_title": "Se connecter",
+  "ui.welcome.login_description": "Accédez à vos jeux et parties avec ce compte.",
+  "ui.welcome.guest_title": "Continuer en tant qu’invité",
+  "ui.welcome.guest_description": "Choisissez un nom d’affichage et accédez directement aux jeux.",
+  "ui.welcome.guest_error": "Impossible de créer un compte invité. Veuillez réessayer."
 }
