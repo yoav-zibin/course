@@ -691,7 +691,7 @@ class PortalOffline {
       value = this.cached(path);
       if (value === undefined)
         throw new Error(
-          "Couldn't reach the server, and this data isn't saved on this device yet. Please try again.",
+          I18n.t("ui.offline.err_server_unreachable", {}, "Couldn't reach the server, and this data isn't saved on this device yet. Please try again."),
         );
     }
     if (path.startsWith("/v2/matches?")) {

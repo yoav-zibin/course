@@ -1,6 +1,28 @@
 import { test, expect } from '@playwright/test';
 import { createGame, createUser, loginAs, uniqueName } from './helpers';
 
+test('referral match link survives switching accounts and opens the intended lobby', async ({ page, request }) => {
+  const alice = await createUser(request, uniqueName('Inviter'));
+  const bob = await createUser(request, uniqueName('Joiner'));
+  const auth = (u: typeof alice) => ({ 'X-User-Id': u.id, 'X-User-Password': u.password });
+  const gameId = await createGame(request, alice, uniqueName('Invited duel'));
+  const created = await request.post('/matches', {headers: auth(alice), data: {game_id: gameId}});
+  expect(created.ok()).toBeTruthy();
+  const match = await created.json();
+  await page.addInitScript(({first, second}) => {
+    if (window !== window.top) return;
+    localStorage.setItem('game-platform.accounts.v1', JSON.stringify([first, second].map(u => ({...u, linked: [], picture_url: ''}))));
+    localStorage.setItem('game-platform.current-account.v1', first.id);
+  }, {first: alice, second: bob});
+  await page.goto(`/r/80479#match=${match.id}`);
+  await expect(page.getByRole('button', {name: 'Start game', exact: true})).toBeVisible();
+  await page.evaluate((id) => { Auth.setCurrent(id); }, bob.id);
+  await expect(page).toHaveURL(new RegExp(`#match=${match.id}`));
+  await expect(page.getByRole('button', {name: 'Join', exact: true})).toBeVisible();
+  await page.getByRole('button', {name: 'Join', exact: true}).click();
+  await expect.poll(async () => (await (await request.get(`/matches/${match.id}`, {headers: auth(alice)})).json()).players.length).toBe(2);
+});
+
 test('two players in separate browsers: join an online match and see each other\'s moves', async ({ browser, request }) => {
   const alice = await createUser(request, uniqueName('Alice'));
   const bob = await createUser(request, uniqueName('Bob'));

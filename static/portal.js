@@ -1209,7 +1209,7 @@ function updateMatchSetup() {
   $("selected-game-name").textContent = (game && I18n.gameName(game.id, game.name)) || I18n.t("ui.games.choose", {}, "Choose a game");
   $("selected-game-description").textContent = (game && I18n.gameDescription(game.id, game.description)) || "";
   $("selected-game-mode").textContent = solo ? I18n.t("ui.games.solo_label", {}, "1 player · solo") : game ? I18n.t("ui.portal.mode_players", {counts: game.allowed_player_counts.join(", ")}, `${game.allowed_player_counts.join(", ")} players`) : "";
-  $("create-hint").textContent = solo ? I18n.t("ui.portal.hint_solo", {}, "Starts immediately. No opponent needed.") : game ? I18n.t("ui.portal.hint_create", {}, "Create a match, then invite friends or add computers in the lobby.") : state.games.length ? I18n.t("ui.portal.hint_choose", {}, "Choose a game from the search results to continue.") : I18n.t("ui.portal.hint_publish", {}, "Publish a game in the builder to make it available here.");
+  $("create-hint").textContent = solo ? I18n.t("ui.portal.hint_solo", {}, "Starts immediately. No opponent needed.") : game ? I18n.t("ui.portal.hint_invite_friends", {}, "Create a match, then invite friends to join.") : state.games.length ? I18n.t("ui.portal.hint_choose", {}, "Choose a game from the search results to continue.") : I18n.t("ui.portal.hint_publish", {}, "Publish a game in the builder to make it available here.");
 }
 
 function selectMatch(id) {
@@ -1612,7 +1612,7 @@ function renderMatch() {
       ? (seated === 1 ? I18n.t("ui.match.ready_one", {}, "Ready to start with 1 player.") : I18n.t("ui.match.ready_many", {count: seated}, `Ready to start with ${seated} players.`)) +
         " " + (isOwner ? I18n.t("ui.match.press_start", {}, "Press Start to play.") : ownerStarts)
       : I18n.t("ui.match.waiting_players_info", {seated, allowed}, `Waiting for players: ${seated} seated, this game plays with ${allowed}.`) +
-        " " + (isOwner ? I18n.t("ui.match.add_or_wait", {}, "Add computers or wait for others to join, then start.") : ownerStarts);
+        " " + (isOwner ? I18n.t("ui.match.wait_then_start", {}, "Invite others to join, then start.") : ownerStarts);
     if (latest && latest.version > match.game_version) {
       $("waiting").textContent += " " + I18n.t("ui.match.newer_version", {match_version: match.game_version, latest_version: latest.version},
         `This match uses version ${match.game_version}; the latest game is version ${latest.version}. Create a new match to use its updated rules.`);
@@ -2026,10 +2026,11 @@ async function main() {
   $("notify-toggle").addEventListener("click", toggleNotifications);
   document.addEventListener("i18n-changed", redrawAfterLanguageChange);
   document.addEventListener("auth-changed", () => {
+    const invitedMatch = new URLSearchParams(location.hash.slice(1)).get("match");
     renderPortalAccountMenu();
     state.armed = null;
     state.lastSent = null;
-    state.selectedId = null;
+    state.selectedId = me() && invitedMatch ? invitedMatch : null;
     state.match = null;
     state.myMatches = [];
     state.gameCache.clear();
@@ -2042,7 +2043,8 @@ async function main() {
     state.recentGamesRequestVersion += 1;
     frame.unload();
     state.loaded = null;
-    history.replaceState(null, "", state.detailGameId ? `#game=${encodeURIComponent(state.detailGameId)}` : "#");
+    if (!state.selectedId)
+      history.replaceState(null, "", state.detailGameId ? `#game=${encodeURIComponent(state.detailGameId)}` : "#");
     showMessage("");
     refresh();
     setupNotifications();
