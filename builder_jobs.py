@@ -148,19 +148,26 @@ def _regenerate_case(client, artifact, name, problem, prompt):
          'rules':prompt['artifacts']['logic'],'request':prompt['correction'],
          'validation_error':problem},ensure_ascii=False)}
     ]
-    for attempt in range(2):
+    # A reply that cannot be parsed (or hits the output limit) is a torn
+    # envelope, not a wrong case: re-roll it inside this job without
+    # spending one of the two content attempts, up to four rolls total.
+    content_failures = 0
+    rolls = 0
+    while True:
+        rolls += 1
         try:
             raw = client.chat(messages,max_tokens=8000,temperature=1.0,reasoning_effort='low')
             regenerated = parse_json(raw)
+        except (ValueError, ModelOutputLimitError) as exc:
+            issue = str(exc)
+        else:
             if isinstance(regenerated, dict) and regenerated.get('name') == name:
                 return regenerated
             issue = 'the reply was not the requested case'
-        except (ValueError, ModelOutputLimitError) as exc:
-            issue = str(exc)
-        if attempt:
+            content_failures += 1
+        if content_failures >= 2 or rolls >= 4:
             raise ValueError(f'Could not regenerate test case {name}: {issue}') from None
         messages.append({'role':'user','content':f'The previous reply failed ({issue}). Generate just this one complete case again, keeping the same name and kind. Address the validation error.'})
-    raise AssertionError('unreachable')
 
 
 def _standalone_svg(svg):
@@ -631,8 +638,15 @@ def propose_step(client, draft, step, correction, *, feedback=False):
                 # about the artifact: keep the real validation problem for
                 # the user-facing message and track the reply failure
                 # separately, instead of letting parse noise overwrite it.
+                # Torn envelopes (unparseable, or over the output limit)
+                # are re-rolled automatically inside this job — up to
+                # four rolls — without spending one of the two replies
+                # that are judged on content.
                 repair_issue = None
-                for attempt in range(2):
+                judged = 0
+                rolls = 0
+                while True:
+                    rolls += 1
                     try:
                         raw = client.chat(messages,max_tokens=12000,temperature=1.0,reasoning_effort='low')
                     except ModelOutputLimitError:
@@ -640,14 +654,17 @@ def propose_step(client, draft, step, correction, *, feedback=False):
                     else:
                         try:
                             fixed = parse_json(raw)
-                            validate_test_data(fixed)
-                            break
-                        except InvalidRequestError as error:
-                            problem = str(error)
-                            repair_issue = None
                         except ValueError as error:
                             repair_issue = f'the repair reply was not valid JSON ({error})'
-                    if attempt:
+                        else:
+                            judged += 1
+                            repair_issue = None
+                            try:
+                                validate_test_data(fixed)
+                                break
+                            except InvalidRequestError as error:
+                                problem = str(error)
+                    if judged >= 2 or rolls >= 4:
                         # This checkpoint can never be repaired by resuming
                         # it; discard it so a retry starts over instead of
                         # resuming a corpse.

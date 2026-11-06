@@ -841,6 +841,45 @@ def test_repair_parse_failure_reports_the_real_problem():
     assert message.index('Test names must be unique') < message.index('not valid JSON')
 
 
+def test_garbled_repair_replies_are_rerolled_inside_the_job():
+    # Torn envelopes must not reach the user: two unparseable repair
+    # replies are re-rolled automatically, the third (valid) one repairs
+    # the set, and the proposal completes in the same job.
+    import copy
+    from game_platform.builder_jobs import propose_step
+    draft = approved_draft()
+    contract = copy.deepcopy(draft.builder_workflow['artifacts']['tests']['value'])
+    cases = contract.pop('cases')
+    originals = {case['name']: case.pop('images') for case in cases}
+    outlines = [{k: c[k] for k in ('name', 'kind', 'description')} for c in cases]
+    duplicated = outlines + [dict(outlines[1])]
+    repairs = []
+    class Flaky:
+        def chat(self, messages, **options):
+            instruction = messages[0]['content']
+            if instruction.startswith('Plan the requested tests'):
+                return json.dumps(dict(contract, cases=duplicated, message='Review the examples'))
+            if instruction.startswith('Write only the single'):
+                name = json.loads(messages[1]['content'])['outline']['name']
+                return json.dumps(next(c for c in cases if c['name'] == name))
+            if instruction.startswith('Repair the specific'):
+                repairs.append(1)
+                if len(repairs) <= 2:
+                    return '{"broken":"'
+                return json.dumps(dict(contract, cases=cases))
+            if instruction.startswith('Illustrate only this one'):
+                name = json.loads(messages[1]['content'])['example']['name']
+                return json.dumps({'images': originals[name]})
+            raise AssertionError(instruction)
+        def checkpoint(self, key, progress):
+            pass
+    result = propose_step(Flaky(), draft, 'tests', 'Check these moves')
+    assert len(repairs) == 3
+    artifact = result.builder_workflow['artifacts']['tests']['value']
+    flow.validate_artifact('tests', artifact)
+    assert [c['name'] for c in artifact['cases']] == [c['name'] for c in cases]
+
+
 def test_unversioned_checkpoint_is_ignored():
     import copy
     from game_platform.builder_jobs import propose_step
