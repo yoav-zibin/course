@@ -381,9 +381,11 @@ class FirestoreStore(SavingStore):
         return self._client.collection(f"{self._prefix}{name}")
 
     def list_popular_game_ids(self, limit: int) -> list[tuple[str, int]]:
-        # Commit accepted starts before reading the ranking, including a start
-        # immediately followed by a return to the catalog.
-        self.flush()
+        # The ranking may lag the background writer by up to the save
+        # interval. It used to flush synchronously here so a start followed
+        # immediately by a return to the catalog would count, but a flush is
+        # a full snapshot + diff of the whole dataset: a hot read path must
+        # never pay it, let alone once per catalog view per client.
         with timed_external("firestore"):
             rows = list(self._collection("game_popularity").order_by(
                 "score", direction="DESCENDING"

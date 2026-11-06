@@ -200,6 +200,16 @@ class TooManyRequestsError(PlatformError):
 # Feedback: the text's length after trimming, and how many messages one person can
 # send in a rolling 24 hours (sending the same kind of feedback on the same target
 # again within 24 hours updates it instead), and how many the admin listing shows.
+# Computer-move chains hold the platform lock while they run. A chain may
+# spend at most this long per run (after a minimum burst of actions, so
+# short chains still finish synchronously) before it continues on a timer.
+_CHAIN_TIME_BUDGET_SECONDS: Final = 0.25
+_CHAIN_MIN_ACTIONS_PER_RUN: Final = 64
+# A chain killed by a game-call timeout is re-armed this many times (with
+# this delay) before the platform gives up on it until the next trigger.
+_CHAIN_TIMEOUT_RETRY_LIMIT: Final = 3
+_CHAIN_TIMEOUT_RETRY_DELAY_SECONDS: Final = 5.0
+
 FEEDBACK_TEXT_MIN: Final = 5
 FEEDBACK_TEXT_MAX: Final = 1000
 FEEDBACK_PER_DAY: Final = 20
@@ -519,6 +529,15 @@ class GamePlatform:
         # One QuickJS runner per game version; versions are immutable, so a
         # cached runner's code can never go stale.
         self._logic_cache: dict[tuple[str, int], GameLogic] = {}
+        # viewFor results by (match id, caller): match records are immutable
+        # and replaced wholesale on every change, so a cached view stays
+        # valid exactly while the same Match object is current. The entry
+        # holds the object itself, both as the validity check and to keep
+        # its identity from being recycled while the entry lives.
+        self._view_cache: dict[tuple[str, str | None], tuple[Match, JsonValue]] = {}
+        # Consecutive computer-chain timeouts per match, so a stalled chain
+        # is re-armed a bounded number of times instead of dying silently.
+        self._chain_timeout_retries: dict[str, int] = {}
         self._verifications: dict[str, _Verification] = {}
         self._verification_starts: dict[str, list[dt.datetime]] = {}
         # Each public method is a read-modify-write on the store; the server handles
@@ -3680,6 +3699,12 @@ class GamePlatform:
             current = match
             # Games could in principle pass the turn between computers
             # forever; the cap keeps a broken game from wedging the server.
+            # The chain also holds the platform lock the whole time, so it
+            # is bounded by time as well: past a minimum burst of actions, a
+            # chain that has held the lock longer than the budget continues
+            # on a timer instead of starving every other request.
+            started = time.perf_counter()
+            actions = 0
             for _ in range(1 if getattr(self._store, "scalable", False) else 1000):
                 if (
                     current.status != "ongoing"
@@ -3694,6 +3719,11 @@ class GamePlatform:
                 ]
                 if not computer_seats:
                     return
+                if (
+                    actions >= _CHAIN_MIN_ACTIONS_PER_RUN
+                    and time.perf_counter() - started > _CHAIN_TIME_BUDGET_SECONDS
+                ):
+                    break
                 seat = computer_seats[0]
                 player_id = current.player_id_of(seat)
                 try:
@@ -3715,8 +3745,19 @@ class GamePlatform:
                         match=current, args=(current.state, player_id, move),
                     )
                     return
-                except PlatformError:
+                except PlatformError as error:
                     # Already recorded by _call_logic; leave the match as is.
+                    # A timeout can be transient load, though: re-arm the
+                    # chain a bounded number of times instead of leaving the
+                    # match stuck on the computer's turn until a restart.
+                    if isinstance(error.__cause__, GameLogicTimeout):
+                        retries = self._chain_timeout_retries.get(match_id, 0) + 1
+                        if retries <= _CHAIN_TIMEOUT_RETRY_LIMIT:
+                            self._chain_timeout_retries[match_id] = retries
+                            self._schedule_chain_continuation(
+                                match_id,
+                                delay_seconds=_CHAIN_TIMEOUT_RETRY_DELAY_SECONDS,
+                            )
                     return
                 before = current
                 current = self._apply_logic_result(
@@ -3729,6 +3770,37 @@ class GamePlatform:
                 self._notify_after_move(
                     before=before, saved=current, mover_user_id=""
                 )
+                actions += 1
+                self._chain_timeout_retries.pop(match_id, None)
+            # The loop stopped (time budget or action cap) while a computer
+            # may still hold the turn: continue on a timer, with the lock
+            # released in between.
+            if (
+                current.status == "ongoing"
+                and current.turn_of_player_indices
+                and any(
+                    current.seats[index].kind == "computer"
+                    for index in current.turn_of_player_indices
+                )
+            ):
+                self._schedule_chain_continuation(match_id)
+
+    def _schedule_chain_continuation(
+        self, match_id: str, *, delay_seconds: float | None = None
+    ) -> None:
+        """Runs the next slice of a computer-move chain on a timer. Always a
+        timer, even when the configured move delay is zero: the point is to
+        release the platform lock between slices, not to pace the game."""
+        delay = (
+            self._computer_move_delay_seconds
+            if delay_seconds is None
+            else delay_seconds
+        )
+        timer = threading.Timer(
+            max(delay, 0.02), self._run_computer_moves, args=(match_id,)
+        )
+        timer.daemon = True
+        timer.start()
 
     def view_state(self, match: Match, caller_id: str | None) -> JsonValue:
         """The state a caller may see of a match: for a v2 game, the game's
@@ -3745,8 +3817,18 @@ class GamePlatform:
             # The game owner (when not playing) sees the full state: it is
             # their game to debug. Anyone else without a seat sees nothing.
             return match.state if caller_id == game.owner_user_id else None
+        # viewFor is deterministic for a given match record (its seed is
+        # derived from the record, and game code must not depend on the
+        # wall clock), and every poll of every player used to pay a full
+        # QuickJS call for the same result. Serve repeats from the cache
+        # while this exact record is current; any change replaces the
+        # record and misses.
+        key = (match.id, caller_id)
+        cached = self._view_cache.get(key)
+        if cached is not None and cached[0] is match:
+            return cached[1]
         try:
-            return self._logic_for(game).call(
+            view = self._logic_for(game).call(
                 "viewFor",
                 match.state,
                 match.player_id_of(seat),
@@ -3760,6 +3842,10 @@ class GamePlatform:
                 match=match, args=(match.state, match.player_id_of(seat)),
             )
             return None
+        if len(self._view_cache) > 1024:
+            self._view_cache.clear()
+        self._view_cache[key] = (match, view)
+        return view
 
     def start_match(
         self,
