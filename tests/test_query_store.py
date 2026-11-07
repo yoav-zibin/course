@@ -1493,12 +1493,16 @@ def test_agent_import_roundtrips_query_store(store):
     from game_platform.tests.test_agent_import import payload
     api = api_for(store)
     owner = api.new_user('Agent import owner')
-    response = api.request('POST', '/agent/games', as_user=owner, json=payload())
+    body = payload()
+    response = api.request('POST', '/agent/games', as_user=owner, json=body)
     assert response.status_code == 201, response.text
-    draft = response.json()
+    game = response.json()
+    assert game['published'] is True
     restarted = QueryStore(store.client, namespace=store.namespace)
-    saved = restarted.get_game_draft(draft['id'])
+    saved = restarted.get_game(game['id'])
+    assert saved is not None
     assert saved.owner_user_id == owner
-    assert saved.builder_workflow == draft['builder_workflow']
-    assert saved.code == payload()['client_code']
-    assert restarted.get_game(saved.id) is None
+    assert saved.code == body['client_code']
+    assert saved.published is True
+    assert saved.builder_workflow is not None
+    assert saved.builder_workflow['translations']['es']['display_name'] == body['translations']['es']['display_name']
