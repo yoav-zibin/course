@@ -87,6 +87,18 @@ function setup({
       opts.body ? JSON.parse(opts.body) : undefined,
       opts.headers || {},
     ]);
+    if (url.startsWith("/batch?")) {
+      // portalTransport batches GETs: answer each sub-request in turn.
+      const requests = JSON.parse(
+        new URL(url, "http://test").searchParams.get("requests"),
+      );
+      const results = requests.map(({ path }) =>
+        path === "/push/config"
+          ? { status: 200, body: config }
+          : { status: 200, body: {} },
+      );
+      return { ok: true, text: async () => JSON.stringify(results) };
+    }
     if (url === "/push/config")
       return { ok: true, text: async () => JSON.stringify(config) };
     return { ok: true, text: async () => "{}" };

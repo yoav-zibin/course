@@ -40,6 +40,8 @@ from game_platform.schemas import (
     AgentChatRequest,
     AgentConversationOut,
     AgentMessage,
+    BatchSubRequest,
+    BatchSubResponse,
     RefactorAllGamesRequest,
     RefactorGameResultOut,
     RefactorJobOut,
@@ -196,6 +198,114 @@ def health(platform: Platform, request: Request, response: Response) -> HealthOu
         uptime_seconds=int(time.monotonic() - request.app.state.started_at),
         storage=error or "ok",
     )
+
+
+# Batched reads
+
+MAX_BATCH_REQUESTS: Final = 50
+
+# Headers a sub-request inherits from the /batch call, so it behaves as if the
+# caller had made it directly (auth, campaign, language). Hop-by-hop and
+# content headers are not forwarded: a sub-request is always a GET with no body.
+_BATCH_FORWARDED_HEADERS: Final = (
+    "x-user-id",
+    "x-user-password",
+    "x-campaign-code",
+    "accept-language",
+)
+
+
+async def _dispatch_batch_item(request: Request, item: object) -> BatchSubResponse:
+    """Runs one batched GET through the app itself, so it gets the same routing,
+    auth and error handling as a direct call, and returns its status and JSON
+    body. A malformed item, a non-GET method or a /batch path is reported as a
+    400 for that item alone, never for the whole batch."""
+    if isinstance(item, str):
+        method, path = "GET", item
+    elif isinstance(item, dict):
+        try:
+            parsed = BatchSubRequest.model_validate(item)
+        except ValueError:
+            return BatchSubResponse(status=HTTPStatus.BAD_REQUEST, body={"detail": "each request must be an object with a path"})
+        method, path = parsed.method, parsed.path
+    else:
+        return BatchSubResponse(status=HTTPStatus.BAD_REQUEST, body={"detail": "each request must be an object or a path string"})
+    if method != "GET":
+        return BatchSubResponse(status=HTTPStatus.BAD_REQUEST, body={"detail": "only GET requests can be batched"})
+    if not isinstance(path, str) or not path.startswith("/"):
+        return BatchSubResponse(status=HTTPStatus.BAD_REQUEST, body={"detail": "path must start with /"})
+    split = urlsplit(path)
+    if split.path == "/batch":
+        return BatchSubResponse(status=HTTPStatus.BAD_REQUEST, body={"detail": "cannot batch /batch"})
+    headers = [
+        (name.encode(), request.headers[name].encode())
+        for name in _BATCH_FORWARDED_HEADERS
+        if name in request.headers
+    ]
+    scope: Scope = {
+        "type": "http",
+        "http_version": request.scope.get("http_version", "1.1"),
+        "method": "GET",
+        "scheme": request.url.scheme,
+        "path": split.path,
+        "raw_path": split.path.encode(),
+        "query_string": split.query.encode(),
+        "root_path": "",
+        "headers": headers,
+        "client": request.client,
+        "server": request.scope.get("server"),
+        "state": {},
+        "app": request.app,
+    }
+    sent_body = False
+
+    async def receive() -> Message:
+        nonlocal sent_body
+        if not sent_body:
+            sent_body = True
+            return {"type": "http.request", "body": b"", "more_body": False}
+        return {"type": "http.disconnect"}
+
+    status = HTTPStatus.INTERNAL_SERVER_ERROR
+    chunks: list[bytes] = []
+
+    async def send(message: Message) -> None:
+        nonlocal status
+        if message["type"] == "http.response.start":
+            status = message["status"]
+        elif message["type"] == "http.response.body":
+            chunks.append(message.get("body", b""))
+
+    await request.app(scope, receive, send)
+    raw = b"".join(chunks)
+    if not raw:
+        return BatchSubResponse(status=status, body=None)
+    try:
+        body = json.loads(raw)
+    except json.JSONDecodeError:
+        body = raw.decode("utf-8", "replace")
+    return BatchSubResponse(status=status, body=body)
+
+
+@router.get("/batch")
+async def batch_gets(request: Request, requests: str) -> list[BatchSubResponse]:
+    """Runs several GET requests in one call and returns their statuses and JSON
+    bodies in request order. [requests] is a JSON array in the query string,
+    each item an object {"method": "GET", "path": "/games"} or a bare path
+    string. A sub-request that fails (unknown id, not found, not authorized)
+    reports its own status and error body; it never fails the whole batch.
+    At most 50 requests per call."""
+    try:
+        items = json.loads(requests)
+    except json.JSONDecodeError:
+        raise HTTPException(HTTPStatus.BAD_REQUEST, "requests must be a JSON array") from None
+    if not isinstance(items, list):
+        raise HTTPException(HTTPStatus.BAD_REQUEST, "requests must be a JSON array") from None
+    if len(items) > MAX_BATCH_REQUESTS:
+        raise HTTPException(
+            HTTPStatus.BAD_REQUEST, f"at most {MAX_BATCH_REQUESTS} requests per batch"
+        )
+    return [await _dispatch_batch_item(request, item) for item in items]
 
 
 # Browser error reports

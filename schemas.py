@@ -1522,6 +1522,22 @@ class HealthOut(BaseModel):
     storage: str
 
 
+class BatchSubRequest(_Request):
+    """One GET request inside a /batch call: the method (always GET) and the path,
+    including any query string. A bare path string is also accepted."""
+
+    method: str = "GET"
+    path: str
+
+
+class BatchSubResponse(BaseModel):
+    """One sub-request's result, in the same order as the request: its HTTP status
+    and its JSON body (null when the response had no body)."""
+
+    status: int
+    body: JsonValue | None = None
+
+
 class GameStringsOut(BaseModel):
     """A game version's texts in one language. A game shows its own texts where there is
     no translation, so every text is always present."""

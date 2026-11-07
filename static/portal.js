@@ -10,7 +10,7 @@
 const $ = (id) => document.getElementById(id);
 const POLL_MS = 2000;
 const MATCH_POLL_MS = 1000;
-async function portalTransport(method, path, { body, user, requestId } = {}) {
+async function portalFetch(method, path, { body, user, requestId } = {}) {
   const controller = new AbortController(),
     timer = setTimeout(() => controller.abort(), 20000);
   try {
@@ -43,6 +43,65 @@ async function portalTransport(method, path, { body, user, requestId } = {}) {
   } finally {
     clearTimeout(timer);
   }
+}
+// Batched reads: GETs queue up and, 100ms after the last one arrives, go out as
+// a single /batch call; the responses are split back to the original callers.
+// A request that arrives while a batch is in flight starts the next batch, so
+// batches are at least 100ms apart. Queues are per user, so one batch never
+// mixes credentials. Only plain GETs are batched; anything with a body or an
+// idempotency key (a write) goes straight out, and the /batch call itself uses
+// portalFetch so it never re-enters the queue.
+const BATCH_WAIT_MS = 100;
+const batchQueues = new Map();
+function enqueueBatchGet(path, user) {
+  const key = user ? user.id : "anonymous";
+  let queue = batchQueues.get(key);
+  if (!queue) {
+    queue = { items: [], user, timer: null };
+    batchQueues.set(key, queue);
+  }
+  return new Promise((resolve, reject) => {
+    queue.items.push({ path, resolve, reject });
+    clearTimeout(queue.timer);
+    queue.timer = setTimeout(() => flushBatch(key), BATCH_WAIT_MS);
+  });
+}
+async function flushBatch(key) {
+  const queue = batchQueues.get(key);
+  if (!queue || !queue.items.length) return;
+  batchQueues.delete(key);
+  const items = queue.items;
+  const requests = items.map(({ path }) => ({ method: "GET", path }));
+  let results;
+  try {
+    results = await portalFetch(
+      "GET",
+      `/batch?requests=${encodeURIComponent(JSON.stringify(requests))}`,
+      { user: queue.user },
+    );
+  } catch (error) {
+    // The batch call itself failed: every queued request fails the same way,
+    // and PortalOffline falls back to its saved copy for each of them.
+    for (const item of items) item.reject(error);
+    return;
+  }
+  for (let i = 0; i < items.length; i++) {
+    const result = Array.isArray(results) ? results[i] : null;
+    if (!result || typeof result.status !== "number") {
+      items[i].reject(new Error(I18n.t("ui.error.invalid_response", {}, "Invalid server response")));
+      continue;
+    }
+    if (result.status >= 200 && result.status < 300) items[i].resolve(result.body);
+    else
+      items[i].reject(
+        new ApiError(result.status, result.body?.detail || String(result.status)),
+      );
+  }
+}
+async function portalTransport(method, path, { body, user, requestId } = {}) {
+  if (method === "GET" && body === undefined && !requestId)
+    return enqueueBatchGet(path, user);
+  return portalFetch(method, path, { body, user, requestId });
 }
 // Browsers that deny storage entirely (private mode, blocked cookies)
 // must not brick the portal: PortalOffline falls back to an in-memory
