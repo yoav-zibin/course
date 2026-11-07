@@ -37,7 +37,7 @@ function labelSvg(label: string) {
       `<text x="30" y="60" fill="#182140" font-size="28">${label}</text></svg>`,
   };
 }
-function caseImages(prefix: string) {
+export function caseImages(prefix: string) {
   return ['Alice', 'spectator', 'Alice after', 'spectator after'].map((who) =>
     labelSvg(`${prefix}: ${who}`),
   );
@@ -52,7 +52,7 @@ function viewOf(board: string[], winner: number | null = null, draw = false) {
   return { board, winner, draw, line };
 }
 
-function testCtx(seed: number) {
+export function testCtx(seed: number) {
   return {
     players: [
       { id: 'u1', kind: 'human', display_name: 'Alice', picture_url: '', max_loss: 0 },
@@ -64,11 +64,79 @@ function testCtx(seed: number) {
   };
 }
 
-/** Publishes the real (server-side) tic-tac-toe game owned by [owner]. Returns its id.
- * Games are created only through POST /agent/games (there is no POST /games), so this
- * builds the full import payload: schemas + 3 unit-test cases + tutorial + images +
- * translations for all 7 non-English languages (prefixed with the locale tag, the same
- * trick the Python agent-import tests use). */
+export interface ImportGameOptions {
+  name: string;
+  description: string;
+  allowedPlayerCounts: number[];
+  allowsLeaveMidMatch?: boolean;
+  allowsJoinMidMatch?: boolean;
+  clientCode: string;
+  serverCode: string;
+  rules: string;
+  uiInstructions: string;
+  tutorialText: string;
+  tutorialHtml: string;
+  tutorialVocab: string[];
+  clientStrings: Record<string, string>;
+  schemas: { state: unknown; move: unknown; view: unknown };
+  cases: unknown[];
+}
+
+/** Publishes a game owned by [owner] through POST /agent/games (the only way to
+ * create a game — there is no POST /games). Builds the full import payload: schemas +
+ * unit-test cases + tutorial + images + translations for all 7 non-English languages
+ * (prefixed with the locale tag, the same trick the Python agent-import tests use). */
+export async function importGame(
+  request: APIRequestContext,
+  owner: Account,
+  opts: ImportGameOptions,
+): Promise<string> {
+  const translations: Record<string, unknown> = {};
+  for (const loc of ['es', 'fr', 'de', 'pt', 'zh', 'hi', 'ar']) {
+    const tag = `[${loc}] `;
+    translations[loc] = {
+      display_name: tag + opts.name,
+      short_description: tag + opts.description,
+      game_logic_rules: tag + opts.rules,
+      game_ui_rules: tag + opts.uiInstructions,
+      tutorial_strings: Object.fromEntries(opts.tutorialVocab.map((s) => [s, tag + s])),
+      client_strings: Object.fromEntries(Object.entries(opts.clientStrings).map(([k, v]) => [k, tag + v])),
+    };
+  }
+  const res = await request.post('/agent/games', {
+    headers: { 'X-User-Id': owner.id, 'X-User-Password': owner.password },
+    data: {
+      name: opts.name,
+      description: opts.description,
+      allowed_player_counts: opts.allowedPlayerCounts,
+      allows_leave_mid_match: opts.allowsLeaveMidMatch ?? false,
+      allows_join_mid_match: opts.allowsJoinMidMatch ?? false,
+      client_code: opts.clientCode,
+      server_code: opts.serverCode,
+      rules: opts.rules,
+      ui_instructions: opts.uiInstructions,
+      tutorial: { text: opts.tutorialText, html: opts.tutorialHtml },
+      images: [
+        { caption: opts.name, svg: COVER_SVG },
+        labelSvg('Board'),
+        labelSvg('A win'),
+        labelSvg('A draw'),
+      ],
+      unit_tests: {
+        state_schema: opts.schemas.state,
+        move_schema: opts.schemas.move,
+        view_schema: opts.schemas.view,
+        cases: opts.cases,
+      },
+      translations,
+      game_addition_request_id_and_secret: `e2e-${Date.now()}-${Math.floor(Math.random() * 1e9)}-secret`,
+    },
+  });
+  expect(res.ok(), await res.text()).toBeTruthy();
+  return (await res.json()).id;
+}
+
+/** Publishes the real (server-side) tic-tac-toe game owned by [owner]. Returns its id. */
 export async function createGame(request: APIRequestContext, owner: Account, name: string): Promise<string> {
   const rules =
     'Two players take turns placing X and O on a 3x3 board. ' +
@@ -136,47 +204,21 @@ export async function createGame(request: APIRequestContext, owner: Account, nam
       images: caseImages('Terminal move'),
     },
   ];
-  const translations: Record<string, unknown> = {};
-  for (const loc of ['es', 'fr', 'de', 'pt', 'zh', 'hi', 'ar']) {
-    const tag = `[${loc}] `;
-    translations[loc] = {
-      display_name: tag + name,
-      short_description: tag + 'UI test game',
-      game_logic_rules: tag + rules,
-      game_ui_rules: tag + ui,
-      tutorial_strings: Object.fromEntries(tutorialVocab.map((s) => [s, tag + s])),
-      client_strings: Object.fromEntries(Object.entries(strings).map(([k, v]) => [k, tag + v])),
-    };
-  }
-  const res = await request.post('/agent/games', {
-    headers: { 'X-User-Id': owner.id, 'X-User-Password': owner.password },
-    data: {
-      name,
-      description: 'UI test game',
-      allowed_player_counts: [2],
-      client_code: TICTACTOE,
-      server_code: TICTACTOE_SERVER,
-      rules,
-      ui_instructions: ui,
-      tutorial: { text: tutorialText, html: tutorialHtml },
-      images: [
-        { caption: 'Tic-tac-toe', svg: COVER_SVG },
-        labelSvg('Board'),
-        labelSvg('X wins'),
-        labelSvg('Draw'),
-      ],
-      unit_tests: {
-        state_schema: TICTACTOE_SCHEMAS.state,
-        move_schema: TICTACTOE_SCHEMAS.move,
-        view_schema: TICTACTOE_SCHEMAS.view,
-        cases,
-      },
-      translations,
-      game_addition_request_id_and_secret: `e2e-${Date.now()}-${Math.floor(Math.random() * 1e9)}-secret`,
-    },
+  return importGame(request, owner, {
+    name,
+    description: 'UI test game',
+    allowedPlayerCounts: [2],
+    clientCode: TICTACTOE,
+    serverCode: TICTACTOE_SERVER,
+    rules,
+    uiInstructions: ui,
+    tutorialText,
+    tutorialHtml,
+    tutorialVocab,
+    clientStrings: strings,
+    schemas: TICTACTOE_SCHEMAS,
+    cases,
   });
-  expect(res.ok(), await res.text()).toBeTruthy();
-  return (await res.json()).id;
 }
 
 /** Pretends the browser already logged in as [user], as the site itself stores it. */
