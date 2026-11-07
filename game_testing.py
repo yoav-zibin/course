@@ -22,6 +22,7 @@ reported as too slow.
 See docs/server-side-game-api.md (the Testing section).
 """
 
+import json
 import random
 import time
 from collections import defaultdict
@@ -69,7 +70,10 @@ class TestFailure:
     """One distinct way the game failed its tests, with everything the
     author (or the AI fix loop) needs to reproduce it: the walk's seed
     replays the whole walk, and [state] / [player_id] / [move] are the
-    exact arguments of the failing call."""
+    exact arguments of the failing call. [ctx] is the platform context
+    at the time, [arguments] the exact arguments passed, [result] what
+    the call returned (when it returned one), and [duration_ms] /
+    [memory_used_bytes] what the call cost against its limits."""
 
     function: str
     message: str
@@ -83,6 +87,15 @@ class TestFailure:
     move: JsonValue = None
     # The last few moves of the walk, oldest first, as {"player_id", "move"}.
     last_moves: tuple[JsonValue, ...] = ()
+    # Reproduction detail: the ctx, the exact arguments, what the call
+    # returned, and what it cost.
+    ctx: JsonValue = None
+    arguments: JsonValue = None
+    result: JsonValue = None
+    duration_ms: float = 0.0
+    memory_used_bytes: int = 0
+    time_limit_seconds: float = 0.0
+    memory_limit_bytes: int = 0
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -185,6 +198,47 @@ def test_server_code(
         failures=tuple(failures),
         failed_seeds=tuple(failed_seeds),
     )
+
+
+def format_failure(failure: TestFailure) -> str:
+    """Renders one failure as a reproduction report: what failed, the
+    exact call (function, ctx, arguments), what it returned, what it
+    cost against its limits, and the seed that replays the walk."""
+    lines = [f"{failure.function}: {failure.message}"]
+    lines.append(
+        f"  seed {failure.seed} (replay the walk with this seed), "
+        f"{failure.player_count} players, move {failure.move_number}"
+    )
+    if failure.ctx is not None:
+        lines.append(f"  ctx: {json.dumps(failure.ctx, sort_keys=True)}")
+    if failure.arguments is not None:
+        lines.append(f"  arguments: {json.dumps(failure.arguments, sort_keys=True)}")
+    if failure.result is not None:
+        lines.append(f"  result: {json.dumps(failure.result, sort_keys=True)}")
+    if failure.time_limit_seconds or failure.memory_limit_bytes:
+        lines.append(
+            f"  took {failure.duration_ms:.1f} ms "
+            f"(limit {failure.time_limit_seconds * 1000:.0f} ms), "
+            f"memory {failure.memory_used_bytes} bytes "
+            f"(limit {failure.memory_limit_bytes} bytes)"
+        )
+    if failure.last_moves:
+        lines.append(
+            "  last moves: "
+            + json.dumps(list(failure.last_moves), sort_keys=True)
+        )
+    return "\n".join(lines)
+
+
+def format_report(report: "GameTestReport") -> str:
+    """Renders a whole test report's failures as reproduction reports,
+    one per distinct failure, plus the walk/move totals."""
+    parts = [
+        f"{report.walks_completed} walks, {report.moves_made} moves"
+        + (", too slow" if report.too_slow else "")
+    ]
+    parts.extend(format_failure(failure) for failure in report.failures)
+    return "\n".join(parts)
 
 
 def infer_game_schemas(
@@ -383,7 +437,15 @@ class _Walk:
         state: JsonValue = None,
         player_id: str | None = None,
         move: JsonValue = None,
+        arguments: JsonValue = None,
+        result: JsonValue = None,
+        ctx: JsonValue = None,
     ) -> None:
+        """Records a failure with everything needed to reproduce it: the
+        walk's seed, the ctx, the exact arguments, what the call returned
+        (when it returned one), and what the call cost against its limits.
+        Duration/memory come from the last QuickJS call the logic ran."""
+        logic = self._logic
         self.failures.append(
             TestFailure(
                 function=function,
@@ -395,6 +457,13 @@ class _Walk:
                 player_id=player_id,
                 move=move,
                 last_moves=tuple(self._last_moves[-5:]),
+                ctx=ctx if ctx is not None else self._ctx(),
+                arguments=arguments,
+                result=result if result is not None else logic.last_call_result,
+                duration_ms=round(logic.last_call_duration_seconds * 1000, 1),
+                memory_used_bytes=logic.last_call_memory_used_bytes,
+                time_limit_seconds=logic.last_call_time_limit_seconds,
+                memory_limit_bytes=logic.last_call_memory_limit_bytes,
             )
         )
 
@@ -417,7 +486,8 @@ class _Walk:
             return True, result
         except (GameLogicError, InvalidMoveError) as error:
             self._fail(
-                function, str(error), state=state, player_id=player_id, move=move
+                function, str(error), state=state, player_id=player_id, move=move,
+                arguments=list(args),
             )
             return False, None
 
@@ -447,6 +517,8 @@ class _Walk:
                 f"non-deterministic: the first call succeeded but the "
                 f"identical re-run failed: {error}",
                 state=state,
+                arguments=list(args),
+                result=result,
             )
             return False
         if again != result:
@@ -455,6 +527,8 @@ class _Walk:
                 "non-deterministic: two identical calls returned "
                 "different results",
                 state=state,
+                arguments=list(args),
+                result=result,
             )
             return False
         return True
@@ -534,7 +608,9 @@ class _Walk:
                                      time_limit_seconds=_PLAYER_LEFT_TIME_LIMIT_SECONDS)
         if not ok or again != result:
             if ok:
-                self._fail("playerLeft", "non-deterministic leave result", state=state)
+                self._fail("playerLeft", "non-deterministic leave result", state=state,
+                           player_id=leaver["id"], arguments=[state, leaver["id"]],
+                           result=result)
             return True, state, None
         self._pot -= sum((result.get("payouts") or {}).values())
         leaver["active"] = False
@@ -609,6 +685,7 @@ class _Walk:
                 state=state,
                 player_id=mover,
                 move=move,
+                arguments=[state, mover, move],
             )
             return False, state, turn
         except GameLogicError as error:
@@ -618,6 +695,7 @@ class _Walk:
                 state=state,
                 player_id=mover,
                 move=move,
+                arguments=[state, mover, move],
             )
             return False, state, turn
         if self._sample_observer is not None:
@@ -651,6 +729,7 @@ class _Walk:
                     state=state,
                     player_id=mover,
                     move=move,
+                    arguments=[state, mover, move],
                 )
                 return False
         return True

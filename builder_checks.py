@@ -94,6 +94,7 @@ def localization(code, server, spec, rules):
 
 
 def random_walks(code, server, spec, rules):
+    from game_platform.game_testing import format_report
     test_schemas = spec['tests']
     game_schemas = {
         'state': test_schemas['state_schema'],
@@ -108,7 +109,7 @@ def random_walks(code, server, spec, rules):
         budget_seconds=3,
         max_walks=1000,
     )
-    return {'passed': report.passed, 'details': str(report.failures)}
+    return {'passed': report.passed, 'details': format_report(report)}
 
 
 CHECKS = (('approved_examples', examples), ('settlement_probes', settlement_probes), ('move_agreement', move_agreement), ('localization', localization), ('random_walks', random_walks))

@@ -237,6 +237,46 @@ def test_reject_translation_with_changed_placeholder(api):
     assert_no_games(api)
 
 
+def test_failed_verification_reports_how_to_reproduce_it_and_inserts_nothing(api):
+    """A game whose server code fails verification is refused with a 422
+    that says how to reproduce the failure (seed, ctx, exact arguments,
+    result, time and memory), and nothing is inserted."""
+    owner = api.new_user('Owner'); body = payload()
+    # The counter game, but applyMove returns a turn naming a player who
+    # is not in the match: the approved examples and the random walks both
+    # fail, and the walks report the exact call that broke.
+    body['server_code'] = (
+        "const game={newMatch(ctx){return {state:{n:0},turn:[ctx.players[0].id]};},"
+        "applyMove(state,id,move,ctx){if(move.add!==1)throw new InvalidMove('Add one');"
+        "const n=state.n+1;return n>=3?{state:{n},turn:null,"
+        "payouts:Object.fromEntries(ctx.players.filter(p=>p.kind==='human').map(p=>[p.id,ctx.pot]))}"
+        ":{state:{n},turn:['ghost-player']};},"
+        "viewFor(state,id,ctx){return {n:state.n};},"
+        "computerMove(){return {add:1}},randomMove(){return {add:1}}};"
+    )
+    response = api.request('POST', '/agent/games', as_user=owner, json=body)
+    assert response.status_code == 422
+    detail = response.json()['detail']
+    assert 'Game verification failed' in detail
+    assert 'seed' in detail and 'ctx:' in detail and 'arguments:' in detail
+    assert 'took' in detail and 'memory' in detail
+    assert 'ghost-player' in detail
+    assert_no_games(api)
+
+
+def test_reject_test_case_roster_outside_allowed_player_counts(api):
+    """A unit test whose ctx roster is not one of the allowed player
+    counts is rejected: a human plus a computer is two seats."""
+    owner = api.new_user('Owner'); body = payload()
+    case = body['unit_tests']['cases'][0]
+    case['ctx']['players'].append(
+        {"id": "u2", "kind": "computer", "max_loss": 0})
+    response = api.request('POST', '/agent/games', as_user=owner, json=body)
+    assert response.status_code == 422
+    assert 'roster' in response.json()['detail'].lower()
+    assert_no_games(api)
+
+
 def test_streaming_limit_and_media_types(api):
     owner = api.new_user('Owner')
     headers = {'X-User-Id': owner, 'X-User-Password': api.passwords_by_user_id[owner]}

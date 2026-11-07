@@ -167,10 +167,23 @@ def prepare(body):
     if len(json.dumps(stored_content).encode()) > MAX_BODY_BYTES:
         raise InvalidRequestError('Stored game package exceeds 900000 bytes; reduce code or schemas')
     from game_platform.builder_checks import run_checks
+    # Every test case's roster must be a seat count the rules allow; a
+    # human plus a computer is two seats, so a one-seat roster can never
+    # take turns correctly.
+    flow.validate_test_rosters(workflow, body.unit_tests)
     checks = run_checks(body.client_code, body.server_code, values, body.game_rules())
     failed = [name for name, result in checks.items() if not result['passed']]
     if failed:
-        raise InvalidRequestError('Game verification failed: ' + ', '.join(failed))
+        # Say exactly what failed and how to reproduce it, not just which
+        # check: the game is not inserted, and the author needs the seed,
+        # the ctx, the arguments, the result and the cost to fix it.
+        detail_lines = []
+        for name in failed:
+            detail_lines.append(f"[{name}]")
+            detail_lines.append(str(checks[name]['details']))
+        raise InvalidRequestError(
+            'Game verification failed:\n' + '\n'.join(detail_lines)
+        )
     # No approval digests, build status or publication claims are trusted.
     return workflow
 

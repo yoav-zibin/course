@@ -118,6 +118,29 @@ def test_a_crashing_apply_move_fails_with_a_usable_report():
     assert failure.move == {"add": 1}
     assert failure.player_id is not None
     assert failure.seed in report.failed_seeds
+    # Reproduction detail: the ctx, the exact arguments, what the call
+    # cost against its limits.
+    assert failure.ctx is not None
+    assert failure.ctx["players"] and failure.ctx["pot"] >= 0
+    assert failure.arguments is not None
+    assert failure.arguments[0] == {"count": 0}
+    assert failure.duration_ms >= 0
+    assert failure.memory_used_bytes > 0
+    assert failure.time_limit_seconds == 0.1
+    assert failure.memory_limit_bytes == 64 * 1024 * 1024
+
+
+def test_a_failure_report_names_the_call_cost_and_replays():
+    from game_platform.game_testing import format_failure, format_report
+    report = run_game_tests(CRASH_GAME, rules=RULES, run_seed=7)
+    assert not report.passed
+    (failure,) = report.failures
+    text = format_failure(failure)
+    assert f"seed {failure.seed}" in text
+    assert "ctx:" in text and "arguments:" in text
+    assert "took" in text and "memory" in text
+    assert "last moves" in text or "move" in text
+    assert "walks" in format_report(report)
 
 
 def test_a_generated_move_the_game_itself_rejects_fails():

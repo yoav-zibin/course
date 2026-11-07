@@ -68,6 +68,90 @@ and `builder_flow.validate_artifact` for the authoritative detailed contracts.
 `examples/agent-game.json` is a runnable counter-game request example.
 Its test images are schematic illustrations, not captured gameplay screenshots.
 
+## What the endpoint validates
+
+Every check below runs before any write: a failure returns 422 and nothing
+is inserted. The checks, in order:
+
+1. **Request shape.** `Content-Type: application/json`, no content encoding,
+   `Content-Length` ≤ 900,000 bytes, 15 s upload deadline, at most 2
+   concurrent validations (429 + `Retry-After: 15` when busy).
+2. **Payload schema.** Strict pydantic model (`extra='forbid'`): `name`
+   1–200 chars, `description` 1–2000, `rules`/`ui_instructions` 1–20000,
+   `language` one of the 8 supported locales, `allowed_player_counts`
+   unique integers 1–10, each code field 1–200,000 chars, 4–6 images,
+   `game_addition_request_id_and_secret` 16–200 chars when present.
+3. **Translations — all 8 languages.** `translations` must cover exactly the
+   7 languages other than the game's own language. Each entry is checked for
+   exact key coverage of the client string table and the tutorial vocabulary,
+   non-empty values, and exact `{placeholder}` preservation for
+   `display_name`, `short_description`, `game_logic_rules`,
+   `game_ui_rules`, tutorial strings and client strings. The source
+   language's entry is synthesized server-side, so the published game
+   carries translations for all 8 languages (en, es, fr, de, pt, zh, hi,
+   ar). The supplied translations are seeded into the portal bundle, so the
+   game shows translated from the first request.
+4. **Artifact validation (all 7 steps).** The understanding, identity, logic,
+   UI, tutorial, images and tests artifacts are validated against the builder
+   artifact contract: schemas are real Draft 2020-12 JSON Schemas, unit tests
+   have 3–10 cases with initial/intermediate/terminal coverage, images meet
+   the size/format rules.
+5. **Test-case rosters.** Every unit test's `ctx.players` length must be one
+   of `allowed_player_counts` (a human plus a computer is two seats).
+6. **Localization lint.** The client code must have a valid `i18n-strings`
+   table (≤ 400 keys), every `t("key")` used must exist, every non-`server_`
+   key must be used, no hard-coded display text, no sentence-building by
+   concatenation, no markup in strings, and every text the server writes
+   (every `InvalidMove` reason, log line, state label) must match a
+   `server_…` template. The client must call `applyLocale(`.
+7. **Size caps.** Each SVG ≤ 120,000 bytes, combined workflow ≤ 400,000
+   bytes, stored package ≤ 900,000 bytes.
+8. **Deterministic verification suite** (`run_checks`, all five checks):
+   - **Approved examples.** Every unit test case runs `newMatch`, `viewFor`
+     (mover and other/spectator, before and after), `applyMove` (or
+     `playerLeft`) and checks the exact expected state, turn, payouts and
+     views; every call runs twice for determinism.
+   - **Settlement probes.** Non-seat leave rejected; forfeit with 2 humans /
+     solo / human-vs-computer (pot to the departing human only, never a
+     computer); post-end leaves return recorded state/payouts unchanged;
+     continuing leave excludes the leaver from the turn; duplicate leave is
+     a no-op.
+   - **Move agreement.** `randomMove` (24 samples) and `computerMove`
+     (every difficulty) on every approved before-state plus a played-out
+     mid-game position: every returned move must be accepted by `applyMove`;
+     generators deterministic, ≤ 100 ms, never null on a live position.
+   - **Localization.** The lint from (6), plus the client must call
+     `applyLocale(message)`.
+   - **Random walks.** The server code is loaded in QuickJS (a load error
+     fails the import) and played: up to 1000 walks of up to 1000 moves,
+     each from a fresh random seed, a random player count from
+     `allowed_player_counts`, each player randomly human or computer with a
+     random stake. Each step picks a player from the turn, gets a move from
+     `computerMove` or `randomMove` (each half the time), applies it with
+     `applyMove`, and calls `viewFor` for every player and for a spectator.
+     On ~2% of steps a player joins (`playerJoined`) or leaves
+     (`playerLeft`). Malformed moves are fuzzed at every step (they must be
+     rejected with `InvalidMove` or return a valid result, never crash).
+     Every result is checked against its JSON Schema (state, move, view),
+     and every function is called twice with identical arguments and seed —
+     the results must be identical (determinism). Each call is limited to
+     100 ms and 64 MB (`playerLeft` gets 2 s, for `ctx.estimateWinChance`).
+     Exceeding a limit, throwing anything other than `InvalidMove`, or
+     returning an invalid result (empty turn, turn naming a non-player,
+     payouts not summing to the pot or paying a computer, a leaver's payout
+     outside 0..pot) is a game bug and fails the import. Reaching 1000
+     moves without the game ending is not an error. The whole suite runs
+     in a 20 s subprocess; if no walk finishes in the budget the game is
+     reported too slow.
+9. **Failure reporting.** When verification fails, the 422 response names
+   the failing checks and, for each failure, gives the exact reproduction:
+   the function and error message (with the JavaScript stack), the walk's
+   seed (replaying it reproduces the walk), the player count and move
+   number, the `ctx` (players, pot, move count), the exact arguments passed
+   to the function, the result it returned (when it returned one), how long
+   the call took and how much memory it used against their limits, and the
+   last few moves before the failure. The game is not inserted.
+
 ## Limits and responses
 
 Limits count UTF-8 bytes: entire request 900,000; each code field 200,000; each

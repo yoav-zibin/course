@@ -34,6 +34,7 @@ Design notes:
 import datetime as dt
 import json
 import threading
+import time
 from typing import Any, Mapping
 
 import quickjs
@@ -450,6 +451,21 @@ class GameLogic:
         self._invoke: quickjs.Object | None = None
         self._available_functions: dict[str, bool] = {}
         self._lock = threading.RLock()
+        # Metrics of the most recent call (set by _call, even when the
+        # call raises): how long the QuickJS evaluation took, how much
+        # memory the context held afterwards, and the limits in effect.
+        # The tester reads these when it records a failure so the report
+        # can say exactly what the call cost.
+        self.last_call_duration_seconds: float = 0.0
+        self.last_call_memory_used_bytes: int = 0
+        self.last_call_memory_delta_bytes: int = 0
+        self.last_call_time_limit_seconds: float = time_limit_seconds
+        self.last_call_memory_limit_bytes: int = memory_limit_bytes
+        # The JSON result of the most recent call, set once the envelope
+        # is parsed and before it is validated; None when the call raised
+        # before producing a result. The tester reads it when a result
+        # fails validation, so the report can show what the game returned.
+        self.last_call_result: Any = None
 
     def _new_context(self) -> quickjs.Context:
         context = quickjs.Context()
@@ -496,6 +512,25 @@ class GameLogic:
         self._context = None
         self._invoke = None
         self._available_functions = {}
+
+    def _memory_used_bytes(self) -> int:
+        """Bytes the QuickJS context currently holds, or 0 if unavailable."""
+        if self._context is None:
+            return 0
+        try:
+            return int(self._context.memory().get("memory_used_size", 0))
+        except Exception:
+            return 0
+
+    def _record_call_metrics(self, started: float, memory_before: int) -> None:
+        """Stores how long the last QuickJS call took and how much memory
+        it left the context holding. Called on both success and failure
+        (before the context is dropped on error), so a failure report can
+        say exactly what the call cost."""
+        self.last_call_duration_seconds = max(0.0, time.monotonic() - started)
+        used = self._memory_used_bytes()
+        self.last_call_memory_used_bytes = used
+        self.last_call_memory_delta_bytes = max(0, used - memory_before)
 
     def has(self, function: str) -> bool:
         """Whether the game defines [function] (some functions are optional)."""
@@ -589,6 +624,13 @@ class GameLogic:
         )
         if override is not None:
             self._context.set_time_limit(override)
+        self.last_call_time_limit_seconds = (
+            override if override is not None else self._time_limit_seconds
+        )
+        self.last_call_memory_limit_bytes = self._memory_limit_bytes
+        self.last_call_result = None
+        started = time.monotonic()
+        memory_before = self._memory_used_bytes()
         try:
             if self._invoke is None:
                 raise GameLogicError("the game's QuickJS context is unavailable")
@@ -602,6 +644,7 @@ class GameLogic:
             # Nothing came back: the call was interrupted (timeout/memory)
             # or the prelude itself failed. The context may be in a bad
             # state, so it is rebuilt before the next call.
+            self._record_call_metrics(started, memory_before)
             self._drop_context()
             if _is_timeout(error):
                 raise GameLogicTimeout(
@@ -612,10 +655,12 @@ class GameLogic:
         finally:
             if override is not None and self._context is not None:
                 self._context.set_time_limit(self._time_limit_seconds)
+        self._record_call_metrics(started, memory_before)
         envelope = json.loads(envelope_text)
         if envelope.get("ok"):
             self.last_call_used_random = bool(envelope.get("used_random"))
             result = envelope.get("result")
+            self.last_call_result = result
             if function == "playerLeft" and isinstance(result, dict) and "payout" in result:
                 # Old published versions used a scalar payout and expected a bot
                 # takeover. Settle them without changing their pinned source.
