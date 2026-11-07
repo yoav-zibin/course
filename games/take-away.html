@@ -50,17 +50,22 @@ let strings = sourceStrings;
 const t = (key, values = {}) => (strings[key] || sourceStrings[key]).replace(
   /\{(\w+)\}/g, (match, name) => values[name] ?? match
 );
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...sourceStrings, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
 document.getElementById("status").textContent = t("waiting");
 let latest = null;
 let sent = false;
 const buttons = [...document.querySelectorAll("button[data-take]")];
 addEventListener("message", event => {
   if (event.source !== parent || event.data?.type !== "state_changed") return;
+  applyLocale(event.data);
   latest = event.data;
   sent = false;
-  strings = {...sourceStrings, ...(latest.strings || {})};
-  if (latest.locale) document.documentElement.lang = latest.locale;
-  if (latest.direction) document.documentElement.dir = latest.direction;
   document.querySelector("h1").textContent = t("title");
   document.getElementById("instructions").textContent = t("instructions");
   document.getElementById("stones").setAttribute("aria-label", t("stones"));
@@ -69,14 +74,15 @@ addEventListener("message", event => {
   if (!view) return;
   document.getElementById("stones").textContent = "● ".repeat(view.remaining);
   const name = id => latest.players.find(player => player.player_id === id)?.name || id;
+  const myTurn = latest.my_player_index !== null && latest.turn_of_player_indices?.includes(latest.my_player_index);
   const statusText = latest.status === "over"
     ? t("wins", {name:name(view.winner)})
-    : latest.acting_for_player_index !== null
+    : myTurn
       ? t("your_turn", {count:view.remaining})
       : t("waiting_for", {name:latest.players[latest.turn_of_player_indices[0]].name, count:view.remaining});
   document.getElementById("status").textContent = statusText;
   for (const button of buttons)
-    button.disabled = latest.status !== "ongoing" || latest.acting_for_player_index === null ||
+    button.disabled = latest.status !== "ongoing" || !myTurn ||
       Number(button.dataset.take) > view.remaining;
 });
 for (const button of buttons) button.addEventListener("click", () => {
