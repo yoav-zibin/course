@@ -986,7 +986,23 @@ class QueryStore:
         ]
 
     def list_all_game_versions(self):
-        return self._list("game_versions")
+        # Unlike the other legacy list methods, this one is part of the Store
+        # protocol for startup scans and administrative jobs, which must see
+        # every version. Serve it through the paginated API instead of the
+        # capped legacy list: page in bounded chunks and re-read each record
+        # in full, mirroring rollback_snapshot's treatment of game_versions.
+        versions = []
+        cursor = None
+        while True:
+            result = self.page(
+                "game_versions", limit=100, cursor=cursor, scope="all_game_versions"
+            )
+            for item in result.items:
+                full = self._get("game_versions", f"{item.id}@{item.version}")
+                versions.append(full if full is not None else item)
+            cursor = result.next_cursor
+            if not cursor:
+                return versions
 
     def set_game_published(self, game_id, published):
         with self.atomic():
