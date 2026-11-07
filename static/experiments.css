@@ -599,3 +599,125 @@
   .portal-layout-picker select { max-width: 98px; padding-inline: 6px; }
 }
 :root[data-portal-layout="top"] .topbar[data-app-page="portal"] nav { display:flex; }
+
+/* Midnight Gold (sc5386): deep navy surfaces with a warm gold accent. */
+:root[data-skin="midnight"] {
+  color-scheme: dark;
+  --builder-accent-ink: #241a02;
+  --color-bg-0: #0a0d18;
+  --color-bg-1: #12172b;
+  --color-bg-2: #1a2138;
+  --color-bg-3: #242e4f;
+  --color-bg-4: #303d66;
+  --color-text-primary: #f7f2e2;
+  --color-text-secondary: #d9d2ba;
+  --color-text-tertiary: #a49a7d;
+  --color-text-quaternary: #7a725c;
+  --color-border-1: #1c2338;
+  --color-border-2: #2b3554;
+  --color-border-3: #414f78;
+  --color-border-4: #5f70a0;
+  --color-accent: #e3a82b;
+  --color-accent-hover: #f2c14e;
+  --color-focus-ring: #f2c14e;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --font-sans: "Gill Sans MT", "Gill Sans", "Trebuchet MS", sans-serif;
+}
+
+:root[data-skin="midnight"] .portal-shell {
+  --color-bg-0: #0a0d18;
+  --color-bg-1: #12172b;
+  --color-bg-2: #1a2138;
+  --color-bg-3: #242e4f;
+  --color-bg-4: #303d66;
+  --color-text-primary: #f7f2e2;
+  --color-text-secondary: #d9d2ba;
+  --color-text-tertiary: #a49a7d;
+  --color-border-2: #2b3554;
+  --color-border-3: #414f78;
+  --color-accent: #e3a82b;
+  --color-accent-hover: #f2c14e;
+  --color-focus-ring: #f2c14e;
+  background: var(--color-bg-0);
+  color: var(--color-text-primary);
+}
+:root[data-skin="midnight"] .portal-sidebar,
+:root[data-skin="midnight"] .match-creator,
+:root[data-skin="midnight"] .game-detail-page,
+:root[data-skin="midnight"] .match-stage,
+:root[data-skin="midnight"] .portal-shell .game-search-popup,
+:root[data-skin="midnight"] .portal-shell .match-tools {
+  background: #12172b;
+  border-color: #2b3554;
+  color: #f7f2e2;
+}
+:root[data-skin="midnight"] .popular-games-section,
+:root[data-skin="midnight"] .play-option,
+:root[data-skin="midnight"] .portal-shell .library-card,
+:root[data-skin="midnight"] .selected-game-card {
+  background: #1a2138;
+  border-color: #2b3554;
+  color: #f7f2e2;
+}
+:root[data-skin="midnight"] .portal-shell input,
+:root[data-skin="midnight"] .portal-shell select {
+  background: #0a0d18;
+  border-color: #414f78;
+  color: #f7f2e2;
+}
+:root[data-skin="midnight"] .portal-shell button.primary,
+:root[data-skin="midnight"] .portal-shell .library-toolbar button[aria-pressed="true"] {
+  background: #e3a82b;
+  border-color: #e3a82b;
+  color: #241a02;
+}
+:root[data-skin="midnight"] .portal-shell button.primary:hover:not(:disabled) {
+  background:#f2c14e; border-color:#f2c14e;
+}
+:root[data-skin="midnight"] .portal-shell button:focus-visible,
+:root[data-skin="midnight"] .portal-shell summary:focus-visible,
+:root[data-skin="midnight"] .portal-shell .popular-game-card:focus-visible {
+  outline-color: #f2c14e;
+}
+:root[data-skin="midnight"] .creator-title,
+:root[data-skin="midnight"] .popular-games-heading h2,
+:root[data-skin="midnight"] .play-option-heading h3,
+:root[data-skin="midnight"] .selected-game-card h2 {
+  color: #f7f2e2;
+}
+:root[data-skin="midnight"] .creator-description,
+:root[data-skin="midnight"] .popular-period,
+:root[data-skin="midnight"] .play-option-heading p,
+:root[data-skin="midnight"] .play-option .play-option-note,
+:root[data-skin="midnight"] .library-description {
+  color: #a49a7d;
+}
+
+:root[data-skin="midnight"] .builder-shell {
+  --color-bg-0:#0a0d18;--color-bg-1:#12172b;--color-bg-2:#1a2138;--color-bg-3:#242e4f;--color-bg-4:#303d66;
+  --color-text-primary:#f7f2e2;--color-text-secondary:#d9d2ba;--color-text-tertiary:#a49a7d;--color-text-quaternary:#7a725c;
+  --color-border-1:#1c2338;--color-border-2:#2b3554;--color-border-3:#414f78;--color-border-4:#5f70a0;
+  --color-accent:#e3a82b;--color-accent-hover:#f2c14e;--color-focus-ring:#f2c14e;--builder-accent-ink:#241a02;
+}
+
+:root[data-skin="midnight"] .topbar .token-wallet {
+  background:linear-gradient(135deg,#4a3608,#232c4d);
+  border-color:#8a6a1f;
+  color:#fdf6dd;
+  box-shadow:0 4px 18px #00000055;
+}
+:root[data-skin="midnight"] .topbar .token-wallet-coin {
+  background:#6e5510;
+  border-color:#c49a35;
+  color:#ffe9a8;
+}
+:root[data-skin="midnight"] .topbar .token-wallet-label {
+  color:#cbbd8f;
+}
+:root[data-skin="midnight"] .topbar .token-wallet-number {
+  color:#d9d2ba;
+}
+:root[data-skin="midnight"] .topbar .token-wallet-number strong {
+  color:#f7f2e2;
+}
