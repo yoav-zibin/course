@@ -415,7 +415,7 @@ function isJoinable(match, userId) {
 /** Fetches the player names for everything on screen, plus the full version
  * of the open match's game. Match lists render names and joinability from
  * the slim catalog (gameMetaOf), so their games' code is not fetched here;
- * the rest of the catalog warms lazily in the background (warmGameCache). */
+ * a game's code is fetched on demand when it is opened. */
 async function ensureDetails() {
   const userIds = new Set();
   const collect = (match) => {
@@ -484,29 +484,6 @@ async function ensureDetails() {
       }
     })(),
   ]);
-}
-
-let gameWarmupRunning = false;
-/** Fills the game cache with the rest of the catalog, one game at a time in
- * the background, so games are ready (and saved for offline play) without a
- * giant up-front download. Page loads never wait on this. */
-async function warmGameCache() {
-  if (gameWarmupRunning || typeof setTimeout !== "function") return;
-  gameWarmupRunning = true;
-  try {
-    for (const game of state.games) {
-      if (state.gameCache.get(`${game.id}@${game.version}`)?.code) continue;
-      if (!navigator.onLine || document.hidden) break;
-      try {
-        await fetchGameVersion(game.id, game.version);
-      } catch {
-        // Skip this game; a later refresh starts the warm-up again.
-      }
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-    }
-  } finally {
-    gameWarmupRunning = false;
-  }
 }
 
 // Coalesce polls before they enter Web Locks, so slow requests cannot build an
@@ -738,7 +715,6 @@ async function refreshLocked() {
       outcome: state.match ? matchOutcome(state.match, user?.id)?.kind : null,
     });
     await syncGame();
-    warmGameCache();
     showPageError("");
     offlineStatus();
   } catch (error) {
