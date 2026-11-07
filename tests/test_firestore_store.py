@@ -177,11 +177,9 @@ def test_records_too_big_for_one_document_are_split(client, prefix, open_store) 
     # Repeated characters now compress into one document; use deterministic
     # high-entropy data to exercise chunking after compression as well.
     huge_code = "<div>" + base64.b64encode(random.Random(1).randbytes(1_200_000)).decode() + "</div>"
-    game = api.ok(
-        "POST",
-        "/games",
-        as_user=alice,
-        json={"name": "Huge", "allowed_player_counts": [2], "code": huge_code},
+    game = api.create_game(
+        {"name": "Huge", "allowed_player_counts": [2], "code": huge_code},
+        alice,
     )
     store.close()
     document = client.collection(f"{prefix}game_versions").document(f"{game['id']}@1").get()

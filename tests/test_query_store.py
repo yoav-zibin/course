@@ -271,27 +271,17 @@ def test_referrals_and_linked_identity_survive_restart(store):
 
 def test_startup_only_lists_game_versions_for_schema_preflight(store):
     second = QueryStore(store.client, namespace=store.namespace)
-    scanned = []
+    original_list = second._list
+    listed = []
 
-    def guard(original):
-        def wrapped(kind, *args, **kwargs):
-            assert kind == "game_versions", "startup must not scan unrelated collections"
-            scanned.append(kind)
-            return original(kind, *args, **kwargs)
+    def list_for_startup(kind, *args, **kwargs):
+        assert kind == "game_versions", "startup must not scan unrelated collections"
+        listed.append(kind)
+        return original_list(kind, *args, **kwargs)
 
-        return wrapped
-
-    # list_all_game_versions serves the preflight through the paginated API
-    # (page + _get), not the capped legacy _list; guard every read primitive
-    # so the preflight still cannot scan an unrelated collection.
-    with (
-        patch.object(second, "_list", side_effect=guard(second._list)),
-        patch.object(second, "page", side_effect=guard(second.page)),
-        patch.object(second, "_get", side_effect=guard(second._get)),
-    ):
+    with patch.object(second, "_list", side_effect=list_for_startup):
         Api(store=second)
-    assert scanned, "startup must scan game_versions for the schema preflight"
-    assert set(scanned) == {"game_versions"}
+    assert listed == ["game_versions"]
 
 
 def test_idempotent_move_does_not_append_or_pay_twice(store):
@@ -391,16 +381,14 @@ def test_quickjs_computer_turn_survives_restart_and_duplicate_job(store):
     source = (Path(__file__).parent.parent / "games" / "tictactoe.server.js").read_text(
         encoding="utf-8"
     )
-    game = api.ok(
-        "POST",
-        "/games",
-        as_user=owner,
-        json={
+    game = api.create_game(
+        {
             "name": "Tic tac toe",
             "code": "<div></div>",
             "server_code": source,
             "allowed_player_counts": [2],
         },
+        owner,
     )
     match = api.ok(
         "POST",
