@@ -78,11 +78,8 @@ def test_removing_a_player_from_a_v2_waiting_room_refunds_their_stake() -> None:
         "payouts:Object.fromEntries(ctx.players.map(p=>[p.id,ctx.pot/ctx.players.length]))};}"
         "function viewFor(state,playerId,ctx){return state;}"
     )
-    game = api.request(
-        "POST",
-        "/games",
-        as_user=alice,
-        json={
+    game = api.create_game(
+        {
             "name": "V2",
             "allowed_player_counts": [2],
             "allows_leave_mid_match": False,
@@ -90,10 +87,10 @@ def test_removing_a_player_from_a_v2_waiting_room_refunds_their_stake() -> None:
             "code": "<div></div>",
             "server_code": server_code,
         },
+        alice,
     )
-    assert game.is_success, game.text
     match = api.ok(
-        "POST", "/matches", as_user=alice, json={"game_id": game.json()["id"], "bet_per_player": STAKE}
+        "POST", "/matches", as_user=alice, json={"game_id": game["id"], "bet_per_player": STAKE}
     )
     api.ok("POST", f"/matches/{match['id']}/join", as_user=bob)
     assert balance(api, bob) == 10 - STAKE  # v2 takes the stake on joining

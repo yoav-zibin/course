@@ -288,10 +288,10 @@ def test_publishing_a_draft_with_broken_server_code_is_refused(api: Api):
 
 def test_updating_a_game_to_broken_server_code_is_refused(api: Api):
     owner = api.new_user("owner")
-    game = api.ok(
-        "POST", "/games", as_user=owner,
-        json={"name": "Direct", "allowed_player_counts": [2],
-              "code": "<div></div>", "server_code": GOOD_GAME},
+    game = api.create_game(
+        {"name": "Direct", "allowed_player_counts": [2],
+         "code": "<div></div>", "server_code": GOOD_GAME},
+        owner,
     )
     response = api.request(
         "PATCH", f"/games/{game['id']}", as_user=owner,

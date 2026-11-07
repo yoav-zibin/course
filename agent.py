@@ -81,8 +81,8 @@ it is all the client ever knows of the state.
    - `turn_of_player_indices`: the seats that may move next, or `null` when over.
    - `status`: "ongoing" or "over". `end_reason`: "finished" or "player_left".
    - `move_count`, `token_pot`, `my_player_index` (the viewer's seat, `null` for \
-spectators), `acting_for_player_index`: the viewer's own seat when it is their \
-turn, otherwise `null`. It is never a computer's seat: the server moves computers.
+spectators). A player only ever acts for themselves: it is their turn when \
+`my_player_index` is in `turn_of_player_indices`. The server moves computers.
 
 2. `make_move` (game -> platform): {"type": "make_move", "move": {...}}. Send \
 only the move itself (any JSON value your server code understands, e.g. \
@@ -167,8 +167,8 @@ Rules you must follow in the code you write:
 - A count of 1 means a genuine solo \
   game (one human, no computer opponent). Its turns stay on that player until it ends. \
   With 2+ seats, support both human opponents and computer-controlled seats.
-- Disable input when `acting_for_player_index` is null; show whose turn it is and \
-who won.
+- Disable input when it is not your turn (`my_player_index` is not in \
+`turn_of_player_indices`); show whose turn it is and who won.
 - Handle seat changes gracefully (players leaving become computers; joiners take \
 over computer seats or are appended). The client must not assume a fixed seat \
 count beyond what `players` says.

@@ -383,10 +383,10 @@ class TranslatingApi(Api):
 
 
 def publish(api: TranslatingApi, owner: str, *, code: str = GAME, name: str = "Tic-tac-toe") -> str:
-    game = api.ok("POST", "/games", as_user=owner, json={
+    game = api.create_game({
         "name": name, "description": "Three in a row wins", "allowed_player_counts": [2],
         "allows_leave_mid_match": False, "allows_join_mid_match": False, "code": code,
-    })
+    }, owner)
     return game["id"]
 
 

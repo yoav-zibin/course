@@ -143,6 +143,7 @@ function applyStaticTexts() {
 }
 var CELLS = N * N;
 var latest = null;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 var selected = "S";
 var sentForMove = -1;
 
@@ -181,7 +182,7 @@ function normState(s, numPlayers) {
 
 function doMove(idx) {
   if (!latest || latest.status !== "ongoing") return;
-  var acting = latest.acting_for_player_index;
+  var acting = actingSeat();
   if (acting === null || acting === undefined) return;
   if (sentForMove === latest.move_count) return;
   var st = normState(view(), latest.players.length);
@@ -195,7 +196,7 @@ function doMove(idx) {
 function render() {
   if (!latest) return;
   var st = normState(view(), latest.players.length);
-  var acting = latest.status === "ongoing" ? latest.acting_for_player_index : null;
+  var acting = actingSeat();
   var isOver = latest.status === "over";
   var canAct = !isOver && acting !== null && acting !== undefined && acting === latest.my_player_index && sentForMove !== latest.move_count;
   if (isOver) {

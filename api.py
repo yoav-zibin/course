@@ -62,7 +62,6 @@ from game_platform.schemas import (
     EmailStart,
     ExperimentActiveUpdate,
     ExperimentVariantCreate,
-    GameCreate,
     GameDraftSave,
     GameDraftPublish,
     GameDraftOut,
@@ -179,6 +178,23 @@ def _get_caller_id_or_none(
 
 
 OptionalCallerId = Annotated[str | None, Depends(_get_caller_id_or_none)]
+
+
+def _get_caller_id_or_anonymous(
+    platform: Platform,
+    x_user_id: Annotated[str | None, Header()] = None,
+    x_user_password: Annotated[str | None, Header()] = None,
+) -> str | None:
+    """The caller's id when credentials were sent and authenticate, else None. Unlike
+    [_get_caller_id_or_none], credentials that are sent but invalid are rejected
+    (401) instead of silently becoming anonymous: the agent import endpoint must not
+    publish an ownerless game for a caller who mistyped their password."""
+    if x_user_id is None and x_user_password is None:
+        return None
+    return platform.authenticate(user_id=x_user_id, password=x_user_password).id
+
+
+AnonymousCallerId = Annotated[str | None, Depends(_get_caller_id_or_anonymous)]
 
 router = APIRouter()
 
@@ -835,27 +851,8 @@ def publish_game_draft(platform: Platform, caller_id: CallerId, draft_id: str, b
     ))
 
 
-# Games
-
-
-@router.post("/games", status_code=HTTPStatus.CREATED)
-def create_game(platform: Platform, caller_id: CallerId, body: GameCreate) -> GameOut:
-    game = platform.create_game(
-        caller_id=caller_id,
-        name=body.name,
-        description=body.description,
-        rules=GameRules(
-            allowed_player_counts=tuple(body.allowed_player_counts),
-            allows_leave_mid_match=body.allows_leave_mid_match,
-            allows_join_mid_match=body.allows_join_mid_match,
-        ),
-        code=body.code,
-        server_code=body.server_code,
-        game_schemas=(
-            body.game_schemas.model_dump() if body.game_schemas is not None else None
-        ),
-    )
-    return GameOut.of(game)
+# Games (read-only here: games are created by the agent import, POST /agent/games,
+# or by publishing a Builder draft; there is no direct create endpoint).
 
 
 @router.post("/games/test")
@@ -2655,7 +2652,7 @@ def create_app(
     from game_platform.builder_api import make_router
     app.include_router(make_router(_get_platform, _get_caller_id))
     from game_platform.agent_import import make_router as make_import_router
-    app.include_router(make_import_router(_get_platform, _get_caller_id))
+    app.include_router(make_import_router(_get_platform, _get_caller_id_or_anonymous))
     from game_platform.test_session_api import make_router as make_test_session_router
     app.include_router(make_test_session_router(_get_platform, _get_caller_id))
     app.include_router(router)

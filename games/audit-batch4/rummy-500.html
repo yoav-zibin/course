@@ -174,6 +174,7 @@ function applyLocale(message) {
 
 
 let latest=null, sel=new Set(), selMeld=null, sortMode='rank', sentFor=-1;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 function txt(parent,text){ parent.appendChild(document.createTextNode(text)); }
 function el(tag,text,cls,parent){ const e=document.createElement(tag); if(text!==undefined&&text!==null) e.textContent=text; if(cls) e.className=cls; if(parent) parent.appendChild(e); return e; }
 document.getElementById('status').textContent=t('waiting_platform');
@@ -231,7 +232,7 @@ function canUseRequiredCard(hand, melds, requiredId) {
 
 function sorted(hand){ const a=[...hand]; if(sortMode==='rank') a.sort((x,y)=>(isJ(x)?99:x.r)-(isJ(y)?99:y.r)||(x.s||'').localeCompare(y.s||'')); else a.sort((x,y)=>(x.s||'Z').localeCompare(y.s||'Z')||(isJ(x)?99:x.r)-(isJ(y)?99:y.r)); return a; }
 function view(){ return latest?latest.view:null; }
-function actor(){ return latest?latest.acting_for_player_index:null; }
+function actor(){ return actingSeat(); }
 function myIdx(){ return latest?latest.my_player_index:null; }
 function canAct(){ return latest&&latest.status==='ongoing'&&actor()!=null&&actor()===myIdx()&&sentFor!==latest.move_count; }
 function send(move){

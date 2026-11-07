@@ -70,7 +70,7 @@ def make_client(*, model_api_config: ModelApiConfig | None = None) -> TestClient
     platform = GamePlatform(
         store=None, clock=FakeClock(), computer_move_delay_seconds=0
     )
-    return TestClient(
+    client = TestClient(
         create_app(
             platform,
             master_password="pw",
@@ -81,6 +81,8 @@ def make_client(*, model_api_config: ModelApiConfig | None = None) -> TestClient
             ),
         )
     )
+    client.platform = platform
+    return client
 
 
 def new_user(client: TestClient, name: str) -> tuple[str, dict]:
@@ -91,17 +93,22 @@ def new_user(client: TestClient, name: str) -> tuple[str, dict]:
 
 
 def new_game(client: TestClient, headers: dict, name: str = "Poker") -> dict:
-    response = client.post(
-        "/games",
-        headers=headers,
-        json={
-            "name": name,
-            "allowed_player_counts": [2, 3, 4],
-            "code": "<div>v1</div>",
-        },
+    # POST /games is deleted; create the game through the service directly.
+    from game_platform.models import GameRules
+    from game_platform.schemas import GameOut
+
+    game = client.platform.create_game(
+        caller_id=headers["X-User-Id"],
+        name=name,
+        description="",
+        rules=GameRules(
+            allowed_player_counts=(2, 3, 4),
+            allows_leave_mid_match=False,
+            allows_join_mid_match=False,
+        ),
+        code="<div>v1</div>",
     )
-    assert response.is_success, response.text
-    return response.json()
+    return GameOut.of(game).model_dump(mode="json")
 
 
 def start_job(client: TestClient, **body) -> dict:

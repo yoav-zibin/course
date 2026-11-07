@@ -150,8 +150,9 @@ var ORIENTS=SHAPES.map(orisOf);
 function curOri(){var o=ORIENTS[selPiece];return o[selOri%o.length]}
 var boardEl=document.getElementById("board"),piecesEl=document.getElementById("pieces"),statusEl=document.getElementById("status"),scoresEl=document.getElementById("scores"),msgEl=document.getElementById("message"),colorNameEl=document.getElementById("colorName"),rotBtn=document.getElementById("rotate"),flipBtn=document.getElementById("flip"),passBtn=document.getElementById("pass");
 var latest=null,view=null,sentFor=-1;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 var selColor=0,selPiece=1,selOri=0,prevR=-1,prevC=-1;
-function actor(){if(!latest)return null;var a=latest.acting_for_player_index;return (typeof a==="number")?a:null}
+function actor(){if(!latest)return null;var a=actingSeat();return (typeof a==="number")?a:null}
 function canAct(){return view&&latest&&latest.status==="ongoing"&&!view.finished&&actor()!==null&&sentFor!==latest.move_count}
 function myColors(){if(!view)return [];var out=[];for(var c=0;c<4;c++){if(view.colorOwners[c]===view.currentPlayer)out.push(c)}return out}
 function ensureSel(){if(!view)return;var cols=[];for(var c=0;c<4;c++){if(view.colorOwners[c]===view.currentPlayer)cols.push(c)}if(cols.indexOf(selColor)<0){selColor=(cols[0]!==undefined?cols[0]:0);selPiece=0;selOri=0}if(view.available&&view.available[selColor]&&!view.available[selColor][selPiece]){var f=view.available[selColor].indexOf(true);selPiece=f>=0?f:0;selOri=0}var n=ORIENTS[selPiece].length;if(selOri>=n)selOri=0}

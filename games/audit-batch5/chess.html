@@ -134,6 +134,7 @@ function applyLocale(message) {
 
 
 let latest=null, sel=null, legalCache=[], flipped=null, sentFor=-1;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 const FILES=['a','b','c','d','e','f','g','h'];
 function moveLine(i,hist){const parts=[String(i/2+1).concat('.'),hist[i]];if(hist[i+1])parts.push(hist[i+1]);return parts.join(' ');}
 function staticTexts(){document.getElementById('title').textContent=t('title');document.getElementById('capLabel').textContent=t('captured');document.getElementById('movesLabel').textContent=t('moves');document.getElementById('resign').textContent=t('resign');document.getElementById('newview').textContent=t('flip');document.getElementById('promoLabel').textContent=t('promote_to');}
@@ -196,7 +197,7 @@ function legalAt(st,r,c){
 function view(){return latest?latest.view:null;}
 function st(){const v=view();return {bd:v.bd,turn:v.toMove,castling:v.castling,ep:v.ep,half:v.half,full:v.full,winner:v.winner,reason:v.reason,history:v.history,lastMove:v.lastMove};}
 function mySeat(){return latest?latest.my_player_index:null;}
-function canAct(){return latest&&latest.status==="ongoing"&&latest.acting_for_player_index!==null&&latest.acting_for_player_index===mySeat();}
+function canAct(){return actingSeat()!==null&&actingSeat()===mySeat();}
 function myColor(){const s=mySeat();return s===0?"w":s===1?"b":null;}
 function render(){
   if(!latest||!view())return;staticTexts();const s=st();const boardEl=document.getElementById("board");boardEl.replaceChildren();
@@ -223,7 +224,7 @@ function render(){
   else if(latest.status==="over")status=t("game_over");
   else{const seat=s.turn==="w"?0:1;const nq={name:latest.players[seat]?latest.players[seat].name:(s.turn==="w"?t("white"):t("black"))};const chk=inCheck(s.bd,turnWhite);
     if(s.turn==="w")status=chk?t("to_move_white_check",nq):t("to_move_white",nq);else status=chk?t("to_move_black_check",nq):t("to_move_black",nq);
-    if(!canAct())status=t("status_waiting",{text:status});else if(latest.players[latest.acting_for_player_index]&&latest.players[latest.acting_for_player_index].kind==="computer")status=t("status_thinking",{text:status});}
+    if(!canAct())status=t("status_waiting",{text:status});else if(latest.players[actingSeat()]&&latest.players[actingSeat()].kind==="computer")status=t("status_thinking",{text:status});}
   document.getElementById("status").textContent=status;
   const hist=s.history;const histEl=document.getElementById("hist");
   if(hist&&hist.length){const rows=[];for(let i=0;i<hist.length;i+=2){const row=document.createElement("div");row.textContent=moveLine(i,hist);rows.push(row);}histEl.replaceChildren.apply(histEl,rows);}

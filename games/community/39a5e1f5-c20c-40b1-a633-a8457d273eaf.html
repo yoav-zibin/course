@@ -139,6 +139,7 @@ function applyStaticTexts(){
   document.querySelector('.hint').textContent=t("hint");
 }
 var latest=null;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 var boardEl=document.getElementById('board');
 var cells=[];
 for(var r=0;r<SIZE;r++){cells.push([]);for(var c=0;c<SIZE;c++){(function(rr,cc){
@@ -155,13 +156,13 @@ function emptyBoard(){var b=[];for(var i=0;i<SIZE;i++){b.push([]);for(var j=0;j<
 function getView(){return (latest&&latest.view)?latest.view:{board:emptyBoard(),last:null,winner:null,winLine:null,draw:false};}
 function canHumanMove(){
   if(!latest||latest.status!=='ongoing')return false;
-  return latest.acting_for_player_index!==null&&latest.acting_for_player_index!==undefined;
+  return actingSeat()!==null&&actingSeat()!==undefined;
 }
 function preview(r,c,on){
   if(!on||!canHumanMove()){if(cells[r]&&cells[r][c])cells[r][c].querySelector('.preview').style.display='none';return;}
   var s=getView();if(s.board[r][c]!==0||s.winner!==null||s.winner!==undefined&&s.winner!==null)return;
   if(s.winner!==null&&s.winner!==undefined&&s.winner!==null)return;
-  var seat=latest.acting_for_player_index;
+  var seat=actingSeat();
   var el=cells[r][c].querySelector('.preview');
   el.style.display='block';
   el.style.background=seat===0?'#111':'#fafafa';
@@ -209,7 +210,7 @@ function render(){
   if(s.winner!==null&&s.winner!==undefined){var w=latest.players[s.winner]?latest.players[s.winner].name:t("player_n",{number:s.winner+1});statusEl.textContent=t("wins",{name:w});return;}
   if(s.draw){statusEl.textContent=t("draw");return;}
   if(latest.status==='over'){statusEl.textContent=t("game_over");return;}
-  var a=latest.acting_for_player_index;
+  var a=actingSeat();
   if(a===null||a===undefined){var turns=latest.turn_of_player_indices;if(turns&&turns.length){var nm2=latest.players[turns[0]]?latest.players[turns[0]].name:t("player_n",{number:turns[0]+1});statusEl.textContent=t("to_move_wait",{name:nm2});if(turns[0]===0)p0.classList.add('active');else if(turns[0]===1)p1.classList.add('active');}else{statusEl.textContent=t("waiting_other");}return;}
   var nm=latest.players[a]?latest.players[a].name:t("player_n",{number:a+1});
   statusEl.textContent=a===0?t("black_to_move",{name:nm}):t("white_to_move",{name:nm});

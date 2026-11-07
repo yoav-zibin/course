@@ -55,9 +55,9 @@ def test_continuing_leave_keeps_indices_and_cannot_be_played_by_leaver(api):
                              "const ids = ctx.players.filter(p => p.active !== false).map(p => p.id);")
     code = code.replace("return {state: state, turn: [others[0]], payout: Math.floor(ctx.pot / 2)};",
                         "return {state, turn: [others[0]], payouts: {[playerId]: 2}};")
-    game = api.ok("POST", "/games", as_user=users[0], json={"name": "Elimination",
+    game = api.create_game({"name": "Elimination",
         "allowed_player_counts": [3], "allows_leave_mid_match": True,
-        "code": "<div></div>", "server_code": code})
+        "code": "<div></div>", "server_code": code}, users[0])
     match = api.ok("POST", "/matches", as_user=users[0], json={"game_id": game["id"], "max_loss": 10})
     mid = match["id"]
     for user in users[1:]:

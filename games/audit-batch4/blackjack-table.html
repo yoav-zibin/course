@@ -115,6 +115,7 @@ function applyLocale(message) {
 
 
 let latest=null,sentFor=-1,six=false;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 const $=id=>document.getElementById(id);
 $("status").textContent=t("waiting_platform");
 function el(tag,text,cls,parent){const e=document.createElement(tag);if(text!==undefined&&text!==null)e.textContent=text;if(cls)e.className=cls;if(parent)parent.appendChild(e);return e;}
@@ -125,8 +126,8 @@ const lbl=c=>(RLBL[c.r]||String(c.r))+(SUITS[c.s]||c.s);
 const red=c=>c.s==="H"||c.s==="D";
 function val(cards){let t=0,a=0;for(const c of cards){t+=c.r===1?11:Math.min(c.r,10);if(c.r===1)a++;}while(t>21&&a>0){t-=10;a--;}return t;}
 function moveCount(){return latest?(latest.move_count??latest.moveCount??0):0;}
-function acting(){return latest&&latest.status==="ongoing"&&latest.acting_for_player_index!==null&&latest.acting_for_player_index!==undefined;}
-function mySeat(){return acting()?latest.acting_for_player_index:-1;}
+function acting(){return actingSeat()!==null;}
+function mySeat(){return acting()?actingSeat():-1;}
 function send(move){if(!acting()||sentFor===moveCount())return;sentFor=moveCount();parent.postMessage({type:"make_move",move},"*");render();}
 function cardEl(c,hole){const d=document.createElement("span");d.className="card"+(hole?" hole":red(c)?" red":"");d.textContent=hole?"🂠":lbl(c);return d;}
 function render(){

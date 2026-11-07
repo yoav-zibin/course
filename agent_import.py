@@ -1,16 +1,17 @@
-"""Bounded complete-game imports into the existing private Builder draft store."""
+"""Bounded complete-game imports: one POST publishes a fully translated game."""
 import asyncio
 import json
 import subprocess
 import sys
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from starlette.concurrency import run_in_threadpool
 
 from game_platform import builder_flow as flow
+from game_platform.builder_flow import LANGUAGES
 from game_platform.models import GameRules
-from game_platform.schemas import GameDraftOut, Name, PlayerCounts
+from game_platform.schemas import GameOut, Name, PlayerCounts
 from game_platform.service import InvalidRequestError
 
 MAX_BODY_BYTES = 900_000
@@ -18,6 +19,22 @@ MAX_CODE_BYTES = 200_000
 MAX_IMAGE_BYTES = 120_000
 MAX_WORKFLOW_BYTES = 400_000
 UPLOAD_TIMEOUT_SECONDS = 15
+
+# The owner recorded for a game imported without an account: no user can
+# authenticate as it (user ids are UUIDs), so no one can edit or unpublish it.
+AGENT_IMPORT_OWNER_ID = "agent-import"
+
+
+class GameTranslation(BaseModel):
+    """One language's translation of a game's player-facing texts, in the shape the
+    Builder's final approval produces, so the published game serves them directly."""
+    model_config = ConfigDict(extra='forbid', strict=True)
+    display_name: Name
+    short_description: str = Field(min_length=1, max_length=2000)
+    game_logic_rules: str = Field(min_length=1, max_length=20000)
+    game_ui_rules: str = Field(min_length=1, max_length=20000)
+    tutorial_strings: dict[str, str]
+    client_strings: dict[str, str]
 
 
 class GameImport(BaseModel):
@@ -35,6 +52,33 @@ class GameImport(BaseModel):
     tutorial: dict
     images: list[dict] = Field(min_length=4, max_length=6)
     unit_tests: dict
+    # The game's texts translated into every language but the one it is written in:
+    # name, description, rules, UI instructions, tutorial strings and the client
+    # string table. The source language's entry is synthesized server-side, so the
+    # published game is translated in all 8 languages from this one POST.
+    translations: dict[str, GameTranslation]
+    # A string the agent picks when creating the game (a long random secret). Sending
+    # the same string again updates the game created with it instead of creating a
+    # duplicate: the request is an update, not a new addition. Anyone holding the
+    # string can update the game, so keep it secret.
+    game_addition_request_id_and_secret: str | None = Field(default=None, min_length=16, max_length=200)
+
+    @model_validator(mode='after')
+    def _translations_cover_every_other_language(self):
+        if self.language not in LANGUAGES:
+            raise ValueError(f'Unsupported language: {self.language!r}')
+        required = set(LANGUAGES) - {self.language}
+        provided = set(self.translations)
+        if provided != required:
+            missing = sorted(required - provided)
+            extra = sorted(provided - required)
+            detail = []
+            if missing:
+                detail.append('missing translations for ' + ', '.join(missing))
+            if extra:
+                detail.append('unexpected translations for ' + ', '.join(extra))
+            raise ValueError('translations must cover every language but the source language: ' + '; '.join(detail))
+        return self
 
     def game_schemas(self):
         return {key: self.unit_tests[key + "_schema"] for key in ("state", "move", "view")}
@@ -43,6 +87,37 @@ class GameImport(BaseModel):
         return GameRules(allowed_player_counts=tuple(self.allowed_player_counts),
                          allows_leave_mid_match=self.allows_leave_mid_match,
                          allows_join_mid_match=self.allows_join_mid_match)
+
+
+def _validate_translations(body, table, tutorial_vocab):
+    """The caller-supplied translations must cover the game's own strings exactly and
+    keep every placeholder, so the published game is translated in every language
+    from the first request. Returns the workflow's translations dict, including the
+    source language synthesized from the game's own texts."""
+    from game_platform import translation as translation_module
+    from game_platform.builder_tutorial import validate_translations
+    translations = {}
+    for locale, translation in body.translations.items():
+        try:
+            validate_translations(table, translation.client_strings)
+            validate_translations({s: s for s in tutorial_vocab}, translation.tutorial_strings)
+        except ValueError as exc:
+            raise InvalidRequestError(f'Translation for {locale} is incomplete: {exc}') from exc
+        for field, source in (('display_name', body.name), ('short_description', body.description),
+                              ('game_logic_rules', body.rules), ('game_ui_rules', body.ui_instructions)):
+            value = getattr(translation, field)
+            if translation_module.placeholders_of(value) != translation_module.placeholders_of(source):
+                raise InvalidRequestError(f'Translation for {locale} changed placeholders in {field}')
+        translations[locale] = translation.model_dump()
+    translations[body.language] = {
+        'display_name': body.name,
+        'short_description': body.description,
+        'game_logic_rules': body.rules,
+        'game_ui_rules': body.ui_instructions,
+        'tutorial_strings': {s: s for s in tutorial_vocab},
+        'client_strings': dict(table),
+    }
+    return translations
 
 
 def prepare(body):
@@ -68,6 +143,19 @@ def prepare(body):
             # Identify the failing artifact without reflecting that content.
             raise InvalidRequestError(f'Invalid {step} artifact; see the Builder artifact contract') from exc
         workflow['artifacts'][step] = {'value': value, 'status': 'draft', 'revision': 1}
+    # The translations are trusted as supplied (they are checked structurally here,
+    # not machine-translated), and they count toward the workflow size limit below.
+    from game_platform.builder_tutorial import vocabulary
+    from game_platform.game_text import StringsError, extract_strings
+    try:
+        table = extract_strings(body.client_code)
+    except StringsError as exc:
+        raise InvalidRequestError(str(exc)) from exc
+    if table is None:
+        raise InvalidRequestError('Game is missing its translation string table')
+    workflow['translations'] = _validate_translations(body, table, vocabulary(body.tutorial['html']))
+    if body.game_addition_request_id_and_secret is not None:
+        workflow['game_addition_request_id_and_secret'] = body.game_addition_request_id_and_secret
     for image in [*body.images, *(i for case in body.unit_tests['cases'] for i in case['images'])]:
         if len(image['svg'].encode('utf-8')) > MAX_IMAGE_BYTES:
             raise InvalidRequestError('Each SVG must be at most 120000 UTF-8 bytes')
@@ -83,7 +171,7 @@ def prepare(body):
     failed = [name for name, result in checks.items() if not result['passed']]
     if failed:
         raise InvalidRequestError('Game verification failed: ' + ', '.join(failed))
-    # No approval digests, build status, translations or publication claims are trusted.
+    # No approval digests, build status or publication claims are trusted.
     return workflow
 
 
@@ -105,13 +193,15 @@ def verify_submission(body):
 def make_router(platform_dependency, caller_dependency):
     router = APIRouter()
 
-    @router.post('/agent/games', status_code=201, response_model=GameDraftOut,
-                 summary='Import a complete game as a private draft',
+    @router.post('/agent/games', status_code=201, response_model=GameOut,
+                 summary='Import a complete game as a published game',
                  openapi_extra={'requestBody': {'required': True, 'content': {
                      'application/json': {'schema': GameImport.model_json_schema()}}}})
     async def import_game(request: Request, platform=Depends(platform_dependency),
                           caller=Depends(caller_dependency)):
         # Authentication runs before reading or parsing the upload (including chunked bodies).
+        # Credentials are optional: a request without them publishes an ownerless game.
+        # Credentials that are sent but invalid are rejected by the dependency.
         if request.headers.get('content-type', '').split(';')[0].lower() != 'application/json':
             raise HTTPException(415, 'Use application/json')
         if request.headers.get('content-encoding', 'identity').lower() != 'identity':
@@ -145,12 +235,18 @@ def make_router(platform_dependency, caller_dependency):
                 raise HTTPException(422, [{'loc': list(e['loc']), 'msg': e['msg'], 'type': e['type']}
                                           for e in exc.errors(include_input=False, include_context=False)]) from exc
             workflow = await run_in_threadpool(verify_submission, body)
-            draft = await run_in_threadpool(platform.save_game_draft,
-                caller_id=caller, draft_id=None, expected_revision=None,
+            # Seed the portal bundle with the supplied translations first, so a failure
+            # here leaves nothing behind; the game itself is created right after.
+            await run_in_threadpool(platform.set_translations, translations=_bundle_translations(body))
+            # A resubmission with the same request id updates the game created with it
+            # instead of creating a duplicate; without one, every POST creates a game.
+            game = await run_in_threadpool(platform.import_agent_game,
+                caller_id=caller if caller is not None else AGENT_IMPORT_OWNER_ID,
                 name=body.name, description=body.description, rules=body.game_rules(),
                 code=body.client_code, server_code=body.server_code,
-                game_schemas=body.game_schemas(), _initial_workflow=workflow)
-            return GameDraftOut.of(draft)
+                game_schemas=body.game_schemas(), builder_workflow=workflow,
+                request_id=body.game_addition_request_id_and_secret)
+            return GameOut.of(game)
         finally:
             slots.release()
 
@@ -159,6 +255,25 @@ def make_router(platform_dependency, caller_dependency):
         return GameImport.model_json_schema()
 
     return router
+
+
+def _bundle_translations(body):
+    """(locale, source, text) triples for the portal bundle: the game's name,
+    description and in-game strings, in every supplied language but English
+    (English is the source language, so the bundle never translates into it)."""
+    from game_platform.game_text import extract_strings
+    table = extract_strings(body.client_code) or {}
+    triples = []
+    for locale, translation in body.translations.items():
+        if locale == 'en':
+            continue
+        triples.append((locale, body.name, translation.display_name))
+        triples.append((locale, body.description, translation.short_description))
+        for key, text in translation.client_strings.items():
+            source = table.get(key)
+            if source is not None:
+                triples.append((locale, source, text))
+    return triples
 
 
 if __name__ == '__main__':

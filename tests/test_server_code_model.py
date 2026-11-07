@@ -58,7 +58,7 @@ def _create_game(api: Api, owner: str, **changes):
         "server_code": SERVER_CODE,
     }
     body.update(changes)
-    return api.ok("POST", "/games", as_user=owner, json=body)
+    return api.create_game(body, owner)
 
 
 def test_create_game_with_client_and_server_code(api: Api):
@@ -72,22 +72,12 @@ def test_create_game_with_client_and_server_code(api: Api):
 
 def test_v1_game_has_no_server_code(api: Api):
     owner = api.new_user("owner")
-    game = api.ok(
-        "POST", "/games", as_user=owner,
-        json={"name": "V1 game", "allowed_player_counts": [2], "code": "<p>v1</p>"},
+    game = api.create_game(
+        {"name": "V1 game", "allowed_player_counts": [2], "code": "<p>v1</p>"},
+        owner,
     )
     assert game["server_code"] is None
     assert game["client_code"] == "<p>v1</p>"
-
-
-def test_a_game_still_needs_client_code(api: Api):
-    owner = api.new_user("owner")
-    response = api.request(
-        "POST", "/games", as_user=owner,
-        json={"name": "No code", "allowed_player_counts": [2],
-              "server_code": SERVER_CODE},
-    )
-    assert response.status_code == 422
 
 
 def test_patch_server_code_and_client_code(api: Api):
@@ -122,10 +112,20 @@ def test_patch_server_code_and_client_code(api: Api):
 
 def test_draft_publish_carries_server_code(api: Api):
     owner = api.new_user("owner")
+
+    def schemas_for(server_code: str) -> dict:
+        return api.ok(
+            "POST", "/games/test", as_user=owner,
+            json={"server_code": server_code, "game_schemas": None,
+                  "allowed_player_counts": [2],
+                  "allows_leave_mid_match": False, "allows_join_mid_match": False},
+        )["game_schemas"]
+
     draft = api.ok(
         "POST", "/game-drafts", as_user=owner,
         json={"name": "Drafted", "allowed_player_counts": [2],
-              "code": CLIENT_CODE, "server_code": SERVER_CODE},
+              "code": CLIENT_CODE, "server_code": SERVER_CODE,
+              "game_schemas": schemas_for(SERVER_CODE)},
     )
     assert draft["server_code"] == SERVER_CODE
     game = api.ok(
@@ -138,6 +138,7 @@ def test_draft_publish_carries_server_code(api: Api):
         "PUT", f"/game-drafts/{draft['id']}", as_user=owner,
         json={"name": "Drafted", "allowed_player_counts": [2],
               "code": CLIENT_CODE, "server_code": SERVER_CODE_V2,
+              "game_schemas": schemas_for(SERVER_CODE_V2),
               "expected_revision": draft["revision"]},
     )
     republished = api.ok(

@@ -1276,6 +1276,12 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
         draft = stage('Preparing approved specification')
         artifacts = draft.builder_workflow['artifacts']
         spec = {key:value['value'] for key,value in artifacts.items()}
+        # The schemas the game is published with: they come from the approved
+        # tests, never generated from the code (see publish_game_draft). The
+        # draft carries them from the first save, so publishing finds them.
+        game_schemas = {'state': spec['tests']['state_schema'],
+                        'move': spec['tests']['move_schema'],
+                        'view': spec['tests']['view_schema']}
         rules = GameRules(allowed_player_counts=tuple(spec['logic']['allowed_player_counts']),
                           allows_join_mid_match=spec['logic']['allows_join_mid_match'],allows_leave_mid_match=spec['logic']['allows_leave_mid_match'])
         request=AgentChatRequest(game_name=spec['identity']['display_name'],game_description=spec['identity']['short_description'],
@@ -1340,12 +1346,6 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
                         continue
                     stage('Loading generated server JavaScript')
                     try:
-                        test_contract = artifacts['tests']['value']
-                        game_schemas = {
-                            'state': test_contract['state_schema'],
-                            'move': test_contract['move_schema'],
-                            'view': test_contract['view_schema'],
-                        }
                         GameLogic(server, game_schemas=game_schemas).load()
                     except GameLogicError as exc:
                         problem = str(exc)[:1000]
@@ -1415,7 +1415,7 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
                 if not errors and not server_restored:
                     def save_server_checkpoint(d):
                         d.builder_workflow['job']['server_checkpoint'] = {'server_code':server,'checks':checks,'reviews':reviews}
-                        return replace(d, server_code=server)
+                        return replace(d, server_code=server, game_schemas=game_schemas)
                     update(save_server_checkpoint)
             if not errors and not restored_pair:
                 from game_platform.builder_checks import localization
@@ -1494,7 +1494,7 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
                     # an attempt re-failing on that same client.
                     def save_verified_pair(d):
                         d.builder_workflow['job'].update(verified_code_digest=flow.digest([code,server]),checks=checks,server_reviews=reviews)
-                        return replace(d,code=code,server_code=server)
+                        return replace(d,code=code,server_code=server,game_schemas=game_schemas)
                     update(save_verified_pair)
             if not errors and restored_pair:
                 try:
@@ -1535,7 +1535,7 @@ def run_build(platform, client, owner, draft_id, job_id, deliver=None):
         def ready(d):
             f=d.builder_workflow; f['job'].update(status='ready_for_review',stage='Play the game and review the screenshots',
                 code_digest=flow.digest([code,server]),examples=examples,server_reviews=reviews,checks=checks)
-            return replace(d, name=spec['identity']['display_name'],description=spec['identity']['short_description'],rules=rules,code=code,server_code=server)
+            return replace(d, name=spec['identity']['display_name'],description=spec['identity']['short_description'],rules=rules,code=code,server_code=server,game_schemas=game_schemas)
         update(ready)
         announce('Your game is ready to review')
     except Exception as exc:

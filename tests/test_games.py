@@ -1,7 +1,5 @@
 from typing import Any
 
-import pytest
-
 from game_platform.tests.helpers import Api, error, validation_errors
 
 POKER: dict[str, Any] = {
@@ -16,9 +14,7 @@ POKER: dict[str, Any] = {
 
 def test_create_and_get_a_game(api: Api) -> None:
     alice = api.new_user("alice")
-    response = api.request("POST", "/games", as_user=alice, json=POKER)
-    assert response.status_code == 201
-    game = response.json()
+    game = api.create_game(POKER, alice)
     # Player counts are stored sorted.
     assert game == {
         "id": game["id"],
@@ -48,11 +44,8 @@ def test_create_and_get_a_game(api: Api) -> None:
 
 def test_optional_game_fields_have_defaults(api: Api) -> None:
     alice = api.new_user("alice")
-    game = api.ok(
-        "POST",
-        "/games",
-        as_user=alice,
-        json={"name": "Chess", "allowed_player_counts": [2], "code": ""},
+    game = api.create_game(
+        {"name": "Chess", "allowed_player_counts": [2], "code": ""}, alice
     )
     assert {
         key: game[key]
@@ -67,7 +60,7 @@ def test_optional_game_fields_have_defaults(api: Api) -> None:
 def test_list_games_optionally_filtered_by_owner(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     for owner, name in [(alice, "Poker"), (bob, "Chess"), (alice, "Go")]:
-        api.ok("POST", "/games", as_user=owner, json={**POKER, "name": name})
+        api.create_game({**POKER, "name": name}, owner)
 
     def names(params: dict[str, str]) -> list[str]:
         return [game["name"] for game in api.ok("GET", "/games", params=params)]
@@ -89,51 +82,11 @@ def test_unknown_game_is_not_found(api: Api) -> None:
     )
 
 
-@pytest.mark.parametrize(
-    ("changes", "expected_errors"),
-    [
-        ({"name": ""}, ["name: String should have at least 1 character"]),
-        (
-            {"allowed_player_counts": []},
-            [
-                "allowed_player_counts: List should have at least 1 item after "
-                "validation, not 0"
-            ],
-        ),
-        (
-            {"allowed_player_counts": [0, 11]},
-            [
-                "allowed_player_counts.0: Input should be greater than or equal to 1",
-                "allowed_player_counts.1: Input should be less than or equal to 10",
-            ],
-        ),
-        (
-            {"allowed_player_counts": [2, 2]},
-            ["allowed_player_counts: Value error, must not contain duplicates"],
-        ),
-        ({"code": None}, ["code: Input should be a valid string"]),
-        (
-            {"allows_join_mid_match": "maybe"},
-            [
-                "allows_join_mid_match: Input should be a valid boolean, unable to interpret input"
-            ],
-        ),
-        ({"color": "red"}, ["color: Extra inputs are not permitted"]),
-    ],
-)
-def test_game_creation_validates_its_input(
-    api: Api, changes: dict[str, Any], expected_errors: list[str]
-) -> None:
-    alice = api.new_user("alice")
-    response = api.request("POST", "/games", as_user=alice, json={**POKER, **changes})
-    assert validation_errors(response) == expected_errors
-
-
 def test_update_creates_a_new_version_changing_only_the_given_fields(
     api: Api,
 ) -> None:
     alice = api.new_user("alice")
-    before = api.ok("POST", "/games", as_user=alice, json=POKER)
+    before = api.create_game(POKER, alice)
     after = api.ok(
         "PATCH",
         f"/games/{before['id']}",
@@ -162,7 +115,7 @@ def test_update_creates_a_new_version_changing_only_the_given_fields(
 
 def test_an_update_that_changes_nothing_keeps_the_version(api: Api) -> None:
     alice = api.new_user("alice")
-    before = api.ok("POST", "/games", as_user=alice, json=POKER)
+    before = api.create_game(POKER, alice)
     after = api.ok(
         "PATCH", f"/games/{before['id']}", as_user=alice, json={"name": "Poker"}
     )
@@ -260,12 +213,7 @@ def test_games_can_be_searched_by_name_and_description(api: Api) -> None:
         ("Chess", "Classic strategy"),
         ("Speed Chess", "Five-minute strategy"),
     ]:
-        api.ok(
-            "POST",
-            "/games",
-            as_user=alice,
-            json={**POKER, "name": name, "description": description},
-        )
+        api.create_game({**POKER, "name": name, "description": description}, alice)
 
     def search(q: str) -> list[str]:
         return [g["name"] for g in api.ok("GET", "/games", params={"q": q})]

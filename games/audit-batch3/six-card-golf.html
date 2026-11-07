@@ -143,18 +143,19 @@ function applyLocale(message) {
 
 
 let latest=null, flipSel=[], flipModeArmed=false, pending=false;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 function rankL(r){return r==1?'A':r==11?'J':r==12?'Q':r==13?'K':''+r;}
 function suitS(s){return ['\u2660','\u2665','\u2666','\u2663'][s];}
 function isRed(s){return s==1||s==2;}
 function cval(r){if(r==1)return 1;if(r>=2&&r<=10)return r;if(r==11)return 0;if(r==12)return 10;return 0;}
 function liveScore(h){let t=0;for(let c=0;c<3;c++){let a=h[c],b=h[c+3];if(a.up&&b.up&&a.r==b.r)continue;if(a.up)t+=cval(a.r);if(b.up)t+=cval(b.r);}return t;}
 function finalScore(h){let t=0;for(let c=0;c<3;c++){let a=h[c],b=h[c+3];if(a.r==b.r)continue;t+=cval(a.r)+cval(b.r);}return t;}
-function canAct(){return latest&&latest.status==='ongoing'&&!latest.replay&&!pending&&Number.isInteger(latest.acting_for_player_index);}
-function actingHand(){return latest?.view?.hands?.[latest.acting_for_player_index];}
+function canAct(){return latest&&latest.status==='ongoing'&&!latest.replay&&!pending&&Number.isInteger(actingSeat());}
+function actingHand(){return latest?.view?.hands?.[actingSeat()];}
 function cardIndex(i){return Number.isInteger(i)&&i>=0&&i<6;}
 function validMove(m){
  if(!canAct()||!m||typeof m!=='object')return false;
- const v=latest.view,seat=latest.acting_for_player_index,hand=actingHand();
+ const v=latest.view,seat=actingSeat(),hand=actingHand();
  if(!v||!hand)return false;
  if(v.phase==='flip')return seat===flipIdx(v)&&m.kind==='flip'&&Array.isArray(m.idxs)&&m.idxs.length===2&&m.idxs[0]!==m.idxs[1]&&m.idxs.every(i=>cardIndex(i)&&!hand[i].up);
  if(v.phase!=='play'||seat!==curIdx(v))return false;
@@ -187,7 +188,7 @@ function render(){
   document.getElementById('title').textContent=t('title');document.getElementById('helpTitle').textContent=t('help_title');document.getElementById('helpText').textContent=t('help_text');
   if(!latest){sEl.textContent=t('waiting');return;}
   let view=latest.view, players=latest.players;
-  let acting=latest.acting_for_player_index;
+  let acting=actingSeat();
   let my=latest.my_player_index;
   let canMove=canAct();
   if(!view){sEl.textContent=t('waiting_start');pEl.replaceChildren();hEl.replaceChildren();aEl.replaceChildren();lEl.textContent='';return;}
@@ -277,7 +278,7 @@ function render(){
 }
 window.clickFlip=function(i){
  const v=latest?.view,hand=actingHand();
- if(!canAct()||v?.phase!=='flip'||latest.acting_for_player_index!==flipIdx(v)||!cardIndex(i)||!hand||hand[i].up)return;
+ if(!canAct()||v?.phase!=='flip'||actingSeat()!==flipIdx(v)||!cardIndex(i)||!hand||hand[i].up)return;
  if(flipSel.includes(i))flipSel=flipSel.filter(x=>x!==i);else if(flipSel.length<2)flipSel.push(i);
  render();
 };

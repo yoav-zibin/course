@@ -235,8 +235,7 @@ def test_full_guided_http_build_with_real_renderer(api,monkeypatch,tmp_path):
             if field == 'code':
                 # Fail the real browser test if the renderer presents an impossible live-match state.
                 source = source.replace("m=e.data;applyLocale", """m=e.data;
-if (m.status==='over' && (m.turn_of_player_indices!==null || m.acting_for_player_index!==null)) throw Error('Invalid terminal turn');
-if (m.acting_for_player_index!==null && !m.turn_of_player_indices?.includes(m.acting_for_player_index)) throw Error('Invalid acting seat');
+if (m.status==='over' && m.turn_of_player_indices!==null) throw Error('Invalid terminal turn');
 applyLocale""")
             return ChatResult(source,prompt_tokens=500,completion_tokens=200)
         return ChatResult(json.dumps(value),prompt_tokens=500,completion_tokens=200)

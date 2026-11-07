@@ -100,11 +100,12 @@ function decor(i){const R=rng(5000+i*331);const t=[];for(let k=0;k<22;k++)t.push
 let DECOR=[0,1,2,3,4].map(decor);
 function fallbackState(){return{hole:0,pos:[[80,200],[90,200]],sunk:[false,false],cur:[0,0],tot:[0,0],hist:[[],[]],par:2};}
 let latest=null,view=fallbackState(),aim=null,animBall=null,dragging=false;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 function V(){return view||fallbackState();}
 let animSeat=null,animationGeneration=0,lastAnimationKey=null;
 function animateShot(shot,key){if(!shot||key===lastAnimationKey||shot.hole!==V().hole)return;lastAnimationKey=key;const generation=++animationGeneration,frames=shot.frames||[];let k=0;animSeat=shot.seat;function step(){if(generation!==animationGeneration)return;if(k<frames.length){animBall=frames[k++];requestAnimationFrame(step);}else{animBall=null;animSeat=null;}}step();}
-function myTurn(){if(!latest||latest.status!=='ongoing')return -1;const a=latest.acting_for_player_index;return a==null?-1:a;}
-function canHumanShoot(s){return latest&&latest.status==='ongoing'&&latest.acting_for_player_index===s&&latest.my_player_index===s&&latest.players[s].kind==='human'&&!V().sunk[s]&&!dragging;}
+function myTurn(){if(!latest||latest.status!=='ongoing')return -1;const a=actingSeat();return a==null?-1:a;}
+function canHumanShoot(s){return latest&&latest.status==='ongoing'&&actingSeat()===s&&latest.my_player_index===s&&latest.players[s].kind==='human'&&!V().sunk[s]&&!dragging;}
 function mouse(e){const r=cv.getBoundingClientRect();return[(e.clientX-r.left)*640/r.width,(e.clientY-r.top)*400/r.height];}
 function posToDraw(s){if(animBall&&animSeat===s)return animBall;return V().pos[s];}
 function path(poly){ctx.beginPath();ctx.moveTo(poly[0][0],poly[0][1]);for(let i=1;i<poly.length;i++)ctx.lineTo(poly[i][0],poly[i][1]);ctx.closePath();}
@@ -157,7 +158,7 @@ addEventListener('message',event=>{if(event.source!==parent||!event.data||event.
   const fin={a:st.tot[0],b:st.tot[1]};
   if(st.hist[0]&&st.hist[0].length)document.getElementById('msg').textContent=t('final_holes',{...fin,holes0:st.hist[0].join(','),holes1:st.hist[1].join(',')});
   else document.getElementById('msg').textContent=t('final',fin);}
- else{const a=latest.acting_for_player_index;
+ else{const a=actingSeat();
   document.getElementById('turn').textContent=(a===null||a===undefined)?t('waiting'):t('turn_of',{name:(latest.players[a]&&latest.players[a].name)||seatLabel(a)});
   if(latest.my_player_index===a)document.getElementById('msg').textContent=t('your_shot');
   else document.getElementById('msg').textContent=t('waiting_for',{name:(a!==null&&a!==undefined&&latest.players[a]&&latest.players[a].name)||t('other_player')});}});

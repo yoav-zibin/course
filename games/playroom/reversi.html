@@ -319,18 +319,32 @@ function platformTokenPayout(state, latest) {
           return b;
         }
         function errorText(message) { switch (message) { case "Illegal square": return t("illegal_square"); default: return message; } }
+        // The seat this client moves for: my own seat when it is my turn, or
+        // the computer's seat when this client is the only human (v1 games are
+        // computed here, so this client plays the computer). Never another
+        // human's seat.
+        function actingSeat() {
+          if (!latest || latest.status !== "ongoing" || !latest.turn_of_player_indices?.length) return null;
+          const turn = latest.turn_of_player_indices[0];
+          if (turn === latest.my_player_index) return turn;
+          // Spectators never act, even on a computer's turn.
+          if (latest.my_player_index === null) return null;
+          const humans = (latest.players || []).filter((p) => p.kind === "human");
+          if (humans.length === 1 && latest.players?.[turn]?.kind === "computer") return turn;
+          return null;
+        }
         function submit(action) {
           if (
             sent ||
             !latest ||
             latest.status !== "ongoing" ||
-            latest.acting_for_player_index === null
+            actingSeat() === null
           )
             return;
           try {
             const result = Logic.play(
               current(),
-              latest.acting_for_player_index,
+              actingSeat(),
               action,
             );
             sent = true;
@@ -356,7 +370,7 @@ function platformTokenPayout(state, latest) {
           $("title").textContent = t("title");
           $("rules").textContent = t("rules");
           const s = current(),
-            seat = latest.acting_for_player_index;
+            seat = actingSeat();
           const human =
             seat !== null &&
             latest.status === "ongoing" &&

@@ -456,17 +456,15 @@ def test_the_creator_who_left_cannot_delete_the_match(api: Api) -> None:
         api.new_user("bob"),
         api.new_user("carol"),
     )
-    game = api.ok(
-        "POST",
-        "/games",
-        as_user=alice,
-        json={
+    game = api.create_game(
+        {
             "name": "Counter race",
             "allowed_player_counts": [3],
             "allows_leave_mid_match": True,
             "code": "<div>counter</div>",
             "server_code": _LEAVE_AND_PLAY_ON_GAME,
         },
+        alice,
     )
     match_id = api.new_match(
         owner=alice, game_id=game["id"], joiners=[bob, carol], start=True

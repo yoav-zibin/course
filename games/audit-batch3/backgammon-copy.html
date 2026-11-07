@@ -151,6 +151,7 @@ function applyLocale(message) {
 // highlight destinations and enable buttons — the server re-validates
 // every action.
 let latest=null, selected=null, sentFor=-1;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 const $=id=>document.getElementById(id);
 function previewSetup(){return {owner:setupOwner(),cnt:setupCnt(),bar:[0,0],off:[0,0],cur:0,dice:[],moves:[],needRoll:true,winner:null};}
 function setupOwner(){let o=new Array(24).fill(-1);o[23]=0;o[12]=0;o[7]=0;o[5]=0;o[0]=1;o[11]=1;o[16]=1;o[18]=1;return o;}
@@ -179,7 +180,7 @@ function render(){let left=$('left'),right=$('right'),barCol=$('barCol');
  $('title').textContent=t('title');$('roll').textContent=t('roll');$('clearSel').textContent=t('clear');$('hint').textContent=t('hint');
  left.innerHTML='';right.innerHTML='';barCol.innerHTML='';
  let st=view()||previewSetup();
- let acting=latest&&latest.status==='ongoing'?latest.acting_for_player_index:null;
+ let acting=actingSeat();
  let my=latest?latest.my_player_index:null;
  let canHuman=acting!==null&&acting===my&&st.winner===null&&latest.status==='ongoing';
  function mkPoint(idx,isTop){let d=document.createElement('div');let light=(idx%2===0);

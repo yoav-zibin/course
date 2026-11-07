@@ -81,13 +81,14 @@ function applyLocale(message) {
 
 
 let latest=null,sentFor=-1,pending8=null;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 const $=id=>document.getElementById(id);
 $("status").textContent=t("waiting_platform");$("title").textContent=t("title");$("rules").textContent=t("rules");
 const SUITS=["♠","♥","♣","♦"],RED={1:1,3:1};
 const RANKS={1:"A",11:"J",12:"Q",13:"K"};
 const label=c=>(RANKS[c%13+1]||String(c%13+1))+SUITS[Math.floor(c/13)];
 function moveCount(){return latest?(latest.move_count??latest.moveCount??0):0;}
-function myTurn(){return latest&&latest.status==="ongoing"&&latest.acting_for_player_index!==null&&latest.acting_for_player_index!==undefined;}
+function myTurn(){return actingSeat()!==null;}
 function send(move){if(!myTurn()||sentFor===moveCount())return;
  if(move!=="draw"){
    const v=latest.view;
@@ -106,7 +107,7 @@ function render(){
  const over=latest.status==="over"||v.done;
  if(over)status.textContent=v.winner!==null&&v.winner!==undefined?t("wins",{name:name(v.winner)}):t("tied");
  else if(sentFor===moveCount())status.textContent=t("saving");
- else if(myTurn())status.textContent=t("your_turn",{name:name(latest.acting_for_player_index)});
+ else if(myTurn())status.textContent=t("your_turn",{name:name(actingSeat())});
  else status.textContent=t("waiting_for",{name:name(v.turnIdx)});
  const hand=$("hand");hand.replaceChildren();
  const playable=new Set(v.playable||[]);

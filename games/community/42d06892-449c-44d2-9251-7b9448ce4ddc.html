@@ -150,6 +150,7 @@ function applyLocale(message) {
   if (message.direction) document.documentElement.dir = message.direction;
 }
 let latest=null;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 function applyStaticTexts(noView){
   document.querySelector('h1').textContent=t("heading");
   document.querySelector('.sub').textContent=t("sub");
@@ -187,7 +188,7 @@ function render(){
   if(!latest){ stEl.textContent=t("waiting_platform"); return; }
   const players=latest.players||[];
   const my=latest.my_player_index;
-  const acting=latest.status==='ongoing'?latest.acting_for_player_index:null;
+  const acting=actingSeat();
   const robot0=players[0]&&players[0].kind==='computer'?' 🤖':'';
   const robot1=players[1]&&players[1].kind==='computer'?' 🤖':'';
   document.getElementById('p0name').textContent=players[0]?players[0].name+robot0:'-';
@@ -252,7 +253,7 @@ addEventListener('message',(event)=>{
 });
 document.getElementById('flipBtn').onclick=()=>{
   if(!latest||latest.status!=='ongoing') return;
-  const acting=latest.acting_for_player_index;
+  const acting=actingSeat();
   if(acting===null||acting===undefined) return;
   if(sentFor===latest.move_count) return;
   sentFor=latest.move_count;

@@ -85,10 +85,11 @@ function applyLocale(message) {
 
 
 let latest=null,sentFor=-1,mode="move",orient="H";
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 const $=id=>document.getElementById(id);
 $("status").textContent=t("waiting_platform");
 function moveCount(){return latest?(latest.move_count??latest.moveCount??0):0;}
-function myTurn(){return latest&&latest.status==="ongoing"&&latest.acting_for_player_index!==null&&latest.acting_for_player_index!==undefined;}
+function myTurn(){return actingSeat()!==null;}
 function blocked(walls,r1,c1,r2,c2){
  for(const w of walls){
   if(c1===c2&&w.o==='H'&&w.r===Math.min(r1,r2)&&(w.c===c1||w.c===c1-1))return true;
@@ -134,7 +135,7 @@ function render(){
  $("meta").textContent=t("walls_left",{name0:name(0),walls0:v.wallsLeft[0],name1:name(1),walls1:v.wallsLeft[1]});
  if(over)status.textContent=t("wins",{name:name(v.winner)});
  else if(sentFor===moveCount())status.textContent=t("saving");
- else if(myTurn()){const who={name:name(latest.acting_for_player_index)};if(mode==="move")status.textContent=t("your_turn_move",who);else status.textContent=t("your_turn_wall",who);}
+ else if(myTurn()){const who={name:name(actingSeat())};if(mode==="move")status.textContent=t("your_turn_move",who);else status.textContent=t("your_turn_wall",who);}
  else status.textContent=t("waiting_for",{name:name(v.turnIdx)});
  $("modeMove").className=mode==="move"?"on":"";$("modeWall").className=mode==="wall"?"on":"";
  $("orient").textContent=orient==="H"?t("wall_horizontal"):t("wall_vertical");

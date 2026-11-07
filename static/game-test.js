@@ -282,12 +282,22 @@ function playerMessage(state, item) {
   const players = reply.players.map((p, index) => ({player_index:index, player_id:p.id, kind:p.kind, name:p.name}));
   const turns = reply.turn === null ? null : reply.turn.map(id => players.findIndex(p => p.player_id === id)).filter(i => i >= 0);
   const seat = config.mode === "pass" ? (turns?.find(i => players[i].kind === "human") ?? 0) : item.seat;
-  const acting = reply.status === "ongoing" && turns?.includes(seat) && players[seat]?.kind === "human" ? seat : null;
   const view = reply.views[players[seat]?.player_id] ?? null;
   const message = stateChangedMessage({state:view, view, players, turn:turns, status:reply.status,
-    endReason:reply.status === "over" ? "finished" : null, moveCount:reply.move_count, mySeat:seat, actingFor:acting});
+    endReason:reply.status === "over" ? "finished" : null, moveCount:reply.move_count, mySeat:seat});
   message.token_pot = reply.pot;
   return message;
+}
+
+/** Whether the frame's seat may move now: the game is ongoing, the seat is in
+ * the turn, and it is a human seat. Players only act for themselves. */
+function frameCanAct(state, item) {
+  const reply = state.reply;
+  if (!reply || reply.status !== "ongoing" || !reply.turn) return false;
+  const message = playerMessage(state, item);
+  const seat = message.my_player_index;
+  return seat !== null && message.turn_of_player_indices?.includes(seat)
+    && message.players[seat]?.kind === "human";
 }
 
 async function displayReply(state, reply) {
@@ -327,19 +337,19 @@ async function move(state, item, moveValue) {
       !state.reply.players.every(p => Object.hasOwn(state.reply.views, p.id))) return;
   const current = run, message = playerMessage(state, item);
   const owner = sessionUser(current);
-  if (message.acting_for_player_index === null) return;
+  if (!frameCanAct(state, item)) return;
   state.busy = true;
   try {
     const reply = await apiRequest("POST", "/game-test-emulator/act", {user:owner, body:{
       ...requestBody(state), state:state.reply.state, turn:state.reply.turn,
-      move_count:state.reply.move_count, player_id:message.players[message.acting_for_player_index].player_id,
+      move_count:state.reply.move_count, player_id:message.players[message.my_player_index].player_id,
       move:moveValue,
     }});
     if (run !== current) return;
     if (reply.error && JSON.stringify(reply.state) === JSON.stringify(state.reply.state)) {
       reply.views = state.reply.views;
     }
-    record({type:"state", scenario:state.config.id, action:"move", seat:message.acting_for_player_index, move:moveValue, reply});
+    record({type:"state", scenario:state.config.id, action:"move", seat:message.my_player_index, move:moveValue, reply});
     await displayReply(state, reply);
   } finally { state.busy = false; }
 }
@@ -411,7 +421,7 @@ async function playRandomMatches() {
           if (current.randomStop) throw new Error(I18n.t("ui.game_test.random_stopped", {}, "Random play stopped by user."));
           if (current.randomError) throw current.randomError;
           if (clicks >= 200) throw new Error(I18n.t("ui.game_test.click_limit", {}, "Match did not finish within 200 clicks."));
-          const item = state.frames.find(frame => playerMessage(state, frame).acting_for_player_index !== null);
+          const item = state.frames.find(frame => frameCanAct(state, frame));
           if (!item) throw new Error(I18n.t("ui.game_test.no_human_turn", {}, "No human screen can act on the current turn."));
           const before = state.reply.move_count;
           await randomClick(item);

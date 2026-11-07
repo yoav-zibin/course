@@ -15,7 +15,7 @@ function setup(name,n,seed=14){
  let current=game.newMatch(ctx);
  function advance(move){ctx.random=random(seed+ctx.move_count);current=game.applyMove(current.state,current.turn[0],move,ctx);ctx.move_count++;return current;}
  function walk(){for(let i=0;i<2000&&current.turn;i++){ctx.random=random(seed+ctx.move_count);const m=game.randomMove(current.state,current.turn[0],ctx);advance(m);}assert.equal(current.turn,null);return current;}
- function send(viewer){const me=ctx.players.findIndex(p=>p.id===viewer);receive({source:parent,data:{type:'state_changed',status:current.turn?'ongoing':'over',move_count:ctx.move_count,players:ctx.players.map(p=>({name:p.display_name})),my_player_index:me<0?null:me,acting_for_player_index:current.turn?.includes(viewer)?me:null,view:game.viewFor(current.state,viewer,ctx)}});}
+ function send(viewer){const me=ctx.players.findIndex(p=>p.id===viewer);receive({source:parent,data:{type:'state_changed',status:current.turn?'ongoing':'over',move_count:ctx.move_count,players:ctx.players.map(p=>({name:p.display_name})),my_player_index:me<0?null:me,turn_of_player_indices:current.turn?current.turn.map(id=>ctx.players.findIndex(p=>p.id===id)):null,view:game.viewFor(current.state,viewer,ctx)}});}
  return{nodes,sent,game,ctx,advance,walk,send,current:()=>current};
 }
 test('Hearts reachable seed14 tie names all low scorers for players and spectators',()=>{

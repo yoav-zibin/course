@@ -68,10 +68,10 @@ def test_popularity_survives_a_snapshot_restart_and_match_deletion(tmp_path):
 def test_server_computer_match_adds_all_players_exactly_once(api):
     owner = api.new_user("computer player")
     source = Path(__file__).resolve().parent.parent / "games" / "tictactoe.server.js"
-    game = api.ok("POST", "/games", as_user=owner, json={
+    game = api.create_game({
         "name": "Computer popularity", "code": "<main>game</main>",
         "allowed_player_counts": [2], "server_code": source.read_text(),
-    })["id"]
+    }, owner)["id"]
     match = api.new_match(owner=owner, game_id=game, num_computer_opponents=1, start=True)
     assert api.ok("GET", f"/games/{game}/popularity")["score"] == 2
     assert api.request("POST", f"/matches/{match}/start", as_user=owner, json={}).status_code == 409

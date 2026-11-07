@@ -421,9 +421,12 @@ function cardHTML(card, size, turned, withTag = false) {
 }
 
 function actingSeat() {
-  if (!latest || latest.status !== "ongoing" || !latest.state) return null;
-  const seat = latest.acting_for_player_index;
-  return seat !== null && seat < latest.state.n ? seat : null;
+  if (!latest || latest.status !== "ongoing" || !latest.state || !latest.turn_of_player_indices?.length) return null;
+  const turn = latest.turn_of_player_indices[0];
+  if (turn === latest.my_player_index) return turn !== null && turn < latest.state.n ? turn : null;
+  const humans = latest.players.filter((p) => p.kind === "human");
+  if (latest.my_player_index !== null && humans.length === 1 && latest.players[turn]?.kind === "computer") return turn !== null && turn < latest.state.n ? turn : null;
+  return null;
 }
 
 function makeMove(newState, nextTurn) {
@@ -640,7 +643,7 @@ window.addEventListener("message", (event) => {
 
   if (latest.status === "ongoing" && latest.state === null) {
     // The first move deals the first hand (seat 0 starts).
-    if (latest.acting_for_player_index === 0) {
+    if (actingSeat() === 0) {
       const n = latest.players.length >= 4 ? 4 : 2;
       makeMove(Logic.newGame(n), [0]);
     }

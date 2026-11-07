@@ -31,7 +31,7 @@ def _create_game(api: Api, owner: str, name: str, **fields) -> dict:
         "game_schemas": _game_schemas(name),
     }
     body.update(fields)
-    return api.ok("POST", "/games", as_user=owner, json=body)
+    return api.create_game(body, owner)
 
 
 def _move(api: Api, match_id: str, user: str, move, expected: int) -> dict:

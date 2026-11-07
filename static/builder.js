@@ -358,7 +358,6 @@ function sendTestState() {
   const test = state.test;
   if (test?.v2) { sendEmulatorState(); return; }
   const firstTurn = test.turn === null ? null : test.turn[0];
-  const turnSeat = firstTurn === null ? null : test.players[firstTurn];
   const message = stateChangedMessage({
     state: test.state,
     players: test.players,
@@ -366,9 +365,9 @@ function sendTestState() {
     status: test.status,
     endReason: test.status === "over" ? "finished" : null,
     moveCount: test.moves.length,
-    // In pass-and-play the person at the screen is whichever human has the turn.
-    mySeat: turnSeat && turnSeat.kind === "human" ? firstTurn : null,
-    actingFor: test.status === "ongoing" && !test.paused ? firstTurn : null,
+    // In pass-and-play the person at the screen is whichever seat has the
+    // turn, so the turn seat is the viewer's own seat here.
+    mySeat: test.status === "ongoing" && !test.paused ? firstTurn : null,
   });
   test.awaiting = test.status === "ongoing" && !test.paused;
   $("pause-test").textContent = test.paused ? I18n.t("ui.builder.resume", {}, "Resume") : I18n.t("ui.builder.pause", {}, "Pause");
@@ -391,8 +390,7 @@ function sendEmulatorState() {
   // The person at the screen: seat 0 against computers; in pass-and-play,
   // whichever human is to move.
   const viewer = test.mode === "computer" ? test.players[0] : (turnSeats.find(p => p.kind === "human") ?? test.players[0]);
-  const actingFor = test.status === "ongoing" && !test.paused && viewer && test.turnIds !== null && test.turnIds.includes(viewer.player_id)
-    ? viewer.player_index : null;
+  const canAct = test.status === "ongoing" && !test.paused && viewer && test.turnIds !== null && test.turnIds.includes(viewer.player_id);
   const message = stateChangedMessage({
     state: test.state,
     view: viewer ? (test.views[viewer.player_id] ?? null) : null,
@@ -402,10 +400,9 @@ function sendEmulatorState() {
     endReason: test.status === "over" ? "finished" : null,
     moveCount: test.moveCount,
     mySeat: viewer ? viewer.player_index : null,
-    actingFor,
   });
   message.token_pot = 0;
-  test.awaiting = actingFor !== null;
+  test.awaiting = canAct;
   $("pause-test").textContent = test.paused ? I18n.t("ui.builder.resume", {}, "Resume") : I18n.t("ui.builder.pause", {}, "Pause");
   $("step-test").disabled = !test.paused || test.status === "over";
   $("undo-move").disabled = !test.moves.length;

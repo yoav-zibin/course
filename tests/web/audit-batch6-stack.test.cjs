@@ -16,7 +16,7 @@ function setup(n=2){
  function random(seed){let value=seed>>>0;return()=>{value=(value+0x6d2b79f5)|0;let t=value;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296}}
  ctx.random=random(29);let current=game.newMatch(ctx);
  function advance(move){ctx.random=random(29+ctx.move_count);current=game.applyMove(current.state,current.turn[0],move,ctx);ctx.move_count++;return current}
- function message(viewer=0,extra={}){const actor=current.turn?ctx.players.findIndex(p=>p.id===current.turn[0]):null;receive({source:parent,data:{type:'state_changed',move_count:ctx.move_count,players:ctx.players.map((p,i)=>({name:'P'+i})),my_player_index:viewer,acting_for_player_index:viewer===actor?actor:null,turn_of_player_indices:actor===null?null:[actor],status:current.turn?'ongoing':'over',view:game.viewFor(current.state,viewer===null?null:'p'+viewer,ctx),...extra}})}
+ function message(viewer=0,extra={}){const actor=current.turn?ctx.players.findIndex(p=>p.id===current.turn[0]):null;receive({source:parent,data:{type:'state_changed',move_count:ctx.move_count,players:ctx.players.map((p,i)=>({name:'P'+i})),my_player_index:viewer,turn_of_player_indices:actor===null?null:[actor],status:current.turn?'ongoing':'over',view:game.viewFor(current.state,viewer===null?null:'p'+viewer,ctx),...extra}})}
  const enabled=()=>nodes.get('cols').children.map((b,i)=>b.disabled?null:i).filter(x=>x!==null);
  return {nodes,sent,ctx,game,advance,message,enabled,current:()=>current,setCurrent:r=>current=r};
 }
@@ -28,13 +28,13 @@ test('six accepted drops leave the next actor real client controls for all remai
  t.nodes.get('cols').children[6].onclick();assert.deepEqual(t.sent[0].move,{rot:1,col:6});assert.doesNotThrow(()=>t.advance(t.sent[0].move));
 });
 test('a player-left ending with nullable winners renders a neutral ending and disables moves',()=>{
- const t=setup();t.message(1,{status:'over',end_reason:'player_left',acting_for_player_index:null,turn_of_player_indices:null});
+ const t=setup();t.message(1,{status:'over',end_reason:'player_left',turn_of_player_indices:null});
  assert.equal(t.current().state.winners,null);assert.match(t.nodes.get('status').textContent,/Game ended — a player left\./);assert.doesNotMatch(t.nodes.get('status').textContent,/wins?|Tie/);
  assert.deepEqual(t.enabled(),[]);assert.equal(t.nodes.get('rotate').disabled,true);
  for(const button of t.nodes.get('cols').children)button.onclick();assert.equal(t.sent.length,0);
 });
 test('other platform terminal reasons without game winners use the neutral fallback',()=>{
- const t=setup();for(const viewer of [0,1,null]){t.message(viewer,{status:'over',end_reason:'finished',acting_for_player_index:null,turn_of_player_indices:null});assert.match(t.nodes.get('status').textContent,/^Game ended\. Lines cleared: 0$/);assert.deepEqual(t.enabled(),[])}
+ const t=setup();for(const viewer of [0,1,null]){t.message(viewer,{status:'over',end_reason:'finished',turn_of_player_indices:null});assert.match(t.nodes.get('status').textContent,/^Game ended\. Lines cleared: 0$/);assert.deepEqual(t.enabled(),[])}
  assert.equal(t.sent.length,0);
 });
 test('a genuine no-placement game ending retains tie and unique-winner rendering',()=>{

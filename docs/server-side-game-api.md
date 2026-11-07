@@ -17,7 +17,7 @@ below land phase by phase — each section says when.
 | Initial state | Created by the game, or `initial_state` at start | The server calls `newMatch` at start |
 | A move | Client sends the full `new_state` + next turn | Client sends a small game-defined `move`; the server calls `applyMove` |
 | Validation | Turn and seat checks only | `applyMove` rejects illegal moves with `InvalidMove` (HTTP 400) |
-| Computer opponents | Played by human clients (`acting_for_player_index`) | Played on the server by `computerMove`, with or without humans online |
+| Computer opponents | Played by the single human's client (v1 games are computed client-side) | Played on the server by `computerMove`, with or without humans online |
 | What clients see | The whole state | `viewFor(state, playerId)` — hidden information stays on the server |
 | Randomness | `Math.random` in whichever client moved | Seeded by the server per call (`ctx.random`), so reproducible |
 | Tokens | Pot split by seat on the final move | Each human stakes up to `max_loss`; server code pays out the pot |
@@ -159,7 +159,7 @@ exchanging the same two messages, but it no longer computes states:
 {"type": "make_move", "move": {"cell": 1}}
 ```
 
-Removed from v1 for v2 games: `acting_for_player_index`, seat indices,
+Removed from v1 for v2 games: seat indices,
 client-computed `new_state` / `next_turn_player_indices`, and
 `initial_state` / `first_turn_player_indices` on start.
 
@@ -362,8 +362,9 @@ portal speaks for v2 matches:
 - `state_changed` (platform -> game) gains `view`: the viewer's `viewFor`
   view (`null` for spectators). `players` entries gain `player_id`. A v2
   client renders `view` and keeps no state of its own;
-  `acting_for_player_index` is only ever the viewer's own seat — the
-  server moves computers, never the client.
+  a player only ever acts for themselves: it is their turn when
+  `my_player_index` is in `turn_of_player_indices`. The server moves
+  computers, never the client.
 - `make_move` (game -> platform) for a v2 game is `{"type": "make_move",
   "move": ...}` — no `new_state`, no next turn; the server validates and
   applies it.

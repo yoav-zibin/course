@@ -467,7 +467,7 @@ private struct OnlineMatch: Identifiable {
         guard let m = selected else { return [:] }
         return ["type": "state_changed", "state": m.json["state"] ?? NSNull(), "players": m.players.map { p -> [String: Any] in
             var p = p; p["name"] = (p["kind"] as? String == "computer") ? "Computer" : ((p["user_id"] as? String == identity?.id) ? identity?.display_name ?? "You" : "Player \((p["player_index"] as? Int ?? 0) + 1)"); return p
-        }, "turn_of_player_indices": m.json["turn_of_player_indices"] ?? NSNull(), "turn_of_player_index": (m.json["turn_of_player_indices"] as? [Int])?.first as Any? ?? NSNull(), "status": m.status, "end_reason": m.json["end_reason"] ?? NSNull(), "move_count": m.count, "my_player_index": mySeat as Any? ?? NSNull(), "acting_for_player_index": acting as Any? ?? NSNull()]
+        }, "turn_of_player_indices": m.json["turn_of_player_indices"] ?? NSNull(), "turn_of_player_index": (m.json["turn_of_player_indices"] as? [Int])?.first as Any? ?? NSNull(), "status": m.status, "end_reason": m.json["end_reason"] ?? NSNull(), "move_count": m.count, "my_player_index": mySeat as Any? ?? NSNull()]
     }
     func move(_ message: [String: Any], matchID: String, count: Int) async {
         guard let cache, let m = selected, m.id == matchID, m.count == count, acting != nil,

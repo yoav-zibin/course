@@ -455,28 +455,21 @@ function seatOf(match, userId) {
   return match.players.find((player) => player.user_id === userId && player.active !== false) ?? null;
 }
 
-/** The seat this viewer moves for now: their own turn, or — in a v1 game — a
- * computer's turn, which the viewer's browser plays. In a v2 game computers
- * move on the server, so a viewer only ever acts for their own seat. */
-function actingFor(match, userId) {
+/** Whether this viewer may move now: their own seat is in the turn. Players
+ * only ever act for themselves. In pass-and-play the viewer's seat is the
+ * turn seat (see the mySeat computation where the message is built), so the
+ * same check covers it; computers move on the server, never through a client. */
+function canMove(match, userId) {
   if (
+    !match ||
+    !userId ||
     match.status !== "ongoing" ||
-    match.turn_of_player_indices === null ||
-    !userId
+    match.turn_of_player_indices === null
   )
-    return null;
-  if (match.localMode === "pass") return match.turn_of_player_indices[0];
+    return false;
+  if (match.localMode === "pass") return true;
   const seat = seatOf(match, userId);
-  if (!seat) return null;
-  const turn = match.turn_of_player_indices;
-  if (turn.includes(seat.player_index)) return seat.player_index;
-  const game = gameOf(match.game_id, match.game_version);
-  if (game && game.server_code) return null;
-  if (match.players.filter(player => player.kind === "human" && player.active !== false).length !== 1) return null;
-  const computer = turn
-    .map((index) => match.players[index])
-    .find((player) => player && player.kind === "computer");
-  return computer ? computer.player_index : null;
+  return seat !== null && match.turn_of_player_indices.includes(seat.player_index);
 }
 
 function isYourTurn(match, userId) {
@@ -1867,7 +1860,6 @@ async function syncGame() {
     endReason: view.end_reason && view.end_reason !== "finished" ? "player_left" : view.end_reason,
     moveCount: view.move_count,
     mySeat: mySeat ? mySeat.player_index : null,
-    actingFor: !replay && user && !match.conflict ? actingFor(match, user.id) : null,
   });
   message.token_pot = view.token_pot ?? 0;
   // Let game UIs distinguish a historical snapshot from a live opponent turn.
@@ -1894,7 +1886,7 @@ async function onMakeMove(move) {
       if ("move" in move) {
         // A v2 game sent only its move: the server validates and applies
         // it, so the client checks nothing but whose turn it is.
-        if (!match || !user || actingFor(match, user.id) === null)
+        if (!canMove(match, user?.id))
           throw new Error(I18n.t("ui.error.not_your_turn", {}, "It isn't your turn."));
         if (match.localMode) {
           const updated = await offline.practiceMove(match, move.move);
@@ -1922,7 +1914,7 @@ async function onMakeMove(move) {
       const seats = new Set(match.players.map(player=>player.player_index));
       if (!(next === null || (Array.isArray(next) && next.length && new Set(next).size === next.length && next.every(seat=>Number.isInteger(seat)&&seats.has(seat)))))
         throw new Error(I18n.t("ui.portal.invalid_next_player", {}, "The game sent an invalid next player. Your move was not queued. Restart or repair this game in Builder."));
-      if (!match || !user || actingFor(match, user.id) === null)
+      if (!canMove(match, user?.id))
         throw new Error(I18n.t("ui.error.not_your_turn", {}, "It isn't your turn."));
       state.match = await offline.submitMove(match, {
         ...move,

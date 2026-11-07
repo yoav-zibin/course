@@ -142,7 +142,7 @@ test('poker translates the lines of its log and leaves the unlisted ones', () =>
     log: ['Ann folds.', 'nobody listed this'],
   };
   const players = [{ name: 'Ann', player_index: 0 }, { name: 'Bob', player_index: 1 }];
-  const { english, spanish } = show(file, { status: 'ongoing', move_count: 3, my_player_index: 0, acting_for_player_index: 0, turn_of_player_indices: [0], players, view });
+  const { english, spanish } = show(file, { status: 'ongoing', move_count: 3, my_player_index: 0, turn_of_player_indices: [0], players, view });
   assert.ok(english.includes('Ann folds.') && !english.includes('ES['));
   assert.ok(spanish.includes('ES[Ann folds.]') && spanish.includes('nobody listed this'), spanish);
 });

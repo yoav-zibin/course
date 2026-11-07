@@ -70,6 +70,7 @@ function applyLocale(message) {
   if (message.direction) document.documentElement.dir = message.direction;
 }
 let latest=null,sentFor=-1;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 function applyStaticTexts(){
  document.title=t("page_title");
  document.querySelector("h1").textContent=t("heading");
@@ -77,7 +78,7 @@ function applyStaticTexts(){
 }
 const $=id=>document.getElementById(id);
 function moveCount(){return latest?(latest.move_count??latest.moveCount??0):0;}
-function myTurn(){return latest&&latest.status==="ongoing"&&latest.acting_for_player_index!==null&&latest.acting_for_player_index!==undefined;}
+function myTurn(){return actingSeat()!==null;}
 function send(add){if(!myTurn()||sentFor===moveCount())return;sentFor=moveCount();parent.postMessage({type:"make_move",move:{add}},"*");render();}
 function render(){
  if(!latest)return;
@@ -88,7 +89,7 @@ function render(){
  const over=latest.status==="over"||(v.winner!==null&&v.winner!==undefined);
  if(over)status.textContent=v.winner!==null&&v.winner!==undefined?t("wins",{name:name(v.winner)}):t("match_ended");
  else if(sentFor===moveCount())status.textContent=t("saving");
- else if(myTurn())status.textContent=t("your_turn",{name:name(latest.acting_for_player_index)});
+ else if(myTurn())status.textContent=t("your_turn",{name:name(actingSeat())});
  else{const turns=latest.turn_of_player_indices||latest.turn;status.textContent=turns&&turns.length?t("waiting_for",{names:turns.map(name).join(", ")}):t("waiting");}
  const can=myTurn()&&sentFor!==moveCount()&&!over;
  $("add1").disabled=!can;$("add2").disabled=!can;

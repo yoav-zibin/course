@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from game_platform.api import create_app
 from game_platform.config import AuthConfig, PushConfig
+from game_platform.models import GameRules
 from game_platform.push import PushNotifier
 from game_platform.senders import CodeSender
 from game_platform.service import GamePlatform
@@ -131,6 +132,33 @@ class Api:
         self.passwords_by_user_id[user["id"]] = user["password"]
         return user["id"]
 
+    def create_game(self, body: dict, owner: str) -> dict:
+        """Creates a published game via the service and returns its GameOut dict.
+        POST /games is gone (the agent import is the HTTP creation path), so tests
+        that just need a game use this. A v2 game without schemas gets the
+        permissive test schemas, as the old HTTP helper injected."""
+        from game_platform.schemas import GameOut
+
+        code = body.get("client_code") or body["code"]
+        server_code = body.get("server_code")
+        game_schemas = body.get("game_schemas")
+        if server_code is not None and game_schemas is None:
+            game_schemas = TEST_GAME_SCHEMAS
+        game = self.platform.create_game(
+            caller_id=owner,
+            name=body["name"],
+            description=body.get("description", ""),
+            rules=GameRules(
+                allowed_player_counts=tuple(sorted(body["allowed_player_counts"])),
+                allows_leave_mid_match=body.get("allows_leave_mid_match", False),
+                allows_join_mid_match=body.get("allows_join_mid_match", False),
+            ),
+            code=code,
+            server_code=server_code,
+            game_schemas=game_schemas,
+        )
+        return GameOut.of(game).model_dump(mode="json")
+
     def new_game(
         self,
         *,
@@ -139,19 +167,18 @@ class Api:
         allows_leave_mid_match: bool = False,
         allows_join_mid_match: bool = False,
     ) -> str:
-        game = self.ok(
-            "POST",
-            "/games",
-            as_user=owner,
-            json={
-                "name": "Poker",
-                "allowed_player_counts": list(allowed_player_counts),
-                "allows_leave_mid_match": allows_leave_mid_match,
-                "allows_join_mid_match": allows_join_mid_match,
-                "code": "<div>poker</div>",
-            },
+        game = self.platform.create_game(
+            caller_id=owner,
+            name="Poker",
+            description="",
+            rules=GameRules(
+                allowed_player_counts=tuple(allowed_player_counts),
+                allows_leave_mid_match=allows_leave_mid_match,
+                allows_join_mid_match=allows_join_mid_match,
+            ),
+            code="<div>poker</div>",
         )
-        return game["id"]
+        return game.id
 
     def new_match(
         self,

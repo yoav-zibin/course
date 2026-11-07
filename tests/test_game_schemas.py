@@ -165,25 +165,10 @@ def test_estimate_win_chance_does_not_swallow_invalid_generated_move():
         logic.call("viewFor", {"count": 0}, "u1", ctx=_ctx())
 
 
-def test_api_generates_missing_and_rejects_malformed_game_schemas(api: Api):
+def test_the_test_endpoint_generates_schemas_and_creation_requires_them(api: Api):
     owner = api.new_user("owner")
-    body = {
-        "name": "Needs schemas",
-        "allowed_player_counts": [2],
-        "allows_leave_mid_match": False,
-        "allows_join_mid_match": False,
-        "code": "<div></div>",
-        "server_code": GAME_CODE,
-    }
-    missing = api.request(
-        "POST", "/games", as_user=owner, json={**body, "game_schemas": None}
-    )
-    assert missing.status_code == 201
-    generated_schemas = missing.json()["game_schemas"]
-    assert set(generated_schemas) == {"state", "move", "view"}
-    assert isinstance(generated_schemas["state"], dict), missing.json()
-    assert generated_schemas["state"]["properties"]["count"]["type"] == "integer"
-
+    # Generation only happens in POST /games/test (the builder and game-test page
+    # test unsaved code); creating a game never generates schemas.
     tested = api.ok(
         "POST",
         "/games/test",
@@ -196,31 +181,97 @@ def test_api_generates_missing_and_rejects_malformed_game_schemas(api: Api):
             "allows_join_mid_match": False,
         },
     )
-    assert tested["game_schemas"] == missing.json()["game_schemas"]
+    generated_schemas = tested["game_schemas"]
+    assert set(generated_schemas) == {"state", "move", "view"}
+    assert isinstance(generated_schemas["state"], dict)
+    assert generated_schemas["state"]["properties"]["count"]["type"] == "integer"
 
+    from game_platform.models import GameRules
+    from game_platform.service import InvalidRequestError
+
+    with pytest.raises(InvalidRequestError, match="needs its game_schemas"):
+        # Bypass the test helper (it injects the permissive test schemas).
+        api.platform.create_game(
+            caller_id=owner,
+            name="Needs schemas",
+            description="",
+            rules=GameRules(
+                allowed_player_counts=(2,),
+                allows_leave_mid_match=False,
+                allows_join_mid_match=False,
+            ),
+            code="<div></div>",
+            server_code=GAME_CODE,
+        )
+
+    # Malformed schemas are rejected by the schema model (422), here via PATCH.
+    game = api.create_game({
+        "name": "V1", "allowed_player_counts": [2], "code": "<div></div>",
+    }, owner)
     malformed = api.request(
-        "POST",
-        "/games",
+        "PATCH",
+        f"/games/{game['id']}",
         as_user=owner,
-        json={**body, "game_schemas": {"state": {"type": "invalid"}, "move": True, "view": True}},
+        json={"server_code": GAME_CODE,
+              "game_schemas": {"state": {"type": "invalid"}, "move": True, "view": True}},
     )
     assert malformed.status_code == 422
 
 
-def test_draft_publication_generates_schemas(api: Api):
+def test_draft_publication_requires_schemas(api: Api):
     owner = api.new_user("draft-owner")
+    # A draft without schemas cannot be published: schemas are given, never
+    # generated at publish time. The builder saves them on the draft (from its
+    # approved tests) before it can be published.
     draft = api.ok(
         "POST",
         "/game-drafts",
         as_user=owner,
         json={
-            "name": "Generated draft",
+            "name": "Needs schemas",
             "allowed_player_counts": [2],
             "allows_leave_mid_match": False,
             "allows_join_mid_match": False,
             "code": "<div></div>",
             "server_code": GAME_CODE,
             "game_schemas": None,
+        },
+    )
+    refused = api.request(
+        "POST",
+        f"/game-drafts/{draft['id']}/publish",
+        as_user=owner,
+        json={"expected_revision": draft["revision"]},
+    )
+    assert refused.status_code == 400
+    assert "needs its game_schemas" in refused.json()["detail"]
+
+    # With the schemas (from POST /games/test, the generation path) it publishes.
+    tested = api.ok(
+        "POST",
+        "/games/test",
+        as_user=owner,
+        json={
+            "server_code": GAME_CODE,
+            "game_schemas": None,
+            "allowed_player_counts": [2],
+            "allows_leave_mid_match": False,
+            "allows_join_mid_match": False,
+        },
+    )
+    draft = api.ok(
+        "PUT",
+        f"/game-drafts/{draft['id']}",
+        as_user=owner,
+        json={
+            "name": "Has schemas",
+            "allowed_player_counts": [2],
+            "allows_leave_mid_match": False,
+            "allows_join_mid_match": False,
+            "code": "<div></div>",
+            "server_code": GAME_CODE,
+            "game_schemas": tested["game_schemas"],
+            "expected_revision": draft["revision"],
         },
     )
     published = api.ok(
@@ -274,24 +325,18 @@ def test_schema_inference_keeps_nested_constraints_for_nullable_values():
 
 def test_game_schemas_round_trip_and_are_in_openapi(api: Api):
     owner = api.new_user("owner")
-    game = api.ok(
-        "POST",
-        "/games",
-        as_user=owner,
-        json={
-            "name": "Schema contract",
-            "allowed_player_counts": [2],
-            "code": "<div></div>",
-            "server_code": GAME_CODE,
-            "game_schemas": SCHEMAS,
-        },
-    )
+    game = api.create_game({
+        "name": "Schema contract",
+        "allowed_player_counts": [2],
+        "code": "<div></div>",
+        "server_code": GAME_CODE,
+        "game_schemas": SCHEMAS,
+    }, owner)
     assert game["game_schemas"] == SCHEMAS
 
     definitions = api.client.get("/openapi.json").json()["components"]["schemas"]
     assert set(definitions["GameSchemas"]["properties"]) == {"state", "move", "view"}
     for model in (
-        "GameCreate",
         "GameUpdate",
         "GameDraftSave",
         "GameTestRequest",
@@ -303,18 +348,13 @@ def test_game_schemas_round_trip_and_are_in_openapi(api: Api):
 
 def test_invalid_api_move_is_rejected_without_advancing_the_match(api: Api):
     owner, other = api.new_user("owner"), api.new_user("other")
-    game = api.ok(
-        "POST",
-        "/games",
-        as_user=owner,
-        json={
-            "name": "Strict move",
-            "allowed_player_counts": [2],
-            "code": "<div></div>",
-            "server_code": GAME_CODE,
-            "game_schemas": SCHEMAS,
-        },
-    )
+    game = api.create_game({
+        "name": "Strict move",
+        "allowed_player_counts": [2],
+        "code": "<div></div>",
+        "server_code": GAME_CODE,
+        "game_schemas": SCHEMAS,
+    }, owner)
     match = api.ok(
         "POST", "/matches", as_user=owner, json={"game_id": game["id"]}
     )

@@ -223,10 +223,10 @@ def make_game(api: TranslatingApi) -> Any:
     if getattr(api, "game", None) is not None:
         return api.game
     owner = api.new_user("owner")
-    game = api.ok("POST", "/games", as_user=owner, json={
+    game = api.create_game({
         "name": "Cards", "description": "d", "allowed_player_counts": [2],
         "allows_leave_mid_match": False, "allows_join_mid_match": False, "code": GAME_PAGE,
-    })
+    }, owner)
     api.game = api.platform.get_game_version(game["id"], 1, caller_id=owner)  # type: ignore[attr-defined]
     return api.game  # type: ignore[attr-defined]
 
@@ -324,12 +324,12 @@ def test_a_failing_translator_still_answers_400_with_the_english_text() -> None:
 def test_a_rejected_move_of_tictactoe_is_answered_in_the_viewers_language() -> None:
     api = TranslatingApi(FakeTranslator())
     owner, guest = api.new_user("owner"), api.new_user("guest")
-    game = api.ok("POST", "/games", as_user=owner, json={
+    game = api.create_game({
         "name": "Tic-tac-toe", "allowed_player_counts": [2],
         "code": (GAMES_DIR / "tictactoe.html").read_text(encoding="utf-8"),
         "server_code": (GAMES_DIR / "tictactoe.server.js").read_text(encoding="utf-8"),
         "game_schemas": json.loads((GAMES_DIR / "tictactoe.schema.json").read_text(encoding="utf-8")),
-    })
+    }, owner)
     match = api.ok("POST", "/matches", as_user=owner, json={"game_id": game["id"], "num_computer_opponents": 0})
     api.ok("POST", f"/matches/{match['id']}/join", as_user=guest)
     current = api.ok("POST", f"/matches/{match['id']}/start", as_user=owner, json={})

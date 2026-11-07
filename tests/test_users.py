@@ -61,7 +61,7 @@ def test_endpoints_that_need_identity_check_the_user_and_password(api: Api) -> N
 
     def create_game(*, as_user: str | None = None, password: str | None = None) -> int:
         response = api.request(
-            "POST", "/games", json=body, as_user=as_user, password=password
+            "POST", "/game-drafts", json=body, as_user=as_user, password=password
         )
         return response.status_code
 
@@ -70,7 +70,7 @@ def test_endpoints_that_need_identity_check_the_user_and_password(api: Api) -> N
         "no headers": create_game(),
         "unknown user": create_game(as_user="nobody", password=bob_password),
         "no password": api.client.post(
-            "/games", json=body, headers={"X-User-Id": alice}
+            "/game-drafts", json=body, headers={"X-User-Id": alice}
         ).status_code,
         "wrong password": create_game(as_user=alice, password="guess"),
         "another user's password": create_game(as_user=alice, password=bob_password),
@@ -83,7 +83,7 @@ def test_endpoints_that_need_identity_check_the_user_and_password(api: Api) -> N
         "another user's password": 401,
         "right password": 201,
     }
-    assert error(api.request("POST", "/games", json=body)) == UNAUTHORIZED
+    assert error(api.request("POST", "/game-drafts", json=body)) == UNAUTHORIZED
 
 
 def test_users_can_change_their_own_display_name(api: Api) -> None:

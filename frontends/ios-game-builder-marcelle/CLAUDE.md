@@ -47,9 +47,10 @@ Explain things to me in simple language; I demo this in class and must understan
 ## Game format (current protocol, see "Game API" in the root README)
 - A game's `code` is one complete HTML document, run in an iframe with `sandbox="allow-scripts"`.
 - Container -> game: `{type: "state_changed", state, players, turn_of_player_indices, status,
-  end_reason, move_count, my_player_index, acting_for_player_index}`.
+  end_reason, move_count, my_player_index}`. A player only acts for themselves:
+  it is their turn when `my_player_index` is in `turn_of_player_indices`.
 - Game -> container: `{type: "make_move", new_state, next_turn_player_indices}` (null ends the match).
-- Computer seats are played by the game itself when `acting_for_player_index` is a computer seat.
+- Computer seats are played by the game itself when the turn seat is a computer and the viewer is the only human (v1 games are computed client-side).
 - On iOS: host the iframe inside a WKWebView page and relay postMessage <-> a
   WKScriptMessageHandler. Reference: `frontends/ios-game-portal/` (another student's portal).
   Copy its ONLINE bridge approach; its offline sample game uses an OLD message format.

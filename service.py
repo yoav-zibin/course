@@ -1861,11 +1861,6 @@ class GamePlatform:
                 self._owned_draft(caller_id=caller_id, draft_id=existing.id)
                 if expected_revision != existing.revision:
                     raise ConflictError("draft changed in another tab; reload before saving")
-                if (
-                    server_code != existing.server_code
-                    and game_schemas == existing.game_schemas
-                ):
-                    game_schemas = None
             elif draft_id is not None:
                 if game is None or game.deleted or game.owner_user_id != caller_id:
                     raise NotFoundError("game not found")
@@ -1939,8 +1934,8 @@ class GamePlatform:
                 self._require_translatable(draft.code, draft.server_code)
                 if draft.server_code:
                     if game_schemas is None:
-                        game_schemas = self._generate_game_schemas(
-                            draft.server_code, draft.rules, draft.id
+                        raise InvalidRequestError(
+                            "a game with server code needs its game_schemas; save them on the draft first"
                         )
                     self._gate_server_code(
                         draft.id, draft.server_code, draft.rules, game_schemas
@@ -1995,6 +1990,7 @@ class GamePlatform:
         code: str,
         server_code: str | None = None,
         game_schemas: dict[str, JsonValue] | None = None,
+        builder_workflow: dict[str, JsonValue] | None = None,
         _check_strings: bool = True,
     ) -> Game:
         server_code = server_code or None
@@ -2004,11 +2000,8 @@ class GamePlatform:
             raise InvalidRequestError("game_schemas requires server_code")
         with self._lock:
             if server_code is not None and game_schemas is None:
-                game_schemas = self._generate_game_schemas(
-                    server_code, rules, "new-game"
-                )
-                self._gate_server_code(
-                    "new-game", server_code, rules, game_schemas
+                raise InvalidRequestError(
+                    "a game with server code needs its game_schemas; give them when creating the game"
                 )
             now = self._clock()
             game = Game(
@@ -2020,12 +2013,76 @@ class GamePlatform:
                 rules=rules,
                 code=code,
                 server_code=server_code,
+                builder_workflow=builder_workflow,
                 game_schemas=game_schemas,
                 created_at=now,
                 updated_at=now,
             )
             self._store.add_game_version(game)
             return game
+
+    def import_agent_game(
+        self,
+        *,
+        caller_id: str,
+        name: str,
+        description: str,
+        rules: GameRules,
+        code: str,
+        server_code: str | None = None,
+        game_schemas: dict[str, JsonValue] | None = None,
+        builder_workflow: dict[str, JsonValue] | None = None,
+        request_id: str | None = None,
+    ) -> Game:
+        """Creates a published game, or updates the one imported with [request_id]
+        (see agent_import). The find and the create/update happen under one lock, so
+        two concurrent resubmissions with the same id — a retry while the first is
+        still running, say — cannot create a duplicate. An update runs as the game's
+        owner: possession of the request id is the authorization, so the caller need
+        not be the owner. A resubmission that changes nothing returns the game as is.
+        """
+        with self._lock:
+            existing = (
+                self.find_game_by_addition_request_id(request_id)
+                if request_id is not None
+                else None
+            )
+            if existing is not None:
+                return self.update_game(
+                    caller_id=existing.owner_user_id,
+                    game_id=existing.id,
+                    name=name,
+                    description=description,
+                    allowed_player_counts=rules.allowed_player_counts,
+                    allows_leave_mid_match=rules.allows_leave_mid_match,
+                    allows_join_mid_match=rules.allows_join_mid_match,
+                    code=code,
+                    server_code=server_code,
+                    game_schemas=game_schemas,
+                    _publishing=True,
+                    _builder_workflow=builder_workflow,
+                )
+            return self.create_game(
+                caller_id=caller_id,
+                name=name,
+                description=description,
+                rules=rules,
+                code=code,
+                server_code=server_code,
+                game_schemas=game_schemas,
+                builder_workflow=builder_workflow,
+            )
+
+    def find_game_by_addition_request_id(self, request_id: str) -> Game | None:
+        """The published game imported with [request_id] (see agent_import: the
+        agent's `game_addition_request_id_and_secret`), or None. The id is stored on
+        the game's workflow; the lookup scans the published games, which is cheap
+        (imports are rare and the list is small)."""
+        with self._lock:
+            for game in self._store.list_games(owner_user_id=None):
+                if (game.builder_workflow or {}).get('game_addition_request_id_and_secret') == request_id:
+                    return game
+        return None
 
     def get_game(self, game_id: str, *, caller_id: str | None = None) -> Game:
         with self._lock:
@@ -2277,6 +2334,35 @@ class GamePlatform:
         self._store.put_translations([translation])
         return translation
 
+    def set_translations(self, *, translations: Sequence[tuple[str, str, str]]) -> list[Translation]:
+        """Stores manual translations of (locale, source, text) triples in one write, for
+        a game imported with its translations supplied: the portal bundle serves these
+        instead of asking Google. Every triple is checked the way [set_translation]
+        checks one: the locale must be a language texts are translated into, both texts
+        must be non-empty, and the translation must keep the source's placeholders.
+        English is the source language, so it is never a target here."""
+        records: list[Translation] = []
+        for locale, source, text in translations:
+            code = i18n.normalize_locale(locale)
+            if code is None or code == i18n.DEFAULT_LOCALE:
+                raise InvalidRequestError(f"{locale!r} is not a language that texts are translated into")
+            if not source.strip() or not text.strip():
+                raise InvalidRequestError("both the text and its translation are needed")
+            if translation_module.placeholders_of(text) != translation_module.placeholders_of(source):
+                raise InvalidRequestError("the translation must keep the text's placeholders (the words in curly braces)")
+            records.append(Translation(
+                locale=code,
+                source_hash=translation_module.text_hash(source),
+                source=source,
+                text=text,
+                provider="manual",
+                created_at=self._clock(),
+                reviewed=True,
+            ))
+        if records:
+            self._store.put_translations(records)
+        return records
+
     def delete_translation(self, locale: str, source_hash: str) -> None:
         """Forgets a translation: the text is translated again next time it is asked for."""
         self._store.delete_translation(locale, source_hash)
@@ -2479,11 +2565,8 @@ class GamePlatform:
             if updated.server_code is None and updated.game_schemas is not None:
                 raise InvalidRequestError("game_schemas requires server_code")
             if updated.server_code is not None and updated.game_schemas is None:
-                updated = replace(
-                    updated,
-                    game_schemas=self._generate_game_schemas(
-                        updated.server_code, updated.rules, game_id
-                    ),
+                raise InvalidRequestError(
+                    "a game with server code needs its game_schemas; give them when updating the game"
                 )
             if updated == game:
                 return game
@@ -2931,25 +3014,6 @@ class GamePlatform:
     # Server-side game logic (v2 Game API, docs/server-side-game-api.md).
     # Everything in this section runs with the platform lock held.
 
-    def _generate_game_schemas(
-        self, server_code: str, rules: GameRules, game_id: str
-    ) -> dict[str, JsonValue]:
-        source = self._store.get_game_draft(game_id) or self._store.get_game(game_id)
-        workflow = getattr(source, "builder_workflow", None) or {}
-        contract = workflow.get("artifacts", {}).get("tests", {}).get("value")
-        try:
-            schemas, _ = infer_game_schemas(
-                server_code,
-                game_id=game_id,
-                rules=rules,
-                contract=contract,
-            )
-        except ValueError as error:
-            raise InvalidRequestError(
-                f"could not automatically generate JSON Schemas: {error}"
-            ) from error
-        return schemas
-
     def test_game_code(
         self,
         *,
@@ -2965,14 +3029,25 @@ class GamePlatform:
         with self._lock:
             generated_schemas = game_schemas is None
             if game_schemas is None:
+                # The test endpoint is the one place schemas are still generated
+                # from code (the builder and the game-test page test unsaved code
+                # that has no schemas yet); creating or publishing a game never
+                # generates them. The game's own test contract, when the code
+                # belongs to a game or draft, seeds the generation.
                 try:
-                    game_schemas = self._generate_game_schemas(
-                        server_code, rules, game_id or "unsaved"
+                    source = self._store.get_game_draft(game_id) or self._store.get_game(game_id) if game_id else None
+                    workflow = getattr(source, "builder_workflow", None) or {}
+                    contract = workflow.get("artifacts", {}).get("tests", {}).get("value")
+                    game_schemas, _ = infer_game_schemas(
+                        server_code,
+                        game_id=game_id or "unsaved",
+                        rules=rules,
+                        contract=contract,
                     )
-                except InvalidRequestError as error:
+                except ValueError as error:
                     failure = TestFailure(
                         function="schema_generation",
-                        message=str(error),
+                        message=f"could not automatically generate JSON Schemas: {error}",
                         seed=0,
                         player_count=0,
                         move_number=0,
@@ -3048,10 +3123,11 @@ class GamePlatform:
     ) -> None:
         """The publish gate (Phase 5): server code about to be published
         must pass the random-walk tests, or publishing is refused and the
-        version stays a draft the author can keep fixing."""
+        version stays a draft the author can keep fixing. The schemas are
+        given, never generated here."""
         if game_schemas is None:
-            game_schemas = self._generate_game_schemas(
-                server_code, rules, game_id
+            raise InvalidRequestError(
+                "a game with server code needs its game_schemas; give them when creating the game"
             )
         report = self._run_game_tests(
             server_code=server_code,

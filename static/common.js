@@ -431,8 +431,10 @@ class GameFrame {
  * For a v2 game, [view] is the viewer's viewFor view of the match; the
  * client renders it instead of [state] (which then carries the same view
  * for portal matches, and the full state only in the builder's emulator,
- * where the author may see everything). */
-function stateChangedMessage({ state, players, turn, status, endReason, moveCount, mySeat, actingFor, view }) {
+ * where the author may see everything). A player only ever acts for
+ * themselves: whether it is their turn is [my_player_index] being in
+ * [turn_of_player_indices]; there is no acting-for seat. */
+function stateChangedMessage({ state, players, turn, status, endReason, moveCount, mySeat, view }) {
   const message = {
     type: "state_changed",
     state,
@@ -442,7 +444,6 @@ function stateChangedMessage({ state, players, turn, status, endReason, moveCoun
     end_reason: endReason,
     move_count: moveCount,
     my_player_index: mySeat,
-    acting_for_player_index: actingFor,
   };
   if (view !== undefined) message.view = view;
   return message;

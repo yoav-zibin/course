@@ -121,17 +121,20 @@ def test_the_default_is_to_require_strings() -> None:
 def test_creating_a_game_without_a_text_table_is_refused_in_plain_words() -> None:
     api = Api(require_game_strings=True)
     owner = api.new_user("owner")
-    refused = api.request("POST", "/games", as_user=owner, json=_body(NO_BLOCK))
-    assert refused.status_code == 400
-    assert "the game's texts cannot be translated: the game has no i18n-strings block" in refused.json()["detail"]
-    assert api.request("POST", "/games", as_user=owner, json=_body(GOOD)).status_code == 201
+    with pytest.raises(
+        InvalidRequestError,
+        match="the game's texts cannot be translated: the game has no i18n-strings block",
+    ):
+        api.create_game(_body(NO_BLOCK), owner)
+    api.create_game(_body(GOOD), owner)
 
 
 def test_the_refusal_is_localized_with_a_stable_code() -> None:
     api = Api(require_game_strings=True)
     owner = api.new_user("owner")
-    refused = api.request("POST", "/games", as_user=owner, json=_body(NO_BLOCK))
-    english = refused.json()["detail"]
+    with pytest.raises(InvalidRequestError) as excinfo:
+        api.create_game(_body(NO_BLOCK), owner)
+    english = str(excinfo.value)
     text, code, params = i18n.localize_error(english, "es")
     assert code == "game_texts_not_translatable" and "traducir" in text
     assert params["problems"].startswith("the game has no i18n-strings block")
@@ -140,14 +143,14 @@ def test_the_refusal_is_localized_with_a_stable_code() -> None:
 def test_saving_a_new_version_needs_a_passing_table_but_other_edits_do_not() -> None:
     api = Api(require_game_strings=True)
     owner = api.new_user("owner")
-    game_id = api.ok("POST", "/games", as_user=owner, json=_body(GOOD))["id"]
+    game_id = api.create_game(_body(GOOD), owner)["id"]
     bad = api.request("PATCH", f"/games/{game_id}", as_user=owner, json={"code": NO_BLOCK})
     assert bad.status_code == 400 and "cannot be translated" in bad.json()["detail"]
     assert api.ok("GET", f"/games/{game_id}")["version"] == 1
     assert api.ok("PATCH", f"/games/{game_id}", as_user=owner, json={"code": GOOD + "<!-- v2 -->"})["version"] == 2
     # A game that predates the rule can still change its description.
     api.platform._require_game_strings = False
-    old_id = api.ok("POST", "/games", as_user=owner, json=_body(NO_BLOCK))["id"]
+    old_id = api.create_game(_body(NO_BLOCK), owner)["id"]
     api.platform._require_game_strings = True
     assert api.ok("PATCH", f"/games/{old_id}", as_user=owner, json={"description": "new"})["version"] == 2
 
@@ -173,7 +176,7 @@ def test_games_with_no_client_code_are_exempt() -> None:
 def test_admin_saves_and_example_data_are_exempt() -> None:
     api = Api(require_game_strings=True, master_password="pw")
     owner = api.new_user("owner")
-    game_id = api.ok("POST", "/games", as_user=owner, json=_body(GOOD))["id"]
+    game_id = api.create_game(_body(GOOD), owner)["id"]
     saved = api.client.put(f"/admin/games/{game_id}/code", auth=ADMIN, json={"code": NO_BLOCK})
     assert saved.is_success, saved.text
     assert saved.json()["version"] == 2
@@ -188,4 +191,4 @@ def test_admin_saves_and_example_data_are_exempt() -> None:
 def test_the_switch_off_allows_any_code() -> None:
     api = Api(require_game_strings=False)
     owner = api.new_user("owner")
-    assert api.request("POST", "/games", as_user=owner, json=_body(NO_BLOCK)).status_code == 201
+    api.create_game(_body(NO_BLOCK), owner)

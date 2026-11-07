@@ -415,46 +415,6 @@ class PushConfigOut(BaseModel):
     vapid_public_key: str
 
 
-class GameCreate(_Request):
-    model_config = _example(
-        {
-            "name": "Tic-tac-toe",
-            "description": "Three in a row wins",
-            "allowed_player_counts": [2],
-            "allows_leave_mid_match": True,
-            "allows_join_mid_match": True,
-            "code": "<div id='board'></div>",
-        }
-    )
-
-    name: Name
-    description: str = ""
-    allowed_player_counts: PlayerCounts
-    allows_leave_mid_match: bool = False
-    allows_join_mid_match: bool = False
-    # The client code. In the v2 Game API this is also called [client_code];
-    # send either name (client_code wins if both are sent).
-    code: str
-    client_code: str | None = None
-    # The server code (v2 Game API, docs/server-side-game-api.md). Omit it (or
-    # send null) for a v1 game whose client computes everything.
-    server_code: str | None = None
-    game_schemas: GameSchemas | None = None
-
-    @model_validator(mode="after")
-    def _require_server_code_for_schemas(self) -> "GameCreate":
-        if not self.server_code and self.game_schemas is not None:
-            raise ValueError("game_schemas requires server_code")
-        return self
-
-    @model_validator(mode="before")
-    @classmethod
-    def _client_code_is_code(cls, data: Any) -> Any:
-        if isinstance(data, dict) and data.get("client_code") is not None:
-            return {**data, "code": data["client_code"]}
-        return data
-
-
 class GameUpdate(_Request):
     """Omitted fields are left unchanged."""
 
@@ -466,7 +426,7 @@ class GameUpdate(_Request):
     allows_leave_mid_match: bool | None = None
     allows_join_mid_match: bool | None = None
     code: str | None = None
-    # The v2 names for the two parts of a game; see [GameCreate].
+    # The v2 names for the two parts of a game.
     client_code: str | None = None
     server_code: str | None = None
     game_schemas: GameSchemas | None = None

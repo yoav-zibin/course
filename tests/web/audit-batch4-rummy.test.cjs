@@ -14,7 +14,7 @@ function setup(){
  vm.runInContext(fs.readFileSync(path.join(root,'rummy-500.server.js'),'utf8')+';globalThis.auditGame=game;',server);
  let seed=1;const ctx={players:[0,1].map(i=>({id:'p'+i,display_name:'P'+i,kind:'human',max_loss:10})),pot:20,move_count:0,random(){seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;}};
  const game=server.auditGame;let current=game.newMatch(ctx);
- function message(){const actor=current.turn[0],seat=ctx.players.findIndex(p=>p.id===actor);return {type:'state_changed',status:'ongoing',view:game.viewFor(current.state,actor,ctx),players:ctx.players.map(p=>({name:p.display_name})),move_count:ctx.move_count,my_player_index:seat,acting_for_player_index:seat};}
+ function message(){const actor=current.turn[0],seat=ctx.players.findIndex(p=>p.id===actor);return {type:'state_changed',status:'ongoing',view:game.viewFor(current.state,actor,ctx),players:ctx.players.map(p=>({name:p.display_name})),move_count:ctx.move_count,my_player_index:seat,turn_of_player_indices:[seat]};}
  const deliver=(extra={},source=parent)=>receive({source,data:{...message(),...extra}});
  function apply(move){current=game.applyMove(JSON.parse(JSON.stringify(current.state)),current.turn[0],move,ctx);ctx.move_count++;}
  function run(code){return vm.runInContext(code,sandbox);}
