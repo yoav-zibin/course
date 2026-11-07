@@ -5,7 +5,6 @@ rewrites the whole file (see [SavingStore] for when).
 """
 
 import datetime as dt
-import json
 import logging
 import shutil
 import time
@@ -20,23 +19,16 @@ from game_platform.store import InMemoryStore, Snapshot
 
 logger = logging.getLogger(__name__)
 
-# Bump when the file layout changes incompatibly.
-FORMAT_VERSION: Final = 15
-# Version 1 stored each turn as a single player index; version 2 stores a set of
-# them. Version 3 adds private drafts; version 4 adds publication state; version
-# 5 adds recorded agent conversations; version 6 adds web push subscriptions;
-# version 7 adds invites, private matches, saved games and referrals; version 8 adds
-# rematch links. Version 9 retains match starting snapshots for replay. Version 10
-# adds speed matches (a per-move clock and the "timed_out" end reason).
-# Version 12 adds guided-builder artifacts, approvals and job state. Version 13 adds
-# feedback (users' bugs, suggestions and reports about users, games, matches and
-# the platform). Version 14 adds private game test recordings.
-# Version 15 retains the per-game popularity aggregates across restarts.
-# Version 11 adds persisted experiments, assignments and events. Older servers must
-# reject new formats rather than lose drafts, re-expose unpublished games or private
-# matches, or drop conversations, subscriptions, invites, experiments or feedback.
-# Versions 1 through 14 still load with all existing data unchanged.
-_V1_FORMAT_VERSION: Final = 1
+# The file layout version. This is version 1 of the clean layout: the
+# current field layout (turn sets, drafts, publication state, agent
+# conversations, push subscriptions, invites, rematch links, replay
+# snapshots, speed matches, experiments, feedback, guided-builder artifacts
+# and game popularity aggregates). There is no migration path: a file whose
+# format_version is not 1 is rejected rather than loaded, so an older or
+# newer file can never silently lose drafts, re-expose unpublished games or
+# private matches, or drop conversations, subscriptions, invites,
+# experiments or feedback.
+FORMAT_VERSION: Final = 1
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -109,30 +101,13 @@ class JsonFileStore(SavingStore):
 def read_snapshot(path: Path) -> Snapshot:
     contents = path.read_bytes()
     # Check the version before validating, which would fail with a less helpful error.
+    # Only version 1 files load; anything else is rejected outright.
     format_version = _VERSION_ADAPTER.validate_json(contents).format_version
-    if format_version == _V1_FORMAT_VERSION:
-        try:
-            contents = _migrate_v1_to_v2(contents)
-        except (KeyError, TypeError):
-            pass  # fall through; validation below reports the real problem
-    elif format_version not in (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, FORMAT_VERSION):
+    if format_version != FORMAT_VERSION:
         raise ValueError(
             f"{path} has format version {format_version}, expected {FORMAT_VERSION}"
         )
     return _FILE_ADAPTER.validate_json(contents).data
-
-
-def _migrate_v1_to_v2(contents: bytes) -> bytes:
-    """Turns each single-index turn field into a one-element turn set."""
-    file = json.loads(contents)
-    file["format_version"] = FORMAT_VERSION
-    for match in file["data"]["matches"]:
-        turn = match.pop("turn_of_player_index")
-        match["turn_of_player_indices"] = None if turn is None else [turn]
-        for move in match["moves"]:
-            next_turn = move.pop("next_turn_player_index")
-            move["next_turn_player_indices"] = None if next_turn is None else [next_turn]
-    return json.dumps(file).encode()
 
 
 def write_snapshot(path: Path, snapshot: Snapshot) -> None:

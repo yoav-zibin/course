@@ -471,7 +471,7 @@ def test_the_api_returns_the_clock_and_the_servers_time() -> None:
 # The data file
 
 
-def test_old_data_files_load_and_the_new_fields_survive_a_restart(tmp_path) -> None:
+def test_the_new_fields_survive_a_restart(tmp_path) -> None:
     path = tmp_path / "data.json"
     store = JsonFileStore(path, min_write_interval_seconds=0)
     world = World(store=store)
@@ -486,14 +486,3 @@ def test_old_data_files_load_and_the_new_fields_survive_a_restart(tmp_path) -> N
         before.turn_started_at,
         before.timeouts,
     )
-    # A version 9 file (before speed matches) still loads, as regular matches.
-    import json
-
-    file = json.loads(path.read_text())
-    file["format_version"] = 9
-    for match_json in file["data"]["matches"]:
-        for key in ("turn_seconds", "turn_started_at", "timeouts"):
-            match_json.pop(key, None)
-    path.write_text(json.dumps(file))
-    old = read_snapshot(path)
-    assert all(m.turn_seconds is None and m.timeouts == () for m in old.matches)

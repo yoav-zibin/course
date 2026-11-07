@@ -4,14 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from game_platform.backfill_game_schemas import (
-    PERMISSIVE_SCHEMAS,
-    backfill_game_schemas,
-    infer_schemas,
-    missing_versions,
-    plan_schema_map,
-    repo_schemas,
-)
 from game_platform.game_input_metrics import game_input_metrics
 from game_platform.tests.helpers import UnrestrictedGameLogic as GameLogic
 from game_platform.game_logic import GameLogicError, InvalidMoveError
@@ -348,7 +340,7 @@ def test_invalid_api_move_is_rejected_without_advancing_the_match(api: Api):
     assert metric["invalid_count"] >= 1
 
 
-def test_missing_persisted_schemas_degrade_startup_but_block_game_logic():
+def test_schema_less_game_versions_cannot_run_logic():
     now = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
     store = InMemoryStore()
     game = Game(
@@ -368,101 +360,4 @@ def test_missing_persisted_schemas_degrade_startup_but_block_game_logic():
     with pytest.raises(GameLogicError, match="game_schemas"):
         platform._logic_for(game)
 
-    assert backfill_game_schemas(store, {"legacy-v2@1": SCHEMAS}) == 1
-    backfilled = GamePlatform(store=store)
-    assert backfilled._logic_for(store.get_game_version("legacy-v2", 1))
 
-
-def _legacy(game_id, version, now):
-    return Game(
-        id=game_id,
-        version=version,
-        owner_user_id="owner",
-        name=game_id,
-        description="",
-        rules=RULES,
-        code="<div></div>",
-        server_code=GAME_CODE,
-        created_at=now,
-        updated_at=now,
-    )
-
-
-def test_the_backfill_plan_uses_shipped_schemas_for_the_newest_version_and_a_stopgap_for_the_rest():
-    now = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
-    store = InMemoryStore()
-    for game_id, version in (("poker", 1), ("poker", 2), ("other", 1)):
-        store.add_game_version(_legacy(game_id, version, now))
-    missing = missing_versions(store)
-    assert missing == [("other", 1), ("poker", 1), ("poker", 2)]
-    shipped = repo_schemas(Path(__file__).parent.parent / "games")
-    assert {"poker", "tictactoe", "debug"} <= set(shipped)
-
-    plan, source = plan_schema_map(missing, {}, shipped=shipped, permissive_rest=True)
-    assert source == {
-        "other@1": "permissive (no validation)",
-        "poker@1": "permissive (no validation)",
-        "poker@2": "games/poker.schema.json",
-    }
-    assert plan["poker@2"] == shipped["poker"] and plan["other@1"] == PERMISSIVE_SCHEMAS
-    # Without the stopgap, versions with no schema are left out, so the backfill refuses.
-    partial, _ = plan_schema_map(missing, {}, shipped=shipped)
-    assert set(partial) == {"poker@2"}
-    with pytest.raises(ValueError, match="missing schemas for other@1, poker@1"):
-        backfill_game_schemas(store, partial)
-    # A given schema wins over everything else.
-    chosen, why = plan_schema_map(missing, {"poker@2": SCHEMAS}, shipped=shipped, permissive_rest=True)
-    assert chosen["poker@2"] == SCHEMAS and why["poker@2"] == "the schema map"
-
-    assert backfill_game_schemas(store, plan) == 3
-    assert GamePlatform(store=store)
-    assert missing_versions(store) == []
-
-
-def test_the_backfill_opens_the_same_store_as_the_server_in_query_mode():
-    from unittest.mock import patch
-
-    from game_platform import backfill_game_schemas as module
-    from game_platform.config import Config
-
-    config = Config.model_validate(
-        {"firestore": {"enabled": True, "mode": "query", "project_id": "p", "database": "d", "namespace": "production_v1"}}
-    )
-    with patch("google.cloud.firestore.Client") as client, patch("game_platform.query_store.QueryStore") as store:
-        module.open_store(config)
-    client.assert_called_once_with(project="p", database="d")
-    assert store.call_args.kwargs == {"namespace": "production_v1"}
-
-
-def test_the_backfill_can_use_inferred_schemas_before_the_stopgap():
-    from unittest.mock import patch
-
-    now = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
-    store = InMemoryStore()
-    for game_id in ("alpha", "beta", "gamma"):
-        store.add_game_version(_legacy(game_id, 1, now))
-    missing = missing_versions(store)
-    inferred_schemas = {"state": {"type": "object"}, "move": {"type": "object"}, "view": {"type": "object"}}
-
-    def fake_infer(server_code, *, game_id, rules, **kwargs):
-        if game_id == "beta":
-            raise ValueError("no successful samples")
-        return inferred_schemas, None
-
-    messages = []
-    with patch("game_platform.game_testing.infer_game_schemas", fake_infer):
-        found = infer_schemas(store, ["alpha@1", "beta@1", "gamma@1"], log=messages.append)
-    assert set(found) == {"alpha@1", "gamma@1"} and found["alpha@1"] == inferred_schemas
-    assert messages == ["beta@1: could not infer schemas (no successful samples)"]
-
-    plan, source = plan_schema_map(missing, {}, inferred=found, permissive_rest=True)
-    assert source == {
-        "alpha@1": "inferred from sample games (not a proof)",
-        "beta@1": "permissive (no validation)",
-        "gamma@1": "inferred from sample games (not a proof)",
-    }
-    # without the stopgap, the version that could not be inferred is left out and the backfill refuses
-    partial, _ = plan_schema_map(missing, {}, inferred=found)
-    with pytest.raises(ValueError, match="missing schemas for beta@1"):
-        backfill_game_schemas(store, partial)
-    assert backfill_game_schemas(store, plan) == 3

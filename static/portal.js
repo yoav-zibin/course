@@ -159,23 +159,7 @@ const state = {
     new URLSearchParams(location.hash.slice(1)).get("game"),
 };
 
-class PortalGameFrame extends GameFrame {
-  receive(event) {
-    if (event.source !== this.iframe?.contentWindow) return;
-    const data = event.data;
-    if (
-      data?.type === "make_move" &&
-      data.next_turn_player_indices === undefined &&
-      data.next_turn_player_index === null
-    )
-      return super.receive({
-        source: event.source,
-        data: { ...data, next_turn_player_indices: null },
-      });
-    super.receive(event);
-  }
-}
-const frame = new PortalGameFrame(
+const frame = new GameFrame(
   $("game-box"),
   (move) => onMakeMove(move),
   (problem) => showMessage(problem, "error"),
