@@ -15,7 +15,8 @@ from dataclasses import asdict, replace
 
 from google.cloud import firestore
 from pydantic import TypeAdapter
-from game_platform.firestore_store import _KINDS, _RECORD_ADAPTERS, _read_text
+from game_platform.firestore_store import _BUNDLES, _KINDS, _RECORD_ADAPTERS, _read_text
+from game_platform.translation_bundle import unpack
 from game_platform.models import (
     Game,
     GameRules,
@@ -71,6 +72,29 @@ def migrate(source, destination, *, source_prefix="", batch_records=None):
         progress = checkpoint.get().to_dict() or {}
         if progress.get("complete"):
             continue
+        if kind.field == "translations":
+            # Translations no longer live one-per-document in the kind's own
+            # collection: the snapshot store packs them into per-language
+            # bundles (translation_bundle.py), which the document stream below
+            # cannot see. Read the bundles the way the store itself does. A
+            # source without bundles falls through to the legacy rows.
+            bundle_docs = [
+                doc.to_dict()
+                for doc in source.collection(source_prefix + _BUNDLES).stream()
+            ]
+            if bundle_docs:
+                records = unpack(bundle_docs)
+                for start in range(0, len(records), 500):
+                    destination.put_translations(records[start : start + 500])
+                completed += len(records)
+                checkpoint.set(
+                    {
+                        **(checkpoint.get().to_dict() or {}),
+                        "complete": True,
+                        "updated_at": dt.datetime.now(dt.timezone.utc),
+                    }
+                )
+                continue
         for doc in documents(
             source.collection(source_prefix + kind.field), after=progress.get("last_id")
         ):
