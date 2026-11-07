@@ -555,6 +555,7 @@
   "ui.error.invalid_response": "服务器响应无效",
   "ui.error.web_locks": "离线走棋需要支持 Web Locks 的较新浏览器。",
   "ui.error.not_your_turn": "还没轮到你。",
+  "ui.error.script_load_failed": "无法加载 {src}",
   "ui.match.gone": "此对局已不存在。",
   "ui.portal.no_multiplayer_games": "没有可用于创建大厅的已发布多人游戏。",
   "ui.portal.invalid_next_player": "游戏发送了无效的下一位玩家，你的这一步没有排入队列。请在创建器中重新开始或修复此游戏。",

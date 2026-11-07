@@ -555,6 +555,7 @@
   "ui.error.invalid_response": "Réponse du serveur non valide",
   "ui.error.web_locks": "Les coups hors ligne nécessitent un navigateur récent compatible avec Web Locks.",
   "ui.error.not_your_turn": "Ce n'est pas votre tour.",
+  "ui.error.script_load_failed": "Impossible de charger {src}",
   "ui.match.gone": "Cette partie n'existe plus.",
   "ui.portal.no_multiplayer_games": "Aucun jeu multijoueur publié n'est disponible pour créer un salon.",
   "ui.portal.invalid_next_player": "Le jeu a envoyé un joueur suivant non valide. Votre coup n'a pas été mis en file d'attente. Redémarrez ou réparez ce jeu dans le créateur.",

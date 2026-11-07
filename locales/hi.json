@@ -555,6 +555,7 @@
   "ui.error.invalid_response": "सर्वर का अमान्य उत्तर",
   "ui.error.web_locks": "ऑफ़लाइन चालों के लिए Web Locks समर्थन वाला नया ब्राउज़र चाहिए।",
   "ui.error.not_your_turn": "अभी आपकी बारी नहीं है।",
+  "ui.error.script_load_failed": "{src} लोड नहीं हो सका",
   "ui.match.gone": "यह मैच अब मौजूद नहीं है।",
   "ui.portal.no_multiplayer_games": "लॉबी बनाने के लिए कोई प्रकाशित मल्टीप्लेयर गेम उपलब्ध नहीं है।",
   "ui.portal.invalid_next_player": "गेम ने अगला खिलाड़ी गलत भेजा। आपकी चाल कतार में नहीं जोड़ी गई। इस गेम को बिल्डर में दोबारा शुरू करें या ठीक करें।",

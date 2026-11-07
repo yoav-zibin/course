@@ -555,6 +555,7 @@
   "ui.error.invalid_response": "Ungültige Serverantwort",
   "ui.error.web_locks": "Offline-Züge brauchen einen aktuellen Browser mit Web-Locks-Unterstützung.",
   "ui.error.not_your_turn": "Du bist nicht am Zug.",
+  "ui.error.script_load_failed": "{src} konnte nicht geladen werden",
   "ui.match.gone": "Diese Partie gibt es nicht mehr.",
   "ui.portal.no_multiplayer_games": "Es sind keine veröffentlichten Mehrspielerspiele verfügbar, um eine Lobby zu erstellen.",
   "ui.portal.invalid_next_player": "Das Spiel hat einen ungültigen nächsten Spieler gesendet. Dein Zug wurde nicht eingereiht. Starte das Spiel neu oder repariere es im Builder.",

@@ -555,6 +555,7 @@
   "ui.error.invalid_response": "Respuesta del servidor no válida",
   "ui.error.web_locks": "Para jugar sin conexión necesitas un navegador actual compatible con Web Locks.",
   "ui.error.not_your_turn": "No es tu turno.",
+  "ui.error.script_load_failed": "No se pudo cargar {src}",
   "ui.match.gone": "Esta partida ya no existe.",
   "ui.portal.no_multiplayer_games": "No hay juegos multijugador publicados para crear una sala.",
   "ui.portal.invalid_next_player": "El juego envió un siguiente jugador no válido. Tu jugada no se puso en cola. Reinicia o repara este juego en el creador.",

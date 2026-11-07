@@ -555,6 +555,7 @@
   "ui.error.invalid_response": "استجابة غير صالحة من الخادم",
   "ui.error.web_locks": "تحتاج الحركات دون اتصال إلى متصفح حديث يدعم Web Locks.",
   "ui.error.not_your_turn": "ليس دورك الآن.",
+  "ui.error.script_load_failed": "تعذّر تحميل {src}",
   "ui.match.gone": "لم تعد هذه المباراة موجودة.",
   "ui.portal.no_multiplayer_games": "لا توجد ألعاب جماعية منشورة متاحة لإنشاء ردهة.",
   "ui.portal.invalid_next_player": "أرسلت اللعبة لاعبًا تاليًا غير صالح ولم تُضَف حركتك إلى قائمة الانتظار. أعد تشغيل هذه اللعبة أو أصلحها في أداة الإنشاء.",

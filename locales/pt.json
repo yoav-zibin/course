@@ -555,6 +555,7 @@
   "ui.error.invalid_response": "Resposta do servidor inválida",
   "ui.error.web_locks": "Jogadas offline exigem um navegador atual com suporte a Web Locks.",
   "ui.error.not_your_turn": "Não é a sua vez.",
+  "ui.error.script_load_failed": "Não foi possível carregar {src}",
   "ui.match.gone": "Esta partida não existe mais.",
   "ui.portal.no_multiplayer_games": "Não há jogos multijogador publicados disponíveis para criar um lobby.",
   "ui.portal.invalid_next_player": "O jogo enviou um próximo jogador inválido. Sua jogada não entrou na fila. Reinicie ou corrija este jogo no criador.",

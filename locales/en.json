@@ -555,6 +555,7 @@
   "ui.error.invalid_response": "Invalid server response",
   "ui.error.web_locks": "Offline moves need a current browser with Web Locks support.",
   "ui.error.not_your_turn": "It isn't your turn.",
+  "ui.error.script_load_failed": "Failed to load {src}",
   "ui.match.gone": "This match no longer exists.",
   "ui.portal.no_multiplayer_games": "No published multiplayer games are available to create a lobby.",
   "ui.portal.invalid_next_player": "The game sent an invalid next player. Your move was not queued. Restart or repair this game in Builder.",
