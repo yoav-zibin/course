@@ -49,12 +49,14 @@ test('two players in separate browsers: join an online match and see each other\
   await expect(b.board).toHaveCount(9);
 
   // Hold Bob's next catalog refresh open. His active match must still receive
-  // Alice's move without waiting for that unrelated request to finish.
+  // Alice's move without waiting for that unrelated request to finish. The
+  // refresh goes out as one /batch call; the live match poll is a direct
+  // request, so holding the batch must not hold the match.
   let releaseCatalog!: () => void;
   const catalogBlocked = new Promise<void>(resolve => { releaseCatalog = resolve; });
   let catalogStarted!: () => void;
   const started = new Promise<void>(resolve => { catalogStarted = resolve; });
-  await b.page.route('**/games', async route => {
+  await b.page.route('**/batch?*', async route => {
     catalogStarted();
     await catalogBlocked;
     await route.continue().catch(() => {});

@@ -168,7 +168,9 @@
     window.syncPortalPreviewLinks?.();
   }
 
-  async function applyCurrentSkin() {
+  // Applies the cached skin assignment synchronously (no network), so the
+  // first paint already uses the right skin.
+  function applyCachedSkin() {
     const account = currentAccount();
     if (!account) {
       assignedSkin = "classic";
@@ -185,7 +187,15 @@
     } catch (error) {
       console.warn("Cached skin assignment could not be read.", error);
     }
+  }
 
+  // Refreshes the skin assignment from the server, after the cached one is
+  // already showing. Kept separate so the first load can defer it until the
+  // browser is idle instead of competing with the catalog fetch.
+  async function refreshSkinAssignment() {
+    const account = currentAccount();
+    if (!account) return;
+    const cacheKey = `${SKIN_CACHE_PREFIX}${account.id}`;
     try {
       const response = await fetch("/users/me/experiments/skin", {
         headers: {
@@ -208,6 +218,11 @@
       applySkin(activeSkin());
       syncSkinPicker();
     }
+  }
+
+  async function applyCurrentSkin() {
+    applyCachedSkin();
+    await refreshSkinAssignment();
   }
 
   document.getElementById("portal-skin-picker")?.addEventListener("change", (event) => {
@@ -234,6 +249,13 @@
     }
   };
 
-  applyCurrentSkin();
+  // Apply the cached skin now (before first paint); refresh the assignment
+  // from the server once the browser is idle, so the fetch does not compete
+  // with the first catalog load.
+  applyCachedSkin();
+  if (typeof requestIdleCallback === "function")
+    requestIdleCallback(() => { refreshSkinAssignment(); }, {timeout: 2000});
+  else
+    setTimeout(() => { refreshSkinAssignment(); }, 0);
   document.addEventListener("auth-changed", applyCurrentSkin);
 })();

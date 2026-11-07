@@ -305,7 +305,21 @@ async def batch_gets(request: Request, requests: str) -> list[BatchSubResponse]:
         raise HTTPException(
             HTTPStatus.BAD_REQUEST, f"at most {MAX_BATCH_REQUESTS} requests per batch"
         )
-    return [await _dispatch_batch_item(request, item) for item in items]
+    # Sub-requests run concurrently: they are independent GETs through the
+    # same app, and gather preserves request order. An exception in one
+    # dispatch becomes a 500 for that item alone, never a failed batch.
+    results = await asyncio.gather(
+        *(_dispatch_batch_item(request, item) for item in items),
+        return_exceptions=True,
+    )
+    return [
+        result
+        if isinstance(result, BatchSubResponse)
+        else BatchSubResponse(
+            status=HTTPStatus.INTERNAL_SERVER_ERROR, body={"detail": str(result)}
+        )
+        for result in results
+    ]
 
 
 # Browser error reports
@@ -2557,6 +2571,17 @@ async def _revalidate_pages(
         "content-type", ""
     ).startswith("application/json"):
         response.headers["Cache-Control"] = "no-cache"
+        # FileResponse already sends an ETag (mtime+size) but never answers
+        # 304 itself: return one here so an unchanged page costs no body.
+        # The service worker fetches portal.html with cache:"no-cache", so the
+        # browser still revalidates on every load and a deploy changes the
+        # ETag; only an unchanged file gets the empty 304.
+        etag = response.headers.get("etag")
+        if etag and request.headers.get("if-none-match") == etag:
+            return Response(
+                status_code=HTTPStatus.NOT_MODIFIED,
+                headers={"ETag": etag, "Cache-Control": "no-cache"},
+            )
     return response
 
 

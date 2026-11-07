@@ -50,7 +50,9 @@ async function portalFetch(method, path, { body, user, requestId } = {}) {
 // batches are at least 100ms apart. Queues are per user, so one batch never
 // mixes credentials. Only plain GETs are batched; anything with a body or an
 // idempotency key (a write) goes straight out, and the /batch call itself uses
-// portalFetch so it never re-enters the queue.
+// portalFetch so it never re-enters the queue. A single match (GET
+// /matches/{id}) is never batched: it is the live game poll, and sharing a
+// batch with the catalog would let a slow catalog delay a move.
 const BATCH_WAIT_MS = 100;
 const batchQueues = new Map();
 function enqueueBatchGet(path, user) {
@@ -99,9 +101,30 @@ async function flushBatch(key) {
   }
 }
 async function portalTransport(method, path, { body, user, requestId } = {}) {
-  if (method === "GET" && body === undefined && !requestId)
+  if (
+    method === "GET" &&
+    body === undefined &&
+    !requestId &&
+    !/^\/matches\/(?!open$)[^/]+$/.test(path)
+  )
     return enqueueBatchGet(path, user);
   return portalFetch(method, path, { body, user, requestId });
+}
+// Lazy-loads a portal script that is not needed for the first paint (speed
+// clock, sounds). The file is already in the service-worker shell cache, so
+// the load is local and fast. Concurrent calls for the same file share one load.
+const portalScriptLoads = new Map();
+function loadPortalScript(src) {
+  if (!portalScriptLoads.has(src)) {
+    portalScriptLoads.set(src, new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error(I18n.t("ui.error.script_load_failed", {src}, `Failed to load ${src}`)));
+      document.head.appendChild(script);
+    }));
+  }
+  return portalScriptLoads.get(src);
 }
 // Browsers that deny storage entirely (private mode, blocked cookies)
 // must not brick the portal: PortalOffline falls back to an in-memory
@@ -248,11 +271,15 @@ function updateStakePreview() {
   }
 }
 
-async function updateTokenWallet(user) {
+async function updateTokenWallet(user, record) {
   const wallet = $("token-wallet");
   if (!user) { wallet.hidden = true; walletBalance = null; updateStakePreview(); return; }
   try {
-    const record = await portalTransport("GET", `/users/${encodeURIComponent(user.id)}`, {user});
+    // [record] is the /users/{id} row fetched with the catalog batch; when it
+    // is not supplied (or the batch fetch failed), fetch it directly.
+    if (record === undefined)
+      record = await portalTransport("GET", `/users/${encodeURIComponent(user.id)}`, {user});
+    if (!record) { wallet.hidden = true; walletBalance = null; updateStakePreview(); return; }
     if (me()?.id !== user.id) return;
     // Accounts saved before short invite links learn their referral code here.
     state.pictureCache.set(user.id, record.picture_url);
@@ -709,7 +736,7 @@ async function refreshLocked() {
     const popularityRequestVersion = state.popularGamesRequestVersion;
     const recentGamesDue = Boolean(user) && (state.recentGamesForceRefresh || Date.now() - state.recentGamesFetchedAt >= 60_000);
     const recentGamesRequestVersion = state.recentGamesRequestVersion;
-    const [games, myMatches, openMatches, popularGames, recentGames] = await Promise.all([
+    const [games, myMatches, openMatches, popularGames, recentGames, userRecord] = await Promise.all([
       StoragePages.list(portalRequest, "/games", {user}),
       user ? StoragePages.list(portalRequest, "/matches", {user}) : [],
       StoragePages.list(portalRequest, "/matches/open", {user}),
@@ -718,6 +745,10 @@ async function refreshLocked() {
         : null,
       recentGamesDue
         ? portalRequest("GET", "/users/me/recent-games", {user}).catch(() => null)
+        : null,
+      // The token-wallet row rides the same batch instead of its own call.
+      user
+        ? portalRequest("GET", `/users/${encodeURIComponent(user.id)}`, {user}).catch(() => null)
         : null,
     ]);
     state.games = games;
@@ -765,7 +796,7 @@ async function refreshLocked() {
     }
     await ensureDetails();
     if (user?.id !== me()?.id) return;
-    await updateTokenWallet(user);
+    await updateTokenWallet(user, userRecord);
     if (user?.id !== me()?.id) return;
     render();
     window.PortalFeedback?.update(state.match, user?.id, {
@@ -2229,6 +2260,15 @@ async function main() {
     ...Object.values(cached.local),
   ];
   state.openMatches = cached.responses["/matches/open"] || [];
+  // Render the catalog sections from the saved responses first, so a warm
+  // load shows the game list, popular ranking and recent games immediately;
+  // refresh() below re-fetches and re-renders with fresh data.
+  state.popularGames = cached.responses["/games/popular?limit=8"] || [];
+  state.recentGames = cached.responses["/users/me/recent-games"] || [];
+  if (state.popularGames.length) state.popularGamesStatus = "ranked";
+  // Tell refreshLocked this cached recent-games list already belongs to the
+  // current account, so it does not wipe it before the fresh fetch lands.
+  if (me()) state.recentGamesUserId = me().id;
   for (const [path, value] of Object.entries(cached.responses)) {
     const game = /^\/games\/([^/]+)\/versions\/(\d+)$/.exec(path);
     if (game) state.gameCache.set(`${game[1]}@${game[2]}`, value);
@@ -2247,7 +2287,15 @@ async function main() {
   } catch (error) {
     showPageError(error.message);
   }
+  // Start push setup first, so its /push/config fetch joins the same /batch
+  // call as the catalog refresh below instead of a second one.
+  setupNotifications();
   refresh();
+  // The speed clock and sounds are only used inside a match view, so they
+  // load after the first paint instead of blocking it. Both are already in
+  // the service-worker shell cache.
+  loadPortalScript("/static/portal-speed.js?v=2").catch(() => {});
+  loadPortalScript("/static/portal-feedback.js?v=4").catch(() => {});
   setInterval(() => {
     if (!document.hidden && !state.moveInFlight) refresh();
   }, POLL_MS);
@@ -2284,7 +2332,6 @@ async function main() {
       .catch((error) =>
         showPageError(I18n.t("ui.offline.setup_failed", {message: error.message}, `Offline setup failed: ${error.message}`)),
       );
-  setupNotifications();
 }
 
 $("history-back").addEventListener("click", () => browseHistory(-1));

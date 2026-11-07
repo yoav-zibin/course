@@ -184,3 +184,15 @@ test("writes bypass the batcher and go straight out", async () => {
   await run(`portalTransport("POST", "/matches", {user: ${JSON.stringify(user)}, body: {game_id: "g1"}})`);
   assert.deepEqual(calls, ["/matches"]);
 });
+
+test("a single match (the live game poll) bypasses the batcher", async () => {
+  const calls = [];
+  const fetchStub = async (url) => {
+    calls.push(url);
+    return { ok: true, status: 200, text: async () => JSON.stringify({ id: "m1" }) };
+  };
+  const { run } = setup(fetchStub);
+  const user = { id: "alice", password: "pw" };
+  await run(`portalTransport("GET", "/matches/m1", {user: ${JSON.stringify(user)}})`);
+  assert.deepEqual(calls, ["/matches/m1"]);
+});

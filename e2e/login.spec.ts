@@ -15,7 +15,8 @@ test.describe('Guest login (real server)', () => {
     const login=page.locator('.auth-menu-panel').getByRole('button', {name:'Log in', exact:true});
     await login.focus();
     await expect(login).toBeFocused();
-    await page.waitForResponse(response => new URL(response.url()).pathname==='/games' && response.request().method()==='GET');
+    // The portal polls in batches now: wait for a batch carrying the catalog.
+    await page.waitForResponse(response => new URL(response.url()).pathname==='/batch' && response.request().method()==='GET');
     await expect(login).toBeFocused();
     await login.click();
     await expect(page.getByRole('dialog')).toBeVisible();

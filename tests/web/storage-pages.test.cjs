@@ -32,6 +32,19 @@ test('catalog search is scoped per signed-in user and resets to its first page',
 });
 
 
+test('concurrent capability checks share one in-flight request',async()=>{
+  let fetches=0;
+  const pages=setup({
+    fetch:async()=>{fetches++;await new Promise(r=>setTimeout(r,10));return {ok:true,json:async()=>({pagination:true})};},
+  });
+  const [a,b,c]=await Promise.all([pages.enabled(),pages.enabled(),pages.enabled()]);
+  assert.equal(fetches,1);
+  assert.deepEqual([a,b,c],[true,true,true]);
+  // A later call reuses the resolved value without another fetch.
+  assert.equal(await pages.enabled(),true);
+  assert.equal(fetches,1);
+});
+
 test('unresponsive capability discovery aborts and falls back to the existing API',async()=>{
  let aborted=false;
  const pages=setup({

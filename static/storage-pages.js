@@ -2,19 +2,29 @@
 // One page per query is retained. Polling refreshes that page, never the catalog.
 window.StoragePages = (() => {
   let capabilities;
+  // The in-flight capabilities fetch, so concurrent first calls (the three
+  // catalog lists in one refresh) share one request instead of each firing
+  // their own. Cleared on failure so a later call retries.
+  let capabilitiesPromise;
   const entries = new Map();
   const supported = new Set(["/games", "/builder/games", "/game-drafts", "/matches", "/matches/open"]);
   async function enabled() {
-    if (capabilities === undefined) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 4000);
-      try {
-        const response = await fetch("/storage/capabilities", {cache:"no-store",signal:controller.signal});
-        capabilities = response.ok && (await response.json()).pagination === true;
-      } catch { return false; }
-      finally { clearTimeout(timer); }
+    if (capabilities !== undefined) return capabilities;
+    if (!capabilitiesPromise) {
+      capabilitiesPromise = (async () => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 4000);
+        try {
+          const response = await fetch("/storage/capabilities", {cache:"no-store",signal:controller.signal});
+          capabilities = response.ok && (await response.json()).pagination === true;
+        } catch {
+          capabilitiesPromise = null;
+          return false;
+        } finally { clearTimeout(timer); }
+        return capabilities;
+      })();
     }
-    return capabilities;
+    return capabilitiesPromise;
   }
   function entry(path, user) {
     const key = path + "\n" + (user?.id || "");
