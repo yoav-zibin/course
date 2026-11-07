@@ -181,7 +181,7 @@ test('random play completes and records three matches in every solo scenario', a
       const button = document.getElementById('move');
       window.addEventListener('message', e => {
         if (e.source === parent && e.data.type === 'state_changed')
-          button.disabled = e.data.acting_for_player_index === null;
+          button.disabled = e.data.my_player_index === null || !e.data.turn_of_player_indices.includes(e.data.my_player_index);
       });
       button.onclick = () => parent.postMessage({type:'make_move', move:{add:1}}, '*');
     </script></body></html>`);
@@ -329,7 +329,7 @@ test('supports solo games and one human against several computers', async ({ pag
       const button = document.getElementById('move');
       window.addEventListener('message', e => {
         if (e.source === parent && e.data.type === 'state_changed')
-          button.disabled = e.data.acting_for_player_index === null;
+          button.disabled = e.data.my_player_index === null || !e.data.turn_of_player_indices.includes(e.data.my_player_index);
       });
       button.onclick = () => parent.postMessage({type:'make_move', move:{add:1}}, '*');
     </script></body></html>`);
