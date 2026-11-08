@@ -16,7 +16,7 @@ operations in query mode and points at these commands: a merge or deletion is
 finished only when its run reports ``complete``.
 
 Merge semantics mirror ``GamePlatform._merge_locked``: games (all versions),
-drafts, matches (owner, seats with their stable logic player IDs, hidden
+matches (owner, seats with their stable logic player IDs, hidden
 flags), move authors, push subscriptions and invites move to the survivor;
 linked accounts are re-reserved for the survivor; the source is marked
 ``replaced_by`` the survivor (never deleted, so its credentials keep working
@@ -28,7 +28,7 @@ with ``shared_active_match`` and nothing has been rewritten yet.
 Deletion semantics mirror ``GamePlatform.admin_delete_user``: owned games are
 soft-deleted, owned matches are deleted with their invites, the user leaves
 every other match that is not over (through the platform, so v2 payouts and
-computer takeovers keep their normal rules), drafts / push subscriptions /
+computer takeovers keep their normal rules), push subscriptions /
 created invites are deleted, invitees are repointed at the deleted user's own
 inviter, and finally the user record is tombstoned and its referral and
 linked-account reservations are released.

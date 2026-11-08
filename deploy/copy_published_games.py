@@ -1,7 +1,7 @@
 """Copy public game records between configured Firestore databases.
 
 The export contains only active, published game versions and their code. It never
-exports users, matches, drafts, invites, or builder conversations. Import refuses to
+exports users, matches, or invites. Import refuses to
 overwrite game IDs already present in the destination unless their records are exact
 matches, making reruns safe.
 """

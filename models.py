@@ -258,9 +258,8 @@ class Translation:
 
 @dataclass(frozen=True, kw_only=True)
 class GameTestSeeds:
-    """The random-walk test seeds that failed for a game (or a draft with
-    the same id), replayed first on the next test run as regression seeds
-    (v2 Game API, see game_testing.py)."""
+    """The random-walk test seeds that failed for a game, replayed first on
+    the next test run as regression seeds (v2 Game API, see game_testing.py)."""
 
     game_id: str
     seeds: tuple[int, ...] = ()

@@ -20,14 +20,12 @@ from game_platform.store import InMemoryStore, Snapshot
 logger = logging.getLogger(__name__)
 
 # The file layout version. This is version 1 of the clean layout: the
-# current field layout (turn sets, drafts, publication state, agent
-# conversations, push subscriptions, invites, rematch links, replay
-# snapshots, speed matches, experiments, feedback, guided-builder artifacts
-# and game popularity aggregates). There is no migration path: a file whose
-# format_version is not 1 is rejected rather than loaded, so an older or
-# newer file can never silently lose drafts, re-expose unpublished games or
-# private matches, or drop conversations, subscriptions, invites,
-# experiments or feedback.
+# current field layout (turn sets, publication state, push subscriptions,
+# invites, rematch links, replay snapshots, speed matches, experiments,
+# feedback and game popularity aggregates). There is no migration path: a file
+# whose format_version is not 1 is rejected rather than loaded, so an older
+# or newer file can never silently lose games, re-expose unpublished games or
+# private matches, or drop subscriptions, invites, experiments or feedback.
 FORMAT_VERSION: Final = 1
 
 

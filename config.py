@@ -154,7 +154,7 @@ class TranslationConfig(_Section):
     # Beyond it, new texts stay in their original language until tomorrow.
     daily_character_limit: Annotated[int, Field(ge=0)] = 200_000
     timeout_seconds: Annotated[float, Field(gt=0)] = 10.0
-    # Refuse, with HTTP 400, a new game, a draft publication or a new version whose client
+    # Refuse, with HTTP 400, a new game or a new version whose client
     # code fails the translation checker (no i18n-strings block, text written in the code, ...).
     # Admin saves, audited migrations and example data are exempt. Set false to allow any code.
     require_strings: bool = True

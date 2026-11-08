@@ -13,8 +13,8 @@ small or incompressible records keep the legacy text representation to avoid ext
 CPU and metadata. Readers accept both formats.
 
 Firestore documents hold at most 1 MiB, so:
-- A match's moves and an agent conversation's entries live in a subcollection, one
-  document per item ("matches/<id>/moves/000000", ...): long matches keep growing.
+- A match's moves live in a subcollection, one document per move
+  ("matches/<id>/moves/000000", ...): long matches keep growing.
 - Text too big for one document is split: the document gets the first part and a
   "chunks" count, and the rest go to its "chunks" subcollection.
 
