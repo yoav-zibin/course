@@ -19,7 +19,6 @@ from pathlib import Path
 import uvicorn
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from game_platform.api import create_app
-from game_platform.config import ModelApiConfig
 from game_platform.query_store import QueryStore
 from game_platform.scaling_live_budget import (
     DemoBudget,
@@ -143,7 +142,6 @@ def app_for(config, platform, budget):
         platform,
         debug_tools=True,
         master_password=config["password"],
-        model_api_config=ModelApiConfig(api_key="", base_url="http://127.0.0.1:9"),
         cors_allow_origins=(),
         public_base_url=config["public_url"],
     )
