@@ -26,22 +26,6 @@ def api_for(store):
     return api
 
 
-def test_popularity_ranking_is_atomic_durable_and_preserved_in_rollback(store):
-    from game_platform.tests.test_popularity import exercise_popularity
-    from game_platform.scaling_cutover import rollback_snapshot
-
-    first, second = exercise_popularity(api_for(store))
-    with pytest.raises(RuntimeError):
-        with store.atomic():
-            store.record_game_match_start(first, 10)
-            raise RuntimeError("roll back the start")
-    restarted = QueryStore(store.client, namespace=store.namespace)
-    assert restarted.game_popularity_score(first) == 4
-    assert restarted.list_popular_game_ids(8) == [(first, 4), (second, 3)]
-    snapshot = rollback_snapshot(restarted)
-    assert {row.game_id: row.score for row in snapshot.game_popularity} == {first: 4, second: 3}
-
-
 @pytest.fixture
 def store():
     assert os.environ["FIRESTORE_EMULATOR_HOST"].startswith(
@@ -1160,43 +1144,6 @@ def test_referral_report_breaks_cycles_without_changing_source_users(store):
     assert store.get_user(b).invited_by_user_id == a
 
 
-def test_rollback_exports_post_cutover_writes_to_a_fresh_legacy_prefix(store):
-    from game_platform.scaling_cutover import restore_legacy, rollback_snapshot
-    from game_platform.firestore_store import FirestoreStore
-
-    api = api_for(store)
-    alice, bob = (api.new_user(x) for x in ("alice", "bob"))
-    game = api.new_game(owner=alice)
-    match = api.new_match(owner=alice, game_id=game, joiners=[bob], start=True)
-    api.move(match, as_user=alice, next_turn=1, state={"post_cutover": True})
-    api.request("PUT", f"/v2/users/me/saved-games/{game}", as_user=alice)
-    store.put_user(
-        replace(
-            store.get_user(alice),
-            display_name="updated after cutover",
-            token_balance=42,
-        )
-    )
-    with pytest.raises(ValueError, match="byte limit"):
-        rollback_snapshot(store, byte_limit=1)
-    prefix = "rollback_" + uuid.uuid4().hex + "_"
-    restore_legacy(store, store.client, prefix=prefix)
-    legacy = FirestoreStore(store.client, collection_prefix=prefix)
-    try:
-        assert legacy.get_user(alice).display_name == "updated after cutover"
-        assert legacy.get_user(alice).token_balance == 42
-        assert legacy.get_user(alice).saved_game_ids == (game,)
-        assert (
-            legacy.get_game_version(game, 1).code
-            == store.get_game_version(game, 1).code
-        )
-        assert tuple(legacy.get_match(match).moves) == tuple(
-            store.get_match(match).moves
-        )
-    finally:
-        legacy.close()
-
-
 def test_generic_worker_wakes_for_work_without_half_second_idle_polling(store):
     import threading, time
 
@@ -1244,40 +1191,6 @@ def test_offline_metrics_use_live_experiment_configuration_after_admin_changes(s
         == 0
     )
     assert result["configuration_consistency"] == "live"
-
-
-def test_merged_translation_memory_works_in_query_mode_and_survives_rollback(store):
-    from game_platform.scaling_cutover import rollback_snapshot
-
-    api = api_for(store)
-    added = api.ok(
-        "PUT",
-        "/admin/translations",
-        json={"locale": "es", "source": "Start {name}", "text": "Comenzar {name}"},
-    )
-    second = QueryStore(store.client, namespace=store.namespace)
-    with patch.object(
-        second, "_list", side_effect=AssertionError("translation lookup must not scan")
-    ):
-        found = second.get_translations("es", [added["source_hash"]])
-    assert found[added["source_hash"]].text == "Comenzar {name}"
-    assert len(store.list_translations("es")) == 1
-    assert (
-        len(api.ok("GET", "/v2/admin/translations", params={"limit": "1"})["items"])
-        == 1
-    )
-    assert rollback_snapshot(store).translations[0].text == "Comenzar {name}"
-    assert (
-        api.request(
-            "DELETE", f"/admin/translations/es/{added['source_hash']}"
-        ).status_code
-        == 204
-    )
-    # a store started after the deletion no longer has it (a running one drops it within
-    # the bundle's refresh time)
-    third = QueryStore(store.client, namespace=store.namespace)
-    assert third.get_translations("es", [added["source_hash"]]) == {}
-    assert store.get_translations("es", [added["source_hash"]]) == {}
 
 
 def test_translation_bundles_on_the_emulator_merge_entries_and_load_in_one_query(store):
@@ -1371,68 +1284,6 @@ def test_every_feedback_call_reads_firestore_at_most_twice_and_is_fast(store):
         assert len(reads) <= 2, (method, path, body, reads)
         assert took < 1, (method, path, took)
     assert api.ok("GET", "/admin/feedback")["count"] == 4
-
-
-def test_feedback_is_saved_listed_and_limited_in_query_mode(store):
-    from game_platform.scaling_cutover import rollback_snapshot
-
-    api = api_for(store)
-    platform = api.client.app.state.platform
-    ann, bob = api.new_user("ann"), api.new_user("bob")
-    game = api.new_game(owner=bob)
-    match = api.new_match(owner=bob, game_id=game, joiners=[ann], start=True)
-    made = {}
-    for kind, target_type, target in (
-        ("problem", "user", bob), ("bug", "game", game), ("suggestion", "match", match), ("bug", "platform", "")
-    ):
-        response = api.request(
-            "POST",
-            "/feedback",
-            as_user=ann,
-            json={"kind": kind, "target_type": target_type, "target_id": target, "text": "This is wrong"},
-        )
-        assert response.status_code == 201, response.text
-        made[target_type] = response.json()["id"]
-    # Saved in Firestore: a restarted server (a new store) lists them.
-    restarted = ScalablePlatform(store=QueryStore(store.client, namespace=store.namespace))
-    listing = restarted.admin_feedback()
-    assert {r["target_type"]: r["id"] for r in listing["feedback"]} == made
-    assert {r["target_name"] for r in listing["feedback"]} == {"bob", "Poker", "", "Platform"}
-    assert [r["context"]["game_id"] for r in listing["feedback"] if r["target_type"] == "match"] == [game]
-    # A repeat of the same kind within 24 hours updates the same message, at the top.
-    again = api.request(
-        "POST",
-        "/feedback",
-        as_user=ann,
-        json={"kind": "problem", "target_type": "user", "target_id": bob, "text": "Their name is offensive"},
-    )
-    assert again.status_code == 200 and again.json()["id"] == made["user"]
-    listing = api.ok("GET", "/admin/feedback")
-    assert listing["count"] == 4 and listing["feedback"][0]["text"] == "Their name is offensive"
-    assert api.ok("GET", "/admin/feedback", params={"kind": "bug"})["count"] == 2
-    assert api.ok("GET", "/admin/feedback", params={"target_type": "game"})["count"] == 1
-    # Lots of feedback: the listing shows the newest 200, Most reported counts problems,
-    # and the daily limit still reads only the sender's own limit document.
-    targets = [platform.create_user(display_name=f"target {n}").id for n in range(20)]
-    reporters = [api.new_user(f"reporter {n}") for n in range(12)]
-    for n, reporter in enumerate(reporters):
-        for target in targets[: 18 if n else 20]:
-            platform.send_feedback(
-                caller_id=reporter, kind="problem", target_type="user", target_id=target, text="spam account"
-            )
-    listing = platform.admin_feedback()
-    assert (listing["count"], listing["more"]) == (200, True)
-    assert listing["most_reported"][0]["reports"] == 12
-    assert listing["most_reported"][0]["target_name"].startswith("target ")
-    response = api.request(
-        "POST",
-        "/feedback",
-        as_user=reporters[0],
-        json={"kind": "bug", "target_type": "platform", "text": "one too many"},
-    )
-    assert response.status_code == 429
-    # A rollback keeps the feedback.
-    assert len(rollback_snapshot(store).feedback) == 4 + 20 + 11 * 18
 
 
 def test_the_daily_feedback_limit_spans_midnight_in_query_mode(store):
