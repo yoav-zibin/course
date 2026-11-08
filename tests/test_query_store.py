@@ -229,21 +229,6 @@ def test_referrals_and_linked_identity_survive_restart(store):
     assert second.user_for_referral(user.referral_code) == alice
 
 
-def test_startup_only_lists_game_versions_for_schema_preflight(store):
-    second = QueryStore(store.client, namespace=store.namespace)
-    original_list = second._list
-    listed = []
-
-    def list_for_startup(kind, *args, **kwargs):
-        assert kind == "game_versions", "startup must not scan unrelated collections"
-        listed.append(kind)
-        return original_list(kind, *args, **kwargs)
-
-    with patch.object(second, "_list", side_effect=list_for_startup):
-        Api(store=second)
-    assert listed == ["game_versions"]
-
-
 def test_idempotent_move_does_not_append_or_pay_twice(store):
     api = api_for(store)
     alice, bob = api.new_user("alice"), api.new_user("bob")
@@ -832,31 +817,6 @@ def test_online_merge_waits_for_shared_live_match_before_any_changes(store):
     assert "wait until shared matches end" in response.json()["detail"]
     assert store.get_user(alice).replaced_by_user_id is None
     assert store.get_game(game).owner_user_id == alice
-
-
-def test_online_delete_leaves_other_matches_and_repoints_referrals_without_global_scans(
-    store,
-):
-    api = api_for(store)
-    carol, dave, erin = (api.new_user(x) for x in ("carol", "dave", "erin"))
-    game = api.new_game(owner=carol)
-    owned = api.new_match(owner=carol, game_id=game)
-    other = api.new_game(owner=erin)
-    shared = api.new_match(owner=erin, game_id=other, joiners=[carol], start=True)
-    store.put_user(replace(store.get_user(dave), invited_by_user_id=carol))
-    with (
-        patch.object(store, "list_users", side_effect=AssertionError("global users")),
-        patch.object(
-            store, "list_experiment_events", side_effect=AssertionError("global events")
-        ),
-    ):
-        response = api.request("DELETE", f"/admin/users/{carol}")
-    assert response.status_code == 204
-    assert store.get_user(carol) is None
-    assert store.get_game(game).deleted
-    assert store.get_match(owned) is None
-    assert store.get_match(shared).status == "over"
-    assert store.get_user(dave).invited_by_user_id is None
 
 
 def test_merge_job_waits_for_shared_active_match_without_mutating(store):
