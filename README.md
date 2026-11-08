@@ -1397,6 +1397,6 @@ now deploys to https://buildplay.fun automatically — no manual VM step needed.
 
 ## Agent game imports
 
-Agents can submit a complete game package through authenticated `POST /agent/games`.
+Agents can submit a complete game package through authenticated `POST /games`.
 Imports create private drafts with server-verified artifacts and code; they do not
 publish or overwrite games. See [API usage and agent instructions](docs/agent-game-import.md).

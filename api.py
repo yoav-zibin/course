@@ -851,7 +851,7 @@ def publish_game_draft(platform: Platform, caller_id: CallerId, draft_id: str, b
     ))
 
 
-# Games (read-only here: games are created by the agent import, POST /agent/games,
+# Games (read-only here: games are created by the agent import, POST /games,
 # or by publishing a Builder draft; there is no direct create endpoint).
 
 

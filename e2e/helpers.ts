@@ -82,7 +82,7 @@ export interface ImportGameOptions {
   cases: unknown[];
 }
 
-/** Publishes a game owned by [owner] through POST /agent/games (the only way to
+/** Publishes a game owned by [owner] through POST /games (the only way to
  * create a game — there is no POST /games). Builds the full import payload: schemas +
  * unit-test cases + tutorial + images + translations for all 7 non-English languages
  * (prefixed with the locale tag, the same trick the Python agent-import tests use). */
@@ -103,7 +103,7 @@ export async function importGame(
       client_strings: Object.fromEntries(Object.entries(opts.clientStrings).map(([k, v]) => [k, tag + v])),
     };
   }
-  const res = await request.post('/agent/games', {
+  const res = await request.post('/games', {
     headers: { 'X-User-Id': owner.id, 'X-User-Password': owner.password },
     data: {
       name: opts.name,

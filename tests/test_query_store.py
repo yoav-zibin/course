@@ -1494,7 +1494,7 @@ def test_agent_import_roundtrips_query_store(store):
     api = api_for(store)
     owner = api.new_user('Agent import owner')
     body = payload()
-    response = api.request('POST', '/agent/games', as_user=owner, json=body)
+    response = api.request('POST', '/games', as_user=owner, json=body)
     assert response.status_code == 201, response.text
     game = response.json()
     assert game['published'] is True

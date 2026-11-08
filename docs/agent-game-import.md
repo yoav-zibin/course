@@ -1,6 +1,6 @@
 # Complete game imports for agents
 
-`POST /agent/games` accepts a complete game and publishes it in one request:
+`POST /games` accepts a complete game and publishes it in one request:
 the game is live for every player, in every language, as soon as the call
 returns. It does not overwrite games, call a paid model, or claim human approval.
 Imported source is checked but not visually reviewed by this API. The existing
@@ -24,7 +24,7 @@ independent API-key system.
 ## Request
 
 Content-Type: `application/json`. The machine-readable schema is available through
-an unauthenticated `GET /agent/games/schema`.
+an unauthenticated `GET /games/schema`.
 
 Required fields:
 
@@ -198,7 +198,7 @@ if os.environ.get('BUILDPLAY_USER_ID'):
                'X-User-Password': os.environ['BUILDPLAY_USER_PASSWORD']}
 with open('examples/agent-game.json') as f:
     game = json.load(f)
-response = httpx.post(base + '/agent/games', headers=headers, json=game, timeout=35)
+response = httpx.post(base + '/games', headers=headers, json=game, timeout=35)
 response.raise_for_status()
 published = response.json()
 print(published['id'], published['version'])

@@ -206,7 +206,7 @@ def verify_submission(body):
 def make_router(platform_dependency, caller_dependency):
     router = APIRouter()
 
-    @router.post('/agent/games', status_code=201, response_model=GameOut,
+    @router.post('/games', status_code=201, response_model=GameOut,
                  summary='Import a complete game as a published game',
                  openapi_extra={'requestBody': {'required': True, 'content': {
                      'application/json': {'schema': GameImport.model_json_schema()}}}})
@@ -263,7 +263,7 @@ def make_router(platform_dependency, caller_dependency):
         finally:
             slots.release()
 
-    @router.get('/agent/games/schema')
+    @router.get('/games/schema')
     def schema(caller=Depends(caller_dependency)):
         return GameImport.model_json_schema()
 
