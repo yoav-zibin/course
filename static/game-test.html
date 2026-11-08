@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test a game before you submit it — BuildPlay</title>
+<link rel="stylesheet" href="game-test.css?v=1">
+</head>
+<body>
+<main>
+<h1>Test a game before you submit it</h1>
+<p>
+  Paste your game below and run the same checks the platform runs when you
+  submit it with <code>POST /games</code>. Then play it here before you send it.
+  See the
+  <a href="https://docs.google.com/document/d/1C2_jQ47k79jpyWW9WDPmfdTxOqL94LRgchcD3bhvuY4/edit">guide to writing a game for BuildPlay</a>
+  for what each field means.
+</p>
+<p class="note">
+  What this page does <strong>not</strong> check: how much memory the server
+  code uses (the platform allows 64 MiB per call), the exact 100&nbsp;ms
+  per-call time limit (this page allows 5&nbsp;s per call, 10&nbsp;s to load),
+  translations, images, or the tutorial — those are validated only when you
+  submit. The random walks here use this page's own seeds, so a failing seed
+  replays the walk on this page only; the server runs its own walks at submit
+  time.
+</p>
+
+<section aria-labelledby="inputs-heading">
+<h2 id="inputs-heading">Game inputs</h2>
+<p>
+  <button type="button" id="load-example">Load the counter example</button>
+  <span class="hint">Fills every field with the “Count to three” example, so you can see the page working.</span>
+</p>
+<div class="field">
+  <label for="server-code">Server code (the <code>game</code> object)</label>
+  <textarea id="server-code" spellcheck="false" rows="12" placeholder="const game = { newMatch(ctx) { ... }, applyMove(state, playerId, move) { ... }, ... }"></textarea>
+</div>
+<div class="field">
+  <label for="client-code">Client code (the game page, including its <code>&lt;script type="application/json" id="i18n-strings"&gt;</code> block)</label>
+  <textarea id="client-code" spellcheck="false" rows="12" placeholder="&lt;!doctype html&gt; ..."></textarea>
+</div>
+<div class="schemas">
+  <div class="field">
+    <label for="schema-state">State schema (JSON)</label>
+    <textarea id="schema-state" spellcheck="false" rows="8" placeholder="{&quot;type&quot;: &quot;object&quot;, ...}"></textarea>
+  </div>
+  <div class="field">
+    <label for="schema-view">View schema (JSON)</label>
+    <textarea id="schema-view" spellcheck="false" rows="8" placeholder="{&quot;type&quot;: &quot;object&quot;, ...}"></textarea>
+  </div>
+  <div class="field">
+    <label for="schema-move">Move schema (JSON)</label>
+    <textarea id="schema-move" spellcheck="false" rows="8" placeholder="{&quot;type&quot;: &quot;object&quot;, ...}"></textarea>
+  </div>
+</div>
+<div class="field">
+  <label for="cases">Unit test cases (JSON — a list of cases, or the whole <code>unit_tests</code> object)</label>
+  <textarea id="cases" spellcheck="false" rows="10" placeholder="[{&quot;name&quot;: ..., &quot;kind&quot;: &quot;initial&quot;, &quot;ctx&quot;: {...}, ...}]"></textarea>
+  <p class="hint">
+    Needed for the approved-examples check and the move-agreement check.
+    Without them those two checks are skipped.
+  </p>
+</div>
+<div class="field-row">
+  <div class="field">
+    <label for="allowed-player-counts">Allowed player counts</label>
+    <input id="allowed-player-counts" type="text" value="2" placeholder="e.g. 2 or 1, 2, 4">
+  </div>
+  <div class="field checkbox">
+    <label><input id="allows-leave" type="checkbox"> A player may leave mid-match</label>
+    <label><input id="allows-join" type="checkbox"> A player may join mid-match</label>
+  </div>
+</div>
+</section>
+
+<section aria-labelledby="checks-heading">
+<h2 id="checks-heading">Platform checks</h2>
+<p>
+  <button type="button" id="run-checks">Run the platform checks</button>
+  <span id="check-status" class="check-status" role="status"></span>
+</p>
+<ul id="check-results" class="check-results"></ul>
+</section>
+
+<section aria-labelledby="play-heading">
+<h2 id="play-heading">Play the game</h2>
+<div class="field-row">
+  <div class="field">
+    <label for="mode">Mode</label>
+    <select id="mode">
+      <option value="single-pass">Single player — pass-and-play</option>
+      <option value="single-computers">Single player — play against computers</option>
+      <option value="multiplayer">Multiplayer</option>
+    </select>
+  </div>
+  <div class="field" id="player-count-row">
+    <label for="player-count">Number of players</label>
+    <input id="player-count" type="number" min="1" max="10" value="2">
+  </div>
+  <div class="field" id="my-seat-row">
+    <label for="my-seat">Your seat</label>
+    <select id="my-seat"></select>
+  </div>
+</div>
+<div class="field-row">
+  <div class="field">
+    <label for="resolution">Screen size</label>
+    <select id="resolution"></select>
+  </div>
+  <div class="field">
+    <label for="orientation">Orientation</label>
+    <select id="orientation">
+      <option value="vertical">Vertical</option>
+      <option value="horizontal">Horizontal</option>
+    </select>
+  </div>
+</div>
+<p>
+  <button type="button" id="new-match">Start a new match</button>
+  <button type="button" id="back" disabled>← Back</button>
+  <button type="button" id="forward" disabled>Forward →</button>
+  <button type="button" id="leave">Leave match</button>
+  <button type="button" id="join">Add a player</button>
+  <span id="match-seed" class="hint"></span>
+</p>
+<p>
+  <span id="seat-label"></span>
+  <span id="replay-label"></span>
+  <span id="resolution-label" class="hint"></span>
+</p>
+<div id="game-wrap">
+  <div id="game-box"><p class="empty">Start a match to play here.</p></div>
+</div>
+<div class="outputs">
+  <div class="field">
+    <label for="state-out">State (read-only — the full state, as the author sees it)</label>
+    <textarea id="state-out" readonly spellcheck="false" rows="8"></textarea>
+  </div>
+  <div class="field">
+    <label for="view-out">View (read-only — what the client is shown)</label>
+    <textarea id="view-out" readonly spellcheck="false" rows="8"></textarea>
+  </div>
+  <div class="field">
+    <label for="last-move-out">Last move (read-only)</label>
+    <textarea id="last-move-out" readonly spellcheck="false" rows="4"></textarea>
+  </div>
+</div>
+</section>
+
+<section aria-labelledby="log-heading">
+<h2 id="log-heading">Log</h2>
+<p class="hint">
+  Every game API exchange (<code>make_move</code> from the client,
+  <code>state_changed</code> to the client) is logged here and to the browser
+  console.
+</p>
+<pre id="log" class="log" aria-live="polite"></pre>
+</section>
+</main>
+<script src="game-test.js?v=1"></script>
+</body>
+</html>

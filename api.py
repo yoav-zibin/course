@@ -1484,6 +1484,14 @@ def portal() -> FileResponse:
     return FileResponse(_STATIC_DIR / "portal.html")
 
 
+@debug_router.get("/game-test")
+def game_test() -> FileResponse:
+    # Static page for game authors to test a game before submitting it.
+    # It runs the platform's checks and a local player in the browser; it
+    # needs no server state, so it is not password-gated (like /portal).
+    return FileResponse(_STATIC_DIR / "game-test.html")
+
+
 @debug_router.get("/r/{code}")
 def short_invite_link(code: str) -> RedirectResponse:
     """Short invite links: /r/<referral code> opens the portal crediting that user.
