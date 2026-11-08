@@ -7,7 +7,7 @@ window.StoragePages = (() => {
   // their own. Cleared on failure so a later call retries.
   let capabilitiesPromise;
   const entries = new Map();
-  const supported = new Set(["/games", "/builder/games", "/game-drafts", "/matches", "/matches/open"]);
+  const supported = new Set(["/games", "/matches", "/matches/open"]);
   async function enabled() {
     if (capabilities !== undefined) return capabilities;
     if (!capabilitiesPromise) {

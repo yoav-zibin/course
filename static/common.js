@@ -531,7 +531,7 @@ function setUpSidebarDrawer() {
     sidebar.setAttribute('aria-hidden',String(!visible));
     sidebar.setAttribute('role',wide.matches?'complementary':'dialog');
     const layout=document.documentElement?.dataset?.portalLayout;
-    sidebar.setAttribute('aria-label',document.querySelector('.builder-shell')?I18n.t("ui.builder.your_games",{},"Your games"):['left','hamburger'].includes(layout)?I18n.t("ui.common.sidebar_portal",{},"Portal navigation and your matches"):I18n.t("ui.common.sidebar_matches",{},"Your matches"));
+    sidebar.setAttribute('aria-label',['left','hamburger'].includes(layout)?I18n.t("ui.common.sidebar_portal",{},"Portal navigation and your matches"):I18n.t("ui.common.sidebar_matches",{},"Your matches"));
     if (modal) sidebar.setAttribute('aria-modal','true');
     else sidebar.removeAttribute('aria-modal');
     main.inert=modal;

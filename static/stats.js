@@ -371,19 +371,19 @@ function render(stats, experiments) {
       barChart("New matches per day", matches.new_per_day),
       table("Users by language", ["Language", "Users"], Object.entries(users.by_locale ?? {})),
     ),
-    el("h2", { textContent: "Builder: games" }),
+    el("h2", { textContent: "Games" }),
     cards([
       [games.live, "live games"],
       [games.deleted, "deleted games"],
       [games.versions, "versions saved"],
-      [games.builders, "game builders"],
+      [games.builders, "game creators"],
     ]),
     el(
       "div",
       { class: "panels" },
       barChart("New games per day", games.new_per_day),
       gamesPanel(games.per_game),
-      table("Top builders", ["User", "Live games"], games.top_builders.map((b) => [b.user, b.games])),
+      table("Top creators", ["User", "Live games"], games.top_builders.map((b) => [b.user, b.games])),
     ),
     el("h2", { textContent: "A/B experiments" }),
     el(
