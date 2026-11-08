@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createUser, loginAs, uniqueName } from './helpers';
 
-test('skin assignment is consistent across the portal and builder', async ({ page, request }) => {
+test('skin assignment is consistent across the portal and admin', async ({ page, request }) => {
   const user = await createUser(request, uniqueName('Skin'));
   await loginAs(page, user);
 
@@ -10,7 +10,7 @@ test('skin assignment is consistent across the portal and builder', async ({ pag
   await expect(root).toHaveAttribute('data-skin', /^(classic|aurora|sunset)$/);
   const skin = await root.getAttribute('data-skin');
 
-  await page.goto('/static/builder.html');
+  await page.goto('/static/admin.html');
   await expect(root).toHaveAttribute('data-skin', skin!);
 });
 

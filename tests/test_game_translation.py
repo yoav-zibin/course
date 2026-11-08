@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from game_platform import agent, game_text, translation
+from game_platform import game_text, translation
 from game_platform.json_file_store import JsonFileStore
 from game_platform.models import Translation
 from game_platform.store import InMemoryStore
@@ -354,10 +354,8 @@ def test_symbol_only_literals_need_no_translation() -> None:
                game_text.lint(table + r'<script>cell.textContent = "caf\u00E9"; other.textContent = t("a");</script>'))
 
 
-def test_the_helper_games_include_is_the_one_the_agent_is_told_about() -> None:
+def test_the_helper_defines_the_translation_functions() -> None:
     assert "function t(key, params)" in game_text.HELPER_JS and "function applyLocale(message)" in game_text.HELPER_JS
-    assert game_text.HELPER_JS in agent.SYSTEM_PROMPT
-    assert agent.SYSTEM_PROMPT.index("TRANSLATION.") < agent.SYSTEM_PROMPT.index("RESPONSE FORMAT:")
 
 
 def test_the_helper_cannot_end_the_games_script_block_early() -> None:

@@ -95,14 +95,6 @@ def test_bots_cannot_be_added_to_multiplayer_or_joined_via_invite(api):
     assert all(p["kind"] == "human" for p in joined["players"])
 
 
-def test_emulator_rejects_mixed_multiplayer_but_accepts_solo_bots(api):
-    user = api.new_user("builder")
-    body = {"server_code": LEAVE_GAME, "players": [{"kind": "human"}, {"kind": "human"}, {"kind": "computer"}]}
-    assert api.request("POST", "/emulator/reset", as_user=user, json=body).status_code == 422
-    body["players"].pop(0)
-    assert api.request("POST", "/emulator/reset", as_user=user, json=body).status_code == 200
-
-
 def test_legacy_mixed_match_ends_and_refunds_once(api):
     from dataclasses import replace
     from game_platform.models import Seat

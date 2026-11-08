@@ -42,30 +42,6 @@ def test_popularity_ranking_is_atomic_durable_and_preserved_in_rollback(store):
     assert {row.game_id: row.score for row in snapshot.game_popularity} == {first: 4, second: 3}
 
 
-def test_private_test_recording_survives_query_store_restart(store):
-    from game_platform.tests.test_test_sessions import recording
-
-    api = api_for(store)
-    owner, other = api.new_user("matrix-owner"), api.new_user("matrix-other")
-    saved = api.ok("POST", "/game-test-sessions", as_user=owner,
-                   json={"revision": 0, "recording": recording()})
-    second = QueryStore(store.client, namespace=store.namespace)
-    from game_platform.test_session_api import _unpack
-    assert _unpack(second.get_game_test_session(saved["id"]).data) == recording()
-    path = "/game-test-sessions/" + saved["id"]
-    updated = recording()
-    updated["events"].append({"type": "click", "at": 50, "scenario": "0"})
-    assert api.ok("PUT", path, as_user=owner, json={"revision": 1, "recording": updated})["revision"] == 2
-    assert api.request("PUT", path, as_user=owner,
-                       json={"revision": 1, "recording": recording()}).status_code == 409
-    assert _unpack(second.get_game_test_session(saved["id"]).data) == updated
-    assert api.request("GET", path, as_user=other).status_code == 404
-    assert api.request("PUT", path, as_user=other, json={"revision": 2, "recording": updated}).status_code == 404
-    assert api.ok("GET", "/game-test-sessions", as_user=owner)["items"][0]["id"] == saved["id"]
-    from game_platform.scaling_cutover import rollback_snapshot
-    assert rollback_snapshot(second).game_test_sessions[0].id == saved["id"]
-
-
 @pytest.fixture
 def store():
     assert os.environ["FIRESTORE_EMULATOR_HOST"].startswith(

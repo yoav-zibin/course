@@ -69,26 +69,6 @@ def test_request_and_response_bodies_are_logged_redacted(api: Api, caplog):
     assert created["response_body"]["id"] == user_id
 
 
-def test_private_test_recordings_and_simulations_do_not_log_bodies(api: Api, caplog):
-    user_id = api.new_user("Recording owner")
-    marker = "PRIVATE-RECORDING-CONTENTS"
-    recording = {"client_code": marker, "server_code": marker,
-                 "scenarios": [], "events": [{"private_view": marker}]}
-    saved = api.ok("POST", "/game-test-sessions", as_user=user_id,
-                   json={"revision": 0, "recording": recording})
-    path = "/game-test-sessions/" + saved["id"]
-    api.ok("GET", path, as_user=user_id)
-    api.ok("PUT", path, as_user=user_id, json={"revision": 1, "recording": recording})
-    api.request("POST", "/game-test-emulator/reset", as_user=user_id,
-                json={"server_code": marker, "game_schemas": {"state": True, "move": True, "view": True},
-                      "players": [{"kind": "human"}]})
-    calls = [call for call in _api_calls(caplog) if call["route"].startswith(
-        ("/game-test-sessions", "/game-test-emulator/"))]
-    assert len(calls) == 4
-    assert all("request_body" not in call and "response_body" not in call for call in calls)
-    assert marker not in caplog.text
-
-
 def test_failed_call_logs_error_status_and_route_template(api: Api, caplog):
     response = api.request("GET", "/users/no-such-user")
     assert response.status_code == 404
