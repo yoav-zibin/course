@@ -1,19 +1,15 @@
-"""Every new game must carry its text table (translation.require_strings): the checker, the
-agent's fix loop, and the server gate on create / publish / save (admin paths exempt)."""
+"""Every new game must carry its text table (translation.require_strings): the checker and the
+server gate on create / save (admin paths exempt)."""
 
 import json
 
 import pytest
 
 from game_platform import game_text, i18n
-from game_platform.agent import AgentError, chat_with_agent
 from game_platform.config import TranslationConfig
-from game_platform.model_api import ChatResult, ModelApiClient
-from game_platform.schemas import AgentChatRequest
 from game_platform.service import InvalidRequestError
 from game_platform.tests.helpers import Api
 
-ADMIN = ("admin", "pw")
 
 # The shape the agent is told to write (PROMPT_RULES): the block first, the helper as given.
 GOOD = (
@@ -32,9 +28,8 @@ GOOD = (
 NO_BLOCK = "<html><body><button>Start</button><script>b.textContent = 'Start';</script></body></html>"
 
 
-def test_the_example_the_agent_is_given_passes_the_checker() -> None:
+def test_the_example_game_passes_the_checker() -> None:
     assert game_text.lint(GOOD) == []
-    assert game_text.PROMPT_RULES in __import__("game_platform.agent", fromlist=["x"]).SYSTEM_PROMPT
 
 
 @pytest.mark.parametrize(
@@ -59,54 +54,6 @@ def test_the_checker_catches_where_real_generations_slip(snippet: str, expected:
 def test_attribute_and_canvas_text_from_t_is_fine() -> None:
     extra = '<button aria-label="" title="">x</button><canvas width="3"></canvas>'
     assert game_text.lint(GOOD.replace("</body>", extra + "</body>")) == []
-
-
-# The agent's fix loop
-
-
-def _request() -> AgentChatRequest:
-    return AgentChatRequest.model_validate({
-        "game_name": "G", "game_description": "", "allowed_player_counts": [2],
-        "player_count_mode": "auto", "messages": [{"role": "user", "content": "make a game"}],
-    })
-
-
-def _reply(code: str) -> str:
-    return json.dumps({"message": "Done.", "code": code, "allowed_player_counts": [2]})
-
-
-class Sequence(ModelApiClient):
-    def __init__(self, replies: list[str]) -> None:
-        super().__init__(api_key="key")
-        self.replies, self.calls = list(replies), []
-
-    def chat_with_reasoning(self, messages, **kwargs):  # type: ignore[no-untyped-def]
-        self.calls.append([dict(m) for m in messages])
-        return ChatResult(content=self.replies.pop(0), reasoning=None)
-
-
-def test_the_agent_feeds_text_problems_back_and_recovers() -> None:
-    client = Sequence([_reply(NO_BLOCK), _reply(GOOD)])
-    response = chat_with_agent(client, _request())
-    assert response.code == GOOD and response.attempts == 2
-    feedback = client.calls[1][-1]["content"]
-    assert "cannot be translated" in feedback and "no i18n-strings block" in feedback
-    assert "translation check failed" in (response.parse_note or "")
-
-
-def test_the_agent_fails_clearly_when_the_retries_run_out() -> None:
-    client = Sequence([_reply(NO_BLOCK)] * 3)
-    with pytest.raises(AgentError, match="cannot be translated.*no i18n-strings block.*gave up after 3"):
-        chat_with_agent(client, _request())
-    assert len(client.calls) == 3
-
-
-def test_a_reply_without_client_code_is_not_checked() -> None:
-    reply = json.dumps({"message": "Sure, what rules?", "code": None})
-    assert chat_with_agent(Sequence([reply]), _request()).code is None
-
-
-# The server gate
 
 
 def _body(code: str) -> dict:
@@ -155,16 +102,6 @@ def test_saving_a_new_version_needs_a_passing_table_but_other_edits_do_not() -> 
     assert api.ok("PATCH", f"/games/{old_id}", as_user=owner, json={"description": "new"})["version"] == 2
 
 
-def test_publishing_a_draft_is_gated() -> None:
-    api = Api(require_game_strings=True)
-    owner = api.new_user("owner")
-    draft = api.ok("POST", "/game-drafts", as_user=owner, json={**_body(NO_BLOCK), "description": "d"})
-    path = f"/game-drafts/{draft['id']}/publish"
-    refused = api.request("POST", path, as_user=owner, json={"expected_revision": draft["revision"]})
-    assert refused.status_code == 400 and "cannot be translated" in refused.json()["detail"]
-    assert api.ok("GET", f"/game-drafts/{draft['id']}", as_user=owner)["revision"] == draft["revision"]
-
-
 def test_games_with_no_client_code_are_exempt() -> None:
     platform = Api(require_game_strings=True).platform
     platform._require_translatable("")  # does not raise
@@ -173,13 +110,9 @@ def test_games_with_no_client_code_are_exempt() -> None:
         platform._require_translatable("<p>hi there</p>")
 
 
-def test_admin_saves_and_example_data_are_exempt() -> None:
+def test_example_data_saves_are_exempt() -> None:
     api = Api(require_game_strings=True, master_password="pw")
     owner = api.new_user("owner")
-    game_id = api.create_game(_body(GOOD), owner)["id"]
-    saved = api.client.put(f"/admin/games/{game_id}/code", auth=ADMIN, json={"code": NO_BLOCK})
-    assert saved.is_success, saved.text
-    assert saved.json()["version"] == 2
     from game_platform.service import GameRules
     seeded = api.platform.create_game(
         caller_id=owner, name="Seed", description="", rules=GameRules(

@@ -1,4 +1,4 @@
-"""Deterministic leaving/settlement probes (builder_checks.settlement_probes).
+"""Deterministic leaving/settlement probes (game_checks.settlement_probes).
 
 The reference server below implements the platform contract exactly; each
 broken variant reproduces one failure class seen in real guided builds and
@@ -6,8 +6,8 @@ must be caught by the probes with the matching scenario label.
 """
 from types import SimpleNamespace
 
-from game_platform.builder_checks import CHECKS, PLATFORM_CONTRACT, REVIEW_DISCIPLINE, settlement_probes
-from game_platform.builder_validation import probe_leaving
+from game_platform.game_checks import CHECKS, settlement_probes
+from game_platform.game_contract import probe_leaving
 
 CONTRACT = {'state_schema': {'type': 'object'}, 'view_schema': {'type': 'object'},
             'move_schema': {'type': 'object'}, 'cases': []}
@@ -142,7 +142,7 @@ def _leave_case(move, name='Forfeit example'):
 
 
 def test_leave_examples_run_through_player_left():
-    from game_platform.builder_validation import verify_examples
+    from game_platform.game_contract import verify_examples
     contract = {**CONTRACT, 'cases': [_leave_case({'type': 'leave'}),
                                        _leave_case(None, 'Forfeit example (no move)')]}
     results = verify_examples(REFERENCE, contract)
@@ -150,10 +150,6 @@ def test_leave_examples_run_through_player_left():
     # A server whose playerLeft never ends the match fails the same example.
     broken = verify_examples(B5_NEVER_ENDS, contract)
     assert [r['passed'] for r in broken] == [False, False]
-
-
-def test_contract_defines_the_leave_example_encoding():
-    assert 'executed through playerLeft, not applyMove' in PLATFORM_CONTRACT
 
 
 def test_game_without_player_left_is_skipped():
@@ -201,24 +197,13 @@ def test_check_is_registered_and_wraps_probes():
     assert settlement_probes('', B2_PAYS_NOBODY, {'tests': CONTRACT}, rules)['passed'] is False
 
 
-def test_contract_states_the_recipe_and_performance_rules():
-    for phrase in ('playerLeft recipe (implement in exactly this order)',
-                   'the recorded payouts re-reported for this call',
-                   'even zero entries',
-                   'the returned turn never contains the leaver',
-                   'never call ctx.estimateWinChance from computerMove',
-                   'must not clone the state'):
-        assert phrase in PLATFORM_CONTRACT, phrase
-    assert 'do not fail code for a leaving or settlement scenario the probes already verify' in REVIEW_DISCIPLINE
-
-
 # --- Move-agreement probes -------------------------------------------------
 # The same reference game, judged on one approved opening position: its
 # generators return {type:'pass'}, which its applyMove accepts, so a
 # correct game agrees with itself. Each broken variant reproduces one
 # failure class from real guided builds.
 
-from game_platform.builder_validation import probe_move_agreement
+from game_platform.game_contract import probe_move_agreement
 
 AGREEMENT_CONTRACT = {**CONTRACT, 'cases': [{
     'name': 'opening', 'kind': 'initial',

@@ -22,13 +22,10 @@ from game_platform.models import (
     Experiment,
     ExperimentAssignment,
     ExperimentEvent,
-    AgentConversation,
-    AgentConversationEntry,
     Game,
-    GameDraft,
-    GameTestSession,
     GameTestSeeds,
     GameVersionError,
+    import_package_from_legacy_workflow,
     Invite,
     Match,
     Move,
@@ -52,14 +49,11 @@ TYPES = {
     "users": User,
     "game_versions": Game,
     "games": Game,
-    "game_drafts": GameDraft,
-    "game_test_sessions": GameTestSession,
     "matches": Match,
     "invites": Invite,
     "push_subscriptions": WebPushSubscription,
     "game_version_errors": GameVersionError,
     "game_test_seeds": GameTestSeeds,
-    "agent_conversations": AgentConversation,
     "feedback": Feedback,
 }
 INTERNAL_COLLECTIONS = frozenset(
@@ -573,7 +567,7 @@ class QueryStore:
         if data is None or data.get("tombstone"):
             return None
         record = ADAPTERS[kind].validate_json(data["json"])
-        if kind in ("games", "game_versions", "game_drafts") and detail:
+        if kind in ("games", "game_versions") and detail:
             chunks = data.get("body_chunks", 0)
             body = "".join(
                 self.raw_get(ref.collection("body").document(f"{i:06}"))["text"]
@@ -581,6 +575,12 @@ class QueryStore:
             )
             if body:
                 record = replace(record, **json.loads(body))
+        if kind in ("games", "game_versions"):
+            # Records written before the Builder deletion carry the old builder
+            # workflow instead of an import package; convert on read.
+            legacy = json.loads(data["json"]).get("builder_workflow")
+            if legacy and record.import_package is None:
+                record = replace(record, import_package=import_package_from_legacy_workflow(legacy))
         if kind == "matches":
             count = data.get("move_count", 0)
             record = replace(
@@ -597,7 +597,7 @@ class QueryStore:
         with self.atomic():
             ref = self.ref(kind, identity)
             old = self.raw_get(ref)
-            if kind in ("games", "game_versions", "game_drafts"):
+            if kind in ("games", "game_versions"):
                 body = json.dumps(
                     {"code": record.code, "server_code": record.server_code}
                 )
@@ -643,7 +643,7 @@ class QueryStore:
                 **metadata,
                 **fields,
             }
-            if kind in ("games", "game_drafts"):
+            if kind == "games":
                 import re
 
                 words = set(
@@ -908,30 +908,6 @@ class QueryStore:
     def delete_user(self, user_id):
         self._delete("users", user_id)
 
-    def put_game_test_session(self, session):
-        self._put("game_test_sessions", session.id, session)
-
-    def get_game_test_session(self, session_id):
-        return self._get("game_test_sessions", session_id)
-
-    def list_game_test_sessions(self, *, owner_user_id):
-        return self._list("game_test_sessions", [("owner_user_id", "==", owner_user_id)])
-
-    def delete_game_test_session(self, session_id):
-        self._delete("game_test_sessions", session_id)
-
-    def put_game_draft(self, draft):
-        self._put("game_drafts", draft.id, draft)
-
-    def get_game_draft(self, draft_id):
-        return self._get("game_drafts", draft_id)
-
-    def delete_game_draft(self, draft_id):
-        self._delete("game_drafts", draft_id)
-
-    def list_game_drafts(self, *, owner_user_id):
-        return self._list("game_drafts", [("owner_user_id", "==", owner_user_id)])
-
     def add_game_version(self, game):
         with self.atomic():
             current = self.get_game(game.id)
@@ -986,23 +962,7 @@ class QueryStore:
         ]
 
     def list_all_game_versions(self):
-        # Unlike the other legacy list methods, this one is part of the Store
-        # protocol for startup scans and administrative jobs, which must see
-        # every version. Serve it through the paginated API instead of the
-        # capped legacy list: page in bounded chunks and re-read each record
-        # in full, mirroring rollback_snapshot's treatment of game_versions.
-        versions = []
-        cursor = None
-        while True:
-            result = self.page(
-                "game_versions", limit=100, cursor=cursor, scope="all_game_versions"
-            )
-            for item in result.items:
-                full = self._get("game_versions", f"{item.id}@{item.version}")
-                versions.append(full if full is not None else item)
-            cursor = result.next_cursor
-            if not cursor:
-                return versions
+        return self._list("game_versions")
 
     def set_game_published(self, game_id, published):
         with self.atomic():
@@ -1135,59 +1095,3 @@ class QueryStore:
         record = self.get_push_subscription_by_endpoint(endpoint)
         if record:
             self.delete_push_subscription(record.id)
-
-    def append_agent_conversation_entries(self, game_id, entries):
-        with self.atomic():
-            ref = self.ref("agent_conversations", game_id)
-            row = self.raw_get(ref) or {}
-            count = row.get("entry_count", 0)
-            adapter = TypeAdapter(AgentConversationEntry)
-            for i, entry in enumerate(entries, count):
-                self.raw_put(
-                    ref.collection("entries").document(f"{i:012}"),
-                    {"json": adapter.dump_json(entry).decode()},
-                )
-            self._put(
-                "agent_conversations",
-                game_id,
-                AgentConversation(game_id=game_id),
-                entry_count=count + len(entries),
-            )
-
-    def put_agent_conversation(self, conversation):
-        with self.atomic():
-            ref = self.ref("agent_conversations", conversation.game_id)
-            self.raw_get(ref) or {}
-            adapter = TypeAdapter(AgentConversationEntry)
-            if len(conversation.entries) > 400:
-                raise conflict("use paginated conversation import for large histories")
-            for i, entry in enumerate(conversation.entries):
-                self.raw_put(
-                    ref.collection("entries").document(f"{i:012}"),
-                    {"json": adapter.dump_json(entry).decode()},
-                )
-            self._put(
-                "agent_conversations",
-                conversation.game_id,
-                replace(conversation, entries=()),
-                entry_count=len(conversation.entries),
-            )
-
-    def get_agent_conversation(self, game_id):
-        ref = self.ref("agent_conversations", game_id)
-        row = self.raw_get(ref)
-        if not row or row.get("tombstone"):
-            return None
-        adapter = TypeAdapter(AgentConversationEntry)
-        count = row.get("entry_count", 0)
-        # Existing AI exchange callers only need a bounded recent context.
-        entries = [
-            adapter.validate_json(
-                self.raw_get(ref.collection("entries").document(f"{i:012}"))["json"]
-            )
-            for i in range(max(0, count - 100), count)
-        ]
-        return AgentConversation(game_id=game_id, entries=tuple(entries))
-
-    def list_agent_conversations(self):
-        return self._list("agent_conversations")

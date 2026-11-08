@@ -45,19 +45,6 @@ class DataFileConfig(_Section):
     backup_keep: Annotated[int, Field(ge=1)] = 48
 
 
-class ModelApiConfig(_Section):
-    # Meta Model API key (get one at https://dev.meta.ai). Empty disables
-    # model features. Prefer the MUSE_SPARK_API_KEY environment variable
-    # over storing the key in this file.
-    api_key: str = ""
-    model: str = "muse-spark-1.3"
-    base_url: str = "https://api.ai.meta.com/v1"
-    # Operator-verified upper tariffs (including multimodal inputs) and provider context bound.
-    builder_input_usd_per_million: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None = None
-    builder_output_usd_per_million: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None = None
-    builder_max_input_tokens: Annotated[int, Field(gt=0)] | None = None
-
-
 
 class GoogleAuthConfig(_Section):
     # Google OAuth client ID for the website (Google Cloud Console > APIs & Services >
@@ -259,18 +246,12 @@ class Config(_Section):
     log_level: LogLevel = "INFO"
     monitoring: MonitoringConfig = MonitoringConfig()
     translation: TranslationConfig = TranslationConfig()
-    model_api: ModelApiConfig = ModelApiConfig()
     auth: AuthConfig = AuthConfig()
     push: PushConfig = PushConfig()
     # Seconds the server waits before a computer opponent moves in a v2 match
     # (server-side game API), so humans can watch the game unfold. 0 moves
     # immediately.
     computer_move_delay_seconds: float = 0.6
-    # How many times the game-building agent may regenerate a game's server
-    # code after it fails its random-walk tests, feeding each failure report
-    # back to the model (server-side game API). 0 disables the fix loop.
-    ai_max_fix_attempts: Annotated[int, Field(ge=0)] = 3
-
     @model_validator(mode="after")
     def _require_master_password_for_hostnames(self) -> "Config":
         if (

@@ -9,7 +9,6 @@ it at the level the class demo depends on:
 - a played match replays move for move on a fresh platform and lands
   in exactly the same state (tic-tac-toe against a server computer,
   and a poker hand, whose deck order comes from the seeded shuffle);
-- the emulator answers identical requests identically;
 - failed test seeds stored for a game are replayed first on the next
   test run, so a fixed bug is verified against the exact walk that
   found it.
@@ -168,33 +167,12 @@ def test_a_poker_hand_replays_to_the_same_state() -> None:
     assert first == second
 
 
-def test_the_emulator_answers_identical_requests_identically(api: Api) -> None:
-    user = api.new_user("dev")
-    server_code = (GAMES_DIR / "poker.server.js").read_text()
-    players = [
-        {"kind": "human", "name": "Dev"},
-        {"kind": "computer", "name": "Bot"},
-        {"kind": "computer", "name": "Bot 2"},
-    ]
-    body = {
-        "server_code": server_code,
-        "game_schemas": _game_schemas("poker"),
-        "players": players,
-        "seed": 42,
-    }
-    first = api.ok("POST", "/emulator/reset", as_user=user, json=body)
-    second = api.ok("POST", "/emulator/reset", as_user=user, json=body)
-    assert first["error"] is None
-    assert first == second
-    # The full state (deck included) is deterministic too, not just views.
-    assert first["state"]["deck"]
-
 
 def test_failed_seeds_are_replayed_first_on_the_next_run(api: Api) -> None:
     owner = api.new_user("owner")
-    draft = api.ok(
-        "POST", "/game-drafts", as_user=owner,
-        json={"name": "Crashy", "allowed_player_counts": [2], "code": "<div>crashy</div>"},
+    game = api.create_game(
+        {"name": "Crashy", "allowed_player_counts": [2], "code": "<div>crashy</div>"},
+        owner,
     )
     broken = """
     const game = {
@@ -205,15 +183,20 @@ def test_failed_seeds_are_replayed_first_on_the_next_run(api: Api) -> None:
       viewFor(state, playerId, ctx) { return state; },
     };
     """
-    body = {"server_code": broken, "allowed_player_counts": [2], "game_id": draft["id"]}
-    first = api.ok("POST", "/games/test", as_user=owner, json=body)
-    assert first["passed"] is False
-    assert first["failures"]
-    stored = api.ok("GET", "/debug/all-data", as_user=owner)["game_test_seeds"]
-    (record,) = [entry for entry in stored if entry["game_id"] == draft["id"]]
-    assert record["seeds"][0] == first["failures"][0]["seed"]
+    rules = api.platform._store.get_game(game["id"]).rules
+    schemas = {"state": True, "move": True, "view": True}
+    first = api.platform._run_game_tests(
+        server_code=broken, game_schemas=schemas, rules=rules, game_id=game["id"]
+    )
+    assert first.passed is False
+    assert first.failures
+    stored = api.platform._store.get_game_test_seeds(game["id"])
+    assert stored is not None
+    assert stored.seeds[0] == first.failures[0].seed
     # The next run replays the stored seeds first: its first failure is
     # the same walk failing the same way.
-    second = api.ok("POST", "/games/test", as_user=owner, json=body)
-    assert second["failures"][0]["seed"] == record["seeds"][0]
-    assert second["failures"][0]["message"] == first["failures"][0]["message"]
+    second = api.platform._run_game_tests(
+        server_code=broken, game_schemas=schemas, rules=rules, game_id=game["id"]
+    )
+    assert second.failures[0].seed == stored.seeds[0]
+    assert second.failures[0].message == first.failures[0].message

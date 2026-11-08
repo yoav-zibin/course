@@ -1,6 +1,7 @@
 {
   "name": "Count to three",
   "description": "Reach three by adding one.",
+  "game_addition_request_id_and_secret": "example-secret-0123456789",
   "allowed_player_counts": [
     1
   ],

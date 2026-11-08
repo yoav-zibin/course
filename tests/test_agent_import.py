@@ -3,13 +3,13 @@ import subprocess
 import pytest
 
 from game_platform.agent_import import AGENT_IMPORT_OWNER_ID, MAX_BODY_BYTES, GameImport, prepare
-from game_platform.builder_flow import LANGUAGES
+from game_platform.i18n import LOCALE_CODES as LANGUAGES
 
 
 def translations_for(body):
     """Translations of the payload's own texts, marked with the locale so a test can
     tell a supplied translation from a machine one."""
-    from game_platform.builder_tutorial import vocabulary
+    from game_platform.game_tutorial import vocabulary
     from game_platform.game_text import extract_strings
     table = extract_strings(body['client_code']) or {}
     tutorial_vocab = vocabulary(body['tutorial']['html'])
@@ -61,11 +61,10 @@ def test_authenticated_complete_import_is_published_and_translated(api):
     assert sorted(g['translations']) == sorted(LANGUAGES)
     assert g['translations']['es']['display_name'] == '[es] ' + body['name']
     assert g['translations']['en']['display_name'] == body['name']
-    # Published: anyone can read the game, and no draft was created.
+    # Published: anyone can read the game, and drafts no longer exist at all.
     assert api.request('GET', f"/games/{g['id']}").status_code == 200
-    assert api.request('GET', f"/game-drafts/{g['id']}", as_user=other).status_code == 404
+    assert api.request('GET', '/game-drafts', as_user=owner).status_code == 404
     assert api.request('GET', f"/game-drafts/{g['id']}", as_user=owner).status_code == 404
-    assert api.ok('GET', '/game-drafts', as_user=owner) == []
     # The supplied translations are served: per-game strings and the portal bundle.
     strings = api.ok('GET', f"/games/{g['id']}/versions/1/strings", params={'lang': 'es'})
     assert strings['status'] == 'translated'
@@ -119,14 +118,11 @@ def test_identical_resubmission_is_a_noop(api):
     assert api.ok('GET', '/games') != [] and len(api.ok('GET', '/games')) == 1
 
 
-def test_resubmission_without_the_secret_creates_a_new_game(api):
+def test_a_missing_request_id_is_rejected(api):
     owner = api.new_user('Owner')
-    body = payload(); body['game_addition_request_id_and_secret'] = 'first-secret-0123456789'
-    first = api.ok('POST', '/games', as_user=owner, json=body)
-    again = payload()
-    second = api.ok('POST', '/games', as_user=owner, json=again)
-    assert second['id'] != first['id']
-    assert len(api.ok('GET', '/games')) == 2
+    body = payload(); del body['game_addition_request_id_and_secret']
+    assert api.request('POST', '/games', as_user=owner, json=body).status_code == 422
+    assert_no_games(api)
 
 
 def test_a_different_secret_creates_a_new_game(api):
@@ -297,7 +293,7 @@ def test_reject_unsafe_artifacts(api, mutation):
 
 
 def test_capacity_and_timeout_release_slots(api, monkeypatch):
-    owner = api.new_user('Owner'); slots = api.client.app.state.builder_slots
+    owner = api.new_user('Owner'); slots = api.client.app.state.import_slots
     slots.acquire(); slots.acquire()
     try:
         assert api.request('POST', '/games', as_user=owner, json=payload()).status_code == 429
@@ -311,19 +307,20 @@ def test_capacity_and_timeout_release_slots(api, monkeypatch):
     assert_no_games(api)
 
 
-def test_import_artifacts_roundtrip_existing_file_storage(tmp_path):
+def test_imported_game_roundtrips_existing_file_storage(tmp_path):
+    # An imported game (no draft involved) survives a file-storage round-trip.
     from game_platform.json_file_store import write_snapshot, read_snapshot
     from game_platform.service import GamePlatform
     from game_platform.store import InMemoryStore
     store = InMemoryStore(); platform = GamePlatform(store=store)
     owner = platform.create_user(display_name='Owner'); body = GameImport(**payload())
-    d = platform.save_game_draft(caller_id=owner.id, draft_id=None, expected_revision=None,
-        name=body.name, description=body.description, rules=body.game_rules(),
+    game = platform.import_agent_game(caller_id=owner.id, name=body.name,
+        description=body.description, rules=body.game_rules(),
         code=body.client_code, server_code=body.server_code,
-        game_schemas=body.game_schemas(), _initial_workflow=prepare(body))
-    assert sorted(d.builder_workflow['translations']) == sorted(LANGUAGES)
+        game_schemas=body.game_schemas(), import_package=prepare(body))
+    assert game.published is True and game.version == 1
     path = tmp_path / 'data.json'; write_snapshot(path, store.snapshot())
-    assert read_snapshot(path).game_drafts[0] == d
+    assert read_snapshot(path).game_versions[0] == game
 
 
 def test_openapi_documents_complete_payload(api):
@@ -379,6 +376,6 @@ def test_upload_timeout_releases_capacity(api, monkeypatch):
         yield b'{}'
     monkeypatch.setattr(module.Request, 'stream', slow_stream)
     assert api.client.post('/games', content='{}', headers=headers).status_code == 408
-    slots = api.client.app.state.builder_slots
+    slots = api.client.app.state.import_slots
     assert slots.acquire(blocking=False) and slots.acquire(blocking=False)
     slots.release(); slots.release()

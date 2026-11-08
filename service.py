@@ -27,8 +27,6 @@ import logging
 from game_platform import game_messages, game_text, i18n, observability
 from game_platform.avatars import user_avatar, USER_AVATARS, computer_avatar
 from game_platform.models import (
-    AgentConversation,
-    AgentConversationEntry,
     Experiment,
     ExperimentAssignment,
     ExperimentEvent,
@@ -36,7 +34,6 @@ from game_platform.models import (
     ExperimentKind,
     ExperimentVariant,
     Game,
-    GameDraft,
     GameRules,
     GameTestSeeds,
     GameVersionError,
@@ -65,7 +62,6 @@ from game_platform.game_logic import (
 from game_platform.game_testing import (
     GameTestReport,
     TestFailure,
-    infer_game_schemas,
     test_server_code,
 )
 from game_platform.push import LogPushNotifier, PushMessage, PushNotifier
@@ -137,8 +133,6 @@ class AllData:
     # Every version of every game, including deleted games.
     game_versions: list[Game]
     matches: list[Match]
-    # Recorded conversations with the game-building agent, admin-only.
-    agent_conversations: list[AgentConversation] = ()
     # Server-code failures recorded on game versions (v2 Game API), admin-only.
     game_version_errors: list[GameVersionError] = ()
     # Failed random-walk test seeds per game (v2 Game API), admin-only.
@@ -297,49 +291,16 @@ PILOT_CAMPAIGNS: Final = (
 )
 
 
-def _emulator_roster(players: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The players of an emulated match, with the ids real matches use:
-    human-1, human-2, ... and computer-1, ... in seat order."""
-    roster: list[dict[str, Any]] = []
-    humans = 0
-    computers = 0
-    for player in players:
-        if player.get("kind") == "computer":
-            computers += 1
-            player_id = f"computer-{computers}"
-        else:
-            humans += 1
-            player_id = f"human-{humans}"
-        roster.append(
-            {
-                "id": player_id,
-                "kind": player.get("kind", "human"),
-                "display_name": player.get("name", ""),
-                "picture_url": "",
-                "max_loss": int(player.get("max_loss", 0)),
-            }
-        )
-    return roster
-
-
-def _emulator_ctx(
-    roster: list[dict[str, Any]], pot: int, move_count: int
-) -> dict[str, Any]:
-    return {
-        "players": [dict(player) for player in roster],
-        "pot": pot,
-        "move_count": move_count,
-    }
-
-# "Leave this field unchanged" for update calls, for fields where None is a
-# real value of its own (a game whose server code was removed has none).
-UNSET: Final = object()
-
 # Referral codes: 5-digit numbers with no leading zero, so always 5 characters.
 REFERRAL_CODE_MIN: Final = 10_000
 REFERRAL_CODE_MAX: Final = 99_999
 # What an invite's "ref" looks like when it's a code rather than a user id.
 _REFERRAL_CODE_RE: Final = re.compile(r"\d{5}")
+
+
+# Sentinel for "argument not passed" in update_game: server_code/game_schemas
+# may be explicitly set to None (removing them), so None cannot mean "unchanged".
+UNSET: Final = object()
 
 
 def _new_referral_code() -> str:
@@ -1653,10 +1614,6 @@ class GamePlatform:
                 self._store.put_game_version(
                     replace(game, owner_user_id=into_user_id)
                 )
-        for draft in self._store.list_game_drafts(owner_user_id=from_user_id):
-            self._store.put_game_draft(replace(draft, owner_user_id=into_user_id))
-        for session in self._store.list_game_test_sessions(owner_user_id=from_user_id):
-            self._store.put_game_test_session(replace(session, owner_user_id=into_user_id))
         for match in self._store.list_all_matches():
             updated = match
             if match.owner_user_id == from_user_id:
@@ -1815,92 +1772,6 @@ class GamePlatform:
                 ))
             ]
 
-    # Private working copies, kept outside all public game/version/match APIs.
-
-    def _owned_draft(self, *, caller_id: str, draft_id: str) -> GameDraft:
-        draft = self._store.get_game_draft(draft_id)
-        if draft is None or draft.owner_user_id != caller_id:
-            raise NotFoundError("draft not found")
-        return draft
-
-    def list_game_drafts(self, *, caller_id: str) -> list[GameDraft]:
-        with self._lock:
-            return self._store.list_game_drafts(owner_user_id=caller_id)
-
-    def get_game_draft(self, *, caller_id: str, draft_id: str) -> GameDraft:
-        with self._lock:
-            return self._owned_draft(caller_id=caller_id, draft_id=draft_id)
-
-    def open_builder_game(self, *, caller_id: str, game_id: str) -> GameDraft:
-        """Reuse an owner's working copy, or seed one from the current public version."""
-        with self._lock:
-            game = self._get_owned_game(caller_id=caller_id, game_id=game_id)
-            if game.deleted: raise NotFoundError("game not found")
-            draft = self._store.get_game_draft(game_id)
-            if draft is not None:
-                return self._owned_draft(caller_id=caller_id, draft_id=game_id)
-            return self.save_game_draft(caller_id=caller_id, draft_id=game.id, name=game.name,
-                description=game.description, rules=game.rules, code=game.code,
-                server_code=game.server_code, expected_revision=None)
-
-    def save_game_draft(
-        self, *, caller_id: str, draft_id: str | None, name: str,
-        description: str, rules: GameRules, code: str,
-        expected_revision: int | None,
-        server_code: str | None = None,
-        game_schemas: dict[str, JsonValue] | None = None,
-        _initial_workflow: dict | None = None,
-    ) -> GameDraft:
-        server_code = server_code or None
-        if server_code is None and game_schemas is not None:
-            raise InvalidRequestError("game_schemas requires server_code")
-        with self._lock:
-            existing = self._store.get_game_draft(draft_id) if draft_id else None
-            game = self._store.get_game(draft_id) if draft_id else None
-            if existing is not None:
-                self._owned_draft(caller_id=caller_id, draft_id=existing.id)
-                if expected_revision != existing.revision:
-                    raise ConflictError("draft changed in another tab; reload before saving")
-            elif draft_id is not None:
-                if game is None or game.deleted or game.owner_user_id != caller_id:
-                    raise NotFoundError("game not found")
-                if expected_revision is not None:
-                    raise ConflictError("draft was discarded; reload before saving")
-            now = self._clock()
-            draft = GameDraft(
-                id=draft_id or self._new_id(), owner_user_id=caller_id,
-                name=name, description=description, rules=rules, code=code,
-                server_code=server_code,
-                builder_workflow=existing.builder_workflow if existing else game.builder_workflow if game else _initial_workflow,
-                game_schemas=game_schemas,
-                created_at=existing.created_at if existing else now, updated_at=now,
-                base_version=existing.base_version if existing else game.version if game else 0,
-                revision=existing.revision + 1 if existing else 1,
-            )
-            self._store.put_game_draft(draft)
-            return draft
-
-    def change_builder_workflow(self, *, caller_id: str, draft_id: str,
-                                expected_revision: int, change: Callable) -> GameDraft:
-        """Atomic owner-checked workflow mutation; no mutable values escape the store."""
-        import copy
-        with self._lock:
-            draft = self._owned_draft(caller_id=caller_id, draft_id=draft_id)
-            if draft.revision != expected_revision:
-                raise ConflictError("draft changed in another tab; reload before saving")
-            updated = change(copy.deepcopy(draft))
-            import json
-            if len(json.dumps(updated.builder_workflow).encode()) > 750_000:
-                raise InvalidRequestError("Builder specification is too large; reduce image detail or test count")
-            updated = replace(updated, revision=draft.revision + 1, updated_at=self._clock())
-            self._store.put_game_draft(updated)
-            return copy.deepcopy(updated)
-
-    def delete_game_draft(self, *, caller_id: str, draft_id: str) -> None:
-        with self._lock:
-            self._owned_draft(caller_id=caller_id, draft_id=draft_id)
-            self._store.delete_game_draft(draft_id)
-
     def _require_translatable(self, code: str | None, server_code: str | None = None) -> None:
         """translation.require_strings: client code that fails game_text.lint is refused,
         with the checker's problems in plain words. Games with no client code are exempt;
@@ -1914,70 +1785,6 @@ class GamePlatform:
                 shown += f"; and {len(problems) - 5} more"
             raise InvalidRequestError(f"the game's texts cannot be translated: {shown}")
 
-    def publish_game_draft(
-        self, *, caller_id: str, draft_id: str, expected_revision: int,
-    ) -> Game:
-        with self._lock:
-            draft = self._owned_draft(caller_id=caller_id, draft_id=draft_id)
-            if draft.revision != expected_revision:
-                raise ConflictError("draft changed in another tab; reload before publishing")
-            if not draft.name.strip() or not draft.rules.allowed_player_counts:
-                raise InvalidRequestError("give the game a name and select player counts before publishing")
-            if draft.builder_workflow:
-                from game_platform.builder_flow import require_publishable
-                require_publishable(draft)
-            current = self._store.get_game(draft_id)
-            if current is None:
-                if draft.base_version != 0:
-                    raise ConflictError("published game is no longer available")
-                game_schemas = draft.game_schemas
-                self._require_translatable(draft.code, draft.server_code)
-                if draft.server_code:
-                    if game_schemas is None:
-                        raise InvalidRequestError(
-                            "a game with server code needs its game_schemas; save them on the draft first"
-                        )
-                    self._gate_server_code(
-                        draft.id, draft.server_code, draft.rules, game_schemas
-                    )
-                game = Game(
-                    id=draft.id, version=1, owner_user_id=caller_id,
-                    name=draft.name.strip(), description=draft.description,
-                    rules=draft.rules, code=draft.code,
-                    server_code=draft.server_code,
-                    builder_workflow=draft.builder_workflow,
-                    game_schemas=game_schemas,
-                    created_at=self._clock(), updated_at=self._clock(),
-                )
-                self._store.add_game_version(game)
-            else:
-                if current.deleted or current.owner_user_id != caller_id:
-                    raise ConflictError("published game is no longer available")
-                if current.version != draft.base_version:
-                    raise ConflictError("public version changed; reload it before publishing this draft")
-                game = self.update_game(
-                    caller_id=caller_id, game_id=draft_id, name=draft.name.strip(),
-                    description=draft.description, code=draft.code,
-                    server_code=draft.server_code,
-                    game_schemas=draft.game_schemas,
-                    allowed_player_counts=draft.rules.allowed_player_counts,
-                    allows_leave_mid_match=draft.rules.allows_leave_mid_match,
-                    allows_join_mid_match=draft.rules.allows_join_mid_match,
-                    _publishing=True,
-                    _builder_workflow=draft.builder_workflow,
-                )
-            self._store.set_game_published(game.id, True)
-            game = self._get_game(game.id)
-            # Keep the working copy; repeat publication cannot create duplicate games.
-            self._store.put_game_draft(
-                replace(
-                    draft,
-                    base_version=game.version,
-                    game_schemas=game.game_schemas,
-                )
-            )
-            return game
-
     # Games (public versions; existing clients continue to publish with POST/PATCH).
 
     def create_game(
@@ -1990,7 +1797,7 @@ class GamePlatform:
         code: str,
         server_code: str | None = None,
         game_schemas: dict[str, JsonValue] | None = None,
-        builder_workflow: dict[str, JsonValue] | None = None,
+        import_package: dict[str, JsonValue] | None = None,
         _check_strings: bool = True,
     ) -> Game:
         server_code = server_code or None
@@ -2013,7 +1820,7 @@ class GamePlatform:
                 rules=rules,
                 code=code,
                 server_code=server_code,
-                builder_workflow=builder_workflow,
+                import_package=import_package,
                 game_schemas=game_schemas,
                 created_at=now,
                 updated_at=now,
@@ -2031,7 +1838,7 @@ class GamePlatform:
         code: str,
         server_code: str | None = None,
         game_schemas: dict[str, JsonValue] | None = None,
-        builder_workflow: dict[str, JsonValue] | None = None,
+        import_package: dict[str, JsonValue] | None = None,
         request_id: str | None = None,
     ) -> Game:
         """Creates a published game, or updates the one imported with [request_id]
@@ -2040,7 +1847,13 @@ class GamePlatform:
         still running, say — cannot create a duplicate. An update runs as the game's
         owner: possession of the request id is the authorization, so the caller need
         not be the owner. A resubmission that changes nothing returns the game as is.
+        A resubmission of an unpublished game re-publishes it: the import publishes.
         """
+        # The stored package is the record of the request id: a resubmission is
+        # found by the secret in the package, so the id passed here is what is
+        # stored, whatever the package itself carried.
+        if request_id is not None and import_package is not None:
+            import_package = {**import_package, "game_addition_request_id_and_secret": request_id}
         with self._lock:
             existing = (
                 self.find_game_by_addition_request_id(request_id)
@@ -2048,7 +1861,7 @@ class GamePlatform:
                 else None
             )
             if existing is not None:
-                return self.update_game(
+                game = self.update_game(
                     caller_id=existing.owner_user_id,
                     game_id=existing.id,
                     name=name,
@@ -2060,8 +1873,12 @@ class GamePlatform:
                     server_code=server_code,
                     game_schemas=game_schemas,
                     _publishing=True,
-                    _builder_workflow=builder_workflow,
+                    _import_package=import_package,
                 )
+                if not game.published:
+                    self._store.set_game_published(game.id, True)
+                    game = replace(game, published=True)
+                return game
             return self.create_game(
                 caller_id=caller_id,
                 name=name,
@@ -2070,17 +1887,18 @@ class GamePlatform:
                 code=code,
                 server_code=server_code,
                 game_schemas=game_schemas,
-                builder_workflow=builder_workflow,
+                import_package=import_package,
             )
 
     def find_game_by_addition_request_id(self, request_id: str) -> Game | None:
         """The published game imported with [request_id] (see agent_import: the
         agent's `game_addition_request_id_and_secret`), or None. The id is stored on
-        the game's workflow; the lookup scans the published games, which is cheap
-        (imports are rare and the list is small)."""
+        the game's import package; the lookup scans the published games, which is cheap
+        (imports are rare and the list is small). Unpublished games are included:
+        a resubmission of one re-publishes it (see import_agent_game)."""
         with self._lock:
-            for game in self._store.list_games(owner_user_id=None):
-                if (game.builder_workflow or {}).get('game_addition_request_id_and_secret') == request_id:
+            for game in self._store.list_games(owner_user_id=None, include_unpublished=True):
+                if (game.import_package or {}).get('game_addition_request_id_and_secret') == request_id:
                     return game
         return None
 
@@ -2140,7 +1958,7 @@ class GamePlatform:
         except game_text.StringsError:
             table = None
         warnings = game_text.lint(game.code)
-        prepared = (game.builder_workflow or {}).get('translations', {}).get(i18n.normalize_locale(locale) or i18n.DEFAULT_LOCALE)
+        prepared = (game.import_package or {}).get('translations', {}).get(i18n.normalize_locale(locale) or i18n.DEFAULT_LOCALE)
         if prepared and isinstance(prepared.get('client_strings'), dict) and set(prepared['client_strings']) == set(table or {}):
             return GameStrings(game_id=game.id, game_version=game.version,
                 locale=i18n.normalize_locale(locale) or i18n.DEFAULT_LOCALE, status='translated',
@@ -2381,49 +2199,15 @@ class GamePlatform:
             for game in games
         }
 
-    def list_owned_games(self, *, caller_id: str) -> list[Game]:
-        with self._lock:
-            return self._store.list_games(owner_user_id=caller_id, include_unpublished=True)
-
     def unpublish_game(self, *, caller_id: str, game_id: str) -> Game:
+        # No drafts anymore: unpublishing is a pure flag flip. Re-publishing
+        # happens by submitting the game again through POST /games.
         with self._lock:
             game = self._get_owned_game(caller_id=caller_id, game_id=game_id)
             if game.deleted:
                 raise NotFoundError("game not found")
-            if self._store.get_game_draft(game_id) is None:
-                self.save_game_draft(
-                    caller_id=caller_id, draft_id=game_id, name=game.name,
-                    description=game.description, code=game.code,
-                    server_code=game.server_code,
-                    game_schemas=game.game_schemas,
-                    rules=game.rules, expected_revision=None,
-                )
             self._store.set_game_published(game_id, False)
             return self._get_game(game_id)
-
-    def published_games_for_guided_migration(self, game_ids=None):
-        """Read the public catalog in bounded pages, or fetch just the requested IDs."""
-        if game_ids is not None:
-            games = []
-            for game_id in dict.fromkeys(game_ids):
-                try:
-                    game = self.get_game(game_id)
-                except NotFoundError:
-                    continue
-                if game.published and not game.deleted:
-                    games.append(game)
-            return games
-        if not getattr(self._store, "scalable", False):
-            return self.list_games(owner_user_id=None)
-        games = []
-        cursor = None
-        while True:
-            page = self._store.page("games", filters=[("deleted", "==", False),
-                                    ("published", "==", True)], cursor=cursor, scope="public")
-            games.extend(page.items)
-            cursor = page.next_cursor
-            if not cursor:
-                return games
 
     def list_games(self, *, owner_user_id: str | None, query: str = "") -> list[Game]:
         """Published games, optionally one owner's. A [query] keeps the games whose
@@ -2499,28 +2283,18 @@ class GamePlatform:
         server_code: str | None | object = UNSET,
         game_schemas: dict[str, JsonValue] | None | object = UNSET,
         _publishing: bool = False,
-        _admin: bool = False,
-        _builder_workflow: Any = UNSET,
-        _test_budget_seconds: float = 1.0,
+        _import_package: Any = UNSET,
     ) -> Game:
         """Creates a new version of the game, unless nothing changes.
 
         Fields left as [None] are unchanged, except [server_code]: it is
         unchanged unless a value (including None, which removes the game's
         server code) is passed explicitly.
-
-        [_admin] skips the ownership check: the caller is the platform
-        operator (the refactor-all-games job), not the game's owner. The
-        publish gate and every other rule still apply.
         """
         with self._lock:
-            game = (
-                self._get_live_game(game_id)
-                if _admin
-                else self._get_owned_game(caller_id=caller_id, game_id=game_id)
-            )
+            game = self._get_owned_game(caller_id=caller_id, game_id=game_id)
             if not game.published and not _publishing:
-                raise ConflictError("game is unpublished; edit its private draft and Publish to share it")
+                raise ConflictError("game is unpublished; submit it again through POST /games to publish it")
             server_code_value = (
                 game.server_code
                 if server_code is UNSET
@@ -2557,7 +2331,7 @@ class GamePlatform:
                     if allows_join_mid_match is not None
                     else rules.allows_join_mid_match,
                 ),
-                builder_workflow=game.builder_workflow if _builder_workflow is UNSET else _builder_workflow,
+                import_package=game.import_package if _import_package is UNSET else _import_package,
                 code=code if code is not None else game.code,
                 server_code=server_code_value,
                 game_schemas=game_schemas_value,
@@ -2570,10 +2344,8 @@ class GamePlatform:
                 )
             if updated == game:
                 return game
-            if not _admin and updated.code != game.code:
+            if updated.code != game.code:
                 self._require_translatable(updated.code, updated.server_code)
-            if game.builder_workflow and not _publishing:
-                raise ConflictError("This game has approved specifications; edit and verify it in the guided builder")
             if updated.server_code and (
                 updated.server_code != game.server_code
                 or updated.game_schemas != game.game_schemas
@@ -2581,18 +2353,12 @@ class GamePlatform:
             ):
                 # New or re-ruled server code must pass its tests before
                 # the new version is published (Phase 5 gate).
-                gate_args = (
+                self._gate_server_code(
                     game_id,
                     updated.server_code,
                     updated.rules,
                     updated.game_schemas,
                 )
-                if _admin and _test_budget_seconds != 1.0:
-                    self._gate_server_code(
-                        *gate_args, budget_seconds=_test_budget_seconds
-                    )
-                else:
-                    self._gate_server_code(*gate_args)
             updated = replace(
                 updated, version=game.version + 1, updated_at=self._clock()
             )
@@ -2603,7 +2369,6 @@ class GamePlatform:
         with self._lock:
             self._get_owned_game(caller_id=caller_id, game_id=game_id)
             self._store.delete_game(game_id)
-            self._store.delete_game_draft(game_id)
 
     # Matches
 
@@ -3014,63 +2779,6 @@ class GamePlatform:
     # Server-side game logic (v2 Game API, docs/server-side-game-api.md).
     # Everything in this section runs with the platform lock held.
 
-    def test_game_code(
-        self,
-        *,
-        server_code: str,
-        game_schemas: dict[str, JsonValue] | None,
-        rules: GameRules,
-        game_id: str | None = None,
-    ) -> GameTestReport:
-        """Runs the random-walk tester on server code that may not be
-        saved yet (POST /games/test: the builder and the AI fix loop).
-        When [game_id] names a game or draft, its stored failed seeds are
-        replayed first and the run's failed seeds replace them."""
-        with self._lock:
-            generated_schemas = game_schemas is None
-            if game_schemas is None:
-                # The test endpoint is the one place schemas are still generated
-                # from code (the builder and the game-test page test unsaved code
-                # that has no schemas yet); creating or publishing a game never
-                # generates them. The game's own test contract, when the code
-                # belongs to a game or draft, seeds the generation.
-                try:
-                    source = self._store.get_game_draft(game_id) or self._store.get_game(game_id) if game_id else None
-                    workflow = getattr(source, "builder_workflow", None) or {}
-                    contract = workflow.get("artifacts", {}).get("tests", {}).get("value")
-                    game_schemas, _ = infer_game_schemas(
-                        server_code,
-                        game_id=game_id or "unsaved",
-                        rules=rules,
-                        contract=contract,
-                    )
-                except ValueError as error:
-                    failure = TestFailure(
-                        function="schema_generation",
-                        message=f"could not automatically generate JSON Schemas: {error}",
-                        seed=0,
-                        player_count=0,
-                        move_number=0,
-                    )
-                    return GameTestReport(
-                        passed=False,
-                        walks_completed=0,
-                        moves_made=0,
-                        too_slow=False,
-                        failures=(failure,),
-                    )
-            report = self._run_game_tests(
-                server_code=server_code,
-                game_schemas=game_schemas,
-                rules=rules,
-                game_id=game_id,
-            )
-            return (
-                replace(report, game_schemas=game_schemas)
-                if generated_schemas
-                else report
-            )
-
     def _run_game_tests(
         self,
         *,
@@ -3083,11 +2791,10 @@ class GamePlatform:
         stored = (
             self._store.get_game_test_seeds(game_id) if game_id else None
         )
-        source = (self._store.get_game_draft(game_id) or self._store.get_game(game_id)) if game_id else None
-        workflow = getattr(source, 'builder_workflow', None) or {}
-        contract = workflow.get('artifacts', {}).get('tests', {}).get('value')
+        source = self._store.get_game(game_id) if game_id else None
+        contract = (getattr(source, 'import_package', None) or {}).get('unit_tests')
         if contract:
-            from game_platform.builder_validation import verify_examples
+            from game_platform.game_contract import verify_examples
             from game_platform.game_testing import TestFailure
             failures = [result for result in verify_examples(server_code, contract) if not result['passed']]
             if failures:
@@ -3122,8 +2829,7 @@ class GamePlatform:
         budget_seconds: float = 1.0,
     ) -> None:
         """The publish gate (Phase 5): server code about to be published
-        must pass the random-walk tests, or publishing is refused and the
-        version stays a draft the author can keep fixing. The schemas are
+        must pass the random-walk tests, or publishing is refused. The schemas are
         given, never generated here."""
         if game_schemas is None:
             raise InvalidRequestError(
@@ -3142,201 +2848,8 @@ class GamePlatform:
         summary = f"{first.function}: {first.message.splitlines()[0][:160]}"
         raise InvalidRequestError(
             f"the game's server code failed its tests: {summary} "
-            f"(seed {first.seed}); run POST /games/test for the full report"
+            f"(seed {first.seed})"
         )
-
-    # The builder's emulator (Phase 6): plays unsaved server code the way
-    # a match would — newMatch, the human's moves, computer moves in
-    # between — without storing anything. Game errors come back in the
-    # result's "error" field, verbatim, never as an exception.
-
-    def emulator_reset(
-        self,
-        *,
-        server_code: str,
-        game_schemas: dict[str, JsonValue],
-        players: list[dict[str, Any]],
-        seed: int,
-    ) -> dict[str, Any]:
-        with self._lock:
-            logic = GameLogic(
-                server_code, game_schemas=game_schemas, game_id="emulator"
-            )
-            roster = _emulator_roster(players)
-            pot = sum(player["max_loss"] for player in roster)
-            try:
-                result = logic.call(
-                    "newMatch",
-                    ctx=_emulator_ctx(roster, pot, 0),
-                    seed=seed % (2**32),
-                    now=self._clock(),
-                )
-            except (GameLogicError, InvalidMoveError) as error:
-                return self._emulator_out(
-                    roster, pot=pot, state=None, turn=None, move_count=0,
-                    error=str(error),
-                )
-            return self._emulator_advance(
-                logic, roster=roster, pot=pot, state=result.get("state"),
-                turn=result.get("turn"), move_count=0, seed=seed,
-            )
-
-    def emulator_act(
-        self,
-        *,
-        server_code: str,
-        game_schemas: dict[str, JsonValue],
-        players: list[dict[str, Any]],
-        seed: int,
-        state: Any,
-        turn: list[str] | None,
-        move_count: int,
-        player_id: str,
-        move: Any,
-    ) -> dict[str, Any]:
-        with self._lock:
-            logic = GameLogic(
-                server_code, game_schemas=game_schemas, game_id="emulator"
-            )
-            roster = _emulator_roster(players)
-            pot = sum(player["max_loss"] for player in roster)
-            if turn is None:
-                return self._emulator_out(
-                    roster, pot=pot, state=state, turn=None,
-                    move_count=move_count, error="the match is over",
-                )
-            if player_id not in turn:
-                return self._emulator_out(
-                    roster, pot=pot, state=state, turn=turn,
-                    move_count=move_count,
-                    error=f"it is not {player_id}'s turn",
-                )
-            try:
-                result = logic.call(
-                    "applyMove",
-                    state,
-                    player_id,
-                    move,
-                    ctx=_emulator_ctx(roster, pot, move_count),
-                    seed=(seed + move_count) % (2**32),
-                    now=self._clock(),
-                )
-            except (GameLogicError, InvalidMoveError) as error:
-                return self._emulator_out(
-                    roster, pot=pot, state=state, turn=turn,
-                    move_count=move_count, error=str(error),
-                )
-            move_count += 1
-            if result.get("turn") is None:
-                return self._emulator_advance(
-                    logic, roster=roster, pot=pot, state=result.get("state"),
-                    turn=None, move_count=move_count, seed=seed,
-                    payouts=result.get("payouts"),
-                )
-            return self._emulator_advance(
-                logic, roster=roster, pot=pot, state=result.get("state"),
-                turn=result.get("turn"), move_count=move_count, seed=seed,
-            )
-
-    def _emulator_advance(
-        self,
-        logic: GameLogic,
-        *,
-        roster: list[dict[str, Any]],
-        pot: int,
-        state: Any,
-        turn: list[str] | None,
-        move_count: int,
-        seed: int,
-        payouts: Any = None,
-    ) -> dict[str, Any]:
-        """Moves computer players until a human is to move (or the match
-        ends), then computes every player's view."""
-        error: str | None = None
-        iterations = 0
-        while turn:
-            mover = next((p for p in roster if p["id"] == turn[0]), None)
-            if mover is None or mover["kind"] != "computer":
-                break
-            iterations += 1
-            if iterations > 1000:
-                error = "the computer players did not stop moving (1000 moves)"
-                break
-            try:
-                move = logic.call(
-                    "computerMove",
-                    state,
-                    mover["id"],
-                    ctx=_emulator_ctx(roster, pot, move_count),
-                    seed=(seed + move_count) % (2**32),
-                    now=self._clock(),
-                )
-                result = logic.call(
-                    "applyMove",
-                    state,
-                    mover["id"],
-                    move,
-                    ctx=_emulator_ctx(roster, pot, move_count),
-                    seed=(seed + move_count) % (2**32),
-                    now=self._clock(),
-                )
-            except (GameLogicError, InvalidMoveError) as exc:
-                error = str(exc)
-                break
-            state, turn = result.get("state"), result.get("turn")
-            move_count += 1
-            if turn is None:
-                payouts = result.get("payouts")
-        views: dict[str, Any] = {}
-        if state is not None and error is None:
-            try:
-                for player in roster:
-                    views[player["id"]] = logic.call(
-                        "viewFor",
-                        state,
-                        player["id"],
-                        ctx=_emulator_ctx(roster, pot, move_count),
-                        seed=(seed + move_count) % (2**32),
-                        now=self._clock(),
-                    )
-            except (GameLogicError, InvalidMoveError) as exc:
-                error = str(exc)
-        return self._emulator_out(
-            roster, pot=pot, state=state, turn=turn, move_count=move_count,
-            payouts=payouts, views=views, error=error,
-        )
-
-    def _emulator_out(
-        self,
-        roster: list[dict[str, Any]],
-        *,
-        pot: int,
-        state: Any,
-        turn: list[str] | None,
-        move_count: int,
-        payouts: Any = None,
-        views: dict[str, Any] | None = None,
-        error: str | None = None,
-    ) -> dict[str, Any]:
-        return {
-            "state": state,
-            "views": views or {},
-            "players": [
-                {
-                    "id": player["id"],
-                    "kind": player["kind"],
-                    "name": player["display_name"],
-                    "max_loss": player["max_loss"],
-                }
-                for player in roster
-            ],
-            "turn": turn,
-            "status": "over" if turn is None else "ongoing",
-            "move_count": move_count,
-            "pot": pot,
-            "payouts": payouts,
-            "error": error,
-        }
 
     def _logic_for(self, game: Game) -> GameLogic:
         key = (game.id, game.version)
@@ -3347,9 +2860,9 @@ class GamePlatform:
                     f"game {game.id} version {game.version} has no game_schemas; "
                     "add game_schemas to it before enabling this game"
                 )
-            contract = (game.builder_workflow or {}).get("artifacts", {}).get("tests", {}).get("value")
+            contract = (game.import_package or {}).get('unit_tests')
             if contract:
-                from game_platform.builder_validation import ContractLogic
+                from game_platform.game_contract import ContractLogic
                 logic = ContractLogic(
                     game.server_code or "",
                     contract,
@@ -5026,69 +4539,6 @@ class GamePlatform:
             ]
         )
 
-    # Agent conversations
-
-    # Bounds the stored history per game so a long-lived game can't grow the
-    # data file without limit; far beyond any real building session.
-    MAX_AGENT_CONVERSATION_ENTRIES: Final = 1000
-
-    def record_agent_exchange(
-        self, *, caller_id: str, game_id: str, user_text: str, assistant_text: str
-    ) -> bool:
-        """Records one exchange with the game-building agent against a game.
-
-        The [game_id] is a draft id (draft ids become game ids on publication).
-        Returns False and records nothing when the id names no draft or game
-        owned by the caller — older clients send no id at all, and their chats
-        simply stay unrecorded. Each entry is stamped with the game's current
-        published version (the draft's base version; 0 when never published).
-        """
-        with self._lock:
-            draft = self._store.get_game_draft(game_id)
-            game = self._store.get_game(game_id)
-            if draft is not None:
-                if draft.owner_user_id != caller_id:
-                    return False
-                version = draft.base_version
-            elif game is not None:
-                if game.owner_user_id != caller_id:
-                    return False
-                version = game.version
-            else:
-                return False
-            now = self._clock()
-            entries = [
-                AgentConversationEntry(
-                    role="user", text=user_text, created_at=now, game_version=version
-                ),
-                AgentConversationEntry(
-                    role="assistant",
-                    text=assistant_text,
-                    created_at=self._clock(),
-                    game_version=version,
-                ),
-            ]
-            self._store.append_agent_conversation_entries(game_id, entries)
-            conversation = self._store.get_agent_conversation(game_id)
-            if (
-                conversation is not None
-                and len(conversation.entries) > self.MAX_AGENT_CONVERSATION_ENTRIES
-            ):
-                self._store.put_agent_conversation(
-                    AgentConversation(
-                        game_id=game_id,
-                        entries=conversation.entries[
-                            -self.MAX_AGENT_CONVERSATION_ENTRIES :
-                        ],
-                    )
-                )
-            return True
-
-    def agent_conversation(self, game_id: str) -> AgentConversation | None:
-        """The recorded agent conversation for a game, for the admin pages."""
-        with self._lock:
-            return self._store.get_agent_conversation(game_id)
-
     # Debugging
 
     def storage_error(self) -> str | None:
@@ -5106,7 +4556,6 @@ class GamePlatform:
                 users=self._store.list_users(),
                 game_versions=self._store.list_all_game_versions(),
                 matches=self._store.list_all_matches(),
-                agent_conversations=self._store.list_agent_conversations(),
                 game_version_errors=[
                     error
                     for game in self._store.list_all_game_versions()
@@ -5519,10 +4968,6 @@ class GamePlatform:
                     self._delete_match_and_invites(match.id)
                 elif match.status != "over" and match.seat_of(user_id) is not None:
                     self.leave_match(caller_id=user_id, match_id=match.id)
-            for draft in self._store.list_game_drafts(owner_user_id=user_id):
-                self._store.delete_game_draft(draft.id)
-            for session in self._store.list_game_test_sessions(owner_user_id=user_id):
-                self._store.delete_game_test_session(session.id)
             for subscription in self._store.list_push_subscriptions(user_id=user_id):
                 self._store.delete_push_subscription(subscription.id)
             for invite in self._store.list_invites(created_by_user_id=user_id):
@@ -5560,7 +5005,6 @@ class GamePlatform:
         with self._lock:
             self._get_live_game(game_id)
             self._store.delete_game(game_id)
-            self._store.delete_game_draft(game_id)
 
     def admin_delete_match(self, match_id: str) -> None:
         with self._lock:

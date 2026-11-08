@@ -191,10 +191,6 @@ def test_real_sdk_and_event_driven_worker_use_budgeted_emulator(tmp_path):
                 "pagination"
             ]
             assert (
-                http.post("/agent/chat", auth=("demo", "test"), json={}).status_code
-                == 403
-            )
-            assert (
                 http.get("/v2/games?limit=2", auth=("demo", "test")).status_code == 200
             )
             reserved = budget.status()["reserved_operation_units"]

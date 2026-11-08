@@ -244,7 +244,10 @@ const state = {
 const frame = new GameFrame(
   $("game-box"),
   (move) => onMakeMove(move),
-  (problem) => showMessage(problem, "error"),
+  // A game that posts anything but make_move is misbehaving, but that is the
+  // game's bug, not the player's: log it for debugging and stay silent in
+  // the UI instead of flashing an error the player cannot act on.
+  (problem) => console.error(problem),
 );
 
 // Data
@@ -375,10 +378,6 @@ function renderPortalAccountMenu() {
         container._hideAuthMenu?.();
         document.querySelector(".topbar .sidebar-toggle")?.click();
       },
-    }),
-    el("a", {
-      href: "/builder",
-      textContent: I18n.t("ui.builder.create_title", {}, "Create a game"),
     }),
   );
   panel.prepend(menu);
@@ -1290,7 +1289,7 @@ function updateMatchSetup() {
   $("selected-game-name").textContent = (game && I18n.gameName(game.id, game.name)) || I18n.t("ui.games.choose", {}, "Choose a game");
   $("selected-game-description").textContent = (game && I18n.gameDescription(game.id, game.description)) || "";
   $("selected-game-mode").textContent = solo ? I18n.t("ui.games.solo_label", {}, "1 player · solo") : game ? I18n.t("ui.portal.mode_players", {counts: game.allowed_player_counts.join(", ")}, `${game.allowed_player_counts.join(", ")} players`) : "";
-  $("create-hint").textContent = solo ? I18n.t("ui.portal.hint_solo", {}, "Starts immediately. No opponent needed.") : game ? I18n.t("ui.portal.hint_invite_friends", {}, "Create a match, then invite friends to join.") : state.games.length ? I18n.t("ui.portal.hint_choose", {}, "Choose a game from the search results to continue.") : I18n.t("ui.portal.hint_publish", {}, "Publish a game in the builder to make it available here.");
+  $("create-hint").textContent = solo ? I18n.t("ui.portal.hint_solo", {}, "Starts immediately. No opponent needed.") : game ? I18n.t("ui.portal.hint_invite_friends", {}, "Create a match, then invite friends to join.") : state.games.length ? I18n.t("ui.portal.hint_choose", {}, "Choose a game from the search results to continue.") : I18n.t("ui.portal.hint_choose", {}, "Choose a game from the search results to continue.");
 }
 
 function selectMatch(id) {
@@ -1913,7 +1912,7 @@ async function onMakeMove(move) {
       const next = move.next_turn_player_indices;
       const seats = new Set(match.players.map(player=>player.player_index));
       if (!(next === null || (Array.isArray(next) && next.length && new Set(next).size === next.length && next.every(seat=>Number.isInteger(seat)&&seats.has(seat)))))
-        throw new Error(I18n.t("ui.portal.invalid_next_player", {}, "The game sent an invalid next player. Your move was not queued. Restart or repair this game in Builder."));
+        throw new Error(I18n.t("ui.portal.invalid_next_player", {}, "The game sent an invalid next player. Your move was not queued. Restart the match."));
       if (!canMove(match, user?.id))
         throw new Error(I18n.t("ui.error.not_your_turn", {}, "It isn't your turn."));
       state.match = await offline.submitMove(match, {

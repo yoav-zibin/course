@@ -10,12 +10,14 @@ test('Take Away plays to completion in real Portal matches', async ({browser, re
   const auth = (user: typeof alice) => ({'X-User-Id':user.id, 'X-User-Password':user.password});
   const client = fs.readFileSync(path.resolve(__dirname, '../games/take-away.html'), 'utf8');
   const server = fs.readFileSync(path.resolve(__dirname, '../games/take-away.server.js'), 'utf8');
-  const tested = await request.post('/games/test', {headers:auth(alice), data:{
-    server_code:server, allowed_player_counts:[2, 3], allows_leave_mid_match:false, allows_join_mid_match:false,
-  }});
-  expect(tested.ok()).toBeTruthy();
-  const report = await tested.json();
-  expect(report.passed).toBeTruthy();
+  // Schemas for Take Away, written out instead of inferred: the state is
+  // {remaining, winner}, a move is {take} (1-3), and the view is the state.
+  // (POST /games/test, which used to infer them, no longer exists.)
+  const schemas = {
+    state: {type: 'object', properties: {remaining: {type: 'integer', minimum: 0}, winner: {type: ['string', 'null']}}, required: ['remaining', 'winner'], additionalProperties: true},
+    move: {type: 'object', properties: {take: {type: 'integer', minimum: 1, maximum: 3}}, required: ['take'], additionalProperties: true},
+    view: {type: 'object', properties: {remaining: {type: 'integer', minimum: 0}, winner: {type: ['string', 'null']}}, required: ['remaining', 'winner'], additionalProperties: true},
+  };
   const gameId = await importGame(request, alice, {
     name: uniqueName('Take Away'),
     description: 'Take the last stone',
@@ -41,7 +43,7 @@ test('Take Away plays to completion in real Portal matches', async ({browser, re
       server_invalid_take: 'Choose one, two, or three stones that remain.',
       server_invalid_player: 'This player cannot move.',
     },
-    schemas: report.game_schemas,
+    schemas,
     cases: [
       {
         name: 'Initial move',

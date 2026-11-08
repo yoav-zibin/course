@@ -480,9 +480,9 @@ function setUpAppTopbar() {
   const nav = bar.querySelector('nav');
   // Entry pages use the shared header without an app navigation menu.
   nav?.replaceChildren(...[
-    ['portal', 'Portal'], ['builder', 'Builder'], ['new_builder', 'New Builder'], ['admin', 'Admin'],
+    ['portal', 'Portal'], ['admin', 'Admin'],
   ].map(([page, label]) => el('a', {
-    href: page === 'new_builder' ? '/static/guided-builder.html' : '/' + page,
+    href: '/' + page,
     'data-i18n': 'ui.nav.' + page,
     'aria-current': page === current ? 'page' : null,
     textContent: label,

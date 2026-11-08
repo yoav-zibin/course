@@ -132,7 +132,7 @@ def test_server_code(
     [regression_seeds] first. Never raises for a broken game: every game
     bug becomes a failure in the report."""
     if contract:
-        from game_platform.builder_validation import ContractLogic
+        from game_platform.game_contract import ContractLogic
         logic = ContractLogic(
             server_code,
             contract,
@@ -239,104 +239,6 @@ def format_report(report: "GameTestReport") -> str:
     ]
     parts.extend(format_failure(failure) for failure in report.failures)
     return "\n".join(parts)
-
-
-def infer_game_schemas(
-    server_code: str,
-    *,
-    game_id: str,
-    rules: GameRules,
-    budget_seconds: float = 3.0,
-    max_walks: int = 1000,
-    run_seed: int | None = None,
-    contract: dict | None = None,
-) -> tuple[dict[str, JsonValue], GameTestReport]:
-    """Infers JSON Schema types from successful random-walk samples.
-
-    The inference is sample-based: observed properties are type-checked,
-    unknown object properties remain allowed, and no property is required.
-    The normal schema-aware random-walk gate must still pass before publishing.
-    """
-    samples: dict[str, list[JsonValue]] = defaultdict(list)
-
-    def observe(function: str, args: tuple[Any, ...], result: Any) -> None:
-        if function in {
-            "applyMove",
-            "computerMove",
-            "randomMove",
-            "viewFor",
-            "playerJoined",
-            "playerLeft",
-        } and args and len(samples["state"]) < 2000:
-            samples["state"].append(args[0])
-
-        if function == "newMatch" and isinstance(result, dict):
-            if "state" in result and len(samples["state"]) < 2000:
-                samples["state"].append(result["state"])
-        elif function in {"applyMove", "playerJoined", "playerLeft"} and isinstance(result, dict):
-            if "state" in result and len(samples["state"]) < 2000:
-                samples["state"].append(result["state"])
-
-        if function in {"computerMove", "randomMove"} and len(samples["move"]) < 2000:
-            samples["move"].append(result)
-        elif function == "viewFor" and len(samples["view"]) < 2000:
-            samples["view"].append(result)
-
-    report = test_server_code(
-        server_code,
-        game_schemas={"state": True, "move": True, "view": True},
-        game_id=game_id,
-        rules=rules,
-        budget_seconds=budget_seconds,
-        max_walks=max_walks,
-        run_seed=run_seed,
-        contract=contract,
-        sample_observer=observe,
-    )
-    missing = sorted(
-        name for name in ("state", "move", "view") if not samples[name]
-    )
-    if missing:
-        raise ValueError(
-            "could not infer "
-            + ", ".join(missing)
-            + " schema: random walks did not produce successful samples "
-            "for every game value"
-        )
-    schemas: dict[str, JsonValue] = {
-        key: _infer_value_schema(values)
-        for key, values in samples.items()
-    }
-    return schemas, report
-
-
-def _infer_value_schema(values: list[JsonValue], *, depth: int = 0) -> JsonValue:
-    if not values or depth >= 16:
-        return True
-    types = {_json_type(value) for value in values}
-    schema: dict[str, JsonValue] = {
-        "type": sorted(types) if len(types) > 1 else next(iter(types))
-    }
-    if "object" in types:
-        objects = [value for value in values if isinstance(value, dict)]
-        keys = set().union(*(value.keys() for value in objects))
-        schema["properties"] = {
-            key: _infer_value_schema(
-                [value[key] for value in objects if key in value],
-                depth=depth + 1,
-            )
-            for key in sorted(keys)
-        }
-        schema["additionalProperties"] = True
-    elif "array" in types:
-        items = [
-            item
-            for value in values
-            if isinstance(value, list)
-            for item in value
-        ]
-        schema["items"] = _infer_value_schema(items, depth=depth + 1)
-    return schema
 
 
 def _json_type(value: JsonValue) -> str:

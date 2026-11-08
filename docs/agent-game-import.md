@@ -56,15 +56,15 @@ with the game; agents do not submit a second potentially inconsistent copy.
 
 Optional: `language` (default `en`), `allows_join_mid_match` and
 `allows_leave_mid_match` (both default false). Do not enable unsupported handlers.
-`game_addition_request_id_and_secret` (optional, 16–200 characters) is a string
+`game_addition_request_id_and_secret` (required, 16–200 characters) is a string
 the agent picks when creating the game — a long random secret. Sending the same
 string again updates the game created with it instead of creating a duplicate:
 the name, description, rules, code, server code, schemas and translations are
 replaced and the game becomes a new version (a resubmission that changes nothing
 returns the game as is). Anyone holding the string can update the game, so keep
-it secret; without it, every POST creates a new game.
+it secret; a request without it is rejected.
 See [the server API](server-side-game-api.md), [translation contract](game-translation.md)
-and `builder_flow.validate_artifact` for the authoritative detailed contracts.
+and `game_artifacts.validate_artifact` for the authoritative detailed contracts.
 `examples/agent-game.json` is a runnable counter-game request example.
 Its test images are schematic illustrations, not captured gameplay screenshots.
 
@@ -80,7 +80,7 @@ is inserted. The checks, in order:
    1–200 chars, `description` 1–2000, `rules`/`ui_instructions` 1–20000,
    `language` one of the 8 supported locales, `allowed_player_counts`
    unique integers 1–10, each code field 1–200,000 chars, 4–6 images,
-   `game_addition_request_id_and_secret` 16–200 chars when present.
+   `game_addition_request_id_and_secret` 16–200 chars, required.
 3. **Translations — all 8 languages.** `translations` must cover exactly the
    7 languages other than the game's own language. Each entry is checked for
    exact key coverage of the client string table and the tutorial vocabulary,

@@ -8,8 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from starlette.concurrency import run_in_threadpool
 
-from game_platform import builder_flow as flow
-from game_platform.builder_flow import LANGUAGES
+from game_platform.game_artifacts import validate_artifact, validate_test_rosters
+from game_platform.i18n import LOCALE_CODES as LANGUAGES
 from game_platform.models import GameRules
 from game_platform.schemas import GameOut, Name, PlayerCounts
 from game_platform.service import InvalidRequestError
@@ -17,7 +17,7 @@ from game_platform.service import InvalidRequestError
 MAX_BODY_BYTES = 900_000
 MAX_CODE_BYTES = 200_000
 MAX_IMAGE_BYTES = 120_000
-MAX_WORKFLOW_BYTES = 400_000
+MAX_PACKAGE_BYTES = 400_000
 UPLOAD_TIMEOUT_SECONDS = 15
 
 # The owner recorded for a game imported without an account: no user can
@@ -57,11 +57,13 @@ class GameImport(BaseModel):
     # string table. The source language's entry is synthesized server-side, so the
     # published game is translated in all 8 languages from this one POST.
     translations: dict[str, GameTranslation]
-    # A string the agent picks when creating the game (a long random secret). Sending
-    # the same string again updates the game created with it instead of creating a
-    # duplicate: the request is an update, not a new addition. Anyone holding the
-    # string can update the game, so keep it secret.
-    game_addition_request_id_and_secret: str | None = Field(default=None, min_length=16, max_length=200)
+    # A string the agent picks when creating the game (a long random secret).
+    # Required: every import carries one, so every game can be updated by
+    # resubmitting with the same string. Sending the same string again updates
+    # the game created with it instead of creating a duplicate: the request is
+    # an update, not a new addition. Anyone holding the string can update the
+    # game, so keep it secret.
+    game_addition_request_id_and_secret: str = Field(min_length=16, max_length=200)
 
     @model_validator(mode='after')
     def _translations_cover_every_other_language(self):
@@ -92,10 +94,10 @@ class GameImport(BaseModel):
 def _validate_translations(body, table, tutorial_vocab):
     """The caller-supplied translations must cover the game's own strings exactly and
     keep every placeholder, so the published game is translated in every language
-    from the first request. Returns the workflow's translations dict, including the
+    from the first request. Returns the package's translations dict, including the
     source language synthesized from the game's own texts."""
     from game_platform import translation as translation_module
-    from game_platform.builder_tutorial import validate_translations
+    from game_platform.game_tutorial import validate_translations
     translations = {}
     for locale, translation in body.translations.items():
         try:
@@ -125,7 +127,6 @@ def prepare(body):
     for code in (body.client_code, body.server_code):
         if len(code.encode('utf-8')) > MAX_CODE_BYTES:
             raise InvalidRequestError('Each code field must be at most 200000 UTF-8 bytes')
-    workflow = flow.initial(body.language)
     values = {
         'understanding': {'text': body.rules, 'questions': []},
         'identity': {'display_name': body.name, 'short_description': body.description},
@@ -137,15 +138,14 @@ def prepare(body):
     }
     for step, value in values.items():
         try:
-            flow.validate_artifact(step, value)
+            validate_artifact(step, value)
         except Exception as exc:
             # The shared validator can embed user schema values in its message.
             # Identify the failing artifact without reflecting that content.
-            raise InvalidRequestError(f'Invalid {step} artifact; see the Builder artifact contract') from exc
-        workflow['artifacts'][step] = {'value': value, 'status': 'draft', 'revision': 1}
+            raise InvalidRequestError(f'Invalid {step} artifact; see the game artifact contract') from exc
     # The translations are trusted as supplied (they are checked structurally here,
-    # not machine-translated), and they count toward the workflow size limit below.
-    from game_platform.builder_tutorial import vocabulary
+    # not machine-translated), and they count toward the package size limit below.
+    from game_platform.game_tutorial import vocabulary
     from game_platform.game_text import StringsError, extract_strings
     try:
         table = extract_strings(body.client_code)
@@ -153,24 +153,34 @@ def prepare(body):
         raise InvalidRequestError(str(exc)) from exc
     if table is None:
         raise InvalidRequestError('Game is missing its translation string table')
-    workflow['translations'] = _validate_translations(body, table, vocabulary(body.tutorial['html']))
-    if body.game_addition_request_id_and_secret is not None:
-        workflow['game_addition_request_id_and_secret'] = body.game_addition_request_id_and_secret
+    translations = _validate_translations(body, table, vocabulary(body.tutorial['html']))
+    # The import package is the game's durable metadata: translations, the
+    # resubmission secret, rules/UI text, tutorial, images and unit tests.
+    # There is no workflow around it anymore (no job, approvals or history).
+    package = {
+        'translations': translations,
+        'game_addition_request_id_and_secret': body.game_addition_request_id_and_secret,
+        'rules_text': body.rules,
+        'ui_text': body.ui_instructions,
+        'tutorial': body.tutorial,
+        'images': body.images,
+        'unit_tests': body.unit_tests,
+    }
     for image in [*body.images, *(i for case in body.unit_tests['cases'] for i in case['images'])]:
         if len(image['svg'].encode('utf-8')) > MAX_IMAGE_BYTES:
             raise InvalidRequestError('Each SVG must be at most 120000 UTF-8 bytes')
-    if len(json.dumps(workflow).encode()) > MAX_WORKFLOW_BYTES:
+    if len(json.dumps(package).encode()) > MAX_PACKAGE_BYTES:
         raise InvalidRequestError('Combined metadata and images exceed 400000 bytes')
-    stored_content = {'builder_workflow': workflow, 'game_schemas': body.game_schemas(),
+    stored_content = {'import_package': package, 'game_schemas': body.game_schemas(),
                       'code': body.client_code, 'server_code': body.server_code,
                       'name': body.name, 'description': body.description}
     if len(json.dumps(stored_content).encode()) > MAX_BODY_BYTES:
         raise InvalidRequestError('Stored game package exceeds 900000 bytes; reduce code or schemas')
-    from game_platform.builder_checks import run_checks
+    from game_platform.game_checks import run_checks
     # Every test case's roster must be a seat count the rules allow; a
     # human plus a computer is two seats, so a one-seat roster can never
     # take turns correctly.
-    flow.validate_test_rosters(workflow, body.unit_tests)
+    validate_test_rosters(body.allowed_player_counts, body.unit_tests)
     checks = run_checks(body.client_code, body.server_code, values, body.game_rules())
     failed = [name for name, result in checks.items() if not result['passed']]
     if failed:
@@ -185,7 +195,7 @@ def prepare(body):
             'Game verification failed:\n' + '\n'.join(detail_lines)
         )
     # No approval digests, build status or publication claims are trusted.
-    return workflow
+    return package
 
 
 def verify_submission(body):
@@ -200,7 +210,7 @@ def verify_submission(body):
     response = json.loads(result.stdout)
     if 'error' in response:
         raise HTTPException(422, response['error'])
-    return response['workflow']
+    return response['package']
 
 
 def make_router(platform_dependency, caller_dependency):
@@ -229,7 +239,7 @@ def make_router(platform_dependency, caller_dependency):
                 raise HTTPException(400, 'Invalid Content-Length')
             if declared_length > MAX_BODY_BYTES:
                 raise HTTPException(413, 'Request exceeds 900000 bytes')
-        slots = request.app.state.builder_slots
+        slots = request.app.state.import_slots
         if not slots.acquire(blocking=False):
             raise HTTPException(429, 'Validation capacity is busy', headers={'Retry-After': '15'})
         try:
@@ -247,7 +257,7 @@ def make_router(platform_dependency, caller_dependency):
             except ValidationError as exc:
                 raise HTTPException(422, [{'loc': list(e['loc']), 'msg': e['msg'], 'type': e['type']}
                                           for e in exc.errors(include_input=False, include_context=False)]) from exc
-            workflow = await run_in_threadpool(verify_submission, body)
+            package = await run_in_threadpool(verify_submission, body)
             # Seed the portal bundle with the supplied translations first, so a failure
             # here leaves nothing behind; the game itself is created right after.
             await run_in_threadpool(platform.set_translations, translations=_bundle_translations(body))
@@ -257,7 +267,7 @@ def make_router(platform_dependency, caller_dependency):
                 caller_id=caller if caller is not None else AGENT_IMPORT_OWNER_ID,
                 name=body.name, description=body.description, rules=body.game_rules(),
                 code=body.client_code, server_code=body.server_code,
-                game_schemas=body.game_schemas(), builder_workflow=workflow,
+                game_schemas=body.game_schemas(), import_package=package,
                 request_id=body.game_addition_request_id_and_secret)
             return GameOut.of(game)
         finally:
@@ -292,7 +302,7 @@ def _bundle_translations(body):
 if __name__ == '__main__':
     try:
         prepared = prepare(GameImport.model_validate_json(sys.stdin.buffer.read(MAX_BODY_BYTES + 1)))
-        print(json.dumps({'workflow': prepared}))
+        print(json.dumps({'package': prepared}))
     except InvalidRequestError as exc:
         print(json.dumps({'error': str(exc)}))
     except Exception:

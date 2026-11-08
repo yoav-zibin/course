@@ -166,7 +166,7 @@ def validate_artifact(step, value, *, require_test_images=True):
                 if error: raise InvalidRequestError(f'{case["name"]}: {field}: {error.message}')
 
 
-def validate_test_rosters(workflow, value):
+def validate_test_rosters(allowed_player_counts, value):
     """Every example's roster must be a seat count the approved logic allows.
 
     allowed_player_counts counts total seats, not humans: one human versus
@@ -174,8 +174,7 @@ def validate_test_rosters(workflow, value):
     take turns correctly, so it is rejected before approval, not repaired
     later by steering code generation with contradictory examples.
     """
-    logic = (workflow.get('artifacts') or {}).get('logic', {}).get('value') or {}
-    counts = logic.get('allowed_player_counts')
+    counts = allowed_player_counts
     if not counts:
         return
     for case in value.get('cases', []):

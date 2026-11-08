@@ -184,7 +184,6 @@ def main() -> None:
             platform,
             debug_tools=config.debug_tools,
             master_password=config.master_password,
-            model_api_config=config.model_api,
             auth_config=config.auth,
             push_config=push_config,
             sms_sender=make_sms_sender(config.auth.sms),
@@ -193,7 +192,6 @@ def main() -> None:
             email_sender=make_email_sender(config.auth.email),
             cors_allow_origins=config.server.cors_allow_origins,
             public_base_url=config.server.public_base_url,
-            ai_max_fix_attempts=config.ai_max_fix_attempts,
             monitor=monitor,
         )
         if config.monitoring.cloud_metrics_enabled:

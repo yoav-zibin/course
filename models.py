@@ -6,7 +6,7 @@ writes them back to the store, so a store never shares mutable state with its ca
 
 import datetime as dt
 from dataclasses import dataclass, field
-from typing import Final, Literal
+from typing import Any, Final, Literal
 
 from pydantic import JsonValue
 
@@ -174,7 +174,11 @@ class Game:
     # None means a v1 game: the client computes everything and the server only
     # stores the state. Defaults to None so older data files load.
     server_code: str | None = None
-    builder_workflow: dict[str, JsonValue] | None = None
+    # The import package POST /games stored with the game (translations, the
+    # resubmission secret, rules/UI text, tutorial, images, unit tests). Games
+    # created before the Builder deletion carry the old builder workflow
+    # instead; it is converted to this shape on load (see below).
+    import_package: dict[str, JsonValue] | None = None
     # Draft 2020-12 schemas for the server-owned state, move, and player view.
     # None is valid only for v1 games and old records awaiting backfill.
     game_schemas: dict[str, JsonValue] | None = None
@@ -187,51 +191,35 @@ class Game:
     published: bool = True
 
 
-@dataclass(frozen=True, kw_only=True)
-class GameTestSession:
-    """Private, bounded recording of a game test."""
+def import_package_from_legacy_workflow(workflow: dict[str, Any]) -> dict[str, Any]:
+    """The import package for a game whose stored record still carries the old
+    builder workflow (games imported before the Builder deletion). The workflow
+    wrapped the same data in per-step artifacts; only the durable parts survive:
+    translations, the resubmission secret, rules/UI text, tutorial, images and
+    unit tests. Job, approval, history and conversation state are dropped.
+    Applied at Game materialization in QueryStore._decode and
+    FirestoreStore._load; a converted record is serialized with import_package
+    (and without builder_workflow) on its next save. The JSON file store does
+    not convert: its data files never carried workflows in practice."""
+    artifacts = workflow.get("artifacts") or {}
 
-    id: str
-    owner_user_id: str
-    created_at: dt.datetime
-    updated_at: dt.datetime
-    revision: int
-    data: str
+    def value(step: str) -> dict[str, Any]:
+        step_value = (artifacts.get(step) or {}).get("value")
+        return step_value if isinstance(step_value, dict) else {}
 
-
-@dataclass(frozen=True, kw_only=True)
-class GameDraft:
-    """Owner-only working copy. Its id becomes the public game id on publication."""
-
-    id: str
-    owner_user_id: str
-    name: str
-    description: str
-    rules: GameRules
-    code: str
-    # The draft's server code (v2 Game API); see [Game.server_code].
-    server_code: str | None = None
-    builder_workflow: dict[str, JsonValue] | None = None
-    game_schemas: dict[str, JsonValue] | None = None
-    created_at: dt.datetime
-    updated_at: dt.datetime
-    base_version: int = 0
-    revision: int = 1
-
-
-AgentMessageRole = Literal["user", "assistant"]
-
-
-@dataclass(frozen=True, kw_only=True)
-class AgentConversationEntry:
-    """One message exchanged with the game-building agent about one game."""
-
-    role: AgentMessageRole
-    text: str
-    created_at: dt.datetime
-    # The game's published version when the message was exchanged; 0 while the
-    # game had never been published (it existed only as a draft).
-    game_version: int
+    logic = value("logic")
+    ui = value("ui")
+    tutorial = value("tutorial")
+    images = value("images")
+    return {
+        "translations": workflow.get("translations") or {},
+        "game_addition_request_id_and_secret": workflow.get("game_addition_request_id_and_secret"),
+        "rules_text": logic.get("text", ""),
+        "ui_text": ui.get("text", ""),
+        "tutorial": {"text": tutorial.get("text", ""), "html": tutorial.get("html", "")},
+        "images": images.get("images", []) if isinstance(images, dict) else [],
+        "unit_tests": value("tests"),
+    }
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -276,15 +264,6 @@ class GameTestSeeds:
 
     game_id: str
     seeds: tuple[int, ...] = ()
-
-
-@dataclass(frozen=True, kw_only=True)
-class AgentConversation:
-    """The whole recorded agent conversation for one game (or draft), oldest
-    first. Admin-only: it is never part of a game or draft API response."""
-
-    game_id: str
-    entries: tuple[AgentConversationEntry, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)

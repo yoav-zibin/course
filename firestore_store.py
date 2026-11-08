@@ -46,7 +46,7 @@ from game_platform.observability import timed_external
 
 from game_platform.json_file_store import read_snapshot, write_snapshot
 from game_platform.saving_store import SavingStore
-from game_platform.models import GamePopularity
+from game_platform.models import GamePopularity, import_package_from_legacy_workflow
 from game_platform.store import InMemoryStore, Snapshot
 from game_platform.translation_bundle import pack, unpack
 
@@ -89,14 +89,7 @@ _KINDS: Final = (
     _Kind(field="game_versions", key=lambda game: f"{game.id}@{game.version}"),
     _Kind(field="deleted_game_ids", key=lambda game_id: game_id),
     _Kind(field="matches", key=lambda match: match.id, items_field="moves"),
-    _Kind(field="game_drafts", key=lambda draft: draft.id),
-    _Kind(field="game_test_sessions", key=lambda session: session.id),
     _Kind(field="unpublished_game_ids", key=lambda game_id: game_id),
-    _Kind(
-        field="agent_conversations",
-        key=lambda conversation: conversation.game_id,
-        items_field="entries",
-    ),
     _Kind(field="push_subscriptions", key=lambda subscription: subscription.id),
     _Kind(field="invites", key=lambda invite: invite.token),
     _Kind(field="game_version_errors", key=lambda error: error.id),
@@ -143,8 +136,6 @@ def _sorted_like_in_memory_store(snapshot_fields: dict[str, list[Any]]) -> None:
     for field in (
         "users",
         "matches",
-        "game_drafts",
-        "game_test_sessions",
         "push_subscriptions",
         "experiments",
         "feedback",
@@ -168,14 +159,6 @@ def _sorted_like_in_memory_store(snapshot_fields: dict[str, list[Any]]) -> None:
     }
     snapshot_fields["game_versions"].sort(
         key=lambda game: (first_created.get(game.id, game.created_at), game.id, game.version)
-    )
-    # Conversations appear when their first entry is recorded; empty ones go last.
-    snapshot_fields["agent_conversations"].sort(
-        key=lambda conversation: (
-            not conversation.entries,
-            conversation.entries[0].created_at.isoformat() if conversation.entries else "",
-            conversation.game_id,
-        )
     )
     for field in ("deleted_game_ids", "unpublished_game_ids"):
         snapshot_fields[field].sort()
@@ -435,11 +418,21 @@ class FirestoreStore(SavingStore):
             with timed_external("firestore"):
                 documents = list(self._collection(kind.field).stream())
             for document in documents:
+                text = text_of(document) if kind.field != "game_popularity" else None
                 record = (
                     adapter.validate_python(document.to_dict())
                     if kind.field == "game_popularity"
-                    else adapter.validate_json(text_of(document))
+                    else adapter.validate_json(text)
                 )
+                if kind.field == "game_versions":
+                    # Records written before the Builder deletion carry the old
+                    # builder workflow instead of an import package; convert on read.
+                    legacy = json.loads(text).get("builder_workflow")
+                    if legacy and record.import_package is None:
+                        record = dataclasses.replace(
+                            record,
+                            import_package=import_package_from_legacy_workflow(legacy),
+                        )
                 if kind.items_field is not None:
                     item_adapter = _ITEM_ADAPTERS[kind.field]
                     items = document.reference.collection(kind.items_field)

@@ -6,10 +6,6 @@ The backend keeps its Muse key. Accounts, games, and matches use that server.
 from __future__ import annotations
 
 import argparse
-import asyncio
-import hmac
-import time
-import uuid
 from html import escape
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -31,15 +27,9 @@ def create_preview(backend: str, *, transport=None) -> FastAPI:
     backend = backend.rstrip("/")
     client = httpx.AsyncClient(base_url=backend, timeout=httpx.Timeout(900, connect=15), trust_env=False, transport=transport)
 
-    jobs = {}
-
     @asynccontextmanager
     async def lifespan(app):
         yield
-        tasks = [job["task"] for job in jobs.values() if not job["task"].done()]
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
         await client.aclose()
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -91,27 +81,19 @@ void (async () => {{
 
     @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
     async def preview(path: str, request: Request):
-        if request.method == "GET" and path in ("", "builder", "new-builder", "portal", "privacy"):
-            page = "guided-builder" if path == "new-builder" else path or "builder"
+        if request.method == "GET" and path in ("", "portal", "privacy"):
+            page = path or "portal"
             if page == "privacy":
                 return FileResponse(STATIC / "privacy.html")
             html = (STATIC / f"{page}.html").read_text(encoding="utf-8")
-            notice = f'<div style="padding:8px 16px;background:#26304a;color:#eef0f5;font:12px/1.5 sans-serif">Local UI preview · Connected to {escape(parsed.netloc)}. Accounts, AI generation, and saved games use the live course server.</div>'
+            notice = f'<div style="padding:8px 16px;background:#26304a;color:#eef0f5;font:12px/1.5 sans-serif">Local UI preview · Connected to {escape(parsed.netloc)}. Accounts and saved games use the live course server.</div>'
             if '<div class="sidebar-footer">' in html:
                 html = html.replace('<div class="sidebar-footer">', '<div class="sidebar-footer">' + notice, 1)
             else:
                 html = html.replace("</header>", "</header>" + notice, 1)
             return preview_html(html, redirect_to_static=page == "portal")
-        if path.startswith("preview/jobs/") and request.method == "GET":
-            job = jobs.get(path.rsplit("/", 1)[-1])
-            owner = (request.headers.get("x-user-id", ""), request.headers.get("x-user-password", ""))
-            if not job or not all(hmac.compare_digest(a, b) for a, b in zip(owner, job["owner"])):
-                return JSONResponse({"detail": "Generation request not found."}, status_code=404)
-            if not job["task"].done():
-                return JSONResponse({"preview_job_id": job["id"]}, status_code=202)
-            return job["task"].result()
-        guided_reads = {"i18n/locales", "storage/capabilities", "v2/game-drafts", "v2/builder/games"}
-        if not (request.method == "GET" and path in guided_reads) and path.split("/", 1)[0] not in {"auth", "users", "games", "game-drafts", "matches", "agent", "builder"}:
+        guided_reads = {"i18n/locales", "storage/capabilities"}
+        if not (request.method == "GET" and path in guided_reads) and path.split("/", 1)[0] not in {"auth", "users", "games", "matches"}:
             return Response("This page is not available in the local preview.", status_code=404)
         # Forward only product API headers; the model key never enters the browser.
         headers = {key: request.headers[key] for key in ("content-type", "x-user-id", "x-user-password") if key in request.headers}
@@ -131,18 +113,6 @@ void (async () => {{
                             headers={"content-type": upstream.headers.get("content-type", "application/json"),
                                      "cache-control": upstream.headers.get("cache-control", "private, no-store")})
 
-        if path == "agent/chat" and request.method == "POST":
-            owner = (headers.get("x-user-id", ""), headers.get("x-user-password", ""))
-            if not all(owner):
-                return JSONResponse({"detail": "Log in before generating a game."}, status_code=401)
-            for key, job in list(jobs.items()):
-                if job["task"].done() and time.monotonic() - job["created"] > 600:
-                    del jobs[key]
-            if sum(not job["task"].done() for job in jobs.values()) >= 4:
-                return JSONResponse({"detail": "Other generations are still running. Please wait."}, status_code=429)
-            key = uuid.uuid4().hex
-            jobs[key] = {"id": key, "owner": owner, "created": time.monotonic(), "task": asyncio.create_task(forward())}
-            return JSONResponse({"preview_job_id": key}, status_code=202)
         return await forward()
 
     return app

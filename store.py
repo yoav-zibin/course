@@ -11,15 +11,11 @@ from dataclasses import dataclass, replace
 from typing import Protocol
 
 from game_platform.models import (
-    AgentConversation,
-    AgentConversationEntry,
     Experiment,
     ExperimentAssignment,
     ExperimentEvent,
     Game,
     GamePopularity,
-    GameDraft,
-    GameTestSession,
     GameTestSeeds,
     Translation,
     GameVersionError,
@@ -34,22 +30,6 @@ from game_platform.models import (
 
 
 class Store(Protocol):
-    def put_game_test_session(self, session: GameTestSession) -> None: ...
-
-    def get_game_test_session(self, session_id: str) -> GameTestSession | None: ...
-
-    def list_game_test_sessions(self, *, owner_user_id: str) -> list[GameTestSession]: ...
-
-    def delete_game_test_session(self, session_id: str) -> None: ...
-
-    def put_game_draft(self, draft: GameDraft) -> None: ...
-
-    def get_game_draft(self, draft_id: str) -> GameDraft | None: ...
-
-    def list_game_drafts(self, *, owner_user_id: str) -> list[GameDraft]: ...
-
-    def delete_game_draft(self, draft_id: str) -> None: ...
-
     def put_user(self, user: User) -> None: ...
 
     def get_user(self, user_id: str) -> User | None: ...
@@ -119,16 +99,6 @@ class Store(Protocol):
         ...
 
     def list_all_matches(self) -> list[Match]: ...
-
-    def append_agent_conversation_entries(
-        self, game_id: str, entries: list[AgentConversationEntry]
-    ) -> None: ...
-
-    def put_agent_conversation(self, conversation: AgentConversation) -> None: ...
-
-    def get_agent_conversation(self, game_id: str) -> AgentConversation | None: ...
-
-    def list_agent_conversations(self) -> list[AgentConversation]: ...
 
     def put_push_subscription(self, subscription: WebPushSubscription) -> None: ...
 
@@ -239,12 +209,7 @@ class Snapshot:
     game_versions: tuple[Game, ...]
     deleted_game_ids: tuple[str, ...]
     matches: tuple[Match, ...]
-    # Optional so existing data files load without a migration. Never public games.
-    game_drafts: tuple[GameDraft, ...] = ()
-    game_test_sessions: tuple[GameTestSession, ...] = ()
     unpublished_game_ids: tuple[str, ...] = ()
-    # Optional so existing data files load without a migration. Admin-only data.
-    agent_conversations: tuple[AgentConversation, ...] = ()
     # Optional so existing data files load without a migration. The browsers that
     # signed up for web push notifications.
     push_subscriptions: tuple[WebPushSubscription, ...] = ()
@@ -288,10 +253,7 @@ class InMemoryStore:
         self._match_ids_by_status: dict[str, set[str]] = {}
         self._match_order: dict[str, int] = {}
         self._next_match_order = 0
-        self._game_drafts: dict[str, GameDraft] = {}
-        self._game_test_sessions: dict[str, GameTestSession] = {}
         self._unpublished_game_ids: set[str] = set()
-        self._agent_conversations: dict[str, list[AgentConversationEntry]] = {}
         self._push_subscriptions: dict[str, WebPushSubscription] = {}
         # Secondary index, endpoint -> subscription id; endpoints are unique.
         self._push_subscription_ids_by_endpoint: dict[str, str] = {}
@@ -322,12 +284,6 @@ class InMemoryStore:
         store._unpublished_game_ids.update(snapshot.unpublished_game_ids)
         for match in snapshot.matches:
             store.put_match(match)
-        for draft in snapshot.game_drafts:
-            store.put_game_draft(draft)
-        for session in snapshot.game_test_sessions:
-            store.put_game_test_session(session)
-        for conversation in snapshot.agent_conversations:
-            store._agent_conversations[conversation.game_id] = list(conversation.entries)
         for subscription in snapshot.push_subscriptions:
             store.put_push_subscription(subscription)
         for invite in snapshot.invites:
@@ -362,13 +318,7 @@ class InMemoryStore:
             ),
             deleted_game_ids=tuple(sorted(self._deleted_game_ids)),
             matches=tuple(self._matches.values()),
-            game_drafts=tuple(self._game_drafts.values()),
-            game_test_sessions=tuple(self._game_test_sessions.values()),
             unpublished_game_ids=tuple(sorted(self._unpublished_game_ids)),
-            agent_conversations=tuple(
-                AgentConversation(game_id=game_id, entries=tuple(entries))
-                for game_id, entries in self._agent_conversations.items()
-            ),
             push_subscriptions=tuple(self._push_subscriptions.values()),
             invites=tuple(self._invites.values()),
             game_version_errors=tuple(self._game_version_errors),
@@ -468,30 +418,6 @@ class InMemoryStore:
         for account_key in new_accounts - old_accounts:
             self._user_ids_by_linked_account.setdefault(account_key, {})[user.id] = None
         self._users[user.id] = user
-
-    def put_game_test_session(self, session: GameTestSession) -> None:
-        self._game_test_sessions[session.id] = session
-
-    def get_game_test_session(self, session_id: str) -> GameTestSession | None:
-        return self._game_test_sessions.get(session_id)
-
-    def list_game_test_sessions(self, *, owner_user_id: str) -> list[GameTestSession]:
-        return [s for s in self._game_test_sessions.values() if s.owner_user_id == owner_user_id]
-
-    def delete_game_test_session(self, session_id: str) -> None:
-        self._game_test_sessions.pop(session_id, None)
-
-    def put_game_draft(self, draft: GameDraft) -> None:
-        self._game_drafts[draft.id] = draft
-
-    def get_game_draft(self, draft_id: str) -> GameDraft | None:
-        return self._game_drafts.get(draft_id)
-
-    def list_game_drafts(self, *, owner_user_id: str) -> list[GameDraft]:
-        return [d for d in self._game_drafts.values() if d.owner_user_id == owner_user_id]
-
-    def delete_game_draft(self, draft_id: str) -> None:
-        self._game_drafts.pop(draft_id, None)
 
     def get_user(self, user_id: str) -> User | None:
         return self._users.get(user_id)
@@ -682,26 +608,6 @@ class InMemoryStore:
 
     def list_all_matches(self) -> list[Match]:
         return list(self._matches.values())
-
-    def append_agent_conversation_entries(
-        self, game_id: str, entries: list[AgentConversationEntry]
-    ) -> None:
-        self._agent_conversations.setdefault(game_id, []).extend(entries)
-
-    def put_agent_conversation(self, conversation: AgentConversation) -> None:
-        self._agent_conversations[conversation.game_id] = list(conversation.entries)
-
-    def get_agent_conversation(self, game_id: str) -> AgentConversation | None:
-        entries = self._agent_conversations.get(game_id)
-        if entries is None:
-            return None
-        return AgentConversation(game_id=game_id, entries=tuple(entries))
-
-    def list_agent_conversations(self) -> list[AgentConversation]:
-        return [
-            AgentConversation(game_id=game_id, entries=tuple(entries))
-            for game_id, entries in self._agent_conversations.items()
-        ]
 
     def add_game_version_error(self, error: GameVersionError) -> None:
         self._game_version_errors.append(error)

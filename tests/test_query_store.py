@@ -1504,5 +1504,5 @@ def test_agent_import_roundtrips_query_store(store):
     assert saved.owner_user_id == owner
     assert saved.code == body['client_code']
     assert saved.published is True
-    assert saved.builder_workflow is not None
-    assert saved.builder_workflow['translations']['es']['display_name'] == body['translations']['es']['display_name']
+    assert saved.import_package is not None
+    assert saved.import_package['translations']['es']['display_name'] == body['translations']['es']['display_name']

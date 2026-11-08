@@ -1,0 +1,469 @@
+"""Schema and approved-example validation shared by the import checks and the
+runtime game logic. (Formerly builder_validation; the render-only helpers are
+gone with the Builder.)"""
+import json
+
+from jsonschema import Draft202012Validator
+from game_platform.game_logic import GameLogic, GameLogicError, InvalidMoveError
+
+
+class ContractLogic(GameLogic):
+    def __init__(
+        self,
+        code,
+        contract,
+        *,
+        game_schemas=None,
+        game_id="unsaved",
+        game_version=0,
+    ):
+        if game_schemas is None:
+            game_schemas = {
+                "state": contract["state_schema"],
+                "move": contract["move_schema"],
+                "view": contract["view_schema"],
+            }
+        super().__init__(
+            code,
+            game_schemas=game_schemas,
+            game_id=game_id,
+            game_version=game_version,
+        )
+        self.contract = contract
+        self.validators = {key:Draft202012Validator(contract[key]) for key in ('state_schema','view_schema','move_schema')}
+
+    def check(self, schema, value, *, move=False):
+        error = next(self.validators[schema].iter_errors(value), None)
+        if error:
+            exception = InvalidMoveError if move else GameLogicError
+            raise exception(f'{schema}: {error.message}')
+
+    def call(self, function, *args, **kwargs):
+        if args and function != 'newMatch': self.check('state_schema', args[0])
+        if function == 'applyMove': self.check('move_schema', args[2], move=True)
+        result = super().call(function, *args, **kwargs)
+        if function == 'viewFor': self.check('view_schema', result)
+        elif function in ('computerMove','randomMove') and result is not None: self.check('move_schema', result)
+        elif isinstance(result, dict) and 'state' in result: self.check('state_schema', result['state'])
+        return result
+
+
+class _RandomExample(Exception):
+    """The illustrated outcome depends on a random draw."""
+
+
+def verify_examples(code, contract):
+    logic = ContractLogic(code, contract)
+    results = []
+    for case in contract['cases']:
+        try:
+            ctx = {k:v for k,v in case['ctx'].items() if k != 'seed'}
+            seed = case['ctx']['seed']
+            def call(fn, *args):
+                first = logic.call(fn,*args,ctx=ctx,seed=seed)
+                random_draw = logic.last_call_used_random and fn in ('newMatch','applyMove')
+                second = logic.call(fn,*args,ctx=ctx,seed=seed)
+                if first != second: raise GameLogicError(f'{fn} is not deterministic')
+                if random_draw: raise _RandomExample(fn)
+                return first
+            if case['kind'] == 'initial':
+                if call('newMatch')['state'] != case['state']: raise GameLogicError('Initial state differs')
+            for who, key in [('player_id','view_of_mover'),('other_player_id','view_of_other')]:
+                if call('viewFor',case['state'],case[who]) != case[key]: raise GameLogicError(f'{key} differs')
+            if 'expected_error' in case:
+                # A negative example passes only on the typed rejection, not
+                # on an arbitrary exception (a game bug) or a silently
+                # accepted move. Run it twice, like every other call, so a
+                # non-deterministic rejection also fails.
+                if case['expected_error'] != 'InvalidMove':
+                    raise GameLogicError(f"Unknown expected_error {case['expected_error']!r}")
+                for _ in range(2):
+                    try:
+                        logic.call('applyMove',case['state'],case['player_id'],case['move'],ctx=ctx,seed=seed)
+                    except InvalidMoveError:
+                        pass
+                    else:
+                        raise GameLogicError('Expected InvalidMove, but the move was accepted')
+                # The match did not advance: every player's view of the
+                # unchanged state must still be the before/expected view.
+                for who, key in [('player_id','view_of_mover'),('other_player_id','view_of_other')]:
+                    if call('viewFor',case['state'],case[who]) != case[key]:
+                        raise GameLogicError('Rejected move changed the player view')
+                results.append({'name':case['name'],'passed':True,'expected_error':'InvalidMove'})
+                continue
+            if case['move'] is None or case['move'] == {'type': 'leave'}:
+                # A leave example is executed through playerLeft, the same
+                # channel the settlement probes use. applyMove has no leave
+                # move, so routing the example there failed it with the
+                # generated code's generic rejection no matter how correct
+                # the code's leaving logic was.
+                if not logic.has('playerLeft'):
+                    raise GameLogicError('playerLeft is not implemented, so this leave example cannot be executed')
+                result = call('playerLeft',case['state'],case['player_id'])
+            else:
+                result = call('applyMove',case['state'],case['player_id'],case['move'])
+            for actual, expected in [('state','expected_state'),('turn','expected_turn')]:
+                if result.get(actual) != case[expected]: raise GameLogicError(f'{expected} differs')
+            if 'expected_payouts' in case and result.get('payouts') != case['expected_payouts']: raise GameLogicError('Payouts differ')
+            ctx = {**ctx, 'move_count':ctx.get('move_count', 0) + 1}
+            for who, key in [('player_id','expected_view_of_mover'),('other_player_id','expected_view_of_other')]:
+                if call('viewFor',result['state'],case[who]) != case[key]: raise GameLogicError(f'{key} differs')
+            results.append({'name':case['name'],'passed':True})
+        except _RandomExample as exc:
+            results.append({'name':case['name'],'passed':True,'random_outcome':str(exc),'detail':'Determinism checked; illustrated random outcome skipped'})
+        except Exception as exc:
+            results.append({'name':case['name'],'passed':False,'error':str(exc)})
+    return results
+
+
+def probe_move_agreement(code, contract, *, samples=24):
+    """Deterministic agreement between the move generators and applyMove.
+
+    Random walks found these only by luck of the seed: a randomMove that
+    returns moves its own applyMove rejects (a second, divergent legality
+    implementation), and generators that throw or crawl on ordinary
+    positions. The probe samples randomMove (and calls computerMove once)
+    on every approved example's before-state and on one played-out
+    mid-game position reached with the game's own generator, and
+    requires every returned move to be accepted by applyMove. The
+    played-out position matters: preconditions that only bite later —
+    a setup move offered mid-game, a resource-gated move offered with
+    none left — are invisible from the early approved states. Sampling
+    also calls computerMove at every difficulty the game's state schema
+    admits (walks never change difficulty, so those branches are
+    otherwise exercised only by review), calls each generator twice
+    with one seed to prove seeded determinism, and times generator
+    calls at the platform's own 100 ms limit. Returns failure strings;
+    an empty list means agreement."""
+    logic = ContractLogic(code, contract)
+    if not logic.has('randomMove') and not logic.has('computerMove'):
+        return []
+    failures = []
+    # The difficulty branches worth sweeping are the ones the game's own
+    # state schema admits. Inventing values the schema forbids — a game
+    # with only easy/hard has no 'medium' — makes the probe manufacture
+    # invalid states and fail sound code on every attempt. Without a
+    # declared enum, fall back to the platform's usual levels.
+    difficulty_field = ((contract.get('state_schema') or {}).get('properties') or {}).get('difficulty')
+    declared = difficulty_field.get('enum') if isinstance(difficulty_field, dict) else None
+    if isinstance(declared, list) and declared and all(isinstance(level, str) for level in declared):
+        difficulty_levels = tuple(declared)
+    else:
+        difficulty_levels = ('easy', 'medium', 'hard')
+
+    def accepted(state, mover, move, ctx, seed):
+        try:
+            logic.call('applyMove', state, mover, move, ctx=ctx, seed=seed)
+            return True
+        except Exception:
+            return False
+
+    def sample_state(state, mover, ctx, label):
+        if logic.has('randomMove'):
+            distinct = []
+            for i in range(samples):
+                try:
+                    move = logic.call('randomMove', state, mover, ctx=ctx, seed=7300 + i,
+                                      time_limit_seconds=0.1)
+                except Exception as exc:
+                    failures.append(f'{label}: randomMove failed on an approved position: {exc}')
+                    break
+                if move is None:
+                    failures.append(f'{label}: randomMove returned no move on a live approved position')
+                    break
+                if not any(move == other for other in distinct):
+                    distinct.append(move)
+            for move in distinct:
+                if not accepted(state, mover, move, ctx, 7400):
+                    failures.append(f'{label}: randomMove returned a move applyMove rejects: '
+                                    f'{json.dumps(move, default=str)} — the move generator and '
+                                    'the validator disagree about legality')
+            try:
+                first = logic.call('randomMove', state, mover, ctx=ctx, seed=7399,
+                                   time_limit_seconds=0.1)
+                second = logic.call('randomMove', state, mover, ctx=ctx, seed=7399,
+                                    time_limit_seconds=0.1)
+                if first != second:
+                    failures.append(f'{label}: randomMove is not deterministic for a fixed seed '
+                                    '(it must draw only from ctx.random)')
+            except Exception:
+                pass
+        if logic.has('computerMove'):
+            variants = [(state, label)]
+            if isinstance(state, dict) and 'difficulty' in state:
+                variants += [({**state, 'difficulty': level}, f'{label} (difficulty {level})')
+                             for level in difficulty_levels
+                             if level != state.get('difficulty')]
+            for variant_index, (variant, variant_label) in enumerate(variants):
+                try:
+                    move = logic.call('computerMove', variant, mover, ctx=ctx, seed=7500,
+                                      time_limit_seconds=0.1)
+                    again = logic.call('computerMove', variant, mover, ctx=ctx, seed=7500,
+                                       time_limit_seconds=0.1)
+                except Exception as exc:
+                    # A synthetic variant the game's own schema rejects says
+                    # nothing about the game — the probe invented that state.
+                    if variant_index and 'state_schema' in str(exc):
+                        continue
+                    failures.append(f'{variant_label}: computerMove raised instead of returning a legal move: {exc}')
+                    continue
+                if move != again:
+                    failures.append(f'{variant_label}: computerMove is not deterministic for a fixed seed '
+                                    '(it must draw only from ctx.random)')
+                if move is None:
+                    failures.append(f'{variant_label}: computerMove returned no move on a live approved position')
+                elif not accepted(variant, mover, move, ctx, 7500):
+                    failures.append(f'{variant_label}: computerMove returned a move applyMove rejects: '
+                                    f'{json.dumps(move, default=str)}')
+
+    seen = []
+    for case in contract['cases']:
+        if len(failures) >= 6:
+            break
+        if 'expected_error' in case:
+            continue
+        state = case['state']
+        if any(state == other for other in seen):
+            continue
+        seen.append(state)
+        ctx = {k: v for k, v in case['ctx'].items() if k != 'seed'}
+        sample_state(state, case['player_id'], ctx, f"example '{case['name']}'")
+
+    if contract['cases'] and len(failures) < 6:
+        # Play a short game with the game's own generator, keeping only
+        # moves applyMove accepts, then sample at the reached position.
+        generator = 'randomMove' if logic.has('randomMove') else 'computerMove'
+        ctx = {k: v for k, v in contract['cases'][0]['ctx'].items() if k != 'seed'}
+        try:
+            opening = logic.call('newMatch', ctx=ctx, seed=4242, time_limit_seconds=2.0)
+            state, turn = opening['state'], opening['turn']
+        except Exception:
+            state, turn = None, None
+        plies = 0
+        while state is not None and turn and plies < 24:
+            mover = turn[0]
+            move = None
+            for seed in range(7600, 7608):
+                try:
+                    candidate = logic.call(generator, state, mover, ctx=ctx, seed=seed,
+                                           time_limit_seconds=0.5)
+                except Exception:
+                    candidate = None
+                if candidate is None:
+                    continue
+                if accepted(state, mover, candidate, ctx, seed):
+                    move = candidate
+                    break
+                failures.append(f'played-out position (ply {plies}): {generator} returned a move '
+                                f'applyMove rejects: {json.dumps(candidate, default=str)} — the '
+                                'move generator and the validator disagree about legality')
+                break
+            if move is None:
+                break
+            try:
+                result = logic.call('applyMove', state, mover, move, ctx=ctx, seed=7700 + plies)
+            except Exception:
+                break
+            state, turn = result['state'], result['turn']
+            ctx = {**ctx, 'move_count': ctx.get('move_count', 0) + 1}
+            plies += 1
+        if state is not None and turn and plies >= 4 and len(failures) < 6:
+            sample_state(state, turn[0], ctx, f'played-out position after {plies} moves')
+    return failures
+
+
+def probe_leaving(code, contract, *, allowed_player_counts, allows_leave_mid_match):
+    """Deterministic leaving/settlement scenarios for a generated server.
+
+    Random walks only ever leave with an active human in an ongoing match,
+    so whole classes of leaving bugs (a duplicate leave re-settling the
+    match, a spectator ending it, payouts recomputed after the end) were
+    previously gated only by AI review. These probes exercise them with
+    scripted rosters and pots and return failure strings; an empty list
+    means every scenario behaved as the platform contract requires."""
+    logic = ContractLogic(code, contract)
+    if not logic.has('playerLeft'):
+        return []
+    failures = []
+
+    def player(pid, kind, *, active=None):
+        entry = {'id': pid, 'kind': kind, 'display_name': pid, 'picture_url': '', 'max_loss': 0}
+        if active is not None:
+            entry['active'] = active
+        return entry
+
+    def make_ctx(players, pot, move_count=0):
+        return {'players': [dict(p) for p in players], 'pot': pot, 'move_count': move_count}
+
+    def paid(result):
+        return sum((result.get('payouts') or {}).values())
+
+    def start(players, pot, label):
+        try:
+            result = logic.call('newMatch', ctx=make_ctx(players, pot), seed=4242, time_limit_seconds=2.0)
+            return result['state'], result['turn']
+        except Exception as exc:
+            failures.append(f'{label}: newMatch failed: {exc}')
+            return None, None
+
+    def leave(state, who, players, pot, label, move_count=0):
+        try:
+            return logic.call('playerLeft', state, who, ctx=make_ctx(players, pot, move_count),
+                              seed=4243, time_limit_seconds=2.0)
+        except Exception as exc:
+            failures.append(f'{label}: playerLeft raised: {exc}')
+            return None
+
+    def advance(state, turn, players, pot):
+        """Best-effort walk to a mid-game state; None when unreachable."""
+        generator = 'randomMove' if logic.has('randomMove') else 'computerMove' if logic.has('computerMove') else None
+        if generator is None or not turn:
+            return None
+        current_state, current_turn = state, turn
+        for step in range(5):
+            if not current_turn:
+                return None
+            mover = current_turn[0]
+            ctx = make_ctx(players, pot, step)
+            try:
+                move = logic.call(generator, current_state, mover, ctx=ctx, seed=5000 + step)
+                following = logic.call('applyMove', current_state, mover, move, ctx=ctx, seed=5000 + step)
+            except Exception:
+                return None
+            current_state, current_turn = following['state'], following['turn']
+        return (current_state, current_turn) if current_turn else None
+
+    def expect_noop(label, result, state, turn):
+        if result is None:
+            return
+        if result['state'] != state:
+            failures.append(f'{label}: the leave changed the state; it must change nothing')
+        if result['turn'] != turn:
+            failures.append(f'{label}: the leave changed the turn; it must change nothing')
+        if paid(result) != 0:
+            failures.append(f'{label}: the leave paid out tokens; it must pay nothing')
+
+    two_humans = [player('human-1', 'human'), player('human-2', 'human')]
+
+    # The platform rejects leave requests from callers without a seat before
+    # invoking game code, so these IDs are invalid playerLeft inputs.
+    state, turn = start(two_humans, 10, 'non-seat leave')
+    if state is not None:
+        try:
+            logic.call(
+                'playerLeft',
+                state,
+                'spectator-1',
+                ctx=make_ctx(two_humans, 10),
+                seed=4243,
+                time_limit_seconds=2.0,
+            )
+        except GameLogicError as exc:
+            if 'playerId is not in ctx.players' not in str(exc):
+                failures.append(f'non-seat leave: unexpected rejection: {exc}')
+        else:
+            failures.append('non-seat leave: playerLeft accepted a caller without a seat')
+        mid = advance(state, turn, two_humans, 10)
+        if mid is not None:
+            try:
+                logic.call(
+                    'playerLeft',
+                    mid[0],
+                    'spectator-1',
+                    ctx=make_ctx(two_humans, 10, 5),
+                    seed=4243,
+                    time_limit_seconds=2.0,
+                )
+            except GameLogicError as exc:
+                if 'playerId is not in ctx.players' not in str(exc):
+                    failures.append(f'non-seat leave (mid-game): unexpected rejection: {exc}')
+            else:
+                failures.append('non-seat leave (mid-game): playerLeft accepted a caller without a seat')
+
+    # A leave that leaves fewer than two active humans ends the match and
+    # conserves the pot; afterwards every further leave — by the other
+    # player or a duplicate by the (now inactive) leaver — returns the
+    # recorded state and identical payouts instead of re-settling.
+    def forfeit(players, pot, leaver, label):
+        state, turn = start(players, pot, label)
+        if state is None:
+            return
+        result = leave(state, leaver, players, pot, label)
+        if result is None:
+            return
+        if result['turn'] is not None:
+            failures.append(f'{label}: the match must end when fewer than two active humans remain, but playerLeft returned a turn')
+            return
+        if paid(result) != pot:
+            failures.append(f'{label}: final payouts add up to {paid(result)}, not the pot of {pot}')
+            return
+        # Only still-active players can leave an ended match: the platform
+        # marks the leaver inactive, and its own result validator rejects
+        # terminal payouts naming inactive players (even a zero entry), so
+        # a duplicate leave by the (now inactive) leaver is outside the
+        # call contract. For the same reason the recorded payouts can only
+        # be re-reported verbatim when they name still-active players
+        # alone; when they also paid the departed player, that share was
+        # settled when the match ended and may only be folded into the
+        # remaining players' reported amounts, never reduce them.
+        after = [dict(p, active=False) if p['id'] == leaver else dict(p) for p in players]
+        recorded = result.get('payouts') or {}
+        still_active = {p['id'] for p in after if p['kind'] == 'human' and p.get('active', True)}
+        for other in players:
+            if other['id'] == leaver:
+                continue
+            again = leave(result['state'], other['id'], after, pot, label + ' (after the end)')
+            if again is None:
+                continue
+            if again['turn'] is not None or again['state'] != result['state']:
+                failures.append(f'{label}: a leave after the match ended must return the recorded state unchanged and a null turn; settlement is computed once and never recomputed')
+            elif set(recorded) <= still_active:
+                if again.get('payouts') != recorded:
+                    failures.append(f'{label}: a leave after the match ended must return the recorded payouts identically; settlement is computed once and never recomputed')
+            else:
+                reported = again.get('payouts') or {}
+                for pid, amount in recorded.items():
+                    if pid in still_active and reported.get(pid, 0) < amount:
+                        failures.append(f'{label}: a leave after the match ended reduced the recorded payout of still-active {pid}; recorded amounts for still-active players never decrease')
+                        break
+
+    forfeit(two_humans, 10, 'human-1', 'two-human forfeit')
+
+    # Against a computer the forfeit winner is the computer seat, which is
+    # never payable: the only eligible payee is the departing human, so the
+    # whole pot goes to them.
+    mixed = [player('human-1', 'human'), player('computer-1', 'computer')]
+    if logic.has('computerMove') or logic.has('randomMove'):
+        state, turn = start(mixed, 25, 'human-vs-computer forfeit')
+        if state is not None:
+            result = leave(state, 'human-1', mixed, 25, 'human-vs-computer forfeit')
+            if result is not None:
+                if result['turn'] is not None:
+                    failures.append('human-vs-computer forfeit: the match must end when the only human leaves, but playerLeft returned a turn')
+                elif result.get('payouts') != {'human-1': 25}:
+                    failures.append(f"human-vs-computer forfeit: payouts must be exactly {{'human-1': 25}} (the computer seat is never payable and the departing human is still active), got {result.get('payouts')}")
+
+    # A solo player leaving ends the match and, as the only eligible
+    # payee, receives the pot.
+    if 1 in allowed_player_counts:
+        forfeit([player('human-1', 'human')], 10, 'human-1', 'solo leave')
+
+    # With three or more humans a leave can continue the match: the turn
+    # must exclude the leaver, and a duplicate leave by the now-inactive
+    # leaver is then a no-op.
+    if allows_leave_mid_match and any(count >= 3 for count in allowed_player_counts):
+        trio = [player(f'human-{n}', 'human') for n in (1, 2, 3)]
+        state, turn = start(trio, 30, 'continuing leave')
+        if state is not None:
+            result = leave(state, 'human-1', trio, 30, 'continuing leave')
+            if result is not None:
+                if result['turn'] is None:
+                    failures.append('continuing leave: the match ended although two active humans remain and the game allows leaving mid-match')
+                elif 'human-1' in result['turn']:
+                    failures.append('continuing leave: the returned turn still contains the departing player')
+                else:
+                    after = [dict(p, active=False) if p['id'] == 'human-1' else dict(p) for p in trio]
+                    expect_noop('duplicate leave', leave(result['state'], 'human-1', after, 30, 'duplicate leave'), result['state'], result['turn'])
+    return failures
+
+

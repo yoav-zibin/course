@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 // Parameterized: every page must load (HTTP 200) without JavaScript errors.
-const pages = ['portal', 'builder', 'admin', 'browse', 'invites', 'stats'];
+const pages = ['portal', 'admin', 'browse', 'invites', 'stats'];
 
 for (const name of pages) {
   test(`${name}.html loads without JS errors`, async ({ page }) => {
@@ -14,22 +14,17 @@ for (const name of pages) {
   });
 }
 
-test('app navigation and language controls stay consistent across Portal, Builder and Admin', async ({ page }, testInfo) => {
-  for (const name of ['portal', 'builder', 'admin']) {
+test('app navigation and language controls stay consistent across Portal and Admin', async ({ page }, testInfo) => {
+  for (const name of ['portal', 'admin']) {
     await page.goto(`/static/${name}.html`);
     const header = page.locator('header.topbar');
-    await expect(header.locator('nav a')).toHaveText(['Portal', 'Builder', 'New Builder', 'Admin']);
-    await expect(header.getByRole('link', {name:'New Builder', exact:true})).toHaveAttribute('href', '/static/guided-builder.html');
+    await expect(header.locator('nav a')).toHaveText(['Portal', 'Admin']);
     await expect(header.locator('nav a[aria-current="page"]')).toHaveAttribute('href', '/' + name);
     await expect(header.getByRole('combobox', { name: 'Language' })).toBeVisible();
     await expect(header.locator('#account-menu')).toBeVisible();
     expect(await header.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     await header.screenshot({ path: testInfo.outputPath(`${name}-header.png`) });
   }
-  await page.locator('header.topbar nav').getByRole('link', { name: 'New Builder', exact: true }).click();
-  await expect(page).toHaveURL(/\/static\/guided-builder\.html$/);
-  await expect(page.locator('#new-draft')).toBeVisible();
-  await expect(page.locator('header nav a[aria-current="page"]')).toHaveText('New Builder');
   await page.locator('header.topbar nav').getByRole('link', { name: 'Portal', exact: true }).click();
   await expect(page).toHaveURL(/portal(?:\.html)?$/);
 });

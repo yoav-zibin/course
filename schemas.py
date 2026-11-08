@@ -22,11 +22,8 @@ from game_platform.models import (
     Translation,
     MAX_PLAYERS,
     MIN_PLAYERS,
-    AgentConversation,
-    AgentConversationEntry,
     EndReason,
     Game,
-    GameDraft,
     GameTestSeeds,
     GameVersionError,
     Invite,
@@ -477,7 +474,7 @@ class GameSummaryOut(BaseModel):
             deleted=game.deleted,
             published=game.published,
             supports_local_practice=True,
-            cover_url=f"/games/{game.id}/versions/{game.version}/cover" if (game.builder_workflow or {}).get("artifacts", {}).get("images", {}).get("status") == "approved" else "",
+            cover_url=f"/games/{game.id}/versions/{game.version}/cover" if (game.import_package or {}).get("images") else "",
         )
 
 
@@ -496,214 +493,13 @@ class GameOut(GameSummaryOut):
     def of(cls, game: Game) -> "GameOut":
         return cls(
             **GameSummaryOut.of(game).model_dump(),
-            game_logic_rules=(game.builder_workflow or {}).get("artifacts", {}).get("logic", {}).get("value", {}).get("text", ""),
-            game_ui_rules=(game.builder_workflow or {}).get("artifacts", {}).get("ui", {}).get("value", {}).get("text", ""),
-            tutorial_html=(game.builder_workflow or {}).get("artifacts", {}).get("tutorial", {}).get("value", {}).get("html", ""),
-            translations=(game.builder_workflow or {}).get("translations", {}),
+            game_logic_rules=(game.import_package or {}).get("rules_text", ""),
+            game_ui_rules=(game.import_package or {}).get("ui_text", ""),
+            tutorial_html=(game.import_package or {}).get("tutorial", {}).get("html", ""),
+            translations=(game.import_package or {}).get("translations", {}),
             code=game.code,
             client_code=game.code,
             server_code=game.server_code,
-        )
-
-
-class GameTestRequest(_Request):
-    """Random-walk tests of server code that may not be saved yet
-    (POST /games/test, v2 Game API). [game_id] optionally names the game
-    or draft the code belongs to, so its failed seeds are replayed first
-    and this run's failures are stored back on it."""
-
-    server_code: str
-    game_schemas: GameSchemas | None = None
-    allowed_player_counts: PlayerCounts
-    allows_leave_mid_match: bool = False
-    allows_join_mid_match: bool = False
-    game_id: str | None = None
-
-
-class GameTestFailureOut(BaseModel):
-    function: str
-    message: str
-    # The seed of the walk that failed; replaying it reproduces the walk.
-    seed: int
-    player_count: int
-    move_number: int
-    state: JsonValue = None
-    player_id: str | None = None
-    move: JsonValue = None
-    last_moves: list[JsonValue] = []
-
-    @classmethod
-    def of(cls, failure: TestFailure) -> "GameTestFailureOut":
-        return cls(
-            function=failure.function,
-            message=failure.message,
-            seed=failure.seed,
-            player_count=failure.player_count,
-            move_number=failure.move_number,
-            state=failure.state,
-            player_id=failure.player_id,
-            move=failure.move,
-            last_moves=list(failure.last_moves),
-        )
-
-
-class GameTestOut(BaseModel):
-    passed: bool
-    walks_completed: int
-    moves_made: int
-    too_slow: bool
-    failures: list[GameTestFailureOut] = []
-    game_schemas: GameSchemas | None = None
-
-    @classmethod
-    def of(cls, report: GameTestReport) -> "GameTestOut":
-        return cls(
-            passed=report.passed,
-            walks_completed=report.walks_completed,
-            moves_made=report.moves_made,
-            too_slow=report.too_slow,
-            failures=[GameTestFailureOut.of(f) for f in report.failures],
-            game_schemas=(
-                GameSchemas.model_validate(report.game_schemas)
-                if report.game_schemas is not None
-                else None
-            ),
-        )
-
-
-class EmulatorPlayerIn(_Request):
-    """One seat of an emulated match (the builder's test play). Ids are
-    assigned by the server: human-1, human-2, ... and computer-1, ... in
-    seat order, as in real matches."""
-
-    kind: Literal["human", "computer"]
-    name: str = ""
-    max_loss: int = 0
-
-
-class EmulatorPlayerOut(BaseModel):
-    id: str
-    kind: str
-    name: str
-    max_loss: int
-
-
-class MatrixEmulatorResetRequest(_Request):
-    """Starts a test-only simulation on unsaved server code."""
-    server_code: str
-    game_schemas: GameSchemas
-    players: Annotated[list[EmulatorPlayerIn], Field(min_length=1, max_length=10)]
-    seed: int = 0
-
-    @model_validator(mode="after")
-    def has_human(self):
-        if not any(p.kind == "human" for p in self.players):
-            raise ValueError("at least one human seat is required")
-        return self
-
-
-class EmulatorResetRequest(MatrixEmulatorResetRequest):
-    """Starts an emulated match on unsaved server code (POST /emulator/reset)."""
-
-    @model_validator(mode="after")
-    def solo_computers(self):
-        humans = sum(p.kind == "human" for p in self.players)
-        if any(p.kind == "computer" for p in self.players) and humans != 1:
-            raise ValueError("computer opponents are only supported with one human")
-        return self
-
-
-class MatrixEmulatorActRequest(MatrixEmulatorResetRequest):
-    """Applies one human move in an emulated match (POST /emulator/act),
-    then advances computer players until a human's turn or the end. The
-    [state], [turn] and [move_count] come from the previous emulator
-    response: the emulator itself keeps nothing."""
-
-    game_schemas: GameSchemas
-    state: JsonValue = None
-    turn: list[str] | None = None
-    move_count: int = 0
-    player_id: str
-    move: JsonValue = None
-
-
-class EmulatorActRequest(MatrixEmulatorActRequest):
-    @model_validator(mode="after")
-    def solo_computers(self):
-        humans = sum(p.kind == "human" for p in self.players)
-        if any(p.kind == "computer" for p in self.players) and humans != 1:
-            raise ValueError("computer opponents are only supported with one human")
-        return self
-
-
-class EmulatorOut(BaseModel):
-    state: JsonValue = None
-    game_schemas: GameSchemas | None = None
-    # Each player's viewFor view of [state], keyed by player id.
-    views: dict[str, JsonValue] = {}
-    players: list[EmulatorPlayerOut] = []
-    # Player ids that may move next; null when the match is over.
-    turn: list[str] | None = None
-    status: Literal["ongoing", "over"]
-    move_count: int = 0
-    pot: int = 0
-    payouts: dict[str, int] | None = None
-    # A game error (or an illegal move), shown verbatim; the state is the
-    # one from before the failed call. Null when everything worked.
-    error: str | None = None
-
-
-class GameDraftContent(_Request):
-    # Incomplete working copies can be saved; publication validates completeness.
-    name: Annotated[str, StringConstraints(max_length=200)] = ""
-    description: str = ""
-    allowed_player_counts: Annotated[list[PlayerCount], AfterValidator(_check_player_counts)]
-    allows_leave_mid_match: bool = False
-    allows_join_mid_match: bool = False
-    code: str
-    # The draft's server code (v2 Game API); None while the draft is a v1 game.
-    server_code: str | None = None
-    game_schemas: GameSchemas | None = Field(
-        default=None, exclude_if=lambda value: value is None
-    )
-
-    @model_validator(mode="after")
-    def _require_server_code_for_schemas(self) -> "GameDraftContent":
-        if not self.server_code and self.game_schemas is not None:
-            raise ValueError("game_schemas requires server_code")
-        return self
-
-
-class GameDraftSave(GameDraftContent):
-    expected_revision: Annotated[int, Field(ge=1)] | None = None
-
-
-class GameDraftPublish(_Request):
-    expected_revision: Annotated[int, Field(ge=1)]
-
-
-class GameDraftOut(GameDraftContent):
-    builder_workflow: dict[str, JsonValue] | None = None
-    id: str
-    owner_user_id: str
-    revision: int
-    base_version: int
-    created_at: dt.datetime
-    updated_at: dt.datetime
-
-    @classmethod
-    def of(cls, draft: GameDraft) -> "GameDraftOut":
-        return cls(
-            id=draft.id, owner_user_id=draft.owner_user_id,
-            name=draft.name, description=draft.description, code=draft.code,
-            server_code=draft.server_code,
-            game_schemas=draft.game_schemas,
-            allowed_player_counts=list(draft.rules.allowed_player_counts),
-            allows_leave_mid_match=draft.rules.allows_leave_mid_match,
-            allows_join_mid_match=draft.rules.allows_join_mid_match,
-            builder_workflow=draft.builder_workflow,
-            revision=draft.revision, base_version=draft.base_version,
-            created_at=draft.created_at, updated_at=draft.updated_at,
         )
 
 
@@ -1087,41 +883,6 @@ class MatchDetailOut(MatchOut):
         )
 
 
-class AgentConversationEntryOut(BaseModel):
-    role: str
-    text: str
-    created_at: dt.datetime
-    # The game's published version when the message was exchanged (0 = the
-    # game had never been published at that point).
-    game_version: int
-
-    @classmethod
-    def of(cls, entry: AgentConversationEntry) -> "AgentConversationEntryOut":
-        return cls(
-            role=entry.role,
-            text=entry.text,
-            created_at=entry.created_at,
-            game_version=entry.game_version,
-        )
-
-
-class AgentConversationOut(BaseModel):
-    """A game's recorded agent conversation. Admin-only: never part of a game
-    or draft response, so the portal and builder never receive it."""
-
-    game_id: str
-    entries: list[AgentConversationEntryOut]
-
-    @classmethod
-    def of(cls, conversation: AgentConversation) -> "AgentConversationOut":
-        return cls(
-            game_id=conversation.game_id,
-            entries=[
-                AgentConversationEntryOut.of(entry) for entry in conversation.entries
-            ],
-        )
-
-
 class GameVersionErrorOut(BaseModel):
     """A server-code failure recorded on a game version (v2 Game API)."""
 
@@ -1157,7 +918,6 @@ class AllDataOut(BaseModel):
     # Every version of every game, including deleted games.
     game_versions: list[GameOut]
     matches: list[MatchDetailOut]
-    agent_conversations: list[AgentConversationOut] = []
     game_version_errors: list[GameVersionErrorOut] = []
     game_test_seeds: list[GameTestSeedsOut] = []
 
@@ -1167,10 +927,6 @@ class AllDataOut(BaseModel):
             users=[UserWithPasswordOut.of_user(user) for user in data.users],
             game_versions=[GameOut.of(game) for game in data.game_versions],
             matches=[MatchDetailOut.of(match) for match in data.matches],
-            agent_conversations=[
-                AgentConversationOut.of(conversation)
-                for conversation in data.agent_conversations
-            ],
             game_version_errors=[
                 GameVersionErrorOut.of(error) for error in data.game_version_errors
             ],
@@ -1178,121 +934,6 @@ class AllDataOut(BaseModel):
                 GameTestSeedsOut.of(record) for record in data.game_test_seeds
             ],
         )
-
-
-class AgentMessage(_Request):
-    role: Annotated[str, StringConstraints(pattern="^(user|assistant)$")]
-    content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-
-
-class AgentChatRequest(_Request):
-    """One turn of conversation with the game-building agent.
-
-    [messages] is the conversation so far, ending with the new user message.
-    The game fields carry the builder editor's current values so the agent
-    stays grounded in what the user sees.
-    """
-
-    game_name: str = ""
-    game_description: str = ""
-    allowed_player_counts: list[int] = []
-    # Existing mobile clients keep their selected counts; web explicitly opts in.
-    player_count_mode: Literal["auto", "manual"] = "manual"
-    allows_leave_mid_match: StrictBool = False
-    allows_join_mid_match: StrictBool = False
-    code: str = ""
-    # The game's server code (v2 Game API); "" while the game has none.
-    server_code: str = ""
-    game_schemas: GameSchemas | None = None
-    messages: Annotated[list[AgentMessage], Field(min_length=1, max_length=50)]
-    # The draft (or game) being edited, when the client knows it. The exchange
-    # is recorded against this id so admins can review the conversation later;
-    # clients that send no id simply stay unrecorded.
-    game_id: str | None = None
-
-class AgentChatResponse(BaseModel):
-    message: str
-    # The complete updated HTML document, or null when the code is unchanged.
-    code: str | None = None
-    # The complete updated server code (v2 Game API), or null when unchanged.
-    server_code: str | None = None
-    game_schemas: GameSchemas | None = Field(
-        default=None, exclude_if=lambda value: value is None
-    )
-    # Whether the returned server code passed its random-walk tests (the
-    # agent retries with the failure report before giving up); null when no
-    # server code was tested this turn.
-    server_test_passed: bool | None = None
-    name: str | None = None
-    description: str | None = None
-    # Applied with the proposed code, so solo code cannot retain a default two seats.
-    allowed_player_counts: PlayerCounts | None = None
-    allows_leave_mid_match: StrictBool | None = None
-    allows_join_mid_match: StrictBool | None = None
-    # Debug info about the model turn (optional; safe to show in the UI).
-    # Chain-of-thought the model exposed for this turn, if any.
-    thinking: str | None = None
-    # The raw model reply text before JSON parsing, if any.
-    raw: str | None = None
-    # How many model calls this turn took (retries on empty/unparsable replies).
-    attempts: int = 1
-    # Human-readable note about the attempts, e.g. which ones failed and why.
-    parse_note: str | None = None
-
-
-class RefactorAllGamesRequest(_Request):
-    """Body of POST /admin/refactor_all_games (super admin): one prompt the
-    building agent applies to every published game, saving the code it
-    returns back to each game as a new version."""
-
-    mode: Literal["code", "guided_artifacts"] = "code"
-    prompt: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] | None = None
-
-    @model_validator(mode="after")
-    def require_code_prompt(self):
-        if self.mode == "code" and not self.prompt:
-            raise ValueError("A prompt is required for a code refactor")
-        return self
-
-    # Restrict the run to these games; null means every published game.
-    game_ids: list[str] | None = None
-
-
-class RefactorGameResultOut(BaseModel):
-    game_id: str
-    name: str
-    # "updated" (a new version was saved), "unchanged" (nothing to save), or
-    # "failed" (the game keeps its previous code; [detail] says why).
-    outcome: str
-    detail: str = ""
-    # The game's version after an "updated" outcome.
-    version: int | None = None
-
-
-class RefactorJobOut(BaseModel):
-    job_id: str
-    status: str  # "running" | "done"
-    total: int
-    completed: int
-    results: list[RefactorGameResultOut]
-
-
-class AdminGameCodeRequest(_Request):
-    """New code for one game, saved by a super admin through
-    PUT /admin/games/{game_id}/code — the hand-written counterpart of
-    the refactor job, for code a person wrote rather than the agent.
-    At least one field is required; an omitted field keeps the game's
-    current code of that kind."""
-
-    code: str | None = None
-    server_code: str | None = None
-    game_schemas: GameSchemas | None = None
-
-    @model_validator(mode="after")
-    def _some_code(self) -> "AdminGameCodeRequest":
-        if self.code is None and self.server_code is None:
-            raise ValueError("provide code, server_code, or both")
-        return self
 
 
 class LocaleOut(BaseModel):

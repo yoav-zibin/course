@@ -36,15 +36,8 @@ from game_platform import i18n, observability
 from game_platform.game_input_metrics import game_input_metrics
 from game_platform.models import Game, GameRules, Match, MatchStatus
 from game_platform.schemas import (
-    AdminGameCodeRequest,
-    AgentChatRequest,
-    AgentConversationOut,
-    AgentMessage,
     BatchSubRequest,
     BatchSubResponse,
-    RefactorAllGamesRequest,
-    RefactorGameResultOut,
-    RefactorJobOut,
     CatalogOut,
     GameStringsOut,
     BundleOut,
@@ -55,26 +48,15 @@ from game_platform.schemas import (
     CampaignSpendUpdate,
     LocaleOut,
     LocalesOut,
-    AgentChatResponse,
     AllDataOut,
     AuthConfigOut,
     AuthResponse,
     EmailStart,
     ExperimentActiveUpdate,
     ExperimentVariantCreate,
-    GameDraftSave,
-    GameDraftPublish,
-    GameDraftOut,
-    EmulatorActRequest,
-    EmulatorOut,
-    EmulatorResetRequest,
-    MatrixEmulatorActRequest,
-    MatrixEmulatorResetRequest,
     GameOut,
     GameSchemas,
     GameSummaryOut,
-    GameTestOut,
-    GameTestRequest,
     GameUpdate,
     GoogleLogin,
     HealthOut,
@@ -125,9 +107,7 @@ from game_platform.service import (
     TooManyRequestsError,
     UnauthorizedError,
 )
-from game_platform.agent import GENERATION_BUDGET_SECONDS, AgentError, chat_with_agent
-from game_platform.config import AuthConfig, ModelApiConfig, PushConfig
-from game_platform.model_api import ModelApiClient
+from game_platform.config import AuthConfig, PushConfig
 from game_platform.models import LinkedAccountKind
 from game_platform.oauth import ProviderError, verify_google_id_token
 from game_platform.push import vapid_public_key
@@ -799,148 +779,8 @@ def email_verify(
     return AuthResponse.of(user, merged_from_user_id=merged_from)
 
 
-# Private drafts: every route requires authentication and owner checks.
-
-
-@router.get("/game-drafts")
-def list_game_drafts(platform: Platform, caller_id: CallerId) -> list[GameDraftOut]:
-    return [GameDraftOut.of(d) for d in platform.list_game_drafts(caller_id=caller_id)]
-
-
-@router.get("/game-drafts/{draft_id}")
-def get_game_draft(platform: Platform, caller_id: CallerId, draft_id: str) -> GameDraftOut:
-    return GameDraftOut.of(platform.get_game_draft(caller_id=caller_id, draft_id=draft_id))
-
-
-def _save_draft(platform: GamePlatform, caller_id: str, draft_id: str | None, body: GameDraftSave) -> GameDraftOut:
-    return GameDraftOut.of(platform.save_game_draft(
-        caller_id=caller_id, draft_id=draft_id, name=body.name,
-        description=body.description, code=body.code,
-        server_code=body.server_code,
-        game_schemas=(
-            body.game_schemas.model_dump() if body.game_schemas is not None else None
-        ),
-        expected_revision=body.expected_revision,
-        rules=GameRules(
-            allowed_player_counts=tuple(body.allowed_player_counts),
-            allows_leave_mid_match=body.allows_leave_mid_match,
-            allows_join_mid_match=body.allows_join_mid_match,
-        ),
-    ))
-
-
-@router.post("/game-drafts", status_code=HTTPStatus.CREATED)
-def create_game_draft(platform: Platform, caller_id: CallerId, body: GameDraftSave) -> GameDraftOut:
-    return _save_draft(platform, caller_id, None, body)
-
-
-@router.put("/game-drafts/{draft_id}")
-def save_game_draft(platform: Platform, caller_id: CallerId, draft_id: str, body: GameDraftSave) -> GameDraftOut:
-    return _save_draft(platform, caller_id, draft_id, body)
-
-
-@router.delete("/game-drafts/{draft_id}", status_code=HTTPStatus.NO_CONTENT)
-def delete_game_draft(platform: Platform, caller_id: CallerId, draft_id: str) -> None:
-    platform.delete_game_draft(caller_id=caller_id, draft_id=draft_id)
-
-
-@router.post("/game-drafts/{draft_id}/publish")
-def publish_game_draft(platform: Platform, caller_id: CallerId, draft_id: str, body: GameDraftPublish) -> GameOut:
-    return GameOut.of(platform.publish_game_draft(
-        caller_id=caller_id, draft_id=draft_id, expected_revision=body.expected_revision,
-    ))
-
-
-# Games (read-only here: games are created by the agent import, POST /games,
-# or by publishing a Builder draft; there is no direct create endpoint).
-
-
-@router.post("/games/test")
-def test_game(
-    platform: Platform, caller_id: CallerId, body: GameTestRequest
-) -> GameTestOut:
-    """Random-walk tests of server code that may not be saved yet
-    (docs/server-side-game-api.md): the builder and the AI fix loop run
-    this before publishing, which is gated on the same tests."""
-    report = platform.test_game_code(
-        server_code=body.server_code,
-        game_schemas=(
-            body.game_schemas.model_dump() if body.game_schemas is not None else None
-        ),
-        rules=GameRules(
-            allowed_player_counts=tuple(body.allowed_player_counts),
-            allows_leave_mid_match=body.allows_leave_mid_match,
-            allows_join_mid_match=body.allows_join_mid_match,
-        ),
-        game_id=body.game_id,
-    )
-    return GameTestOut.of(report)
-
-
-@router.post("/emulator/reset")
-def emulator_reset(
-    platform: Platform, caller_id: CallerId, body: EmulatorResetRequest
-) -> EmulatorOut:
-    """Starts an emulated match on unsaved server code (the builder's test
-    play): runs newMatch and advances any computer players."""
-    game_schemas = body.game_schemas.model_dump()
-    result = platform.emulator_reset(
-        server_code=body.server_code,
-        game_schemas=game_schemas,
-        players=[player.model_dump() for player in body.players],
-        seed=body.seed,
-    )
-    result["game_schemas"] = game_schemas
-    return EmulatorOut.model_validate(result)
-
-
-@router.post("/emulator/act")
-def emulator_act(
-    platform: Platform, caller_id: CallerId, body: EmulatorActRequest
-) -> EmulatorOut:
-    """Applies one human move in an emulated match, then advances computer
-    players until a human's turn or the end. Game errors come back in the
-    response's error field, never as an HTTP error."""
-    return EmulatorOut.model_validate(
-        platform.emulator_act(
-            server_code=body.server_code,
-            game_schemas=body.game_schemas.model_dump(),
-            players=[player.model_dump() for player in body.players],
-            seed=body.seed,
-            state=body.state,
-            turn=body.turn,
-            move_count=body.move_count,
-            player_id=body.player_id,
-            move=body.move,
-        )
-    )
-
-
-@router.post("/game-test-emulator/reset")
-def matrix_emulator_reset(
-    platform: Platform, caller_id: CallerId, body: MatrixEmulatorResetRequest
-) -> EmulatorOut:
-    """Simulate test rosters, including combinations unavailable in real matches."""
-    game_schemas = body.game_schemas.model_dump()
-    result = platform.emulator_reset(
-        server_code=body.server_code, game_schemas=game_schemas,
-        players=[player.model_dump() for player in body.players], seed=body.seed,
-    )
-    result["game_schemas"] = game_schemas
-    return EmulatorOut.model_validate(result)
-
-
-@router.post("/game-test-emulator/act")
-def matrix_emulator_act(
-    platform: Platform, caller_id: CallerId, body: MatrixEmulatorActRequest
-) -> EmulatorOut:
-    """Apply a move in a test-only roster; no real match is created."""
-    return EmulatorOut.model_validate(platform.emulator_act(
-        server_code=body.server_code, game_schemas=body.game_schemas.model_dump(),
-        players=[player.model_dump() for player in body.players], seed=body.seed,
-        state=body.state, turn=body.turn, move_count=body.move_count,
-        player_id=body.player_id, move=body.move,
-    ))
+# Games (read-only here: games are created by the agent import, POST /games;
+# there is no direct create endpoint).
 
 
 @router.get("/games")
@@ -974,11 +814,6 @@ def game_popularity_score(
             game_id=game_id, caller_id=caller_id
         ),
     }
-
-
-@router.get("/builder/games")
-def list_owned_games(platform: Platform, caller_id: CallerId) -> list[GameOut]:
-    return [GameOut.of(g) for g in platform.list_owned_games(caller_id=caller_id)]
 
 
 @router.get("/games/versions")
@@ -1045,6 +880,22 @@ def get_game_strings(
     return GameStringsOut.of(
         platform.game_strings(game_id, version, request.state.locale, caller_id=caller_id)
     )
+
+
+@router.get("/games/{game_id}/versions/{version}/cover")
+def get_game_cover(platform: Platform, game_id: str, version: int, caller_id: OptionalCallerId) -> Response:
+    """The game's cover image (the first image of its import package), as SVG.
+    Imported games always carry their cover in the package."""
+    from game_platform.game_artifacts import validate_cover
+
+    game = platform.get_game_version(game_id, version, caller_id=caller_id)
+    images = (game.import_package or {}).get("images") or []
+    if not images:
+        raise HTTPException(404, "No approved cover")
+    validate_cover(images[0])
+    return Response(images[0]["svg"], media_type="image/svg+xml", headers={
+        "Content-Security-Policy": "default-src 'none'; sandbox", "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "public, max-age=3600"})
 
 
 @router.patch("/games/{game_id}")
@@ -1423,7 +1274,7 @@ def list_locales() -> LocalesOut:
 def get_games_text(platform: Platform, locale: str) -> GamesTextOut:
     """The names and descriptions of every published game in [locale], for a portal's game
     cards. Translated the first time they are asked for, then remembered; whatever cannot be
-    translated is as its builder wrote it."""
+    translated is as its author wrote it."""
     code = i18n.normalize_locale(locale)
     if code is None:
         raise NotFoundError(f"language not supported: {locale}")
@@ -1626,21 +1477,6 @@ def index() -> FileResponse:
 @debug_router.get("/console")
 def console() -> FileResponse:
     return FileResponse(_STATIC_DIR / "console.html")
-
-
-@debug_router.get("/new-builder")
-def new_builder_page() -> FileResponse:
-    return FileResponse(_STATIC_DIR / "guided-builder.html")
-
-
-@debug_router.get("/builder")
-def builder() -> FileResponse:
-    return FileResponse(_STATIC_DIR / "builder.html")
-
-
-@debug_router.get("/game-test")
-def game_test_page() -> FileResponse:
-    return FileResponse(_STATIC_DIR / "game-test.html")
 
 
 @debug_router.get("/portal")
@@ -1906,390 +1742,6 @@ def admin_delete_match(platform: Platform, match_id: str) -> None:
     platform.admin_delete_match(match_id)
 
 
-@router.post("/agent/chat", include_in_schema=False)
-async def agent_chat(
-    request: Request, platform: Platform, caller_id: CallerId, body: AgentChatRequest
-) -> AgentChatResponse:
-    """One turn of conversation with the game-building agent (backs the builder's
-    Agent tab). Requires the acting user because every turn calls the paid model
-    API. Returns 503 when no Model API key is configured."""
-    config: ModelApiConfig = request.app.state.model_api_config
-    client = ModelApiClient(
-        api_key=config.api_key, model=config.model, base_url=config.base_url
-    )
-    if not client.enabled:
-        raise HTTPException(
-            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
-            detail="The game-building agent is not set up: no Model API key is "
-            "configured on the server.",
-        )
-
-    def server_tester(
-        server_code: str,
-        game_schemas: dict | None,
-        allowed_player_counts: list[int],
-        allows_leave_mid_match: bool,
-        allows_join_mid_match: bool,
-    ):
-        """The agent's fix loop tests generated server code with the
-        platform's random-walk tester (Phase 5), keyed to the game being
-        built so its failed seeds are replayed first."""
-        return platform.test_game_code(
-            server_code=server_code,
-            game_schemas=game_schemas,
-            rules=GameRules(
-                allowed_player_counts=tuple(allowed_player_counts),
-                allows_leave_mid_match=allows_leave_mid_match,
-                allows_join_mid_match=allows_join_mid_match,
-            ),
-            game_id=body.game_id,
-        )
-
-    try:
-        response = await asyncio.wait_for(
-            run_in_threadpool(
-                chat_with_agent,
-                client,
-                body,
-                server_tester=server_tester,
-                max_fix_attempts=request.app.state.ai_max_fix_attempts,
-            ),
-            timeout=GENERATION_BUDGET_SECONDS,
-        )
-    except asyncio.TimeoutError as exc:
-        observability.log_event(
-            "ai_generation_timeout",
-            f"the game-building agent took more than {GENERATION_BUDGET_SECONDS:.0f}s",
-            level=logging.WARNING,
-            alert="minor",
-            budget_seconds=GENERATION_BUDGET_SECONDS,
-            game_id=body.game_id,
-            messages=len(body.messages),
-            last_message=observability.capture(body.messages[-1].content, 1000),
-        )
-        raise HTTPException(status_code=504, detail="Muse did not finish within two minutes. Try a smaller game or change.") from exc
-    except AgentError as exc:
-        observability.log_event(
-            "ai_generation_failed",
-            f"the game-building agent failed: {str(exc)[:200]}",
-            level=logging.WARNING,
-            error=str(exc)[:1000],
-            game_id=body.game_id,
-            messages=len(body.messages),
-            last_message=observability.capture(body.messages[-1].content, 1000),
-        )
-        raise HTTPException(
-            status_code=HTTPStatus.BAD_GATEWAY, detail=str(exc)
-        ) from exc
-    # Keep the whole conversation server-side so admins can review how a game
-    # was built. Recording must never fail the chat itself.
-    if body.game_id is not None and body.messages and body.messages[-1].role == "user":
-        try:
-            platform.record_agent_exchange(
-                caller_id=caller_id,
-                game_id=body.game_id,
-                user_text=body.messages[-1].content,
-                assistant_text=response.message,
-            )
-        except Exception:
-            pass
-    return response
-
-
-# Refactor all games (super admin): one prompt, applied by the building
-# agent to every published game, saving the returned code back as a new
-# version of each game. This is the fleet-wide counterpart of the builder:
-# it exists for migrations like converting every client-only game to the
-# server-side API, and later for checks like hidden information or
-# determinism. A run is a background job (one agent call per game can take
-# up to the generation budget), started by the POST and polled by the GET.
-
-
-def _refactor_job_out(job: dict) -> RefactorJobOut:
-    """The public view of a refactor job record. Callers hold the jobs lock."""
-    return RefactorJobOut(
-        job_id=job["job_id"],
-        status=job["status"],
-        total=job["total"],
-        completed=len(job["results"]),
-        results=[RefactorGameResultOut(**result) for result in job["results"]],
-    )
-
-
-@debug_router.post(
-    "/admin/refactor_all_games",
-    dependencies=[MasterPassword],
-    status_code=HTTPStatus.ACCEPTED,
-)
-def refactor_all_games(
-    request: Request, platform: Platform, body: RefactorAllGamesRequest
-) -> RefactorJobOut:
-    """Starts a refactor job over the published games (or [body.game_ids])
-    and returns it; poll GET /admin/refactor_all_games/{job_id}."""
-    config: ModelApiConfig = request.app.state.model_api_config
-    client = ModelApiClient(
-        api_key=config.api_key, model=config.model, base_url=config.base_url
-    )
-    if not client.enabled:
-        raise HTTPException(
-            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
-            detail="The game-building agent is not set up: no Model API key is "
-            "configured on the server.",
-        )
-    if body.mode == 'guided_artifacts':
-        from game_platform.builder_budget import validate_tariffs
-        validate_tariffs(config)
-        games = platform.published_games_for_guided_migration(body.game_ids)
-    else:
-        games = platform.list_games(owner_user_id=None)
-    missing: list[str] = []
-    if body.game_ids is not None:
-        by_id = {game.id: game for game in games}
-        missing = [game_id for game_id in body.game_ids if game_id not in by_id]
-        games = [by_id[game_id] for game_id in body.game_ids if game_id in by_id]
-    with request.app.state.refactor_lock:
-        if any(
-            job["status"] == "running"
-            for job in request.app.state.refactor_jobs.values()
-        ):
-            raise HTTPException(
-                status_code=HTTPStatus.CONFLICT,
-                detail="A refactor job is already running; wait for it to finish.",
-            )
-        job = {
-            "job_id": uuid.uuid4().hex,
-            "status": "running",
-            "total": len(games) + len(missing),
-            "results": [
-                {
-                    "game_id": game_id,
-                    "name": "",
-                    "outcome": "failed",
-                    "detail": "game not found (not a published game)",
-                    "version": None,
-                }
-                for game_id in missing
-            ],
-        }
-        request.app.state.refactor_jobs[job["job_id"]] = job
-    threading.Thread(
-        target=_run_refactor_job,
-        args=(request.app.state, platform, client, job["job_id"], body.prompt, games, body.mode),
-        daemon=True,
-    ).start()
-    return _refactor_job_out(job)
-
-
-@debug_router.get(
-    "/admin/refactor_all_games/{job_id}", dependencies=[MasterPassword]
-)
-def refactor_job(request: Request, job_id: str) -> RefactorJobOut:
-    """One refactor job's progress and per-game results."""
-    with request.app.state.refactor_lock:
-        job = request.app.state.refactor_jobs.get(job_id)
-        if job is None:
-            raise HTTPException(
-                status_code=HTTPStatus.NOT_FOUND, detail="No such refactor job."
-            )
-        return _refactor_job_out(job)
-
-
-def _run_refactor_job(
-    app_state: State,
-    platform: GamePlatform,
-    client: ModelApiClient,
-    job_id: str,
-    prompt: str,
-    games: list[Game],
-    mode: str = "code",
-) -> None:
-    """The job thread: refactor each game in turn, recording every outcome.
-    A game's failure never stops the run — its previous code stays live."""
-    for game in games:
-        if mode == "guided_artifacts":
-            from game_platform.builder_api import configured_client
-            from game_platform.builder_migration import prefill
-            result = {"game_id":game.id, "name":game.name, "version":game.version}
-            try:
-                changed = prefill(platform,game,lambda owner,draft:configured_client(app_state.model_api_config,platform,owner,draft))
-                result.update(outcome="ready_for_review" if changed else "unchanged",detail="Review the saved proposals in the guided builder")
-            except Exception as exc:
-                result.update(outcome="failed",detail=str(exc)[:500])
-        else:
-            result = _refactor_one_game(app_state, platform, client, prompt, game)
-        with app_state.refactor_lock:
-            app_state.refactor_jobs[job_id]["results"].append(result)
-    with app_state.refactor_lock:
-        app_state.refactor_jobs[job_id]["status"] = "done"
-
-
-def _refactor_one_game(
-    app_state: State,
-    platform: GamePlatform,
-    client: ModelApiClient,
-    prompt: str,
-    game: Game,
-) -> dict:
-    """Sends [prompt] plus the game's data to the agent and saves what it
-    returns as a new version of the game (through the publish gate). Only
-    the two code fields are taken from the reply: a refactor never renames
-    a game or changes who can play it."""
-    result = {
-        "game_id": game.id,
-        "name": game.name,
-        "outcome": "failed",
-        "detail": "",
-        "version": None,
-    }
-
-    def server_tester(
-        server_code: str,
-        game_schemas: dict,
-        allowed_player_counts: list[int],
-        allows_leave_mid_match: bool,
-        allows_join_mid_match: bool,
-    ):
-        return platform.test_game_code(
-            server_code=server_code,
-            game_schemas=game_schemas,
-            rules=GameRules(
-                allowed_player_counts=tuple(allowed_player_counts),
-                allows_leave_mid_match=allows_leave_mid_match,
-                allows_join_mid_match=allows_join_mid_match,
-            ),
-            game_id=game.id,
-        )
-
-    try:
-        response = chat_with_agent(
-            client,
-            AgentChatRequest(
-                game_name=game.name,
-                game_description=game.description,
-                allowed_player_counts=list(game.rules.allowed_player_counts),
-                player_count_mode="manual",
-                allows_leave_mid_match=game.rules.allows_leave_mid_match,
-                allows_join_mid_match=game.rules.allows_join_mid_match,
-                code=game.code,
-                server_code=game.server_code or "",
-                game_schemas=game.game_schemas,
-                messages=[AgentMessage(role="user", content=prompt)],
-                game_id=game.id,
-            ),
-            server_tester=server_tester,
-            max_fix_attempts=app_state.ai_max_fix_attempts,
-        )
-    except AgentError as exc:
-        return {**result, "detail": f"the agent failed: {exc}"}
-    # Record the exchange against the game, as the builder does, so the
-    # admin conversation view shows how the game got its new code.
-    try:
-        platform.record_agent_exchange(
-            caller_id=game.owner_user_id,
-            game_id=game.id,
-            user_text=prompt,
-            assistant_text=response.message,
-        )
-    except Exception:
-        pass
-    if response.server_code is not None and response.server_test_passed is False:
-        note = f" ({response.parse_note})" if response.parse_note else ""
-        return {
-            **result,
-            "detail": "the agent's server code failed its random-walk tests "
-            f"and was not saved{note}",
-        }
-    if response.code is None and response.server_code is None:
-        return {**result, "outcome": "unchanged", "detail": "the agent returned no code changes"}
-    current = next(
-        (g for g in platform.list_games(owner_user_id=None) if g.id == game.id),
-        None,
-    )
-    if current is None:
-        return {**result, "detail": "the game no longer exists"}
-    if current.version != game.version:
-        return {
-            **result,
-            "detail": f"the game changed during the refactor (now version "
-            f"{current.version}); skipped so the newer edit is not overwritten",
-        }
-    try:
-        updated = platform.update_game(
-            caller_id=game.owner_user_id,
-            game_id=game.id,
-            code=response.code,
-            server_code=(
-                response.server_code if response.server_code is not None else UNSET
-            ),
-            game_schemas=(
-                response.game_schemas.model_dump()
-                if response.game_schemas is not None
-                else UNSET
-            ),
-            _admin=True,
-        )
-    except Exception as exc:
-        # Gate refusals and validation errors leave the game untouched.
-        return {**result, "detail": str(exc)}
-    if updated.version == game.version:
-        return {
-            **result,
-            "outcome": "unchanged",
-            "detail": "the agent's code was identical to the current version",
-        }
-    return {
-        **result,
-        "outcome": "updated",
-        "detail": f"saved as version {updated.version}",
-        "version": updated.version,
-    }
-
-
-@debug_router.put(
-    "/admin/games/{game_id}/code", dependencies=[MasterPassword]
-)
-def admin_set_game_code(
-    platform: Platform, game_id: str, body: AdminGameCodeRequest
-) -> GameOut:
-    """Saves hand-written client and/or server code for any game, as a
-    super admin: the save goes through update_game's admin path, so the
-    publish gate still tests new server code and a refusal changes
-    nothing. The refactor job is the agent-driven counterpart; this is
-    for code a person wrote (for example the games whose agent
-    conversions kept failing their tests)."""
-    game = platform.get_game(game_id)
-    return GameOut.of(
-        platform.update_game(
-            caller_id=game.owner_user_id,
-            game_id=game_id,
-            code=body.code,
-            server_code=(
-                body.server_code if body.server_code is not None else UNSET
-            ),
-            game_schemas=(
-                body.game_schemas.model_dump()
-                if body.game_schemas is not None
-                else UNSET
-            ),
-            _admin=True,
-        )
-    )
-
-
-@debug_router.get(
-    "/admin/games/{game_id}/agent-conversation", dependencies=[MasterPassword]
-)
-def admin_agent_conversation(platform: Platform, game_id: str) -> AgentConversationOut:
-    """A game's recorded conversation with the building agent (super admin)."""
-    conversation = platform.agent_conversation(game_id)
-    if conversation is None:
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND,
-            detail="No agent conversation recorded for this game.",
-        )
-    return AgentConversationOut.of(conversation)
-
-
 def _error_body(request: Request, message: str) -> dict[str, object]:
     """`detail` is the message in the request's language, `code` names it in every
     language, and `params` holds the values the message mentions."""
@@ -2444,7 +1896,6 @@ def _error_page_content(status_code: int, locale: str = i18n.DEFAULT_LOCALE) -> 
       </a>
       <nav aria-label="{html.escape(app_name)}">
         <a href="/portal" aria-current="page">{html.escape(text("ui.error_page.play_games"))}</a>
-        <a href="/builder">{html.escape(text("ui.nav.builder"))}</a>
       </nav>
       <span class="spacer"></span>
     </header>
@@ -2562,7 +2013,7 @@ async def _revalidate_pages(
     """Makes browsers check for newer pages and scripts on every load. Otherwise they
     may keep using a cached old script with a new page, which breaks it."""
     response = await call_next(request)
-    if request.url.path == "/builder/games" or request.url.path.startswith(("/games/", "/matches/", "/users/me/")) or request.url.path == "/game-drafts" or request.url.path.startswith("/game-drafts/"):
+    if request.url.path.startswith(("/games/", "/matches/", "/users/me/")):
         response.headers["Cache-Control"] = "private, no-store"
     elif request.method == "GET" and not response.headers.get(
         "content-type", ""
@@ -2587,7 +2038,6 @@ def create_app(
     *,
     debug_tools: bool = True,
     master_password: str = "",
-    model_api_config: ModelApiConfig | None = None,
     auth_config: AuthConfig | None = None,
     push_config: PushConfig | None = None,
     sms_sender: CodeSender | None = None,
@@ -2596,10 +2046,9 @@ def create_app(
     email_sender: CodeSender | None = None,
     cors_allow_origins: Sequence[str] = ("*",),
     public_base_url: str = "",
-    ai_max_fix_attempts: int = 3,
     monitor: observability.Monitor | None = None,
 ) -> FastAPI:
-    """[debug_tools] adds the web pages (/, /portal, /builder, /admin, /console, /browse)
+    """[debug_tools] adds the web pages (/, /portal, /admin, /console, /browse)
     and /debug/all-data, which exposes everything (including users' passwords),
     and the backoffice's /stats and /admin/* endpoints. /admin, /browse, /stats,
     /debug/all-data and /admin/* need [master_password], unless it is empty.
@@ -2626,7 +2075,9 @@ def create_app(
             allow_methods=["*"],
             allow_headers=["*"],
         )
-    app.state.builder_slots = threading.BoundedSemaphore(2)
+    # The import endpoint validates at most two games at a time (POST /games);
+    # a third concurrent import gets 429 with Retry-After 15.
+    app.state.import_slots = threading.BoundedSemaphore(2)
     app.state.platform = platform if platform is not None else GamePlatform()
     app.state.master_password = master_password
     monitor = monitor if monitor is not None else observability.Monitor()
@@ -2634,27 +2085,14 @@ def create_app(
     observability.set_current(monitor)
     app.state.public_base_url = public_base_url
     app.state.started_at = time.monotonic()
-    app.state.model_api_config = (
-        model_api_config if model_api_config is not None else ModelApiConfig()
-    )
-    app.state.ai_max_fix_attempts = ai_max_fix_attempts
-    # Refactor-all-games jobs (see /admin/refactor_all_games): job_id ->
-    # mutable job record, guarded by the lock. In-memory on purpose: a
-    # restart loses the progress view, never any game's saved code.
-    app.state.refactor_jobs: dict[str, dict] = {}
-    app.state.refactor_lock = threading.Lock()
     app.state.auth_config = auth_config if auth_config is not None else AuthConfig()
     app.state.push_config = push_config if push_config is not None else PushConfig()
     app.state.sms_sender = sms_sender if sms_sender is not None else LogSender()
     app.state.voice_sender = voice_sender if voice_sender is not None else LogSender()
     app.state.verify_client = verify_client
     app.state.email_sender = email_sender if email_sender is not None else LogSender()
-    from game_platform.builder_api import make_router
-    app.include_router(make_router(_get_platform, _get_caller_id))
     from game_platform.agent_import import make_router as make_import_router
     app.include_router(make_import_router(_get_platform, _get_caller_id_or_anonymous))
-    from game_platform.test_session_api import make_router as make_test_session_router
-    app.include_router(make_test_session_router(_get_platform, _get_caller_id))
     app.include_router(router)
     from game_platform.scaling_api import install as install_scaling_api
     install_scaling_api(app, debug_tools=debug_tools)
