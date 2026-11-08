@@ -59,11 +59,32 @@
 
 /* Sidebar: the primary action spans the panel like the list buttons under it. */
 #new-draft{width:100%}
-/* StoragePages.controls() appends an unstyled nav.storage-pagination ([Previous
-   page] [label] [Next page]) after each list. The panel is at most ~195px wide,
-   too narrow for the full-word buttons and the "Page N · up to 50 results"
-   label on one row without the label wrapping mid-phrase, so the label gets
-   its own non-wrapping row and the two buttons share the row under it. */
-.drafts .storage-pagination{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-block-start:8px}
-.drafts .storage-pagination span{order:-1;flex:1 1 100%;text-align:center;white-space:nowrap;font-size:.85rem;color:var(--color-text-secondary)}
-.drafts .storage-pagination button{flex:1;padding:6px 10px;text-align:center}
+/* StoragePages.controls() appends a nav.storage-pagination ([Previous page]
+   [label] [Next page]) after each list, and hides it while there is only one
+   page. Keep what does appear minimal: one slim, quiet row under the list
+   that reads as a footnote, not a toolbar. */
+.drafts .storage-pagination{display:flex;align-items:center;justify-content:center;gap:10px;margin-block-start:10px;font-size:.78rem;color:var(--color-text-tertiary)}
+.drafts .storage-pagination[hidden]{display:none}
+.drafts .storage-pagination span{white-space:nowrap}
+.drafts .storage-pagination button{flex:none;min-height:0;padding:2px 4px;background:none;border:0;color:inherit;font:inherit;text-decoration:underline;text-underline-offset:2px}
+.drafts .storage-pagination button:disabled{opacity:.4;text-decoration:none}
+
+/* Shared-topbar wallet: portal.css carries these base rules for the portal;
+   this page does not load portal.css, so they live here scoped to the topbar.
+   Per-skin variants already come from experiments.css. */
+.topbar .token-wallet[hidden]{display:none!important}
+.topbar .token-wallet{display:inline-flex;gap:10px;align-items:center;background:linear-gradient(135deg,#273623,#1b2b26);color:#ecffd1;border:1px solid #597c3f;border-radius:999px;padding:7px 14px 7px 8px;box-shadow:0 4px 18px #070d0a45;white-space:nowrap;min-height:40px;box-sizing:border-box}
+.topbar .token-wallet-coin{display:inline-grid;place-items:center;flex:none;color:#d5ff69;background:#3b5d23;border:1px solid #749f39;border-radius:50%;font-size:17px;width:32px;height:32px;line-height:1}
+.topbar .token-wallet-copy{display:flex;flex-direction:column;gap:1px;line-height:1.15}
+.topbar .token-wallet-label{font:700 9px/1.2 system-ui,sans-serif;letter-spacing:1px;color:#accb96}
+.topbar .token-wallet-number{font:500 12px/1.3 system-ui,sans-serif;color:#d9f5cc}
+.topbar .token-wallet-number strong{font:800 19px/1 system-ui,sans-serif;color:#f1ffd6;letter-spacing:-.4px}
+@media(max-width:640px){.topbar .token-wallet{padding:5px 9px 5px 5px;gap:5px;min-height:35px}.topbar .token-wallet-coin{width:26px;height:26px;font-size:14px}.topbar .token-wallet-label{font-size:8px}.topbar .token-wallet-number{font-size:10px}.topbar .token-wallet-number strong{font-size:16px}}
+
+/* The ☰ topbar button collapses the drafts sidebar: the workshop grid drops
+   its first column. experiments.css hides .sidebar-toggle on wide screens at
+   layout=left because the portal sidebar is pinned there; this page's
+   sidebar is not pinned by the layout, so its toggle stays available. */
+.workshop.drafts-collapsed{grid-template-columns:minmax(0,1fr)}
+.workshop.drafts-collapsed .drafts{display:none}
+@media(min-width:900px){:root[data-portal-layout="left"] .topbar[data-app-page="new_builder"] .sidebar-toggle{display:block}}

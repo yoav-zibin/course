@@ -63,6 +63,9 @@ window.StoragePages = (() => {
       bar.replaceChildren(back,label,next);
     }
     const [back,next,label]=bar._pageControls;
+    // A single page needs no pager at all: keep the bar out of the way until
+    // there is somewhere to go (an earlier page or a next cursor).
+    bar.hidden = !page.previous.length && !page.next;
     back.type = next.type = "button";
     back.textContent = I18n.t("ui.storage.previous_page", {}, "Previous page"); next.textContent = I18n.t("ui.storage.next_page", {}, "Next page");
     back.disabled = !page.previous.length; next.disabled = !page.next;

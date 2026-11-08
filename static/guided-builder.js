@@ -25,6 +25,32 @@ let draft=null, selected=0, working=false, poll=null, renderedRevision=null;
 const matrixLink=el('a',{id:'game-test-matrix',href:'/game-test',target:'_blank',rel:'noopener',textContent:I18n.t("ui.guided.test_matrix",{},"Open game test matrix"),hidden:true});
 const emulator=$('emulator');
 if(emulator)emulator.after(matrixLink);
+// The header is the shared app topbar, identical on every app page: common.js
+// rewrites the nav, experiments.js wires the skin/layout pickers (same ids as
+// the portal), and the wallet mirrors portal.js — the signed-in user's
+// /users/{id} record carries the token balance; guests and bad records keep
+// the pill hidden.
+async function updateTokenWallet(){
+ const wallet=$('token-wallet');if(!wallet)return;
+ const user=me();
+ if(!user){wallet.hidden=true;return;}
+ try{
+  const record=await request('GET','/users/'+encodeURIComponent(user.id));
+  if(me()?.id!==user.id)return;
+  if(!record||!Number.isSafeInteger(record.token_balance)||record.token_balance<0){wallet.hidden=true;return;}
+  const balance=String(record.token_balance);
+  if($('token-balance').textContent!==balance)$('token-balance').textContent=balance;
+  wallet.title=I18n.t("ui.portal.wallet_hint",{balance},`${balance} virtual tokens · Earn 10 when starting your first eligible match each day`);
+  wallet.hidden=false;
+ }catch{wallet.hidden=true;}
+}
+// The ☰ topbar button (same .sidebar-toggle look common.js builds on the
+// shell pages) collapses this page's own drafts sidebar.
+const draftsToggle=$('drafts-toggle'),workshop=document.querySelector('.workshop');
+if(draftsToggle&&workshop)draftsToggle.onclick=()=>{
+ const collapsed=workshop.classList.toggle('drafts-collapsed');
+ draftsToggle.setAttribute('aria-expanded',String(!collapsed));
+};
 const me=()=>Auth.current();
 const request=(method,path,body)=>apiRequest(method,path,{user:me(),...(body?{body}:{})});
 function error(e){showPageError(e.message||String(e));}
@@ -263,7 +289,7 @@ $('name-form').onsubmit=e=>{e.preventDefault();act('edit-identity');};
 $('chat-form').onsubmit=e=>{e.preventDefault();act('propose');};
 for(const action of ['approve','reopen','refresh','build','cancel','final-approve','feedback'])$(action).onclick=()=>act(action);
 $('publish').onclick=async()=>{try{const game=await request('POST',`/game-drafts/${draft.id}/publish`,{expected_revision:draft.revision});toast(I18n.t("ui.guided.published_toast",{name:game.name},"Published {name}"));await select(draft.id);}catch(e){error(e);}};
-document.addEventListener('auth-changed',()=>{clearTimeout(poll);draft=null;render();Auth.renderMenu($('account-menu'));loadDrafts().catch(error);});
-Auth.renderMenu($('account-menu'));loadDrafts().then(()=>{if(me()&&location.hash.length>1)return select(decodeURIComponent(location.hash.slice(1)));}).catch(error);
+document.addEventListener('auth-changed',()=>{clearTimeout(poll);draft=null;render();Auth.renderMenu($('account-menu'));updateTokenWallet();loadDrafts().catch(error);});
+Auth.renderMenu($('account-menu'));updateTokenWallet();loadDrafts().then(()=>{if(me()&&location.hash.length>1)return select(decodeURIComponent(location.hash.slice(1)));}).catch(error);
 
 document.addEventListener('i18n-changed',()=>{matrixLink.textContent=I18n.t("ui.guided.test_matrix",{},"Open game test matrix");renderedRevision=null;render();loadDrafts().catch(error);});
