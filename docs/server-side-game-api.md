@@ -21,7 +21,7 @@ below land phase by phase — each section says when.
 | What clients see | The whole state | `viewFor(state, playerId)` — hidden information stays on the server |
 | Randomness | `Math.random` in whichever client moved | Seeded by the server per call (`ctx.random`), so reproducible |
 | Tokens | Pot split by seat on the final move | Each human stakes up to `max_loss`; server code pays out the pot |
-| Testing | Manual, in the builder | Random walks + fuzzing whenever `server_code` changes; only passing versions publish |
+| Testing | Manual | Random walks + fuzzing whenever `server_code` changes; only passing versions publish |
 
 Games with a `server_code` use the v2 flow. Games without one keep the v1
 flow until they are migrated.
@@ -31,7 +31,7 @@ flow until they are migrated.
 `server_code` is a plain JavaScript script (no modules, DOM, network or
 timers) that defines a global `game` object. All arguments and results are
 JSON. Given the same arguments and `ctx.random`, a function must return the
-same result: the server may call it again for replays, tests and the emulator,
+same result: the server may call it again for replays and tests,
 and tests verify this by calling each function twice and requiring identical
 results.
 
@@ -167,9 +167,7 @@ client-computed `new_state` / `next_turn_player_indices`, and
 
 | Endpoint | v1 | v2 (phase) |
 |---|---|---|
-| `POST /games`, `PATCH /games/{id}`, drafts, publishing | `code` | Also `server_code` (as `client_code` + `server_code`). Draft publishing and `PATCH` updates that change the server code (or its rules) run the tests first and are refused if they fail |
-| `POST /games/test` | — | Runs the random-walk/fuzz tests on unsaved code, for the builder and the AI fix loop |
-| `POST /emulator/reset`, `POST /emulator/act` | — | Play unsaved server code the way a match would (the builder's test play): reset runs `newMatch`, act applies one human move; both advance computer players and return the full state, every player's view, and any game error verbatim |
+| `POST /games` | — | Creates and publishes a complete game in one call (the agent import): `client_code`, `server_code`, `game_schemas` (in `unit_tests`), translations and images are all supplied in the body; the server runs the tests first and inserts nothing if they fail. `PATCH /games/{id}` updates a game and re-tests any new server code (or its rules) first, refusing the update if the tests fail |
 | `POST /matches` | `{game_id, num_computer_opponents, private?}` | Also `max_loss` (Phase 3) |
 | `POST /matches/{id}/join`, `POST /invites/{token}/accept` | Take a seat | Also deduct `max_loss` (409 if the balance is too low); mid-match the server calls `playerJoined` (Phase 3/4) |
 | `POST /matches/{id}/leave` | Ends legacy matches and settles outstanding tokens | Before the start, a refund; mid-match, `playerLeft` |
@@ -185,8 +183,7 @@ client-computed `new_state` / `next_turn_player_indices`, and
 Computer matches contain exactly one human. A second human cannot join a bot
 match through the API or an invite; remove all computers in the waiting room
 first. Multiplayer lobbies and random matchmaking cannot add bots. Bot matches
-are excluded from open-match listings. The emulator follows the same rule, and
-random walks cover either all humans or one human against computers.
+are excluded from open-match listings. Random walks cover either all humans or one human against computers.
 
 Timeouts end a match and refund its outstanding pot; they never create bots.
 Ongoing mixed rosters saved before this change end on their next read, move, or
@@ -196,22 +193,10 @@ pot to active humans once. Waiting lobbies can remove their bots.
 ## Game JSON Schemas
 
 Every published v2 game version stores a `game_schemas` object with exactly
-three Draft 2020-12 JSON Schemas: `state`, `move`, and `view`. The platform
-generates these from successful random-walk samples when a creator omits them.
-The builder runs generation as part of server-code testing and keeps the
-generated schemas with its autosaved draft; direct API create/update and draft
-publication use the same generator. Creators do not need to author JSON Schema.
-Explicit schemas remain accepted for integrations that already provide them.
-V1 games do not use these schemas.
-
-Generated schemas describe observed JSON value types, leave object properties
-optional, and allow additional object properties so unobserved game branches
-remain playable. Generation requires successful samples for state, move, and
-view, and publication still runs the schema-aware random-walk gate. Generation
-or validation errors block publication instead of falling back to an
-accept-everything schema. Since inference is sample-based, it is not a proof
-that every rare game branch has been observed; games with highly variable
-contracts should still be exercised thoroughly before publishing.
+three Draft 2020-12 JSON Schemas: `state`, `move`, and `view`. The schemas are
+supplied with the game when it is created (in the import's `unit_tests`) and
+are required: a game with `server_code` but no `game_schemas` is refused. The
+platform never infers schemas. V1 games do not use these schemas.
 
 The platform validates state arguments before calling game functions that
 receive state, and validates a human's `move` against the `move` schema before
@@ -234,9 +219,8 @@ entries and runs in degraded mode so non-game API functionality remains
 available. A v2 game version without schemas is still blocked from executing:
 there is no permissive runtime fallback. Backfill historical versions with the
 exact schemas for those entries before restarting a strict server deployment.
-The automatic generator is used for
-new versions; the backfill utility intentionally requires an explicit,
-complete mapping because old matches may still rely on those versions:
+The backfill utility intentionally requires an explicit, complete mapping
+because old matches may still rely on those versions:
 
 ```json
 {
@@ -321,9 +305,9 @@ on the game version.
 
 ## Testing before publishing (Phase 5 — `game_platform/game_testing.py`)
 
-Whenever `server_code` changes, the server tests it in QuickJS; only a
-passing version can be published (draft publishing and `PATCH /games/{id}`
-run the gate; `POST /games/test` runs the same tests on unsaved code).
+Whenever a game is submitted or its `server_code` changes, the server tests it
+in QuickJS; only a passing version can be published (`POST /games` runs the
+gate before inserting anything; `PATCH /games/{id}` runs it on update).
 The tests take at most 1 second: up to
 1000 random walks of up to 1000 moves each, stopping at whichever limit
 comes first. Each walk uses a random player count, either all humans or one human plus
@@ -338,26 +322,17 @@ arguments and seed to verify determinism. If not even one walk finishes in
 the budget, the game is reported as too slow. A failure report records the
 error and stack, the function and its exact arguments, the walk's seed,
 player count and move number, and the last few moves; failed seeds are
-stored on the game and replayed first on the next run. The builder's AI
-fix loop consumes the same report
-(up to `ai_max_fix_attempts`, default 3).
+stored on the game and replayed first on the next run. The failure report is
+returned in the 422 response, so the submitting agent can fix the game and
+retry.
 
-## The builder, the emulator, and the client protocol (Phase 6)
+## The client protocol (Phase 6)
 
-The building agent writes both parts of a game: its reply JSON gains a
-`server_code` field next to `code`, and its prompt teaches the contract
-above. After a reply with server code, the server runs the random-walk
-tests on it; a failure report (function, error, exact arguments, seed) is
-fed back and the model regenerates, up to `ai_max_fix_attempts` times
-(default 3, in the server config). The response reports
-`server_test_passed`; code that still fails is returned with the failure
-noted, and publishing refuses it (Phase 5). Replies without `server_code`
-still parse, as client-only changes.
-
-The builder's test play runs v2 games through the emulator endpoints
-above: the client iframe receives `state_changed` with the viewer's
-`view`, and its moves go back as moves only — the same protocol the
-portal speaks for v2 matches:
+A game is submitted complete through `POST /games` (see
+[agent-game-import.md](agent-game-import.md)): the server runs the
+random-walk tests on the submitted code before publishing it. The client
+protocol for a published v2 game is the same one the portal speaks for v2
+matches:
 
 - `state_changed` (platform -> game) gains `view`: the viewer's `viewFor`
   view (`null` for spectators). `players` entries gain `player_id`. A v2
@@ -411,41 +386,11 @@ arguments and seed and compare the JSON; per match,
 `tests/test_determinism.py` plays scripted matches (tic-tac-toe
 against a server computer, a poker hand) on a fresh platform with the
 same ids — hence the same match seed — and asserts every intermediate
-state is identical, and that the emulator answers identical requests
-identically; and failed test seeds stored for a game are replayed
-first on the next `POST /games/test`, so a fix is verified against the
+state is identical, and failed test seeds stored for a game are replayed
+first when the game is next submitted, so a fix is verified against the
 exact walk that found the bug. One platform fix landed with this
 phase: when a speed-match timeout hands a seat to a computer, the
 takeover now schedules the computer's moves like every other path —
 in v1 a human's browser submitted them, so the takeover path never
 did, and a v2 match stalled on the computer's turn (found by the
 Playwright speed test when the UI suite was migrated to v2 games).
-
-## Refactoring all games (admin — landed 2026-10-27)
-
-`POST /admin/refactor_all_games` (super admin: the master password, as
-HTTP Basic auth) starts a background job that applies one prompt to the
-published games: for each game it sends the prompt plus the game's data
-(name, description, rules, client code, server code) to the building
-agent — the same agent, system prompt, and test-fix loop as the builder —
-and saves the code it returns as a new version of the game. The save
-goes through `update_game`'s admin path, so the publish gate re-tests
-any new server code and a refusal leaves the game untouched; only the
-two code fields are taken from the reply, so a refactor never renames a
-game or changes who can play it. `game_ids` in the body restricts the
-run to those games; without it every published game is refactored. One
-job runs at a time (a second POST is a 409). `GET
-/admin/refactor_all_games/{job_id}` reports progress and the per-game
-outcome (`updated` / `unchanged` / `failed` with the reason — a failed
-game keeps its previous code, and the run continues). The agent exchange
-is recorded against each game, like a builder conversation. First use:
-converting the remaining client-only games to this API with a
-conversion prompt; the same endpoint serves later fleet-wide refactors
-(adding unit tests, checking hidden information, checking determinism).
-
-The hand-written counterpart is `PUT /admin/games/{game_id}/code`
-(same master-password auth): the body carries explicit `code` and/or
-`server_code` and the save goes through the same admin path and
-publish gate — for conversions a person writes by hand when the
-agent's attempts keep failing a game's tests (the last few complex
-games: chess, a second backgammon, Rummy 500, ERS, Guandan).

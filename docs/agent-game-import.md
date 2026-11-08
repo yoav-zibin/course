@@ -3,9 +3,8 @@
 `POST /games` accepts a complete game and publishes it in one request:
 the game is live for every player, in every language, as soon as the call
 returns. It does not overwrite games, call a paid model, or claim human approval.
-Imported source is checked but not visually reviewed by this API. The existing
-Builder may regenerate code during its build step; retain the original payload
-for comparison.
+Imported source is checked but not visually reviewed by this API. Retain the
+original payload for comparison.
 
 ## Authentication and ownership
 
@@ -14,8 +13,8 @@ Credentials are optional. Send the existing account credentials in
 game is published ownerless (owner `agent-import`), and no one can edit or
 unpublish it. Credentials that are sent but invalid return 401. Use HTTPS
 except on loopback. Never put passwords in URLs, payload files or source
-control. All authenticated platform users (including guest accounts, as in
-Builder) can publish their own game. Ownership comes exclusively from
+control. All authenticated platform users (including guest accounts)
+can publish their own game. Ownership comes exclusively from
 authentication. Unknown fields, including IDs, owners, publication and approval
 flags, are rejected. Missing credentials no longer return 401; invalid ones do,
 before reading the body. This does not introduce an admin-only policy or an
@@ -38,7 +37,7 @@ Required fields:
 - `unit_tests`: `state_schema`, `view_schema`, `move_schema`, and 3–10 `cases`.
   Include initial, intermediate and terminal examples, complete expected player
   and spectator views, fixed context/seed and terminal payouts. Each case includes
-  four `{caption, svg}` view illustrations, matching the existing Builder format.
+  four `{caption, svg}` view illustrations.
 - `translations`: the game's texts translated into every language but the one it
   is written in (7 entries when the game is written in English: `es`, `fr`, `de`,
   `pt`, `zh`, `hi`, `ar`). Each entry has `display_name`, `short_description`,
@@ -92,7 +91,7 @@ is inserted. The checks, in order:
    ar). The supplied translations are seeded into the portal bundle, so the
    game shows translated from the first request.
 4. **Artifact validation (all 7 steps).** The understanding, identity, logic,
-   UI, tutorial, images and tests artifacts are validated against the builder
+   UI, tutorial, images and tests artifacts are validated against the game
    artifact contract: schemas are real Draft 2020-12 JSON Schemas, unit tests
    have 3–10 cases with initial/intermediate/terminal coverage, images meet
    the size/format rules.
@@ -169,14 +168,14 @@ Chunked requests have the same cumulative limit. Uploads have a 15-second deadli
 - 413: request too large.
 - 415: unsupported media type or content encoding.
 - 422: malformed payload, missing or incomplete translations, artifact validation or code checks failed/timed out.
-- 429: both per-process Builder/validation slots occupied; retry after 15 seconds.
+- 429: both per-process import/validation slots occupied; retry after 15 seconds.
 - 5xx: infrastructure/storage failure; do not assume success.
 
-Validation runs before any storage write, reusing Builder artifact validators,
+Validation runs before any storage write, reusing the game artifact validators,
 example tests, localization checks, random walks and the existing QuickJS limits.
 An isolated validator process has a 20-second wall deadline, including schema
 validation. Errors never echo the full submitted source. Persistence creates the
-published game once, with the initial workflow (including translations) stored
+published game once, with the import package (including translations) stored
 with it, and seeds the portal bundle with the supplied translations.
 
 The endpoint is not idempotent without a request id: do not blindly retry a
