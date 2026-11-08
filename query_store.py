@@ -809,6 +809,23 @@ class QueryStore:
     def list_matches_involving(self, user_id):
         return self._list("matches", [("participants", "array_contains", user_id)])
 
+    def list_matches_for_game(self, game_id):
+        """All matches played with [game_id], oldest first, paging past the
+        100-record legacy cap (a popular game can have more matches than that)."""
+        matches = []
+        cursor = None
+        while True:
+            page = self.page(
+                "matches",
+                filters=[("game_id", "==", game_id)],
+                limit=100,
+                cursor=cursor,
+            )
+            matches.extend(page.items)
+            cursor = page.next_cursor
+            if not cursor:
+                return matches
+
     def list_matches_by_status(self, status):
         """Legacy bounded status listing; scalable clients use the paged v2 API."""
         return self._list("matches", [("status", "==", status)])

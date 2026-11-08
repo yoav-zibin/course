@@ -229,6 +229,22 @@ def test_referrals_and_linked_identity_survive_restart(store):
     assert second.user_for_referral(user.referral_code) == alice
 
 
+def test_list_matches_for_game_returns_only_that_games_matches(store):
+    api = api_for(store)
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game_id = api.new_game(owner=alice)
+    first = api.new_match(owner=alice, game_id=game_id)
+    second_match = api.new_match(owner=alice, game_id=game_id, joiners=[bob], start=True)
+    other_game = api.new_game(owner=bob)
+    api.new_match(owner=bob, game_id=other_game)
+
+    assert [m.id for m in store.list_matches_for_game(game_id)] == [
+        first,
+        second_match,
+    ]
+    assert store.list_matches_for_game("no-such-game") == []
+
+
 def test_idempotent_move_does_not_append_or_pay_twice(store):
     api = api_for(store)
     alice, bob = api.new_user("alice"), api.new_user("bob")

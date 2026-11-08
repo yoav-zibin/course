@@ -5026,6 +5026,8 @@ class GamePlatform:
     def admin_delete_game(self, game_id: str) -> None:
         with self._lock:
             self._get_live_game(game_id)
+            for match in self._store.list_matches_for_game(game_id):
+                self._delete_match_and_invites(match.id)
             self._store.delete_game(game_id)
 
     def admin_delete_match(self, match_id: str) -> None:

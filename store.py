@@ -88,6 +88,10 @@ class Store(Protocol):
         """Matches that [user_id] owns or holds a seat in, oldest first."""
         ...
 
+    def list_matches_for_game(self, game_id: str) -> list[Match]:
+        """Matches played with [game_id], oldest first."""
+        ...
+
     def list_matches_by_status(self, status: MatchStatus) -> list[Match]:
         """Matches with [status], oldest first."""
         ...
@@ -572,6 +576,15 @@ class InMemoryStore:
                 self._match_ids_by_user.get(user_id, ()),
                 key=self._match_order.__getitem__,
             )
+        ]
+
+    def list_matches_for_game(self, game_id: str) -> list[Match]:
+        return [
+            match
+            for match in sorted(
+                self._matches.values(), key=lambda m: self._match_order[m.id]
+            )
+            if match.game_id == game_id
         ]
 
     def delete_match(self, match_id: str) -> None:

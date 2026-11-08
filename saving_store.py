@@ -228,6 +228,10 @@ class SavingStore:
         with self._lock:
             return self._inner.list_matches_involving(user_id)
 
+    def list_matches_for_game(self, game_id: str) -> list[Match]:
+        with self._lock:
+            return self._inner.list_matches_for_game(game_id)
+
     def list_matches_by_status(self, status: MatchStatus) -> list[Match]:
         with self._lock:
             return self._inner.list_matches_by_status(status)
