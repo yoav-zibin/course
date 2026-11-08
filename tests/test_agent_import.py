@@ -4,7 +4,6 @@ import pytest
 
 from game_platform.agent_import import AGENT_IMPORT_OWNER_ID, MAX_BODY_BYTES, GameImport, prepare
 from game_platform.builder_flow import LANGUAGES
-from game_platform.tests.test_builder_flow import approved_draft
 
 
 def translations_for(body):
@@ -31,15 +30,12 @@ def translations_for(body):
 
 
 def payload():
-    d = approved_draft()
-    a = d.builder_workflow['artifacts']
-    from game_platform.tests.test_builder_flow import fixture
-    f = fixture()
-    body = dict(name=d.name, description=d.description, allowed_player_counts=[1],
-                client_code=f['code'], server_code=f['server_code'],
-                rules=a['logic']['value']['text'], ui_instructions=a['ui']['value']['text'],
-                tutorial=a['tutorial']['value'], images=a['images']['value']['images'],
-                unit_tests=f['contract'])
+    """A complete import body, standalone: the hand-written example game, with its
+    translations re-marked per locale so tests can tell a supplied translation
+    from a machine one. No builder fixture is involved."""
+    import json
+    from pathlib import Path
+    body = json.loads((Path(__file__).resolve().parent.parent / 'examples' / 'agent-game.json').read_text())
     body['translations'] = translations_for(body)
     return body
 
