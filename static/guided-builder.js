@@ -208,8 +208,41 @@ function renderArtifact(f,active){
  $('reopen').disabled=working||active||!artifact||artifact.status!=='approved';
  $('propose').disabled=working||active||!allowed;
 }
+// The progress strip sits at the top of the studio in every state — intro,
+// a step, the build view — and this stays the single renderer of what it
+// shows: with no draft open it rests at step 1 with every step disabled.
+// The bar's fill is position-based (the mockup's glide bar): it covers the
+// current step's share of the strip and fills smoothly via its CSS width
+// transition; approved steps carry their own ✓ in the step row itself.
+function renderProgress(){
+ const labels=[I18n.t("ui.guided.label.understanding",{},"Idea"),I18n.t("ui.guided.label.identity",{},"Name"),I18n.t("ui.guided.label.logic",{},"Rules"),I18n.t("ui.guided.label.ui",{},"Layout"),I18n.t("ui.guided.label.tutorial",{},"Tutorial"),I18n.t("ui.guided.label.images",{},"Images"),I18n.t("ui.guided.label.tests",{},"Tests"),I18n.t("ui.guided.label.build",{},"Build & verify")];
+ const f=draft?.builder_workflow;
+ const count=f?steps.filter(s=>f.artifacts[s]?.status==='approved').length:0;
+ const all=count===steps.length;
+ const current=draft?selected:0;
+ $('step-position').textContent=I18n.t("ui.guided.step_position",{step:current+1,total:labels.length},"Step {step} of {total}");
+ $('steps').replaceChildren(...labels.map((label,i)=>{
+  const build=i===steps.length;
+  const done=f?(build?f.job?.status==='ready':f.artifacts[steps[i]]?.status==='approved'):false;
+  return el('button',{'aria-current':draft&&i===selected?'step':null,class:done?'step-done':null,disabled:!draft||working||(build&&!all&&!f.job),
+   title:build&&!all?I18n.t("ui.guided.locked_title",{},"Approve the specifications to unlock Build & verify"):label,
+   onclick:()=>{if(i!==selected){$('correction').value='';editName=false;}selected=i;render();}},el('span',{textContent:label}));
+ }));
+ $('progress-fill').style.width=((current+1)/labels.length*100)+'%';
+ document.querySelector('.progress-track')?.setAttribute('aria-valuenow',String(current+1));
+}
+// Glide: when the visible view changes, the newly shown panel fades and
+// rises once. Re-renders of the same view (polls, keystrokes) do not
+// retrigger it; the class removal + reflow restarts the CSS animation.
+let lastView=null;
+function glideIn(node,view){
+ if(lastView===view)return;
+ lastView=view;
+ node.classList.remove('glide-in');void node.offsetWidth;node.classList.add('glide-in');
+}
 function render(){
- $('intro').hidden=!!draft;$('workspace').hidden=!draft;if(!draft)return;
+ $('intro').hidden=!!draft;$('workspace').hidden=!draft;renderProgress();
+ if(!draft){glideIn($('intro'),'intro');return;}
  const f=draft.builder_workflow, active=['queued','running'].includes(f.job?.status);
  const money=value=>I18n.number(value,{style:'currency',currency:'USD'});
  $('budget').textContent=I18n.t("ui.guided.budget",{used:money((f.charged_microdollars || 0)/1000000),limit:money(10)},"AI budget used or reserved: {used} of {limit}");
@@ -218,19 +251,11 @@ function render(){
  $('draft-title').textContent=draftName(draft);
  $('delete-draft').disabled=working||active;
  $('edit-title').disabled=working||active||f.artifacts.understanding?.status!=='approved';
- const labels=[I18n.t("ui.guided.label.understanding",{},"Idea"),I18n.t("ui.guided.label.identity",{},"Name"),I18n.t("ui.guided.label.logic",{},"Rules"),I18n.t("ui.guided.label.ui",{},"Layout"),I18n.t("ui.guided.label.tutorial",{},"Tutorial"),I18n.t("ui.guided.label.images",{},"Images"),I18n.t("ui.guided.label.tests",{},"Tests"),I18n.t("ui.guided.label.build",{},"Build & verify")];
  const buildView=selected===steps.length;
  const all=count===steps.length;
- $('step-position').textContent=I18n.t("ui.guided.step_position",{step:selected+1,total:labels.length},"Step {step} of {total}");
- $('steps').replaceChildren(...labels.map((label,i)=>{
-  const build=i===steps.length;
-  const done=build?f.job?.status==='ready':f.artifacts[steps[i]]?.status==='approved';
-  return el('button',{'aria-current':i===selected?'step':null,class:done?'step-done':null,disabled:working||(build&&!all&&!f.job),
-   title:build&&!all?I18n.t("ui.guided.locked_title",{},"Approve the specifications to unlock Build & verify"):label,
-   textContent:label,onclick:()=>{if(i!==selected){$('correction').value='';editName=false;}selected=i;render();}});
- }));
  $('spec-panel').hidden=buildView;
  $('build-panel').hidden=!buildView;
+ glideIn(buildView?$('build-panel'):$('spec-panel'),buildView?'build':'step:'+selected);
  if(!buildView)renderArtifact(f,active);
  if(renderedRevision!==draft.revision){
   $('conversation').replaceChildren(...f.conversation.map(m=>{
@@ -261,7 +286,23 @@ function render(){
   try{const user=me();const response=await fetch(`/game-drafts/${draft.id}/workflow/images/${shot.file}`,{headers:{'X-User-Id':user.id,'X-User-Password':user.password}});if(!response.ok)throw Error(I18n.t("ui.guided.image_unavailable",{},"Image unavailable"));const url=URL.createObjectURL(await response.blob());const modal=el('dialog',{},el('button',{textContent:I18n.t("ui.action.close",{},"Close"),onclick:()=>modal.close()}),el('img',{src:url,alt:shot.test,style:'max-width:90vw;max-height:80vh'}));modal.addEventListener('close',()=>{URL.revokeObjectURL(url);modal.remove();});document.body.append(modal);modal.showModal();}catch(e){error(e);}
  }})));
 }
-$('new-draft').onclick=async()=>{if(!me()){Auth.openDialog('login');return;}try{const d=await request('POST','/game-drafts',{name:'',description:'',allowed_player_counts:[2],code:''});await select(d.id);await loadDrafts();}catch(e){error(e);}};
+async function createDraft(){
+ if(!me()){Auth.openDialog('login');return null;}
+ try{const d=await request('POST','/game-drafts',{name:'',description:'',allowed_player_counts:[2],code:''});await select(d.id);await loadDrafts();return d;}catch(e){error(e);return null;}
+}
+$('new-draft').onclick=createDraft;
+// The intro's starter cards run the same new-draft flow, then seed the
+// step-1 chat box with that starter's idea — filled in and focused for the
+// person to edit, never auto-sent.
+const starterIdeas={walls:"ui.guided.starter.walls_idea",row:"ui.guided.starter.row_idea",race:"ui.guided.starter.race_idea"};
+for(const card of document.querySelectorAll('.starter-card'))card.onclick=async()=>{
+ const key=starterIdeas[card.dataset.starter];
+ if(!key)return;
+ const created=await createDraft();
+ if(!created||draft?.id!==created.id)return;
+ $('correction').value=I18n.t(key,{});
+ $('correction').focus();
+};
 $('delete-draft').onclick=async()=>{
  const target=draft;
  if(!target || working || !window.confirm(I18n.t("ui.guided.confirm_delete",{name:draftName(target)},"Delete the draft “{name}”? This cannot be undone.")))return;

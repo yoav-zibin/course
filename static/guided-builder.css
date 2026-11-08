@@ -19,8 +19,16 @@
 .work-head h2{margin:0;overflow-wrap:anywhere}.work-head{margin-block-end:24px}#budget{margin-inline-start:auto}
 .progress-head{justify-content:space-between}.progress-head span,#budget,#step-guide,#next-action{color:var(--color-text-secondary)}
 #progress{width:100%;height:.6rem;accent-color:var(--color-accent);margin-block:6px}
-#steps{display:flex;flex-wrap:nowrap;gap:2px;margin-block-end:18px;overflow-x:auto;counter-reset:step;padding-block-end:4px}
-#steps button{display:inline-flex;align-items:center;gap:8px;border:1px solid transparent;background:transparent;color:var(--color-text-secondary);padding:6px 9px;flex:none}
+/* The progress strip caps the studio in every state (intro, step, build):
+   the step row stretches the full width of the column — each step takes an
+   equal share instead of bunching at the start — and a thin bar under it
+   fills smoothly to the current step's share. */
+.studio>nav{margin-block-end:18px}
+.progress-track{height:4px;border-radius:99px;background:var(--color-bg-3);overflow:hidden;margin-block-start:8px}
+#progress-fill{height:100%;width:12.5%;border-radius:99px;background:var(--color-accent);transition:width .45s ease}
+#steps{display:flex;flex-wrap:nowrap;gap:2px;overflow-x:auto;counter-reset:step;padding-block-end:4px}
+#steps button{display:inline-flex;align-items:center;gap:8px;border:1px solid transparent;background:transparent;color:var(--color-text-secondary);padding:6px 9px;flex:1 1 0;min-width:0;justify-content:center}
+#steps button>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 #steps button::before{counter-increment:step;content:counter(step);width:24px;height:24px;border-radius:50%;background:var(--color-bg-3);border:1px solid var(--color-border-2);display:grid;place-items:center;font-size:12px;font-weight:700;flex:none}
 #steps button.step-done::before{content:'✓';background:var(--color-ok);border-color:transparent;color:#08130a}
 #steps button[aria-current=step]{color:var(--color-text-primary);font-weight:700}
@@ -34,8 +42,21 @@
 #conversation{max-height:45vh;overflow:auto}.studio :focus-visible{outline:2px solid var(--color-focus-ring);outline-offset:2px}
 @media(max-width:850px){.workshop{grid-template-columns:minmax(0,1fr)}.drafts{border-inline-end:0;border-block-end:1px solid var(--color-border-2);padding:10px 16px}.drafts details{margin-block:6px}.preview-grid{grid-template-columns:1fr}#budget{margin-inline-start:0}}
 
-#intro{text-align:center;padding-block:clamp(18px,5vh,44px)}
-#intro h2{margin-block-end:6px}
+#intro{text-align:center;padding-block:clamp(18px,5vh,44px);max-width:720px;margin-inline:auto}
+#intro h2{margin-block-end:6px;font-size:clamp(24px,3.4vw,34px)}
+#intro>p{color:var(--color-text-secondary);font-size:16px}
+/* Starter cards: a mini 3×3 board (p = accent piece, q = ok piece), a title
+   and one line each; clicking one starts a draft with the idea pre-filled. */
+.starter-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-block-start:20px}
+@media(max-width:640px){.starter-cards{grid-template-columns:minmax(0,1fr)}}
+.starter-card{display:flex;flex-direction:column;gap:4px;border:1px solid var(--color-border-2);border-radius:12px;background:var(--color-bg-1);padding:14px;text-align:start;color:var(--color-text-primary);transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}
+.starter-card:hover{transform:translateY(-3px);box-shadow:0 8px 18px rgb(0 0 0/.18);border-color:var(--color-accent)}
+.mini-board{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;width:64px;margin-block-end:8px}
+.mini-board i{aspect-ratio:1;background:var(--color-bg-3);border-radius:4px}
+.mini-board i.p{background:var(--color-accent)}
+.mini-board i.q{background:var(--color-ok)}
+.starter-title{font-weight:700;font-size:15px}
+.starter-text{font-size:13px;color:var(--color-text-secondary);line-height:1.45}
 #spec-panel{display:grid;grid-template-columns:minmax(250px,330px) minmax(0,1fr);gap:22px;align-items:start}
 .artifact-main,.artifact-chat{min-width:0}
 .artifact-chat{border-inline-end:1px solid var(--color-border-2);padding-inline-end:18px}
@@ -48,6 +69,9 @@
 .workshop button:active{transform:scale(.98)}
 #steps button{transition:background-color .15s ease,color .15s ease,border-color .15s ease}
 @keyframes gb-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+/* Glide: render() tags the newly shown view (intro / a step / the build
+   panel) with .glide-in so it fades and rises once, ~.28s ease-out. */
+.glide-in{animation:gb-in .28s ease-out both}
 #artifact-content>*,#artifact-changes>*,#build-panel{animation:gb-in .28s ease both}
 #workspace{animation:gb-in .25s ease both}
 @media(max-width:1000px){#spec-panel{grid-template-columns:minmax(0,1fr)}.artifact-chat{border-inline-end:0;border-block-end:1px solid var(--color-border-2);padding-inline-end:0;padding-block-end:14px}}
@@ -63,10 +87,13 @@
    [label] [Next page]) after each list, and hides it while there is only one
    page. Keep what does appear minimal: one slim, quiet row under the list
    that reads as a footnote, not a toolbar. */
-.drafts .storage-pagination{display:flex;align-items:center;justify-content:center;gap:10px;margin-block-start:10px;font-size:.78rem;color:var(--color-text-tertiary)}
+/* The sidebar column is only ~195px wide inside its padding, so the row
+   must wrap: the label takes its own line and the two buttons share the
+   next — nothing may stick out past the column at any sidebar width. */
+.drafts .storage-pagination{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:4px 10px;max-width:100%;min-width:0;box-sizing:border-box;margin-block-start:10px;font-size:.78rem;color:var(--color-text-tertiary)}
 .drafts .storage-pagination[hidden]{display:none}
-.drafts .storage-pagination span{white-space:nowrap}
-.drafts .storage-pagination button{flex:none;min-height:0;padding:2px 4px;background:none;border:0;color:inherit;font:inherit;text-decoration:underline;text-underline-offset:2px}
+.drafts .storage-pagination span{flex:1 1 100%;min-width:0;text-align:center;overflow-wrap:anywhere}
+.drafts .storage-pagination button{flex:0 1 auto;min-width:0;min-height:0;padding:2px 4px;background:none;border:0;color:inherit;font:inherit;text-decoration:underline;text-underline-offset:2px}
 .drafts .storage-pagination button:disabled{opacity:.4;text-decoration:none}
 
 /* Shared-topbar wallet: portal.css carries these base rules for the portal;
