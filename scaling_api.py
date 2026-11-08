@@ -3,7 +3,7 @@
 import re
 from dataclasses import replace
 from fastapi import HTTPException, Query, Response
-from game_platform.schemas import GameSummaryOut, GameDraftOut, UserOut, MoveOut
+from game_platform.schemas import GameSummaryOut, UserOut, MoveOut
 
 
 def install(app, *, debug_tools):
@@ -80,26 +80,6 @@ def install(app, *, debug_tools):
         )
         return {
             "items": [GameSummaryOut.of(x) for x in result.items],
-            "next_cursor": result.next_cursor,
-        }
-
-    @app.get("/v2/game-drafts")
-    def drafts(
-        platform: Platform,
-        caller_id: CallerId,
-        limit: int = Query(50, ge=1, le=100),
-        cursor: str | None = None,
-    ):
-        result = page(
-            store_of(platform),
-            "game_drafts",
-            filters=[("owner_user_id", "==", caller_id)],
-            limit=limit,
-            cursor=cursor,
-            scope=caller_id,
-        )
-        return {
-            "items": [GameDraftOut.of(x) for x in result.items],
             "next_cursor": result.next_cursor,
         }
 
@@ -350,9 +330,7 @@ def install(app, *, debug_tools):
                 "games",
                 "game_versions",
                 "matches",
-                "game_drafts",
                 "game_version_errors",
-                "agent_conversations",
             ):
                 raise HTTPException(404, "unknown collection")
             result = page(
@@ -362,8 +340,6 @@ def install(app, *, debug_tools):
                 items = [UserOut.of(x) for x in result.items]
             elif kind == "matches":
                 items = [_match_out(platform, x) for x in result.items]
-            elif kind == "game_drafts":
-                items = [GameDraftOut.of(x) for x in result.items]
             elif kind in ("games", "game_versions"):
                 items = [GameSummaryOut.of(x) for x in result.items]
             else:

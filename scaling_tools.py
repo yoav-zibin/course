@@ -24,7 +24,6 @@ from game_platform.models import (
     Move,
     Seat,
     User,
-    AgentConversationEntry,
 )
 from game_platform.query_store import QueryStore
 
@@ -155,36 +154,12 @@ def migrate(source, destination, *, source_prefix="", batch_records=None):
                 destination.delete_game(record)
             elif kind.field == "unpublished_game_ids":
                 destination.set_game_published(record, False)
-            elif kind.field == "agent_conversations":
-                ref = destination.ref("agent_conversations", record.game_id)
-                count = 0
-                for entry_doc in documents(doc.reference.collection("entries")):
-                    entry = TypeAdapter(AgentConversationEntry).validate_json(
-                        _read_text(entry_doc)
-                    )
-                    destination.raw_put(
-                        ref.collection("entries").document(f"{count:012}"),
-                        {
-                            "json": TypeAdapter(AgentConversationEntry)
-                            .dump_json(entry)
-                            .decode()
-                        },
-                    )
-                    count += 1
-                destination._put(
-                    "agent_conversations",
-                    record.game_id,
-                    replace(record, entries=()),
-                    entry_count=count,
-                )
             else:
                 method = {
                     "experiments": "put_experiment",
                     "experiment_assignments": "put_experiment_assignment",
                     "experiment_events": "put_experiment_event",
                     "users": "put_user",
-                    "game_drafts": "put_game_draft",
-                    "game_test_sessions": "put_game_test_session",
                     "push_subscriptions": "put_push_subscription",
                     "invites": "put_invite",
                     "game_version_errors": "add_game_version_error",

@@ -2,6 +2,11 @@
 
 An in-memory REST backend for a multiplayer turn-based games platform, built with FastAPI.
 
+> Historical note (Nov 7, 2026): the Builder was deleted — games are now created only
+> through `POST /games` (see `docs/agent-game-import.md`). The builder sections below
+> (game builder, `/builder`, builder tests, builder emulator) are stale and describe
+> removed code; they are kept for history until the README is rewritten.
+
 - **Game**: a game built in the game builder. Its `code` runs in a sandboxed iframe on the
   client; the server never executes it.
 - **Match**: playing a game with a set of players (humans and computer opponents).
