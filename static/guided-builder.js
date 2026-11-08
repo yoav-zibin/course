@@ -15,10 +15,16 @@ const guidance=()=>({
 });
 const draftName=d=>d.builder_workflow?.artifacts?.identity?.value?.display_name || d.name || I18n.t("ui.builder.untitled",{},"Untitled game");
 let editName=false;
-if(window.matchMedia('(max-width:850px)').matches)$('library').open=false;
+// These two lookups only decorate the page (collapse the library on a narrow
+// screen, park the test-matrix link by the emulator): if either element is
+// ever missing, that must not abort the rest of this script — every handler
+// wiring and the initial load below depend on reaching them.
+const library=$('library');
+if(library&&window.matchMedia('(max-width:850px)').matches)library.open=false;
 let draft=null, selected=0, working=false, poll=null, renderedRevision=null;
 const matrixLink=el('a',{id:'game-test-matrix',href:'/game-test',target:'_blank',rel:'noopener',textContent:I18n.t("ui.guided.test_matrix",{},"Open game test matrix"),hidden:true});
-$('emulator').after(matrixLink);
+const emulator=$('emulator');
+if(emulator)emulator.after(matrixLink);
 const me=()=>Auth.current();
 const request=(method,path,body)=>apiRequest(method,path,{user:me(),...(body?{body}:{})});
 function error(e){showPageError(e.message||String(e));}
@@ -43,7 +49,7 @@ function nextStep(){
 }
 async function select(id){
  $('build-error').textContent='';editName=false;clearTimeout(poll);draft=await request('GET','/game-drafts/'+encodeURIComponent(id));
- if(!draft.builder_workflow)draft=await request('POST',`/game-drafts/${id}/workflow/initialize`,{expected_revision:draft.revision,language:$('language').value});
+ if(!draft.builder_workflow)draft=await request('POST',`/game-drafts/${id}/workflow/initialize`,{expected_revision:draft.revision,language:typeof I18n.locale==='function'?I18n.locale():'en'});
  await recover();location.hash=id;selected=nextStep();
  const pending=draft.builder_workflow.pending_generation?.progress;
  $('correction').value=pending?.request_mode==='feedback'?'':pending?.request_text || '';
@@ -260,5 +266,4 @@ $('publish').onclick=async()=>{try{const game=await request('POST',`/game-drafts
 document.addEventListener('auth-changed',()=>{clearTimeout(poll);draft=null;render();Auth.renderMenu($('account-menu'));loadDrafts().catch(error);});
 Auth.renderMenu($('account-menu'));loadDrafts().then(()=>{if(me()&&location.hash.length>1)return select(decodeURIComponent(location.hash.slice(1)));}).catch(error);
 
-request('GET','/i18n/locales').then(data=>{const picker=$('language');picker.replaceChildren(...data.locales.map(l=>el('option',{value:l.code,textContent:l.name})));picker.value=typeof I18n.locale==='function'&&data.locales.some(l=>l.code===I18n.locale())?I18n.locale():data.default;}).catch(()=>{});
 document.addEventListener('i18n-changed',()=>{matrixLink.textContent=I18n.t("ui.guided.test_matrix",{},"Open game test matrix");renderedRevision=null;render();loadDrafts().catch(error);});

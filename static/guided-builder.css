@@ -56,3 +56,14 @@
 #spec-panel[data-step="images"],#spec-panel[data-step="tests"]{grid-template-columns:minmax(240px,300px) minmax(0,1fr)}
 @media(max-width:1000px){#spec-panel[data-step="images"],#spec-panel[data-step="tests"]{grid-template-columns:minmax(0,1fr)}}
 @media(prefers-reduced-motion:reduce){.workshop *,#workspace{animation:none!important;transition:none!important}}
+
+/* Sidebar: the primary action spans the panel like the list buttons under it. */
+#new-draft{width:100%}
+/* StoragePages.controls() appends an unstyled nav.storage-pagination ([Previous
+   page] [label] [Next page]) after each list. The panel is at most ~195px wide,
+   too narrow for the full-word buttons and the "Page N · up to 50 results"
+   label on one row without the label wrapping mid-phrase, so the label gets
+   its own non-wrapping row and the two buttons share the row under it. */
+.drafts .storage-pagination{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-block-start:8px}
+.drafts .storage-pagination span{order:-1;flex:1 1 100%;text-align:center;white-space:nowrap;font-size:.85rem;color:var(--color-text-secondary)}
+.drafts .storage-pagination button{flex:1;padding:6px 10px;text-align:center}
