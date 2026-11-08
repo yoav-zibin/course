@@ -412,6 +412,28 @@ def _replace_seat(seats: tuple[Seat, ...], new_seat: Seat) -> tuple[Seat, ...]:
     )
 
 
+def _iter_all_game_versions(store):
+    """Yield every game version, paging when the store supports it.
+
+    QueryStore caps unpaginated lists at 100 records (LEGACY_LIMIT), so
+    list_all_game_versions() raises once the store holds more than 100
+    versions — which crashes platform startup. Stores that expose the
+    paginated ``page`` API (the query backend) are walked page by page;
+    everything else keeps the old single-list call.
+    """
+    page = getattr(store, "page", None)
+    if callable(page):
+        cursor = None
+        while True:
+            result = page("game_versions", limit=100, cursor=cursor)
+            yield from result.items
+            cursor = result.next_cursor
+            if not cursor:
+                return
+    else:
+        yield from store.list_all_game_versions()
+
+
 class GamePlatform:
     RECENT_GAME_LIMIT = 8
 
@@ -437,7 +459,7 @@ class GamePlatform:
         self._store: Store = store if store is not None else InMemoryStore()
         missing_game_schemas = sorted(
             (game.id, game.version)
-            for game in self._store.list_all_game_versions()
+            for game in _iter_all_game_versions(self._store)
             if game.server_code is not None and game.game_schemas is None
         )
         if missing_game_schemas:
