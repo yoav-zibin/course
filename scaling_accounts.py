@@ -45,8 +45,6 @@ MERGE_STAGES = (
     "check_matches",
     "game_versions",
     "games",
-    "game_drafts",
-    "game_test_sessions",
     "matches",
     "match_moves",
     "push_subscriptions",
@@ -60,8 +58,6 @@ DELETE_STAGES = (
     "games",
     "matches_owned",
     "matches_leave",
-    "game_drafts",
-    "game_test_sessions",
     "push_subscriptions",
     "invites",
     "invitees",
@@ -334,22 +330,6 @@ def _merge_stage_plan(stage, source_id, into_id):
                 store.put_game_version(replace(record, owner_user_id=into_id))
                 if record.owner_user_id == source_id
                 else None
-            ),
-        )
-    if stage == "game_test_sessions":
-        return (
-            stage,
-            [("owner_user_id", "==", source_id)],
-            lambda store, record: store.put_game_test_session(
-                replace(record, owner_user_id=into_id)
-            ),
-        )
-    if stage == "game_drafts":
-        return (
-            "game_drafts",
-            [("owner_user_id", "==", source_id)],
-            lambda store, record: store.put_game_draft(
-                replace(record, owner_user_id=into_id)
             ),
         )
     if stage == "matches":
@@ -756,18 +736,6 @@ def _delete_stage_plan(stage, user_id):
             lambda store, record, state: (
                 store.delete_game(record.id) if not record.deleted else None
             ),
-        )
-    if stage == "game_test_sessions":
-        return (
-            stage,
-            [("owner_user_id", "==", user_id)],
-            lambda store, record, state: store.delete_game_test_session(record.id),
-        )
-    if stage == "game_drafts":
-        return (
-            "game_drafts",
-            [("owner_user_id", "==", user_id)],
-            lambda store, record, state: store.delete_game_draft(record.id),
         )
     if stage == "push_subscriptions":
         return (

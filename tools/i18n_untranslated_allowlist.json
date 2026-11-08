@@ -83,9 +83,9 @@
   },
   "ratchet": {
     "privacy.html": 24,
-    "browse.js": 62,
+    "browse.js": 57,
     "console.js": 20,
     "feedback.js": 18,
-    "stats.js": 84
+    "stats.js": 77
   }
 }

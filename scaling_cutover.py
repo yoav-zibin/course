@@ -8,7 +8,7 @@ from dataclasses import replace
 
 from pydantic import TypeAdapter
 
-from game_platform.models import AgentConversationEntry, GamePopularity, Move
+from game_platform.models import GamePopularity, Move
 from game_platform.query_store import ADAPTERS
 from game_platform.scaling_tools import documents
 from game_platform.store import Snapshot
@@ -49,9 +49,6 @@ def rollback_snapshot(store, *, byte_limit=32 * 1024**2, record_limit=5000):
         "users",
         "game_versions",
         "matches",
-        "game_drafts",
-        "game_test_sessions",
-        "agent_conversations",
         "push_subscriptions",
         "invites",
         "game_version_errors",
@@ -69,28 +66,14 @@ def rollback_snapshot(store, *, byte_limit=32 * 1024**2, record_limit=5000):
                     for entry in pages("libraries", [("user_id", "==", row.id)])
                 )
                 row = replace(row, saved_game_ids=saved)
-            elif kind in ("game_versions", "game_drafts"):
-                identity = (
-                    f"{row.id}@{row.version}" if kind == "game_versions" else row.id
-                )
-                row = store._get(kind, identity)
+            elif kind == "game_versions":
+                row = store._get(kind, f"{row.id}@{row.version}")
             elif kind == "matches":
                 moves = []
                 for move in row.moves:
                     account(len(TypeAdapter(Move).dump_json(move)))
                     moves.append(move)
                 row = replace(row, moves=tuple(moves))
-            elif kind == "agent_conversations":
-                entries = []
-                for doc in documents(
-                    store.ref(kind, row.game_id).collection("entries")
-                ):
-                    raw = doc.to_dict()["json"]
-                    account(len(raw.encode()))
-                    entries.append(
-                        TypeAdapter(AgentConversationEntry).validate_json(raw)
-                    )
-                row = replace(row, entries=tuple(entries))
             account(len(ADAPTERS[kind].dump_json(row)))
             rows.append(row)
         fields[kind] = tuple(rows)

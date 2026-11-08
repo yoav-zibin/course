@@ -346,8 +346,6 @@ class ScalablePlatform(GamePlatform):
             )
         for kind, field in (
             ("game_versions", "owner_user_id"),
-            ("game_drafts", "owner_user_id"),
-            ("game_test_sessions", "owner_user_id"),
             ("push_subscriptions", "user_id"),
         ):
             for row in store._list(kind, [(field, "==", source.id)]):
@@ -356,8 +354,6 @@ class ScalablePlatform(GamePlatform):
                     store,
                     {
                         "game_versions": "put_game_version",
-                        "game_drafts": "put_game_draft",
-                        "game_test_sessions": "put_game_test_session",
                         "push_subscriptions": "put_push_subscription",
                     }[kind],
                 )(updated)
@@ -404,10 +400,6 @@ class ScalablePlatform(GamePlatform):
                     self._delete_match_and_invites(match.id)
                 elif match.status != "over" and match.seat_of(user_id):
                     self.leave_match(caller_id=user_id, match_id=match.id)
-            for row in store.list_game_drafts(owner_user_id=user_id):
-                store.delete_game_draft(row.id)
-            for row in store.list_game_test_sessions(owner_user_id=user_id):
-                store.delete_game_test_session(row.id)
             for row in store.list_push_subscriptions(user_id=user_id):
                 store.delete_push_subscription(row.id)
             for row in store.list_invites(created_by_user_id=user_id):
