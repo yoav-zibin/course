@@ -7,6 +7,10 @@ An in-memory REST backend for a multiplayer turn-based games platform, built wit
 > (game builder, `/builder`, builder tests, builder emulator) are stale and describe
 > removed code; they are kept for history until the README is rewritten.
 
+> Writing a game for the platform: see [GAME_DEVELOPMENT_GUIDE.md](GAME_DEVELOPMENT_GUIDE.md)
+> — the complete guide to the `POST /games` import API, the server and client
+> contracts, and the checks every game must pass.
+
 - **Game**: a game built in the game builder. Its `code` runs in a sandboxed iframe on the
   client; the server never executes it.
 - **Match**: playing a game with a set of players (humans and computer opponents).
