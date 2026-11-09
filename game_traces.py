@@ -332,13 +332,38 @@ def replay_match(body, *, players, pot, match_seed, states, moves):
 # ---------------------------------------------------------------------------
 
 
-def required_matrix(body):
+def covering_configs(body):
+    """The smallest set of match configurations covering every parameter:
+    each allowed player count, each resolution and each orientation appears
+    at least once (the full cross product is NOT required)."""
+    counts = list(body.allowed_player_counts)
+    total = max(len(counts), len(RESOLUTIONS), len(ORIENTATIONS))
     return [
-        (count, resolution["label"], orientation)
-        for count in body.allowed_player_counts
-        for resolution in RESOLUTIONS
-        for orientation in ORIENTATIONS
+        (
+            counts[i % len(counts)],
+            RESOLUTIONS[i % len(RESOLUTIONS)]["label"],
+            ORIENTATIONS[i % len(ORIENTATIONS)],
+        )
+        for i in range(total)
     ]
+
+
+def coverage_missing(rows, body):
+    """What a set of verified-match rows still lacks, per parameter."""
+    missing = []
+    counts = {row["num_players"] for row in rows}
+    for count in body.allowed_player_counts:
+        if count not in counts:
+            missing.append(f"a match with {count} players")
+    resolutions = {row["resolution"] for row in rows}
+    for resolution in RESOLUTIONS:
+        if resolution["label"] not in resolutions:
+            missing.append(f"a match at {resolution['label']}")
+    orientations = {row["orientation"] for row in rows}
+    for orientation in ORIENTATIONS:
+        if orientation not in orientations:
+            missing.append(f"a match in {orientation} orientation")
+    return missing
 
 
 def evaluate(store, secret, body):
@@ -368,7 +393,6 @@ def evaluate(store, secret, body):
     steps["step2"] = {"done": any(row.get("passed") for row in checks)}
     verified = rows_for_submission(store, submission_id, kind="match_verified")
     moves = rows_for_submission(store, submission_id, kind="move")
-    required = required_matrix(body)
     gaps = []
     if not steps["step2"]["done"]:
         gaps.append("step 2 (server code tests) has not passed for the tested inputs")
@@ -376,22 +400,18 @@ def evaluate(store, secret, body):
         ("step3", "step 3", MODE_PASS_AND_PLAY),
         ("step5", "step 5", MODE_MULTIPLAYER),
     ):
-        have = {
-            (row["num_players"], row["resolution"], row["orientation"])
-            for row in verified
-            if row["mode"] == mode
-        }
-        missing = [combo for combo in required if combo not in have]
+        rows = [row for row in verified if row["mode"] == mode]
+        missing = coverage_missing(rows, body)
         steps[step] = {
             "done": not missing,
-            "verified": len(required) - len(missing),
-            "required": len(required),
-            "missing": [list(combo) for combo in missing],
+            "verified": len(rows),
+            "required": len(covering_configs(body)),
+            "missing": missing,
         }
         if missing:
             gaps.append(
-                f"{label} ({mode.replace('_', ' ')}) is incomplete: "
-                f"{len(missing)} of {len(required)} matches are not verified"
+                f"{label} ({mode.replace('_', ' ')}) is incomplete: missing "
+                + "; ".join(missing)
             )
     configs = {}
     for row in moves:

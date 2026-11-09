@@ -2913,13 +2913,17 @@ const Flow = {
   },
 
   matrix() {
+    // A covering set, not the cross product: every allowed player count,
+    // every resolution and both orientations appear at least once.
+    const counts = this.submittedBody.allowed_player_counts;
+    const total = Math.max(counts.length, RESOLUTIONS.length, 2);
     const combos = [];
-    for (const count of this.submittedBody.allowed_player_counts) {
-      for (let r = 0; r < RESOLUTIONS.length; r++) {
-        for (const orientation of ["vertical", "horizontal"]) {
-          combos.push({ count, resolutionIndex: r, orientation });
-        }
-      }
+    for (let i = 0; i < total; i++) {
+      combos.push({
+        count: counts[i % counts.length],
+        resolutionIndex: i % RESOLUTIONS.length,
+        orientation: ["vertical", "horizontal"][i % 2],
+      });
     }
     return combos;
   },

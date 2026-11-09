@@ -51,7 +51,7 @@ def add_row(store, submission_id, **fields):
 def complete_run(store, body, submission_id):
     add_row(store, submission_id, kind="server_check", passed=True)
     for mode in (gt.MODE_PASS_AND_PLAY, gt.MODE_MULTIPLAYER):
-        for count, resolution, orientation in gt.required_matrix(body):
+        for count, resolution, orientation in gt.covering_configs(body):
             add_row(
                 store,
                 submission_id,
@@ -112,7 +112,45 @@ def test_evaluate_reports_each_missing_step(store, body):
     steps, gaps = gt.evaluate(store, SECRET, body)
     assert gaps == []
     assert steps["complete"] is True
-    assert steps["step3"]["verified"] == steps["step3"]["required"] == 10
+    assert steps["step3"]["verified"] == steps["step3"]["required"] == 5
+
+
+def test_coverage_is_per_parameter_not_cross_product(store, body):
+    # The counter game allows only 2 players, so the old cross product would
+    # demand 10 matches; per-parameter coverage needs just 5 (one per
+    # resolution; the orientations and the single count ride along).
+    row = submit(store, body)
+    add_row(store, row["id"], kind="server_check", passed=True)
+    configs = gt.covering_configs(body)
+    assert len(configs) == 5
+    for count, resolution, orientation in configs[:-1]:
+        add_row(
+            store,
+            row["id"],
+            kind="match_verified",
+            mode=gt.MODE_PASS_AND_PLAY,
+            num_players=count,
+            resolution=resolution,
+            orientation=orientation,
+            moves=3,
+        )
+    steps, gaps = gt.evaluate(store, SECRET, body)
+    missing = steps["step3"]["missing"]
+    assert missing == [f"a match at {configs[-1][1]}"]
+    assert any("step 3" in gap and configs[-1][1] in gap for gap in gaps)
+    count, resolution, orientation = configs[-1]
+    add_row(
+        store,
+        row["id"],
+        kind="match_verified",
+        mode=gt.MODE_PASS_AND_PLAY,
+        num_players=count,
+        resolution=resolution,
+        orientation=orientation,
+        moves=3,
+    )
+    steps, _ = gt.evaluate(store, SECRET, body)
+    assert steps["step3"]["done"]
 
 
 def test_evaluate_rejects_changed_payload(store, body):
