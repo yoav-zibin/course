@@ -28,6 +28,11 @@ from game_platform.service import (
 
 logger = logging.getLogger(__name__)
 
+# Compiled game-logic (QuickJS) contexts kept in memory, oldest evicted
+# first. The catalog is far smaller than this; the cap only bounds memory if
+# game versions multiply.
+LOGIC_CACHE_LIMIT = 2000
+
 
 class OutboxNotifier:
     def __init__(self, store, target, wake=None):
@@ -96,7 +101,7 @@ class ScalablePlatform(GamePlatform):
         # GameLogic serializes access to its QuickJS context internally.
         with self._cache_lock:
             if (
-                len(self._logic_cache) >= 64
+                len(self._logic_cache) >= LOGIC_CACHE_LIMIT
                 and (game.id, game.version) not in self._logic_cache
             ):
                 self._logic_cache.pop(next(iter(self._logic_cache)), None)

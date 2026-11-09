@@ -73,6 +73,88 @@ class Document:
         self.client.docs.pop(self.path, None)
 
 
+def _matches(data: dict[str, Any], field_filter: Any) -> bool:
+    value = data.get(field_filter.field_path)
+    target = field_filter.value
+    op = field_filter.op_string
+    try:
+        if op == "==":
+            return value == target
+        if op == "!=":
+            return value != target
+        if op == "<":
+            return value is not None and value < target
+        if op == "<=":
+            return value is not None and value <= target
+        if op == ">":
+            return value is not None and value > target
+        if op == ">=":
+            return value is not None and value >= target
+        if op == "array_contains":
+            return isinstance(value, list) and target in value
+        if op == "array_contains_any":
+            return isinstance(value, list) and any(t in value for t in target)
+        if op == "in":
+            return value in target
+        if op == "not_in":
+            return value not in target
+    except TypeError:
+        return False
+    raise ValueError(f"unsupported filter operator {op!r}")
+
+
+class Query:
+    """The chainable query builder the store uses: where/order_by/limit/
+    start_after, evaluated over the fake's documents in document-name order."""
+
+    def __init__(
+        self,
+        collection: "Collection",
+        filters: tuple = (),
+        limit_count: int | None = None,
+        after_id: str | None = None,
+    ) -> None:
+        self.collection = collection
+        self.filters = filters
+        self.limit_count = limit_count
+        self.after_id = after_id
+
+    def where(self, *, filter: Any) -> "Query":
+        return Query(
+            self.collection, self.filters + (filter,), self.limit_count, self.after_id
+        )
+
+    def order_by(self, field: str) -> "Query":
+        return self  # stream() always sorts by document name.
+
+    def limit(self, count: int) -> "Query":
+        return Query(self.collection, self.filters, count, self.after_id)
+
+    def start_after(self, snapshot: dict) -> "Query":
+        return Query(
+            self.collection, self.filters, self.limit_count, snapshot["__name__"].id
+        )
+
+    def stream(self, transaction: Any = None) -> list[Snapshot]:
+        client = self.collection.client
+        client.queries += 1
+        prefix = self.collection.path + "/"
+        rows = [
+            (path, data)
+            for path, data in sorted(client.docs.items())
+            if path.startswith(prefix) and "/" not in path[len(prefix) :]
+            and all(_matches(data, f) for f in self.filters)
+        ]
+        if self.after_id is not None:
+            rows = [row for row in rows if row[0].rsplit("/", 1)[-1] > self.after_id]
+        if self.limit_count is not None:
+            rows = rows[: self.limit_count]
+        client.reads += len(rows)
+        return [
+            Snapshot(Document(client, path), copy.deepcopy(data)) for path, data in rows
+        ]
+
+
 class Collection:
     def __init__(self, client: "FakeClient", path: str) -> None:
         self.client, self.path = client, path
@@ -80,6 +162,18 @@ class Collection:
 
     def document(self, name: str) -> Document:
         return Document(self.client, f"{self.path}/{name}")
+
+    def where(self, *, filter: Any) -> Query:
+        return Query(self).where(filter=filter)
+
+    def order_by(self, field: str) -> Query:
+        return Query(self)
+
+    def limit(self, count: int) -> Query:
+        return Query(self, limit_count=count)
+
+    def start_after(self, snapshot: dict) -> Query:
+        return Query(self).start_after(snapshot)
 
     def stream(self, transaction: Any = None) -> list[Snapshot]:
         self.client.queries += 1
@@ -108,6 +202,43 @@ class Batch:
         self.operations = []
 
 
+class Transaction:
+    """Stages set/delete calls and applies them on commit, like the real
+    client's transaction object the store drives directly."""
+
+    def __init__(self, client: "FakeClient") -> None:
+        self.client = client
+        self.id = "fake-transaction"
+        self.in_progress = False
+        self._staged: dict[str, dict[str, Any] | None] = {}
+
+    def _begin(self, retry_id: Any = None) -> None:
+        self.in_progress = True
+
+    def set(self, ref: Document, data: dict[str, Any]) -> None:
+        self._staged[ref.path] = copy.deepcopy(data)
+
+    def delete(self, ref: Document) -> None:
+        self._staged[ref.path] = None
+
+    def _commit(self) -> None:
+        for path, data in self._staged.items():
+            self.client.writes += 1
+            if data is None:
+                self.client.docs.pop(path, None)
+            else:
+                self.client.docs[path] = copy.deepcopy(data)
+        self._staged = {}
+        self.in_progress = False
+
+    def _rollback(self) -> None:
+        self._staged = {}
+        self.in_progress = False
+
+    def _clean_up(self) -> None:
+        pass
+
+
 class FakeClient:
     project = "fake"
 
@@ -123,6 +254,12 @@ class FakeClient:
 
     def batch(self) -> Batch:
         return Batch(self)
+
+    def transaction(self) -> Transaction:
+        return Transaction(self)
+
+    def get_all(self, refs: list[Document], transaction: Any = None) -> list[Snapshot]:
+        return [ref.get(transaction=transaction) for ref in refs]
 
 
 def query_store(namespace: str = "test", client: FakeClient | None = None):

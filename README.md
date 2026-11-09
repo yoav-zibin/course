@@ -37,6 +37,7 @@ in bounded, paginated queries.
 | `saving_store.py` | `SavingStore`: an `InMemoryStore` saved in the background (base of the stores below) |
 | `json_file_store.py` | `JsonFileStore`: `InMemoryStore` saved to a JSON file   |
 | `query_store.py` | `QueryStore`: on-demand Firestore storage — paginated reads, transactional writes |
+| `read_cache.py` | The stale-while-revalidate cache in front of `QueryStore`'s non-transactional reads |
 | `scaling_service.py`, `scaling_api.py` | The platform layer and `/v2` routes on top of `QueryStore` |
 | `scaling_tools.py` | Offline maintenance CLI for a query-store namespace (init, export, merges, reports) |
 | `config.py`  | Server config, read from a JSON file                            |
@@ -651,8 +652,11 @@ Instead of the data file, the server can keep its data in
 the data then doesn't depend on one machine's disk, and Firestore's scheduled backups
 replace the file backups. The Firestore store is the query store (`query_store.py`):
 nothing is loaded wholesale at startup — every read is a bounded, paginated query
-and every change is written transactionally as it happens, so memory stays flat
-however large the dataset grows.
+and every change is written transactionally as it happens. Non-transactional reads
+are served from a stale-while-revalidate cache (`read_cache.py`): entries refresh
+in the background at most once a second, so data is never more than about a second
+stale across server processes, and the cache is LRU-evicted at half the machine's
+RAM.
 
 **Layout.** One namespace per deployment keeps everything apart inside a shared
 database: collections are named `<namespace>_<kind>` (`production_v3_users`,

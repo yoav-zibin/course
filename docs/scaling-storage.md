@@ -43,6 +43,16 @@ move again. Only Firestore `Aborted` conflicts are automatically retried, at mos
 five attempts, retaining the original transaction's retry priority. Domain
 conflicts are returned to the caller.
 
+Non-transactional reads go through a stale-while-revalidate cache
+(`read_cache.py`): documents, query results and move batches are served from
+memory, an entry older than one second is refreshed in the background (at most
+one refresh per key per second), and committed local writes are written through
+at commit time, so a value read on the VM that wrote it is never stale and a
+value written by another VM is at most about a second stale. The cache is
+LRU-evicted and capped at half the machine's RAM. Transactional reads never
+touch it — they read through their transaction so conflict detection keeps
+working.
+
 Computer turns and deadlines use durable revision-fenced jobs with leases.
 Workers process a bounded batch; restarting does not scan historical matches.
 Push delivery uses a transactional outbox and supports at-least-once delivery:
@@ -51,7 +61,7 @@ Match jobs move to `failed_jobs` after five failures. Outbox deliveries retry on
 lease expiry. Shared verification records persist expiry, attempts and request
 rate limits. Linked identities and referral codes have transactional lookup
 reservations. New referral codes use 16 hexadecimal characters; migration retains
-old codes. The compiled QuickJS cache is capped at 64 versions.
+old codes. The compiled QuickJS cache is capped at 2000 versions.
 
 The store uses the Firestore SDK's private transaction begin/commit methods to
 support the existing context-manager service boundaries. Emulator and cloud

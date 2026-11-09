@@ -4,9 +4,13 @@ No startup scans and no background snapshot writer. Service operations run in a
 unit of work: reads acquire Firestore transaction versions, writes are buffered
 until the operation succeeds, then committed atomically. A conflicting operation
 returns a conflict; it is never replayed with uncontrolled external side effects.
+Reads outside a unit of work are served by the stale-while-revalidate cache in
+read_cache.py (background refresh at most once a second, LRU-evicted at half
+the machine's RAM); transactional reads never touch it.
 """
 
 import contextlib
+import copy
 import datetime as dt
 import hashlib
 import json
@@ -38,6 +42,7 @@ from game_platform.move_history import MoveHistory
 from game_platform.observability import timed_external
 from game_platform.scaling_library import LibraryEntry
 from game_platform.paging import Page, decode_cursor, encode_cursor, page_size
+from game_platform.read_cache import ReadCache
 from game_platform.translation_bundle import TranslationMemory
 
 TYPES = {
@@ -117,6 +122,28 @@ class _Operation:
         return self.store._local.contexts.pop().__exit__(*args)
 
 
+class _CachedSnapshot:
+    """A query result snapshot served from the read cache: the reference of
+    the document plus its cached payload."""
+
+    __slots__ = ("reference", "_data")
+
+    def __init__(self, reference, data):
+        self.reference = reference
+        self._data = data
+
+    @property
+    def id(self):
+        return self.reference.id
+
+    @property
+    def exists(self):
+        return self._data is not None
+
+    def to_dict(self):
+        return copy.deepcopy(self._data)
+
+
 class _BundleBackend:
     """Saves translation bundles (see translation_bundle.py) in this store's namespace."""
 
@@ -169,6 +196,10 @@ class QueryStore:
         self.namespace = namespace
         self._local = threading.local()
         self.operation_lock = _Operation(self)
+        # Non-transactional reads are served by this stale-while-revalidate
+        # cache (see read_cache.py); transactional reads always go through
+        # their Firestore transaction.
+        self._cache = ReadCache()
         self.translation_memory = TranslationMemory(_BundleBackend(self))
         marker = self.collection("meta").document("schema").get()
         if not marker.exists or marker.to_dict().get("version") != SCHEMA:
@@ -248,6 +279,9 @@ class QueryStore:
                 with timed_external("firestore"):
                     uow["reads"][ref.path] = ref.get(transaction=uow["tx"]).to_dict()
             return uow["reads"][ref.path]
+        return self._cache.get_or_fetch(("doc", ref.path), lambda: self._read_doc(ref))
+
+    def _read_doc(self, ref):
         with timed_external("firestore"):
             return ref.get().to_dict()
 
@@ -258,9 +292,31 @@ class QueryStore:
             return
         self.raw_get(ref)  # Includes absent documents in the transaction read set.
         self._local.uow["writes"][ref.path] = (ref, data)
+        # Write through to the read cache only once the transaction commits
+        # (the unit of work runs its after-callbacks solely on success), and
+        # drop cached query results for the written document's kind: a cached
+        # list cannot be patched precisely, so it is refetched on next use.
+        self._local.uow["after"].append(
+            lambda path=ref.path, data=data: self._cache_committed(path, data)
+        )
+
+    def _cache_committed(self, path, data):
+        self._cache.put(("doc", path), data)
+        kind = self._kind_for_path(path)
+        if kind is None:
+            self._cache.drop_where(lambda k: k[0] == "query")
+        else:
+            self._cache.drop_where(lambda k: k[0] == "query" and k[1] == kind)
+
+    def _kind_for_path(self, path):
+        prefix = self.namespace + "_"
+        for segment in path.split("/"):
+            if segment.startswith(prefix) and segment[len(prefix) :] in COLLECTIONS:
+                return segment[len(prefix) :]
+        return None
 
     def close(self):
-        pass
+        self._cache.close()
 
     def put_experiment(self, experiment):
         self._put("experiments", experiment.id, experiment)
@@ -493,6 +549,34 @@ class QueryStore:
         pass  # Every successful operation has already committed.
 
     def _query(self, kind, filters=(), *, limit=101, after=None):
+        uow = getattr(self._local, "uow", None)
+        if uow is not None:
+            return self._run_query(
+                kind, filters, limit=limit, after=after, transaction=uow["tx"]
+            )
+        try:
+            cache_key = ("query", kind, tuple(filters), limit, after)
+            hash(cache_key)
+        except TypeError:
+            return self._run_query(
+                kind, filters, limit=limit, after=after, transaction=None
+            )
+        rows = self._cache.get_or_fetch(
+            cache_key,
+            lambda: [
+                (doc.id, doc.to_dict())
+                for doc in self._run_query(
+                    kind, filters, limit=limit, after=after, transaction=None
+                )
+            ],
+        )
+        collection = self.collection(kind)
+        return [
+            _CachedSnapshot(collection.document(doc_id), data)
+            for doc_id, data in rows
+        ]
+
+    def _run_query(self, kind, filters, *, limit, after, transaction):
         query = self.collection(kind)
         for field, op, value in filters:
             query = query.where(filter=FieldFilter(field, op, value))
@@ -501,9 +585,8 @@ class QueryStore:
             query = query.start_after(
                 {"__name__": self.collection(kind).document(after)}
             )
-        uow = getattr(self._local, "uow", None)
         with timed_external("firestore"):
-            return list(query.limit(limit).stream(transaction=uow["tx"] if uow else None))
+            return list(query.limit(limit).stream(transaction=transaction))
 
     def page(self, kind, *, filters=(), limit=50, cursor=None, scope=None):
         page_size(limit)
@@ -759,6 +842,26 @@ class QueryStore:
             ref.collection("moves").document(f"{i:012}") for i in range(start, stop)
         ]
         uow = getattr(self._local, "uow", None)
+        if uow is None:
+            # Moves are immutable once written, so the read cache serves them
+            # in one batch; only cache misses reach Firestore (one get_all).
+            by_path = {r.path: r for r in refs}
+            values = self._cache.get_or_fetch_many(
+                [("doc", r.path) for r in refs],
+                lambda keys: {
+                    ("doc", snap.reference.path): snap.to_dict()
+                    for snap in self.client.get_all(
+                        [by_path[path] for _, path in keys]
+                    )
+                },
+            )
+            result = []
+            for move_ref in refs:
+                data = values[("doc", move_ref.path)]
+                if data is None:
+                    raise RuntimeError("missing persisted move")
+                result.append(MOVE_ADAPTER.validate_json(data["json"]))
+            return result
         pending = [
             r
             for r in refs
