@@ -3,6 +3,9 @@ fastapi>=0.115,<1
 pydantic>=2.9,<3
 jsonschema>=4.23,<5
 uvicorn>=0.34,<1
+# Needed by oauth.py for the Google tokeninfo call (it used to arrive
+# transitively with the deleted Model API client's dependency).
+httpx>=0.28,<1
 # Needed for web push notifications (push.py): RFC 8030 delivery signed with VAPID,
 # and the EC key handling behind it.
 pywebpush>=1.9,<3
