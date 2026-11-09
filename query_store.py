@@ -84,6 +84,7 @@ INTERNAL_COLLECTIONS = frozenset(
         "game_popularity",
         "feedback_limits",
         "feedback_targets",
+        "game_test_traces",
     }
 )
 COLLECTIONS = frozenset(TYPES) | INTERNAL_COLLECTIONS

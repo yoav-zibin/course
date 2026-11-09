@@ -4,26 +4,25 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Test a game before you submit it — BuildPlay</title>
-<link rel="stylesheet" href="/static/game-test.css?v=1">
+<link rel="stylesheet" href="/static/game-test.css?v=2">
 </head>
 <body>
 <main>
 <h1>Test a game before you submit it</h1>
 <p>
-  Paste your game below and run the same checks the platform runs when you
-  submit it with <code>POST /games</code>. Then play it here before you send it.
-  See the
-  <a href="https://docs.google.com/document/d/1C2_jQ47k79jpyWW9WDPmfdTxOqL94LRgchcD3bhvuY4/edit">guide to writing a game for BuildPlay</a>
+  Fill in your game below and run the five-step test flow. The server records
+  every step, and <code>POST /games</code> only accepts the game once the flow
+  is complete for the exact payload you submit — if the code changes after
+  step 1, the run starts over. See the
+  <a href="https://github.com/yoav-zibin/course/blob/main/GAME_DEVELOPMENT_GUIDE.md">guide to writing a game for BuildPlay</a>
   for what each field means.
 </p>
 <p class="note">
-  What this page does <strong>not</strong> check: how much memory the server
-  code uses (the platform allows 64 MiB per call), the exact 100&nbsp;ms
-  per-call time limit (this page allows 5&nbsp;s per call, 10&nbsp;s to load),
-  translations, images, or the tutorial — those are validated only when you
-  submit. The random walks here use this page's own seeds, so a failing seed
-  replays the walk on this page only; the server runs its own walks at submit
-  time.
+  What the local pre-checks on this page do <strong>not</strong> check: how
+  much memory the server code uses (the platform allows 64 MiB per call) and
+  the exact 100&nbsp;ms per-call time limit (this page allows 5&nbsp;s per
+  call, 10&nbsp;s to load). Step 2 runs the server-side checks on the server,
+  with the platform's real limits.
 </p>
 
 <section aria-labelledby="inputs-heading">
@@ -32,6 +31,20 @@
   <button type="button" id="load-example">Load the counter example</button>
   <span class="hint">Fills every field with the “Count to three” example, so you can see the page working.</span>
 </p>
+<div class="field-row">
+  <div class="field">
+    <label for="game-name">Game name (unique)</label>
+    <input id="game-name" type="text" placeholder="e.g. Count to three">
+  </div>
+  <div class="field">
+    <label for="game-secret">Secret string (the same <code>game_addition_request_id_and_secret</code> you will submit with)</label>
+    <input id="game-secret" type="text" placeholder="16–200 characters, your own random string">
+  </div>
+</div>
+<div class="field">
+  <label for="description">Short description</label>
+  <textarea id="description" spellcheck="false" rows="2" placeholder="One or two sentences shown next to the game"></textarea>
+</div>
 <div class="field">
   <label for="server-code">Server code (the <code>game</code> object)</label>
   <textarea id="server-code" spellcheck="false" rows="12" placeholder="const game = { newMatch(ctx) { ... }, applyMove(state, playerId, move) { ... }, ... }"></textarea>
@@ -67,17 +80,137 @@
     <label for="allowed-player-counts">Allowed player counts</label>
     <input id="allowed-player-counts" type="text" value="2" placeholder="e.g. 2 or 1, 2, 4">
   </div>
+  <div class="field">
+    <label for="language">Source language of the texts</label>
+    <select id="language">
+      <option value="en" selected>English (en)</option>
+      <option value="es">Spanish (es)</option>
+      <option value="fr">French (fr)</option>
+      <option value="de">German (de)</option>
+      <option value="zh">Chinese (zh)</option>
+      <option value="ja">Japanese (ja)</option>
+      <option value="ar">Arabic (ar)</option>
+      <option value="he">Hebrew (he)</option>
+    </select>
+  </div>
   <div class="field checkbox">
     <label><input id="allows-leave" type="checkbox"> A player may leave mid-match</label>
     <label><input id="allows-join" type="checkbox"> A player may join mid-match</label>
   </div>
 </div>
+<div class="field">
+  <label for="rules-text">Rules text (how the game works, for players and for the platform)</label>
+  <textarea id="rules-text" spellcheck="false" rows="5"></textarea>
+</div>
+<div class="field">
+  <label for="ui-text">UI instructions (how the client presents the game)</label>
+  <textarea id="ui-text" spellcheck="false" rows="5"></textarea>
+</div>
+<div class="field-row">
+  <div class="field">
+    <label for="tutorial-text">Tutorial text</label>
+    <textarea id="tutorial-text" spellcheck="false" rows="4"></textarea>
+  </div>
+  <div class="field">
+    <label for="tutorial-html">Tutorial HTML</label>
+    <textarea id="tutorial-html" spellcheck="false" rows="4"></textarea>
+  </div>
+</div>
+<div class="field">
+  <label for="images-json">Images (JSON array of <code>{caption, svg}</code>, 4–6, the 16:9 cover first)</label>
+  <textarea id="images-json" spellcheck="false" rows="6" placeholder="[{&quot;caption&quot;: ..., &quot;svg&quot;: ...}]"></textarea>
+</div>
+<div class="field">
+  <label for="translations-json">Translations (JSON object keyed by the 7 locales other than the source language)</label>
+  <textarea id="translations-json" spellcheck="false" rows="6" placeholder="{&quot;es&quot;: {&quot;display_name&quot;: ..., &quot;short_description&quot;: ..., &quot;game_logic_rules&quot;: ..., &quot;game_ui_rules&quot;: ..., &quot;tutorial_strings&quot;: {...}, &quot;client_strings&quot;: {...}}, ...}"></textarea>
+</div>
+</section>
+
+<section aria-labelledby="flow-heading">
+<h2 id="flow-heading">The test flow</h2>
+<p>
+  Follow the steps in order. Every step is recorded on the server under your
+  secret. If a step fails, fix the code and start again from step 1 — the
+  inputs must not change during a run.
+</p>
+<div id="flow-banner" class="flow-banner" hidden></div>
+
+<div class="step-card" id="step-card-1">
+  <h3>Step 1 — Submit the inputs</h3>
+  <p>Send everything above (both code fields, the schemas, the unit tests and the other parameters) to the server, which stores it with the time of the call.</p>
+  <p>
+    <button type="button" id="step1-submit">Submit the inputs</button>
+    <span id="step1-status" class="check-status" role="status"></span>
+  </p>
+</div>
+
+<div class="step-card" id="step-card-2">
+  <h3>Step 2 — Server code tests</h3>
+  <p>The server runs its tests on the submitted server code: the unit test cases, the settlement and move-agreement probes, and the random walks (each function is called twice to prove it is deterministic). The run's metadata — how long it took, how many states were visited, how many terminal states were reached — is recorded.</p>
+  <p>
+    <button type="button" id="step2-run" disabled>Run the server tests</button>
+    <span id="step2-status" class="check-status" role="status"></span>
+  </p>
+  <ul id="step2-results" class="check-results"></ul>
+</div>
+
+<div class="step-card" id="step-card-3">
+  <h3>Step 3 — Pass-and-play, every screen size</h3>
+  <p>Play pass-and-play matches to the very end (until there is no next turn) in every combination: each of the 5 screen sizes, vertical and horizontal, for each allowed number of players. When a match ends, the page sends its states and moves to the server, which replays them with the step 1 server code and checks every transition and that the match truly ended.</p>
+  <p>
+    <button type="button" id="step3-start" disabled>Start step 3</button>
+    <span id="step3-status" class="check-status" role="status"></span>
+  </p>
+  <p id="step3-progress" class="hint"></p>
+  <p id="step3-instruction" class="step-instruction"></p>
+</div>
+
+<div class="step-card" id="step-card-4">
+  <h3>Step 4 — Play against the computer</h3>
+  <p>Play against the computer in 5 random configurations (screen size, number of players, orientation, and which seat you play), up to 100 moves per match. Every move is recorded on the server.</p>
+  <p>
+    <button type="button" id="step4-start" disabled>Start step 4</button>
+    <span id="step4-status" class="check-status" role="status"></span>
+  </p>
+  <p id="step4-progress" class="hint"></p>
+  <p id="step4-instruction" class="step-instruction"></p>
+</div>
+
+<div class="step-card" id="step-card-5">
+  <h3>Step 5 — Multiplayer, every screen size</h3>
+  <p>Like step 3, but multiplayer: one frame per player, each showing only that player's view. Play every seat from its own frame until the match is over, in every combination of player count, screen size and orientation. Each finished match is verified on the server the same way as step 3.</p>
+  <p>
+    <button type="button" id="step5-start" disabled>Start step 5</button>
+    <span id="step5-status" class="check-status" role="status"></span>
+  </p>
+  <p id="step5-progress" class="hint"></p>
+  <p id="step5-instruction" class="step-instruction"></p>
+</div>
+
+<div class="step-card" id="flow-finish" hidden>
+  <h3>Testing complete</h3>
+  <p>
+    All five steps passed for exactly this payload. Submit it with
+    <code>POST /games</code> — the server checks the recorded traces for your
+    secret, verifies the payload is identical to the tested inputs, and
+    publishes the game.
+  </p>
+  <div class="field">
+    <label for="submission-json">The exact submission payload (JSON)</label>
+    <textarea id="submission-json" readonly spellcheck="false" rows="10"></textarea>
+  </div>
+</div>
 </section>
 
 <section aria-labelledby="checks-heading">
-<h2 id="checks-heading">Platform checks</h2>
+<h2 id="checks-heading">Local pre-checks (optional)</h2>
 <p>
-  <button type="button" id="run-checks">Run the platform checks</button>
+  The same checks, run instantly in this page — a fast pre-flight before
+  step 2 runs them on the server. The page's own seeds are used for the
+  random walks here.
+</p>
+<p>
+  <button type="button" id="run-checks">Run the local checks</button>
   <span id="check-status" class="check-status" role="status"></span>
 </p>
 <ul id="check-results" class="check-results"></ul>
@@ -158,6 +291,6 @@
 <pre id="log" class="log" aria-live="polite"></pre>
 </section>
 </main>
-<script src="/static/game-test.js?v=1"></script>
+<script src="/static/game-test.js?v=2"></script>
 </body>
 </html>

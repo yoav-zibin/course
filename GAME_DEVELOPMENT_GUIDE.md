@@ -339,39 +339,37 @@ Every check below runs before anything is written. A failure returns 422 and not
 
 ## 9. How to test before you submit
 
-Use the test page at **https://buildplay.fun/game-test** before you submit. It runs the same checks the platform runs at submit time, and lets you play the game in the browser. Do the whole section before you POST.
+Testing is a **linear, five-step flow** on the test page at **https://buildplay.fun/game-test**, and it is not optional: the server records every step under your secret string, and `POST /games` refuses the game until it finds a complete run whose step 1 inputs are **identical** to the payload you submit. Follow the steps in order, do not change any input mid-run — if a step fails, fix the code and start again from step 1.
 
-**What to paste.** The page has a field for each input the platform validates:
+**What to paste.** The page has a field for everything the submission carries:
 
-- **Server code** — the `game` object (the same code you will submit).
-- **Client code** — the game page, including its `i18n-strings` block.
-- **State, view, and move schemas** — the three JSON schemas you will submit.
-- **Unit test cases** — a JSON list of cases, or the whole `unit_tests` object. Needed for the approved-examples check and the move-agreement check; without them those two checks are skipped.
-- **Allowed player counts** — e.g. `2`, or `1, 2, 4`.
-- **Leave / join** — tick the boxes if a player may leave or join mid-match.
+- **Game name and secret string** — the name, and the same `game_addition_request_id_and_secret` you will submit with. The traces are recorded under this secret; it is how the server matches the run to the submission.
+- **Short description**, **source language**, **rules text**, **UI instructions**, **tutorial** (text and HTML), **images** (the JSON array), and **translations** (the JSON object for the 7 non-source locales).
+- **Server code** — the `game` object. **Client code** — the game page, including its `i18n-strings` block.
+- **State, view, and move schemas** — the three JSON schemas.
+- **Unit test cases** — a JSON list of cases, or the whole `unit_tests` object. Needed for the approved-examples check and the move-agreement check.
+- **Allowed player counts** — e.g. `2`, or `1, 2, 4` — and the **leave / join** boxes if a player may leave or join mid-match.
 
-If you are unsure what a field should contain, read the guide section for it first — the page validates the same shapes the endpoint does.
+**Step 1 — Submit the inputs.** Press **Submit the inputs**. The page assembles the exact payload you will later POST and sends it to the server, which stores it with the time of the call. From here on, the inputs are frozen: editing any field restarts the run.
 
-**Run the checks.** Press **Run the platform checks**. The button shows that the test is running; when it finishes, the page says plainly whether all checks passed or which ones failed, with the failure details. It runs, in the platform's order: approved examples, settlement probes (what happens when a player leaves), move agreement (every move the generators return must be accepted by `applyMove`), localization (the translation lint), and random walks (up to 1,000 walks of up to 1,000 moves, with fuzz moves, joins, and leaves). A failing random walk reports its seed, so you can replay it.
+**Step 2 — Server code tests.** Press **Run the server tests**. The server runs its tests on the submitted server code — the unit test cases (approved examples), the settlement probes, the move-agreement probes, and the random walks, calling each function twice to prove it is deterministic and idempotent — and records the run's metadata: how long it took, how many walks and moves it made, how many states were visited, and how many terminal states were reached. (The page's optional **local pre-checks** run the same checks instantly in the browser first, with the page's own limits — 5 s per call instead of the platform's 100 ms — so use them to iterate, but step 2 on the server is the run that counts.)
 
-What the page does **not** check: how much memory the server code uses (the platform allows 64 MiB per call), the exact 100 ms per-call time limit (the page allows 5 s per call, 10 s to load), translations, images, or the tutorial — those are validated only when you submit. The page's random walks also use its own seeds, so a failing seed replays the walk on the page, not on the server.
+**Step 3 — Pass-and-play, every screen size.** Press **Start step 3**, then play each pass-and-play match the page sets up **to the very end** — until there is no next turn. The page walks you through every combination: each of the 5 screen sizes (two phones, two tablets, the laptop), vertical and horizontal, for each allowed number of players (a game that allows 2, 4 and 8 players does the whole matrix for each count). Every move is recorded on the server as it happens, and when a match ends the page sends all its states and moves to the server, which replays them with the step 1 server code and verifies every transition and that the match ended in a terminal state. A match the server cannot verify fails the run.
 
-**Play it — 100 moves, in many combinations.** After the checks pass, verify the server-side code by playing the game on the same page:
+**Step 4 — Play against the computer.** Press **Start step 4** and play 5 matches against the computer, in the random configurations the page picks (screen size, number of players, orientation, and which seat you play), up to 100 moves each. Every move is recorded the same way.
 
-1. Pick a mode (single player pass-and-play, single player against computers, or multiplayer), the number of players, and your seat (or watch as a viewer), then start a match.
-2. Play **100 moves, or until the game ends** — whichever comes first. Watch the read-only state, view, and last-move panels as you go: the view must show each player only what they may see, the turn must pass to the right seats, and a move must never be rejected that the game itself offered.
-3. Do it **in many combinations, and select each option in every dropdown at least once**: every mode, every player count the game allows, every seat (including the viewer), every screen size (the two phones, the two tablets, the laptop), and both orientations. Use the back and forward buttons to step through the match history, and try leaving and joining when the game allows it.
-4. Watch the log: every `make_move` the client sends and every `state_changed` the page sends back is logged there and to the browser console. If the client posts anything else, or a v1-style `make_move` with a `new_state`, the page says so — fix the client before submitting.
+**Step 5 — Multiplayer, every screen size.** Press **Start step 5**. Like step 3 — every combination of player count, screen size and orientation — but the page opens **one frame per player**, each showing only that player's view, the way real multiplayer works. Play every seat from its own frame until the match is over; each finished match is sent to the server and verified exactly as in step 3.
 
-Only when the checks pass **and** you have played it through in those combinations should you submit.
+**Submit.** When all five steps pass, the page shows the exact submission payload. POST it, unchanged, to `/games` with the same secret. The server finds the traces for the secret, takes the last step 1 submission, checks the payload is identical to it, and validates that steps 2–5 were completed for it. Then the usual submit-time verification runs, and a 201 publishes the game. A 422 that says the testing is incomplete names the missing steps — go back to the page and finish them (if the code changed at all, that means starting again from step 1).
 
-The manual checklist behind the page — do these even if the page is green, because the page cannot check them all:
+While you play, watch the read-only state, view, and last-move panels: the view must show each player only what they may see, the turn must pass to the right seats, and a move must never be rejected that the game itself offered. Watch the log too: every `make_move` the client sends and every `state_changed` the page sends back is logged there and to the browser console. If the client posts anything else, or a v1-style `make_move` with a `new_state`, the page says so — fix the client before submitting.
+
+The manual checklist behind the page — do these even if the flow is green, because the page cannot check them all:
 
 1. **Write the unit tests first, from the rules.** Pick the initial, intermediate, and terminal positions, compute the expected states, turns, payouts, and views by hand, and write them down before writing server code. A test written from a run of your own code cannot catch your own misunderstanding.
 2. **Check the limits.** Time your slowest call (usually `computerMove` on an empty board, and `playerLeft` with `estimateWinChance`). If a call can exceed 100 ms, memoize or prune the search. If a state can grow without bound, cap it.
 3. **Check the sizes.** Whole request ≤ 900,000 bytes; each code field ≤ 200,000 bytes; each SVG ≤ 120,000 bytes. Keep code tight and SVGs simple — schematic illustrations, not screenshots.
 4. **Validate against the schema.** Fetch `GET https://buildplay.fun/games/schema` and check your payload against it (field names, types, lengths, the exact 7 translation locales).
-5. **Submit.** The endpoint is the final validator: a 201 means the game is published. A 422 means the game is not in the database — read the failure report and go to section 10. Never claim a game is published unless you got a 201 and saved the returned id.
 
 A complete, minimal, working request — a counter game, "Count to three" — is in the repository at `examples/agent-game.json` (raw: `https://raw.githubusercontent.com/yoav-zibin/course/main/examples/agent-game.json`). Read it end to end before writing your own payload, and press **Load the counter example** on the test page to see the page working with it. It is the smallest payload that passes every check, and the fastest way to learn the exact shapes.
 

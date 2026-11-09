@@ -11,7 +11,8 @@
     ],
     "portal.js": [
       "Join an open match of any game",
-      "Couldn't redraw after a language change:", "Couldn't send the game its new language:",
+      "Couldn't redraw after a language change:",
+      "Couldn't send the game its new language:",
       "Random"
     ],
     "portal-offline.js": [
@@ -80,8 +81,8 @@
     "console.js": 20,
     "feedback.js": 18,
     "stats.js": 77,
-    "game-test.html": 58,
-    "game-test.js": 52,
+    "game-test.html": 105,
+    "game-test.js": 71,
     "game-test-host.js": 9
   }
 }

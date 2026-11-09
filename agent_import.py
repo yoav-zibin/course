@@ -257,6 +257,14 @@ def make_router(platform_dependency, caller_dependency):
             except ValidationError as exc:
                 raise HTTPException(422, [{'loc': list(e['loc']), 'msg': e['msg'], 'type': e['type']}
                                           for e in exc.errors(include_input=False, include_context=False)]) from exc
+            # The game must have passed the full /game-test flow with this
+            # secret, for exactly this payload, before it can be submitted.
+            from game_platform import game_traces
+            from game_platform.service import InvalidRequestError
+            try:
+                await run_in_threadpool(game_traces.assert_complete, platform, body)
+            except InvalidRequestError as exc:
+                raise HTTPException(422, str(exc)) from exc
             package = await run_in_threadpool(verify_submission, body)
             # Seed the portal bundle with the supplied translations first, so a failure
             # here leaves nothing behind; the game itself is created right after.

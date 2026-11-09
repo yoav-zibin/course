@@ -1213,17 +1213,26 @@ Making a new move after undo clears the redo branch. Restart resets the session.
 ### The game-test page
 
 `/game-test` is a static page for game authors (see GAME_DEVELOPMENT_GUIDE.md
-section 9). Paste a game's server code, client code, the three JSON schemas,
-unit-test cases, allowed player counts and the leave/join flags, then press
-**Run the platform checks**: the page runs the same five checks the POST /games
-import runs (approved examples, settlement probes, move agreement,
-localization, random walks) in the browser and reports failures with their
-reproductions. It also emulates matches — pass-and-play, against computers, or
-multiplayer with a chosen seat or as a spectator — at phone, tablet and laptop
-sizes in both orientations, with back/forward stepping through the match
-history and a log of every `state_changed` / `make_move` exchange. Nothing is
-stored on the server; translations, images and the tutorial are only validated
-at submit time.
+section 9). The author pastes the full submission payload (name, secret,
+description, both code fields, the three JSON schemas, unit-test cases,
+rules/UI text, tutorial, images and translations) and follows a linear
+five-step flow: (1) the payload is stored on the server, (2) the server runs
+its server-code tests and records the run's metadata, (3) pass-and-play
+matches are played to the end in every screen size and orientation and each
+is verified by replaying its states and moves on the server, (4) matches
+against the computer are played in 5 random configurations, and (5) the same
+matrix as (3) is played multiplayer, one frame per player, and verified the
+same way. Every step leaves rows in the `game_test_traces` collection
+(`game_traces.py`), keyed by the submission secret's hash: a submission row,
+a server-check row, one move row per played move (creation time, an md5 of
+the state, view and move, and the UI configuration), and one row per verified
+match. POST /games checks those traces before accepting a game: the last
+step 1 payload must be identical to the submitted one and steps 2–5 must be
+complete. The page also keeps its local pre-checks (the same five import
+checks, run in the browser) and free play — pass-and-play, against computers,
+or multiplayer with a chosen seat or as a spectator — with back/forward
+stepping through the match history and a log of every `state_changed` /
+`make_move` exchange.
 
 ## UI tests and CI/CD
 

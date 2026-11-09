@@ -85,6 +85,15 @@ is inserted. The checks, in order:
    `language` one of the 8 supported locales, `allowed_player_counts`
    unique integers 1–10, each code field 1–200,000 chars, 4–6 images,
    `game_addition_request_id_and_secret` 16–200 chars, required.
+2a. **Recorded test flow.** The game must have completed the five-step test
+   flow on `/game-test` under this secret (guide §9): the endpoint looks up
+   the traces recorded for `game_addition_request_id_and_secret`, takes the
+   last step 1 submission, requires this payload to be identical to it, and
+   requires steps 2–5 complete for it (server code tests passed; a verified
+   pass-and-play and multiplayer match for every player count × screen size
+   × orientation; at least 5 recorded against-the-computer configurations).
+   A shortfall returns 422 naming the missing steps. Any code change after
+   step 1 therefore needs a fresh run before resubmitting.
 3. **Translations — all 8 languages.** `translations` must cover exactly the
    7 languages other than the game's own language. Each entry is checked for
    exact key coverage of the client string table and the tutorial vocabulary,

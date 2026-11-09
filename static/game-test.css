@@ -89,3 +89,34 @@ button#run-checks, button#new-match {
   word-break: break-word;
   font-size: 0.85rem;
 }
+.step-card {
+  border: 1px solid #d8d8d2;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  background: #fff;
+}
+.step-card h3 { margin: 4px 0 8px; font-size: 1.05rem; }
+.step-card.active { border-left: 5px solid #1c6dd9; }
+.step-card.done { border-left: 5px solid #1e7a34; }
+.step-card.failed { border-left: 5px solid #b3261e; }
+.flow-banner {
+  background: #fdecea;
+  border: 1px solid #b3261e;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 12px 0;
+  color: #7a1a14;
+}
+.step-instruction { font-weight: 600; }
+#game-box.multi { transform: none; overflow: visible; background: transparent; border: 0; }
+.seat-frame { margin: 0 0 16px; }
+.seat-frame .seat-name { font-weight: 600; margin: 0 0 4px; }
+.seat-box {
+  position: relative;
+  overflow: hidden;
+  transform-origin: top left;
+  background: #fff;
+  border: 1px solid #b9b9b4;
+  border-radius: 6px;
+}

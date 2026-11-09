@@ -1658,6 +1658,72 @@ function readInputs() {
   };
 }
 
+function fieldValue(id) {
+  const el = $(id);
+  return el ? el.value : "";
+}
+
+// Assemble the exact POST /games payload from every input field. This is
+// what step 1 of the test flow submits to the server, and what the author
+// later POSTs to /games unchanged — any difference restarts the run.
+function buildImportBody() {
+  const { inputs, errors } = readInputs();
+  const jsonField = (id, label, fallback) => {
+    const text = fieldValue(id).trim();
+    if (!text) return fallback;
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      errors.push(`the ${label} is not valid JSON: ${e.message}`);
+      return fallback;
+    }
+  };
+  const images = jsonField("images-json", "images", []);
+  if (!Array.isArray(images)) errors.push("the images must be a JSON array");
+  const translations = jsonField("translations-json", "translations", {});
+  if (typeof translations !== "object" || translations === null || Array.isArray(translations)) {
+    errors.push("the translations must be a JSON object keyed by locale");
+  }
+  const name = fieldValue("game-name").trim();
+  if (!name) errors.push("give the game a name");
+  const description = fieldValue("description").trim();
+  if (!description) errors.push("write a short description");
+  const rulesText = fieldValue("rules-text").trim();
+  if (!rulesText) errors.push("write the rules text");
+  const uiText = fieldValue("ui-text").trim();
+  if (!uiText) errors.push("write the UI instructions");
+  const secret = fieldValue("game-secret").trim();
+  if (secret.length < 16 || secret.length > 200) {
+    errors.push("the secret string must be 16–200 characters");
+  }
+  const body = {
+    name,
+    description,
+    allowed_player_counts: inputs.allowedPlayerCounts,
+    client_code: inputs.clientCode,
+    server_code: inputs.serverCode,
+    rules: rulesText,
+    ui_instructions: uiText,
+    tutorial: {
+      text: fieldValue("tutorial-text"),
+      html: fieldValue("tutorial-html"),
+    },
+    images,
+    unit_tests: {
+      state_schema: inputs.schemas.state || {},
+      view_schema: inputs.schemas.view || {},
+      move_schema: inputs.schemas.move || {},
+      cases: inputs.cases || [],
+    },
+    translations,
+    game_addition_request_id_and_secret: secret,
+    language: fieldValue("language") || "en",
+    allows_leave_mid_match: inputs.allowsLeaveMidMatch,
+    allows_join_mid_match: inputs.allowsJoinMidMatch,
+  };
+  return { body, errors };
+}
+
 async function runChecks(inputs, onProgress, createHost) {
   const results = [];
   const push = (name, status, details) => {
@@ -1801,6 +1867,9 @@ const Player = {
   match: null,
   frame: null,
   frameReady: null,
+  frames: [],
+  multiFrame: false,
+  messageSeat: null,
   autoPlaying: false,
 
   mode() {
@@ -1891,18 +1960,57 @@ const Player = {
   },
 
   loadClient(code) {
-    const iframe = document.createElement("iframe");
-    iframe.className = "game-frame";
-    iframe.setAttribute("sandbox", "allow-scripts");
-    iframe.setAttribute("title", "game under test");
-    iframe.srcdoc =
-      code + `<script>(${fitGameViewport.toString()})()</script>`;
     const box = $("game-box");
-    box.replaceChildren(iframe);
-    this.frame = iframe;
-    this.frameReady = new Promise((resolve) =>
-      iframe.addEventListener("load", resolve, { once: true }),
-    );
+    box.replaceChildren();
+    box.classList.toggle("multi", this.multiFrame);
+    this.frames = [];
+    // In multiplayer test-flow matches there is one frame per seat, each
+    // showing only that seat's view; everywhere else a single frame follows
+    // the acting seat, as before.
+    const seats = this.multiFrame
+      ? this.match.players.map((_, i) => i)
+      : [null];
+    const loads = [];
+    for (const seat of seats) {
+      const iframe = document.createElement("iframe");
+      iframe.className = "game-frame";
+      iframe.setAttribute("sandbox", "allow-scripts");
+      iframe.setAttribute(
+        "title",
+        seat === null
+          ? "game under test"
+          : `game under test — player ${seat + 1}`,
+      );
+      iframe.srcdoc =
+        code + `<script>(${fitGameViewport.toString()})()</script>`;
+      const entry = { frame: iframe, seat, viewport: null, box: null, holder: null };
+      if (seat === null) {
+        box.appendChild(iframe);
+      } else {
+        const holder = document.createElement("div");
+        holder.className = "seat-frame";
+        const name = document.createElement("p");
+        name.className = "seat-name";
+        name.textContent =
+          `Player ${seat + 1} (seat ${seat}) — this frame only sees that player's view`;
+        const seatBox = document.createElement("div");
+        seatBox.className = "seat-box";
+        seatBox.appendChild(iframe);
+        holder.appendChild(name);
+        holder.appendChild(seatBox);
+        box.appendChild(holder);
+        entry.box = seatBox;
+        entry.holder = holder;
+      }
+      loads.push(
+        new Promise((resolve) =>
+          iframe.addEventListener("load", resolve, { once: true }),
+        ),
+      );
+      this.frames.push(entry);
+    }
+    this.frame = this.frames[0].frame;
+    this.frameReady = Promise.all(loads);
     this.applyResolution();
   },
 
@@ -1912,24 +2020,27 @@ const Player = {
   // resolution, so there is no auto-height growth here.
   viewport: null,
 
-  applyViewport() {
-    const frame = this.frame;
-    const view = this.viewport;
-    if (!frame || !view || !view.width || !view.height) return;
-    const { width, height, scale } = view;
-    Object.assign(frame.style, {
-      width: Math.ceil(width / scale) + "px",
-      height: Math.ceil(height / scale) + "px",
-      minHeight: "0",
-      maxWidth: "none",
-      flex: "none",
-      transformOrigin: "top left",
-      transform: `scale(${scale})`,
-    });
+  applyViewport(entry) {
+    const entries = entry ? [entry] : this.frames;
+    for (const e of entries) {
+      const frame = e.frame;
+      const view = e.viewport || this.viewport;
+      if (!frame || !view || !view.width || !view.height) continue;
+      const { width, height, scale } = view;
+      Object.assign(frame.style, {
+        width: Math.ceil(width / scale) + "px",
+        height: Math.ceil(height / scale) + "px",
+        minHeight: "0",
+        maxWidth: "none",
+        flex: "none",
+        transformOrigin: "top left",
+        transform: `scale(${scale})`,
+      });
+    }
   },
 
-  fitViewport(message) {
-    const view = this.viewport;
+  fitViewport(message, entry) {
+    const view = (entry && entry.viewport) || this.viewport;
     if (!view || !this.frame) return;
     const { width, height, viewport_width: vw, viewport_height: vh } = message;
     if (![width, height, vw, vh].every((n) => Number.isFinite(n) && n > 0)) return;
@@ -1948,13 +2059,20 @@ const Player = {
     if (view.scale - scale < .001) return;
     view.scale = scale;
     view.passes++;
-    this.applyViewport();
+    this.applyViewport(entry);
   },
 
   async newMatch() {
     const { errors } = readInputs();
     if (errors.length) {
       Log.add("error", errors.join("; "));
+      return;
+    }
+    if (Trace.session && !Flow.driving) {
+      Log.add(
+        "error",
+        "a test-flow match is in progress — finish it before starting a free match",
+      );
       return;
     }
     const inputs = readInputs().inputs;
@@ -2002,6 +2120,7 @@ const Player = {
     this.match.state = result.state;
     this.match.turn = result.turn;
     this.snapshot(null, null);
+    Trace.matchStarted();
     await this.sendStateChanged(null);
     this.refreshOutputs();
     this.refreshButtons();
@@ -2029,11 +2148,8 @@ const Player = {
     m.lastEvent = event === undefined ? null : event;
   },
 
-  async viewForSeat() {
+  async viewForPlayer(playerId) {
     if (!this.host.has("viewFor")) return undefined;
-    const seat = this.actingSeat();
-    const playerId =
-      seat === null ? null : this.match.players[seat].id;
     try {
       const { result } = await this.host.call(
         "viewFor",
@@ -2049,8 +2165,39 @@ const Player = {
     }
   },
 
+  async viewForSeat() {
+    const seat = this.actingSeat();
+    const playerId =
+      seat === null ? null : this.match.players[seat].id;
+    return this.viewForPlayer(playerId);
+  },
+
+  // The view a player was looking at when they chose a move, recomputed
+  // with the move's own ctx and seed so a trace row can hash it.
+  async traceView(state, playerId, moveNumber) {
+    if (!this.host || !this.host.has("viewFor")) return clone(state);
+    const ctx = {
+      players: this.ctx().players,
+      pot: this.match.pot,
+      move_count: moveNumber,
+    };
+    try {
+      const { result } = await this.host.call(
+        "viewFor",
+        [state, playerId],
+        ctx,
+        (this.match.matchSeed + moveNumber) % 4294967296,
+        Date.now(),
+      );
+      return result;
+    } catch (e) {
+      return clone(state);
+    }
+  },
+
   async sendStateChanged(replay) {
     if (!this.frame || !this.match) return;
+    if (this.multiFrame) return this.sendStateChangedMulti(replay);
     const m = this.match;
     const view = await this.viewForSeat();
     m.view = view;
@@ -2090,6 +2237,49 @@ const Player = {
     this.refreshButtons();
   },
 
+  // Multiplayer test-flow matches: every seat's frame gets the same state
+  // with its own view and its own my_player_index, like real multiplayer.
+  async sendStateChangedMulti(replay) {
+    const m = this.match;
+    for (const entry of this.frames) {
+      const seat = entry.seat;
+      const view = await this.viewForPlayer(m.players[seat].id);
+      if (seat === 0) m.view = view;
+      const message = {
+        type: "state_changed",
+        state: m.state,
+        view,
+        players: m.players.map((p, i) => ({
+          player_index: i,
+          player_id: p.id,
+          kind: p.kind,
+          name: p.display_name,
+          picture_url: p.picture_url,
+        })),
+        turn_of_player_indices:
+          m.turn === null ? null : m.turn.map((id) => this.seatIndexOf(id)),
+        status: m.status,
+        end_reason: m.endReason,
+        move_count: m.moveCount,
+        my_player_index: seat,
+        token_pot: m.pot,
+        replay,
+        strings: this.strings,
+        locale: "en",
+        direction: "ltr",
+      };
+      message.acting_for_player_index =
+        Array.isArray(message.turn_of_player_indices) &&
+        message.turn_of_player_indices.includes(seat)
+          ? seat
+          : null;
+      entry.frame.contentWindow.postMessage(message, "*");
+      Log.add("api", `state_changed (seat ${seat}) → ${JSON.stringify(message)}`);
+    }
+    this.refreshOutputs();
+    this.refreshButtons();
+  },
+
   async onMakeMove(message) {
     if (!this.match || !this.host) return;
     if (message.new_state !== undefined || message.next_turn_player_indices !== undefined) {
@@ -2107,7 +2297,8 @@ const Player = {
       );
       return;
     }
-    const seat = this.actingSeat();
+    const seat = this.messageSeat != null ? this.messageSeat : this.actingSeat();
+    this.messageSeat = null;
     if (seat === null) {
       Log.add("info", "you are watching as a viewer; pick a seat to play");
       return;
@@ -2118,6 +2309,7 @@ const Player = {
       return;
     }
     Log.add("api", `make_move ← ${JSON.stringify(message)}`);
+    const stateBefore = this.match.state;
     let result;
     try {
       result = (
@@ -2143,6 +2335,13 @@ const Player = {
       this.match.endReason = "finished";
     }
     this.snapshot(message.move, null);
+    await Trace.moveApplied({
+      stateBefore,
+      seat,
+      moverId: mover.id,
+      move: message.move,
+      stateAfter: result.state,
+    });
     await this.sendStateChanged(null);
     await this.autoPlayComputers();
   },
@@ -2168,6 +2367,7 @@ const Player = {
           Log.add("error", `${source} failed for ${next.display_name}: ${e.message}`);
           break;
         }
+        const stateBefore = m.state;
         let result;
         try {
           result = (
@@ -2193,6 +2393,13 @@ const Player = {
         }
         m.lastMove = clone(move);
         this.snapshot(move, null);
+        await Trace.moveApplied({
+          stateBefore,
+          seat: this.seatIndexOf(next.id),
+          moverId: next.id,
+          move,
+          stateAfter: result.state,
+        });
         await this.sendStateChanged(null);
         await new Promise((resolve) => setTimeout(resolve, 250));
       }
@@ -2274,6 +2481,7 @@ const Player = {
     }
     this.snapshot(null, { type: "player_left", player_id: leaver.id });
     await this.sendStateChanged(null);
+    if (this.match.status === "over") await Trace.matchEnded();
   },
 
   async joinMatch() {
@@ -2363,15 +2571,514 @@ const Player = {
     const wrap = $("game-wrap");
     const available = Math.max(320, wrap.clientWidth || 800);
     const scale = Math.min(1, available / width);
-    box.style.width = `${width}px`;
-    box.style.height = `${height}px`;
-    box.style.transform = `scale(${scale})`;
-    wrap.style.height = `${Math.round(height * scale)}px`;
     $("resolution-label").textContent =
       `${selected.label} — ${width}×${height}` +
       (scale < 1 ? ` (scaled to ${Math.round(scale * 100)}%)` : "");
     this.viewport = { width, height, scale: 1, passes: 0 };
+    if (this.multiFrame) {
+      box.style.width = "";
+      box.style.height = "";
+      box.style.transform = "";
+      wrap.style.height = "";
+      for (const entry of this.frames) {
+        entry.viewport = { width, height, scale: 1, passes: 0 };
+        if (entry.box) {
+          entry.box.style.width = `${width}px`;
+          entry.box.style.height = `${height}px`;
+          entry.box.style.transform = `scale(${scale})`;
+        }
+        if (entry.holder) {
+          entry.holder.style.height = `${Math.round(height * scale) + 28}px`;
+        }
+      }
+    } else {
+      box.style.width = `${width}px`;
+      box.style.height = `${height}px`;
+      box.style.transform = `scale(${scale})`;
+      wrap.style.height = `${Math.round(height * scale)}px`;
+      if (this.frames.length) this.frames[0].viewport = this.viewport;
+    }
     this.applyViewport();
+  },
+};
+
+// ---------------------------------------------------------------------------
+// The recorded test flow: Trace talks to the /game-test endpoints, Flow
+// drives the five linear steps. Moves made while a session is active are
+// recorded on the server; a finished pass-and-play or multiplayer match is
+// verified by replaying it against the step 1 server code.
+// ---------------------------------------------------------------------------
+
+async function traceFetch(path, options) {
+  let response;
+  try {
+    response = await fetch(path, options);
+  } catch (e) {
+    throw new Error(`could not reach the server (${e.message})`);
+  }
+  const text = await response.text();
+  let data = null;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    /* not JSON — the raw text is the detail */
+  }
+  if (!response.ok) {
+    let detail = data && data.detail !== undefined ? data.detail : text;
+    if (typeof detail !== "string") detail = JSON.stringify(detail);
+    throw new Error(detail || `the server answered ${response.status}`);
+  }
+  return data;
+}
+
+const Trace = {
+  session: null,
+
+  async post(path, payload) {
+    return traceFetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  beginSession(mode, config) {
+    this.session = {
+      id:
+        window.crypto && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `session-${Date.now()}-${Math.floor(Math.random() * 1e9)}`,
+      mode,
+      config,
+      states: [],
+      moves: [],
+      roster: null,
+      matchSeed: null,
+    };
+  },
+
+  endSession() {
+    this.session = null;
+  },
+
+  matchStarted() {
+    const s = this.session;
+    if (!s || !Player.match) return;
+    s.states = [clone(Player.match.state)];
+    s.moves = [];
+    s.roster = Player.match.players.map((p) => ({
+      id: p.id,
+      kind: p.kind,
+      display_name: p.display_name,
+      picture_url: p.picture_url,
+      max_loss: p.max_loss,
+    }));
+    s.matchSeed = Player.match.matchSeed;
+  },
+
+  async moveApplied({ stateBefore, seat, moverId, move, stateAfter }) {
+    const s = this.session;
+    if (!s || !Flow.submissionId) return;
+    const moveNumber = s.moves.length;
+    try {
+      const view = await Player.traceView(stateBefore, moverId, moveNumber);
+      await this.post("/game-test/moves", {
+        secret: Flow.secret(),
+        submission_id: Flow.submissionId,
+        session_id: s.id,
+        mode: s.mode,
+        config: s.config,
+        player_index: seat,
+        move_number: moveNumber,
+        state: stateBefore,
+        view,
+        move,
+      });
+    } catch (e) {
+      Flow.fail(`Recording a move on the server failed: ${e.message}`);
+      return;
+    }
+    s.moves.push({ player_index: seat, move: clone(move) });
+    s.states.push(clone(stateAfter));
+    if (Player.match && Player.match.status === "over") {
+      await this.matchEnded();
+    } else if (s.mode === "against_computers" && s.moves.length >= 100) {
+      await this.matchEnded();
+    }
+  },
+
+  async matchEnded() {
+    const s = this.session;
+    if (!s) return;
+    this.session = null;
+    await Flow.sessionFinished(s);
+  },
+
+  async verifyMatch(s) {
+    return this.post("/game-test/verify-match", {
+      secret: Flow.secret(),
+      submission_id: Flow.submissionId,
+      session_id: s.id,
+      mode: s.mode,
+      config: s.config,
+      players: s.roster,
+      pot: 0,
+      match_seed: s.matchSeed,
+      states: s.states,
+      moves: s.moves,
+    });
+  },
+};
+
+const Flow = {
+  step: 1,
+  driving: false,
+  active: false,
+  submissionId: null,
+  submittedBody: null,
+  combos: [],
+  comboIndex: 0,
+  configs4: [],
+  config4Index: 0,
+
+  secret() {
+    return fieldValue("game-secret").trim();
+  },
+
+  card(n, state, statusText) {
+    const card = $(`step-card-${n}`);
+    if (card) card.className = `step-card${state ? " " + state : ""}`;
+    const status = $(`step${n}-status`);
+    if (status && statusText !== undefined) {
+      status.textContent = statusText;
+      status.className =
+        "check-status " +
+        (state === "done"
+          ? "passed"
+          : state === "failed"
+            ? "failed"
+            : state === "active"
+              ? "running"
+              : "");
+    }
+  },
+
+  banner(message) {
+    const b = $("flow-banner");
+    if (!b) return;
+    if (message) {
+      b.textContent = message;
+      b.hidden = false;
+    } else {
+      b.hidden = true;
+      b.textContent = "";
+    }
+  },
+
+  refreshButtons() {
+    $("step2-run").disabled = this.step !== 2;
+    $("step3-start").disabled = this.step !== 3;
+    $("step4-start").disabled = this.step !== 4;
+    $("step5-start").disabled = this.step !== 5;
+  },
+
+  fail(message) {
+    const step = this.step;
+    this.active = false;
+    Trace.endSession();
+    if (step >= 1 && step <= 5) this.card(step, "failed", "Failed");
+    this.step = 1;
+    this.submissionId = null;
+    this.submittedBody = null;
+    this.banner(`${message} Fix the code and start again from step 1.`);
+    $("flow-finish").hidden = true;
+    this.refreshButtons();
+    Log.add("error", message);
+  },
+
+  abandon() {
+    this.active = false;
+    Trace.endSession();
+    this.step = 1;
+    this.submissionId = null;
+    this.submittedBody = null;
+    for (const n of [1, 2, 3, 4, 5]) this.card(n, "", "");
+    $("flow-finish").hidden = true;
+    this.refreshButtons();
+  },
+
+  inputsChanged() {
+    if (!this.submittedBody) return;
+    const { body, errors } = buildImportBody();
+    if (errors.length || !deepEqual(body, this.submittedBody)) {
+      this.fail("The inputs changed during the run.");
+    }
+  },
+
+  async step1() {
+    this.banner(null);
+    const { body, errors } = buildImportBody();
+    if (errors.length) {
+      this.card(1, "failed", "Fix the inputs first");
+      Log.add("error", `step 1: ${errors.join("; ")}`);
+      return;
+    }
+    for (const n of [2, 3, 4, 5]) this.card(n, "", "");
+    $("step2-results").replaceChildren();
+    this.card(1, "active", "Submitting…");
+    try {
+      const result = await Trace.post("/game-test/submissions", {
+        secret: body.game_addition_request_id_and_secret,
+        game_name: body.name,
+        body,
+      });
+      this.submissionId = result.submission_id;
+      this.submittedBody = body;
+      this.step = 2;
+      this.card(1, "done", `Recorded (${result.created_at})`);
+      Log.add("info", `step 1 recorded: submission ${result.submission_id}`);
+    } catch (e) {
+      this.card(1, "failed", "Failed");
+      this.banner(`Step 1 failed: ${e.message} Fix the inputs and submit again.`);
+      Log.add("error", `step 1 failed: ${e.message}`);
+    }
+    this.refreshButtons();
+  },
+
+  async step2() {
+    if (!this.submissionId) return;
+    this.banner(null);
+    this.card(2, "active", "Running on the server…");
+    const resultsEl = $("step2-results");
+    resultsEl.replaceChildren();
+    let report;
+    try {
+      report = await Trace.post("/game-test/server-check", {
+        secret: this.secret(),
+        submission_id: this.submissionId,
+      });
+    } catch (e) {
+      this.fail(`Step 2 could not run: ${e.message}`);
+      return;
+    }
+    if (report.checks) {
+      for (const [name, result] of Object.entries(report.checks)) {
+        const li = document.createElement("li");
+        li.className = result.passed ? "passed" : "failed";
+        const head = document.createElement("strong");
+        head.textContent = `${name}: ${result.passed ? "passed" : "failed"}`;
+        li.appendChild(head);
+        const details = document.createElement("pre");
+        details.textContent =
+          typeof result.details === "string"
+            ? result.details
+            : JSON.stringify(result.details, null, 2);
+        li.appendChild(details);
+        resultsEl.appendChild(li);
+      }
+    }
+    if (!report.passed) {
+      this.fail(
+        `Step 2 failed: ${report.error || "one or more server checks failed — see the results above."}`,
+      );
+      return;
+    }
+    this.card(
+      2,
+      "done",
+      `Passed in ${report.duration_ms} ms — ${report.walks_completed} walks, ` +
+        `${report.moves_made} moves, ${report.states_visited} states visited, ` +
+        `${report.terminal_states} terminal states`,
+    );
+    Log.add(
+      "info",
+      `step 2 passed: ${report.walks_completed} walks, ${report.states_visited} states visited, ${report.terminal_states} terminal states`,
+    );
+    this.step = 3;
+    this.refreshButtons();
+  },
+
+  matrix() {
+    const combos = [];
+    for (const count of this.submittedBody.allowed_player_counts) {
+      for (let r = 0; r < RESOLUTIONS.length; r++) {
+        for (const orientation of ["vertical", "horizontal"]) {
+          combos.push({ count, resolutionIndex: r, orientation });
+        }
+      }
+    }
+    return combos;
+  },
+
+  async startPlayStep(step) {
+    if (!this.submissionId) return;
+    this.banner(null);
+    this.combos = this.matrix();
+    this.comboIndex = 0;
+    this.step = step;
+    this.active = true;
+    this.card(step, "active", "Running…");
+    this.refreshButtons();
+    await this.startCombo();
+  },
+
+  async startCombo() {
+    const step = this.step;
+    const combo = this.combos[this.comboIndex];
+    $("mode").value = step === 3 ? "single-pass" : "multiplayer";
+    populateSeats();
+    $("player-count").value = String(combo.count);
+    populateSeats();
+    $("resolution").value = String(combo.resolutionIndex);
+    $("orientation").value = combo.orientation;
+    Player.multiFrame = step === 5;
+    Player.applyResolution();
+    const label = RESOLUTIONS[combo.resolutionIndex].label;
+    Trace.beginSession(step === 3 ? "pass_and_play" : "multiplayer", {
+      num_players: combo.count,
+      resolution: label,
+      orientation: combo.orientation,
+      human_player_index: null,
+    });
+    $(`step${step}-progress`).textContent =
+      `${this.comboIndex} of ${this.combos.length} matches verified`;
+    $(`step${step}-instruction`).textContent =
+      `Play this match to the end: ${combo.count} player${combo.count === 1 ? "" : "s"}, ` +
+      `${label}, ${combo.orientation}.`;
+    this.driving = true;
+    try {
+      await Player.newMatch();
+    } finally {
+      this.driving = false;
+    }
+    if (!Player.match || Player.match.state == null) {
+      this.fail(`Step ${step}: the match could not start — see the log for the error.`);
+    }
+  },
+
+  async startStep4() {
+    if (!this.submissionId) return;
+    this.banner(null);
+    const counts = this.submittedBody.allowed_player_counts;
+    const seen = new Set();
+    const configs = [];
+    while (configs.length < 5) {
+      const count = counts[Math.floor(Math.random() * counts.length)];
+      const cfg = {
+        count,
+        resolutionIndex: Math.floor(Math.random() * RESOLUTIONS.length),
+        orientation: Math.random() < 0.5 ? "vertical" : "horizontal",
+        humanSeat: Math.floor(Math.random() * count),
+      };
+      const key = JSON.stringify(cfg);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      configs.push(cfg);
+    }
+    this.configs4 = configs;
+    this.config4Index = 0;
+    this.step = 4;
+    this.active = true;
+    this.card(4, "active", "Running…");
+    this.refreshButtons();
+    await this.startConfig4();
+  },
+
+  async startConfig4() {
+    const cfg = this.configs4[this.config4Index];
+    $("mode").value = "single-computers";
+    populateSeats();
+    $("player-count").value = String(cfg.count);
+    populateSeats();
+    $("my-seat").value = String(cfg.humanSeat);
+    $("resolution").value = String(cfg.resolutionIndex);
+    $("orientation").value = cfg.orientation;
+    Player.multiFrame = false;
+    Player.applyResolution();
+    const label = RESOLUTIONS[cfg.resolutionIndex].label;
+    Trace.beginSession("against_computers", {
+      num_players: cfg.count,
+      resolution: label,
+      orientation: cfg.orientation,
+      human_player_index: cfg.humanSeat,
+    });
+    $("step4-progress").textContent =
+      `${this.config4Index} of ${this.configs4.length} matches played`;
+    $("step4-instruction").textContent =
+      `Play seat ${cfg.humanSeat} against the computer: ${cfg.count} players, ` +
+      `${label}, ${cfg.orientation}. Play until the match ends or 100 moves are played.`;
+    this.driving = true;
+    try {
+      await Player.newMatch();
+    } finally {
+      this.driving = false;
+    }
+    if (!Player.match || Player.match.state == null) {
+      this.fail("Step 4: the match could not start — see the log for the error.");
+    }
+  },
+
+  async sessionFinished(session) {
+    if (!this.active) return;
+    const finished = Player.match && Player.match.endReason === "finished";
+    const capped =
+      session.mode === "against_computers" && session.moves.length >= 100;
+    if (!finished && !capped) {
+      Log.add("info", "the match ended without finishing; restarting it");
+      if (this.step === 3 || this.step === 5) return this.startCombo();
+      if (this.step === 4) return this.startConfig4();
+      return;
+    }
+    if (session.mode === "against_computers") {
+      this.config4Index++;
+      $("step4-progress").textContent =
+        `${this.config4Index} of ${this.configs4.length} matches played`;
+      if (this.config4Index >= this.configs4.length) {
+        this.active = false;
+        this.card(4, "done", "Passed");
+        this.step = 5;
+        this.refreshButtons();
+      } else {
+        await this.startConfig4();
+      }
+      return;
+    }
+    try {
+      await Trace.verifyMatch(session);
+    } catch (e) {
+      this.fail(
+        `Step ${this.step}: the server could not verify the finished match: ${e.message}`,
+      );
+      return;
+    }
+    this.comboIndex++;
+    const step = this.step;
+    $(`step${step}-progress`).textContent =
+      `${this.comboIndex} of ${this.combos.length} matches verified`;
+    if (this.comboIndex >= this.combos.length) {
+      this.active = false;
+      this.card(step, "done", "Passed");
+      if (step === 3) {
+        this.step = 4;
+        this.refreshButtons();
+      } else {
+        this.finish();
+      }
+    } else {
+      await this.startCombo();
+    }
+  },
+
+  finish() {
+    this.step = 6;
+    this.card(5, "done", "Passed");
+    $("submission-json").value = pretty(this.submittedBody);
+    $("flow-finish").hidden = false;
+    this.refreshButtons();
+    Log.add(
+      "info",
+      "the test flow is complete — submit the payload with POST /games",
+    );
   },
 };
 
@@ -2477,6 +3184,10 @@ async function loadExample() {
     const response = await fetch("/static/game-test-example.json");
     const example = await response.json();
     const tests = example.unit_tests || {};
+    Flow.abandon();
+    $("game-name").value = example.name || "";
+    $("game-secret").value = example.game_addition_request_id_and_secret || "";
+    $("description").value = example.description || "";
     $("server-code").value = example.server_code || "";
     $("client-code").value = example.client_code || "";
     $("schema-state").value = pretty(tests.state_schema || {});
@@ -2486,6 +3197,13 @@ async function loadExample() {
     $("allowed-player-counts").value = (example.allowed_player_counts || [2]).join(", ");
     $("allows-leave").checked = !!example.allows_leave_mid_match;
     $("allows-join").checked = !!example.allows_join_mid_match;
+    $("language").value = example.language || "en";
+    $("rules-text").value = example.rules || "";
+    $("ui-text").value = example.ui_instructions || "";
+    $("tutorial-text").value = (example.tutorial || {}).text || "";
+    $("tutorial-html").value = (example.tutorial || {}).html || "";
+    $("images-json").value = pretty(example.images || []);
+    $("translations-json").value = pretty(example.translations || {});
     $("player-count").value = String((example.allowed_player_counts || [2])[0]);
     populateSeats();
     Log.add("info", "loaded the counter example (\"Count to three\")");
@@ -2504,6 +3222,18 @@ function init() {
   });
   $("run-checks").addEventListener("click", runChecksUi);
   $("load-example").addEventListener("click", loadExample);
+  $("step1-submit").addEventListener("click", () => Flow.step1());
+  $("step2-run").addEventListener("click", () => Flow.step2());
+  $("step3-start").addEventListener("click", () => Flow.startPlayStep(3));
+  $("step4-start").addEventListener("click", () => Flow.startStep4());
+  $("step5-start").addEventListener("click", () => Flow.startPlayStep(5));
+  const inputsSection = document.querySelector(
+    "section[aria-labelledby='inputs-heading']",
+  );
+  if (inputsSection) {
+    inputsSection.addEventListener("input", () => Flow.inputsChanged());
+    inputsSection.addEventListener("change", () => Flow.inputsChanged());
+  }
   $("new-match").addEventListener("click", () => Player.newMatch());
   $("back").addEventListener("click", () => Player.goBack());
   $("forward").addEventListener("click", () => Player.goForward());
@@ -2518,14 +3248,20 @@ function init() {
   $("orientation").addEventListener("change", () => Player.applyResolution());
   window.addEventListener("resize", () => Player.applyResolution());
   window.addEventListener("message", (event) => {
-    if (!Player.frame || event.source !== Player.frame.contentWindow) return;
+    const entry = Player.frames.find(
+      (e) => e.frame.contentWindow && e.frame.contentWindow === event.source,
+    );
+    if (!entry) return;
     const message = event.data;
     if (!message || typeof message !== "object") return;
-    if (message.type === "game_viewport") { Player.fitViewport(message); return; }
+    if (message.type === "game_viewport") { Player.fitViewport(message, entry); return; }
     if (message.type === "ready") return;
     if (message.type !== "make_move") {
       Log.add("warn", `ignored a message that is not make_move: ${JSON.stringify(message)}`);
       return;
+    }
+    if (entry.seat !== null && entry.seat !== undefined) {
+      Player.messageSeat = entry.seat;
     }
     Player.onMakeMove(message);
   });
@@ -2548,6 +3284,7 @@ var GameTest = {
   testServerCode,
   runChecks,
   readInputs,
+  buildImportBody,
   Walk,
   RESOLUTIONS,
 };

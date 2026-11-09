@@ -2092,6 +2092,8 @@ def create_app(
     app.state.email_sender = email_sender if email_sender is not None else LogSender()
     from game_platform.agent_import import make_router as make_import_router
     app.include_router(make_import_router(_get_platform, _get_caller_id_or_anonymous))
+    from game_platform.game_traces import make_router as make_game_test_router
+    app.include_router(make_game_test_router(_get_platform))
     app.include_router(router)
     from game_platform.scaling_api import install as install_scaling_api
     install_scaling_api(app, debug_tools=debug_tools)

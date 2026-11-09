@@ -22,6 +22,7 @@ reported as too slow.
 See docs/server-side-game-api.md (the Testing section).
 """
 
+import hashlib
 import json
 import random
 import time
@@ -98,6 +99,12 @@ class TestFailure:
     memory_limit_bytes: int = 0
 
 
+def _state_hash(state: JsonValue) -> str:
+    return hashlib.md5(
+        json.dumps(state, sort_keys=True, default=str).encode()
+    ).hexdigest()
+
+
 @dataclass(frozen=True, kw_only=True)
 class GameTestReport:
     """The outcome of testing one game's server code."""
@@ -105,6 +112,10 @@ class GameTestReport:
     passed: bool
     walks_completed: int
     moves_made: int
+    # Distinct states the walks reached, and how many of them were terminal
+    # (turn null). Recorded for the /game-test trace metadata.
+    states_visited: int = 0
+    terminal_states: int = 0
     # True when no walk finished within the time budget.
     too_slow: bool
     failures: tuple[TestFailure, ...] = ()
@@ -156,6 +167,8 @@ def test_server_code(
     failed_seeds: list[int] = []
     walks_completed = 0
     moves_made = 0
+    states_seen: set[str] = set()
+    terminal_seen: set[str] = set()
     for seed in walk_seeds:
         if walks_completed >= max_walks or time.monotonic() >= deadline:
             break
@@ -169,6 +182,8 @@ def test_server_code(
         if walk.run(max_moves_per_walk):
             walks_completed += 1
         moves_made += walk.move_count
+        states_seen |= walk.states_seen
+        terminal_seen |= walk.terminal_states
         for failure in walk.failures:
             key = (failure.function, failure.message)
             if key not in seen and len(failures) < MAX_FAILURES:
@@ -194,6 +209,8 @@ def test_server_code(
         passed=not failures and not too_slow,
         walks_completed=walks_completed,
         moves_made=moves_made,
+        states_visited=len(states_seen),
+        terminal_states=len(terminal_seen),
         too_slow=too_slow,
         failures=tuple(failures),
         failed_seeds=tuple(failed_seeds),
@@ -280,6 +297,8 @@ class _Walk:
         self._rng = random.Random(seed)
         self.failures: list[TestFailure] = []
         self.move_count = 0
+        self.states_seen: set[str] = set()
+        self.terminal_states: set[str] = set()
         self._call_number = 0
         self._last_moves: list[JsonValue] = []
         self._next_human = 1
@@ -445,6 +464,7 @@ class _Walk:
             return True
         state: JsonValue = result.get("state")
         turn: list[str] | None = result.get("turn")
+        self._note_state(state, turn)
         if not self._check_views(state):
             return True
         steps = 0
@@ -459,11 +479,19 @@ class _Walk:
                 failed, state, turn = event
                 if failed or not self._players:
                     return True
+                self._note_state(state, turn)
                 continue
             ok, state, turn = self._step(state, turn)
             if not ok:
                 return True
+            self._note_state(state, turn)
         return True
+
+    def _note_state(self, state: JsonValue, turn: list[str] | None) -> None:
+        digest = _state_hash(state)
+        self.states_seen.add(digest)
+        if turn is None:
+            self.terminal_states.add(digest)
 
     def _maybe_event(
         self, state: JsonValue
