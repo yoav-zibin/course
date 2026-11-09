@@ -1898,9 +1898,12 @@ const Player = {
   roster() {
     const mode = this.mode();
     const count = this.playerCount();
+    // Against computers, the author's chosen seat is the only human; every
+    // other seat is a computer (a viewer watches computers play each other).
+    const mySeat = mode === "single-computers" ? this.actingSeat() : null;
     const roster = [];
     for (let i = 0; i < count; i++) {
-      if (mode === "single-computers" && i > 0) {
+      if (mode === "single-computers" && i !== mySeat) {
         roster.push({
           id: `computer-${i}`,
           kind: "computer",
