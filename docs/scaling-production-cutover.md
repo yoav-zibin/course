@@ -2,6 +2,11 @@
 
 > **Completed Oct 30, 2026** (the production namespace was later advanced to
 > `production_v3`). Retained as the rollback/repeat procedure.
+>
+> **Update Nov 9, 2026:** snapshot mode and `scaling_cutover.py` were removed
+> from the code. The rollback-to-snapshot procedure below no longer applies:
+> recover from Firestore's scheduled backups or a `scaling_tools export` of
+> the namespace instead. The `firestore.mode` config key no longer exists.
 
 Code deployment and data-format conversion are distinct operations. Existing
 users already live in Firestore; this procedure preserves them in the same
@@ -14,7 +19,6 @@ Production configuration, after successful conversion and reconciliation:
 {
   "firestore": {
     "enabled": true,
-    "mode": "query",
     "project_id": "THE_EXISTING_PROJECT",
     "database": "(default)",
     "namespace": "production_v1",
@@ -58,14 +62,12 @@ bounded and atomic; oversized operations retain the offline maintenance path.
 
 Before opening to new writes, restoring the original config/source is safe if
 the query service has not processed jobs or mutations. After any new writes,
-**never** point back at the stale source collections. Stop writers, export the
-current query state with `scaling_cutover.restore_legacy` into a fresh legacy
-prefix, reconcile it, and select snapshot mode with that new prefix. This
-preserves new matches, moves, credentials, token balances and saved libraries.
+**never** point back at the stale source collections.
 
-This bounded rollback helper has explicit 32-MiB/5,000-record limits and is for
-this small deployment. It refuses larger exports; it is not target-scale
-disaster recovery. Protect all exported snapshots because they contain secrets.
+*Nov 9, 2026: snapshot mode and the `scaling_cutover.restore_legacy` helper
+were deleted, so there is no legacy mode to roll back to. Recovery is
+Firestore's scheduled backups, or a `scaling_tools export` of the namespace
+taken with writers stopped. Protect all exports because they contain secrets.*
 
 ## Validation
 

@@ -21,11 +21,12 @@ All data lives in process memory behind the `Store` interface (`store.py`), so i
 be swapped for a database. The in-memory store maintains secondary indexes for
 user-linked login accounts, match participants, and match status, avoiding full user or
 match scans on common login, match-history, open-match, and quick-match candidate
-requests. These indexes are process-local and do not make snapshot-based persistence
-safe across multiple server processes. With no Firestore configured, the server binary uses `JsonFileStore`
+requests. These indexes are process-local and do not make the file-backed
+persistence safe across multiple server processes. With no Firestore configured, the server binary uses `JsonFileStore`
 (`json_file_store.py`), which also saves everything to a JSON file; see
 [Data file](#data-file). The production deployment instead runs the Firestore
-store in query mode.
+query store (`query_store.py`), which keeps the data in Firestore and reads it
+in bounded, paginated queries.
 
 ## Layout
 
@@ -35,7 +36,9 @@ store in query mode.
 | `store.py`   | `Store` protocol and `InMemoryStore`                            |
 | `saving_store.py` | `SavingStore`: an `InMemoryStore` saved in the background (base of the stores below) |
 | `json_file_store.py` | `JsonFileStore`: `InMemoryStore` saved to a JSON file   |
-| `firestore_store.py` | `FirestoreStore`: `InMemoryStore` saved to Firestore, and the `import` command |
+| `query_store.py` | `QueryStore`: on-demand Firestore storage — paginated reads, transactional writes |
+| `scaling_service.py`, `scaling_api.py` | The platform layer and `/v2` routes on top of `QueryStore` |
+| `scaling_tools.py` | Offline maintenance CLI for a query-store namespace (init, export, merges, reports) |
 | `config.py`  | Server config, read from a JSON file                            |
 | `config.example.json` | Example config with every field at its default         |
 | `requirements.txt` | pip packages needed to run the server                      |
@@ -132,9 +135,10 @@ different.
 
 In the product API, the password appears in exactly one place: the `POST /users`
 response. `GET /users/{id}` never returns it and it can't be reset, so clients must keep
-it; a lost password means a lost account. The debug tools (`/browse` and
-`/debug/all-data`, protected by the [master password](#master-password)) do show every
-user's password, so the API console can fill it in for whichever user you act as.
+it; a lost password means a lost account. The debug tools (`/browse` and the
+API console, protected by the [master password](#master-password)) do show every
+user's password — the console reads it from the paged admin user collection —
+so it can fill it in for whichever user you act as.
 
 #### How passwords are stored
 
@@ -575,10 +579,10 @@ stop the server at startup with an error naming the field.
 | `firestore.enabled`               | `false`                                  | Save the data in Firestore instead of the data file; see [Firestore](#firestore) |
 | `firestore.project_id`            | `""`                                     | Google Cloud project; empty uses the project of the server's credentials |
 | `firestore.database`              | `"(default)"`                            | Firestore database id |
-| `firestore.collection_prefix`     | `""`                                     | Prepended to every collection name, to keep several servers apart in one database |
-| `firestore.save_interval_seconds` | `1.0`                                    | After a change, Firestore is written at most once per this many seconds |
-| `debug_tools`                     | `true`                                   | Serve `/console`, `/browse` and `/debug/all-data` (see [Pages](#pages)) |
-| `master_password`                 | `""`                                     | Password for `/browse` and `/debug/all-data` (see [Master password](#master-password)). Empty means none, which is only allowed when `server.host` is a numeric IP address |
+| `firestore.namespace`             | `""`                                     | The query schema's namespace inside the database; required when Firestore is enabled |
+| `firestore.allow_default_database_query` | `false`                             | Explicit opt-in to run the query schema in the `(default)` database |
+| `debug_tools`                     | `true`                                   | Serve `/console` and `/browse` (see [Pages](#pages)) |
+| `master_password`                 | `""`                                     | Password for `/browse` and the other admin pages (see [Master password](#master-password)). Empty means none, which is only allowed when `server.host` is a numeric IP address |
 | `log_level`                       | `"INFO"`                                 | `"DEBUG"`, `"INFO"`, `"WARNING"` or `"ERROR"` |
 | `translation.*`                   | `"provider": "off"`                      | Translate games' own texts with Google Translate, on first use (see [docs/game-translation.md](docs/game-translation.md)); `google_api_key`, `daily_character_limit` |
 | `monitoring.*`                    | see `config.example.json`                | JSON logs, a log file for the Ops Agent, and the thresholds for alerts (slow requests, sign-up floods, memory...); see [docs/monitoring.md](docs/monitoring.md) |
@@ -645,19 +649,18 @@ games and referrer. Its layout is
 Instead of the data file, the server can keep its data in
 [Firestore](https://cloud.google.com/firestore), Google Cloud's managed database:
 the data then doesn't depend on one machine's disk, and Firestore's scheduled backups
-replace the file backups. Like the data file, everything is loaded into memory at
-startup and changes are saved in the background, so it still serves one server
-process at a time (`firestore_store.py`).
+replace the file backups. The Firestore store is the query store (`query_store.py`):
+nothing is loaded wholesale at startup — every read is a bounded, paginated query
+and every change is written transactionally as it happens, so memory stays flat
+however large the dataset grows.
 
-**Layout.** One document per record, named after the record: `users/<id>`,
-`game_versions/<game id>@<version>`, `matches/<id>`, `invites/<token>`, ... Each
-document holds the record as JSON. Large records that compress well are saved as
-level-1 zlib bytes; small and incompressible records stay as text to avoid spending
-CPU for little storage reduction. Readers accept both formats. A match's moves are
-one document each in `matches/<id>/moves`, so long matches never hit Firestore's 1 MiB
-document limit; text over ~900 KB is split into a `chunks` subcollection.
-`meta/format` holds the data format, so an older server refuses newer data. A save
-writes only the records that changed.
+**Layout.** One namespace per deployment keeps everything apart inside a shared
+database: collections are named `<namespace>_<kind>` (`production_v3_users`,
+`production_v3_matches`, ...), and `<namespace>_meta/schema` holds the schema
+version. Each document holds its record as JSON; an oversized game body is split
+into a `body` subcollection so no document nears Firestore's 1 MiB limit, and a
+match's moves are separate documents the server reads in bounded chunks, only
+when a history is actually viewed.
 
 **Setting it up on Google Cloud** (once):
 
@@ -669,32 +672,40 @@ writes only the records that changed.
    IAM). On a Compute Engine VM that's the VM's service account, and the VM's access
    scopes must also enable **Cloud Datastore** (changing scopes requires stopping the
    VM; make its external IP static first if it's ephemeral, or it changes).
-3. Copy the existing data in, with the server stopped:
+3. Initialize an empty namespace, with the server stopped:
 
    ```bash
-   python -m game_platform.firestore_store import /path/to/data.json
+   python -m game_platform.scaling_tools init --project <project> \
+       --database "(default)" --namespace <namespace>
    ```
 
-   It refuses a database that already has data. Then set `"firestore": {"enabled": true}`
-   in the config file and start the server.
+   Then set `"firestore": {"enabled": true, "namespace": "<namespace>",
+   "allow_default_database_query": true}` in the config file (the opt-in is
+   required for the `(default)` database) and start the server.
 
-To go back to a data file, write the database out (refuses to overwrite a file):
+To copy a namespace back out, use the maintenance CLI's streaming export, again
+with writers stopped:
 
 ```bash
-python -m game_platform.firestore_store export /path/to/new-data.json
+python -m game_platform.scaling_tools export --project <project> \
+    --database "(default)" --namespace <namespace> --output <directory>
 ```
 
-**Costs.** Startup reads every document once (a document per record and per move),
-and each change writes the changed documents. A class-sized deployment stays within
-Firestore's free tier (50,000 reads and 20,000 writes a day, 1 GiB stored); backups
-are billed for their storage.
+The same CLI carries the other offline jobs (counts, validation, account merges
+and deletions, library normalization, dashboard reports); see
+`python -m game_platform.scaling_tools --help`.
 
-**Tests.** `tests/test_firestore_store.py` runs against the Firestore emulator and is
+**Costs.** Reads and writes are per request: a page costs at most 100 document
+reads, and a change writes only the records it touched. A class-sized deployment
+stays within Firestore's free tier (50,000 reads and 20,000 writes a day, 1 GiB
+stored); backups are billed for their storage.
+
+**Tests.** `tests/test_query_store.py` runs against the Firestore emulator and is
 skipped without it. Start the emulator (Java and Node.js needed) and point the tests at it:
 
 ```bash
 npx firebase-tools emulators:start --only firestore --project demo-game-platform
-FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 python -m pytest game_platform/tests
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 python -m pytest game_platform/tests/test_query_store.py
 ```
 
 ### Staged HTTP benchmark
@@ -741,10 +752,12 @@ peak for that dataset and mix. `/health` alone measures health-check overhead, n
 application capacity. The runner is read-only by default; other methods require
 `--allow-write` and an isolated benchmark database.
 
-**Historical limitation (resolved Oct 30, 2026):** the snapshot-based Firestore store
-was single-process only, with several unpaginated list routes. Production now runs
-the query store with paginated routes (see [docs/scaling-storage.md](docs/scaling-storage.md));
-the snapshot store remains the default for unconfigured local runs.
+**Historical limitation (resolved Oct 30, 2026):** the original Firestore store
+loaded the whole dataset into memory and was single-process only, with several
+unpaginated list routes. Production runs the query store with paginated routes
+(see [docs/scaling-storage.md](docs/scaling-storage.md)), and the snapshot store
+was removed entirely on Nov 9, 2026; unconfigured local runs use the JSON data
+file instead.
 
 ### Synthetic target-scale traffic and resource data
 
@@ -763,7 +776,7 @@ includes authentication/profile, catalog, match history/details, matchmaking, ma
 creation/join, moves, invites, and health. CPU, memory, autoscaled instance count,
 latency, network, and Firestore document operations are model estimates, not measured
 benchmarks or GCE telemetry. The summary records the assumptions and warns that the
-current snapshot-based service cannot load the full target inventory into one VM.
+original snapshot-based service could not load the full target inventory into one VM.
 Generating the files makes no cloud calls; this model is not a capacity claim.
 
 Generate charts from the CSV with the standard-library-only renderer:
@@ -799,8 +812,8 @@ Once the server is running, open these pages in a browser:
 - `/console`: API console. Pick an operation, fill in its parameters and JSON
   body (prefilled with an example and the most recent ids), choose who to act as
   (`X-User-Id` and `X-User-Password`) at the top, and send (Ctrl+Enter). Picking a user
-  fills in their password (from `/debug/all-data`, or remembered in the browser's
-  localStorage for users created from the console). It shows the response, keeps a
+  fills in their password (from the paged admin user collection, or remembered in
+  the browser's localStorage for users created from the console). It shows the response, keeps a
   history you can click to restore, and can copy a request as curl. The operations come
   from `/openapi.json`, so new endpoints show up automatically.
 - `/browse`: every user (including their password), game (expand a row for all versions
@@ -820,10 +833,11 @@ Once the server is running, open these pages in a browser:
   in `/admin`.
 - `/docs`: FastAPI's generated OpenAPI docs.
 
-The `/console` and `/browse` pages read `/debug/all-data`, which returns everything,
-including every user's password. Set `"debug_tools": false` in the config to turn off
-the pages and that endpoint; the API itself keeps working. (The portal and builder no
-longer use it: they log in as real accounts.)
+The `/console` and `/browse` pages read the paged admin collections
+(`/v2/admin/users`, `/v2/admin/games`, `/v2/admin/matches`), one bounded page at a
+time; the user pages include every user's password. Set `"debug_tools": false` in
+the config to turn off the pages; the API itself keeps working. (The portal no
+longer uses them: it logs in as real accounts.)
 
 ### Administration
 
@@ -886,11 +900,11 @@ fake users in `tools/fake_users`) and investigate from the logs (`tools/log_dige
 
 ### Master password
 
-`master_password` in the config protects `/browse` and `/debug/all-data` with HTTP basic
-auth: the browser asks for a username and password once, and then sends them with every
-request, including the other pages' fetches of `/debug/all-data` (so opening the portal,
-builder or console asks for it too). The username is ignored; only the password is
-checked. The product API and `/docs` don't need it.
+`master_password` in the config protects `/browse` and the other admin pages with
+HTTP basic auth: the browser asks for a username and password once, and then sends
+them with every request, including the other pages' fetches of the paged admin
+collections (so opening the portal or console asks for it too). The username is
+ignored; only the password is checked. The product API and `/docs` don't need it.
 
 It defaults to empty, which means no password. That is only allowed when `server.host`
 is a numeric IP address (such as the default `127.0.0.1`, or `0.0.0.0`). If `server.host`

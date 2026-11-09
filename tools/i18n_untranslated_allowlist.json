@@ -44,7 +44,7 @@
     ],
     "common.js": [
       "New Builder",
-      "GET /debug/all-data: {}",
+      "GET /v2/admin/{}: {}",
       "Campaign attribution is unavailable in this browser.",
       "Campaign attribution could not be saved in this browser.",
       "Admin",
@@ -76,7 +76,7 @@
   },
   "ratchet": {
     "privacy.html": 24,
-    "browse.js": 57,
+    "browse.js": 3,
     "console.js": 20,
     "feedback.js": 18,
     "stats.js": 77,

@@ -159,7 +159,7 @@ class ScalablePlatform(GamePlatform):
         with self._store.atomic():
             return (
                 self._store.list_invites(created_by_user_id=caller_id),
-                self._store._list(
+                self._store._list_all(
                     "users",
                     [
                         ("invited_by_user_id", "==", caller_id),
@@ -168,20 +168,39 @@ class ScalablePlatform(GamePlatform):
                 ),
             )
 
-    def all_data(self):
-        raise ConflictError(
-            "snapshot export is disabled in query mode; use the streaming export command"
-        )
+    def _normalize_library(self, user):
+        """Move this user's legacy saved_game_ids into library entries, once,
+        on first touch: a single user's list is small, so no offline job is
+        needed. The caller holds the store transaction. Returns the user."""
+        if not user.saved_game_ids:
+            return user
+        from game_platform.scaling_library import LibraryEntry, identity
+
+        for game_id in user.saved_game_ids:
+            key = identity(user.id, game_id)
+            if self._store._get("libraries", key) is None:
+                self._store._put(
+                    "libraries",
+                    key,
+                    LibraryEntry(
+                        user_id=user.id, game_id=game_id, saved_at=user.updated_at
+                    ),
+                )
+        user = replace(user, saved_game_ids=())
+        self._store.put_user(user)
+        return user
+
+    def ensure_library_normalized(self, caller_id):
+        """Normalize the caller's legacy library if it still needs it (the
+        paged saved-games endpoint calls this before reading entries)."""
+        with self._store.atomic():
+            self._normalize_library(self._require_user(caller_id))
 
     def set_saved_game(self, *, caller_id, game_id, saved):
         from game_platform.scaling_library import LibraryEntry, identity
 
         with self._store.atomic():
-            user = self._require_user(caller_id)
-            if user.saved_game_ids:
-                raise ConflictError(
-                    "normalize this legacy library with the offline libraries command first"
-                )
+            user = self._normalize_library(self._require_user(caller_id))
             key = identity(caller_id, game_id)
             if saved:
                 game = self._get_live_game(game_id)
@@ -199,13 +218,10 @@ class ScalablePlatform(GamePlatform):
                 self._store._delete("libraries", key)
 
     def _saved_games(self, user):
-        if user.saved_game_ids:
-            raise ConflictError(
-                "normalize this legacy library with the offline libraries command first"
-            )
+        user = self._normalize_library(user)
         games = [
             self._store.get_game(entry.game_id)
-            for entry in self._store._list("libraries", [("user_id", "==", user.id)])
+            for entry in self._store._list_all("libraries", [("user_id", "==", user.id)])
         ]
         return [
             game
@@ -307,8 +323,19 @@ class ScalablePlatform(GamePlatform):
         )
 
     def invite_stats(self):
-        raise ConflictError(
-            "the global referral tree is unavailable in query mode; use paginated referrals or an offline export"
+        # The tree computation runs over the live users, read in bounded
+        # pages; the result itself lists every user, so nothing is gained by
+        # refusing — only the reads need to stay paged.
+        users = []
+        cursor = None
+        while True:
+            page = self._store.page("users", limit=100, cursor=cursor)
+            users.extend(page.items)
+            cursor = page.next_cursor
+            if not cursor:
+                break
+        return self._invite_stats_for(
+            [user for user in users if user.replaced_by_user_id is None]
         )
 
     def _merge_locked(self, *, source, into):
@@ -328,7 +355,7 @@ class ScalablePlatform(GamePlatform):
         if source.id == into.id:
             raise InvalidRequestError("cannot merge a user into itself")
         store = self._store
-        matches = store._list(
+        matches = store._list_all(
             "matches", [("historical_participants", "array_contains", source.id)]
         )
         for match in matches:
@@ -348,7 +375,7 @@ class ScalablePlatform(GamePlatform):
             ("game_versions", "owner_user_id"),
             ("push_subscriptions", "user_id"),
         ):
-            for row in store._list(kind, [(field, "==", source.id)]):
+            for row in store._list_all(kind, [(field, "==", source.id)]):
                 updated = replace(row, **{field: into.id})
                 getattr(
                     store,
@@ -371,13 +398,13 @@ class ScalablePlatform(GamePlatform):
                         },
                     )
             self._schedule_match(store.get_match(match.id))
-        for row in store._list(
+        for row in store._list_all(
             "experiment_assignments", [("user_id", "==", source.id)]
         ):
             jobs._merge_assignment(store, row, source.id, into.id)
-        for row in store._list("libraries", [("user_id", "==", source.id)]):
+        for row in store._list_all("libraries", [("user_id", "==", source.id)]):
             jobs._merge_library(store, row, source.id, into.id)
-        for row in store._list(
+        for row in store._list_all(
             "invites", [("participants", "array_contains", source.id)]
         ):
             jobs._merge_invite(store, row, source.id, into.id)
@@ -404,22 +431,22 @@ class ScalablePlatform(GamePlatform):
                 store.delete_push_subscription(row.id)
             for row in store.list_invites(created_by_user_id=user_id):
                 store.delete_invite(row.token)
-            for row in store._list("libraries", [("user_id", "==", user_id)]):
+            for row in store._list_all("libraries", [("user_id", "==", user_id)]):
                 store._delete("libraries", identity(user_id, row.game_id))
             for account_id in (user_id, *user.replaced_user_ids):
-                for row in store._list(
+                for row in store._list_all(
                     "experiment_assignments", [("user_id", "==", account_id)]
                 ):
                     store.delete_experiment_assignment(
                         user_id=account_id, experiment_id=row.experiment_id
                     )
-                for row in store._list(
+                for row in store._list_all(
                     "experiment_events", [("user_id", "==", account_id)]
                 ):
                     store.delete_experiment_event(row.id)
             inviter = self._inviter_of(user)
             for account_id in (user_id, *user.replaced_user_ids):
-                for row in store._list(
+                for row in store._list_all(
                     "users", [("invited_by_user_id", "==", account_id)]
                 ):
                     if row.id != user_id:
@@ -582,13 +609,25 @@ class ScalablePlatform(GamePlatform):
         }
 
     def experiment_stats(self):
-        from game_platform.scaling_experiment_report import current
+        from game_platform.scaling_experiment_report import current, rebuild
 
         report = current(self._store)
+        if report is not None:
+            return report
+        # No report has ever been built: build one now instead of refusing.
+        # The rebuild is resumable and processes records one at a time in
+        # bounded chunks, so driving it to completion here never loads the
+        # dataset into memory; it only costs time on this first view. Later
+        # views read the published report until an offline rebuild (the
+        # scaling_tools experiment-dashboard command) refreshes it.
+        for _ in range(100_000):
+            if rebuild(self._store, run_id="online", max_records=100)["complete"]:
+                break
+        else:
+            raise RuntimeError("experiment report build did not converge")
+        report = current(self._store)
         if report is None:
-            raise ConflictError(
-                "build an offline experiment-dashboard report before viewing experiment statistics"
-            )
+            raise RuntimeError("experiment report build published nothing")
         return report
 
     def run_due_jobs(self, limit=10):

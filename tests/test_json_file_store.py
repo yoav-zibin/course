@@ -36,11 +36,11 @@ def test_all_data_survives_a_restart(tmp_path: Path) -> None:
     api.move(match_id, as_user=alice, next_turn=None, state={"winner": [0, "alice"]})
     api.ok("DELETE", f"/matches/{match_id}", as_user=bob)
     api.ok("DELETE", f"/games/{game_id}", as_user=alice)
-    before = api.ok("GET", "/debug/all-data")
+    before = api.client.app.state.platform.all_data()
     store.close()
 
     restarted = JsonFileStore(path)
-    after = Api(store=restarted).ok("GET", "/debug/all-data")
+    after = Api(store=restarted).client.app.state.platform.all_data()
     restarted.close()
     assert after == before
 
@@ -107,13 +107,12 @@ def test_a_missing_file_starts_empty_and_is_created_on_the_first_change(
     path = tmp_path / "data.json"
     store = JsonFileStore(path)
     api = Api(store=store)
-    assert api.ok("GET", "/debug/all-data") == {
-        "users": [],
-        "game_versions": [],
-        "matches": [],
-        "game_version_errors": [],
-        "game_test_seeds": [],
-    }
+    empty = api.client.app.state.platform.all_data()
+    assert empty.users == []
+    assert empty.game_versions == []
+    assert empty.matches == []
+    assert empty.game_version_errors == []
+    assert empty.game_test_seeds == []
     assert not path.exists()
 
     api.new_user("alice")
@@ -153,7 +152,7 @@ def test_reads_do_not_rewrite_the_file(tmp_path: Path) -> None:
     written_at = path.stat().st_mtime_ns
 
     api.ok("GET", f"/users/{user_id}")
-    api.ok("GET", "/debug/all-data")
+    api.client.app.state.platform.all_data()
     store.close()
     assert path.stat().st_mtime_ns == written_at
 

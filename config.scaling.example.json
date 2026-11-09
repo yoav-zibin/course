@@ -9,7 +9,6 @@
   },
   "firestore": {
     "enabled": true,
-    "mode": "query",
     "project_id": "project-c9ca4f0b-4e47-43ff-847",
     "database": "game-platform-scaling",
     "namespace": "scaling_v1",

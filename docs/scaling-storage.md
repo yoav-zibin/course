@@ -1,21 +1,22 @@
 # Query-based storage
 
 > **Status (Nov 9, 2026):** merged (PRs #32, #38, #39) and live in production —
-> the production server runs in query mode. Passages below written as an
-> unmerged branch or a pre-cutover plan are historical. Snapshot storage
-> remains the configuration default in code.
+> the production server runs the query store. Passages below written as an
+> unmerged branch or a pre-cutover plan are historical. Snapshot storage was
+> removed from the code on Nov 9, 2026; the query store is the only Firestore
+> store, and unconfigured local runs use the JSON data file.
 
 This branch implements the first end-to-end release of the backend scaling plan.
-It is **opt-in**. Snapshot storage remains the configuration default. A converted
-namespace in the existing production database requires explicit opt-in; see
-`scaling-production-cutover.md`. The existing QuickJS Game API, generated client/server
+A converted namespace in the existing production database requires explicit
+opt-in; see `scaling-production-cutover.md`. The existing QuickJS Game API, generated client/server
 code, deterministic execution checks and random-walk repair loop are preserved.
 
-Merging this implementation and enabling query storage are separate steps. An
-existing config containing only `firestore.enabled: true` continues using
-snapshot mode and `(default)`. Neither normal startup nor CI deployment invokes
-synthetic-data generators, the isolated demo wrapper, namespace initialization
-or migration. Test data stays in its explicitly configured database/namespace;
+Merging this implementation and enabling query storage were separate steps. An
+existing config containing only `firestore.enabled: true` is incomplete: the
+query store requires an explicit `namespace`, and the `(default)` database
+requires `allow_default_database_query`. Neither normal startup nor CI deployment invokes
+synthetic-data generators, the isolated demo wrapper or namespace initialization.
+Test data stays in its explicitly configured database/namespace;
 separate VMs by themselves are not a data-isolation guarantee.
 
 The merge with main through `0091652` preserves the recent catalog/practice/replay
@@ -156,7 +157,6 @@ Example test-server config:
   "server": {"host": "127.0.0.1", "port": 8000},
   "firestore": {
     "enabled": true,
-    "mode": "query",
     "project_id": "PROJECT",
     "database": "game-platform-scaling",
     "namespace": "scaling_v1"
@@ -170,12 +170,9 @@ email, push, AI API credentials or private user data into a synthetic test setup
 
 ## Maintenance, migration and validation
 
-`scaling_tools migrate` copies the legacy schema into an empty query namespace.
-It requires `--source-writers-stopped`, binds checkpoints to the exact source,
-resumes at completed parent records, and preserves IDs, versions, visibility,
-histories and balances. It regenerates pending computer/deadline jobs. Stop both
-source and destination writers throughout the copy. The flag is an operator
-assertion, not a remote stop command. Do not resume against a changed source.
+The one-time copy from the legacy schema (`scaling_tools migrate`) was retired
+with snapshot mode on Nov 9, 2026; every live namespace is already in the query
+schema, and new namespaces start empty with `scaling_tools init`.
 
 `scaling_tools export --source-writers-stopped --output DIRECTORY` streams
 Firestore-typed JSONL including child records, with durable file offsets and
@@ -208,7 +205,7 @@ explicit named test database. CI includes a dedicated emulator workflow.
 
 ## Release gates and limits
 
-This release is not yet a replacement for every snapshot-mode feature:
+Known limits of the query release:
 
 * Ordinary account merges/deletions run atomically through bounded, user-filtered
   lookups, preserving sign-in, libraries, logical player IDs and token balances.
@@ -221,7 +218,7 @@ This release is not yet a replacement for every snapshot-mode feature:
   normal project/database/namespace flags) repeatedly until `complete` is
   true. Each run rewrites a bounded number of records, one record and its
   progress checkpoint per transaction, and resumes by run ID after a crash.
-  Merge mirrors the snapshot semantics (games, drafts, match seats with
+  Merge mirrors the original semantics (games, drafts, match seats with
   stable logic player IDs, move authors, invites, linked-account
   reservations; the source is marked replaced, never deleted) and refuses
   before any mutation when both accounts share a match that is not over.
@@ -234,8 +231,8 @@ This release is not yet a replacement for every snapshot-mode feature:
   endpoints still use bounded legacy representations. Records reject payloads
   above 800 KB; these features need their own child-record and pagination designs.
   The recent experiment-variant deletion endpoint also retains the 100-record
-  legacy assignment/event limit in query mode; an oversized request returns 409
-  with its writes rolled back. Its snapshot-mode behavior remains unchanged.
+  legacy assignment/event limit; an oversized request returns 409
+  with its writes rolled back.
 * Daily creation, A/B and transitive referral reports are available as offline
   snapshots. A/B metric counts retain the published snapshot date; experiment
   names, activation, variants and spend configuration come from current records,

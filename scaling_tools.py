@@ -1,9 +1,9 @@
-"""Initialize, migrate, seed and inspect the on-demand store.
+"""Initialize, seed and inspect the on-demand store.
 
 Run with python -m game_platform.scaling_tools --help. All writes require an
-explicit destination database and namespace. Migration is offline: stop source
-writers first. Checkpoints resume at a completed parent record, never midway
-through a mutation. The tool does not alter the source.
+explicit destination database and namespace. The maintenance commands are
+offline: stop writers first. Checkpoints resume at a completed parent record,
+never midway through a mutation.
 """
 
 import argparse
@@ -11,12 +11,9 @@ import datetime as dt
 import hashlib
 import json
 import os
-from dataclasses import asdict, replace
+from dataclasses import replace
 
 from google.cloud import firestore
-from pydantic import TypeAdapter
-from game_platform.firestore_store import _BUNDLES, _KINDS, _RECORD_ADAPTERS, _read_text
-from game_platform.translation_bundle import unpack
 from game_platform.models import (
     Game,
     GameRules,
@@ -26,6 +23,7 @@ from game_platform.models import (
     User,
 )
 from game_platform.query_store import QueryStore
+
 
 
 def documents(collection, *, after=None, page_size=100):
@@ -39,163 +37,6 @@ def documents(collection, *, after=None, page_size=100):
         for doc in docs:
             yield doc
         after = docs[-1].id
-
-
-def migrate(source, destination, *, source_prefix="", batch_records=None):
-    if (
-        source.project == destination.client.project
-        and source._database == destination.client._database
-    ):
-        if source_prefix == destination.namespace + "_":
-            raise ValueError("source and destination overlap")
-    manifest = destination.collection("migration").document("manifest")
-    source_identity = {
-        "project": source.project,
-        "database": source._database,
-        "prefix": source_prefix,
-    }
-    with destination.atomic():
-        previous = destination.raw_get(manifest)
-        if previous and previous.get("source") != source_identity:
-            raise ValueError("migration checkpoint belongs to a different source")
-        if not previous:
-            if destination.counts():
-                raise ValueError("migration requires an empty destination namespace")
-            destination.raw_put(manifest, {"source": source_identity, "schema": 1})
-    from game_platform.scaling_service import ScalablePlatform
-
-    scheduler = ScalablePlatform(store=destination)
-    completed = 0
-    for kind in _KINDS:
-        checkpoint = destination.collection("migration").document(kind.field)
-        progress = checkpoint.get().to_dict() or {}
-        if progress.get("complete"):
-            continue
-        if kind.field == "translations":
-            # Translations no longer live one-per-document in the kind's own
-            # collection: the snapshot store packs them into per-language
-            # bundles (translation_bundle.py), which the document stream below
-            # cannot see. Read the bundles the way the store itself does. A
-            # source without bundles falls through to the legacy rows.
-            bundle_docs = [
-                doc.to_dict()
-                for doc in source.collection(source_prefix + _BUNDLES).stream()
-            ]
-            if bundle_docs:
-                records = unpack(bundle_docs)
-                for start in range(0, len(records), 500):
-                    destination.put_translations(records[start : start + 500])
-                completed += len(records)
-                checkpoint.set(
-                    {
-                        **(checkpoint.get().to_dict() or {}),
-                        "complete": True,
-                        "updated_at": dt.datetime.now(dt.timezone.utc),
-                    }
-                )
-                continue
-        for doc in documents(
-            source.collection(source_prefix + kind.field), after=progress.get("last_id")
-        ):
-            adapter = _RECORD_ADAPTERS[kind.field]
-            record = (
-                adapter.validate_python(doc.to_dict())
-                if kind.field == "game_popularity"
-                else adapter.validate_json(_read_text(doc))
-            )
-            if kind.field == "matches":
-                destination.ref("matches", record.id)
-                # The namespace must remain offline during migration. Clear any
-                # partially imported parent so its moves are replayed deterministically.
-                destination.put_match(
-                    replace(record, moves=())
-                ) if not destination.get_match(record.id) else None
-                pending = []
-
-                def append_batch():
-                    with destination.atomic():
-                        current = destination.get_match(record.id)
-                        updated = current
-                        for move in pending:
-                            if move.move_number <= len(updated.moves):
-                                continue
-                            if move.move_number != len(updated.moves) + 1:
-                                raise ValueError("non-contiguous source history")
-                            updated = replace(updated, moves=updated.moves.append(move))
-                        if updated is not current:
-                            destination.put_match(updated)
-                    pending.clear()
-
-                for move_doc in documents(doc.reference.collection("moves")):
-                    pending.append(
-                        TypeAdapter(Move).validate_json(_read_text(move_doc))
-                    )
-                    if len(pending) == 100:
-                        append_batch()
-                if pending:
-                    append_batch()
-                with destination.atomic():
-                    current = destination.get_match(record.id)
-                    destination.put_match(replace(record, moves=current.moves))
-                    scheduler._schedule_match(destination.get_match(record.id))
-            elif kind.field == "translations":
-                destination.put_translations([record])
-            elif kind.field == "game_popularity":
-                destination.raw_put(destination.ref("game_popularity", record.game_id), asdict(record))
-            elif kind.field == "game_versions":
-                with destination.atomic():
-                    destination._put(
-                        "game_versions", f"{record.id}@{record.version}", record
-                    )
-                    existing = destination.get_game(record.id)
-                    if existing is None or existing.version <= record.version:
-                        destination._put("games", record.id, record)
-            elif kind.field == "deleted_game_ids":
-                destination.delete_game(record)
-            elif kind.field == "unpublished_game_ids":
-                destination.set_game_published(record, False)
-            else:
-                method = {
-                    "experiments": "put_experiment",
-                    "experiment_assignments": "put_experiment_assignment",
-                    "experiment_events": "put_experiment_event",
-                    "users": "put_user",
-                    "push_subscriptions": "put_push_subscription",
-                    "invites": "put_invite",
-                    "game_version_errors": "add_game_version_error",
-                    "game_test_seeds": "put_game_test_seeds",
-                    "feedback": "put_feedback",
-                }[kind.field]
-                if kind.field == "users" and not record.referral_code:
-                    record = replace(
-                        record,
-                        referral_code=hashlib.sha256(record.id.encode()).hexdigest()[
-                            :16
-                        ],
-                    )
-                getattr(destination, method)(record)
-            checkpoint.set(
-                {
-                    "last_id": doc.id,
-                    "complete": False,
-                    "updated_at": dt.datetime.now(dt.timezone.utc),
-                }
-            )
-            completed += 1
-            if batch_records and completed >= batch_records:
-                return {"complete": False, "processed": completed}
-        checkpoint.set({**(checkpoint.get().to_dict() or {}), "complete": True})
-    from game_platform.scaling_library import normalize
-
-    libraries = normalize(
-        destination, run_id="snapshot-migration", max_records=batch_records or 100
-    )
-    return {
-        "complete": libraries["complete"],
-        "processed": completed,
-        "library_steps": libraries["processed"],
-        "counts": destination.counts(),
-    }
 
 
 def seed(store, *, run_id, users, games, matches, moves_per_match, max_writes):
@@ -354,7 +195,6 @@ def main():
         "command",
         choices=[
             "init",
-            "migrate",
             "seed",
             "counts",
             "export",
@@ -380,8 +220,6 @@ def main():
         action="store_true",
         help="allow maintenance of an explicitly named production namespace; never permits fake-data seeding",
     )
-    parser.add_argument("--source-database", default="(default)")
-    parser.add_argument("--source-prefix", default="")
     parser.add_argument("--source-writers-stopped", action="store_true")
     parser.add_argument("--run-id", default="capacity-1")
     parser.add_argument("--as-of", help="dashboard window end date, YYYY-MM-DD")
@@ -405,7 +243,6 @@ def main():
         args.command
         in (
             "init",
-            "migrate",
             "seed",
             "cleanup",
             "dashboard",
@@ -429,15 +266,7 @@ def main():
         if args.command == "init"
         else QueryStore(client, namespace=args.namespace)
     )
-    if args.command == "migrate":
-        if not args.source_writers_stopped:
-            parser.error("migration requires a source write-maintenance window")
-        result = migrate(
-            firestore.Client(project=args.project, database=args.source_database),
-            store,
-            source_prefix=args.source_prefix,
-        )
-    elif args.command == "referral-dashboard":
+    if args.command == "referral-dashboard":
         if not args.source_writers_stopped:
             parser.error("referral report requires stopped source writers")
         from game_platform.scaling_referrals import rebuild

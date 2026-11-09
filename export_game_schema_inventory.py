@@ -14,7 +14,7 @@ from game_platform.store import Store
 
 
 def _open_store(config) -> Store:
-    if config.firestore.enabled and config.firestore.mode == "query":
+    if config.firestore.enabled:
         from google.cloud import firestore
 
         from game_platform.query_store import QueryStore
@@ -25,15 +25,6 @@ def _open_store(config) -> Store:
                 database=config.firestore.database,
             ),
             namespace=config.firestore.namespace,
-        )
-    if config.firestore.enabled:
-        from game_platform.firestore_store import FirestoreStore
-
-        return FirestoreStore.connect(
-            project_id=config.firestore.project_id,
-            database=config.firestore.database,
-            collection_prefix=config.firestore.collection_prefix,
-            min_write_interval_seconds=0,
         )
     return JsonFileStore(
         config.data_file.path,

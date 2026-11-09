@@ -533,35 +533,73 @@ class QueryStore:
             encode_cursor(scope, docs[limit - 1].id) if len(docs) > limit else None,
         )
 
+    def _collect(self, kind, filters, docs, *, detail=True, seen=None):
+        """Decoded records for [docs], with this unit of work's staged writes
+        merged in. [seen], when given, holds the document paths already emitted
+        (paged reads) or staged (their committed version must not reappear)."""
+        rows = {}
+        for doc in docs:
+            if seen is not None:
+                if doc.reference.path in seen:
+                    continue
+                seen.add(doc.reference.path)
+            rows[doc.reference.path] = (doc.reference, doc.to_dict())
+        uow = getattr(self._local, "uow", None)
+        if uow:
+            prefix = self.collection(kind).id + "/"
+            for path, (ref, data) in uow["writes"].items():
+                if not path.startswith(prefix) or "/" in path[len(prefix) :]:
+                    continue
+                if seen is not None:
+                    if path in seen:
+                        continue
+                    seen.add(path)
+                rows.pop(path, None)
+                if data and all(
+                    data.get(field) == value
+                    if op == "=="
+                    else value in (data.get(field) or [])
+                    for field, op, value in filters
+                ):
+                    rows[path] = (ref, data)
+        return [
+            record
+            for ref, data in rows.values()
+            if (record := self._decode(kind, data, ref, detail=detail)) is not None
+        ]
+
     def _list(self, kind, filters=()):
+        """At most LEGACY_LIMIT records: a safety rail for callers that have not
+        moved to bounded reads. Callers that legitimately need every match use
+        _list_all."""
         docs = self._query(kind, filters, limit=LEGACY_LIMIT + 1)
         if len(docs) > LEGACY_LIMIT:
             raise conflict(
                 "result exceeds 100 records; use the paginated API or an administrative job"
             )
-        rows = {d.reference.path: (d.reference, d.to_dict()) for d in docs}
-        uow = getattr(self._local, "uow", None)
-        if uow:
-            prefix = self.collection(kind).id + "/"
-            for path, (ref, data) in uow["writes"].items():
-                if path.startswith(prefix) and "/" not in path[len(prefix) :]:
-                    rows.pop(path, None)
-                    if data and all(
-                        data.get(field) == value
-                        if op == "=="
-                        else value in (data.get(field) or [])
-                        for field, op, value in filters
-                    ):
-                        rows[path] = (ref, data)
+        rows = self._collect(kind, filters, docs)
         if len(rows) > LEGACY_LIMIT:
             raise conflict(
                 "result exceeds 100 records; use the paginated API or an administrative job"
             )
-        return [
-            record
-            for ref, data in rows.values()
-            if (record := self._decode(kind, data, ref)) is not None
-        ]
+        return rows
+
+    def _list_all(self, kind, filters=(), *, detail=True):
+        """Every matching record, read in bounded pages: each Firestore query
+        fetches at most LEGACY_LIMIT documents, so the store never streams a
+        whole collection in one read. The decoded result is the caller's own
+        payload (a catalog, one user's matches), not a dataset snapshot."""
+        records = []
+        seen: set[str] = set()
+        after = None
+        while True:
+            docs = self._query(kind, filters, limit=LEGACY_LIMIT, after=after)
+            records.extend(
+                self._collect(kind, filters, docs, detail=detail, seen=seen)
+            )
+            if len(docs) < LEGACY_LIMIT:
+                return records
+            after = docs[-1].id
 
     def _decode(self, kind, data, ref, *, detail=True):
         if data is None or data.get("tombstone"):
@@ -807,7 +845,7 @@ class QueryStore:
         self._delete("matches", match_id)
 
     def list_matches_involving(self, user_id):
-        return self._list("matches", [("participants", "array_contains", user_id)])
+        return self._list_all("matches", [("participants", "array_contains", user_id)])
 
     def list_matches_for_game(self, game_id):
         """All matches played with [game_id], oldest first, paging past the
@@ -832,8 +870,9 @@ class QueryStore:
                 return sorted(matches, key=lambda m: m.created_at)
 
     def list_matches_by_status(self, status):
-        """Legacy bounded status listing; scalable clients use the paged v2 API."""
-        return self._list("matches", [("status", "==", status)])
+        """Every match with [status], read in bounded pages; scalable clients
+        that only need a page use the paged v2 API instead."""
+        return self._list_all("matches", [("status", "==", status)])
 
     def list_all_matches(self):
         return self._list("matches")
@@ -963,25 +1002,16 @@ class QueryStore:
             filters.append(("owner_user_id", "==", owner_user_id))
         if not include_unpublished:
             filters.append(("published", "==", True))
-        return self._list("games", filters)
+        return self._list_all("games", filters)
 
     def list_games_without_code(self, *, owner_user_id=None, include_unpublished=False):
-        """Like [list_games], but the games have no code: one query and no body reads."""
+        """Like [list_games], but the games have no code: paged queries and no body reads."""
         filters = [("deleted", "==", False)]
         if owner_user_id is not None:
             filters.append(("owner_user_id", "==", owner_user_id))
         if not include_unpublished:
             filters.append(("published", "==", True))
-        docs = self._query("games", filters, limit=LEGACY_LIMIT + 1)
-        if len(docs) > LEGACY_LIMIT:
-            raise conflict(
-                "result exceeds 100 records; use the paginated API or an administrative job"
-            )
-        return [
-            game
-            for doc in docs
-            if (game := self._decode("games", doc.to_dict(), doc.reference, detail=False))
-        ]
+        return self._list_all("games", filters, detail=False)
 
     def list_all_game_versions(self):
         return self._list("game_versions")
@@ -1056,7 +1086,7 @@ class QueryStore:
         self._delete("invites", token)
 
     def list_invites(self, *, created_by_user_id=None, match_id=None):
-        return self._list(
+        return self._list_all(
             "invites",
             [
                 (k, "==", v)

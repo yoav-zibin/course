@@ -9,7 +9,7 @@ const source = fs.readFileSync(path.join(__dirname, "../../static/common.js"), "
 // The reporting code, without the rest of the page's helpers.
 const reporting = source.slice(
   source.indexOf("function showPageError"),
-  source.indexOf("async function fetchAllData"),
+  source.indexOf("async function fetchAdminCollection"),
 );
 
 function setup() {

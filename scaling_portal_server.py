@@ -123,10 +123,9 @@ def main():
     if (
         config.server.host != "127.0.0.1"
         or not config.firestore.enabled
-        or config.firestore.mode != "query"
         or config.firestore.database == "(default)"
     ):
-        parser.error("requires loopback binding and explicit named query database")
+        parser.error("requires loopback binding and an explicit named Firestore database")
     clock = MonthClock(args.month)
     store = QueryStore.initialize(
         firestore.Client(

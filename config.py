@@ -102,8 +102,8 @@ class PushConfig(_Section):
 
 
 class FirestoreConfig(_Section):
-    # query mode requires a migrated, explicitly named namespace.
-    mode: Literal["snapshot", "query"] = "snapshot"
+    # Firestore storage is the paginated query schema inside an explicitly named
+    # namespace; there is no other Firestore mode.
     namespace: str = ""
     # Save the data in Firestore instead of the data file (see "Firestore" in the
     # README). data_file is then unused.
@@ -115,25 +115,18 @@ class FirestoreConfig(_Section):
     # A separate acknowledgement is required before using the query schema in
     # the existing production database. It never migrates data at startup.
     allow_default_database_query: bool = False
-    # Prepended to every collection name, to keep several servers (e.g. staging) apart
-    # in one database.
-    collection_prefix: str = ""
-    # After a change, Firestore is written at most once per this many seconds.
-    save_interval_seconds: Annotated[float, Field(ge=0)] = 1.0
 
     @model_validator(mode="after")
     def _validate_query_mode(self):
-        if self.enabled and self.mode == "query":
+        if self.enabled:
             if (
                 not self.project_id
                 or not self.namespace
                 or not self.namespace.replace("_", "").replace("-", "").isalnum()
             ):
                 raise ValueError(
-                    "query mode requires an explicit project_id and alphanumeric namespace"
+                    "Firestore requires an explicit project_id and alphanumeric namespace"
                 )
-            if self.collection_prefix:
-                raise ValueError("query mode uses namespace, not collection_prefix")
         return self
 
 
@@ -238,9 +231,9 @@ class Config(_Section):
     server: ServerConfig = ServerConfig()
     data_file: DataFileConfig = DataFileConfig()
     firestore: FirestoreConfig = FirestoreConfig()
-    # Serve the /console and /browse pages and /debug/all-data, which expose all data.
+    # Serve the /console and /browse pages, which expose all data.
     debug_tools: bool = True
-    # Protects /browse and /debug/all-data (HTTP basic auth, any username). Empty means
+    # Protects /browse and the other admin pages (HTTP basic auth, any username). Empty means
     # no password, which is only allowed when [server.host] is a numeric IP address.
     master_password: str = ""
     log_level: LogLevel = "INFO"

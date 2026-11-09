@@ -35,14 +35,11 @@ The marker makes this a one-time release cleanup. Normal author republishing,
 even without a version/code change, survives later server restarts. Concurrent
 author changes abort the transaction instead of leaving a partial draft/hide
 or marker. InMemoryStore tests keep in-memory markers; unknown persistent
-adapters without a transactional journal are skipped. Both production Firestore modes are supported through the real metrics wrapper.
-Query mode uses the atomic migration journal above. Legacy snapshot mode uses a
-receipt in its existing prefixed meta collection, claimed before any visibility
-change, then flushes the snapshot and marks completion. A crash or failed save
-leaves a claim for operator review and never automatically re-hides a later
-restoration. It cannot claim atomic rollback across the snapshot and receipt.
-Snapshot restart, restored publication, failed claim and crash-after-claim are
-covered explicitly. Other unknown persistent adapters still skip safely.
+adapters without a transactional journal are skipped. Production is supported
+through the real metrics wrapper: the query store uses the atomic migration
+journal above. (The legacy snapshot store had its own receipt-based path; it
+was removed with snapshot mode on Nov 9, 2026.) Other unknown persistent
+adapters still skip safely.
 No snapshot format, configuration or access changes are introduced.
 
 31 focused tests cover both-side guards, whole-manifest prevalidation,

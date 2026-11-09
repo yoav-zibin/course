@@ -12,9 +12,10 @@ data volume, but the peak-traffic objective still needs measurable concurrency o
 requests-per-second and latency targets before VM sizes or a capacity claim can be
 justified.
 
-The current server is not safe to scale by adding a second VM. `FirestoreStore` loads
-every record into each process at startup, serves reads from its private in-memory
-copy, and periodically writes changed records. Two processes would have divergent
+The original server was not safe to scale by adding a second VM. Its snapshot
+Firestore store loaded
+every record into each process at startup, served reads from its private in-memory
+copy, and periodically wrote changed records. Two processes would have divergent
 copies and can overwrite one another. Several lookups also scan all records, including
 finding matches involving a user, open matches, quick-match candidates, and users linked
 to a login credential. The in-memory store now indexes linked-login lookups, matches by

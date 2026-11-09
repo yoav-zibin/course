@@ -48,7 +48,6 @@ from game_platform.schemas import (
     CampaignSpendUpdate,
     LocaleOut,
     LocalesOut,
-    AllDataOut,
     AuthConfigOut,
     AuthResponse,
     EmailStart,
@@ -1141,15 +1140,13 @@ def agree_to_payouts(
 
 @router.get("/matches/{match_id}/history")
 def get_match_history(platform: Platform, match_id: str, caller_id: OptionalCallerId) -> MatchHistoryOut:
-    if getattr(platform._store, "scalable", False):
-        raise HTTPException(409, "use /v2/matches/{match_id}/history with bounded pages")
+    # One match's moves: the query store reads them in bounded chunks behind
+    # the lazy history, so the full list costs no dataset-sized read.
     return MatchHistoryOut.of(platform.get_match(match_id, caller_id=caller_id))
 
 
 @router.get("/matches/{match_id}/moves")
 def list_moves(platform: Platform, match_id: str, caller_id: OptionalCallerId) -> list[MoveOut]:
-    if getattr(platform._store, "scalable", False):
-        raise HTTPException(409, "use /v2/matches/{match_id}/history with bounded pages")
     return [MoveOut.of(move) for move in platform.get_match(match_id, caller_id=caller_id).moves]
 
 
@@ -1451,7 +1448,7 @@ def _check_master_password(
     credentials: Annotated[HTTPBasicCredentials | None, Depends(_basic_auth)],
 ) -> None:
     """Uses HTTP basic auth so the browser asks for the password once and then sends
-    it with every request, including the pages' fetches of /debug/all-data."""
+    it with every request, including the pages' fetches of the admin collections."""
     master_password: str = request.app.state.master_password
     if not master_password:
         return
@@ -1531,12 +1528,6 @@ def admin() -> FileResponse:
 @debug_router.get("/privacy")
 def privacy() -> FileResponse:
     return FileResponse(_STATIC_DIR / "privacy.html")
-
-
-@debug_router.get("/debug/all-data", dependencies=[MasterPassword])
-def all_data(platform: Platform) -> AllDataOut:
-    """Everything, including users' passwords."""
-    return AllDataOut.of(platform.all_data())
 
 
 @debug_router.get("/admin/game-input-metrics", dependencies=[MasterPassword])
@@ -2057,9 +2048,9 @@ def create_app(
     monitor: observability.Monitor | None = None,
 ) -> FastAPI:
     """[debug_tools] adds the web pages (/, /portal, /admin, /console, /browse)
-    and /debug/all-data, which exposes everything (including users' passwords),
-    and the backoffice's /stats and /admin/* endpoints. /admin, /browse, /stats,
-    /debug/all-data and /admin/* need [master_password], unless it is empty.
+    and the backoffice's /stats and /admin/* endpoints; the admin user pages
+    expose every user's password. /admin, /browse, /stats and /admin/* need
+    [master_password], unless it is empty.
 
     [cors_allow_origins] are the origins whose pages may call the API from a browser;
     empty adds no CORS headers, for when a reverse proxy already adds them (two

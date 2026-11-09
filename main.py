@@ -42,7 +42,7 @@ def warn_about_insecure_setup(config: Config, platform: GamePlatform) -> None:
     if config.debug_tools and not config.master_password:
         logger.warning(
             "debug_tools is on with no master_password: anyone who can reach this "
-            "server can read every user's password via /browse and /debug/all-data"
+            "server can read every user's password via the admin pages"
         )
     if getattr(platform._store, "scalable", False):
         return  # Full-database hygiene checks belong to offline maintenance.
@@ -111,14 +111,14 @@ def main() -> None:
     )
     monitor = observability.Monitor(config.monitoring)
     store: SavingStore
-    if config.firestore.enabled and config.firestore.mode == "query":
+    if config.firestore.enabled:
         if (
             config.firestore.database == "(default)"
             and not config.firestore.allow_default_database_query
             and not os.environ.get("FIRESTORE_EMULATOR_HOST")
         ):
             raise ValueError(
-                "query mode in the default database requires explicit production opt-in after migration"
+                "Firestore in the default database requires explicit production opt-in after migration"
             )
         from google.cloud import firestore
         from game_platform.query_store import QueryStore
@@ -129,21 +129,6 @@ def main() -> None:
                 database=config.firestore.database,
             ),
             namespace=config.firestore.namespace,
-        )
-    elif config.firestore.enabled:
-        # Imported here so that servers using the data file don't load the client.
-        from game_platform.firestore_store import FirestoreStore
-
-        store = FirestoreStore.connect(
-            project_id=config.firestore.project_id,
-            database=config.firestore.database,
-            collection_prefix=config.firestore.collection_prefix,
-            min_write_interval_seconds=config.firestore.save_interval_seconds,
-        )
-        logger.info(
-            "Using Firestore database %s (collection prefix %r)",
-            config.firestore.database,
-            config.firestore.collection_prefix,
         )
     else:
         data_file = config.data_file.path.expanduser()

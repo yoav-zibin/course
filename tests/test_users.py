@@ -123,12 +123,12 @@ def test_passwords_are_saved_and_only_shown_by_the_debug_tools(
     api = Api(store=store)
     alice = api.new_user("alice")
     password = api.passwords_by_user_id[alice]
-    all_data = api.request("GET", "/debug/all-data").text
+    all_data = api.client.app.state.platform.all_data()
     store.close()
 
     (saved_user,) = json.loads(path.read_text())["data"]["users"]
     assert saved_user["password"] == password
-    assert json.loads(all_data)["users"][0]["password"] == password
+    assert all_data.users[0].password == password
     assert "password" not in api.ok("GET", f"/users/{alice}")
 
     # After a restart, the saved password still works.

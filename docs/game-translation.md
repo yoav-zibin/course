@@ -178,8 +178,8 @@ language outgrows ~600 KB, see below), loaded into memory once:
   applied to the memory in place, so concurrent requests and servers cannot overwrite each other's entries.
 - A language that would near Firestore's 1 MiB document limit spills into `es-001`, `es-002`, ...; a
   correction stays in the chunk it was in. All chunks of all languages still load in the one query.
-- `FirestoreStore` (the whole-database-in-memory mode) and the data-file stores keep the same behaviour:
-  they already serve translations from memory; `FirestoreStore` saves them in the same bundle layout.
+- The data-file stores keep the same behaviour:
+  they already serve translations from memory and save them in the same bundle layout.
 - `GET /admin/translations` (and `/v2/admin/translations`) answer from the memory too, without the old
   limit of 100 rows.
 
@@ -197,8 +197,7 @@ python3 -m game_platform.tools.migrate_translation_bundles --project PROJECT --d
 counts, adds only entries no bundle has (so it is idempotent and never overwrites a correction made
 meanwhile), checks the bundles from the database, and then marks `<namespace>_meta/translations` as
 migrated, after which the server no longer reads the old rows. The old documents are left alone;
-delete the `<namespace>_translations` collection when you are happy. A server running `FirestoreStore`
-needs no command: its first save after the upgrade rewrites the rows as bundles and deletes the old ones.
+delete the `<namespace>_translations` collection when you are happy.
 
 **To the browser**, `GET /i18n/bundle/{locale}` answers in one response:
 

@@ -87,10 +87,21 @@ window.addEventListener("unhandledrejection", (event) => {
   reportClientError("unhandled_rejection", event.reason?.message ?? event.reason);
 });
 
-async function fetchAllData() {
-  const response = await fetch("/debug/all-data");
-  if (!response.ok) throw new Error(`GET /debug/all-data: ${response.status}`);
-  return response.json();
+/** Every item of one admin collection (/v2/admin/{kind}), fetched in bounded
+ * pages of 100: the server never builds a whole-dataset response. */
+async function fetchAdminCollection(kind) {
+  const items = [];
+  let cursor = null;
+  do {
+    const params = new URLSearchParams({ limit: "100" });
+    if (cursor) params.set("cursor", cursor);
+    const response = await fetch(`/v2/admin/${kind}?${params}`);
+    if (!response.ok) throw new Error(`GET /v2/admin/${kind}: ${response.status}`);
+    const result = await response.json();
+    items.push(...result.items);
+    cursor = result.next_cursor;
+  } while (cursor);
+  return items;
 }
 
 /** Latest version of each game, in creation order. */

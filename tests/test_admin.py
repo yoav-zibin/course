@@ -78,8 +78,8 @@ def test_admin_deletes_a_user_with_their_games_and_matches(api: Api) -> None:
 
     api.ok("DELETE", f"/admin/users/{alice}")
 
-    data = api.ok("GET", "/debug/all-data")
-    assert [user["display_name"] for user in data["users"]] == ["bob"]
+    platform = api.client.app.state.platform
+    assert [user.display_name for user in platform.all_data().users] == ["bob"]
     assert api.request("GET", f"/matches/{owned}").status_code == 404
     assert api.request("GET", f"/games/{game_id}").json()["deleted"] is True
     assert api.match_summary(joined)["players"] == ["bob", "alice"]

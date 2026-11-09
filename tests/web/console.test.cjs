@@ -8,10 +8,19 @@ const path=require('node:path');
 // uses are inlined here verbatim so the test exercises console.js itself.
 const COMMON_DEFS=`
 function shortId(id) { return id.length > 8 ? id.slice(0, 8) : id; }
-async function fetchAllData() {
-  const response = await fetch("/debug/all-data");
-  if (!response.ok) throw new Error(\`GET /debug/all-data: \${response.status}\`);
-  return response.json();
+async function fetchAdminCollection(kind) {
+  const items = [];
+  let cursor = null;
+  do {
+    const params = new URLSearchParams({ limit: "100" });
+    if (cursor) params.set("cursor", cursor);
+    const response = await fetch(\`/v2/admin/\${kind}?\${params}\`);
+    if (!response.ok) throw new Error(\`GET /v2/admin/\${kind}: \${response.status}\`);
+    const result = await response.json();
+    items.push(...result.items);
+    cursor = result.next_cursor;
+  } while (cursor);
+  return items;
 }
 function latestGames(allData) {
   const latest = new Map();
@@ -32,7 +41,7 @@ const SPEC={
   components:{schemas:{}},
 };
 
-function setup(allDataResponse) {
+function setup(respond) {
   const nodes=new Map();
   const node=id=>{
     if(!nodes.has(id)) nodes.set(id,{value:'',textContent:'',hidden:false,disabled:false,dataset:{},children:[],classList:{toggle(){}},
@@ -44,7 +53,8 @@ function setup(allDataResponse) {
     setItem:(k,v)=>storageData.set(k,String(v)),removeItem:k=>storageData.delete(k)};
   const fetch=async(url)=>{
     if(url==='/openapi.json') return {ok:true,json:async()=>SPEC};
-    if(url==='/debug/all-data') return allDataResponse;
+    const admin=/^\/v2\/admin\/(users|games|matches)\?/.exec(url);
+    if(admin) return respond(admin[1]);
     throw new Error(`Unexpected fetch ${url}`);
   };
   const ctx=vm.createContext({console,Map,Set,URLSearchParams,
@@ -61,21 +71,21 @@ function setup(allDataResponse) {
 const settle=async()=>{ for(let i=0;i<10;i++) await new Promise(r=>setTimeout(r,5)); };
 const operationButtons=(node)=>node('operations').children.filter(child=>child.class==='operation');
 
-test('operations list renders even when the all-data request fails',async()=>{
-  const {node,run}=setup({ok:false,status:401,json:async()=>({})});
+test('operations list renders even when the admin page requests fail',async()=>{
+  const {node,run}=setup(()=>({ok:false,status:401,json:async()=>({})}));
   await settle();
   const buttons=operationButtons(node);
   assert.equal(buttons.length,2);
   assert.equal(run('state.selected.key'),'GET /games');
 });
 
-test('operations list renders when all-data records lack optional fields',async()=>{
-  // Agent-imported game versions may carry no updated_at, and stored matches
+test('operations list renders when admin records lack optional fields',async()=>{
+  // Agent-imported games may carry no updated_at, and stored matches
   // may lack players: neither may take the console page down.
-  const allData={users:[{id:'u1',display_name:'Ann',password:'pw'}],
-    game_versions:[{id:'g1',name:'Game',version:1,deleted:false}],
+  const parts={users:[{id:'u1',display_name:'Ann',password:'pw'}],
+    games:[{id:'g1',name:'Game',version:1,deleted:false}],
     matches:[{id:'m1',game_id:'g1',status:'ongoing'}]};
-  const {node,run}=setup({ok:true,status:200,json:async()=>allData});
+  const {node,run}=setup((kind)=>({ok:true,status:200,json:async()=>({items:parts[kind],next_cursor:null})}));
   await settle();
   assert.equal(operationButtons(node).length,2);
   assert.equal(run('state.selected.key'),'GET /games');

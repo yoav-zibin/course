@@ -1222,9 +1222,8 @@ class GamePlatform:
         """The users for [user_ids], in request order, skipping unknown ids.
 
         Backs the portal's batched profile fetch: one API call instead of one
-        request per visible player. Reads only, so no lock (see get_user); in
-        snapshot mode the store is in memory, so the whole batch costs no
-        Firestore fetches.
+        request per visible player. Reads only, so no lock (see get_user); with
+        the query store each id in the batch is a single document read.
         """
         users = []
         for user_id in user_ids:
@@ -4703,9 +4702,15 @@ class GamePlatform:
         first.
         """
         with self._lock:
-            now = self._clock()
             users = [u for u in self._store.list_users() if u.replaced_by_user_id is None]
-            parent = {user.id: self._inviter_of(user) for user in users}
+        return self._invite_stats_for(users)
+
+    def _invite_stats_for(self, users) -> dict[str, JsonValue]:
+        """The invite tree over [users], which must be the live (not merged-away)
+        accounts. Computed from the given records plus per-user inviter lookups,
+        so the scalable platform can feed it users read in bounded pages."""
+        now = self._clock()
+        parent = {user.id: self._inviter_of(user) for user in users}
         live = {user.id for user in users}
         for user_id, inviter in parent.items():
             if inviter not in live:

@@ -148,9 +148,9 @@ def test_a_game_bug_is_a_500_and_is_recorded(api: Api):
     # The match is unchanged, and the failure is recorded on the game version.
     match = api.ok("GET", f"/matches/{match_id}", as_user=alice)
     assert match["move_count"] == 0
-    errors = api.ok("GET", "/debug/all-data")["game_version_errors"]
+    errors = api.client.app.state.platform.all_data().game_version_errors
     assert [
-        (e["game_id"], e["function"]) for e in errors
+        (e.game_id, e.function) for e in errors
     ] == [(game_id, "applyMove")]
 
 

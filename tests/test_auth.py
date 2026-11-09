@@ -520,8 +520,8 @@ def test_merge_does_not_duplicate_an_already_linked_login(
 
 
 def test_merge_works_through_the_file_backed_store(tmp_path: Path) -> None:
-    """The live server persists with JsonFileStore, which must implement every store
-    method the merge uses (regression test: it once missed two)."""
+    """The file-backed store must implement every store method the merge uses
+    (regression test: it once missed two)."""
     store = JsonFileStore(tmp_path / "data.json")
     try:
         platform = GamePlatform(store=store, clock=Clock())

@@ -197,10 +197,10 @@ def import_package_from_legacy_workflow(workflow: dict[str, Any]) -> dict[str, A
     wrapped the same data in per-step artifacts; only the durable parts survive:
     translations, the resubmission secret, rules/UI text, tutorial, images and
     unit tests. Job, approval, history and conversation state are dropped.
-    Applied at Game materialization in QueryStore._decode and
-    FirestoreStore._load; a converted record is serialized with import_package
-    (and without builder_workflow) on its next save. The JSON file store does
-    not convert: its data files never carried workflows in practice."""
+    Applied at Game materialization in QueryStore._decode; a converted record
+    is serialized with import_package (and without builder_workflow) on its
+    next save. The JSON file store does not convert: its data files never
+    carried workflows in practice."""
     artifacts = workflow.get("artifacts") or {}
 
     def value(step: str) -> dict[str, Any]:

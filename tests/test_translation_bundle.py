@@ -10,7 +10,6 @@ from typing import Any
 import pytest
 
 from game_platform import translation_bundle
-from game_platform.firestore_store import FirestoreStore
 from game_platform.models import Translation
 from game_platform.query_store import ADAPTERS, QueryStore, _BundleBackend, key
 from game_platform.tests.fake_firestore import FakeClient, query_store
@@ -239,34 +238,6 @@ def test_a_translation_corrected_after_the_migration_is_not_overwritten_by_runni
     store.put_translations([row("Hello", "Buenas", provider="manual")])
     tool.migrate(client, "test")
     assert query_store(client=client).list_translations("es")[0].text == "Buenas"
-
-
-# The Firestore store that keeps everything in memory
-
-
-def test_the_in_memory_firestore_store_saves_one_document_per_language_and_migrates_old_rows() -> None:
-    client = FakeClient()
-    legacy_document(FakeClient(), "x", row("ignored"))  # (just checks the helper)
-    for item in [row("Old one")]:
-        client.docs[f"translations/{item.locale}@{item.source_hash}"] = {
-            "json": ADAPTERS["translations"].dump_json(item).decode()
-        }
-    store = FirestoreStore(client, min_write_interval_seconds=0)
-    assert [t.source for t in store.list_translations("es")] == ["Old one"]  # read from the old rows
-    store.put_translations([row("New one"), row("Nouveau", locale="fr")])
-    store.close()  # saves
-    assert sorted(p for p in client.docs if p.startswith("translation_bundles/")) == [
-        "translation_bundles/es-000",
-        "translation_bundles/fr-000",
-    ]
-    assert not any(p.startswith("translations/") for p in client.docs)  # the old rows are gone
-    reopened = FirestoreStore(client, min_write_interval_seconds=0)
-    try:
-        assert {t.source for t in reopened.list_translations()} == {"Old one", "New one", "Nouveau"}
-        reopened.delete_translation("fr", text_hash("Nouveau"))
-    finally:
-        reopened.close()
-    assert "translation_bundles/fr-000" not in client.docs  # an empty language leaves no document
 
 
 # The bundle endpoint

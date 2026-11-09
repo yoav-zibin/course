@@ -137,11 +137,11 @@ def test_match_list_never_runs_view_for(api: Api) -> None:
     match_id = _start(api, alice, game_id, joiner=bob)
 
     def view_errors() -> int:
-        errors = api.ok("GET", "/debug/all-data")["game_version_errors"]
+        errors = api.client.app.state.platform.all_data().game_version_errors
         return sum(
             1
             for error in errors
-            if error["game_id"] == game_id and error["function"] == "viewFor"
+            if error.game_id == game_id and error.function == "viewFor"
         )
 
     # Starting the match already ran (and recorded) the broken viewFor once

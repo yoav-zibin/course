@@ -41,7 +41,7 @@ from game_platform.models import (
 )
 from game_platform.game_testing import GameTestReport, TestFailure
 from game_platform.i18n import LOCALE_CODES, Locale, get_locale, normalize_locale
-from game_platform.service import AllData, GameStrings, TranslationBundle
+from game_platform.service import GameStrings, TranslationBundle
 
 Name = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
@@ -870,19 +870,6 @@ class MatchHistoryOut(BaseModel):
         )
 
 
-class MatchDetailOut(MatchOut):
-    moves: list[MoveOut]
-    hidden_for_user_ids: list[str]
-
-    @classmethod
-    def of(cls, match: Match) -> "MatchDetailOut":
-        return cls(
-            **MatchOut.of(match).model_dump(),
-            moves=[MoveOut.of(move) for move in match.moves],
-            hidden_for_user_ids=sorted(match.hidden_for_user_ids),
-        )
-
-
 class GameVersionErrorOut(BaseModel):
     """A server-code failure recorded on a game version (v2 Game API)."""
 
@@ -911,29 +898,6 @@ class GameTestSeedsOut(BaseModel):
     @classmethod
     def of(cls, record: GameTestSeeds) -> "GameTestSeedsOut":
         return cls(game_id=record.game_id, seeds=list(record.seeds))
-
-
-class AllDataOut(BaseModel):
-    users: list[UserWithPasswordOut]
-    # Every version of every game, including deleted games.
-    game_versions: list[GameOut]
-    matches: list[MatchDetailOut]
-    game_version_errors: list[GameVersionErrorOut] = []
-    game_test_seeds: list[GameTestSeedsOut] = []
-
-    @classmethod
-    def of(cls, data: AllData) -> "AllDataOut":
-        return cls(
-            users=[UserWithPasswordOut.of_user(user) for user in data.users],
-            game_versions=[GameOut.of(game) for game in data.game_versions],
-            matches=[MatchDetailOut.of(match) for match in data.matches],
-            game_version_errors=[
-                GameVersionErrorOut.of(error) for error in data.game_version_errors
-            ],
-            game_test_seeds=[
-                GameTestSeedsOut.of(record) for record in data.game_test_seeds
-            ],
-        )
 
 
 class LocaleOut(BaseModel):

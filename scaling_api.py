@@ -3,7 +3,7 @@
 import re
 from dataclasses import replace
 from fastapi import HTTPException, Query, Response
-from game_platform.schemas import GameSummaryOut, UserOut, MoveOut
+from game_platform.schemas import GameSummaryOut, UserOut, UserWithPasswordOut, MoveOut
 
 
 def install(app, *, debug_tools):
@@ -146,8 +146,9 @@ def install(app, *, debug_tools):
         cursor: str | None = None,
     ):
         store = store_of(platform)
-        if platform._require_user(caller_id).saved_game_ids:
-            raise HTTPException(409, "legacy library requires offline normalization")
+        # A legacy library (saved_game_ids on the user record) is normalized
+        # lazily on this first touch; it is one user's small list.
+        platform.ensure_library_normalized(caller_id)
         result = page(
             store,
             "libraries",
@@ -337,7 +338,10 @@ def install(app, *, debug_tools):
                 store_of(platform), kind, limit=limit, cursor=cursor, scope="admin"
             )
             if kind == "users":
-                items = [UserOut.of(x) for x in result.items]
+                # Master-password debug surface: like the other debug tools,
+                # it includes the password (the API credential the console
+                # needs to act as the user).
+                items = [UserWithPasswordOut.of_user(x) for x in result.items]
             elif kind == "matches":
                 items = [_match_out(platform, x) for x in result.items]
             elif kind in ("games", "game_versions"):

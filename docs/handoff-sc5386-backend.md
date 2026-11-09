@@ -50,13 +50,15 @@ server-game practice behavior; distinguish local practice from a server
 computer-opponent match. Reuse main's query APIs and shared header instead of
 recreating them.
 
-Production `buildplay.fun` runs `game_platform.main` with **query mode in the
-existing (default) database, namespace production_v1**. Its private external
+Production `buildplay.fun` runs `game_platform.main` with **the query store in
+the existing (default) database, namespace production_v3**. Its private external
 config has `allow_default_database_query: true`; non-storage settings and all
 credentials were preserved. Do not overwrite it with the example config or
-switch it back to stale legacy collections. `/storage/capabilities` now returns
-`pagination: true`; `/debug/all-data` returns 409 instead of loading/exporting
-everything. The ordinary Portal/Builder/admin pages remain the application UI.
+switch it back to stale legacy collections. `/storage/capabilities` returns
+`pagination: true`; the whole-dataset `/debug/all-data` endpoint was deleted
+with snapshot mode (Nov 9, 2026), and the admin pages read the paginated
+`/v2/admin/*` collections instead. The ordinary Portal/admin pages remain the
+application UI.
 
 During a writer-maintenance window, the existing records were converted and
 fully reconciled: **131 users, 167 game versions, 212 matches, 1,780 moves**, plus
@@ -69,9 +71,10 @@ admin checks verified all user IDs across three pages and every match ID.
 The full-data and rollback rehearsals ran in a loopback emulator on the same VM;
 private credentials were not downloaded. Original collections and protected
 snapshots remain for recovery at `/opt/game-platform/backups/production-query-cutover`.
-If rollback is needed after new writes, export current query state into a fresh
-legacy prefix; never select the stale pre-cutover source. See main's
-`docs/scaling-production-cutover.md` and `scaling_cutover.py`.
+There is no snapshot mode to roll back to (removed Nov 9, 2026, together with
+`scaling_cutover.py`); recover from the Firestore backups or a
+`scaling_tools export` of the namespace. See main's
+`docs/scaling-production-cutover.md`.
 
 The durable worker wakes after commits/deadlines with a 60-second recovery poll;
 half-second idle Firestore polling is removed. Ordinary online account merges
@@ -113,14 +116,12 @@ For your Portal/Builder scope:
    UI work and main's experiments/campaign headers. Do not independently recreate
    the storage API. See the endpoint contract below.
 2. Verify catalog/search, owned games, drafts, saved games, open/current matches
-   and history use bounded pages, follow cursors, and retain snapshot-mode
-   fallback. Check desktop/mobile and old cached-client behavior. Existing
+   and history use bounded pages and follow cursors. Check desktop/mobile and
+   old cached-client behavior. Existing
    small-fixture checks passed; larger emulator datasets still need validation.
-3. Your pre-existing service on the **scaling VM's** port 8000 was last observed
-   in snapshot mode; the **primary VM's** production service is now query mode.
-   Adopting query mode there is a separate integration step. The working query
-   demonstration is the protected port-8132 service; do not mistake the two.
-   Coordinate any test-service switch with Chad. Do not reset production's query
+3. The **scaling VM** was deleted on Nov 6, 2026; the **primary VM's**
+   production service runs the query store — the only Firestore store since
+   snapshot mode was removed on Nov 9, 2026. Do not reset production's query
    config or point it at the synthetic scaling database.
 4. Exercise normal Portal/Builder against the shared fake-month namespace and
    record any client-specific failures. Use the existing VM and database. Do not

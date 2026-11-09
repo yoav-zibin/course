@@ -429,31 +429,6 @@ def test_seed_resume_does_not_reset_existing_user(store):
     assert store.get_user(user.id).token_balance == 17
 
 
-def test_snapshot_migration_preserves_history_and_resumes(store):
-    from game_platform.firestore_store import import_snapshot
-    from game_platform.scaling_tools import migrate
-
-    source = Api()
-    alice, bob = source.new_user("alice"), source.new_user("bob")
-    game = source.new_game(owner=alice)
-    match = source.new_match(owner=alice, game_id=game, joiners=[bob], start=True)
-    source.move(match, as_user=alice, next_turn=1, state={"board": [[1, 0], [0, 0]]})
-    snapshot = source.client.app.state.platform._store.snapshot()
-    prefix = "source_" + uuid.uuid4().hex + "_"
-    import_snapshot(store.client, snapshot, collection_prefix=prefix)
-    assert not migrate(store.client, store, source_prefix=prefix, batch_records=1)[
-        "complete"
-    ]
-    assert migrate(store.client, store, source_prefix=prefix)["complete"]
-    assert store.get_user(alice) == snapshot.users[0]
-    assert store.get_game(game) == snapshot.game_versions[0]
-    migrated = store.get_match(match)
-    assert replace(migrated, moves=tuple(migrated.moves)) == snapshot.matches[0]
-    counts = store.counts()
-    migrate(store.client, store, source_prefix=prefix)
-    assert store.counts() == counts
-
-
 def test_quick_match_uses_bounded_queries_and_reserves_same_player_slot(store):
     api = api_for(store)
     alice, bob = api.new_user("alice"), api.new_user("bob")
@@ -495,7 +470,7 @@ def test_payout_ledger_and_lost_response_retry_are_atomic(store):
     assert len(store.get_match(match).moves) == 5
 
 
-def test_private_history_is_view_filtered_and_old_unbounded_routes_rejected(store):
+def test_private_history_is_view_filtered_and_v1_routes_serve_the_same_match(store):
     from game_platform.tests.test_server_matches import _create_game, _start, _move
 
     api = api_for(store)
@@ -508,14 +483,17 @@ def test_private_history_is_view_filtered_and_old_unbounded_routes_rejected(stor
         "your_secret": "secret-of-" + bob,
     }
     assert "secrets" not in history["initial_state"]
-    assert api.request("GET", f"/matches/{match}/moves", as_user=bob).status_code == 409
-    assert (
-        api.request("GET", f"/matches/{match}/history", as_user=bob).status_code == 409
-    )
+    # The v1 routes serve the same one-match history (moves are read in
+    # bounded chunks behind the lazy history); they keep the v1 raw-state
+    # contract, unlike the view-filtered v2 pages above.
+    moves = api.ok("GET", f"/matches/{match}/moves", as_user=bob)
+    assert [move["new_state"]["count"] for move in moves] == [1]
+    full = api.ok("GET", f"/matches/{match}/history", as_user=bob)
+    assert [move["new_state"]["count"] for move in full["moves"]] == [1]
 
 
 def test_export_resume_validation_and_cleanup_are_bounded(store, tmp_path):
-    from game_platform.scaling_tools import seed, migrate
+    from game_platform.scaling_tools import seed
     from game_platform.scaling_maintenance import (
         export_namespace,
         validate_matches,
@@ -538,8 +516,6 @@ def test_export_resume_validation_and_cleanup_are_bounded(store, tmp_path):
     )
     exported = export_namespace(store, tmp_path)
     assert exported == export_namespace(store, tmp_path)
-    with pytest.raises(ValueError, match="empty destination"):
-        migrate(store.client, store, source_prefix="unrelated_")
     match = store.page("matches", limit=1).items[0]
     store.delete_match(match.id)
     assert store.get_match(match.id) is None
@@ -967,7 +943,10 @@ def test_large_library_pages_do_not_grow_the_user_record(store):
         )
         ids.add(gid)
     assert store.get_user(owner).saved_game_ids == ()
-    assert api.request("GET", "/users/me/saved-games", as_user=owner).status_code == 409
+    # The v1 list serves the whole library too: entries are read in bounded
+    # pages behind it, however many games the user saved.
+    saved = api.ok("GET", "/users/me/saved-games", as_user=owner)
+    assert {game["id"] for game in saved} == ids
     found, cursor = set(), None
     while True:
         result = api.ok(
@@ -996,11 +975,14 @@ def test_library_normalization_and_account_jobs_preserve_saved_games(store):
     owner, target = api.new_user("owner"), api.new_user("target")
     game = api.new_game(owner=owner)
     store.put_user(replace(store.get_user(owner), saved_game_ids=(game,)))
+    # The first read normalizes the legacy library lazily — no offline job
+    # and no refusal — and the offline command afterwards is a no-op.
     assert (
-        api.request("GET", "/v2/users/me/saved-games", as_user=owner).status_code == 409
+        api.ok("GET", "/v2/users/me/saved-games", as_user=owner)["items"][0]["id"]
+        == game
     )
-    _run_until_complete(normalize, store=store, run_id="normalize", max_records=1)
     assert store.get_user(owner).saved_game_ids == ()
+    _run_until_complete(normalize, store=store, run_id="normalize", max_records=1)
     assert (
         api.ok("GET", "/v2/users/me/saved-games", as_user=owner)["items"][0]["id"]
         == game
