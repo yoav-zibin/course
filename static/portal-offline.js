@@ -146,6 +146,46 @@ class PortalOffline {
       return undefined;
     }
   }
+  /** Stored response-cache keys belonging to OTHER accounts on this
+   * device, least recently used first (from each account's recency log;
+   * unlogged entries count as oldest). Only `.r.` pieces are listed:
+   * another account's queues, practice matches and archives are durable
+   * data and are never reclaimed. */
+  foreignResponseKeys() {
+    const mine = `${this.key()}.`;
+    const accounts = new Map();
+    for (const stored of this.storedKeys()) {
+      if (!stored.startsWith(PORTAL_PREFIX) || stored.startsWith(mine)) continue;
+      const rest = stored.slice(PORTAL_PREFIX.length);
+      const dot = rest.indexOf(".");
+      if (dot < 0) continue;
+      const account = rest.slice(0, dot);
+      if (!accounts.has(account)) accounts.set(account, { recency: null, responses: [] });
+      const entry = accounts.get(account);
+      if (rest.slice(dot) === ".recency") {
+        const log = this.readJson(stored);
+        entry.recency = new Map(
+          (Array.isArray(log?.entries) ? log.entries : []).map((item) => [item.path, item.at || 0]),
+        );
+      } else if (rest.slice(dot).startsWith(".r.")) {
+        entry.responses.push(stored);
+      }
+    }
+    const found = [];
+    for (const [account, entry] of accounts) {
+      const base = `${PORTAL_PREFIX}${account}`;
+      for (const stored of entry.responses) {
+        let path = stored.slice(base.length + 3);
+        try {
+          path = decodeURIComponent(path);
+        } catch {
+          // An undecodable suffix sorts as oldest; the key is still cache.
+        }
+        found.push({ key: stored, at: entry.recency?.get(path) || 0 });
+      }
+    }
+    return found.sort((a, b) => a.at - b.at).map((item) => item.key);
+  }
   storedKeys() {
     try {
       if (typeof this.storage.keys === "function") return this.storage.keys();
@@ -561,6 +601,22 @@ class PortalOffline {
     while (failed.length && droppable.length) {
       evictOne();
       failed = this.fanOut(data);
+    }
+    // The quota is per browser origin, not per account: when this account
+    // has nothing left to drop, the space may be held by other accounts'
+    // cached answers on this device. Those are refetchable GET responses
+    // (never queues, practice matches or archives), so reclaim them
+    // before declaring the device full.
+    if (failed.length) {
+      const foreign = this.foreignResponseKeys();
+      while (failed.length && foreign.length) {
+        try {
+          this.storage.removeItem(foreign.shift());
+        } catch {
+          // A denied removal must not mask the original failure.
+        }
+        failed = this.fanOut(data);
+      }
     }
     if (failed.length) {
       const message =

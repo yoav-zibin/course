@@ -91,7 +91,9 @@ function idKind(paramName) {
 }
 
 function byRecentUpdate(items) {
-  return [...items].sort((a, b) => a.updated_at.localeCompare(b.updated_at));
+  // Some records (e.g. agent-imported game versions) carry no updated_at;
+  // a missing timestamp sorts as oldest instead of throwing.
+  return [...items].sort((a, b) => String(a.updated_at ?? "").localeCompare(String(b.updated_at ?? "")));
 }
 
 function latestId(kind) {
@@ -130,18 +132,20 @@ function renderDatalists() {
 }
 
 async function refreshData() {
+  // Everything here is best-effort context for the request form: a failed
+  // or malformed all-data response must never reject, or main() would die
+  // before the operations list renders.
   try {
     state.allData = await fetchAllData();
+    renderDatalists();
+    renderUserSelect();
+    // The password of the acting user may only now be known.
+    if (currentUserId() && !currentPassword()) {
+      $("user-password").value = knownPassword(currentUserId());
+      renderAuthNote();
+    }
   } catch (error) {
     toast(String(error));
-    return;
-  }
-  renderDatalists();
-  renderUserSelect();
-  // The password of the acting user may only now be known.
-  if (currentUserId() && !currentPassword()) {
-    $("user-password").value = knownPassword(currentUserId());
-    renderAuthNote();
   }
 }
 
@@ -672,8 +676,10 @@ async function main() {
 
   state.spec = await (await fetch("/openapi.json")).json();
   state.operations = parseOperations(state.spec);
-  await refreshData();
+  // Render the operations list first: it only needs the spec, and the page
+  // must stay usable even if the all-data load below fails or hangs.
   renderOperations();
+  await refreshData();
   if (!applyHash() && state.operations.length) selectOperation(state.operations[0]);
 }
 

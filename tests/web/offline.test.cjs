@@ -575,3 +575,23 @@ test("writeCache swallows a denied-storage error instead of failing the page", (
   assert.doesNotThrow(() => o.save("/new", { x: 1 }));
   assert.match(o.notice, /unavailable/);
 });
+test("a move is saved by reclaiming other accounts' cached answers when the device quota is full", () => {
+  const storage = totalQuotaStorage(1_000_000);
+  storage.keys = () => [...storage.map.keys()]; // like a real Storage object
+  const bob = new Offline(storage, undefined, () => ({ id: "bob", password: "t" }), () => false);
+  for (let i = 0; i < 20; i++) bob.save(`/games/g${i}/versions/1`, { code: "x".repeat(4000) });
+  const bobsMatch = { ...base, id: "bobs" };
+  bob.save("/matches/bobs", bobsMatch);
+  bob.enqueue(bobsMatch, body);
+  const alice = new Offline(storage, undefined, () => ({ id: "alice", password: "t" }), () => false);
+  alice.save("/matches/match", base);
+  // Alice has nothing of her own to evict and the device is full: only
+  // reclaiming bob's refetchable cache can make room for her move.
+  storage.setLimit(storage.storedBytes() + 100);
+  const shown = alice.enqueue(base, body);
+  assert.equal(shown.pending, 1);
+  assert.equal(alice.read().queues.match.length, 1);
+  assert.equal(bob.read().responses["/games/g0/versions/1"], undefined);
+  // Bob's queued move is durable data, never reclaimed.
+  assert.equal(bob.read().queues.bobs.length, 1);
+});

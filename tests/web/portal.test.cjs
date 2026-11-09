@@ -541,3 +541,20 @@ test('the portal boots when storage methods deny access',()=>{
   assert.equal(run('typeof portalStorage'),'function');
   assert.equal(run('portalStorage()===localStorage'),true);
 });
+
+test('leaving an ongoing server-coded match previews the payout, confirms, then leaves',async()=>{
+  const calls=[];
+  const {node,run}=setup(async(method,path)=>{
+    calls.push([method,path]);
+    if(path.endsWith('/maybeLeave')) return {pending_leave_payout:0,pending_leave_ends_match:true};
+    return {};
+  });
+  run('globalThis.confirm=()=>true;state.games[0].server_code="code";state.gameCache.set("game@2",state.games[0]);'+
+      'state.match={id:"match",game_id:"game",game_version:2,owner_user_id:"someone-else",status:"ongoing",move_count:2,'+
+      'players:[{player_index:0,kind:"human",user_id:"owner"},{player_index:1,kind:"computer",user_id:null}],turn_of_player_indices:[0]};'+
+      'state.selectedId="match";renderMatch()');
+  const leave=node('actions').children.find(child=>child.textContent==='Leave');
+  assert.ok(leave,'Leave button is rendered');
+  await leave.onclick();
+  assert.deepEqual(calls,[['POST','/matches/match/maybeLeave'],['POST','/matches/match/playerLeft']]);
+});
