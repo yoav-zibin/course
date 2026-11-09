@@ -2077,6 +2077,13 @@ const Player = {
       locale: "en",
       direction: "ltr",
     };
+    // Same derived legacy field as the portal's stateChangedMessage.
+    message.acting_for_player_index =
+      message.my_player_index !== null &&
+      Array.isArray(message.turn_of_player_indices) &&
+      message.turn_of_player_indices.includes(message.my_player_index)
+        ? message.my_player_index
+        : null;
     this.frame.contentWindow.postMessage(message, "*");
     Log.add("api", `state_changed → ${JSON.stringify(message)}`);
     this.refreshOutputs();

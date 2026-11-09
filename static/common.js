@@ -433,7 +433,11 @@ class GameFrame {
  * for portal matches, and the full state only in the builder's emulator,
  * where the author may see everything). A player only ever acts for
  * themselves: whether it is their turn is [my_player_index] being in
- * [turn_of_player_indices]; there is no acting-for seat. */
+ * [turn_of_player_indices]. The message also carries a derived
+ * [acting_for_player_index] for older game clients that read it to know
+ * when it is their turn: the viewer's own seat when it is in the turn,
+ * else null. It grants no authority to act for another seat — the move
+ * API still only lets a player act for their own seat. */
 function stateChangedMessage({ state, players, turn, status, endReason, moveCount, mySeat, view }) {
   const message = {
     type: "state_changed",
@@ -444,6 +448,11 @@ function stateChangedMessage({ state, players, turn, status, endReason, moveCoun
     end_reason: endReason,
     move_count: moveCount,
     my_player_index: mySeat,
+    // Derived legacy field: the viewer's own seat when it is in the turn,
+    // else null. Older game clients read this to know when it is their
+    // turn; it grants no authority to act for another seat.
+    acting_for_player_index:
+      mySeat !== null && Array.isArray(turn) && turn.includes(mySeat) ? mySeat : null,
   };
   if (view !== undefined) message.view = view;
   return message;
