@@ -2467,7 +2467,7 @@ async function runChecksUi() {
 
 async function loadExample() {
   try {
-    const response = await fetch("game-test-example.json");
+    const response = await fetch("/static/game-test-example.json");
     const example = await response.json();
     const tests = example.unit_tests || {};
     $("server-code").value = example.server_code || "";
