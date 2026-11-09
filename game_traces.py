@@ -222,7 +222,7 @@ def run_server_checks(body):
         },
         rules=rules,
         contract=body.unit_tests,
-        budget_seconds=3,
+        budget_seconds=8,
         max_walks=1000,
     )
     checks["random_walks"] = {
