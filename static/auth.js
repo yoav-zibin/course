@@ -1,4 +1,4 @@
-// Accounts and login, shared by the portal and the builder.
+// Accounts and login, shared by the site's pages.
 //
 // The browser remembers every logged-in account in localStorage:
 // [{id, display_name, password, linked: [{kind, identifier, linked_at}]}].

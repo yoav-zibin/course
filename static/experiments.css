@@ -1,6 +1,5 @@
 :root[data-skin="aurora"] {
   color-scheme: dark;
-  --builder-accent-ink: #071b22;
   --color-bg-0: #071321;
   --color-bg-1: #0e2032;
   --color-bg-2: #132a40;
@@ -24,7 +23,6 @@
 
 :root[data-skin="sunset"] {
   color-scheme: light;
-  --builder-accent-ink: #fffaf6;
   --color-bg-0: #fff8f1;
   --color-bg-1: #ffede0;
   --color-bg-2: #ffe3d1;
@@ -48,7 +46,6 @@
 
 :root[data-skin="immersive"] {
   color-scheme: dark;
-  --builder-accent-ink: #100c1d;
   --color-bg-0: #100c1d;
   --color-bg-1: #19132b;
   --color-bg-2: #211a38;
@@ -293,104 +290,6 @@
 :root[data-portal-layout="hamburger"] .portal-app-menu { display:flex; }
 :root[data-portal-layout="top"] .topbar[data-app-page="portal"] nav { display:flex; }
 
-/* Skin the builder's own controls and panels while leaving each game preview's
-   authored interface intact. */
-:root[data-skin="aurora"] .builder-shell {
-  --color-bg-0:#071321;--color-bg-1:#0e2032;--color-bg-2:#132a40;--color-bg-3:#1b3852;--color-bg-4:#264968;
-  --color-text-primary:#f0fbff;--color-text-secondary:#c1e3ee;--color-text-tertiary:#89b7ca;--color-text-quaternary:#63899b;
-  --color-border-1:#183044;--color-border-2:#24465b;--color-border-3:#38617a;--color-border-4:#5888a1;
-  --color-accent:#34c6b5;--color-accent-hover:#69e1d1;--color-focus-ring:#69e1d1;--builder-accent-ink:#071b22;
-}
-:root[data-skin="sunset"] .builder-shell {
-  --color-bg-0:#fff8f1;--color-bg-1:#ffede0;--color-bg-2:#ffe3d1;--color-bg-3:#ffd3b8;--color-bg-4:#ffc19c;
-  --color-text-primary:#38251f;--color-text-secondary:#61443a;--color-text-tertiary:#8b6759;--color-text-quaternary:#a58577;
-  --color-border-1:#f0d7c7;--color-border-2:#e8c2ad;--color-border-3:#d7a48a;--color-border-4:#c8876a;
-  --color-accent:#b94f35;--color-accent-hover:#963b29;--color-focus-ring:#963b29;--builder-accent-ink:#fffaf6;
-}
-:root[data-skin="immersive"] .builder-shell {
-  --color-bg-0:#100c1d;--color-bg-1:#19132b;--color-bg-2:#211a38;--color-bg-3:#30244e;--color-bg-4:#403064;
-  --color-text-primary:#f6f1ff;--color-text-secondary:#d7cdef;--color-text-tertiary:#aa9bc9;--color-text-quaternary:#81739e;
-  --color-border-1:#2a2141;--color-border-2:#3c305c;--color-border-3:#554578;--color-border-4:#75629b;
-  --color-accent:#c6f432;--color-accent-hover:#d9ff62;--color-focus-ring:#e3aaff;--builder-accent-ink:#100c1d;
-}
-:root[data-skin]:not([data-skin="classic"]) .builder-shell {
-  background:var(--color-bg-0);
-  color:var(--color-text-primary);
-  font-family:var(--font-sans);
-}
-:root[data-skin]:not([data-skin="classic"]) .builder-shell .sidebar { background:var(--color-bg-1); border-color:var(--color-border-2); }
-:root[data-skin]:not([data-skin="classic"]) .builder-shell button:not(.primary):not(.danger) {
-  background:var(--color-bg-2);border-color:var(--color-border-3);color:var(--color-text-primary);
-}
-:root[data-skin]:not([data-skin="classic"]) .builder-shell button:not(.primary):not(.danger):hover:not(:disabled) { background:var(--color-bg-3);border-color:var(--color-border-4); }
-:root[data-skin]:not([data-skin="classic"]) .builder-shell button.primary {
-  background:var(--color-accent);border-color:var(--color-accent);color:var(--builder-accent-ink);
-}
-:root[data-skin]:not([data-skin="classic"]) .builder-shell button.primary:hover:not(:disabled) { background:var(--color-accent-hover);border-color:var(--color-accent-hover); }
-:root[data-skin]:not([data-skin="classic"]) .builder-shell .library-label,
-:root[data-skin]:not([data-skin="classic"]) .builder-shell .list-item .sub,
-:root[data-skin]:not([data-skin="classic"]) .builder-shell .starter-card>p,
-:root[data-skin]:not([data-skin="classic"]) .builder-shell .starter-options p,
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #game-summary,
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #test-status,
-:root[data-skin]:not([data-skin="classic"]) .builder-shell .game-history summary { color:var(--color-text-tertiary); }
-:root[data-skin]:not([data-skin="classic"]) .builder-shell .list-item[aria-selected=true] { background:var(--color-bg-3);border-left-color:var(--color-accent); }
-:root[data-skin]:not([data-skin="classic"]) .builder-shell .list-item:hover { background:var(--color-bg-2); }
-:root[data-skin]:not([data-skin="classic"]) .builder-shell .starter-card {
-  background:var(--color-bg-1);border-color:var(--color-border-2);border-top-color:var(--color-accent);
-}
-:root[data-skin]:not([data-skin="classic"]) .builder-shell .starter-options,
-:root[data-skin]:not([data-skin="classic"]) .builder-shell .game-history,
-:root[data-skin]:not([data-skin="classic"]) .builder-shell .game-management { border-color:var(--color-border-2); }
-:root[data-skin]:not([data-skin="classic"]) .builder-shell .starter-options input,
-:root[data-skin]:not([data-skin="classic"]) .builder-shell .starter-options select,
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #play-mode,
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #versions,
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #agent-input,
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #game-name {
-  background:var(--color-bg-0);border-color:var(--color-border-3);color:var(--color-text-primary);
-}
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #agent-input::placeholder { color:var(--color-text-tertiary); }
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #agent-log .user { background:var(--color-bg-3);color:var(--color-text-primary); }
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #agent-log .assistant { background:var(--color-bg-2);color:var(--color-text-primary); }
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #agent-log .system,
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #agent-activity { color:var(--color-text-secondary); }
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #agent-activity { background:var(--color-bg-1);border-color:var(--color-border-2); }
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #agent-activity progress { accent-color:var(--color-accent); }
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #game-name { font-family:var(--font-sans); }
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #game-name:hover,
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #game-name:focus { border-bottom-color:var(--color-border-4); }
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #game-version { color:var(--color-accent-hover); }
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #play-game { color:var(--color-accent-hover); }
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #test-frame { background:var(--color-bg-1);border-color:var(--color-border-2); }
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #test-state,
-:root[data-skin]:not([data-skin="classic"]) .builder-shell #server-code { background:var(--color-bg-1);color:var(--color-text-primary); }
-:root[data-skin]:not([data-skin="classic"]) #ai-panel {
-  background:var(--color-bg-1);border-color:var(--color-border-3);color:var(--color-text-primary);font-family:var(--font-sans);
-}
-:root[data-skin]:not([data-skin="classic"]) #ai-panel .ai-panel-heading {
-  background:var(--color-accent);color:var(--builder-accent-ink, var(--color-bg-0));
-}
-:root[data-skin]:not([data-skin="classic"]) #ai-panel button { color:inherit; }
-:root[data-skin]:not([data-skin="classic"]) #ai-panel #close-ai { color:inherit; }
-:root[data-skin]:not([data-skin="classic"]) #ai-panel button.primary {
-  background:var(--color-accent);border-color:var(--color-accent);color:var(--builder-accent-ink);
-}
-:root[data-skin]:not([data-skin="classic"]) #ai-panel button.primary:hover:not(:disabled) {
-  background:var(--color-accent-hover);border-color:var(--color-accent-hover);
-}
-:root[data-skin]:not([data-skin="classic"]) #ai-panel #agent-log .user { background:var(--color-bg-3);color:var(--color-text-primary); }
-:root[data-skin]:not([data-skin="classic"]) #ai-panel #agent-log .assistant { background:var(--color-bg-2);color:var(--color-text-primary); }
-:root[data-skin]:not([data-skin="classic"]) #open-ai {
-  background:var(--color-accent);border-color:var(--color-accent);color:var(--builder-accent-ink, var(--color-bg-0));
-}
-:root[data-skin]:not([data-skin="classic"]) #open-ai:hover { background:var(--color-accent-hover);border-color:var(--color-accent-hover); }
-
-/* Secondary builder pages already use shared palette variables; keep embedded
-   previews and image placeholders aligned with the selected skin as well. */
-:root[data-skin]:not([data-skin="classic"]) .studio iframe { border-color:var(--color-border-3)!important; }
-:root[data-skin]:not([data-skin="classic"]) .preview-grid img { background:var(--color-bg-1); }
-
 /* Match setup and token panels use the same palette as the surrounding page. */
 :root[data-skin]:not([data-skin="classic"]) .portal-shell .play-option-icon,
 :root[data-skin]:not([data-skin="classic"]) .portal-shell .practice-option .play-option-icon,
@@ -603,7 +502,6 @@
 /* Midnight Gold (sc5386): deep navy surfaces with a warm gold accent. */
 :root[data-skin="midnight"] {
   color-scheme: dark;
-  --builder-accent-ink: #241a02;
   --color-bg-0: #0a0d18;
   --color-bg-1: #12172b;
   --color-bg-2: #1a2138;
@@ -692,13 +590,6 @@
 :root[data-skin="midnight"] .play-option .play-option-note,
 :root[data-skin="midnight"] .library-description {
   color: #a49a7d;
-}
-
-:root[data-skin="midnight"] .builder-shell {
-  --color-bg-0:#0a0d18;--color-bg-1:#12172b;--color-bg-2:#1a2138;--color-bg-3:#242e4f;--color-bg-4:#303d66;
-  --color-text-primary:#f7f2e2;--color-text-secondary:#d9d2ba;--color-text-tertiary:#a49a7d;--color-text-quaternary:#7a725c;
-  --color-border-1:#1c2338;--color-border-2:#2b3554;--color-border-3:#414f78;--color-border-4:#5f70a0;
-  --color-accent:#e3a82b;--color-accent-hover:#f2c14e;--color-focus-ring:#f2c14e;--builder-accent-ink:#241a02;
 }
 
 :root[data-skin="midnight"] .topbar .token-wallet {

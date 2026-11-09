@@ -228,7 +228,7 @@ function rememberExperimentCampaign() {
 
 rememberExperimentCampaign();
 
-// "Act as": a select of every user, shared by the builder and portal. The chosen user
+// "Act as": a select of every user, used by the console. The chosen user
 // is remembered across pages (the console uses the same key).
 
 const ACTING_USER_KEY = "game-platform.user-id";
@@ -333,8 +333,8 @@ class GameFrame {
   resizeViewport() {
     if (!this.iframe) return;
     const width = this.container.clientWidth;
-    const autoHeight = this.container.id === "test-frame" && !document.body.classList.contains("builder-preview-focus");
-    // A new width/game or leaving Focus gets a fresh natural-height measurement.
+    const autoHeight = this.container.id === "test-frame";
+    // A new width or game gets a fresh natural-height measurement.
     if (autoHeight && (this.viewport?.width !== width || !this.viewport?.autoHeight)) {
       this.container.style.removeProperty("--game-height");
     }
@@ -430,7 +430,7 @@ class GameFrame {
 /** The state_changed message for a viewer; see README.md for each field.
  * For a v2 game, [view] is the viewer's viewFor view of the match; the
  * client renders it instead of [state] (which then carries the same view
- * for portal matches, and the full state only in the builder's emulator,
+ * for portal matches, and the full state only in the game-test emulator,
  * where the author may see everything). A player only ever acts for
  * themselves: whether it is their turn is [my_player_index] being in
  * [turn_of_player_indices]. The message also carries a derived
@@ -519,7 +519,7 @@ setUpAppTopbar();
 
 /** Dock beside the page when 280px of navigation leaves at least 620px to work. */
 function setUpSidebarDrawer() {
-  const sidebar=document.querySelector('.builder-shell > .sidebar, .portal-shell > .sidebar');
+  const sidebar=document.querySelector('.portal-shell > .sidebar');
   if (!sidebar) return;
   const main=document.querySelector('.work'), openers=[];
   const wide=window.matchMedia('(min-width: 900px)');

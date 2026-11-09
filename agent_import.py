@@ -307,4 +307,4 @@ if __name__ == '__main__':
         print(json.dumps({'error': str(exc)}))
     except Exception:
         # Never echo submitted code, paths, credentials or internal exception details.
-        print(json.dumps({'error': 'Invalid game artifacts or failed verification; check Builder contract and tests'}))
+        print(json.dumps({'error': 'Invalid game artifacts or failed verification; check the game schemas, images and code against the game development guide'}))
