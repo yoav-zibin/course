@@ -35,7 +35,7 @@ available to override are:
 Use the existing Aurora and Sunset rules in `static/experiments.css` as
 examples. A new skin inherits any tokens it does not override from
 `static/common.css`. Prefer changing tokens over adding selectors for individual
-components: token-based themes remain consistent across the portal, builder,
+components: token-based themes remain consistent across the portal,
 browse, invites, console, admin, and statistics pages.
 
 Example:
@@ -72,13 +72,13 @@ and hover/focus states; do not rely on color alone to communicate status.
 2. Add the theme rule to `static/experiments.css`. Pick a unique key and keep it
    lowercase with hyphens if needed.
 3. Run the app using the local setup described in the repository
-   [README](../README.md#running). Open the portal or builder while signed in.
+   [README](../README.md#running). Open the portal while signed in.
 4. To preview your unregistered skin, open the browser developer console on the
    page and run `document.documentElement.dataset.skin = "ocean"` (replace
    `ocean` with your key). This applies the rule to the current page only; repeat
    on each page you want to inspect. Reloading or refreshing the user's server
    assignment may restore the assigned skin.
-5. Inspect the portal, builder, and other listed app surfaces at desktop and
+5. Inspect the portal and other listed app surfaces at desktop and
    mobile widths. Check dialogs, navigation, disabled states, errors, focus
    indicators, and any color combinations affected by your palette.
 
@@ -111,13 +111,13 @@ eligible for new assignments immediately, so users must not be assigned to a
 key that has no deployed CSS rule. Registering a key does not upload or deploy
 CSS.
 
-When editing `static/experiments.css`, update its cache-busting version from
-`v=1` in each HTML page that loads it and in `static/portal-sw.js`. Keep those
+When editing `static/experiments.css`, increment its cache-busting version (currently
+`v=8`) in each HTML page that loads it and in `static/portal-sw.js`. Keep those
 references in sync so browsers and the portal service worker receive the new
 theme. Also increment the `CACHE` version in `static/portal-sw.js` so an updated
 portal shell replaces the previous cached shell. The pages currently linking
-the stylesheet are `admin.html`, `browse.html`, `builder.html`, `console.html`,
-`invites.html`, `portal.html`, and `stats.html`.
+the stylesheet are `admin.html`, `browse.html`, `console.html`, `feedback.html`,
+`invites.html`, `portal.html`, `stats.html`, and `welcome.html`.
 
 ## Access the assigned skin and experiment results
 
@@ -147,7 +147,7 @@ administrator.
       to the base theme.
 - [ ] Text, controls, status states, and keyboard focus remain clear and
       accessible.
-- [ ] The portal and builder have been previewed at desktop and mobile sizes.
+- [ ] The portal has been previewed at desktop and mobile sizes.
 - [ ] Any cache-busting references are updated consistently.
 - [ ] The pull request description includes the display name, key, and preview
       screenshots or testing notes.

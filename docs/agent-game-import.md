@@ -1,8 +1,13 @@
 # Complete game imports for agents
 
+For writing a game, start with [GAME_DEVELOPMENT_GUIDE.md](../GAME_DEVELOPMENT_GUIDE.md);
+this document is the endpoint reference.
+
 `POST /games` accepts a complete game and publishes it in one request:
 the game is live for every player, in every language, as soon as the call
-returns. It does not overwrite games, call a paid model, or claim human approval.
+returns. It does not overwrite other games, call a paid model, or claim human approval:
+resubmitting with the same `game_addition_request_id_and_secret` updates the game
+it created (a new version if anything changed).
 Imported source is checked but not visually reviewed by this API. Retain the
 original payload for comparison.
 
@@ -154,14 +159,14 @@ is inserted. The checks, in order:
 ## Limits and responses
 
 Limits count UTF-8 bytes: entire request 900,000; each code field 200,000; each
-SVG 120,000; combined saved workflow 400,000 (the translations count toward it).
+SVG 120,000; combined import package 400,000 (the translations count toward it).
 Existing tutorial/artifact limits also apply. The smaller combined limit leaves
-room under Firestore's document limit for both code fields and draft metadata.
+room under Firestore's document limit for both code fields and package metadata.
 The complete stored package, including the derived runtime-schema copy, is also
 capped at 900,000 serialized bytes. Compressed uploads are rejected.
 Chunked requests have the same cumulative limit. Uploads have a 15-second deadline.
 
-- 201: complete `GameOut` for the published game (version 1); save its `id`.
+- 201: complete `GameOut` for the published game (version 1 on create, higher on an update); save its `id`.
 - 401: invalid credentials that were sent.
 - 400: malformed Content-Length.
 - 408: upload deadline exceeded.
@@ -175,7 +180,7 @@ Validation runs before any storage write, reusing the game artifact validators,
 example tests, localization checks, random walks and the existing QuickJS limits.
 An isolated validator process has a 20-second wall deadline, including schema
 validation. Errors never echo the full submitted source. Persistence creates the
-published game once, with the import package (including translations) stored
+published game (or updates the one carrying the same request secret), with the import package (including translations) stored
 with it, and seeds the portal bundle with the supplied translations.
 
 The endpoint is not idempotent without a request id: do not blindly retry a
@@ -233,7 +238,7 @@ print(published['id'], published['version'])
    Record the response ID and validation results. A 201 means the game is
    published; never claim otherwise.
 6. Obtain deployment/publication authorization where needed before submitting to
-   production. Do not alter production settings, existing games or other users' drafts.
+   production. Do not alter production settings, existing games or other users' games.
 
 For a batch, assign one game per agent only when delegation is explicitly
 requested. Keep credentials out of agent prompts and payload artifacts. Track

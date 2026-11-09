@@ -1,5 +1,10 @@
 # Scaling demo VM deployment
 
+> **Retired Nov 6, 2026.** The `game-platform-scaling` VM and its reserved IP
+> (34.26.223.67) were deleted. Production is the single `game-platform-c4` VM
+> running Firestore in query mode. This document is kept as a record — do not
+> follow its setup instructions.
+
 This setup targets only the `game-platform-scaling` VM in project
 `project-c9ca4f0b-4e47-43ff-847`. It uses the separate `game-platform-scaling`
 Firestore database. It does not deploy to or alter the production `game-platform` VM.
@@ -8,7 +13,7 @@ The API binds to `127.0.0.1:8000`. Nginx serves the portal's static files and
 terminates HTTPS on the VM's public IP, forwarding API requests to localhost.
 Open the portal at:
 
-<https://34.26.223.67/portal>
+<https://34.26.223.67/portal> (dead — VM deleted)
 
 The VM uses a reserved external IPv4 address. Its Let's Encrypt IP certificate lasts
 160 hours; a systemd timer checks renewal every six hours and reloads Nginx after a

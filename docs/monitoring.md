@@ -48,7 +48,6 @@ The same alert is written at most once per `alert_cooldown_seconds` (5 minutes).
 | `game_function_memory` | minor | a game's server code used more than 64 MB | same |
 | `game_function_error` | minor | a game's server code threw, or returned something invalid | same |
 | `computer_illegal_move` | minor | a computer opponent chose a move its own game rejects | same: the game has a bug |
-| `ai_generation_timeout` | minor | the game-building agent took over two minutes | `last_message`: what was asked |
 | `translation_budget_exceeded` | minor | the day's character budget for Google Translate is spent: new game texts stay in their original language until tomorrow | `characters_today`, `daily_character_limit` (config `translation`) |
 | `translation_failed` | minor, once per cooldown | Google Translate is failing or refusing (a bad key, a quota, an outage): games show their own texts | `error` |
 | `alert_test` | minor or major | a test alert (`POST /admin/alerts/test`) | nobody needs to act |
@@ -153,12 +152,11 @@ assets and the docs pages are excluded. Fields:
 - `request_bytes` and `response_bytes`, plus the redacted, capped (`max_logged_body_bytes`)
   `request_body` and `response_body`.
 - `external_calls`: per service, how many calls the request waited on and their total seconds —
-  `firestore` (snapshot store reads/writes and query-store reads/queries), `model_api` (builder
-  agent model calls), `email` (SMTP login-code mail) and `sms` (Twilio Verify). Push
+  `firestore` (snapshot store reads/writes and query-store reads/queries),
+  `email` (SMTP login-code mail) and `sms` (Twilio Verify). Push
   notifications are not attributed: they are delivered from a background thread after the
   response, outside any request.
 
-The daily API summary (see below) parses these lines from the journal.
 
 ## Set it up
 

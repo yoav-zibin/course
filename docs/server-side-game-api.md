@@ -141,27 +141,35 @@ exchanging the same two messages, but it no longer computes states:
 // state_changed: platform to game
 {
   "type": "state_changed",
+  "state": { /* the viewer's view (portal matches) */ },
   "view": { /* viewFor output for this viewer; never null */ },
   "players": [
-    {"id": "u1", "kind": "human", "display_name": "user1",
-     "picture_url": "<96x96 image>", "max_loss": 100},
-    {"id": "computer-1", "kind": "computer", "display_name": "Computer 1",
-     "picture_url": "<96x96 image>", "max_loss": 0}
+    {"player_index": 0, "player_id": "u1", "kind": "human", "name": "user1",
+     "picture_url": "<96x96 image>"},
+    {"player_index": 1, "player_id": "computer-1", "kind": "computer",
+     "name": "Computer 1", "picture_url": "<96x96 image>"}
   ],
-  "turn": ["u1"],
+  "turn_of_player_indices": [0],
   "status": "ongoing",
   "end_reason": null,
   "move_count": 2,
-  "my_player_id": "u1"        // null for spectators
+  "my_player_index": 0,        // null for spectators
+  "acting_for_player_index": 0, // the seat this screen should move for, or null
+  "token_pot": 0,
+  "strings": { /* the viewer's translations of the game's string table */ },
+  "locale": "en",
+  "direction": "ltr"
 }
 
 // make_move: game to platform
 {"type": "make_move", "move": {"cell": 1}}
 ```
 
-Removed from v1 for v2 games: seat indices,
-client-computed `new_state` / `next_turn_player_indices`, and
-`initial_state` / `first_turn_player_indices` on start.
+Removed from v1 for v2 games: client-computed `new_state` /
+`next_turn_player_indices`, `initial_state` / `first_turn_player_indices` on
+start, and id-based turn reporting — the v2 message reports the turn and the
+viewer's seat as seat indices (`turn_of_player_indices`, `my_player_index`,
+`acting_for_player_index`).
 
 ## REST API changes
 
@@ -217,53 +225,12 @@ Every persisted v2 version—including historical versions—must have schemas.
 V1 records are excluded. At startup, the server logs missing `game-id@version`
 entries and runs in degraded mode so non-game API functionality remains
 available. A v2 game version without schemas is still blocked from executing:
-there is no permissive runtime fallback. Backfill historical versions with the
-exact schemas for those entries before restarting a strict server deployment.
-The backfill utility intentionally requires an explicit, complete mapping
-because old matches may still rely on those versions:
-
-```json
-{
-  "my-game@1": {
-    "state": {"type": "object"},
-    "move": {"type": "object"},
-    "view": {"type": "object"}
-  }
-}
-```
-
-```powershell
-python backfill_game_schemas.py --config C:\path\to\config.json --schemas C:\path\to\game-schema-backfill.json
-```
-
-Writing the map by hand for every historical version is rarely practical, so the
-utility can also fill the versions the map leaves out. It prints each missing
-`game-id@version` with the source of the schema it would get, and writes nothing
-at all unless every missing version has one:
-
-| Option | Gives |
-|---|---|
-| `--schemas FILE` | Exactly the schemas in the map (wins over everything else). |
-| `--use-repo-schemas` | `games/<id>.schema.json` for the newest missing version of a built-in game. |
-| `--infer-rest` | Schemas inferred by playing the version's server code, like the generator for new games (observed types, nothing required, extra properties allowed). Needs the QuickJS runtime, so run it where the server runs. A version that cannot be played is reported and left to the next option. |
-| `--permissive-rest` | A schema that accepts any JSON for what is still left: the behavior before schemas, a stopgap to replace later. |
-| `--dry-run` | Only prints the plan (including the inference results); writes nothing. |
-
-On the production server (Firestore query mode; the utility opens the same store the
-server does) run a dry run first, then the same command without `--dry-run`, and restart:
-
-```bash
-cd /opt/game-platform
-sudo .venv/bin/python -m game_platform.backfill_game_schemas --config /opt/game-platform/config.json --use-repo-schemas --infer-rest --permissive-rest --dry-run
-```
-
-Inference is sample-based, so a rare branch of a game that no sample reached can be
-rejected later: watch `game_function_error` / schema rejections in the log after a backfill.
-
-The utility validates the complete mapping before writing any versions and
-supports the configured JSON-file or Firestore store (including query mode). Back up the database
-before running it; schemas are versioned with the game and should describe
-that version's actual inputs and outputs, not merely allow all JSON values.
+there is no permissive runtime fallback. Historical versions must carry the
+exact schemas for those entries before restarting a strict server deployment,
+because old matches may still rely on those versions. (The
+`backfill_game_schemas` utility described in earlier drafts of this contract
+was never built; schemas are supplied at import time, and the built-in games
+ship theirs in `games/<id>.schema.json`.)
 
 To gather exact code and rules for affected versions without exporting user
 records, run `export_game_schema_inventory.py` with the production config and
@@ -308,9 +275,11 @@ on the game version.
 Whenever a game is submitted or its `server_code` changes, the server tests it
 in QuickJS; only a passing version can be published (`POST /games` runs the
 gate before inserting anything; `PATCH /games/{id}` runs it on update).
-The tests take at most 1 second: up to
-1000 random walks of up to 1000 moves each, stopping at whichever limit
-comes first. Each walk uses a random player count, either all humans or one human plus
+On import the checks run inside a 20-second validator
+subprocess, and the random walks inside it have a 3-second budget: up to
+1000 walks of up to 1000 moves each, stopping at whichever limit comes first.
+The `PATCH /games/{id}` update path runs the same tester with a 1-second
+walk budget. Each walk uses a random player count, either all humans or one human plus
 computers, random `max_loss` values and a random seed; moves come from
 `computerMove`/`randomMove`; `viewFor` is called for every player and a
 spectator after each move; joins/leaves happen occasionally if allowed
@@ -355,9 +324,9 @@ debug); each game's pure `Logic` object became most of its server code,
 and the clients now only render their view and send moves. The example
 data's matches were re-scripted as real moves played by that server
 code. Two things the migration surfaced: the random-walk tester now
-models a leave the way the platform does (the seat stays, taken over by
-a computer, ids renumbered) — removing the seat broke seat-indexed
-games — and tic-tac-toe's minimax is memoized, because unmemoized it
+models a leave the way the platform does (the seat stays at its
+original index, marked inactive, never taken over by a computer) — removing
+the seat broke seat-indexed games — and tic-tac-toe's minimax is memoized, because unmemoized it
 overruns the 100 ms per-call limit on an empty board. With the built-in
 games on v2, acting on behalf survives only in the v1 protocol path
 (pre-existing client-only games); nothing in the v2 API, the portal's

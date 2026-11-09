@@ -1,5 +1,8 @@
 # Production query-storage activation
 
+> **Completed Oct 30, 2026** (the production namespace was later advanced to
+> `production_v3`). Retained as the rollback/repeat procedure.
+
 Code deployment and data-format conversion are distinct operations. Existing
 users already live in Firestore; this procedure preserves them in the same
 `(default)` database and converts their record layout into `production_v1`.

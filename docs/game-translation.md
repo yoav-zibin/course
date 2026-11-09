@@ -21,7 +21,7 @@ list is finite and known, so it can be translated one batch at a time and checke
 of the game only pays for the texts that changed, and a text that two games share (or that was
 already translated for another player) is translated once.
 
-## For game builders and the AI
+## For game authors and their agents
 
 A translatable game has, in its client HTML, a block with every text it shows, in English, with
 `{placeholders}` for the parts that change, and the helper from `game_i18n_helper.js`:
@@ -41,7 +41,7 @@ window.addEventListener("message", (event) => {
 </script>
 ```
 
-Rules (the game-building agent is told the same ones, `game_text.PROMPT_RULES`):
+Rules (game authors are told the same ones, `game_text.PROMPT_RULES`):
 
 - **Every text the player reads is in the block**: buttons, labels, hints, errors, results,
   `aria-label`s, placeholders, and text drawn on a canvas. Shown only through `t()`.
@@ -68,19 +68,14 @@ checker with **HTTP 400** and the checker's problems in plain words (localized l
 code `game_texts_not_translatable`) when a non-admin:
 
 - creates a game (`POST /games`),
-- publishes a draft (`POST /game-drafts/{id}/publish`),
 - saves a new version whose client code changed (`PATCH /games/{id}`).
 
-Exempt: admin saves (`PUT /admin/games/{id}/code`, the refactor job), the guarded audit-batch
-publications (`game_patch_migrations.py`), example data, games with no client code, and edits that
+Exempt: example data, games with no client code, and edits that
 leave the client code unchanged (a game from before the rule can still change its description).
 Set `require_strings` to `false` to accept any code again.
 
-The game-building agent (`/agent/chat`) treats the checker like a failing test: the problems are
-fed back to the model and it retries within its normal attempts; when they run out the user gets
-an error naming the problems instead of a game with warnings. The guided builder requires the
-table in its client-code stage (the `localization` check, retried on the client only) and its
-final approval and publishing re-check it. The checker also catches `aria-label`/`placeholder`/
+Authors meet the checker through the POST /games import: a submission that fails
+returns 422 with the problems named, and the author fixes and resubmits. The checker also catches `aria-label`/`placeholder`/
 `title`/`alt` attributes written as text, `alert`/`confirm`/`prompt`/`createTextNode` with literal
 text, and `fillText`/`strokeText` with anything but `t()`.
 
@@ -361,8 +356,7 @@ matched whole.
 
 `game_text.lint(code, server_code=None)` also reads the server code: every `InvalidMove` text and every
 player-visible server text it can read must match a template of the table, or the game is not accepted
-(`translation.require_strings`, the agent's retry loop, the guided builder's `localization` check and its final
-approval all pass the server code). `game_text.PROMPT_RULES` tells the agent to write its server texts this way,
+(`translation.require_strings` gates all of them: every import passes the server code). `game_text.PROMPT_RULES` tells the agent to write its server texts this way,
 with an example. Not affected: admin saves, the migration and audit-batch publications, example data, games
 without a table, and edits that leave the client code unchanged, so a game from before the rule with
 unmatched texts is still accepted.
@@ -402,8 +396,8 @@ python tools/publish_game_code.py --target https://buildplay.fun --password MAST
 
 ## Not done yet
 
-- **The game builder's preview** does not send translations: a creator tests in English. A language picker
-  for the preview (translating the unsaved code) is the next step.
+- **The game-test page's emulator** does not send translations: an author tests in the source
+  language there. Translations are validated at import and served by the portal.
 - **Games made by players before this have no block.** Options: ask the agent to "make this game translatable" as a
   new version, or translate the page's text from outside the game (which cannot work for text built from pieces).
   The built-in games are done (see above).

@@ -22,15 +22,14 @@ function reporter(width,height) {
   return {body,ctx,callbacks,queue,messages,flush(){while(queue.length)queue.shift()();}};
 }
 
-function host(builder=false,initialHeight=480) {
+function host(gameTest=false,initialHeight=480) {
   const iframe={style:{},contentWindow:{}};
-  let focused=false;
-  const container={id:builder?'test-frame':'game-box',clientWidth:390,clientHeight:initialHeight,
+  const container={id:gameTest?'test-frame':'game-box',clientWidth:390,clientHeight:initialHeight,
     get offsetHeight(){return this.clientHeight+2;},style:{removeProperty(){container.clientHeight=initialHeight;},setProperty(k,v){container.clientHeight=parseFloat(v)-2;}}};
-  const ctx=browserContext({window:{addEventListener(){}},document:{body:{classList:{contains:()=>focused}}},container,iframe});
+  const ctx=browserContext({window:{addEventListener(){}},document:{body:{classList:{contains:()=>false}}},container,iframe});
   vm.runInContext(source,ctx);
   vm.runInContext('frame=new GameFrame(container,()=>{},()=>{});frame.iframe=iframe;frame.resizeViewport()',ctx);
-  return {iframe,container,ctx,focus(value){focused=value;vm.runInContext('frame.resizeViewport()',ctx);},report(width,height,extra={}){
+  return {iframe,container,ctx,report(width,height,extra={}){
     ctx.message={type:'game_viewport',width,height,viewport_width:parseInt(iframe.style.width),viewport_height:parseInt(iframe.style.height),...extra};
     vm.runInContext('frame.receive({source:iframe.contentWindow,data:message})',ctx);
   },view(){return vm.runInContext('frame.viewport',ctx);}};
@@ -81,7 +80,7 @@ test('fitting stays inside the script-only sandbox and preserves the move protoc
   assert.equal(calls.length,1);assert.equal(calls[0].new_state.n,1);
 });
 
-test('inline Builder grows for a portrait game instead of shrinking its width',()=>{
+test('game-test frame grows for a portrait game instead of shrinking its width',()=>{
   const t=host(true,214);
   t.report(390,760);
   assert.equal(t.view().scale,1);
@@ -89,9 +88,7 @@ test('inline Builder grows for a portrait game instead of shrinking its width',(
   for(let i=0;i<20;i++)t.report(390,t.container.clientHeight+1);
   assert.equal(t.container.clientHeight,762); // 100vh plus rounding must not grow forever
   assert.equal(t.view().passes,1);
-  t.focus(true);t.report(390,900);
-  assert.ok(t.view().scale<1); // Focus still fits its fixed viewport
-  t.focus(false);t.report(390,760);
+  t.report(390,760);
   assert.equal(t.view().scale,1);assert.equal(t.container.clientHeight,762);
 });
 

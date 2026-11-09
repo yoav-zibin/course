@@ -1,4 +1,9 @@
-# Query-based storage: isolated test release
+# Query-based storage
+
+> **Status (Nov 9, 2026):** merged (PRs #32, #38, #39) and live in production —
+> the production server runs in query mode. Passages below written as an
+> unmerged branch or a pre-cutover plan are historical. Snapshot storage
+> remains the configuration default in code.
 
 This branch implements the first end-to-end release of the backend scaling plan.
 It is **opt-in**. Snapshot storage remains the configuration default. A converted
@@ -57,7 +62,7 @@ integration tests must pass before upgrading that SDK.
 `{items, next_cursor}` with a default page size of 50 and maximum 100:
 
 * `/v2/games`: published catalog, optional single word-prefix `q` (2–24 characters).
-* `/v2/builder/games` and `/v2/game-drafts`: authenticated owner's records.
+* `/v2/builder/games` (legacy path name): the caller's published games. Drafts and `/v2/game-drafts` were removed with the Builder.
 * `/v2/users/me/referred-users` and `/v2/users/me/invites`: authenticated user's
   direct sign-ups and invite summaries, paginated. Existing screens still need to
   adopt these APIs. Individual invite acceptance histories remain embedded and
@@ -68,7 +73,7 @@ integration tests must pass before upgrading that SDK.
   endpoints retain their 100-record guard. Migration resumes library normalization;
   existing query namespaces can run `scaling_tools libraries --source-writers-stopped`
   repeatedly with a stable run ID until complete. Account jobs handle normalized
-  libraries. Portal/Builder owners should use the versioned API for library UI.
+  libraries. Portal owners should use the versioned API for library UI.
 * `/v2/matches`: authenticated membership; optional status/game filters.
 * `/v2/matches/open`: public joinable matches, including mid-game joins; current
   game publication is checked before returning a row.
@@ -86,7 +91,7 @@ chronological snapshots. Concurrent changes can affect a later page. They confer
 no authorization. Lists may be shorter than the limit when tombstones or newly
 unpublished games are filtered; follow `next_cursor` even after an empty page.
 
-Portal, Builder and Browse negotiate pagination. Detail/source is fetched when
+Portal and Browse negotiate pagination. Detail/source is fetched when
 needed. Portal history and offline retry reconciliation use bounded history
 reads, and queued moves retain an idempotency key. Catalog prefix search and
 client-side filtering apply to the current page; this is not a global substring
@@ -241,7 +246,7 @@ This release is not yet a replacement for every snapshot-mode feature:
   with revision revalidation, remains a contention optimization. Job due-time
   indexes and 64 counter shards need measured throughput limits before large
   live workloads; this is not a 1-billion-match throughput claim.
-* Coordinate the API rollout with Portal/Builder owners and cached clients.
+* Coordinate the API rollout with Portal owners and cached clients.
   Before production cutover, rehearse full migration, failure recovery and
   two-process load, validate counts/checksums/ledger invariants, verify indexes
   and backups, and define rollback that preserves writes made after cutover.

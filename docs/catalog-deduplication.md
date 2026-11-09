@@ -1,5 +1,9 @@
 # Reviewed catalog deduplication
 
+> **Completed one-off cleanup.** The draft/working-copy mechanism described
+> below no longer exists — there are no drafts anymore; unpublishing is a pure
+> flag flip (`service.py`). Kept as the record of the reviewed pairs.
+
 The user requested one entry per duplicate game. This release reversibly
 unpublishes three reviewed entries, preserving versions, schemas, private
 working copies and old matches. It does not physically delete games or drafts.
@@ -49,7 +53,7 @@ fake independently changes the keeper before commit and verifies complete
 rollback of hide/draft/marker. Unsupported persistent adapters are refused.
 
 ```sh
-PYTHONPATH=.. python -m pytest game_platform/tests/test_catalog_deduplication.py game_platform/tests/test_unpublish.py
+PYTHONPATH=.. python -m pytest game_platform/tests/test_unpublish.py
 ```
 
 Release is direct to yoav-zibin/course main, no branch merge. Foundation, data,

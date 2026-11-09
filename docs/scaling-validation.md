@@ -2,7 +2,8 @@
 
 Recorded October 29, 2026. This is an isolated test release, not a production
 cutover or a completed billion-match capacity test. See `scaling-storage.md` for
-the remaining feature and release gates.
+the remaining feature and release gates. The Oct 30, 2026 cutover superseded
+those gates; see `scaling-production-cutover.md`.
 
 ## Automated checks
 

@@ -1,5 +1,9 @@
 # Backend scaling plan
 
+> **Status (Nov 9, 2026):** this plan was largely implemented on Oct 30, 2026 —
+> production runs the query store (QueryStore) on a single VM. The "current
+> gap" and two-VM demonstration passages below are pre-implementation text.
+
 ## Target and current gap
 
 The assignment's stated targets are 10,000,000 users, 1,000,000,000 matches, and

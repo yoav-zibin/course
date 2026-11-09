@@ -1,5 +1,11 @@
 # Publishing the converted community games
 
+> **Completed one-off record.** The publish route this runbook used
+> (`PUT /admin/games/{id}/code`, via `tools/publish_game_code.py`) was removed
+> with the Builder, and the tool has been deleted. Client-code updates for
+> these games now go through their owners (`PATCH /games/{id}`) or a fresh
+> POST /games import.
+
 `games/community/` has 21 games that players built with the game builder and that exist only in the production database. Each `<id>.html` is the same game as `<id>.original.html` (the code fetched from production) with an `i18n-strings` block, so the platform can translate its texts. **Nothing here is published until the owner runs the commands below** (they need the master password, which is not in this repository).
 
 Review (optional): `node --test tests/web/community-games.test.cjs` shows that the English page is identical to the original for the same messages, and that a translation reaches every text.

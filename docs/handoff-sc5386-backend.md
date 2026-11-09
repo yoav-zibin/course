@@ -1,5 +1,10 @@
 # Handoff: backend scaling and verified portal activity
 
+> **Superseded Nov 9, 2026:** the Builder and the scaling-VM demos were
+> deleted; production is Firestore query mode on the single primary VM
+> (game-platform-c4). The "latest verified production release" and the action
+> items below are as of Oct 30, 2026.
+
 From Chad (sc5386) to Ian (zkamenov) and his agent. Updated October 30, 2026.
 This note is the handoff. A coordination comment is also on your code commit
 `e45a25a`; Chad has not sent a separate email.
@@ -299,7 +304,7 @@ Cursors bind to namespace, filters and caller; concurrent writes may shift pages
 
 - Catalog: `/v2/games`, optional one word-prefix `q` (2–24 characters). Source is
   omitted; fetch one game's detail/source when needed.
-- Builder: `/v2/builder/games`, `/v2/game-drafts`.
+- Builder (deleted Nov 7, 2026): `/v2/builder/games` survives as a legacy path returning the caller's published games; `/v2/game-drafts` was removed.
 - Matches: `/v2/matches`, `/v2/matches/open`; history uses
   `/v2/matches/{id}/history?start=...&limit=...`, with `next_start` and `total`.
 - Saved library: `GET /v2/users/me/saved-games`; `PUT`/`DELETE`
