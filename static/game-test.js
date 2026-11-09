@@ -2818,6 +2818,19 @@ const Flow = {
     }
   },
 
+  adoptSubmission(body, submissionId, createdAt, logMessage) {
+    for (const n of [2, 3, 4, 5]) this.card(n, "", "");
+    $("step2-results").replaceChildren();
+    $("flow-finish").hidden = true;
+    this.submissionId = submissionId;
+    this.submittedBody = body;
+    this.step = 2;
+    this.active = true;
+    this.card(1, "done", `Recorded (${createdAt})`);
+    Log.add("info", logMessage);
+    this.refreshButtons();
+  },
+
   async step1() {
     this.banner(null);
     const { body, errors } = buildImportBody();
@@ -2828,18 +2841,16 @@ const Flow = {
     }
     for (const n of [2, 3, 4, 5]) this.card(n, "", "");
     $("step2-results").replaceChildren();
-    this.card(1, "active", "Submitting…");
+    this.card(1, "active", "Checking and submitting…");
     try {
       const result = await Trace.post("/game-test/submissions", {
         secret: body.game_addition_request_id_and_secret,
         game_name: body.name,
         body,
       });
-      this.submissionId = result.submission_id;
-      this.submittedBody = body;
-      this.step = 2;
-      this.card(1, "done", `Recorded (${result.created_at})`);
-      Log.add("info", `step 1 recorded: submission ${result.submission_id}`);
+      this.adoptSubmission(
+        body, result.submission_id, result.created_at,
+        `step 1 recorded: submission ${result.submission_id}`);
     } catch (e) {
       this.card(1, "failed", "Failed");
       this.banner(`Step 1 failed: ${e.message} Fix the inputs and submit again.`);
@@ -3182,13 +3193,9 @@ async function runChecksUi() {
   Log.add("info", `checks finished: ${status.textContent}`);
 }
 
-async function loadExample() {
-  try {
-    const response = await fetch("/static/game-test-example.json");
-    const example = await response.json();
-    const tests = example.unit_tests || {};
-    Flow.abandon();
-    $("game-name").value = example.name || "";
+function fillForm(example) {
+  const tests = example.unit_tests || {};
+  $("game-name").value = example.name || "";
     $("game-secret").value = example.game_addition_request_id_and_secret || "";
     $("description").value = example.description || "";
     $("server-code").value = example.server_code || "";
@@ -3209,9 +3216,38 @@ async function loadExample() {
     $("translations-json").value = pretty(example.translations || {});
     $("player-count").value = String((example.allowed_player_counts || [2])[0]);
     populateSeats();
+}
+
+async function loadExample() {
+  try {
+    const response = await fetch("/static/game-test-example.json");
+    const example = await response.json();
+    Flow.abandon();
+    fillForm(example);
     Log.add("info", "loaded the counter example (\"Count to three\")");
   } catch (e) {
     Log.add("error", `could not load the example: ${e.message}`);
+  }
+}
+
+async function loadBySecret() {
+  const secret = $("game-secret").value;
+  if (!secret) {
+    Log.add("error", "type the game's secret first, then load its stored inputs");
+    return;
+  }
+  try {
+    const response = await fetch(
+      `/game-test/submission?secret=${encodeURIComponent(secret)}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+    Flow.abandon();
+    fillForm(data.body);
+    Flow.adoptSubmission(
+      data.body, data.submission_id, data.created_at,
+      `step 1 loaded from the stored inputs: submission ${data.submission_id}`);
+  } catch (e) {
+    Log.add("error", `could not load stored inputs: ${e.message}`);
   }
 }
 
@@ -3225,6 +3261,7 @@ function init() {
   });
   $("run-checks").addEventListener("click", runChecksUi);
   $("load-example").addEventListener("click", loadExample);
+  $("load-by-secret").addEventListener("click", loadBySecret);
   $("step1-submit").addEventListener("click", () => Flow.step1());
   $("step2-run").addEventListener("click", () => Flow.step2());
   $("step3-start").addEventListener("click", () => Flow.startPlayStep(3));

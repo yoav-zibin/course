@@ -31,6 +31,10 @@
   <button type="button" id="load-example">Load the counter example</button>
   <span class="hint">Fills every field with the “Count to three” example, so you can see the page working.</span>
 </p>
+<p>
+  <button type="button" id="load-by-secret">Load stored inputs by secret</button>
+  <span class="hint">If you already stored this game's inputs with the API (the usual agent flow), type the secret below and load them — every field is filled and step 1 is already recorded.</span>
+</p>
 <div class="field-row">
   <div class="field">
     <label for="game-name">Game name (unique)</label>
@@ -137,7 +141,7 @@
 
 <div class="step-card" id="step-card-1">
   <h3>Step 1 — Submit the inputs</h3>
-  <p>Send everything above (both code fields, the schemas, the unit tests and the other parameters) to the server, which stores it with the time of the call.</p>
+  <p>Send everything above (both code fields, the schemas, the unit tests and the other parameters) to the server, which runs the full submission checks on them and stores them with the time of the call. Agents usually do this step with the API before opening this page, then use “Load stored inputs by secret” above instead of this button.</p>
   <p>
     <button type="button" id="step1-submit">Submit the inputs</button>
     <span id="step1-status" class="check-status" role="status"></span>
@@ -291,6 +295,6 @@
 <pre id="log" class="log" aria-live="polite"></pre>
 </section>
 </main>
-<script src="/static/game-test.js?v=3"></script>
+<script src="/static/game-test.js?v=4"></script>
 </body>
 </html>

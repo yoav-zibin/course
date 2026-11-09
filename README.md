@@ -1213,10 +1213,13 @@ Making a new move after undo clears the redo branch. Restart resets the session.
 ### The game-test page
 
 `/game-test` is a static page for game authors (see GAME_DEVELOPMENT_GUIDE.md
-section 9). The author pastes the full submission payload (name, secret,
+section 9). The author stores the full submission payload (name, secret,
 description, both code fields, the three JSON schemas, unit-test cases,
-rules/UI text, tutorial, images and translations) and follows a linear
-five-step flow: (1) the payload is stored on the server, (2) the server runs
+rules/UI text, tutorial, images and translations) with a REST call
+(`POST /game-test/submissions`, which runs the full submission verification
+before storing) and follows a linear
+five-step flow: (1) the payload is stored on the server and the page loads
+it back by secret (`GET /game-test/submission`), (2) the server runs
 its server-code tests and records the run's metadata, (3) pass-and-play
 matches are played to the end in every screen size and orientation and each
 is verified by replaying its states and moves on the server, (4) matches

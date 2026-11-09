@@ -151,6 +151,32 @@ def run_full_flow(api, secret, body):
     return submission_id, report
 
 
+def test_get_submission_roundtrip(api):
+    response = api.client.get("/game-test/submission", params={"secret": SECRET})
+    assert response.status_code == 404
+    submission_id = submit(api)
+    response = api.client.get("/game-test/submission", params={"secret": SECRET})
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["submission_id"] == submission_id
+    assert data["game_name"] == BODY["name"]
+    from game_platform.agent_import import GameImport
+
+    assert data["body"] == GameImport.model_validate(BODY).model_dump()
+
+
+def test_submission_with_broken_code_is_rejected_and_not_stored(api):
+    broken = {**BODY, "server_code": "const game = {};"}
+    response = api.client.post(
+        "/game-test/submissions",
+        json={"secret": SECRET, "game_name": BODY["name"], "body": broken},
+    )
+    assert response.status_code == 422, response.text
+    assert "erification" in response.text
+    response = api.client.get("/game-test/submission", params={"secret": SECRET})
+    assert response.status_code == 404
+
+
 def test_submission_rejects_a_mismatched_secret(api):
     response = api.client.post(
         "/game-test/submissions",

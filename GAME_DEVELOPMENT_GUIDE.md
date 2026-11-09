@@ -339,9 +339,9 @@ Every check below runs before anything is written. A failure returns 422 and not
 
 ## 9. How to test before you submit
 
-Testing is a **linear, five-step flow** on the test page at **https://buildplay.fun/game-test**, and it is not optional: the server records every step under your secret string, and `POST /games` refuses the game until it finds a complete run whose step 1 inputs are **identical** to the payload you submit. Follow the steps in order, do not change any input mid-run — if a step fails, fix the code and start again from step 1.
+Testing is a **linear, five-step flow**, and it is not optional: the server records every step under your secret string, and `POST /games` refuses the game until it finds a complete run whose step 1 inputs are **identical** to the payload you submit. Step 1 is an API call you make **before** opening the test page at **https://buildplay.fun/game-test** — you store the inputs on the server, the page then pulls them by secret, and you play steps 2–5 there. Follow the steps in order, do not change any input mid-run — if a step fails, fix the code and start again from step 1.
 
-**What to paste.** The page has a field for everything the submission carries:
+**What the page holds.** The page has a field for everything the submission carries (loading by secret fills them all from the stored payload):
 
 - **Game name and secret string** — the name, and the same `game_addition_request_id_and_secret` you will submit with. The traces are recorded under this secret; it is how the server matches the run to the submission.
 - **Short description**, **source language**, **rules text**, **UI instructions**, **tutorial** (text and HTML), **images** (the JSON array), and **translations** (the JSON object for the 7 non-source locales).
@@ -350,7 +350,15 @@ Testing is a **linear, five-step flow** on the test page at **https://buildplay.
 - **Unit test cases** — a JSON list of cases, or the whole `unit_tests` object. Needed for the approved-examples check and the move-agreement check.
 - **Allowed player counts** — e.g. `2`, or `1, 2, 4` — and the **leave / join** boxes if a player may leave or join mid-match.
 
-**Step 1 — Submit the inputs.** Press **Submit the inputs**. The page assembles the exact payload you will later POST and sends it to the server, which stores it with the time of the call. From here on, the inputs are frozen: editing any field restarts the run.
+**Step 1 — Store the inputs (API call).** POST the exact payload you will later submit to `https://buildplay.fun/game-test/submissions`:
+
+```bash
+curl -X POST https://buildplay.fun/game-test/submissions \
+  -H 'Content-Type: application/json' \
+  -d '{"secret": "<the payload's game_addition_request_id_and_secret>", "game_name": "<the game's name>", "body": <the payload itself>}'
+```
+
+Before storing anything, the server runs **the same verification as a final submission** on the payload — translations, images, and all the code checks of §8 — so a **422** here carries the full failure report; fix the payload and call again (nothing was stored). A **201** returns the `submission_id` and stores the inputs with the time of the call. Then open the test page, type the secret into the **Secret string** field, and press **Load stored inputs by secret**: the page fetches the stored payload (`GET /game-test/submission?secret=...`), fills every field, and marks step 1 recorded — there is nothing to paste. (Storing again replaces the stored inputs and restarts the run; filling the fields by hand and pressing **Submit the inputs** makes the same call from the page.) From here on, the inputs are frozen: editing any field restarts the run.
 
 **Step 2 — Server code tests.** Press **Run the server tests**. The server runs its tests on the submitted server code — the unit test cases (approved examples), the settlement probes, the move-agreement probes, and the random walks, calling each function twice to prove it is deterministic and idempotent — and records the run's metadata: how long it took, how many walks and moves it made, how many states were visited, and how many terminal states were reached. (The page's optional **local pre-checks** run the same checks instantly in the browser first, with the page's own limits — 5 s per call instead of the platform's 100 ms — so use them to iterate, but step 2 on the server is the run that counts.)
 

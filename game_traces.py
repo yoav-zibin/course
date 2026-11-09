@@ -561,6 +561,12 @@ def make_router(platform_dependency):
                 422,
                 "the secret must equal the payload's game_addition_request_id_and_secret",
             )
+        # The inputs are stored server-side from here on, so they must pass
+        # the same verification as a final submission (translations,
+        # artifacts and all the code checks) before anything is recorded.
+        from game_platform.agent_import import verify_submission
+
+        verify_submission(body)
         row = record_submission(
             store,
             secret=payload.secret,
@@ -571,6 +577,24 @@ def make_router(platform_dependency):
             "submission_id": row["id"],
             "inputs_hash": row["inputs_hash"],
             "created_at": _iso(row["created_at"]),
+        }
+
+    @router.get("/game-test/submission")
+    def get_submission(secret: str, platform=Depends(platform_dependency)):
+        store = store_of(platform)
+        check_secret(secret)
+        row = latest_submission(store, secret_hash(secret))
+        if row is None:
+            raise HTTPException(
+                404,
+                "no inputs stored for this secret — store them first with "
+                "POST /game-test/submissions",
+            )
+        return {
+            "submission_id": row["id"],
+            "game_name": row["game_name"],
+            "created_at": _iso(row["created_at"]),
+            "body": load_submission_body(store, row),
         }
 
     @router.post("/game-test/server-check")
