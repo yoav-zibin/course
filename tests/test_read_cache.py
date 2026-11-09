@@ -125,6 +125,15 @@ def test_oversized_value_is_never_cached():
     assert len(calls) == 2
 
 
+def test_clear_drops_everything():
+    cache, clock, jobs = make_cache()
+    cache.put("a", {"v": 1})
+    cache.clear()
+    calls = []
+    assert cache.get_or_fetch("a", lambda: calls.append(1) or {"v": 2}) == {"v": 2}
+    assert calls == [1]
+
+
 def test_drop_where_removes_only_matching_keys():
     cache, clock, jobs = make_cache()
     cache.put(("query", "games", (), 10, None), [("g1", {"v": 1})])

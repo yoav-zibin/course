@@ -130,8 +130,14 @@ def test_history_page_uses_one_batch_and_preserves_move_order(store):
         moves_per_match=5,
         max_writes=1000,
     )
-    match = store.get_match("synthetic-batch-history-match-0")
+    # Measure with a cold store (empty read cache): seeding wrote the moves
+    # through the seeding store's own cache, which would serve them itself.
+    cold = QueryStore(store.client, namespace=store.namespace)
+    match = cold.get_match("synthetic-batch-history-match-0")
     with patch.object(store.client, "get_all", wraps=store.client.get_all) as batch:
+        assert [move.move_number for move in match.moves[:5]] == [1, 2, 3, 4, 5]
+        assert batch.call_count == 1
+        # A repeat read is served by the read cache: still one batch total.
         assert [move.move_number for move in match.moves[:5]] == [1, 2, 3, 4, 5]
         assert batch.call_count == 1
 
@@ -293,7 +299,14 @@ def test_verification_attempts_persist_and_second_instance_can_finish_login(stor
     second = ScalablePlatform(store=QueryStore(store.client, namespace=store.namespace))
     user, _ = second.verify_code(verification_id=identity, code=code)
     assert user.linked_accounts[0].identifier == "test@example.com"
-    assert store.raw_get(store.ref("verifications", identity)) is None
+    # The second instance deleted the record; this store's read cache may
+    # serve its copy for up to a refresh window (~1s), then it converges.
+    import time
+
+    deadline = time.monotonic() + 5
+    while store.raw_get(store.ref("verifications", identity)) is not None:
+        assert time.monotonic() < deadline
+        time.sleep(0.05)
 
 
 def test_two_instances_racing_a_move_commit_only_once(store):
@@ -329,7 +342,14 @@ def test_two_instances_racing_a_move_commit_only_once(store):
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(attempt, [1, 2]))
     assert sorted(results) == ["committed", "conflict"], conflicts
-    assert len(store.get_match(match).moves) == 1
+    # The winning instance committed the move; this store's cached copy of
+    # the match converges within a refresh window (~1s).
+    import time
+
+    deadline = time.monotonic() + 5
+    while len(store.get_match(match).moves) != 1:
+        assert time.monotonic() < deadline
+        time.sleep(0.05)
     assert store.counts()["moves_total"] == 1
 
 
@@ -376,8 +396,16 @@ def test_quickjs_computer_turn_survives_restart_and_duplicate_job(store):
         store=QueryStore(store.client, namespace=store.namespace)
     )
     restarted.run_due_jobs()
+    # The restarted instance committed the computer's move; this store's
+    # cached copy of the match converges within a refresh window (~1s).
+    import time
+
+    deadline = time.monotonic() + 5
     after = store.get_match(match["id"])
-    assert len(after.moves) == 2
+    while len(after.moves) != 2:
+        assert time.monotonic() < deadline
+        time.sleep(0.05)
+        after = store.get_match(match["id"])
     assert after.state["board"][0] == "X"
     restarted.run_due_jobs()
     assert len(store.get_match(match["id"]).moves) == 2

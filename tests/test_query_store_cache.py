@@ -67,6 +67,27 @@ def test_own_write_is_visible_immediately():
     assert client.reads == reads
 
 
+def test_second_instance_delete_converges_within_refresh_window():
+    client = FakeClient()
+    stores = [query_store(NS, client), query_store(NS, client)]
+    clock = [1000.0]
+    jobs = []
+    for store in stores:
+        store._cache = ReadCache(
+            max_bytes=64 * 1024 * 1024, clock=lambda: clock[0], submit=jobs.append
+        )
+    first, second = stores
+    ref = first.ref("verifications", "v1")
+    client.docs[ref.path] = {"attempts": 1}
+    assert first.raw_get(ref) == {"attempts": 1}  # first instance caches it
+    second.raw_put(ref, None)  # second instance deletes it (committed)
+    assert first.raw_get(ref) == {"attempts": 1}  # first still serves its copy
+    clock[0] += 2.0
+    assert first.raw_get(ref) == {"attempts": 1}  # stale served, refresh queued
+    drain(jobs)
+    assert first.raw_get(ref) is None  # converged
+
+
 def test_transactional_reads_bypass_the_cache():
     store, client, clock, jobs = make_store()
     ref = store.ref("users", "alice")

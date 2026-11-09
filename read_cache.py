@@ -190,6 +190,12 @@ class ReadCache:
             for key in [k for k in self._entries if predicate(k)]:
                 self._total_bytes -= self._entries.pop(key).size
 
+    def clear(self):
+        """Evict everything; the next read of each key refetches."""
+        with self._lock:
+            self._entries.clear()
+            self._total_bytes = 0
+
     # -- internals ---------------------------------------------------------
 
     def _due_locked(self, key, entry, *, mark=True):

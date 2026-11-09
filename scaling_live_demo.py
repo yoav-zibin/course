@@ -63,6 +63,10 @@ class DemoPlatform(ScalablePlatform):
     def invalidate(self):
         with self._demo_epoch_lock:
             self._demo_epoch += 1
+        # The epoch invalidates the demo's HTTP response cache; the store's
+        # read cache is the layer beneath it, so drop that too — the next
+        # request must re-read Firestore, not the cache in front of it.
+        self._store.clear_cache()
 
     def wake_after(self, delay=0.6):
         with self._demo_timer_lock:

@@ -300,6 +300,12 @@ class QueryStore:
             lambda path=ref.path, data=data: self._cache_committed(path, data)
         )
 
+    def clear_cache(self):
+        """Drop every cached read; the next read of each record refetches
+        from Firestore. Used by callers that invalidate cached state
+        end-to-end (the live demo's epoch invalidation)."""
+        self._cache.clear()
+
     def _cache_committed(self, path, data):
         self._cache.put(("doc", path), data)
         kind = self._kind_for_path(path)
