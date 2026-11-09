@@ -824,7 +824,12 @@ class QueryStore:
             matches.extend(page.items)
             cursor = page.next_cursor
             if not cursor:
-                return matches
+                # The paged query returns document-id order, not creation
+                # order, so the "oldest first" contract needs an explicit
+                # sort (a query without order_by is unordered in Firestore,
+                # which made this test flaky: the two matches' ids sorted
+                # the other way round).
+                return sorted(matches, key=lambda m: m.created_at)
 
     def list_matches_by_status(self, status):
         """Legacy bounded status listing; scalable clients use the paged v2 API."""
