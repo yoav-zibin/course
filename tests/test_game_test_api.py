@@ -43,16 +43,18 @@ def api():
     return api
 
 
-def submit(api):
+def submit(api, secret=SECRET, body=BODY):
     response = api.client.post(
         "/game-test/submissions",
-        json={"secret": SECRET, "game_name": BODY["name"], "body": BODY},
+        json={"secret": secret, "game_name": body["name"], "body": body},
     )
     assert response.status_code == 201, response.text
     return response.json()["submission_id"]
 
 
-def play_verified_match(api, submission_id, mode, resolution, orientation):
+def play_verified_match(
+    api, submission_id, mode, resolution, orientation, secret=SECRET
+):
     session = f"{mode}-{resolution}-{orientation}"
     config = {
         "num_players": 1,
@@ -64,7 +66,7 @@ def play_verified_match(api, submission_id, mode, resolution, orientation):
         response = api.client.post(
             "/game-test/moves",
             json={
-                "secret": SECRET,
+                "secret": secret,
                 "submission_id": submission_id,
                 "session_id": session,
                 "mode": mode,
@@ -81,7 +83,7 @@ def play_verified_match(api, submission_id, mode, resolution, orientation):
     response = api.client.post(
         "/game-test/verify-match",
         json={
-            "secret": SECRET,
+            "secret": secret,
             "submission_id": submission_id,
             "session_id": session,
             "mode": mode,
@@ -95,6 +97,58 @@ def play_verified_match(api, submission_id, mode, resolution, orientation):
     )
     assert response.status_code == 200, response.text
     assert response.json()["verified"] is True
+
+
+def run_full_flow(api, secret, body):
+    """Drive the whole recorded /game-test flow for an import body over HTTP:
+    step 1 submission, step 2 server check, steps 3+5 verified matches for
+    every resolution/orientation, step 4 computer configs. Returns
+    (submission_id, server-check report). Assumes the counter example's
+    one-player shape (states {n:0..3}, moves {add: 1})."""
+    submission_id = submit(api, secret, body)
+    response = api.client.post(
+        "/game-test/server-check",
+        json={"secret": secret, "submission_id": submission_id},
+    )
+    assert response.status_code == 200, response.text
+    report = response.json()
+    assert report["passed"], report
+    for mode in (gt.MODE_PASS_AND_PLAY, gt.MODE_MULTIPLAYER):
+        for resolution in gt.RESOLUTIONS:
+            for orientation in gt.ORIENTATIONS:
+                play_verified_match(
+                    api,
+                    submission_id,
+                    mode,
+                    resolution["label"],
+                    orientation,
+                    secret=secret,
+                )
+    for i in range(gt.STEP4_MIN_CONFIGS):
+        config = {
+            "num_players": 1,
+            "resolution": gt.RESOLUTIONS[i]["label"],
+            "orientation": gt.ORIENTATIONS[i % 2],
+            "human_player_index": 0,
+        }
+        for j in range(gt.STEP4_MIN_MOVES_PER_CONFIG):
+            response = api.client.post(
+                "/game-test/moves",
+                json={
+                    "secret": secret,
+                    "submission_id": submission_id,
+                    "session_id": f"computers-{i}",
+                    "mode": gt.MODE_AGAINST_COMPUTERS,
+                    "config": config,
+                    "player_index": 0,
+                    "move_number": j,
+                    "state": {"n": j},
+                    "view": {"n": j},
+                    "move": {"add": 1},
+                },
+            )
+            assert response.status_code == 201, response.text
+    return submission_id, report
 
 
 def test_submission_rejects_a_mismatched_secret(api):
@@ -139,48 +193,9 @@ def test_full_flow_then_import(api):
     assert response.status_code == 422
     assert "Game testing is incomplete" in response.text
 
-    submission_id = submit(api)
-
-    response = api.client.post(
-        "/game-test/server-check",
-        json={"secret": SECRET, "submission_id": submission_id},
-    )
-    assert response.status_code == 200, response.text
-    report = response.json()
-    assert report["passed"], report
+    submission_id, report = run_full_flow(api, SECRET, BODY)
     assert report["states_visited"] >= 4
     assert report["terminal_states"] >= 1
-
-    for mode in (gt.MODE_PASS_AND_PLAY, gt.MODE_MULTIPLAYER):
-        for resolution in gt.RESOLUTIONS:
-            for orientation in gt.ORIENTATIONS:
-                play_verified_match(
-                    api, submission_id, mode, resolution["label"], orientation
-                )
-    for i in range(gt.STEP4_MIN_CONFIGS):
-        config = {
-            "num_players": 1,
-            "resolution": gt.RESOLUTIONS[i]["label"],
-            "orientation": gt.ORIENTATIONS[i % 2],
-            "human_player_index": 0,
-        }
-        for j in range(gt.STEP4_MIN_MOVES_PER_CONFIG):
-            response = api.client.post(
-                "/game-test/moves",
-                json={
-                    "secret": SECRET,
-                    "submission_id": submission_id,
-                    "session_id": f"computers-{i}",
-                    "mode": gt.MODE_AGAINST_COMPUTERS,
-                    "config": config,
-                    "player_index": 0,
-                    "move_number": j,
-                    "state": {"n": j},
-                    "view": {"n": j},
-                    "move": {"add": 1},
-                },
-            )
-            assert response.status_code == 201, response.text
 
     response = api.client.get("/game-test/status", params={"secret": SECRET})
     assert response.status_code == 200

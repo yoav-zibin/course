@@ -1304,9 +1304,12 @@ def test_the_daily_feedback_limit_spans_midnight_in_query_mode(store):
 
 def test_agent_import_roundtrips_query_store(store):
     from game_platform.tests.test_agent_import import payload
+    from game_platform.tests.test_game_test_api import run_full_flow
     api = api_for(store)
     owner = api.new_user('Agent import owner')
     body = payload()
+    # POST /games is gated on the recorded /game-test flow for the secret.
+    run_full_flow(api, body['game_addition_request_id_and_secret'], body)
     response = api.request('POST', '/games', as_user=owner, json=body)
     assert response.status_code == 201, response.text
     game = response.json()
