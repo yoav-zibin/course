@@ -70,6 +70,10 @@ def build(operations: Iterable[Mapping[str, Any]]) -> Snapshot:
         # Computer opponents move synchronously, so the generated file is
         # the same on every run (no timers racing the operations).
         computer_move_delay_seconds=0,
+        # The scripted scenario (and the committed snapshot) predate secret
+        # match seeds: its poker plays were authored against decks dealt
+        # from the old id-derived seeds, so reproduce that scheme here.
+        legacy_match_seeds=True,
     )
     for number, operation in enumerate(operations, start=1):
         try:

@@ -352,10 +352,17 @@ class Match:
     turn_started_at: dt.datetime | None = None
     # Seats that ran out of time, oldest first; their people can still watch.
     timeouts: tuple[SeatTimeout, ...] = ()
-    # v2 matches: the seed the server's per-call random seeds are derived from
-    # (together with the move number), so a match can be replayed exactly.
-    # 0 on v1 matches and older data files.
+    # v2 matches: the secret the server's per-call random seeds are derived
+    # from (together with the move number), so a match can be replayed
+    # exactly by the server. Server-only: never sent to clients. 0 on v1
+    # matches and older data files.
     seed: int = 0
+    # Seed scheme version: 1 = the seed was derived from the match id, so
+    # anyone who knew the id could recompute it and predict the match's
+    # random outcomes; 2 = a random secret. Older data files load as 1 and
+    # are rekeyed to 2 before their next state-changing logic call (see
+    # Platform._rekey_seed).
+    seed_version: int = 1
     # v2 matches: a pending leave-with-tokens preview (the playerLeft result
     # stored by POST /matches/{id}/maybeLeave): a JSON object with the leaving
     # player's id, their payout, and the state that leaving would produce.

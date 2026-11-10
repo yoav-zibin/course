@@ -233,6 +233,10 @@ def _new_id() -> str:
     return str(uuid.uuid4())
 
 
+def _new_seed() -> int:
+    return secrets.randbits(64)
+
+
 def _new_password() -> str:
     return secrets.token_urlsafe(16)
 
@@ -447,6 +451,7 @@ class GamePlatform:
         new_verification_code: Callable[[], str] = _new_verification_code,
         new_invite_token: Callable[[], str] = _new_invite_token,
         new_referral_code: Callable[[], str] = _new_referral_code,
+        new_seed: Callable[[], int] = _new_seed,
         push_notifier: PushNotifier | None = None,
         max_push_subscriptions_per_user: int = 10,
         computer_move_delay_seconds: float = 0.6,
@@ -455,6 +460,7 @@ class GamePlatform:
         bundle_wait_seconds: float = 3.0,
         bundle_games_ttl_seconds: float = 10.0,
         require_game_strings: bool = False,
+        legacy_match_seeds: bool = False,
     ) -> None:
         self._store: Store = store if store is not None else InMemoryStore()
         missing_game_schemas = sorted(
@@ -501,6 +507,13 @@ class GamePlatform:
         self._new_verification_code = new_verification_code
         self._new_invite_token = new_invite_token
         self._new_referral_code = new_referral_code
+        self._new_seed = new_seed
+        # Example-data generation only: reproduce the pre-fix seed scheme
+        # (seed derived from the match id, legacy derivation, no rekey), so
+        # the generator's scripted scenario and committed snapshot — whose
+        # poker operations were authored against the old decks — stay
+        # byte-identical. Never set in production: those seeds are public.
+        self._legacy_match_seeds = legacy_match_seeds
         self._push_notifier = (
             push_notifier if push_notifier is not None else LogPushNotifier()
         )
@@ -2444,6 +2457,17 @@ class GamePlatform:
         The caller holds the lock and has checked the game."""
         now = self._clock()
         match_id = self._new_id()
+        if self._legacy_match_seeds:
+            seed = int.from_bytes(
+                hashlib.sha256(match_id.encode()).digest()[:4], "big"
+            )
+            seed_version = 1
+        else:
+            # A random server-side secret (see _call_seed): never sent to
+            # clients, and knowing the match id reveals nothing about it,
+            # so nobody can predict the match's random outcomes.
+            seed = self._new_seed()
+            seed_version = 2
         match = Match(
             id=match_id,
             game_id=game.id,
@@ -2465,12 +2489,8 @@ class GamePlatform:
             matchmaking_player_count=matchmaking_player_count,
             bet_per_player=bet_per_player,
             turn_seconds=turn_seconds,
-            # Derived from the match id, so the seed is stable for a given
-            # match (replays reproduce it exactly) and unrelated across
-            # matches (ids are random).
-            seed=int.from_bytes(
-                hashlib.sha256(match_id.encode()).digest()[:4], "big"
-            ),
+            seed=seed,
+            seed_version=seed_version,
         )
         if game.server_code and bet_per_player:
             # A v2 match takes each human's stake as they join — the
@@ -2938,10 +2958,31 @@ class GamePlatform:
         }
 
     def _call_seed(self, match: Match) -> int:
-        """The seed for the next logic call: the match's seed advanced by the
-        move number, so calls differ within a match but a replay of the match
-        reproduces every call exactly."""
-        return (match.seed + len(match.moves)) % (2**32)
+        """The seed for the next logic call: derived from the match's secret
+        seed and the move number, so calls differ within a match but a
+        replay with the same secret reproduces every call exactly. The
+        derivation is a hash of the secret, so observed random outcomes
+        reveal nothing about the seeds of later calls."""
+        move_number = len(match.moves)
+        if getattr(match, "seed_version", 1) >= 2:
+            digest = hashlib.sha256(
+                f"call-seed:{match.seed}:{move_number}".encode()
+            ).digest()
+            return int.from_bytes(digest[:4], "big")
+        # Legacy matches (seed derived from the public match id, or 0) are
+        # rekeyed before any state-changing logic call; this branch only
+        # serves read-only calls (views, logs) until then.
+        return (match.seed + move_number) % (2**32)
+
+    def _rekey_seed(self, match: Match) -> Match:
+        """Replaces a legacy match's public seed (derived from its match id,
+        so anyone could recompute it and predict the match's random
+        outcomes) with a random secret one. Called before a match's
+        state-changing logic calls; the caller saves the returned match,
+        so the rekey persists."""
+        if self._legacy_match_seeds or match.seed_version >= 2:
+            return match
+        return replace(match, seed=self._new_seed(), seed_version=2)
 
     def _call_logic(
         self,
@@ -3219,6 +3260,7 @@ class GamePlatform:
         v2 matches take each human's stake as they join (see [_new_match]
         and [_join]) — except matches created before that, which are
         funded here, all at once."""
+        match = self._rekey_seed(match)
         humans = [seat for seat in match.seats if seat.kind == "human"]
         pot = match.token_pot
         if match.bet_per_player and not pot:
@@ -3301,6 +3343,7 @@ class GamePlatform:
             match = self._store.get_match(match_id)
             if match is not None:
                 match = self._enforce_clock(match)
+                match = self._rekey_seed(match)
             if match is None or match.status != "ongoing" or len(match.active_human_user_ids) != 1:
                 return
             game = self._store.get_game_version(match.game_id, match.game_version)
@@ -4084,6 +4127,7 @@ class GamePlatform:
         is ongoing and [seat] is the caller's seat. A player may only move
         on their own turn — nobody acts on behalf of another seat, because
         computer opponents move on the server."""
+        match = self._rekey_seed(match)
         if seat.player_index not in (match.turn_of_player_indices or frozenset()):
             raise ForbiddenError("it is not your turn")
         try:

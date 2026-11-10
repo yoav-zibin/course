@@ -42,6 +42,7 @@ def _platform(ids: Iterator[str]) -> GamePlatform:
         store=InMemoryStore(),
         clock=_Clock(),
         new_id=lambda: next(ids),
+        new_seed=lambda: 0x5EED,
         new_password=lambda: "pw",
         new_referral_code=lambda: next(referral_codes),
         computer_move_delay_seconds=0,
@@ -105,8 +106,8 @@ def _play_tictactoe() -> list[tuple[int, dict]]:
 def test_a_match_replays_move_for_move_to_the_same_state() -> None:
     first = _play_tictactoe()
     second = _play_tictactoe()
-    # Same ids -> same match seed -> the computer's minimax tie-breaks
-    # and every state along the way are identical.
+    # Same ids and the same (injected) match seed -> the computer's
+    # minimax tie-breaks and every state along the way are identical.
     assert len(first) > 3
     assert first == second
 

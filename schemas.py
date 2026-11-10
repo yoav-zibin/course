@@ -674,11 +674,11 @@ class MatchOut(BaseModel):
     max_loss: int = 0
     token_pot: int = 0
     token_payouts: dict[int, int] | None = None
-    # v2 matches: the seed the server's random seeds derive from (0 on v1
-    # matches), and the pending leave preview's public parts — who would
+    # v2 matches: the pending leave preview's public parts — who would
     # leave and what they would be paid. The preview's resulting state is
-    # server-only and is never in a response.
-    seed: int = 0
+    # server-only and is never in a response. The match's seed is likewise
+    # server-only and is never in a response: it keys every random draw in
+    # the match, so exposing it would let anyone predict future rolls.
     pending_leave_player_id: str | None = None
     pending_leave_payout: int | None = None
     pending_leave_ends_match: bool | None = None
@@ -735,7 +735,6 @@ class MatchOut(BaseModel):
             move_count=len(match.moves),
             bet_per_player=match.bet_per_player,
             max_loss=match.bet_per_player,
-            seed=match.seed,
             pending_leave_player_id=(
                 match.pending_leave.get("player_id")
                 if isinstance(match.pending_leave, dict)
@@ -808,7 +807,6 @@ class MatchSummaryOut(BaseModel):
     max_loss: int = 0
     token_pot: int = 0
     token_payouts: dict[int, int] | None = None
-    seed: int = 0
     pending_leave_player_id: str | None = None
     pending_leave_payout: int | None = None
     rematch_match_id: str | None

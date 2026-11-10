@@ -8,6 +8,9 @@ is their own view, computers move on the server, and the winner of a paid
 match is paid the pot by the game's own payouts.
 """
 
+import hashlib
+from dataclasses import replace
+
 from game_platform.service import GamePlatform
 from game_platform.store import InMemoryStore
 from game_platform.tests.helpers import Api, FakeClock
@@ -243,3 +246,69 @@ def test_v2_start_ignores_the_clients_initial_state(api: Api):
     )
     assert started["state"]["count"] == 0
     assert started["turn_of_player_indices"] == [0]
+
+
+def _legacy_seed(match_id: str) -> int:
+    """The pre-fix seed: the first 4 bytes of the match id's sha256 — the
+    value anyone could compute (and that responses used to carry)."""
+    return int.from_bytes(hashlib.sha256(match_id.encode()).digest()[:4], "big")
+
+
+def test_match_seed_is_a_secret_and_never_in_responses(api: Api):
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game_id = _create_game(api, alice)
+
+    created = api.ok("POST", "/matches", as_user=alice, json={"game_id": game_id})
+    assert "seed" not in created
+    match_id = created["id"]
+    api.ok("POST", f"/matches/{match_id}/join", as_user=bob)
+    started = api.ok("POST", f"/matches/{match_id}/start", as_user=alice, json={})
+    assert "seed" not in started
+    fetched = api.ok("GET", f"/matches/{match_id}", as_user=alice)
+    assert "seed" not in fetched
+    assert "seed" not in api.match_summary(match_id)
+
+    stored = api.platform._store.get_match(match_id)
+    assert stored.seed_version == 2
+    assert stored.seed not in (0, _legacy_seed(match_id))
+
+    # Every match gets its own secret.
+    other = api.ok("POST", "/matches", as_user=alice, json={"game_id": game_id})
+    other_stored = api.platform._store.get_match(other["id"])
+    assert other_stored.seed != stored.seed
+
+
+def test_call_seed_depends_on_the_secret_and_the_move_number(api: Api):
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game_id = _create_game(api, alice)
+    match_id = _start(api, alice, game_id, joiner=bob)
+    platform = api.platform
+    stored = platform._store.get_match(match_id)
+
+    first = platform._call_seed(stored)
+    # Stable for the same match state, and not the value the old public
+    # scheme (seed from the match id, advanced by the move number) predicts.
+    assert first == platform._call_seed(stored)
+    assert first != (_legacy_seed(match_id) + len(stored.moves)) % 2**32
+    # A different secret or a later move number gives a different seed.
+    assert platform._call_seed(replace(stored, seed=stored.seed + 1)) != first
+    assert _move(api, match_id, as_user=alice, add=1).status_code == 201
+    moved = platform._store.get_match(match_id)
+    assert platform._call_seed(moved) != first
+
+
+def test_legacy_match_is_rekeyed_when_it_starts(api: Api):
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game_id = _create_game(api, alice)
+    match = api.ok("POST", "/matches", as_user=alice, json={"game_id": game_id})
+    match_id = match["id"]
+    api.ok("POST", f"/matches/{match_id}/join", as_user=bob)
+
+    store = api.platform._store
+    legacy = _legacy_seed(match_id)
+    store.put_match(replace(store.get_match(match_id), seed=legacy, seed_version=1))
+
+    api.ok("POST", f"/matches/{match_id}/start", as_user=alice, json={})
+    stored = store.get_match(match_id)
+    assert stored.seed_version == 2
+    assert stored.seed != legacy

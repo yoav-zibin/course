@@ -110,7 +110,7 @@ def test_patch_server_code_and_client_code(api: Api):
     assert new_client["server_code"] == SERVER_CODE_V2
 
 
-def test_match_max_loss_seed_and_player_ids(api: Api):
+def test_match_max_loss_and_player_ids(api: Api):
     owner = api.new_user("owner")
     game = _create_game(api, owner)
     # The stake is taken when the match is created (Phase 4), so it must
@@ -121,7 +121,9 @@ def test_match_max_loss_seed_and_player_ids(api: Api):
     )
     assert match["bet_per_player"] == 10
     assert match["max_loss"] == 10
-    assert match["seed"] != 0
+    # The match's seed keys every random draw in the match, so it is a
+    # server secret and never appears in a response.
+    assert "seed" not in match
     assert match["players"][0]["id"] == owner
     assert match["pending_leave_player_id"] is None
     assert match["pending_leave_payout"] is None
@@ -131,7 +133,7 @@ def test_match_max_loss_seed_and_player_ids(api: Api):
         json={"game_id": game["id"], "num_computer_opponents": 1},
     )
     assert [p["id"] for p in solo["players"]] == [owner, "computer-1"]
-    assert solo["seed"] != match["seed"]
+    assert "seed" not in solo
 
 
 def test_v1_moves_have_no_v2_move_fields(api: Api):

@@ -31,7 +31,6 @@ def test_create_a_match_with_computer_opponents(api: Api) -> None:
         "move_count": 0,
         "bet_per_player": 0,
         "max_loss": 0,
-        "seed": match["seed"],
         "pending_leave_player_id": None,
         "pending_leave_payout": None,
         "pending_leave_ends_match": None,
