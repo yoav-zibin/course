@@ -2946,26 +2946,67 @@ const Flow = {
     this.refreshButtons();
   },
 
-  matrix() {
-    // A covering set, not the cross product: every allowed player count,
-    // every resolution and both orientations appear at least once.
+  displayPlanner() {
+    // Hands out screen configurations for steps 3–5, preferring sizes
+    // and orientations this run has not covered yet. Screen coverage is
+    // judged once across the whole flow (see display_missing in
+    // game_traces.py), so one planner is shared by all three steps.
+    const coveredRes = new Set();
+    const coveredOri = new Set();
+    let rotation = 0;
+    return {
+      next() {
+        let resolutionIndex = RESOLUTIONS.findIndex(
+          (_, i) => !coveredRes.has(i),
+        );
+        if (resolutionIndex < 0) resolutionIndex = rotation % RESOLUTIONS.length;
+        let orientation = ["vertical", "horizontal"].find(
+          (o) => !coveredOri.has(o),
+        );
+        if (!orientation) orientation = ["vertical", "horizontal"][rotation % 2];
+        rotation++;
+        coveredRes.add(resolutionIndex);
+        coveredOri.add(orientation);
+        return { resolutionIndex, orientation };
+      },
+      uncovered() {
+        return {
+          resolutions: RESOLUTIONS.filter((_, i) => !coveredRes.has(i)).length,
+          orientations: ["vertical", "horizontal"].filter(
+            (o) => !coveredOri.has(o),
+          ).length,
+        };
+      },
+    };
+  },
+
+  step4Pairs() {
+    // Mirror of step4_required_pairs in game_traces.py: the smallest
+    // player count played from its first and last seat, plus the largest
+    // count from its last seat when the game allows more than one count.
     const counts = this.submittedBody.allowed_player_counts;
-    const total = Math.max(counts.length, RESOLUTIONS.length, 2);
-    const combos = [];
-    for (let i = 0; i < total; i++) {
-      combos.push({
-        count: counts[i % counts.length],
-        resolutionIndex: i % RESOLUTIONS.length,
-        orientation: ["vertical", "horizontal"][i % 2],
-      });
-    }
-    return combos;
+    const min = Math.min(...counts);
+    const max = Math.max(...counts);
+    const keys = new Set([`${min},0`, `${min},${min - 1}`]);
+    if (max !== min) keys.add(`${max},${max - 1}`);
+    return [...keys].map((key) => key.split(",").map(Number));
   },
 
   async startPlayStep(step) {
     if (!this.submissionId) return;
     this.banner(null);
-    this.combos = this.matrix();
+    if (step === 3 || !this.planner) this.planner = this.displayPlanner();
+    const counts = this.submittedBody.allowed_player_counts;
+    // One match per allowed player count. Step 5 adds a match for each
+    // screen size or orientation steps 3–5 have not covered yet.
+    this.combos = counts.map((count) => ({ count, ...this.planner.next() }));
+    if (step === 5) {
+      for (;;) {
+        const missing = this.planner.uncovered();
+        if (!missing.resolutions && !missing.orientations) break;
+        this.combos.push({ count: counts[0], ...this.planner.next() });
+      }
+    }
     this.comboIndex = 0;
     this.step = step;
     this.active = true;
@@ -3011,23 +3052,12 @@ const Flow = {
   async startStep4() {
     if (!this.submissionId) return;
     this.banner(null);
-    const counts = this.submittedBody.allowed_player_counts;
-    const seen = new Set();
-    const configs = [];
-    while (configs.length < 5) {
-      const count = counts[Math.floor(Math.random() * counts.length)];
-      const cfg = {
-        count,
-        resolutionIndex: Math.floor(Math.random() * RESOLUTIONS.length),
-        orientation: Math.random() < 0.5 ? "vertical" : "horizontal",
-        humanSeat: Math.floor(Math.random() * count),
-      };
-      const key = JSON.stringify(cfg);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      configs.push(cfg);
-    }
-    this.configs4 = configs;
+    if (!this.planner) this.planner = this.displayPlanner();
+    this.configs4 = this.step4Pairs().map(([count, humanSeat]) => ({
+      count,
+      humanSeat,
+      ...this.planner.next(),
+    }));
     this.config4Index = 0;
     this.step = 4;
     this.active = true;

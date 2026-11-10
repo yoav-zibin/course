@@ -47,10 +47,10 @@ MODE_AGAINST_COMPUTERS = "against_computers"
 MODE_MULTIPLAYER = "multiplayer"
 MODES = (MODE_PASS_AND_PLAY, MODE_AGAINST_COMPUTERS, MODE_MULTIPLAYER)
 VERIFIED_MODES = (MODE_PASS_AND_PLAY, MODE_MULTIPLAYER)
-# Step 4 evidence bar: at least this many distinct configurations, each
-# with at least one recorded move (a match can legitimately be shorter
-# than any fixed move count — "Count to three" takes exactly 3 moves).
-STEP4_MIN_CONFIGS = 5
+# Step 4 evidence bar: every (player count, human seat) pair of
+# step4_required_pairs(), each with at least one recorded move (a match
+# can legitimately be shorter than any fixed move count — "Count to
+# three" takes exactly 3 moves).
 STEP4_MIN_MOVES_PER_CONFIG = 1
 
 SERVER_CHECK_TIMEOUT_SECONDS = 90
@@ -332,38 +332,56 @@ def replay_match(body, *, players, pot, match_seed, states, moves):
 # ---------------------------------------------------------------------------
 
 
-def covering_configs(body):
-    """The smallest set of match configurations covering every parameter:
-    each allowed player count, each resolution and each orientation appears
-    at least once (the full cross product is NOT required)."""
-    counts = list(body.allowed_player_counts)
-    total = max(len(counts), len(RESOLUTIONS), len(ORIENTATIONS))
+def counts_missing(rows, body):
+    """Allowed player counts no verified match in [rows] has covered yet.
+    Steps 3 and 5 each owe one full match per allowed player count —
+    counts are not cosmetic (hands, turn rotation and per-player state
+    all change with the count), so this axis is never shared or cut."""
+    counts = {row["num_players"] for row in rows}
     return [
-        (
-            counts[i % len(counts)],
-            RESOLUTIONS[i % len(RESOLUTIONS)]["label"],
-            ORIENTATIONS[i % len(ORIENTATIONS)],
-        )
-        for i in range(total)
+        f"a match with {count} players"
+        for count in body.allowed_player_counts
+        if count not in counts
     ]
 
 
-def coverage_missing(rows, body):
-    """What a set of verified-match rows still lacks, per parameter."""
-    missing = []
-    counts = {row["num_players"] for row in rows}
-    for count in body.allowed_player_counts:
-        if count not in counts:
-            missing.append(f"a match with {count} players")
+def display_missing(rows):
+    """(missing strings, missing resolution labels, missing orientations)
+    for the screen sizes and orientations no row in [rows] has covered.
+
+    Screen coverage is judged ONCE across the whole flow — over the
+    union of the step 3 and 5 verified matches and the step 4 move rows
+    — not once per step: replay verification is size-blind (a transition
+    verifies identically at every size), so each size only needs one
+    recorded match somewhere in the run for a human to have seen the
+    layout there. The gaps are charged to step 5, the last match step,
+    whose list adds the matches covering whatever is still missing."""
     resolutions = {row["resolution"] for row in rows}
-    for resolution in RESOLUTIONS:
-        if resolution["label"] not in resolutions:
-            missing.append(f"a match at {resolution['label']}")
+    missing_resolutions = [
+        resolution["label"]
+        for resolution in RESOLUTIONS
+        if resolution["label"] not in resolutions
+    ]
     orientations = {row["orientation"] for row in rows}
-    for orientation in ORIENTATIONS:
-        if orientation not in orientations:
-            missing.append(f"a match in {orientation} orientation")
-    return missing
+    missing_orientations = [o for o in ORIENTATIONS if o not in orientations]
+    missing = [f"a match at {label}" for label in missing_resolutions]
+    missing += [f"a match in {o} orientation" for o in missing_orientations]
+    return missing, missing_resolutions, missing_orientations
+
+
+def step4_required_pairs(body):
+    """The (player count, human seat) pairs step 4 must record: the
+    smallest player count played from its first and last seat, plus the
+    largest count from its last seat when the game allows more than one
+    count. The seat is the axis that matters (a roster that mis-seats
+    the human stalls the match); computer moves are computed on the
+    server, so screen size and orientation add nothing here — they
+    still count toward the flow's shared screen coverage."""
+    counts = sorted(body.allowed_player_counts)
+    pairs = {(counts[0], 0), (counts[0], counts[0] - 1)}
+    if len(counts) > 1:
+        pairs.add((counts[-1], counts[-1] - 1))
+    return sorted(pairs)
 
 
 def evaluate(store, secret, body):
@@ -401,43 +419,58 @@ def evaluate(store, secret, body):
         ("step5", "step 5", MODE_MULTIPLAYER),
     ):
         rows = [row for row in verified if row["mode"] == mode]
-        missing = coverage_missing(rows, body)
-        steps[step] = {
+        missing = counts_missing(rows, body)
+        entry = {
             "done": not missing,
             "verified": len(rows),
-            "required": len(covering_configs(body)),
+            "required": len(body.allowed_player_counts),
             "missing": missing,
         }
+        if step == "step5":
+            # Screen sizes and orientations are covered once across the
+            # whole flow (see display_missing); the gaps land here
+            # because step 5 is the last match step.
+            union = verified + [
+                row for row in moves if row["mode"] == MODE_AGAINST_COMPUTERS
+            ]
+            d_missing, d_resolutions, d_orientations = display_missing(union)
+            entry["missing"] = missing + d_missing
+            entry["missing_resolutions"] = d_resolutions
+            entry["missing_orientations"] = d_orientations
+            entry["done"] = not entry["missing"]
+            missing = entry["missing"]
+        steps[step] = entry
         if missing:
             gaps.append(
                 f"{label} ({mode.replace('_', ' ')}) is incomplete: missing "
                 + "; ".join(missing)
             )
-    configs = {}
+    pair_moves = {}
     for row in moves:
         if row["mode"] != MODE_AGAINST_COMPUTERS:
             continue
-        config = (
-            row["num_players"],
-            row["resolution"],
-            row["orientation"],
-            row.get("human_player_index"),
-        )
-        configs[config] = configs.get(config, 0) + 1
-    complete_configs = [
-        config
-        for config, count in configs.items()
-        if count >= STEP4_MIN_MOVES_PER_CONFIG
+        pair = (row["num_players"], row.get("human_player_index"))
+        pair_moves[pair] = pair_moves.get(pair, 0) + 1
+    required_pairs = step4_required_pairs(body)
+    played_pairs = [
+        pair
+        for pair in required_pairs
+        if pair_moves.get(pair, 0) >= STEP4_MIN_MOVES_PER_CONFIG
     ]
+    missing_pairs = [pair for pair in required_pairs if pair not in played_pairs]
     steps["step4"] = {
-        "done": len(complete_configs) >= STEP4_MIN_CONFIGS,
-        "configs": len(complete_configs),
-        "required_configs": STEP4_MIN_CONFIGS,
+        "done": not missing_pairs,
+        "configs": len(played_pairs),
+        "required_configs": len(required_pairs),
+        "missing": [
+            f"a match with {count} players played as seat {seat}"
+            for count, seat in missing_pairs
+        ],
     }
-    if not steps["step4"]["done"]:
+    if missing_pairs:
         gaps.append(
-            f"step 4 (against the computer) is incomplete: "
-            f"{len(complete_configs)} of {STEP4_MIN_CONFIGS} configurations played"
+            "step 4 (against the computer) is incomplete: missing "
+            + "; ".join(steps["step4"]["missing"])
         )
     steps["complete"] = not gaps
     return steps, gaps

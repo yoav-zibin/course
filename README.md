@@ -1211,13 +1211,14 @@ before storing) and follows a linear
 five-step flow: (1) the payload is stored on the server and the page loads
 it back by secret (`GET /game-test/submission`), (2) the server runs
 its server-code tests and records the run's metadata, (3) pass-and-play
-matches are played to the end in a covering set of configurations — every
-allowed player count, every screen size and both orientations at least
-once, not the cross product — and each is verified by replaying its states
-and moves on the server, (4) matches
-against the computer are played in 5 random configurations, and (5) the same
-covering set as (3) is played multiplayer, one frame per player, and verified the
-same way. Every step leaves rows in the `game_test_traces` collection
+matches are played to the end — one per allowed player count — and each is
+verified by replaying its states and moves on the server, (4) matches
+against the computer are played from the seats that matter (the smallest
+player count from its first and last seat, plus the largest count from its
+last seat), and (5) the per-count set is played multiplayer, one frame per
+player, and verified the same way; screen sizes and orientations are
+covered once across steps 3–5 together, with step 5 adding matches for any
+the run has not shown yet. Every step leaves rows in the `game_test_traces` collection
 (`game_traces.py`), keyed by the submission secret's hash: a submission row,
 a server-check row, one move row per played move (creation time, an md5 of
 the state, view and move, and the UI configuration), and one row per verified

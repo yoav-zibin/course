@@ -159,8 +159,8 @@
 </div>
 
 <div class="step-card" id="step-card-3">
-  <h3>Step 3 — Pass-and-play, every screen size</h3>
-  <p>Play pass-and-play matches to the very end (until there is no next turn). The page sets up a short covering list of matches — not every combination — chosen so that each allowed number of players, each of the 5 screen sizes, and both orientations (vertical and horizontal) come up at least once. When a match ends, the page sends its states and moves to the server, which replays them with the step 1 server code and checks every transition and that the match truly ended.</p>
+  <h3>Step 3 — Pass-and-play</h3>
+  <p>Play pass-and-play matches to the very end (until there is no next turn): one match for each allowed number of players. When a match ends, the page sends its states and moves to the server, which replays them with the step 1 server code and checks every transition and that the match truly ended. Screen sizes and orientations are covered once across steps 3–5 together, not once per step — see step 5.</p>
   <p>
     <button type="button" id="step3-start" disabled>Start step 3</button>
     <span id="step3-status" class="check-status" role="status"></span>
@@ -171,7 +171,7 @@
 
 <div class="step-card" id="step-card-4">
   <h3>Step 4 — Play against the computer</h3>
-  <p>Play against the computer in 5 random configurations (screen size, number of players, orientation, and which seat you play), up to 100 moves per match. Every move is recorded on the server.</p>
+  <p>Play against the computer from the seats that matter: the smallest player count from its first and last seat, plus the largest player count from its last seat when the game allows more than one count — up to 100 moves per match. Every move is recorded on the server.</p>
   <p>
     <button type="button" id="step4-start" disabled>Start step 4</button>
     <span id="step4-status" class="check-status" role="status"></span>
@@ -181,8 +181,8 @@
 </div>
 
 <div class="step-card" id="step-card-5">
-  <h3>Step 5 — Multiplayer, every screen size</h3>
-  <p>Like step 3, but multiplayer: one frame per player, each showing only that player's view. Play every seat from its own frame until the match is over, in the same covering list of matches (every player count, screen size and orientation at least once). Each finished match is verified on the server the same way as step 3.</p>
+  <h3>Step 5 — Multiplayer</h3>
+  <p>Like step 3, but multiplayer: one frame per player, each showing only that player's view. Play every seat from its own frame until the match is over: one match for each allowed number of players, plus a match for each screen size or orientation that steps 3–5 have not covered yet — across the three steps, each of the 5 screen sizes and both orientations comes up at least once. Each finished match is verified on the server the same way as step 3.</p>
   <p>
     <button type="button" id="step5-start" disabled>Start step 5</button>
     <span id="step5-status" class="check-status" role="status"></span>
@@ -295,6 +295,6 @@
 <pre id="log" class="log" aria-live="polite"></pre>
 </section>
 </main>
-<script src="/static/game-test.js?v=7"></script>
+<script src="/static/game-test.js?v=8"></script>
 </body>
 </html>

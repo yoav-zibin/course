@@ -50,30 +50,46 @@ def add_row(store, submission_id, **fields):
 
 def complete_run(store, body, submission_id):
     add_row(store, submission_id, kind="server_check", passed=True)
-    for mode in (gt.MODE_PASS_AND_PLAY, gt.MODE_MULTIPLAYER):
-        for count, resolution, orientation in gt.covering_configs(body):
-            add_row(
-                store,
-                submission_id,
-                kind="match_verified",
-                mode=mode,
-                num_players=count,
-                resolution=resolution,
-                orientation=orientation,
-                moves=3,
-            )
-    for i in range(gt.STEP4_MIN_CONFIGS):
+    counts = list(body.allowed_player_counts)
+    # Step 3: one verified match per allowed player count.
+    for i, count in enumerate(counts):
+        add_row(
+            store,
+            submission_id,
+            kind="match_verified",
+            mode=gt.MODE_PASS_AND_PLAY,
+            num_players=count,
+            resolution=gt.RESOLUTIONS[i % len(gt.RESOLUTIONS)]["label"],
+            orientation=gt.ORIENTATIONS[i % 2],
+            moves=3,
+        )
+    # Step 5: one verified match per allowed player count, at the
+    # remaining resolutions, so the flow-wide screen coverage (judged
+    # over the union of all three match steps) is complete.
+    for i, resolution in enumerate(gt.RESOLUTIONS):
+        add_row(
+            store,
+            submission_id,
+            kind="match_verified",
+            mode=gt.MODE_MULTIPLAYER,
+            num_players=counts[i % len(counts)],
+            resolution=resolution["label"],
+            orientation=gt.ORIENTATIONS[i % 2],
+            moves=3,
+        )
+    # Step 4: the required (player count, human seat) pairs.
+    for count, seat in gt.step4_required_pairs(body):
         for j in range(gt.STEP4_MIN_MOVES_PER_CONFIG):
             add_row(
                 store,
                 submission_id,
                 kind="move",
                 mode=gt.MODE_AGAINST_COMPUTERS,
-                num_players=body.allowed_player_counts[0],
-                resolution=gt.RESOLUTIONS[i % len(gt.RESOLUTIONS)]["label"],
-                orientation=gt.ORIENTATIONS[i % 2],
-                human_player_index=0,
-                player_index=0,
+                num_players=count,
+                resolution=gt.RESOLUTIONS[0]["label"],
+                orientation=gt.ORIENTATIONS[0],
+                human_player_index=seat,
+                player_index=seat,
                 move_number=j,
                 md5="0" * 32,
             )
@@ -112,45 +128,115 @@ def test_evaluate_reports_each_missing_step(store, body):
     steps, gaps = gt.evaluate(store, SECRET, body)
     assert gaps == []
     assert steps["complete"] is True
-    assert steps["step3"]["verified"] == steps["step3"]["required"] == 5
+    assert steps["step3"]["verified"] == steps["step3"]["required"] == len(
+        body.allowed_player_counts
+    )
 
 
-def test_coverage_is_per_parameter_not_cross_product(store, body):
-    # The counter game allows only 2 players, so the old cross product would
-    # demand 10 matches; per-parameter coverage needs just 5 (one per
-    # resolution; the orientations and the single count ride along).
+def test_step3_needs_one_match_per_player_count(store, body):
+    # The counter game allows only 1 player: step 3 is done after ONE
+    # verified pass-and-play match, at any single screen size — the
+    # screen sizes are not step 3's axis any more.
     row = submit(store, body)
     add_row(store, row["id"], kind="server_check", passed=True)
-    configs = gt.covering_configs(body)
-    assert len(configs) == 5
-    for count, resolution, orientation in configs[:-1]:
-        add_row(
-            store,
-            row["id"],
-            kind="match_verified",
-            mode=gt.MODE_PASS_AND_PLAY,
-            num_players=count,
-            resolution=resolution,
-            orientation=orientation,
-            moves=3,
-        )
-    steps, gaps = gt.evaluate(store, SECRET, body)
-    missing = steps["step3"]["missing"]
-    assert missing == [f"a match at {configs[-1][1]}"]
-    assert any("step 3" in gap and configs[-1][1] in gap for gap in gaps)
-    count, resolution, orientation = configs[-1]
+    steps, _ = gt.evaluate(store, SECRET, body)
+    assert steps["step3"]["missing"] == ["a match with 1 players"]
     add_row(
         store,
         row["id"],
         kind="match_verified",
         mode=gt.MODE_PASS_AND_PLAY,
-        num_players=count,
-        resolution=resolution,
-        orientation=orientation,
+        num_players=1,
+        resolution=gt.RESOLUTIONS[0]["label"],
+        orientation="vertical",
         moves=3,
     )
     steps, _ = gt.evaluate(store, SECRET, body)
     assert steps["step3"]["done"]
+
+
+def test_display_coverage_is_judged_once_across_the_flow(store, body):
+    # Screen sizes ride on whichever match step shows them: with step 3
+    # and step 4 played at the first resolution only, step 5 is charged
+    # with the sizes nobody has shown yet — and step 4's rows count.
+    row = submit(store, body)
+    add_row(store, row["id"], kind="server_check", passed=True)
+    add_row(
+        store,
+        row["id"],
+        kind="match_verified",
+        mode=gt.MODE_PASS_AND_PLAY,
+        num_players=1,
+        resolution=gt.RESOLUTIONS[0]["label"],
+        orientation="vertical",
+        moves=3,
+    )
+    for count, seat in gt.step4_required_pairs(body):
+        add_row(
+            store,
+            row["id"],
+            kind="move",
+            mode=gt.MODE_AGAINST_COMPUTERS,
+            num_players=count,
+            resolution=gt.RESOLUTIONS[1]["label"],
+            orientation="horizontal",
+            human_player_index=seat,
+            player_index=seat,
+            move_number=0,
+            md5="0" * 32,
+        )
+    steps, gaps = gt.evaluate(store, SECRET, body)
+    assert steps["step4"]["done"]
+    assert steps["step5"]["missing_resolutions"] == [
+        resolution["label"] for resolution in gt.RESOLUTIONS[2:]
+    ]
+    assert steps["step5"]["missing_orientations"] == []
+    assert any("step 5" in gap and gt.RESOLUTIONS[2]["label"] in gap for gap in gaps)
+    # One multiplayer match per remaining resolution completes the flow's
+    # screen coverage (and the per-count requirement rides along).
+    for resolution in gt.RESOLUTIONS[2:]:
+        add_row(
+            store,
+            row["id"],
+            kind="match_verified",
+            mode=gt.MODE_MULTIPLAYER,
+            num_players=1,
+            resolution=resolution["label"],
+            orientation="vertical",
+            moves=3,
+        )
+    steps, _ = gt.evaluate(store, SECRET, body)
+    assert steps["step5"]["done"]
+
+
+def test_step4_requires_the_seat_pairs(store, body):
+    # A 2–4 player variant: the pairs are the smallest count from its
+    # first and last seat, plus the largest count from its last seat.
+    # Playing only seat 0 does not finish step 4.
+    variant = body.model_copy(update={"allowed_player_counts": [2, 4]})
+    assert gt.step4_required_pairs(variant) == [(2, 0), (2, 1), (4, 3)]
+    row = submit(store, variant)
+    add_row(store, row["id"], kind="server_check", passed=True)
+    add_row(
+        store,
+        row["id"],
+        kind="move",
+        mode=gt.MODE_AGAINST_COMPUTERS,
+        num_players=2,
+        resolution=gt.RESOLUTIONS[0]["label"],
+        orientation="vertical",
+        human_player_index=0,
+        player_index=0,
+        move_number=0,
+        md5="0" * 32,
+    )
+    steps, gaps = gt.evaluate(store, SECRET, variant)
+    assert not steps["step4"]["done"]
+    assert steps["step4"]["missing"] == [
+        "a match with 2 players played as seat 1",
+        "a match with 4 players played as seat 3",
+    ]
+    assert any("step 4" in gap and "seat 1" in gap for gap in gaps)
 
 
 def test_evaluate_rejects_changed_payload(store, body):

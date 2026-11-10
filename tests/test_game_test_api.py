@@ -124,12 +124,15 @@ def run_full_flow(api, secret, body):
                     orientation,
                     secret=secret,
                 )
-    for i in range(gt.STEP4_MIN_CONFIGS):
+    from game_platform.agent_import import GameImport
+
+    pairs = gt.step4_required_pairs(GameImport.model_validate(body))
+    for count, seat in pairs:
         config = {
-            "num_players": 1,
-            "resolution": gt.RESOLUTIONS[i]["label"],
-            "orientation": gt.ORIENTATIONS[i % 2],
-            "human_player_index": 0,
+            "num_players": count,
+            "resolution": gt.RESOLUTIONS[0]["label"],
+            "orientation": gt.ORIENTATIONS[0],
+            "human_player_index": seat,
         }
         for j in range(gt.STEP4_MIN_MOVES_PER_CONFIG):
             response = api.client.post(
@@ -137,10 +140,10 @@ def run_full_flow(api, secret, body):
                 json={
                     "secret": secret,
                     "submission_id": submission_id,
-                    "session_id": f"computers-{i}",
+                    "session_id": f"computers-{count}-{seat}",
                     "mode": gt.MODE_AGAINST_COMPUTERS,
                     "config": config,
-                    "player_index": 0,
+                    "player_index": seat,
                     "move_number": j,
                     "state": {"n": j},
                     "view": {"n": j},

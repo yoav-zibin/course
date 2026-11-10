@@ -89,11 +89,12 @@ is inserted. The checks, in order:
    flow under this secret (guide §9): the endpoint looks up
    the traces recorded for `game_addition_request_id_and_secret`, takes the
    last step 1 submission, requires this payload to be identical to it, and
-   requires steps 2–5 complete for it (server code tests passed; verified
-   pass-and-play and multiplayer matches that between them cover every
-   allowed player count, every screen size and both orientations at least
-   once — per-parameter coverage, not the cross product; at least 5 recorded
-   against-the-computer configurations).
+   requires steps 2–5 complete for it (server code tests passed; one verified
+   pass-and-play match and one verified multiplayer match per allowed player
+   count; every screen size and both orientations covered at least once
+   across steps 3–5 together; recorded against-the-computer matches for the
+   required seat pairs — the smallest player count from its first and last
+   seat, plus the largest count from its last seat).
    A shortfall returns 422 naming the missing steps. Any code change after
    step 1 therefore needs a fresh run before resubmitting. Step 1 itself is
    the `POST /game-test/submissions` call, which runs this endpoint's full
