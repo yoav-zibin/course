@@ -447,11 +447,22 @@ test('current account avatar wins over stale match profile cache',()=>{
   assert.equal(run('playerPicture({kind:"human",user_id:"other"})'),'/other-cat.png');
 });
 
-test('v2 games offer local practice and offline instructions',()=>{
+test('games offer pass-and-play and offline instructions, with a player-count choice when the game has one',()=>{
  const t=setup();t.run('state.games[0].supports_local_practice=false;updateMatchSetup()');
  assert.equal(t.node('practice').disabled,false);
- assert.equal(t.node('practice-mode').disabled,false);
  assert.equal(t.node('practice-offline-note').hidden,false);
+ // The stub game allows a single count, so neither count choice is shown.
+ assert.equal(t.node('practice-count-choice').hidden,true);
+ assert.equal(t.node('computer-count-choice').hidden,true);
+ t.run('state.games[0].allowed_player_counts=[2,3,4];updateMatchSetup()');
+ assert.equal(t.node('practice-count-choice').hidden,false);
+ assert.deepEqual(t.node('practice-player-count').children.map(option=>option.value),['2','3','4']);
+ assert.equal(t.node('practice-player-count').value,'2'); // pass-and-play defaults to the smallest count
+ assert.equal(t.node('computer-count-choice').hidden,false);
+ assert.deepEqual(t.node('computer-player-count').children.map(option=>option.value),['2','3','4']);
+ assert.equal(t.node('computer-player-count').value,'4'); // computer matches default to the largest count
+ t.run("document.getElementById('practice-player-count').value='3';updateMatchSetup()");
+ assert.equal(t.node('practice-player-count').value,'3'); // a still-valid choice survives a refresh
 });
 test('duplicate names have stable distinct labels across search and catalog filters',()=>{
  const t=setup();t.run('state.games=[{id:"abcdefgh-one",name:"Gomoku",version:2},{id:"ijklmnop-two",name:" gomoku ",version:2},{id:"unique",name:"Chess",version:1}]');

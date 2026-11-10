@@ -1011,11 +1011,15 @@ class PortalOffline {
     if (conflict.remote) d.responses[`/matches/${id}`] = conflict.remote;
     this.writeBestEffort(d);
   }
-  async practice(game, mode = "computer") {
+  async practice(game, mode = "computer", playerCount = undefined) {
     const user = this.user();
     if (!user)
       throw new Error(I18n.t("ui.offline.err_login_first", {}, "Log in online once before starting offline practice."));
-    const count = Math.min(...game.allowed_player_counts),
+    // An explicitly chosen count wins when the game allows it; otherwise the
+    // smallest allowed count, as before the choice existed.
+    const count = game.allowed_player_counts.includes(playerCount)
+        ? playerCount
+        : Math.min(...game.allowed_player_counts),
       id = `local-${crypto.randomUUID()}`;
     const match = {
       id,

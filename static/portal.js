@@ -1234,6 +1234,22 @@ function renderMatchList(node, matches) {
 
 // The selected match
 
+/** Rebuilds a player-count select with [counts], keeping the current choice
+ * when it is still offered and otherwise falling back to [fallback] of the
+ * counts — the smallest for pass-and-play, the largest for computer matches,
+ * which are the counts those flows used before the choice existed. The
+ * select's label is hidden when the game offers fewer than two counts. */
+function fillPlayerCounts(select, label, counts, fallback) {
+  const previous = Number(select.value);
+  select.replaceChildren(
+    ...counts.map((count) => el("option", { value: String(count), textContent: String(count) })),
+  );
+  select.value = counts.length
+    ? String(counts.includes(previous) ? previous : fallback(...counts))
+    : "";
+  label.hidden = counts.length < 2;
+}
+
 function updateMatchSetup() {
   const detailPage = Boolean(state.detailGameId);
   if (detailPage && !state.detailCreatorInitialized) {
@@ -1252,7 +1268,8 @@ function updateMatchSetup() {
   const maximum = game ? Math.max(...game.allowed_player_counts) - 1 : 0;
   $("create").disabled = !me() || !game || state.creating || !navigator.onLine;
   $("practice").disabled = !me() || !game;
-  $("practice-mode").disabled = false;
+  fillPlayerCounts($("practice-player-count"), $("practice-count-choice"), game?.allowed_player_counts ?? [], Math.min);
+  fillPlayerCounts($("computer-player-count"), $("computer-count-choice"), game?.allowed_player_counts.filter((count) => count > 1) ?? [], Math.max);
   $("practice-offline-note").hidden = false;
   const gameVersion=game && gameOf(game.id,game.version);
   const supportsComputerMatch=Boolean(gameVersion?.server_code && game.allowed_player_counts.some(count=>count>1));
@@ -1443,7 +1460,9 @@ function renderMatch() {
   if (game?.code)
     secondaryActions.push(
       actionButton(I18n.t("ui.match.new_practice", {}, "Start a new practice"), async () => {
-        const practiceMatch = await offline.practice(game, $("practice-mode").value);
+        // A local match's new practice mirrors its own mode and size; from a
+        // server match it is a pass-and-play game at that match's size.
+        const practiceMatch = await offline.practice(game, match.localMode ?? "pass", match.players.length);
         selectMatch(practiceMatch.id);
       }),
     );
@@ -1904,7 +1923,7 @@ async function practice() {
       "GET",
       `/games/${game.id}/versions/${game.version}`,
     );
-    match = await offline.practice(full, $("practice-mode").value);
+    match = await offline.practice(full, "pass", Number($("practice-player-count").value) || undefined);
     state.gameCache.set(`${full.id}@${full.version}`, full);
     if (navigator.onLine) {
       try {
@@ -1997,7 +2016,10 @@ async function playWithAllComputers() {
     $("create-message").className="message error";
     return;
   }
-  const playerCount=Math.max(...game.allowed_player_counts.filter(count=>count>1));
+  const chosenCount=Number($("computer-player-count").value);
+  const playerCount=chosenCount>1 && game.allowed_player_counts.includes(chosenCount)
+    ? chosenCount
+    : Math.max(...game.allowed_player_counts.filter(count=>count>1));
   if (!Number.isFinite(playerCount)) {
     $("create-message").textContent=I18n.t("ui.portal.needs_two_seats", {}, "This game needs at least two player seats.");
     $("create-message").className="message error";

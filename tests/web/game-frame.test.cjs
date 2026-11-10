@@ -107,6 +107,20 @@ test('inline previews bound viewport-dependent growth and reset for a narrower p
   assert.equal(t.container.clientHeight,480);assert.equal(t.view().passes,0);
 });
 
+test('a game ready handshake is accepted silently; unknown messages are still reported',()=>{
+  const bad=[],moves=[];
+  const context=browserContext({window:{addEventListener(){}},document:{createElement(tag){
+    return {tag,contentWindow:{},style:{},setAttribute(){},addEventListener(){}};
+  }},Node:class{},container:{replaceChildren(){}},onMove:m=>moves.push(m),onBad:p=>bad.push(p)});
+  vm.runInContext(source,context);
+  vm.runInContext('frame = new GameFrame(container,onMove,onBad);frame.load("<h1>Game</h1>")',context);
+  const receive=(data)=>vm.runInContext(`frame.receive({source:frame.iframe.contentWindow,data:${JSON.stringify(data)}})`,context);
+  receive({type:'ready'});
+  assert.equal(bad.length,0);assert.equal(moves.length,0);
+  receive({type:'something_else'});
+  assert.equal(bad.length,1);assert.match(bad[0],/isn't make_move/);
+});
+
 test('observed resize work is deferred and independent of page scroll position',()=>{
   const observers=[],queue=[];let measurements=0;
   const container={};

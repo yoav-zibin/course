@@ -415,6 +415,11 @@ class GameFrame {
     if (!this.iframe || event.source !== this.iframe.contentWindow) return;
     const message = event.data;
     if (message?.type === "game_viewport") { this.fitViewport(message); return; }
+    // A game's load handshake. Readiness is the iframe load event, so there
+    // is nothing to do — and it is not a protocol violation (the game-test
+    // host accepts it silently too). Flagging it reported a scary "ignored
+    // a message" error for well-behaved games such as Yahtzee.
+    if (message?.type === "ready") return;
     if (!message || message.type !== "make_move") {
       this.onBadMessage(`ignored a message that isn't make_move: ${JSON.stringify(message)}`);
       return;
