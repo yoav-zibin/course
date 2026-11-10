@@ -306,11 +306,10 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `GET /matches/{id}` |  | Get a match; anyone can view it, so it can be shared by URL. Speed matches include `turn_deadline` and `server_time` |
 | `PATCH /matches/{id}` | yes | Set `num_computer_opponents` before the match starts (owner only) |
 | `POST /matches/{id}/join` | yes | Take a seat |
-| `POST /matches/{id}/start` | yes | Start `{first_turn_player_indices, initial_state}`, both optional (owner only) |
+| `POST /matches/{id}/start` | yes | Start the match (owner only); the server calls the game's `newMatch` |
 | `POST /matches/{id}/leave` | yes | Leave the match |
-| `POST /matches/{id}/moves` | yes | Make a move `{new_state, next_turn_player_indices, expected_move_count?}` |
-| `POST /matches/{id}/payouts` | yes | Agree to (`{agree: true}`) or dispute (`{agree: false}`) a v1 paid match's proposed pot split |
-| `DELETE /matches/{id}/players/{user_id}` | yes | Owner removes a player before the match starts (like them leaving; a v2 stake is refunded); they can't join it again. Not for quick matches |
+| `POST /matches/{id}/moves` | yes | Make a move `{move, expected_move_count?}`; the server runs the game's `applyMove` |
+| `DELETE /matches/{id}/players/{user_id}` | yes | Owner removes a player before the match starts (like them leaving; the stake is refunded); they can't join it again. Not for quick matches |
 | `GET /matches/{id}/moves` |  | Full move history |
 | `DELETE /matches/{id}` | yes | Owner: delete the match. Other players: hide an ended match from their list |
 | `GET /users/me/saved-games` | yes | The caller's saved games, most recently saved first |
@@ -332,7 +331,9 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `POST /push/test` | yes | Queue a test notification to the caller (404 when they have no subscription) |
 
 Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct, each in
-1..10), `allows_leave_mid_match`, `allows_join_mid_match`, `code`.
+1..10), `allows_leave_mid_match`, `allows_join_mid_match`, `code`, and `server_code`
+(required — the JavaScript the server runs for the game; see
+`docs/server-side-game-api.md`).
 
 ### Game versions and deletion
 
@@ -350,23 +351,16 @@ Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct
   `GET /games/{game_id}/versions/{game_version}`.
 - Before the start, humans sit in join order followed by the computers. Starting requires
   the total number of seats to be in the game's `allowed_player_counts`.
-- A move is accepted from any player whose turn it is: `next_turn_player_indices` names
-  the set of seats that may make the next move, and `null` ends the match
-  (`end_reason: "finished"`). When a computer seat has the turn in a v1 game, any human player in
-  the match computes and submits the computer's move; in a v2 game the server
-  computes and submits computer moves itself.
+- A move is accepted from any player whose turn it is. The client sends the game's
+  own move object; the server runs `applyMove`, whose result names the set of seats
+  that may move next (`turn_of_player_indices`), and a `null` turn ends the match
+  (`end_reason: "finished"`). When a computer seat has the turn, the server computes
+  and submits the computer's move itself.
   `expected_move_count` optionally guards against two clients submitting the same move.
-- **Token stakes in games without server code (v1).** The server can't check a v1
-  client's claimed result, so the final move of a paid match only *proposes* how the pot
-  is split (`payout_player_indices`, which must pay every human seat and total the pot).
-  No tokens move yet: the match is over with `proposed_payouts` set and `token_payouts`
-  null. Every other human answers with `POST /matches/{id}/payouts {agree}` (the portal
-  shows Agree / Dispute buttons). Once every human seat has agreed, the pot is paid as
-  proposed (`payout_outcome: "agreed"`). One dispute (`"disputed"`), or no full agreement
-  within an hour (`payout_deadline`, `"expired"`), refunds every stake instead. A final
-  move with no `payout_player_indices` (a game that knows nothing about tokens) ends the
-  match and refunds every stake, so any game can finish a paid match. v2 games are
-  unaffected: their server code computes the payouts.
+- **Token stakes.** Every human's stake is taken when they join and held in the
+  match's pot. The server code decides the split: the move that ends the match
+  returns `payouts` totaling the pot, and the server pays them out at once. A match
+  that ends any other way — a timeout, the last human leaving — refunds the stakes.
 - Leaving a waiting match frees the seat (the owner must delete the match instead). Leaving
   an ongoing match replaces the leaver with a computer (which keeps the turn) if the game
   `allows_leave_mid_match`, and otherwise ends it (`end_reason: "player_left"`). The match
@@ -923,12 +917,11 @@ iframe with `sandbox="allow-scripts"`: its scripts run, but in an isolated origi
 game can't read the platform's cookies or storage or call the API. The page and the game
 talk only through `postMessage`, with two messages.
 
-A game may also have `server_code` (the v2 Game API, specified in
+Every game has `server_code` (the server-side Game API, specified in
 `docs/server-side-game-api.md`): plain JavaScript the server runs authoritatively —
 it holds the state and the rules, validates every move, and moves computer opponents
-itself. The client then only renders the view the server sends it. Games without
-server code keep the original (v1) protocol below, in which the server never runs
-game code; it only stores each move's state and checks whose turn it is.
+itself. The client then only renders the view the server sends it. A game cannot be
+created without server code.
 
 ### `state_changed`: platform to game
 
@@ -956,73 +949,56 @@ joining or leaving, the match ending), and again if a move the game sent was rej
 
 | Field | Meaning |
 |-------|---------|
-| `state` | The match state from the last move: any JSON the game chose. `null` before the first move, so the game must create its own initial state. For a v2 game this is the viewer's view (the full state never leaves the server) |
-| `view` | v2 games only: the viewer's view of the match, exactly what the server code's `viewFor` returned for them (`null` for spectators). A v2 client renders this and keeps no state of its own |
+| `state` | The viewer's view of the match state: what the server code's `viewFor` returned for them (`null` for spectators). The full state never leaves the server |
+| `view` | The same view as `state`, carried under its own name: a client renders this and keeps no state of its own |
 | `players` | Every seat, in order. `kind` is `"human"` or `"computer"`; `player_id` is the user's id for humans and `computer-1`, ... for computers. Seats can change kind when players leave or join, and seats can be added mid-match |
 | `turn_of_player_indices` | The seats that may move next; `null` once the match is over |
 | `status` | `"ongoing"` or `"over"` (games aren't loaded while a match waits for players) |
 | `end_reason` | When over: `"finished"` (a move ended it) or `"player_left"` |
 | `move_count` | How many moves were made |
-| `token_pot` | The match's token pot (v2 games stake tokens; see the v2 spec) |
+| `token_pot` | The match's token pot (see [Match rules](#match-rules)) |
 | `my_player_index` | The viewer's seat, to decide what to show (e.g. whose cards). `null` for spectators |
-| `acting_for_player_index` | The seat this game should make the next move for, or `null` if it must wait. For a v2 game it is only ever the viewer's own seat — the server moves computers. For a v1 game it can also be a computer's seat on a computer's turn if the viewer plays in the match |
+| `acting_for_player_index` | The seat this game should make the next move for, or `null` if it must wait. It is only ever the viewer's own seat — the server moves computers itself |
 
 ### `make_move`: game to platform
 
-Sent by the game to make the move for `acting_for_player_index`. A v2 game sends
+Sent by the game to make the move for `acting_for_player_index`. The game sends
 only the move itself — the server validates and applies it:
 
 ```json
 {"type": "make_move", "move": {"cell": 4}}
 ```
 
-A v1 game sends the full result:
+The portal submits it with `POST /matches/{id}/moves` (with `expected_move_count`,
+so a stale move is rejected) and then sends a fresh `state_changed`. Moves the
+server rejects (not your turn, an illegal move) are shown to the player and followed
+by `state_changed` with the unchanged match. Send at most one `make_move` per
+`state_changed`.
 
-```json
-{"type": "make_move", "new_state": {"board": ["X", "X", "", "", "O", "", "", "", ""]}, "next_turn_player_indices": [1]}
-```
-
-`new_state` replaces the match's state. `next_turn_player_indices` lists the seats that
-may move next (more than one when several players move at once), or `null` to end the
-match. In a match with a token pot, the final move may also carry
-`payout_player_indices` (seat index to tokens, paying every human seat and totaling
-`token_pot`): the split it proposes pays out once every other player agrees. Without
-it every stake is refunded (see [Match rules](#match-rules)). The portal submits it with
-`POST /matches/{id}/moves` (with `expected_move_count`, so a stale move is rejected) and
-then sends a fresh `state_changed`. Moves the server rejects (not your turn, a seat that
-doesn't exist) are shown to the player and followed by `state_changed` with the
-unchanged match. Send at most one `make_move` per `state_changed`.
-
-For compatibility, games written before turn sets may still send `next_turn_player_index`
-(a single seat); the portal wraps it into a one-element set. `state_changed` likewise
-still carries the legacy `turn_of_player_index` (the first seat in the turn), which new
-games should ignore.
+For compatibility, `state_changed` still carries the legacy `turn_of_player_index`
+(the first seat in the turn), which new games should ignore.
 
 ### Rules for games
 
-For a v2 game, the server code holds the rules: see `docs/server-side-game-api.md`
-for the contract (deterministic logic, `viewFor` views so secrets never leave the
-server, computers moved by the server, token payouts). The rules below are the
-v1 protocol's, kept for games without server code:
+The server code holds the rules: see `docs/server-side-game-api.md` for the
+contract (deterministic logic, `viewFor` views so secrets never leave the server,
+computers moved by the server, token payouts). In short:
 
-- **Computers are played by the game.** On a computer's turn, every human player's game
-  gets `acting_for_player_index` set to that seat and should compute and send the
-  computer's move (after a short delay, so people can follow). The first one to arrive
-  wins; the others are rejected as stale and ignored. With no human player online,
-  computers wait.
-- **Randomness happens in moves.** For example, poker's first move deals, and the move
-  that ends a hand deals the next one, so every player sees the same cards.
-- **The state is public.** Every player's game, and anyone with the debug tools, can
-  read the whole state, so hidden information (like poker hands) is hidden by the game's
-  UI only. That's fine for friendly games, not for real stakes.
-- **Handle seat changes.** A player leaving becomes a computer seat in games that allow
-  it, and players joining mid-match take over a computer seat or add one at the end.
+- **Computers are moved by the server.** The game's `computerMove` supplies their
+  moves, whether or not any human is online; no client ever moves for another seat.
+- **Randomness comes from `ctx.random`.** The server seeds it per call, so every
+  call is reproducible and a match replays exactly.
+- **The state is private.** Only `viewFor` views ever leave the server, so hidden
+  information (like poker hands) stays hidden.
+- **Handle seat changes.** Games that allow leaving or joining mid-match implement
+  `playerLeft` / `playerJoined`; a player who leaves an ongoing match is replaced
+  by a computer seat where the game allows it.
 
 ### Example games
 
 The `games/` directory holds the example data's games. Each is a pair of files: an
 HTML client that only renders its view and sends moves, and a `.server.js` with the
-game's logic, which the server runs (the v2 Game API):
+game's logic, which the server runs (the server-side Game API):
 
 - `tictactoe.html` + `tictactoe.server.js`: 2 players; the computer plays perfectly
   (minimax).
