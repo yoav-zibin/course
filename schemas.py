@@ -484,8 +484,8 @@ class GameOut(GameSummaryOut):
     tutorial_html: str = ""
     translations: dict[str, JsonValue] = {}
     code: str
-    # The v2 names for the two parts of a game: [client_code] is the same code
-    # as [code]; [server_code] is None for a v1 game.
+    # The two parts of a game: [client_code] is the same code as [code];
+    # [server_code] runs the game's logic on the server. Every game has both.
     client_code: str
     server_code: str | None = None
 
@@ -582,55 +582,14 @@ class MatchUpdate(_Request):
     num_computer_opponents: Annotated[int, Field(ge=0)]
 
 
-class MatchStart(_Request):
-    model_config = _example(
-        {"first_turn_player_indices": [0], "initial_state": {"board": _TIC_TAC_TOE_BOARD}}
-    )
-
-    first_turn_player_indices: PlayerIndices = [0]
-    initial_state: JsonValue = None
-
-
-class PayoutAgreement(_Request):
-    """A human's answer to the pot split a v1 paid match's final move proposed."""
-
-    model_config = _example({"agree": True})
-
-    # true accepts the proposed split; false disputes it, which refunds every stake.
-    agree: bool
-
-
 class MoveCreate(_Request):
-    model_config = _example(
-        {
-            "new_state": {"board": ["X", *_TIC_TAC_TOE_BOARD[1:]]},
-            "next_turn_player_indices": [1],
-        }
-    )
+    model_config = _example({"move": {"type": "roll"}})
 
-    # A v1 client sends the state it computed; a v2 client sends only [move]
-    # and the server computes the state, so [new_state] is required exactly
-    # when [move] is absent.
-    new_state: JsonValue = None
-    # v2 matches only: the game-defined move, from which the server computes
-    # the new state by running the game's server code.
-    move: JsonValue = None
-    # The seats that may move next; [None] ends the match.
-    next_turn_player_indices: PlayerIndices | None = None
-
-    @model_validator(mode="after")
-    def _new_state_unless_move(self) -> "MoveCreate":
-        if self.move is None:
-            if "new_state" not in self.model_fields_set:
-                raise ValueError("new_state is required")
-            if "next_turn_player_indices" not in self.model_fields_set:
-                raise ValueError("next_turn_player_indices is required")
-        return self
+    # The game-defined move; the server computes the new state by running
+    # the game's server code. Clients never send a state.
+    move: JsonValue
     # If given, the move is rejected unless the match has exactly this many moves.
     expected_move_count: int | None = None
-    # Amount of token pot paid to each human seat (integer keys encoded as strings).
-    # Required on a final move with nonzero pot; forbidden on other moves.
-    payout_player_indices: dict[int, Annotated[int, Field(ge=0)]] | None = None
 
 
 class SeatTimeoutOut(BaseModel):
@@ -645,7 +604,7 @@ class PlayerOut(BaseModel):
     player_index: int
     kind: SeatKind
     user_id: str | None
-    # The v2 player id: the human's user id, or "computer-N" (see
+    # The player id: the human's user id, or "computer-N" (see
     # [Match.player_id_of]). Empty only for a seat-less construction.
     id: str = ""
     active: bool = True
@@ -674,23 +633,14 @@ class MatchOut(BaseModel):
     max_loss: int = 0
     token_pot: int = 0
     token_payouts: dict[int, int] | None = None
-    # v2 matches: the pending leave preview's public parts — who would
-    # leave and what they would be paid. The preview's resulting state is
+    # The pending leave preview's public parts — who would leave and what
+    # they would be paid. The preview's resulting state is
     # server-only and is never in a response. The match's seed is likewise
     # server-only and is never in a response: it keys every random draw in
     # the match, so exposing it would let anyone predict future rolls.
     pending_leave_player_id: str | None = None
     pending_leave_payout: int | None = None
     pending_leave_ends_match: bool | None = None
-    # v1 paid matches: the pot split the final move proposed, which pays out only
-    # once every human seat agrees (POST /matches/{id}/payouts). Until then
-    # [token_payouts] is None. A dispute, or no agreement by [payout_deadline],
-    # refunds every stake. [payout_outcome] is "agreed", "disputed" or "expired"
-    # once settled, None while waiting.
-    proposed_payouts: dict[int, int] | None = None
-    payout_agreed_player_indices: list[int] = []
-    payout_deadline: dt.datetime | None = None
-    payout_outcome: str | None = None
     rematch_match_id: str | None
     created_at: dt.datetime
     updated_at: dt.datetime
@@ -751,10 +701,6 @@ class MatchOut(BaseModel):
             ),
             token_pot=match.token_pot,
             token_payouts=match.token_payouts,
-            proposed_payouts=match.proposed_payouts,
-            payout_agreed_player_indices=sorted(match.payout_agreed_indices),
-            payout_deadline=match.payout_deadline,
-            payout_outcome=match.payout_outcome,
             rematch_match_id=match.rematch_match_id,
             created_at=match.created_at,
             updated_at=match.updated_at,
@@ -831,10 +777,14 @@ class MoveOut(BaseModel):
     player_index: int
     made_by_user_id: str
     created_at: dt.datetime
+    # The state after the move, as the requesting player may see it: their
+    # own view of it, never the full state (the handlers substitute the
+    # view; [of] alone carries the recorded state and is only used where a
+    # view was already computed or no state leaves the server).
     new_state: JsonValue
     next_turn_player_indices: list[int] | None
-    # v2 matches only: the move the player sent and their player id (see
-    # [Move.move] / [Move.player_id]); both null on v1 moves.
+    # The move the player sent and their player id (see [Move.move] /
+    # [Move.player_id]).
     move: JsonValue = None
     player_id: str | None = None
 
@@ -855,21 +805,28 @@ class MoveOut(BaseModel):
 
 
 class MatchHistoryOut(BaseModel):
+    # Every state here is the requesting player's own view of it (see
+    # [GamePlatform.view_history]): a full state is never in a response.
     initial_state: JsonValue
     initial_turn_player_indices: list[int] | None
     moves: list[MoveOut]
 
     @classmethod
-    def of(cls, match: Match) -> "MatchHistoryOut":
+    def of(
+        cls, match: Match, initial_view: JsonValue, move_views: list[JsonValue]
+    ) -> "MatchHistoryOut":
         return cls(
-            initial_state=match.initial_state,
+            initial_state=initial_view,
             initial_turn_player_indices=None if match.initial_turn_player_indices is None else sorted(match.initial_turn_player_indices),
-            moves=[MoveOut.of(move) for move in match.moves],
+            moves=[
+                MoveOut.of(move).model_copy(update={"new_state": view})
+                for move, view in zip(match.moves, move_views)
+            ],
         )
 
 
 class GameVersionErrorOut(BaseModel):
-    """A server-code failure recorded on a game version (v2 Game API)."""
+    """A server-code failure recorded on a game version (Game API)."""
 
     id: str
     game_id: str

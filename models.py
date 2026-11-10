@@ -17,8 +17,6 @@ MatchStatus = Literal["waiting_for_players", "ongoing", "over"]
 SeatKind = Literal["human", "computer"]
 # "timed_out": a speed match ended because a player ran out of time to move.
 EndReason = Literal["finished", "player_left", "timed_out", "solo_computers_only"]
-# How a v1 match's proposed pot split ended (see Match.proposed_payouts).
-PayoutOutcome = Literal["agreed", "disputed", "expired"]
 
 
 LinkedAccountKind = Literal["google", "phone", "email"]
@@ -169,10 +167,10 @@ class Game:
     # The game's client code (the innerHTML of its sandboxed iframe). The server never
     # executes it.
     code: str
-    # The game's server code (v2 Game API, docs/server-side-game-api.md): plain
-    # JavaScript the server runs in QuickJS to decide states, moves and payouts.
-    # None means a v1 game: the client computes everything and the server only
-    # stores the state. Defaults to None so older data files load.
+    # The game's server code (docs/server-side-game-api.md): plain
+    # JavaScript the server runs in QuickJS to decide states, moves and
+    # payouts. Every game has it — the server runs every game's logic.
+    # The field stays optional so older data files load.
     server_code: str | None = None
     # The import package POST /games stored with the game (translations, the
     # resubmission secret, rules/UI text, tutorial, images, unit tests). Games
@@ -180,7 +178,7 @@ class Game:
     # instead; it is converted to this shape on load (see below).
     import_package: dict[str, JsonValue] | None = None
     # Draft 2020-12 schemas for the server-owned state, move, and player view.
-    # None is valid only for v1 games and old records awaiting backfill.
+    # None only on old records awaiting backfill.
     game_schemas: dict[str, JsonValue] | None = None
     created_at: dt.datetime
     updated_at: dt.datetime
@@ -287,10 +285,10 @@ class Move:
     new_state: JsonValue
     # The seats that may make the next move; [None] ends the match.
     next_turn_player_indices: frozenset[int] | None
-    # v2 matches only: the game-defined move the player sent (the server computed
-    # [new_state] from it by running the game's server code), and the id of the
-    # player who moved ("computer-1", a user id, ...). Both default to None so
-    # v1 moves and older data files load unchanged.
+    # The game-defined move the player sent (the server computed
+    # [new_state] from it by running the game's server code), and the id
+    # of the player who moved ("computer-1", a user id, ...). Both
+    # default to None so older data files load unchanged.
     move: JsonValue = None
     player_id: str | None = None
 
@@ -352,10 +350,10 @@ class Match:
     turn_started_at: dt.datetime | None = None
     # Seats that ran out of time, oldest first; their people can still watch.
     timeouts: tuple[SeatTimeout, ...] = ()
-    # v2 matches: the secret the server's per-call random seeds are derived
-    # from (together with the move number), so a match can be replayed
-    # exactly by the server. Server-only: never sent to clients. 0 on v1
-    # matches and older data files.
+    # The secret the server's per-call random seeds are derived from
+    # (together with the move number), so a match can be replayed exactly
+    # by the server. Server-only: never sent to clients. 0 only on
+    # matches created before secret seeds, and older data files.
     seed: int = 0
     # Seed scheme version: 1 = the seed was derived from the match id, so
     # anyone who knew the id could recompute it and predict the match's
@@ -363,24 +361,12 @@ class Match:
     # are rekeyed to 2 before their next state-changing logic call (see
     # Platform._rekey_seed).
     seed_version: int = 1
-    # v2 matches: a pending leave-with-tokens preview (the playerLeft result
+    # A pending leave-with-tokens preview (the playerLeft result
     # stored by POST /matches/{id}/maybeLeave): a JSON object with the leaving
     # player's id, their payout, and the state that leaving would produce.
     # Cleared by any move; applied by POST /matches/{id}/playerLeft.
     # The state inside is server-only and is never sent to clients.
     pending_leave: JsonValue = None
-    # v1 paid matches (no server code): the server can't check a client's claimed
-    # result, so the final move only *proposes* how the pot is split. Tokens move
-    # once every human seat agrees; a dispute, or no agreement by
-    # [payout_deadline], refunds every stake instead. [proposed_payouts] is kept
-    # after settling, as a record of what was proposed.
-    proposed_payouts: dict[int, int] | None = None
-    # The human seats that agreed so far (the proposer agrees by proposing).
-    payout_agreed_indices: frozenset[int] = frozenset()
-    payout_deadline: dt.datetime | None = None
-    # How a proposal ended: "agreed" (paid as proposed), "disputed" or "expired"
-    # (stakes refunded). None while it waits, or when nothing was proposed.
-    payout_outcome: PayoutOutcome | None = None
     # Users the owner removed from the waiting room; they can't join this match
     # again (so they can't keep taking a seat to block its start).
     removed_user_ids: frozenset[str] = frozenset()
@@ -393,11 +379,6 @@ class Match:
         if self.status != "waiting_for_players":
             return 0
         return len(self.reserved_for_user_ids - set(self.human_user_ids))
-
-    @property
-    def payout_pending(self) -> bool:
-        """Whether a v1 pot is waiting for every human to agree to its split."""
-        return self.proposed_payouts is not None and self.payout_outcome is None
 
     @property
     def turn_deadline(self) -> dt.datetime | None:

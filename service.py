@@ -45,7 +45,6 @@ from game_platform.models import (
     Feedback,
     MatchStatus,
     Move,
-    PayoutOutcome,
     SeatTimeout,
     Seat,
     Translation,
@@ -253,9 +252,6 @@ def _new_verification_code() -> str:
 # Speed matches: the allowed seconds per move (1, 3 or 10 minutes). None is a regular
 # match with no clock. Kept as a list so more choices can be added later.
 SPEED_TURN_SECONDS: Final = (60, 180, 600)
-# How long the other humans in a v1 paid match have to agree to the pot split the
-# final move proposed. Without every agreement by then, every stake is refunded.
-PAYOUT_AGREEMENT_SECONDS: Final = 3600
 
 # playerLeft calls get a longer time budget than other game functions:
 # a playerLeft may price its payout with ctx.estimateWinChance, whose
@@ -1837,13 +1833,15 @@ class GamePlatform:
         server_code = server_code or None
         if _check_strings:
             self._require_translatable(code, server_code)
-        if server_code is None and game_schemas is not None:
-            raise InvalidRequestError("game_schemas requires server_code")
+        if server_code is None:
+            # Every game runs its logic on the server: a game without
+            # server code cannot be created.
+            raise InvalidRequestError("a game needs server_code")
+        if game_schemas is None:
+            raise InvalidRequestError(
+                "a game with server code needs its game_schemas; give them when creating the game"
+            )
         with self._lock:
-            if server_code is not None and game_schemas is None:
-                raise InvalidRequestError(
-                    "a game with server code needs its game_schemas; give them when creating the game"
-                )
             now = self._clock()
             game = Game(
                 id=self._new_id(),
@@ -2322,8 +2320,8 @@ class GamePlatform:
         """Creates a new version of the game, unless nothing changes.
 
         Fields left as [None] are unchanged, except [server_code]: it is
-        unchanged unless a value (including None, which removes the game's
-        server code) is passed explicitly.
+        unchanged unless a value is passed explicitly, and it can never be
+        removed — every game runs its logic on the server.
         """
         with self._lock:
             game = self._get_owned_game(caller_id=caller_id, game_id=game_id)
@@ -2334,6 +2332,10 @@ class GamePlatform:
                 if server_code is UNSET
                 else server_code or None
             )
+            if server_code_value is None:
+                raise InvalidRequestError(
+                    "a game needs server_code; it cannot be removed"
+                )
             game_schemas_value = (
                 (
                     None
@@ -2370,9 +2372,7 @@ class GamePlatform:
                 server_code=server_code_value,
                 game_schemas=game_schemas_value,
             )
-            if updated.server_code is None and updated.game_schemas is not None:
-                raise InvalidRequestError("game_schemas requires server_code")
-            if updated.server_code is not None and updated.game_schemas is None:
+            if updated.game_schemas is None:
                 raise InvalidRequestError(
                     "a game with server code needs its game_schemas; give them when updating the game"
                 )
@@ -2602,24 +2602,14 @@ class GamePlatform:
                 num_computer_opponents=match.num_computer_opponents,
             )
         game = self._store.get_game_version(match.game_id, match.game_version)
-        # A v2 match takes the joiner's stake as they join, in the waiting room
-        # and mid-match alike. A v1 match takes its players' stakes at the start
-        # (_fund_match_tokens), so only a mid-match joiner pays here. Either way
-        # the pot grows by the stake, so nobody holds a seat in a paid match (and
-        # a share of its pot, or of its refund) without having paid in.
-        stake = (
-            match.bet_per_player
-            if (game is not None and game.server_code) or match.status == "ongoing"
-            else 0
-        )
+        # A match takes the joiner's stake as they join, in the waiting room
+        # and mid-match alike. The pot grows by the stake, so nobody holds
+        # a seat in a paid match (and a share of its pot, or of its refund)
+        # without having paid in.
+        stake = match.bet_per_player
         if stake:
             # Raises (before anything is saved) when the joiner can't afford it.
             self._deduct_stake(caller_id, stake)
-        elif match.bet_per_player:
-            # A waiting v1 match takes stakes only at the start, so check now that
-            # the joiner could pay: otherwise one short player would make the
-            # owner's Start fail for everyone ("a player has insufficient tokens").
-            self._check_can_stake(caller_id, match.bet_per_player)
         saved = self._save(
             replace(
                 match,
@@ -2669,31 +2659,8 @@ class GamePlatform:
         ):
             game = self._store.get_game_version(saved.game_id, saved.game_version)
             if game is not None and game.server_code:
-                # A v2 quick match starts by running the game's newMatch.
-                return self._begin_v2_match(saved, game)
-            # Like the portal's Start button: seat 0 moves first, and the game
-            # creates its own initial state.
-            humans = self._fund_match_tokens(saved)
-            saved = self._save(
-                replace(
-                    saved,
-                    status="ongoing",
-                    state=None,
-                    turn_of_player_indices=frozenset({0}),
-                    token_pot=saved.bet_per_player * len(humans),
-                )
-            )
-            self._record_game_match_start(saved)
-            self._notify_match_event(
-                "notify.turn",
-                match=saved,
-                recipient_ids=[
-                    seat.user_id
-                    for seat in saved.seats[:1]
-                    if seat.user_id is not None and seat.user_id != caller_id
-                ],
-                tag_suffix="turn",
-            )
+                # A quick match starts by running the game's newMatch.
+                return self._begin_match(saved, game)
         return saved
 
     def request_rematch(self, *, caller_id: str, match_id: str) -> Match:
@@ -2758,8 +2725,6 @@ class GamePlatform:
                 rematch = self.start_match(
                     caller_id=caller_id,
                     match_id=rematch.id,
-                    first_turn_player_indices=frozenset({0}),
-                    initial_state=None,
                 )
             self._save(replace(match, rematch_match_id=rematch.id))
             return rematch
@@ -2958,12 +2923,16 @@ class GamePlatform:
         }
 
     def _call_seed(self, match: Match) -> int:
-        """The seed for the next logic call: derived from the match's secret
-        seed and the move number, so calls differ within a match but a
-        replay with the same secret reproduces every call exactly. The
-        derivation is a hash of the secret, so observed random outcomes
-        reveal nothing about the seeds of later calls."""
-        move_number = len(match.moves)
+        """The seed for the next logic call (see [_call_seed_at])."""
+        return self._call_seed_at(match, len(match.moves))
+
+    def _call_seed_at(self, match: Match, move_number: int) -> int:
+        """The seed for the logic call made with [move_number] moves on the
+        match: derived from the match's secret seed and the move number,
+        so calls differ within a match but a replay with the same secret
+        reproduces every call exactly. The derivation is a hash of the
+        secret, so observed random outcomes reveal nothing about the
+        seeds of later calls."""
         if getattr(match, "seed_version", 1) >= 2:
             digest = hashlib.sha256(
                 f"call-seed:{match.seed}:{move_number}".encode()
@@ -3225,7 +3194,7 @@ class GamePlatform:
     def _notify_after_move(
         self, *, before: Match, saved: Match, mover_user_id: str
     ) -> None:
-        """The notifications a move causes (the same ones a v1 move causes)."""
+        """The notifications a move causes."""
         if saved.status == "over":
             self._notify_match_event(
                 "notify.match_over",
@@ -3254,10 +3223,10 @@ class GamePlatform:
                 tag_suffix="turn",
             )
 
-    def _begin_v2_match(self, match: Match, game: Game) -> Match:
-        """Starts a v2 match: runs newMatch, saves the result, and lets any
+    def _begin_match(self, match: Match, game: Game) -> Match:
+        """Starts a match: runs newMatch, saves the result, and lets any
         computer with the first turn move. The pot is already staked —
-        v2 matches take each human's stake as they join (see [_new_match]
+        matches take each human's stake as they join (see [_new_match]
         and [_join]) — except matches created before that, which are
         funded here, all at once."""
         match = self._rekey_seed(match)
@@ -3456,20 +3425,22 @@ class GamePlatform:
         timer.start()
 
     def view_state(self, match: Match, caller_id: str | None) -> JsonValue:
-        """The state a caller may see of a match: for a v2 game, the game's
-        own viewFor for that caller, so private information (another
-        player's cards) never leaves the server. The game owner sees the
-        full state (it is their game to debug); anyone without a seat in an
-        ongoing v2 match sees no state. A failing viewFor is recorded and
-        shows no state rather than leaking the full one."""
+        """The state a caller may see of a match: the game's own viewFor
+        for that caller, so private information (another player's cards)
+        never leaves the server. Anyone without a seat in an ongoing
+        match — the game owner included — sees no state: a state is only
+        ever shown as a seated player's own view. A failing viewFor is
+        recorded and shows no state rather than leaking the full one."""
         game = self._store.get_game_version(match.game_id, match.game_version)
-        if game is None or not game.server_code or match.state is None:
+        if game is None or match.state is None:
             return match.state
+        if not game.server_code:
+            # No server code, no view (every game has server code; this
+            # covers records that predate that requirement).
+            return None
         seat = match.seat_of(caller_id) if caller_id else None
         if seat is None or (not seat.active and match.status == "ongoing"):
-            # The game owner (when not playing) sees the full state: it is
-            # their game to debug. Anyone else without a seat sees nothing.
-            return match.state if caller_id == game.owner_user_id else None
+            return None
         # viewFor is deterministic for a given match record (its seed is
         # derived from the record, and game code must not depend on the
         # wall clock), and every poll of every player used to pay a full
@@ -3500,13 +3471,34 @@ class GamePlatform:
         self._view_cache[key] = (match, view)
         return view
 
+    def view_history(
+        self, match: Match, caller_id: str | None
+    ) -> tuple[JsonValue, list[JsonValue]]:
+        """The caller's views of a match's history: the initial state and
+        the state after each move, each passed through viewFor for the
+        caller exactly like the live state (see [view_state]) — a full
+        state never leaves the server, not even in the history, and a
+        caller without a seat gets null views. Each historical state is
+        viewed with the move count it was recorded at, so its viewFor
+        gets the same call seed the state was computed with."""
+        moves = list(match.moves)
+        initial_view = self.view_state(
+            replace(match, state=match.initial_state, moves=()), caller_id
+        )
+        move_views = [
+            self.view_state(
+                replace(match, state=move.new_state, moves=tuple(moves[: index + 1])),
+                caller_id,
+            )
+            for index, move in enumerate(moves)
+        ]
+        return initial_view, move_views
+
     def start_match(
         self,
         *,
         caller_id: str,
         match_id: str,
-        first_turn_player_indices: frozenset[int],
-        initial_state: JsonValue,
     ) -> Match:
         with self._lock:
             match = self._get_owned_match(caller_id=caller_id, match_id=match_id)
@@ -3522,36 +3514,11 @@ class GamePlatform:
                     f"{list(allowed_player_counts)}"
                 )
             game = self._store.get_game_version(match.game_id, match.game_version)
-            if game is not None and game.server_code:
-                # A v2 match starts itself: the game's newMatch decides the
-                # state and the first turn; the client's start values (kept
-                # for v1 games) are ignored.
-                started = self._begin_v2_match(match, game)
-                self.record_match_start(
-                    user_id=caller_id,
-                    match_id=started.id,
-                    occurred_at=started.updated_at,
-                )
-                return started
-            if not first_turn_player_indices:
-                raise InvalidRequestError(
-                    "the first turn must name at least one player"
-                )
-            self._check_player_indices(match, first_turn_player_indices)
-            humans = self._fund_match_tokens(match)
-            started = self._save(
-                replace(
-                    match,
-                    status="ongoing",
-                    state=initial_state,
-                    initial_state=initial_state,
-                    initial_turn_player_indices=first_turn_player_indices,
-                    turn_of_player_indices=first_turn_player_indices,
-                    token_pot=match.bet_per_player * len(humans),
-                    turn_started_at=self._clock() if match.turn_seconds else None,
-                )
-            )
-            self._record_game_match_start(started)
+            if game is None or not game.server_code:
+                raise ConflictError("the match's game has no server code")
+            # The match starts itself: the game's newMatch decides the
+            # state and the first turn.
+            started = self._begin_match(match, game)
             self.record_match_start(
                 user_id=caller_id,
                 match_id=started.id,
@@ -3588,63 +3555,24 @@ class GamePlatform:
             if match.status == "over":
                 raise ConflictError("the match is over")
             game = self._store.get_game_version(match.game_id, match.game_version)
-            if game is not None and game.server_code:
-                # A v2 leave is settled by the game's own playerLeft (or
-                # the platform's equal split when the game does not decide
-                # payouts): see the leave section below.
-                return self._leave_match_v2(
-                    match, game, seat=seat, caller_id=caller_id
-                )
-            if match.status == "waiting_for_players":
-                if caller_id == match.owner_user_id:
-                    raise ConflictError(
-                        "the owner cannot leave a match that has not started; "
-                        "delete it instead"
-                    )
-                remaining_humans = [
-                    user_id for user_id in match.human_user_ids if user_id != caller_id
-                ]
-                updated = replace(
-                    match,
-                    seats=_waiting_seats(
-                        human_user_ids=remaining_humans,
-                        num_computer_opponents=match.num_computer_opponents,
-                    ),
-                )
-            else:
-                return self._end_match_by_leave(match, caller_id=caller_id)
-            saved = self._save(updated)
-            others = [
-                user_id for user_id in saved.human_user_ids if user_id != caller_id
-            ]
-            if saved.status == "over":
-                self._notify_match_event(
-                    "notify.match_over",
-                    match=saved,
-                    recipient_ids=others,
-                    tag_suffix="over",
-                )
-            elif saved.status == "ongoing":
-                leaver = self._store.get_user(caller_id)
-                self._notify_match_event(
-                    "notify.player_left",
-                    match=saved,
-                    recipient_ids=others,
-                    actor_name=leaver.display_name if leaver is not None else "",
-                    tag_suffix="left",
-                )
-            # A leave from the waiting room (still waiting_for_players) tells nobody.
-            return saved
+            if game is None or not game.server_code:
+                raise ConflictError("the match's game has no server code")
+            # A leave is settled by the game's own playerLeft (or the
+            # platform's equal split when the game does not decide
+            # payouts): see the leave section below.
+            return self._leave_match(
+                match, game, seat=seat, caller_id=caller_id
+            )
 
-    # Leaving a v2 match (Phase 4): the game's playerLeft decides what a
+    # Leaving a match (Phase 4): the game's playerLeft decides what a
     # leaver is paid, the pot is settled when too few humans remain, and
     # the maybeLeave/playerLeft endpoints let the portal confirm the
     # payout with the player before anything changes.
 
-    def _leave_match_v2(
+    def _leave_match(
         self, match: Match, game: Game, *, seat: Seat, caller_id: str
     ) -> Match:
-        """Leaving a v2 match. In the waiting room the leaver's stake is
+        """Leaving a match. In the waiting room the leaver's stake is
         refunded and their seat freed. Mid-match, the game's playerLeft
         decides the complete result; without that handler the match ends
         and the pot is split equally."""
@@ -3797,40 +3725,8 @@ class GamePlatform:
             payouts[index] = payouts.get(index, 0) + remaining
         return payouts
 
-    def _end_match_by_leave(
-        self, match: Match, *, caller_id: str, leaver_share: int | None = None
-    ) -> Match:
-        """Ends a client-side (v1) match because a player left.
-        The pot is split equally among the
-        humans in the match, the leaver included, so no stake is
-        stranded. [leaver_share] pays the leaver exactly that amount (a
-        preview promised it) and splits the rest among the others."""
-        payouts = dict(match.token_payouts or {})
-        if match.token_pot:
-            humans = [s for s in match.seats if s.kind == "human" and s.active]
-            leaver_seat = match.seat_of(caller_id)
-            fixed = (
-                {leaver_seat.player_index: leaver_share}
-                if leaver_share is not None and leaver_seat is not None
-                else None
-            )
-            payouts = self._settle_pot(
-                match.token_pot, payouts, recipients=humans, fixed=fixed
-            )
-        saved = self._save(
-            replace(
-                self._ended_by_leaving(match),
-                token_pot=0 if match.token_pot else match.token_pot,
-                token_payouts=payouts if match.token_pot else match.token_payouts,
-                pending_leave=None,
-            )
-        )
-        self._notify_leave(saved, caller_id=caller_id)
-        return saved
-
     def _notify_leave(self, saved: Match, *, caller_id: str) -> None:
-        """The notifications a v2 leave causes (the same ones a v1 leave
-        causes)."""
+        """The notifications a leave causes."""
         others = [
             user_id for user_id in saved.human_user_ids if user_id != caller_id
         ]
@@ -3852,7 +3748,7 @@ class GamePlatform:
             )
 
     def maybe_leave(self, *, caller_id: str, match_id: str) -> Match:
-        """Previews leaving an ongoing v2 match (POST
+        """Previews leaving an ongoing match (POST
         /matches/{id}/maybeLeave): computes what leaving would pay the
         caller — the game's playerLeft, or the platform's equal split
         when the game does not decide payouts — and stores it on the
@@ -3868,7 +3764,7 @@ class GamePlatform:
             game = self._store.get_game_version(match.game_id, match.game_version)
             if game is None or not game.server_code:
                 raise ConflictError(
-                    "only a server-side (v2) game has a leave preview"
+                    "the match's game has no server code"
                 )
             preview = self._compute_leave_preview(match, game, caller_id)
             return self._save(replace(match, pending_leave=preview))
@@ -3899,22 +3795,16 @@ class GamePlatform:
         *,
         caller_id: str,
         match_id: str,
-        new_state: JsonValue,
-        next_turn_player_indices: frozenset[int] | None,
         expected_move_count: int | None,
-        payout_player_indices: dict[int, int] | None = None,
         move: JsonValue = None,
     ) -> Match:
         """Records a move by one of the players whose turn it is.
 
-        Any player in the turn set may move; the move is recorded for that player's
-        seat. In a v2 game (server code) [move] is all that is sent and only the
-        seat's own player may move — the server moves computer seats itself. The
-        on-behalf path below (a human submitting a computer seat's move in a v1
-        game, whose client computes the move) remains only for games without
-        server code. [next_turn_player_indices = None] ends the match.
-        [expected_move_count], if given, guards against two clients submitting the
-        same move.
+        Any player in the turn set may move; the move is recorded for that
+        player's seat. [move] is all that is sent and only the seat's own
+        player may move — the server runs the game's code to compute the
+        new state, and moves computer seats itself. [expected_move_count],
+        if given, guards against two clients submitting the same move.
         """
         with self._lock:
             # Reading the match applies any timeout first (see _enforce_clock).
@@ -3934,186 +3824,13 @@ class GamePlatform:
                     f"{len(match.moves)}"
                 )
             game = self._store.get_game_version(match.game_id, match.game_version)
-            if game is not None and game.server_code:
-                return self._make_move_v2(
-                    match, game, seat=seat, caller_id=caller_id, move=move
-                )
-            mover_seat = self._mover_seat(match, seat)
-            if next_turn_player_indices is not None:
-                if not next_turn_player_indices:
-                    raise InvalidRequestError(
-                        "the next turn must name at least one player"
-                    )
-                self._check_player_indices(match, next_turn_player_indices)
-            # On a paid terminal move the server checks the complete pot distribution.
-            if next_turn_player_indices is not None and payout_player_indices is not None:
-                raise InvalidRequestError("payouts only allowed on the final move")
-            if next_turn_player_indices is None:
-                if match.token_pot and payout_player_indices is not None:
-                    human_seats = {s.player_index for s in match.seats if s.kind == "human"}
-                    if set(payout_player_indices) != human_seats:
-                        raise InvalidRequestError("payouts must include every human seat")
-                    if any(type(v) is not int or v < 0 for v in payout_player_indices.values()):
-                        raise InvalidRequestError("payouts must be nonnegative integer tokens")
-                    if sum(payout_player_indices.values()) != match.token_pot:
-                        raise InvalidRequestError("payouts must total the token pot")
-                elif payout_player_indices is not None and any(payout_player_indices.values()):
-                    raise InvalidRequestError("no tokens available for payout")
-            # A v1 client's claimed result can't be checked (the server runs no
-            # game code), so a paid final move only proposes the split: no tokens
-            # move until every other human agrees (agree_to_payouts).
-            proposal = (
-                dict(payout_player_indices)
-                if next_turn_player_indices is None
-                and match.token_pot
-                and payout_player_indices is not None
-                else None
+            if game is None or not game.server_code:
+                raise ConflictError("the match's game has no server code")
+            return self._make_move(
+                match, game, seat=seat, caller_id=caller_id, move=move
             )
-            if (
-                next_turn_player_indices is None
-                and match.token_pot
-                and payout_player_indices is None
-            ):
-                # A game that knows nothing about tokens ended a paid match: there
-                # is no result to pay out, so every human gets their stake back
-                # (an equal split of the pot) instead of the match never ending.
-                payout_player_indices = self._settle_pot(
-                    match.token_pot,
-                    {},
-                    recipients=[s for s in match.seats if s.kind == "human"],
-                )
-            now = self._clock()
-            move = Move(
-                move_number=len(match.moves) + 1,
-                player_index=mover_seat.player_index,
-                made_by_user_id=caller_id,
-                created_at=now,
-                new_state=new_state,
-                next_turn_player_indices=next_turn_player_indices,
-            )
-            saved = self._save(
-                replace(
-                    match,
-                    state=new_state,
-                    moves=append_move(match.moves, move),
-                    turn_of_player_indices=next_turn_player_indices,
-                    status="ongoing"
-                    if next_turn_player_indices is not None
-                    else "over",
-                    end_reason=None
-                    if next_turn_player_indices is not None
-                    else "finished",
-                    token_payouts=payout_player_indices
-                    if next_turn_player_indices is None and proposal is None
-                    else None,
-                    proposed_payouts=proposal,
-                    payout_agreed_indices=frozenset({seat.player_index})
-                    if proposal is not None
-                    else frozenset(),
-                    payout_deadline=now
-                    + dt.timedelta(seconds=PAYOUT_AGREEMENT_SECONDS)
-                    if proposal is not None
-                    else None,
-                    payout_outcome=None,
-                    # Every accepted move restarts the clock, also when the same
-                    # player moves again (a raise and its answer, chained jumps).
-                    turn_started_at=now if match.turn_seconds else None,
-                )
-            )
-            if proposal is not None and self._payout_agreed_by_all(saved):
-                # Only one human seat: nobody else has to agree.
-                saved = self._settle_proposed_payouts(saved, outcome="agreed")
-            if saved.status == "over":
-                self._notify_match_event(
-                    "notify.match_over",
-                    match=saved,
-                    recipient_ids=[
-                        user_id
-                        for user_id in saved.human_user_ids
-                        if user_id != caller_id
-                    ],
-                    tag_suffix="over",
-                )
-            else:
-                # Only seats that gained the turn are told: seats that already held
-                # it (simultaneous turns) know, and the mover just played.
-                gained = (saved.turn_of_player_indices or frozenset()) - (
-                    match.turn_of_player_indices or frozenset()
-                )
-                self._notify_match_event(
-                    "notify.turn",
-                    match=saved,
-                    recipient_ids=[
-                        seat.user_id
-                        for seat in saved.seats
-                        if seat.player_index in gained
-                        and seat.user_id is not None
-                        and seat.user_id != caller_id
-                    ],
-                    tag_suffix="turn",
-                )
-            return saved
 
-    def agree_to_payouts(
-        self, *, caller_id: str, match_id: str, agree: bool
-    ) -> Match:
-        """A human in a finished v1 paid match answers the pot split its final
-        move proposed. Agreeing records the caller's seat, and once every human
-        seat has agreed the pot is paid as proposed. Disputing refunds every
-        stake at once. Either answer is final for that seat."""
-        with self._lock:
-            # Reading the match applies an expired agreement deadline first.
-            match = self._get_match(match_id)
-            seat = match.seat_of(caller_id)
-            if seat is None or seat.kind != "human":
-                raise ForbiddenError("you are not a player in this match")
-            if not match.payout_pending:
-                raise ConflictError("this match has no payouts waiting for agreement")
-            if seat.player_index in match.payout_agreed_indices:
-                raise ConflictError("you already agreed to these payouts")
-            if not agree:
-                return self._settle_proposed_payouts(match, outcome="disputed")
-            saved = self._save(
-                replace(
-                    match,
-                    payout_agreed_indices=match.payout_agreed_indices
-                    | {seat.player_index},
-                )
-            )
-            if self._payout_agreed_by_all(saved):
-                saved = self._settle_proposed_payouts(saved, outcome="agreed")
-            return saved
-
-    @staticmethod
-    def _payout_human_indices(match: Match) -> frozenset[int]:
-        """The seats that must agree to a proposed split: every human seat, the
-        same seats the proposal has to pay (see make_move)."""
-        return frozenset(s.player_index for s in match.seats if s.kind == "human")
-
-    def _payout_agreed_by_all(self, match: Match) -> bool:
-        return self._payout_human_indices(match) <= match.payout_agreed_indices
-
-    def _settle_proposed_payouts(self, match: Match, *, outcome: PayoutOutcome) -> Match:
-        """Ends a pending v1 pot split: "agreed" pays it as proposed; "disputed"
-        or "expired" refunds every human's stake (an equal split of the pot).
-        Clears the pending state, so it can never pay twice. The caller holds
-        the lock."""
-        assert match.proposed_payouts is not None and match.payout_outcome is None
-        if outcome == "agreed":
-            payouts = dict(match.proposed_payouts)
-            for index, amount in payouts.items():
-                self._credit_tokens(match.seats[index].user_id or "", amount)
-        else:
-            payouts = self._settle_pot(
-                match.token_pot,
-                {},
-                recipients=[s for s in match.seats if s.kind == "human"],
-            )
-        return self._save(
-            replace(match, token_payouts=payouts, payout_outcome=outcome)
-        )
-
-    def _make_move_v2(
+    def _make_move(
         self,
         match: Match,
         game: Game,
@@ -4122,7 +3839,7 @@ class GamePlatform:
         caller_id: str,
         move: JsonValue,
     ) -> Match:
-        """A move in a v2 match: the server runs the game's applyMove and
+        """A move in a match: the server runs the game's applyMove and
         stores the state it computes. The caller holds the lock; the match
         is ongoing and [seat] is the caller's seat. A player may only move
         on their own turn — nobody acts on behalf of another seat, because
@@ -4369,11 +4086,10 @@ class GamePlatform:
 
     @staticmethod
     def _held_pot(match: Match) -> int:
-        """Tokens the match holds that nobody has been paid yet: the pot of a
-        waiting (v2 stakes are taken on joining) or ongoing match, or of a
-        finished v1 match whose split still waits for agreement. A settled
+        """Tokens the match holds that nobody has been paid yet: the pot of
+        a waiting (stakes are taken on joining) or ongoing match. A settled
         match holds nothing, even where [token_pot] still records its size."""
-        if match.status == "over" and not match.payout_pending:
+        if match.status == "over":
             return 0
         return match.token_pot
 
@@ -5140,13 +4856,6 @@ class GamePlatform:
                 match, status="over", turn_of_player_indices=None,
                 end_reason="solo_computers_only", token_pot=0,
                 token_payouts=payouts or match.token_payouts, pending_leave=None))
-        if (
-            match.payout_pending
-            and match.payout_deadline is not None
-            and self._clock() >= match.payout_deadline
-        ):
-            # Not everyone agreed to the v1 pot split in time: refund the stakes.
-            return self._settle_proposed_payouts(match, outcome="expired")
         deadline = match.turn_deadline
         if deadline is None:
             return match
@@ -5210,22 +4919,6 @@ class GamePlatform:
                     f"player index {player_index} is not a seat in this match"
                 )
 
-    def _mover_seat(self, match: Match, seat: Seat) -> Seat:
-        """The seat the move is recorded for: the caller's own seat when it's their
-        turn, or a computer's seat when a human moves on its behalf."""
-        turn = match.turn_of_player_indices
-        assert turn is not None
-        if seat.player_index in turn:
-            return seat
-        if seat.kind == "human":
-            computer_index = min(
-                (index for index in turn if match.seats[index].kind == "computer"),
-                default=None,
-            )
-            if computer_index is not None:
-                return match.seats[computer_index]
-        raise ConflictError("it is not your turn")
-
     def _take_seat_mid_match(self, match: Match, *, user_id: str) -> tuple[Seat, ...]:
         rules = self._rules_of(match)
         if not rules.allows_join_mid_match:
@@ -5236,11 +4929,6 @@ class GamePlatform:
             )
             return (*match.seats, new_seat)
         raise ConflictError("the match is full")
-
-    def _ended_by_leaving(self, match: Match) -> Match:
-        return replace(
-            match, status="over", turn_of_player_indices=None, end_reason="player_left"
-        )
 
     def _save(self, match: Match) -> Match:
         match = replace(match, updated_at=self._clock())

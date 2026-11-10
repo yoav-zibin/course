@@ -69,11 +69,9 @@ from game_platform.schemas import (
     MatchOut,
     MatchSummaryOut,
     MatchHistoryOut,
-    MatchStart,
     MatchUpdate,
     MergeRequest,
     MoveCreate,
-    PayoutAgreement,
     MoveOut,
     PhoneStart,
     PushConfigOut,
@@ -1053,15 +1051,8 @@ def start_match(
     platform: Platform,
     caller_id: CallerId,
     match_id: str,
-    body: MatchStart | None = None,
 ) -> MatchOut:
-    body = body if body is not None else MatchStart()
-    match = platform.start_match(
-        caller_id=caller_id,
-        match_id=match_id,
-        first_turn_player_indices=frozenset(body.first_turn_player_indices),
-        initial_state=body.initial_state,
-    )
+    match = platform.start_match(caller_id=caller_id, match_id=match_id)
     return _match_out(platform, match, caller_id=caller_id)
 
 
@@ -1104,12 +1095,7 @@ def make_move(
         **extra,
         caller_id=caller_id,
         match_id=match_id,
-        new_state=body.new_state,
-        next_turn_player_indices=None
-        if body.next_turn_player_indices is None
-        else frozenset(body.next_turn_player_indices),
         expected_move_count=body.expected_move_count,
-        payout_player_indices=body.payout_player_indices,
         move=body.move,
     )
     return _match_out(platform, match, caller_id=caller_id)
@@ -1125,29 +1111,25 @@ def remove_player(
     return _match_out(platform, match, caller_id=caller_id)
 
 
-@router.post("/matches/{match_id}/payouts")
-def agree_to_payouts(
-    platform: Platform, caller_id: CallerId, match_id: str, body: PayoutAgreement
-) -> MatchOut:
-    """Agree to (or dispute) the pot split a v1 paid match's final move proposed.
-    Tokens move only once every human seat agrees; one dispute refunds every
-    stake, as does no agreement by the match's payout_deadline."""
-    match = platform.agree_to_payouts(
-        caller_id=caller_id, match_id=match_id, agree=body.agree
-    )
-    return _match_out(platform, match, caller_id=caller_id)
-
-
 @router.get("/matches/{match_id}/history")
 def get_match_history(platform: Platform, match_id: str, caller_id: OptionalCallerId) -> MatchHistoryOut:
     # One match's moves: the query store reads them in bounded chunks behind
-    # the lazy history, so the full list costs no dataset-sized read.
-    return MatchHistoryOut.of(platform.get_match(match_id, caller_id=caller_id))
+    # the lazy history, so the full list costs no dataset-sized read. Every
+    # state is the caller's own view of it (see GamePlatform.view_history):
+    # a full state never leaves the server.
+    match = platform.get_match(match_id, caller_id=caller_id)
+    initial_view, move_views = platform.view_history(match, caller_id)
+    return MatchHistoryOut.of(match, initial_view, move_views)
 
 
 @router.get("/matches/{match_id}/moves")
 def list_moves(platform: Platform, match_id: str, caller_id: OptionalCallerId) -> list[MoveOut]:
-    return [MoveOut.of(move) for move in platform.get_match(match_id, caller_id=caller_id).moves]
+    match = platform.get_match(match_id, caller_id=caller_id)
+    _, move_views = platform.view_history(match, caller_id)
+    return [
+        MoveOut.of(move).model_copy(update={"new_state": view})
+        for move, view in zip(match.moves, move_views)
+    ]
 
 
 # Invites: shareable links and QR codes to a match, which also track referrals.
