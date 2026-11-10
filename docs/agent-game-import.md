@@ -159,7 +159,7 @@ is inserted. The checks, in order:
      payouts not summing to the pot or paying a computer, a leaver's payout
      outside 0..pot) is a game bug and fails the import. Reaching 1000
      moves without the game ending is not an error. The whole suite runs
-     in a 20 s subprocess; if no walk finishes in the budget the game is
+     in a 200 s subprocess; if no walk finishes in the budget the game is
      reported too slow.
 9. **Failure reporting.** When verification fails, the 422 response names
    the failing checks and, for each failure, gives the exact reproduction:
@@ -192,7 +192,7 @@ Chunked requests have the same cumulative limit. Uploads have a 15-second deadli
 
 Validation runs before any storage write, reusing the game artifact validators,
 example tests, localization checks, random walks and the existing QuickJS limits.
-An isolated validator process has a 20-second wall deadline, including schema
+An isolated validator process has a 200-second wall deadline, including schema
 validation. Errors never echo the full submitted source. Persistence creates the
 published game (or updates the one carrying the same request secret), with the import package (including translations) stored
 with it, and seeds the portal bundle with the supplied translations.

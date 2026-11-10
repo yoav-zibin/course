@@ -132,7 +132,7 @@ def test_server_code(
     game_id: str = "unsaved",
     rules: GameRules,
     regression_seeds: tuple[int, ...] = (),
-    budget_seconds: float = 1.0,
+    budget_seconds: float = 10.0,
     max_walks: int = 1000,
     max_moves_per_walk: int = 1000,
     run_seed: int | None = None,

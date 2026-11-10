@@ -202,9 +202,9 @@ def verify_submission(body):
     try:
         result = subprocess.run([sys.executable, '-m', 'game_platform.agent_import'],
                                 input=body.model_dump_json(), text=True,
-                                capture_output=True, timeout=20, check=False)
+                                capture_output=True, timeout=200, check=False)
     except subprocess.TimeoutExpired as exc:
-        raise HTTPException(422, 'Game validation exceeded the 20 second limit') from exc
+        raise HTTPException(422, 'Game validation exceeded the 200 second limit') from exc
     if result.returncode:
         raise HTTPException(422, 'Game validation failed; check schemas, images and code')
     response = json.loads(result.stdout)

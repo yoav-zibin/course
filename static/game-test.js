@@ -1518,7 +1518,7 @@ function formatFailure(failure) {
 
 async function testServerCode(host, inputs, onProgress) {
   const rules = inputs.rules;
-  const budgetMs = 3000;
+  const budgetMs = 9000;
   const maxWalks = 1000;
   const deadlineMs = Date.now() + budgetMs;
   const rng = mulberry32((Math.random() * 4294967296) >>> 0);

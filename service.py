@@ -2799,7 +2799,7 @@ class GamePlatform:
         game_schemas: dict[str, JsonValue],
         rules: GameRules,
         game_id: str | None,
-        budget_seconds: float = 1.0,
+        budget_seconds: float = 10.0,
         contract: dict[str, JsonValue] | None = None,
     ) -> GameTestReport:
         stored = (
@@ -2841,7 +2841,7 @@ class GamePlatform:
         rules: GameRules,
         game_schemas: dict[str, JsonValue] | None,
         *,
-        budget_seconds: float = 1.0,
+        budget_seconds: float = 10.0,
         contract: dict[str, JsonValue] | None = None,
     ) -> None:
         """The publish gate (Phase 5): server code about to be published

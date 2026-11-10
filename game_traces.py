@@ -53,7 +53,7 @@ VERIFIED_MODES = (MODE_PASS_AND_PLAY, MODE_MULTIPLAYER)
 STEP4_MIN_CONFIGS = 5
 STEP4_MIN_MOVES_PER_CONFIG = 1
 
-SERVER_CHECK_TIMEOUT_SECONDS = 30
+SERVER_CHECK_TIMEOUT_SECONDS = 90
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +222,7 @@ def run_server_checks(body):
         },
         rules=rules,
         contract=body.unit_tests,
-        budget_seconds=8,
+        budget_seconds=24,
         max_walks=1000,
     )
     checks["random_walks"] = {
