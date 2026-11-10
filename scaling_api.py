@@ -248,20 +248,27 @@ def install(app, *, debug_tools):
         match = platform.get_match(match_id=match_id, caller_id=caller_id)
         stop = min(start + limit, len(match.moves))
         moves = match.moves[start:stop]
-        # Apply per-player views to history as well as current state.
+        # Apply per-player views to history as well as current state. Each
+        # view is computed with the move prefix it was recorded at, so its
+        # viewFor gets the same call seed as in GamePlatform.view_history.
         items = [
             MoveOut.of(
                 replace(
                     move,
                     new_state=platform.view_state(
-                        replace(match, state=move.new_state), caller_id
+                        replace(
+                            match,
+                            state=move.new_state,
+                            moves=tuple(match.moves[: start + offset + 1]),
+                        ),
+                        caller_id,
                     ),
                 )
             )
-            for move in moves
+            for offset, move in enumerate(moves)
         ]
         initial = platform.view_state(
-            replace(match, state=match.initial_state), caller_id
+            replace(match, state=match.initial_state, moves=()), caller_id
         )
         return {
             "items": items,

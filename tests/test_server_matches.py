@@ -105,6 +105,25 @@ def test_start_runs_new_match_and_views_are_per_player(api: Api):
     assert spectator_view["state"] is None
 
 
+def test_missing_game_record_never_exposes_the_full_state(api: Api):
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game_id = _create_game(api, alice)
+    match_id = _start(api, alice, game_id, joiner=bob)
+
+    # The game version record disappears while the match lives on. The
+    # store itself refuses this delete (the version is pinned by the
+    # match), so tombstone it directly to simulate the record being gone
+    # anyway. The API already 404s such a match; view_state is the last
+    # line of defense for any caller holding the match record, and it
+    # must show nothing — never fall back to the full state, which
+    # carries every player's secret.
+    api.platform._store._game_versions[game_id][0] = None
+    match = api.platform._store.get_match(match_id)
+    assert api.platform.view_state(match, alice) is None
+    initial_view, _ = api.platform.view_history(match, alice)
+    assert initial_view is None
+
+
 def test_moves_run_apply_move_and_are_recorded(api: Api):
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game_id = _create_game(api, alice)

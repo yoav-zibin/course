@@ -107,8 +107,9 @@ function applyLocale(message) {
 
 let V=null,PL=[],ME=null,ACT=null,STATUS='ongoing';
 // The seat this client moves for: my own seat when it is my turn, or the
-// computer's seat when this client is the only human (v1 games are computed
-// here, so this client plays the computer). Never another human's seat.
+// computer's seat when this client is the only human (this standalone
+// page computes the game locally, so it also plays the computer's turns).
+// Never another human's seat.
 function actingSeatOf(m){if(!m||m.status!=="ongoing"||!m.turn_of_player_indices?.length)return null;const turn=m.turn_of_player_indices[0];if(turn===m.my_player_index)return turn;const humans=(m.players||[]).filter(p=>p.kind==="human");if(m.my_player_index!==null&&humans.length===1&&m.players[turn]?.kind==="computer")return turn;return null;}
 let sel=new Set(),msgKey='';
 const root=document.getElementById('t');

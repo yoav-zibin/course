@@ -115,8 +115,9 @@ function applyLocale(message) {
 
 let S=null,PL=[],MY=null,ACT=null,STATUS='ongoing',sentFor=-1;
 // The seat this client moves for: my own seat when it is my turn, or the
-// computer's seat when this client is the only human (v1 games are computed
-// here, so this client plays the computer). Never another human's seat.
+// computer's seat when this client is the only human (this standalone
+// page computes the game locally, so it also plays the computer's turns).
+// Never another human's seat.
 function actingSeatOf(m){if(!m||m.status!=="ongoing"||!m.turn_of_player_indices?.length)return null;const turn=m.turn_of_player_indices[0];if(turn===m.my_player_index)return turn;const humans=(m.players||[]).filter(p=>p.kind==="human");if(m.my_player_index!==null&&humans.length===1&&m.players[turn]?.kind==="computer")return turn;return null;}const SU='♠♥♣♦',RS={11:'J',12:'Q',13:'K',14:'A'};function rn(r){if(r===15)return t('small_joker');if(r===16)return t('big_joker');return RS[r]||r}
 function el(tag,text,cls,parent){const e=document.createElement(tag);if(text!==undefined&&text!==null)e.textContent=text;if(cls)e.className=cls;if(parent)parent.appendChild(e);return e}
 function comboName(type){switch(type){case 'single':return t('combo_single');case 'pair':return t('combo_pair');case 'trips':return t('combo_trips');case 'fullhouse':return t('combo_fullhouse');case 'straight':return t('combo_straight');case 'tube':return t('combo_tube');case 'plate':return t('combo_plate');case 'bomb':return t('combo_bomb');case 'sflush':return t('combo_sflush');case 'jokerbomb':return t('combo_jokerbomb');default:return type}}

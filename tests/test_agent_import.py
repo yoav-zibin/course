@@ -109,6 +109,44 @@ def test_resubmission_with_the_same_request_id_updates_the_game(api):
     assert strings['description'] == '[es] ' + updated['description']
 
 
+def test_resubmission_may_redesign_the_state_shape(api):
+    """A resubmission carrying a new import package is gated on the NEW
+    package's tests, not the stored one. Here the state field is renamed
+    n -> m in the code, the schemas and the cases alike; the stored
+    contract (additionalProperties: false, requires n) could never pass
+    against the redesigned code."""
+    owner = api.new_user('Owner')
+    secret = 'redesign-secret-0123456789'
+    body = payload(); body['game_addition_request_id_and_secret'] = secret
+    first = api.ok('POST', '/games', as_user=owner, json=body)
+    assert first['version'] == 1
+
+    def rename(value):
+        if isinstance(value, dict):
+            return {('m' if key == 'n' else key): rename(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return ['m' if item == 'n' else rename(item) for item in value]
+        return value
+
+    updated = payload()
+    updated['game_addition_request_id_and_secret'] = secret
+    updated['server_code'] = (
+        updated['server_code']
+        .replace('{n:0}', '{m:0}')
+        .replace('state.n', 'state.m')
+        .replace('const n=', 'const m=')
+        .replace('n>=3', 'm>=3')
+        .replace('{n}', '{m}')
+        .replace('{n:state.m}', '{m:state.m}')
+    )
+    updated['client_code'] = updated['client_code'].replace('.n', '.m')
+    updated['unit_tests'] = rename(updated['unit_tests'])
+    updated['translations'] = translations_for(updated)
+    second = api.ok('POST', '/games', as_user=owner, json=updated)
+    assert second['id'] == first['id'] and second['version'] == 2
+    assert second['game_schemas']['state']['required'] == ['m']
+
+
 def test_identical_resubmission_is_a_noop(api):
     owner = api.new_user('Owner')
     body = payload(); body['game_addition_request_id_and_secret'] = 'identical-secret-0123456789'

@@ -2386,12 +2386,19 @@ class GamePlatform:
                 or updated.rules != game.rules
             ):
                 # New or re-ruled server code must pass its tests before
-                # the new version is published (Phase 5 gate).
+                # the new version is published (Phase 5 gate). An update
+                # that carries a new import package is gated on THAT
+                # package's tests: the stored package's contract describes
+                # the old design and can never pass against redesigned
+                # code (an import that renames a state field, say).
                 self._gate_server_code(
                     game_id,
                     updated.server_code,
                     updated.rules,
                     updated.game_schemas,
+                    contract=(updated.import_package or {}).get('unit_tests')
+                    if _import_package is not UNSET
+                    else None,
                 )
             updated = replace(
                 updated, version=game.version + 1, updated_at=self._clock()
@@ -2793,12 +2800,14 @@ class GamePlatform:
         rules: GameRules,
         game_id: str | None,
         budget_seconds: float = 1.0,
+        contract: dict[str, JsonValue] | None = None,
     ) -> GameTestReport:
         stored = (
             self._store.get_game_test_seeds(game_id) if game_id else None
         )
-        source = self._store.get_game(game_id) if game_id else None
-        contract = (getattr(source, 'import_package', None) or {}).get('unit_tests')
+        if contract is None:
+            source = self._store.get_game(game_id) if game_id else None
+            contract = (getattr(source, 'import_package', None) or {}).get('unit_tests')
         if contract:
             from game_platform.game_contract import verify_examples
             from game_platform.game_testing import TestFailure
@@ -2833,6 +2842,7 @@ class GamePlatform:
         game_schemas: dict[str, JsonValue] | None,
         *,
         budget_seconds: float = 1.0,
+        contract: dict[str, JsonValue] | None = None,
     ) -> None:
         """The publish gate (Phase 5): server code about to be published
         must pass the random-walk tests, or publishing is refused. The schemas are
@@ -2847,6 +2857,7 @@ class GamePlatform:
             rules=rules,
             game_id=game_id,
             budget_seconds=budget_seconds,
+            contract=contract,
         )
         if report.passed:
             return
@@ -3433,7 +3444,9 @@ class GamePlatform:
         recorded and shows no state rather than leaking the full one."""
         game = self._store.get_game_version(match.game_id, match.game_version)
         if game is None or match.state is None:
-            return match.state
+            # No game record (or no state yet): show nothing. Never fall
+            # back to the full state.
+            return None
         if not game.server_code:
             # No server code, no view (every game has server code; this
             # covers records that predate that requirement).

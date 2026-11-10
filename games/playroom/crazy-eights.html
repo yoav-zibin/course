@@ -218,21 +218,6 @@ function applyLocale(message) {
 }
 </script>
 <script>
-/* Match-level virtual currency payout helper. In-game poker chips remain separate. */
-function platformTokenPayout(state, latest) {
-  const pot = latest?.token_pot || 0;
-  const humanSeats = (latest?.players || []).filter(p => p.kind === "human").map(p => p.player_index);
-  if (!pot || !humanSeats.length) return undefined;
-  const winner = state?.winner;
-  const winners = Number.isInteger(winner) && humanSeats.includes(winner)
-    ? [winner] : humanSeats; // draws split the pot equally
-  const payouts = Object.fromEntries(humanSeats.map(i => [i, 0]));
-  const base = Math.floor(pot / winners.length);
-  winners.forEach((i, index) => { payouts[i] = base + (index < pot % winners.length ? 1 : 0); });
-  return payouts;
-}
-</script>
-<script>
       "use strict";
       const KIND = "crazy-eights";
 
@@ -371,9 +356,9 @@ function platformTokenPayout(state, latest) {
         }
         function errorText(message) { switch (message) { case "Not your turn": return t("not_your_turn"); case "Illegal card": return t("illegal_card"); default: return message; } }
         // The seat this client moves for: my own seat when it is my turn, or
-        // the computer's seat when this client is the only human (v1 games are
-        // computed here, so this client plays the computer). Never another
-        // human's seat.
+        // the computer's seat when this client is the only human (this
+        // standalone page computes the game locally, so it also plays the
+        // computer's turns). Never another human's seat.
         function actingSeat() {
           if (!latest || latest.status !== "ongoing" || !latest.turn_of_player_indices?.length) return null;
           const turn = latest.turn_of_player_indices[0];
@@ -402,7 +387,6 @@ function platformTokenPayout(state, latest) {
             parent.postMessage(
               {
                 type: "make_move",
-                ...(result.nextTurn === null ? {payout_player_indices: platformTokenPayout(result.state, latest)} : {}),
                 new_state: result.state,
                 next_turn_player_indices:
                   result.nextTurn === null ? null : [result.nextTurn],

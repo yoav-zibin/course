@@ -419,7 +419,7 @@ class GameFrame {
       this.onBadMessage(`ignored a message that isn't make_move: ${JSON.stringify(message)}`);
       return;
     }
-    // A v2 game sends only its move; the server validates and applies it.
+    // A game sends only its move; the server validates and applies it.
     if ("move" in message) {
       this.onMakeMove({ move: message.move });
       return;
@@ -432,13 +432,12 @@ class GameFrame {
       this.onBadMessage(`ignored a malformed make_move: ${JSON.stringify(message)}`);
       return;
     }
-    this.onMakeMove({ new_state: message.new_state, next_turn_player_indices: next,
-      ...(message.payout_player_indices !== undefined ? {payout_player_indices: message.payout_player_indices} : {}) });
+    this.onMakeMove({ new_state: message.new_state, next_turn_player_indices: next });
   }
 }
 
 /** The state_changed message for a viewer; see README.md for each field.
- * For a v2 game, [view] is the viewer's viewFor view of the match; the
+ * For a server game, [view] is the viewer's viewFor view of the match; the
  * client renders it instead of [state] (which then carries the same view
  * for portal matches, and the full state only in the game-test emulator,
  * where the author may see everything). A player only ever acts for
