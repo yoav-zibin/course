@@ -261,8 +261,7 @@ def test_idempotent_move_does_not_append_or_pay_twice(store):
     args = dict(
         caller_id=alice,
         match_id=match,
-        new_state={"n": 1},
-        next_turn_player_indices=frozenset([1]),
+        move={"state": {"n": 1}, "turn_indices": [1]},
         expected_move_count=0,
         request_id="first",
     )
@@ -270,7 +269,7 @@ def test_idempotent_move_does_not_append_or_pay_twice(store):
     again = platform.make_move(**args)
     assert len(first.moves) == len(again.moves) == 1
     with pytest.raises(ConflictError):
-        platform.make_move(**{**args, "new_state": {"n": 2}})
+        platform.make_move(**{**args, "move": {"state": {"n": 2}, "turn_indices": [1]}})
     assert store.counts()["moves_total"] == 1
 
 
@@ -329,8 +328,7 @@ def test_two_instances_racing_a_move_commit_only_once(store):
             platform.make_move(
                 caller_id=alice,
                 match_id=match,
-                new_state={"winner": n},
-                next_turn_player_indices=frozenset([1]),
+                move={"state": {"winner": n}, "turn_indices": [1]},
                 expected_move_count=0,
                 request_id=str(n),
             )
@@ -485,8 +483,6 @@ def test_payout_ledger_and_lost_response_retry_are_atomic(store):
         match_id=match,
         move={"add": 2},
         expected_move_count=4,
-        new_state=None,
-        next_turn_player_indices=None,
         request_id="winning-move",
     )
     platform.make_move(**args)
@@ -511,9 +507,9 @@ def test_private_history_is_view_filtered_and_v1_routes_serve_the_same_match(sto
         "your_secret": "secret-of-" + bob,
     }
     assert "secrets" not in history["initial_state"]
-    # The v1 routes serve the same one-match history (moves are read in
-    # bounded chunks behind the lazy history); they keep the v1 raw-state
-    # contract, unlike the view-filtered v2 pages above.
+    # The plain routes serve the same one-match history (moves are read
+    # in bounded chunks behind the lazy history), view-filtered the same
+    # way: Bob's new_state below is his view, never the full state.
     moves = api.ok("GET", f"/matches/{match}/moves", as_user=bob)
     assert [move["new_state"]["count"] for move in moves] == [1]
     full = api.ok("GET", f"/matches/{match}/history", as_user=bob)

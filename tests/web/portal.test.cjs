@@ -410,10 +410,10 @@ test('history reaches a recorded custom initial state at move zero',async()=>{
   assert.equal(t.run('state.replay.move.new_state.score'),42);assert.equal(t.node('history-back').disabled,true);
 });
 
-test('invalid next seats are rejected before a move is durably queued',async()=>{
+test('a make_move with a client-computed state is ignored, never queued',async()=>{
   const t=setup();t.run('navigator.locks={request:async(name,run)=>run()};state.match={id:"m",game_id:"g",game_version:1,status:"ongoing",turn_of_player_indices:[0],players:[{player_index:0,user_id:"owner",kind:"human"}]};state.loaded="m@g@1";offline.enqueue=()=>{throw new Error("must not enqueue")};offline.sync=async()=>{}');
   await t.run('onMakeMove({new_state:{score:1},next_turn_player_indices:[1]})');
-  assert.match(t.node('match-message').textContent,/invalid next player/);
+  assert.ok(!t.node('match-message').textContent);
 });
 test('a second v2 move is not queued behind a pending one',async()=>{
   const t=setup();
