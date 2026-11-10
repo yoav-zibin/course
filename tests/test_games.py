@@ -1,6 +1,6 @@
 from typing import Any
 
-from game_platform.tests.helpers import Api, error, validation_errors
+from game_platform.tests.helpers import Api, ECHO_SERVER_CODE, TEST_GAME_SCHEMAS, error, validation_errors
 
 POKER: dict[str, Any] = {
     "name": "Poker",
@@ -27,7 +27,8 @@ def test_create_and_get_a_game(api: Api) -> None:
         "allows_join_mid_match": False,
         "code": "<div id='table'></div>",
         "client_code": "<div id='table'></div>",
-        "server_code": None,
+        "server_code": ECHO_SERVER_CODE,
+        "game_schemas": TEST_GAME_SCHEMAS,
         "game_logic_rules": "",
         "game_ui_rules": "",
         "tutorial_html": "",

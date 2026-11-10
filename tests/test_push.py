@@ -322,10 +322,11 @@ def test_solo_client_does_not_notify_itself_after_a_computer_move() -> None:
         owner=alice, game_id=game_id, num_computer_opponents=2, start=True
     )
 
-    api.move(match_id, as_user=alice, next_turn=2)  # the computer's turn: no message
-    assert notifier.messages == []
-    api.move(match_id, as_user=alice, next_turn=0)  # played for the computer
-    assert _messages_to(notifier, bob) == []
+    # Alice hands the turn to a computer (seat 2); the server plays the
+    # computer's move at once and the turn comes back to Alice, so she
+    # gets exactly one your-turn message — none for her own move itself.
+    api.move(match_id, as_user=alice, next_turn=2)
+    assert len(_messages_to(notifier, bob)) == 1
     assert api.match_summary(match_id)["turn"] == [0]
 
 

@@ -47,8 +47,9 @@ def test_the_owner_removes_a_player_who_then_cannot_rejoin() -> None:
 
 
 def test_removing_a_player_who_spent_their_tokens_unblocks_a_paid_match() -> None:
-    # The gap left by checking balances on join: Bob could afford the stake when
-    # he joined, then spent it, and now Start fails for everyone.
+    # Stakes are taken when a player joins, so Bob spending his remaining
+    # tokens afterwards cannot block the start; and taking him out of the
+    # waiting room hands the held stake back whatever his balance did.
     api = Api()
     match_id, alice, bob = waiting_match(api, bet=STAKE)
     store = api.platform._store
@@ -59,17 +60,26 @@ def test_removing_a_player_who_spent_their_tokens_unblocks_a_paid_match() -> Non
             user, token_balance=0, last_token_grant_day=api.platform.now().date().isoformat()
         )
     )
-    blocked = api.request("POST", f"/matches/{match_id}/start", as_user=alice)
-    assert blocked.status_code == 409
+    started = api.ok("POST", f"/matches/{match_id}/start", as_user=alice)
+    assert (started["status"], started["token_pot"]) == ("ongoing", 2 * STAKE)
+
+    match_id, alice, bob = waiting_match(api, bet=STAKE)
+    user = store.get_user(bob)
+    assert user is not None
+    store.put_user(
+        dataclasses.replace(
+            user, token_balance=0, last_token_grant_day=api.platform.now().date().isoformat()
+        )
+    )
     assert remove(api, match_id, bob, as_user=alice).status_code == 200
     carol = api.new_user("carol")
     api.ok("POST", f"/matches/{match_id}/join", as_user=carol)
     started = api.ok("POST", f"/matches/{match_id}/start", as_user=alice)
     assert (started["status"], started["token_pot"]) == ("ongoing", 2 * STAKE)
-    assert balance(api, bob) == 0  # nothing was taken from (or given to) Bob
+    assert balance(api, bob) == STAKE  # his held stake came back on removal
 
 
-def test_removing_a_player_from_a_v2_waiting_room_refunds_their_stake() -> None:
+def test_removing_a_player_from_a_waiting_room_refunds_their_stake() -> None:
     api = Api()
     alice, bob = api.new_user("alice"), api.new_user("bob")
     server_code = (

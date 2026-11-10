@@ -18,6 +18,54 @@ from game_platform.game_logic import GameLogic
 
 TEST_GAME_SCHEMAS = {"state": True, "move": True, "view": True}
 
+# A pass-through game for platform-mechanics tests: the mover names the
+# resulting state and the next turn (by seat index), and the game applies
+# them verbatim. It exercises the same server path as every real game —
+# there is no client-computed match mode — while keeping the old tests'
+# focus on seats, turns, tokens and timing rather than on game rules.
+ECHO_SERVER_CODE = """
+const game = {
+  newMatch(ctx) { return { state: { pot: 0 }, turn: [ctx.players[0].id] }; },
+  applyMove(state, playerId, move, ctx) {
+    const m = move && typeof move === "object" && !Array.isArray(move) ? move : {};
+    let turn = null;
+    if (m.turn_indices != null) {
+      const bad = !Array.isArray(m.turn_indices)
+        || m.turn_indices.length === 0
+        || m.turn_indices.some((i) => !Number.isInteger(i) || i < 0 || i >= ctx.players.length)
+        || new Set(m.turn_indices).size !== m.turn_indices.length;
+      if (bad) throw new InvalidMove();
+      turn = m.turn_indices.map((i) => ctx.players[i].id);
+    }
+    const result = {
+      state: "state" in m ? m.state : state,
+      turn,
+    };
+    if (m.payouts) result.payouts = m.payouts;
+    else if (turn === null && ctx.pot) {
+      // Ending the game with a pot in play: split it evenly over the
+      // active humans, as the platform contract requires payouts.
+      const humans = ctx.players.filter((p) => p.kind === "human" && p.active !== false);
+      const split = {};
+      const share = Math.floor(ctx.pot / humans.length);
+      let rest = ctx.pot - share * humans.length;
+      for (const p of humans) split[p.id] = share + (rest-- > 0 ? 1 : 0);
+      result.payouts = split;
+    }
+    return result;
+  },
+  computerMove(state, playerId, ctx) {
+    // A move for seat 0 — except deep into a match, where the computer
+    // ends it: the server-code verifier plays whole matches with
+    // computerMove as the move generator, and a match that never ends
+    // makes its random walks run out of test budget.
+    if (ctx.move_count >= 25) return { state: state, turn_indices: null };
+    return { state: state, turn_indices: [0] };
+  },
+  viewFor(state, playerId, ctx) { return state; },
+};
+"""
+
 
 class UnrestrictedGameLogic(GameLogic):
     """Test game mechanics with explicit schemas that accept all JSON values."""
@@ -135,12 +183,12 @@ class Api:
     def create_game(self, body: dict, owner: str) -> dict:
         """Creates a published game via the service and returns its GameOut dict.
         POST /games is gone (the agent import is the HTTP creation path), so tests
-        that just need a game use this. A v2 game without schemas gets the
+        that just need a game use this. A game without schemas gets the
         permissive test schemas, as the old HTTP helper injected."""
         from game_platform.schemas import GameOut
 
         code = body.get("client_code") or body["code"]
-        server_code = body.get("server_code")
+        server_code = body.get("server_code", ECHO_SERVER_CODE)
         game_schemas = body.get("game_schemas")
         if server_code is not None and game_schemas is None:
             game_schemas = TEST_GAME_SCHEMAS
@@ -177,6 +225,8 @@ class Api:
                 allows_join_mid_match=allows_join_mid_match,
             ),
             code="<div>poker</div>",
+            server_code=ECHO_SERVER_CODE,
+            game_schemas=TEST_GAME_SCHEMAS,
         )
         return game.id
 
@@ -199,12 +249,7 @@ class Api:
         for joiner in joiners:
             self.ok("POST", f"/matches/{match_id}/join", as_user=joiner)
         if start:
-            self.ok(
-                "POST",
-                f"/matches/{match_id}/start",
-                as_user=owner,
-                json={"initial_state": {"pot": 0}},
-            )
+            self.ok("POST", f"/matches/{match_id}/start", as_user=owner)
         return match_id
 
     def move(
@@ -215,18 +260,23 @@ class Api:
         next_turn: int | list[int] | None,
         state: Any = None,
     ) -> httpx.Response:
+        """A move in the pass-through game (see ECHO_SERVER_CODE): the mover
+        names the resulting state and the next turn, as the old
+        client-computed helpers did."""
+        move: dict[str, Any] = {
+            "turn_indices": None
+            if next_turn is None
+            else [next_turn]
+            if isinstance(next_turn, int)
+            else next_turn,
+        }
+        if state is not None:
+            move["state"] = state
         return self.request(
             "POST",
             f"/matches/{match_id}/moves",
             as_user=as_user,
-            json={
-                "new_state": state,
-                "next_turn_player_indices": None
-                if next_turn is None
-                else [next_turn]
-                if isinstance(next_turn, int)
-                else next_turn,
-            },
+            json={"move": move},
         )
 
     def name(self, user_id: str | None) -> str | None:

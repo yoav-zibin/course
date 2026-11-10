@@ -116,14 +116,17 @@ def test_moves_run_apply_move_and_are_recorded(api: Api):
     assert after["state"]["count"] == 2
     assert after["turn_of_player_indices"] == [1]
 
-    moves = api.ok("GET", f"/matches/{match_id}/moves")
+    moves = api.ok("GET", f"/matches/{match_id}/moves", as_user=alice)
     assert len(moves) == 1
     assert moves[0]["move"] == {"add": 2}
     assert moves[0]["player_id"] == alice
     assert moves[0]["made_by_user_id"] == alice
-    # The history keeps the full state the server computed.
-    assert moves[0]["new_state"]["count"] == 2
-    assert moves[0]["new_state"]["secrets"][bob] == f"secret-of-{bob}"
+    # The history shows the requesting player their own view of the state
+    # after the move — never the full state (which holds bob's secret).
+    assert moves[0]["new_state"] == {"count": 2, "your_secret": f"secret-of-{alice}"}
+    # A caller without a seat gets no view of any historical state.
+    anonymous_moves = api.ok("GET", f"/matches/{match_id}/moves")
+    assert anonymous_moves[0]["new_state"] is None
 
 
 def test_wrong_turn_is_forbidden_and_illegal_move_is_a_400(api: Api):

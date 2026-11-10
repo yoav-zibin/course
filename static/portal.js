@@ -321,26 +321,6 @@ function updateMatchCurrency(match, user) {
   const notes = [];
   if (paid && match.status === "waiting_for_players")
     notes.push(el("p", {class:"token-summary-note", textContent:I18n.t("ui.stakes.pot_note", {}, "Pot is collected when the match starts. Paid matches need human players.")}));
-  const payoutPending = paid && match.status === "over" && match.proposed_payouts != null && match.payout_outcome == null;
-  if (payoutPending) {
-    const seat = user && match.players.find(p => p.user_id === user.id);
-    if (seat) {
-      const proposed = match.proposed_payouts[String(seat.player_index)] ?? 0;
-      const net = proposed - stake;
-      notes.push(el("div", {class:"token-summary-payout"},
-        el("span", {textContent:I18n.t("ui.stakes.proposed_payout", {}, "Proposed payout")}),
-        el("strong", {textContent:I18n.t("ui.stakes.tokens", {count: proposed}, `${proposed} tokens`)}),
-        el("small", {textContent:I18n.t("ui.stakes.net", {amount: `${net > 0 ? "+" : ""}${net}`}, `Net ${net > 0 ? "+" : ""}${net} tokens`)})));
-    }
-    const agreed = (match.payout_agreed_player_indices || []).includes(seat?.player_index);
-    notes.push(el("p", {class:"token-summary-note", textContent: agreed
-      ? I18n.t("ui.stakes.waiting_for_others", {}, "You agreed. Waiting for the other players to agree before tokens move.")
-      : I18n.t("ui.stakes.agreement_needed", {}, "Tokens move only once every player agrees to these payouts. A dispute, or no answer within an hour, refunds every stake.")}));
-  }
-  if (paid && match.status === "over" && (match.payout_outcome === "disputed" || match.payout_outcome === "expired"))
-    notes.push(el("p", {class:"token-summary-note", textContent: match.payout_outcome === "disputed"
-      ? I18n.t("ui.stakes.refunded_disputed", {}, "A player disputed the result, so every stake was refunded.")
-      : I18n.t("ui.stakes.refunded_expired", {}, "Not every player agreed in time, so every stake was refunded.")}));
   if (paid && match.status === "over" && match.token_payouts != null) {
     const seat = user && match.players.find(p => p.user_id === user.id);
     if (seat) {
@@ -1561,7 +1541,7 @@ function renderMatch() {
     }
   } else if (match.status === "ongoing" && mySeat && !match.localMode) {
     if (game && game.server_code) {
-      // Leaving a v2 match: the server first previews what leaving
+      // Leaving a match: the server first previews what leaving
       // would pay back (the game's playerLeft, or the platform's
       // split), and only a confirmed click applies that exact preview
       // — so the amount is always shown, staked match or not.
@@ -1586,19 +1566,6 @@ function renderMatch() {
       );
     }
   } else if (match.status === "over") {
-    // A v1 paid match's pot split waits for every human to agree: answer it first.
-    const mustAnswerPayouts = mySeat && !match.localMode && match.proposed_payouts != null &&
-      match.payout_outcome == null && mySeat.kind === "human" &&
-      !(match.payout_agreed_player_indices || []).includes(mySeat.player_index);
-    if (mustAnswerPayouts) {
-      actions.push(
-        actionButton(I18n.t("ui.stakes.agree", {}, "Agree to payouts"), call("POST", "/payouts", {agree: true}), {primary: true}),
-        actionButton(I18n.t("ui.stakes.dispute", {}, "Dispute"), call("POST", "/payouts", {agree: false}), {
-          danger: true,
-          confirm: I18n.t("ui.stakes.dispute_confirm", {}, "Dispute the result? Every player gets their stake back."),
-        }),
-      );
-    }
     if (mySeat && !match.localMode) {
       const playingSoloWithComputers =
         match.players.filter((player) => player.kind === "human").length === 1 &&
@@ -1840,12 +1807,9 @@ async function syncGame() {
   const currentGame = gameOf(match.game_id, match.game_version);
   const message = stateChangedMessage({
     state: view.state,
-    // A v2 client renders its viewFor view, which is what [state] holds
+    // A client renders its viewFor view, which is what [state] holds
     // for a participant; spectators get no view.
-    view:
-      currentGame && currentGame.server_code
-        ? (view.state ?? null)
-        : undefined,
+    view: view.state ?? null,
     players: match.players.map((player) => ({
       player_index: player.player_index,
       player_id: player.id,
@@ -1883,7 +1847,7 @@ async function onMakeMove(move) {
         user = me();
       if (match?.id !== receivedFor.id) return;
       if ("move" in move) {
-        // A v2 game sent only its move: the server validates and applies
+        // A game sends only its move: the server validates and applies
         // it, so the client checks nothing but whose turn it is.
         if (!canMove(match, user?.id))
           throw new Error(I18n.t("ui.error.not_your_turn", {}, "It isn't your turn."));
@@ -1894,11 +1858,11 @@ async function onMakeMove(move) {
           return;
         }
         if (offline.read().queues?.[match.id]?.length) {
-          // A v2 move is already waiting to sync. Unlike a v1 move it
-          // carries no resulting state, so a second click is a decision
-          // on the same stale view — queueing it behind the first could
-          // only conflict once the server answers. Drop it and push the
-          // pending move instead; the game replays from the synced state.
+          // A move is already waiting to sync. It carries no resulting
+          // state, so a second click is a decision on the same stale
+          // view — queueing it behind the first could only conflict once
+          // the server answers. Drop it and push the pending move
+          // instead; the game replays from the synced state.
           await offline.sync({ force: true });
           return;
         }
@@ -1909,17 +1873,9 @@ async function onMakeMove(move) {
         state.lastSent = null;
         return;
       }
-      const next = move.next_turn_player_indices;
-      const seats = new Set(match.players.map(player=>player.player_index));
-      if (!(next === null || (Array.isArray(next) && next.length && new Set(next).size === next.length && next.every(seat=>Number.isInteger(seat)&&seats.has(seat)))))
-        throw new Error(I18n.t("ui.portal.invalid_next_player", {}, "The game sent an invalid next player. Your move was not queued. Restart the match."));
-      if (!canMove(match, user?.id))
-        throw new Error(I18n.t("ui.error.not_your_turn", {}, "It isn't your turn."));
-      state.match = await offline.submitMove(match, {
-        ...move,
-        expected_move_count: match.move_count,
-      });
-      state.lastSent = null;
+      // Anything else (a client-computed state, a next-turn claim) is
+      // not a move: every game runs on the server, so there is nothing
+      // to submit. Ignore it.
     });
   } catch (error) {
     showMessage(error.message, "error");

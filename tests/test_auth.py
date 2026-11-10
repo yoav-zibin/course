@@ -22,7 +22,7 @@ from game_platform.service import (
     NotFoundError,
 )
 from game_platform.store import InMemoryStore
-from game_platform.tests.helpers import Api, error
+from game_platform.tests.helpers import Api, ECHO_SERVER_CODE, TEST_GAME_SCHEMAS, error
 
 
 class Clock:
@@ -537,6 +537,8 @@ def test_merge_works_through_the_file_backed_store(tmp_path: Path) -> None:
                 allows_join_mid_match=False,
             ),
             code="<div/>",
+            server_code=ECHO_SERVER_CODE,
+            game_schemas=TEST_GAME_SCHEMAS,
         )
         merged = platform.merge_users(
             caller_id=ann.id, from_user_id=ann.id, into_user_id=bob.id,

@@ -36,10 +36,6 @@ def test_create_a_match_with_computer_opponents(api: Api) -> None:
         "pending_leave_ends_match": None,
         "token_pot": 0,
         "token_payouts": None,
-        "proposed_payouts": None,
-        "payout_agreed_player_indices": [],
-        "payout_deadline": None,
-        "payout_outcome": None,
         "rematch_match_id": None,
         "created_at": "2026-01-01T00:03:00Z",
         "updated_at": "2026-01-01T00:03:00Z",
@@ -137,7 +133,7 @@ def test_rematch_against_computers_restarts_immediately_with_same_bot_count(
         "computer",
     ]
     assert rematch["turn_of_player_indices"] == [0]
-    assert rematch["state"] is None
+    assert rematch["state"] == {"pot": 0}
     assert api.ok("GET", f"/matches/{match_id}")["rematch_match_id"] == rematch["id"]
     assert api.ok("POST", f"/matches/{match_id}/rematch", as_user=alice)["id"] == rematch["id"]
 
@@ -222,49 +218,14 @@ def test_start_a_match(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game_id = api.new_game(owner=alice)
     match_id = api.new_match(owner=alice, game_id=game_id, joiners=[bob])
-    match = api.ok(
-        "POST",
-        f"/matches/{match_id}/start",
-        as_user=alice,
-        json={"first_turn_player_indices": [1], "initial_state": {"deck": [1, 2, 3]}},
-    )
+    match = api.ok("POST", f"/matches/{match_id}/start", as_user=alice)
+    # The game's newMatch decides the initial state and the first turn:
+    # the echo game starts at seat 0 with an empty pot.
     assert api.summary(match) == {
         "status": "ongoing",
         "players": ["alice", "bob"],
-        "turn": [1],
-        "state": {"deck": [1, 2, 3]},
-    }
-
-
-def test_start_can_give_the_first_turn_to_several_players(api: Api) -> None:
-    alice, bob, carol = (
-        api.new_user("alice"),
-        api.new_user("bob"),
-        api.new_user("carol"),
-    )
-    game_id = api.new_game(owner=alice, allowed_player_counts=[3])
-    match_id = api.new_match(
-        owner=alice, game_id=game_id, joiners=[bob, carol]
-    )
-    match = api.ok(
-        "POST",
-        f"/matches/{match_id}/start",
-        as_user=alice,
-        json={"first_turn_player_indices": [2, 0]},
-    )
-    assert api.summary(match)["turn"] == [0, 2]
-
-
-def test_start_defaults_to_player_0_and_no_state(api: Api) -> None:
-    alice = api.new_user("alice")
-    game_id = api.new_game(owner=alice)
-    match_id = api.new_match(owner=alice, game_id=game_id, num_computer_opponents=1)
-    match = api.ok("POST", f"/matches/{match_id}/start", as_user=alice)
-    assert api.summary(match) == {
-        "status": "ongoing",
-        "players": ["alice", "computer"],
         "turn": [0],
-        "state": None,
+        "state": {"pot": 0},
     }
 
 
@@ -276,19 +237,8 @@ def test_start_is_rejected_when_it_does_not_make_sense(api: Api) -> None:
     )
     game_id = api.new_game(owner=alice, allowed_player_counts=[2, 4])
 
-    def start(
-        match_id: str, *, as_user: str = alice, first_turn: int | list[int] = 0
-    ) -> httpx.Response:
-        return api.request(
-            "POST",
-            f"/matches/{match_id}/start",
-            as_user=as_user,
-            json={
-                "first_turn_player_indices": [first_turn]
-                if isinstance(first_turn, int)
-                else first_turn
-            },
-        )
+    def start(match_id: str, *, as_user: str = alice) -> httpx.Response:
+        return api.request("POST", f"/matches/{match_id}/start", as_user=as_user)
 
     alone = api.new_match(owner=alice, game_id=game_id)
     assert error(start(alone)) == (
@@ -304,14 +254,6 @@ def test_start_is_rejected_when_it_does_not_make_sense(api: Api) -> None:
 
     two = api.new_match(owner=alice, game_id=game_id, joiners=[bob])
     assert error(start(two, as_user=bob)) == (403, "only the match's owner can do this")
-    assert error(start(two, first_turn=2)) == (
-        400,
-        "player index 2 is not a seat in this match",
-    )
-    assert error(start(two, first_turn=[0, 2])) == (
-        400,
-        "player index 2 is not a seat in this match",
-    )
     assert start(two).status_code == 200
     assert error(start(two)) == (409, "the match has already started")
 
@@ -323,20 +265,28 @@ def test_anyone_can_view_a_match(api: Api) -> None:
         owner=alice, game_id=game_id, num_computer_opponents=1, start=True
     )
     api.move(match_id, as_user=alice, next_turn=1, state={"pot": 5})
+    # The computer took its turn at once and handed it back to alice.
 
     as_stranger = api.ok("GET", f"/matches/{match_id}", as_user=bob)
     anonymous = api.ok("GET", f"/matches/{match_id}")
     # Each response carries its own server_time; everything else is the same.
     assert {**as_stranger, "server_time": None} == {**anonymous, "server_time": None}
+    # A non-player sees the match but never a state: a state is only ever
+    # shown as a seated player's own view.
     assert api.summary(anonymous) == {
         "status": "ongoing",
         "players": ["alice", "computer"],
-        "turn": [1],
-        "state": {"pot": 5},
+        "turn": [0],
+        "state": None,
     }
     assert [
         move["new_state"] for move in api.ok("GET", f"/matches/{match_id}/moves")
-    ] == [{"pot": 5}]
+    ] == [None, None]
+    # Alice, seated, sees her views of both states.
+    assert [
+        move["new_state"]
+        for move in api.ok("GET", f"/matches/{match_id}/moves", as_user=alice)
+    ] == [{"pot": 5}, {"pot": 5}]
     assert error(api.request("GET", "/matches/nope")) == (404, "match not found")
 
 

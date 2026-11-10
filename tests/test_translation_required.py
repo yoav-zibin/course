@@ -8,7 +8,7 @@ import pytest
 from game_platform import game_text, i18n
 from game_platform.config import TranslationConfig
 from game_platform.service import InvalidRequestError
-from game_platform.tests.helpers import Api
+from game_platform.tests.helpers import Api, ECHO_SERVER_CODE, TEST_GAME_SCHEMAS
 
 
 # The shape the agent is told to write (PROMPT_RULES): the block first, the helper as given.
@@ -117,7 +117,8 @@ def test_example_data_saves_are_exempt() -> None:
     seeded = api.platform.create_game(
         caller_id=owner, name="Seed", description="", rules=GameRules(
             allowed_player_counts=(2,), allows_leave_mid_match=False, allows_join_mid_match=False),
-        code=NO_BLOCK, _check_strings=False)
+        code=NO_BLOCK, server_code=ECHO_SERVER_CODE,
+        game_schemas=TEST_GAME_SCHEMAS, _check_strings=False)
     assert seeded.code == NO_BLOCK
 
 

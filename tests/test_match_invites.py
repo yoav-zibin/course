@@ -7,7 +7,7 @@ from game_platform.json_file_store import JsonFileStore
 from game_platform.models import GameRules
 from game_platform.schemas import GameOut
 from game_platform.service import GamePlatform
-from game_platform.tests.helpers import Api, error
+from game_platform.tests.helpers import Api, ECHO_SERVER_CODE, TEST_GAME_SCHEMAS, error
 
 
 def _invite(api: Api, match_id: str, *, as_user: str, **body: object) -> dict:
@@ -73,6 +73,8 @@ def test_links_use_the_configured_public_address() -> None:
                 allows_join_mid_match=False,
             ),
             code="",
+            server_code=ECHO_SERVER_CODE,
+            game_schemas=TEST_GAME_SCHEMAS,
         )
     ).model_dump(mode="json")
     match = client.post("/matches", headers=headers, json={"game_id": game["id"]}).json()

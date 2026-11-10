@@ -18,7 +18,7 @@ def balance(api: Api, user_id: str) -> int:
 
 
 def paid_match(api: Api, *, turn_seconds: int | None = None) -> tuple[str, str, str]:
-    """A started v1 match between two players staking STAKE each. Both start with
+    """A started match between two players staking STAKE each. Both start with
     the 10-token daily grant, so each holds 10 - STAKE once it starts."""
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game_id = api.new_game(owner=alice, allowed_player_counts=(2,))
@@ -68,37 +68,20 @@ def test_deleting_the_owners_account_refunds_the_other_players_stake() -> None:
     assert balance(api, bob) == 10
 
 
-def test_deleting_a_match_whose_payouts_await_agreement_refunds_both_stakes() -> None:
-    api = Api(master_password=ADMIN)
-    match_id, alice, bob = paid_match(api)
-    api.ok(
-        "POST",
-        f"/matches/{match_id}/moves",
-        as_user=alice,
-        json={
-            "new_state": {},
-            "next_turn_player_indices": None,
-            "payout_player_indices": {"0": 10, "1": 0},
-        },
-    )
-    admin_delete(api, f"/admin/matches/{match_id}")
-    assert (balance(api, alice), balance(api, bob)) == (10, 10)
-
-
 def test_deleting_a_settled_match_pays_nothing_twice() -> None:
     api = Api(master_password=ADMIN)
     match_id, alice, bob = paid_match(api)
+    # The server game's move settles the pot itself: the match ends
+    # with payouts for the two seats, no agreement step.
     api.ok(
         "POST",
         f"/matches/{match_id}/moves",
         as_user=alice,
         json={
-            "new_state": {},
-            "next_turn_player_indices": None,
-            "payout_player_indices": {"0": 10, "1": 0},
+            "move": {"turn_indices": None, "payouts": {alice: 10, bob: 0}},
+            "expected_move_count": 0,
         },
     )
-    api.ok("POST", f"/matches/{match_id}/payouts", as_user=bob, json={"agree": True})
     assert (balance(api, alice), balance(api, bob)) == (15, 5)
     # The over match keeps recording its pot size, but holds no tokens any more.
     api.ok("DELETE", f"/matches/{match_id}", as_user=bob)  # only hides it for Bob

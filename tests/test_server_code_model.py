@@ -1,11 +1,11 @@
-"""Phase 2 of the v2 Game API: the data model carries server code.
+"""The data model carries server code.
 
-A game gains a second part — [server_code], the JavaScript the server will
-run in QuickJS (docs/server-side-game-api.md) — alongside its client code,
-which the v2 API also calls [client_code]. Matches gain the seed their
-randomness derives from and room for a pending leave preview; moves gain
-the game-defined move and the mover's player id. None of the new fields
-change v1 behavior, and data written before they existed must still load.
+A game has two parts — [server_code], the JavaScript the server runs in
+QuickJS (docs/server-side-game-api.md) — alongside its client code, also
+called [client_code]. Matches carry the seed their randomness derives
+from and room for a pending leave preview; moves carry the game-defined
+move and the mover's player id. Data written before these fields existed
+must still load.
 """
 
 import json
@@ -70,16 +70,6 @@ def test_create_game_with_client_and_server_code(api: Api):
     assert api.ok("GET", f"/games/{game['id']}") == game
 
 
-def test_v1_game_has_no_server_code(api: Api):
-    owner = api.new_user("owner")
-    game = api.create_game(
-        {"name": "V1 game", "allowed_player_counts": [2], "code": "<p>v1</p>"},
-        owner,
-    )
-    assert game["server_code"] is None
-    assert game["client_code"] == "<p>v1</p>"
-
-
 def test_patch_server_code_and_client_code(api: Api):
     owner = api.new_user("owner")
     game = _create_game(api, owner, client_code=None, code=CLIENT_CODE)
@@ -134,17 +124,6 @@ def test_match_max_loss_and_player_ids(api: Api):
     )
     assert [p["id"] for p in solo["players"]] == [owner, "computer-1"]
     assert "seed" not in solo
-
-
-def test_v1_moves_have_no_v2_move_fields(api: Api):
-    owner = api.new_user("owner")
-    game_id = api.new_game(owner=owner, allowed_player_counts=(1,))
-    match_id = api.new_match(owner=owner, game_id=game_id, start=True)
-    response = api.move(match_id, as_user=owner, next_turn=None, state={"done": True})
-    assert response.status_code == 201
-    moves = api.ok("GET", f"/matches/{match_id}/moves")
-    assert moves[0]["move"] is None
-    assert moves[0]["player_id"] is None
 
 
 def test_json_store_round_trips_the_new_fields(tmp_path: Path):

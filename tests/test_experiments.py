@@ -7,7 +7,7 @@ from game_platform.api import create_app
 from game_platform.json_file_store import JsonFileStore
 from game_platform.models import ExperimentAssignment
 from game_platform.service import GamePlatform
-from game_platform.tests.helpers import Api
+from game_platform.tests.helpers import Api, ECHO_SERVER_CODE, TEST_GAME_SCHEMAS
 
 
 def test_skin_assignment_is_stable_and_hashes_across_variants() -> None:
@@ -40,6 +40,8 @@ def test_signup_experiment_events_do_not_consume_generated_ids() -> None:
             allows_join_mid_match=False,
         ),
         code="",
+        server_code=ECHO_SERVER_CODE,
+        game_schemas=TEST_GAME_SCHEMAS,
     )
 
     assert game.id == "game-1"
@@ -68,23 +70,20 @@ def test_match_start_tracking_uses_match_timestamp_without_advancing_clock() -> 
             allows_join_mid_match=False,
         ),
         code="",
+        server_code=ECHO_SERVER_CODE,
+        game_schemas=TEST_GAME_SCHEMAS,
     )
     match = platform.create_match(
         caller_id=user.id, game_id=game.id, num_computer_opponents=0
     )
-    started = platform.start_match(
-        caller_id=user.id,
-        match_id=match.id,
-        first_turn_player_indices=frozenset({0}),
-        initial_state={},
-    )
+    started = platform.start_match(caller_id=user.id, match_id=match.id)
     match_start_event = next(
         event
         for event in platform._store.list_experiment_events()
         if event.kind == "match_start"
     )
 
-    assert clock_reads == 6
+    assert clock_reads == 5
     assert match_start_event.occurred_at == started.updated_at
     assert platform._store.get_user(user.id).updated_at == started.updated_at
 

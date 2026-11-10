@@ -158,30 +158,14 @@ def _apply(
         platform.start_match(
             caller_id=operation["as"],
             match_id=operation["match"],
-            first_turn_player_indices=frozenset({0}),
-            initial_state=None,
         )
     elif kind == "move":
-        if "move" in operation:
-            # A v2 move: the game's server code computes the new state.
-            platform.make_move(
-                caller_id=operation["as"],
-                match_id=operation["match"],
-                new_state=None,
-                next_turn_player_indices=None,
-                expected_move_count=None,
-                move=operation["move"],
-            )
-            return
-        next_turn = operation["next_turn_player_indices"]
+        # The game's server code computes the new state.
         platform.make_move(
             caller_id=operation["as"],
             match_id=operation["match"],
-            new_state=operation["new_state"],
-            next_turn_player_indices=None
-            if next_turn is None
-            else frozenset(next_turn),
             expected_move_count=None,
+            move=operation["move"],
         )
     elif kind == "leave":
         platform.leave_match(caller_id=operation["as"], match_id=operation["match"])

@@ -676,7 +676,7 @@ class PortalOffline {
     };
   }
   apply(match, body) {
-    // A v2 move ({move}) carries no resulting state: the server computes
+    // A move ({move}) carries no resulting state: the server computes
     // it. The optimistic copy keeps the current view until the sync lands.
     if (!("new_state" in body)) {
       return { ...match, move_count: body.expected_move_count + 1 };

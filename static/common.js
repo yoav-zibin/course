@@ -302,9 +302,8 @@ function fitGameViewport() {
 }
 
 class GameFrame {
-  /** [onMakeMove] is called for valid make_move messages: ({new_state,
-   * next_turn_player_indices}) for a v1 game, ({move}) for a v2 game whose
-   * server code validates and applies the move. */
+  /** [onMakeMove] is called for valid make_move messages: ({move}) —
+   * the game's server code validates and applies the move. */
   constructor(container, onMakeMove, onBadMessage) {
     this.container = container;
     this.onMakeMove = onMakeMove;

@@ -11,7 +11,7 @@ from game_platform.api import create_app
 from game_platform.json_file_store import JsonFileStore, read_snapshot
 from game_platform.models import GameRules
 from game_platform.service import GamePlatform, TooManyRequestsError
-from game_platform.tests.helpers import Api, error
+from game_platform.tests.helpers import Api, ECHO_SERVER_CODE, TEST_GAME_SCHEMAS, error
 
 START = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
 
@@ -41,6 +41,8 @@ def world(clock=None, store=None):
         caller_id=bob, name="Duel", description="",
         rules=GameRules(allowed_player_counts=(2,), allows_leave_mid_match=False, allows_join_mid_match=False),
         code="<div>duel</div>",
+        server_code=ECHO_SERVER_CODE,
+        game_schemas=TEST_GAME_SCHEMAS,
     ).id
     return platform, ann, bob, game
 

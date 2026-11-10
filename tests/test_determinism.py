@@ -82,8 +82,6 @@ def _play_tictactoe() -> list[tuple[int, dict]]:
     platform.start_match(
         caller_id=owner.id,
         match_id=match.id,
-        first_turn_player_indices=frozenset({0}),
-        initial_state=None,
     )
     snapshots = []
     while True:
@@ -96,8 +94,6 @@ def _play_tictactoe() -> list[tuple[int, dict]]:
         platform.make_move(
             caller_id=owner.id,
             match_id=match.id,
-            new_state=None,
-            next_turn_player_indices=None,
             expected_move_count=None,
             move={"cell": cell},
         )
@@ -138,8 +134,6 @@ def _play_poker_hand() -> dict:
     platform.start_match(
         caller_id=alice.id,
         match_id=match.id,
-        first_turn_player_indices=frozenset({0}),
-        initial_state=None,
     )
     users = [alice.id, bob.id]
     for _ in range(40):
@@ -153,8 +147,6 @@ def _play_poker_hand() -> dict:
         platform.make_move(
             caller_id=users[seat],
             match_id=match.id,
-            new_state=None,
-            next_turn_player_indices=None,
             expected_move_count=None,
             move=action,
         )
@@ -172,7 +164,12 @@ def test_a_poker_hand_replays_to_the_same_state() -> None:
 def test_failed_seeds_are_replayed_first_on_the_next_run(api: Api) -> None:
     owner = api.new_user("owner")
     game = api.create_game(
-        {"name": "Crashy", "allowed_player_counts": [2], "code": "<div>crashy</div>"},
+        {
+            "name": "Crashy",
+            "allowed_player_counts": [2],
+            "code": "<div>crashy</div>",
+            "server_code": "const game = { newMatch(ctx) { return {state: {count: 0}, turn: [ctx.players[0].id]}; }, applyMove(state, playerId, move, ctx) { return {state, turn: null}; }, viewFor(state, playerId, ctx) { return state; } };",
+        },
         owner,
     )
     broken = """

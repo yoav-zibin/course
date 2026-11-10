@@ -2288,8 +2288,8 @@ const Player = {
     if (message.new_state !== undefined || message.next_turn_player_indices !== undefined) {
       Log.add(
         "error",
-        "this page only tests v2 games: the client must post {type: 'make_move', move} " +
-        "and let the server code apply the move (got a v1 make_move with new_state)",
+        "the client must post {type: 'make_move', move} " +
+        "and let the server code apply the move (got a make_move with new_state)",
       );
       return;
     }
