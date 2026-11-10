@@ -310,6 +310,10 @@ class GameFrame {
     this.onBadMessage = onBadMessage;
     this.iframe = null;
     this.ready = null;
+    this.openReadyGate = null;
+    // How long send() waits for a game's game_ready handshake after the
+    // frame loads before sending anyway (games that never send it).
+    this.readyTimeoutMs = 2000;
     this.viewport = null;
     window.addEventListener("message", (event) => this.receive(event));
     // Inline Builder previews scroll with the workspace. Do not squeeze them
@@ -334,7 +338,21 @@ class GameFrame {
     this.viewport = null;
     this.iframe = el("iframe", { className: "game-frame", title: I18n.t("ui.common.game_frame", {}, "Game") });
     this.iframe.setAttribute("sandbox", "allow-scripts");
-    this.ready = new Promise((resolve) => this.iframe.addEventListener("load", resolve, { once: true }));
+    // Sends hold until the game posts its game_ready handshake, so its
+    // message listener is installed before the first state_changed can
+    // arrive. Games that never send it get their state once the ready
+    // timeout elapses after the frame loads — the pre-handshake behavior.
+    const loaded = new Promise((resolve) => this.iframe.addEventListener("load", resolve, { once: true }));
+    let openGate;
+    const gate = new Promise((resolve) => { openGate = resolve; });
+    this.openReadyGate = openGate;
+    this.ready = (async () => {
+      await loaded;
+      let timer;
+      const timeout = new Promise((resolve) => { timer = setTimeout(resolve, this.readyTimeoutMs); });
+      await Promise.race([gate, timeout]);
+      clearTimeout(timer);
+    })();
     this.iframe.srcdoc = code + "<script>(" + fitGameViewport.toString() + ")()<" + "/script>";
     this.container.replaceChildren(this.iframe);
     this.resizeViewport();
@@ -398,6 +416,8 @@ class GameFrame {
   }
 
   unload() {
+    this.openReadyGate?.();
+    this.openReadyGate = null;
     this.iframe = null;
     this.ready = null;
     this.viewport = null;
@@ -415,11 +435,15 @@ class GameFrame {
     if (!this.iframe || event.source !== this.iframe.contentWindow) return;
     const message = event.data;
     if (message?.type === "game_viewport") { this.fitViewport(message); return; }
-    // A game's load handshake. Readiness is the iframe load event, so there
-    // is nothing to do — and it is not a protocol violation (the game-test
-    // host accepts it silently too). Flagging it reported a scary "ignored
-    // a message" error for well-behaved games such as Yahtzee.
-    if (message?.type === "ready") return;
+    // The game's handshake: its message listener is installed and it is
+    // ready for the first state_changed, which send() holds back until
+    // this arrives (or the ready timeout elapses). "ready" is the spelling
+    // some already-published games use; both open the gate, and neither is
+    // a protocol violation.
+    if (message?.type === "game_ready" || message?.type === "ready") {
+      this.openReadyGate?.();
+      return;
+    }
     if (!message || message.type !== "make_move") {
       this.onBadMessage(`ignored a message that isn't make_move: ${JSON.stringify(message)}`);
       return;

@@ -16,13 +16,16 @@ function setup(){
   return {nodes,sent,send:extra=>receive({source:parent,data:{...message,...extra}})};
 }
 test('each board square announces its position and contents',()=>{
-  const t=setup();t.send();const cells=t.nodes.get('board').children;
+  const t=setup();
+  assert.equal(t.sent.length,1);assert.equal(t.sent[0].type,'game_ready'); // the load handshake goes out before any move
+  t.send();const cells=t.nodes.get('board').children;
   assert.equal(cells[0].attributes['aria-label'],'Row 1, column 1: X');
   assert.equal(cells[8].attributes['aria-label'],'Row 3, column 3: empty');
-  cells[1].click();assert.equal(t.sent.length,1);assert.equal(t.sent[0].move.cell,1);
+  cells[1].click();assert.equal(t.sent.length,2);assert.equal(t.sent[1].move.cell,1);
 });
 test('history shows read-only status instead of waiting and cannot submit moves',()=>{
-  const t=setup();t.send({replay:{index:5,total:6}});
+  const t=setup();t.sent.length=0; // discard the load handshake
+  t.send({replay:{index:5,total:6}});
   assert.equal(t.nodes.get('status').textContent,'Viewing move 5 of 6 · read only');
   assert.ok(t.nodes.get('board').children.every(c=>c.disabled));
   t.nodes.get('board').children[1].click();assert.equal(t.sent.length,0);

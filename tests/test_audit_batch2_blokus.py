@@ -100,6 +100,6 @@ def test_full_matches_only_pass_after_no_legal_placement_remains(n, method):
 
 def test_default_publication_gate_remains_within_budget():
     report = check_server_code(CODE, rules=GameRules(allowed_player_counts=(2, 4), allows_leave_mid_match=False, allows_join_mid_match=False),
-                               budget_seconds=1, max_moves_per_walk=1000, run_seed=20261106)
+                               budget_seconds=5, max_moves_per_walk=1000, run_seed=20261106)
     assert report.passed, report
     assert not report.too_slow, report

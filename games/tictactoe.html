@@ -162,6 +162,8 @@ if (typeof window !== "undefined" && window.document) {
     moveSent = false;
     render();
   });
+  // The listener is installed: the platform may send the first state_changed.
+  window.parent.postMessage({ type: "game_ready" }, "*");
 }
 </script>
 </body>

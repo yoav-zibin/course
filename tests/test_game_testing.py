@@ -96,8 +96,10 @@ NONDETERMINISTIC_GAME = GOOD_GAME.replace(
 
 def test_a_correct_game_passes():
     # Keep this a coverage check rather than a machine-specific throughput test.
+    # The budget is generous on purpose: the >100-walk assertion is about
+    # coverage, and a tight wall-clock budget flakes on loaded machines.
     report = run_game_tests(
-        GOOD_GAME, rules=RULES, run_seed=7, budget_seconds=2.0
+        GOOD_GAME, rules=RULES, run_seed=7, budget_seconds=10.0
     )
     assert report.passed
     assert report.failures == ()

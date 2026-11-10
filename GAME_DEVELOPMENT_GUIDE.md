@@ -193,6 +193,14 @@ The full tic-tac-toe server code is in the repository at `games/tictactoe.server
 
 ### The messages
 
+As soon as your page has installed its `message` listener, post the ready handshake:
+
+```json
+{"type": "game_ready"}
+```
+
+The platform holds back the first `state_changed` until your `game_ready` arrives, so no state can be lost in the gap between the page loading and your listener installing. Post it once, immediately after `addEventListener("message", ...)`. A game that never posts it still works — the platform sends the state anyway after a 2-second wait — but posting it starts the game instantly, and it is part of the contract. (A few older games post `{"type": "ready"}` instead; the platform accepts that spelling too.)
+
 The platform sends `state_changed` whenever the match changes:
 
 ```jsonc
@@ -230,6 +238,7 @@ Rules:
 - Render `view` if present, otherwise `state`. Never assume the full state is available — it is not.
 - It is your turn when `status` is `"ongoing"`, `my_player_index` is not `null`, and `my_player_index` is in `turn_of_player_indices`. Disable input otherwise. A spectator (`my_player_index === null`) never moves.
 - `acting_for_player_index` says the same thing in one field: the seat this screen should accept a move for right now, or `null` when it must wait. This is the signal single-device play runs on — in pass-and-play the viewer's seat rotates to the player to move, so `my_player_index` follows the turn and `acting_for_player_index` names the seat to move for on this device; against the computer it is your seat on your turn and `null` while the computer is to move. Checking either signal is fine; never send a move when `acting_for_player_index` is `null`.
+- Post `game_ready` once, right after installing your `message` listener (see above).
 - Send at most one `make_move` per `state_changed`. Do not send a move for a computer's turn — the server moves computers.
 - If the player sends an illegal move, the server rejects it and the portal shows the error message — but the game iframe gets no callback. Design the client to only offer legal moves (disable illegal inputs) so a rejection is rare; after a rejection the game simply receives the next `state_changed` for the unchanged match.
 - Call `applyLocale(message)` first in your `state_changed` handler, before drawing anything. It installs `message.strings`, `message.locale`, and `message.direction`.
@@ -372,7 +381,7 @@ You can check a run's progress at any time without the page: `GET https://buildp
 
 **Submit.** When all five steps pass, the page shows the exact submission payload. POST it, unchanged, to `/games` with the same secret. The server finds the traces for the secret, takes the last step 1 submission, checks the payload is identical to it, and validates that steps 2–5 were completed for it. Then the usual submit-time verification runs, and a 201 publishes the game. A 422 that says the testing is incomplete names the missing steps — go back to the page and finish them (if the code changed at all, that means starting again from step 1).
 
-While you play, watch the read-only state, view, and last-move panels: the view must show each player only what they may see, the turn must pass to the right seats, and a move must never be rejected that the game itself offered. Watch the log too: every `make_move` the client sends and every `state_changed` the page sends back is logged there and to the browser console. If the client posts anything else, or a `make_move` carrying a client-computed `new_state` instead of a `move`, the page says so — fix the client before submitting.
+While you play, watch the read-only state, view, and last-move panels: the view must show each player only what they may see, the turn must pass to the right seats, and a move must never be rejected that the game itself offered. Watch the log too: every `make_move` the client sends and every `state_changed` the page sends back is logged there and to the browser console. Like the portal, the page holds the first `state_changed` until the client posts `game_ready` (with the same 2-second fallback) and logs a note when the fallback fires — if you see that note, your client is missing the handshake. If the client posts anything else, or a `make_move` carrying a client-computed `new_state` instead of a `move`, the page says so — fix the client before submitting.
 
 The manual checklist behind the page — do these even if the flow is green, because the page cannot check them all:
 

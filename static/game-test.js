@@ -95,6 +95,7 @@ const Log = {
 // the code, the way the platform rebuilds a QuickJS context after a timeout.
 // ---------------------------------------------------------------------------
 
+const READY_TIMEOUT_MS = 2000;
 const CALL_TIMEOUT_MS = 5000;
 const PLAYER_LEFT_TIMEOUT_MS = 10000;
 const LOAD_TIMEOUT_MS = 10000;
@@ -2005,11 +2006,27 @@ const Player = {
         entry.box = seatBox;
         entry.holder = holder;
       }
-      loads.push(
-        new Promise((resolve) =>
-          iframe.addEventListener("load", resolve, { once: true }),
-        ),
+      const loaded = new Promise((resolve) =>
+        iframe.addEventListener("load", resolve, { once: true }),
       );
+      loads.push(loaded);
+      // The frame's ready gate, mirroring GameFrame in the portal: the
+      // first state_changed to this frame waits for the game's game_ready
+      // handshake, with the same 2 second fallback after the frame loads.
+      let openGate;
+      const gate = new Promise((resolve) => { openGate = resolve; });
+      entry.openGate = openGate;
+      entry.gateTimedOut = false;
+      entry.gateLogged = false;
+      entry.readyGate = (async () => {
+        await loaded;
+        let timer;
+        const timeout = new Promise((resolve) => {
+          timer = setTimeout(() => { entry.gateTimedOut = true; resolve(); }, READY_TIMEOUT_MS);
+        });
+        await Promise.race([gate, timeout]);
+        clearTimeout(timer);
+      })();
       this.frames.push(entry);
     }
     this.frame = this.frames[0].frame;
@@ -2198,6 +2215,21 @@ const Player = {
     }
   },
 
+  // Waits out a frame's ready gate before its first state_changed. When
+  // the 2s fallback fires (the game never posted game_ready), say so once
+  // in the log — the guide asks games to post the handshake — and play on.
+  async waitForReady(entry) {
+    if (!entry?.readyGate) return;
+    await entry.readyGate;
+    if (entry.gateTimedOut && !entry.gateLogged) {
+      entry.gateLogged = true;
+      Log.add(
+        "info",
+        "the game did not post game_ready within 2s of loading — state_changed sent anyway; the guide asks games to post game_ready once their message listener is installed",
+      );
+    }
+  },
+
   async sendStateChanged(replay) {
     if (!this.frame || !this.match) return;
     if (this.multiFrame) return this.sendStateChangedMulti(replay);
@@ -2234,6 +2266,7 @@ const Player = {
       message.turn_of_player_indices.includes(message.my_player_index)
         ? message.my_player_index
         : null;
+    await this.waitForReady(this.frames[0]);
     this.frame.contentWindow.postMessage(message, "*");
     Log.add("api", `state_changed → ${JSON.stringify(message)}`);
     this.refreshOutputs();
@@ -2276,6 +2309,7 @@ const Player = {
         message.turn_of_player_indices.includes(seat)
           ? seat
           : null;
+      await this.waitForReady(entry);
       entry.frame.contentWindow.postMessage(message, "*");
       Log.add("api", `state_changed (seat ${seat}) → ${JSON.stringify(message)}`);
     }
@@ -3299,7 +3333,10 @@ function init() {
     const message = event.data;
     if (!message || typeof message !== "object") return;
     if (message.type === "game_viewport") { Player.fitViewport(message, entry); return; }
-    if (message.type === "ready") return;
+    // The game's handshake: its listener is installed, so this frame's
+    // ready gate opens and its first state_changed can go out. "ready" is
+    // the spelling some already-published games use; both are accepted.
+    if (message.type === "game_ready" || message.type === "ready") { entry.openGate?.(); return; }
     if (message.type !== "make_move") {
       Log.add("warn", `ignored a message that is not make_move: ${JSON.stringify(message)}`);
       return;

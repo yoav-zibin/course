@@ -117,8 +117,36 @@ test('a game ready handshake is accepted silently; unknown messages are still re
   const receive=(data)=>vm.runInContext(`frame.receive({source:frame.iframe.contentWindow,data:${JSON.stringify(data)}})`,context);
   receive({type:'ready'});
   assert.equal(bad.length,0);assert.equal(moves.length,0);
+  receive({type:'game_ready'});
+  assert.equal(bad.length,0);assert.equal(moves.length,0);
   receive({type:'something_else'});
   assert.equal(bad.length,1);assert.match(bad[0],/isn't make_move/);
+});
+
+test('sends wait for the game_ready handshake, with a timeout fallback',async()=>{
+  const sent=[],bad=[];
+  const node={contentWindow:{postMessage:m=>sent.push(m)},style:{},setAttribute(){},listeners:{},
+    addEventListener(name,fn){this.listeners[name]=fn;}};
+  const context=browserContext({window:{addEventListener(){}},setTimeout,clearTimeout,
+    document:{createElement:()=>node},Node:class{},container:{replaceChildren(){}},
+    onMove:()=>{},onBad:p=>bad.push(p)});
+  vm.runInContext(source,context);
+  vm.runInContext('frame = new GameFrame(container,onMove,onBad);frame.load("<h1>Game</h1>")',context);
+  const sending=vm.runInContext('frame.send({type:"state_changed"})',context);
+  await new Promise(r=>setTimeout(r,20));
+  assert.equal(sent.length,0); // frame has not loaded yet
+  node.listeners.load();
+  await new Promise(r=>setTimeout(r,20));
+  assert.equal(sent.length,0); // loaded, but the game has not posted game_ready
+  vm.runInContext('frame.receive({source:frame.iframe.contentWindow,data:{type:"game_ready"}})',context);
+  await sending;
+  assert.equal(sent.length,1);assert.equal(bad.length,0);
+  // A game that never handshakes still gets its state after the timeout.
+  vm.runInContext('frame.readyTimeoutMs=10;frame.load("<h1>Game</h1>")',context);
+  const sending2=vm.runInContext('frame.send({type:"state_changed"})',context);
+  node.listeners.load();
+  await sending2;
+  assert.equal(sent.length,2);
 });
 
 test('observed resize work is deferred and independent of page scroll position',()=>{

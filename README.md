@@ -975,6 +975,20 @@ server rejects (not your turn, an illegal move) are shown to the player and foll
 by `state_changed` with the unchanged match. Send at most one `make_move` per
 `state_changed`.
 
+### `game_ready`: game to platform
+
+Sent once by the game as soon as it has installed its `message` listener:
+
+```json
+{"type": "game_ready"}
+```
+
+The platform holds the first `state_changed` until `game_ready` arrives, so a game
+cannot miss state posted before its listener was up. Games that never send it are
+sent their first `state_changed` after a 2-second timeout instead, so the handshake
+is recommended but not required. (Some older games send `{"type": "ready"}`; both
+spellings open the gate.)
+
 For compatibility, `state_changed` still carries the legacy `turn_of_player_index`
 (the first seat in the turn), which new games should ignore.
 

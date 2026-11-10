@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createGame, createUser, loginAs, uniqueName } from './helpers';
 
-test('v2 practice works against a computer after disconnect and reload, with no match writes', async ({page,request,context})=>{
+test('local pass-and-play practice works after disconnect and reload, with no match writes', async ({page,request,context})=>{
   const owner=await createUser(request,uniqueName('Offline owner'));
   const name=uniqueName('Offline noughts');
   await createGame(request,owner,name);
@@ -15,8 +15,12 @@ test('v2 practice works against a computer after disconnect and reload, with no 
   await page.locator('#practice').click();
   const board=page.frameLocator('#game-box iframe').locator('#board button');
   await expect(board).toHaveCount(9);
+  // Pass-and-play: the two seats alternate on this device, so each mark is
+  // placed by its own click (there is no computer reply to wait for).
   await board.first().click();
   await expect(board.filter({hasText:'X'})).toHaveCount(1);
+  await expect(board.filter({hasText:'O'})).toHaveCount(0);
+  await board.filter({hasText:/^$/}).first().click();
   await expect(board.filter({hasText:'O'})).toHaveCount(1);
   await page.evaluate(()=>navigator.serviceWorker.ready.then(()=>undefined));
   await expect.poll(()=>page.evaluate(()=>Boolean(navigator.serviceWorker.controller))).toBe(true);
@@ -26,6 +30,7 @@ test('v2 practice works against a computer after disconnect and reload, with no 
   await expect(board.filter({hasText:'O'})).toHaveCount(1);
   await board.filter({hasText:/^$/}).first().click();
   await expect(board.filter({hasText:'X'})).toHaveCount(2);
+  await board.filter({hasText:/^$/}).first().click();
   await expect(board.filter({hasText:'O'})).toHaveCount(2);
   await page.locator('#match-controls-toggle').click();
   await page.locator('#history-back').click();
@@ -70,5 +75,6 @@ test('saved local practice can move while storage metadata is unresponsive',asyn
   await expect(board).toHaveCount(9);
   await board.first().click();
   await expect(board.filter({hasText:'X'})).toHaveCount(1);
+  await board.filter({hasText:/^$/}).first().click();
   await expect(board.filter({hasText:'O'})).toHaveCount(1);
 });
