@@ -37,6 +37,8 @@ from game_platform.models import (
     GameRules,
     GameTestSeeds,
     GameVersionError,
+    package_secret_hash,
+    with_package_secret_hash,
     Invite,
     InviteAcceptance,
     LinkedAccount,
@@ -1872,6 +1874,8 @@ class GamePlatform:
         game_schemas: dict[str, JsonValue] | None = None,
         import_package: dict[str, JsonValue] | None = None,
         request_id: str | None = None,
+        existing_game_id: str | None = None,
+        preserve_secret: bool = False,
     ) -> Game:
         """Creates a published game, or updates the one imported with [request_id]
         (see agent_import). The find and the create/update happen under one lock, so
@@ -1880,18 +1884,32 @@ class GamePlatform:
         owner: possession of the request id is the authorization, so the caller need
         not be the owner. A resubmission that changes nothing returns the game as is.
         A resubmission of an unpublished game re-publishes it: the import publishes.
+
+        [existing_game_id] names the update target directly instead of finding
+        it by [request_id]: the master-password path, where the presented
+        credential authorizes any game but identifies none. [preserve_secret]
+        then keeps the target's own stored secret hash, so the game's real
+        request id keeps working after a master-password update.
         """
-        # The stored package is the record of the request id: a resubmission is
-        # found by the secret in the package, so the id passed here is what is
-        # stored, whatever the package itself carried.
-        if request_id is not None and import_package is not None:
-            import_package = {**import_package, "game_addition_request_id_and_secret": request_id}
         with self._lock:
-            existing = (
-                self.find_game_by_addition_request_id(request_id)
-                if request_id is not None
-                else None
-            )
+            existing = None
+            if existing_game_id is not None:
+                existing = self.find_game_by_id(existing_game_id)
+                if existing is None:
+                    raise InvalidRequestError(f"no game with id {existing_game_id}")
+            elif request_id is not None:
+                existing = self.find_game_by_addition_request_id(request_id)
+            # Only the request id's hash is ever stored: a resubmission is
+            # found by comparing hashes, so the plaintext never persists,
+            # whatever the package itself carried.
+            if import_package is not None:
+                if preserve_secret and existing is not None:
+                    digest = package_secret_hash(existing.import_package)
+                elif request_id is not None:
+                    digest = hashlib.sha256(request_id.encode("utf-8")).hexdigest()
+                else:
+                    digest = package_secret_hash(import_package)
+                import_package = with_package_secret_hash(import_package, digest)
             if existing is not None:
                 game = self.update_game(
                     caller_id=existing.owner_user_id,
@@ -1924,13 +1942,29 @@ class GamePlatform:
 
     def find_game_by_addition_request_id(self, request_id: str) -> Game | None:
         """The published game imported with [request_id] (see agent_import: the
-        agent's `game_addition_request_id_and_secret`), or None. The id is stored on
-        the game's import package; the lookup scans the published games, which is cheap
-        (imports are rare and the list is small). Unpublished games are included:
-        a resubmission of one re-publishes it (see import_agent_game)."""
+        agent's `game_addition_request_id_and_secret`), or None. Only the id's
+        SHA-256 hash is stored on the game's import package, so the lookup
+        hashes the presented id and compares hashes; packages written before
+        the hash-only change, which carry the id itself, match too (see
+        models.package_secret_hash). The lookup scans the published games,
+        which is cheap (imports are rare and the list is small). Unpublished
+        games are included: a resubmission of one re-publishes it (see
+        import_agent_game)."""
+        digest = hashlib.sha256(request_id.encode("utf-8")).hexdigest()
         with self._lock:
             for game in self._store.list_games(owner_user_id=None, include_unpublished=True):
-                if (game.import_package or {}).get('game_addition_request_id_and_secret') == request_id:
+                stored = package_secret_hash(game.import_package)
+                if stored is not None and secrets.compare_digest(stored, digest):
+                    return game
+        return None
+
+    def find_game_by_id(self, game_id: str) -> Game | None:
+        """The game with [game_id], published or not, or None. The scan
+        mirrors find_game_by_addition_request_id: imports are rare and the
+        list is small."""
+        with self._lock:
+            for game in self._store.list_games(owner_user_id=None, include_unpublished=True):
+                if game.id == game_id:
                     return game
         return None
 

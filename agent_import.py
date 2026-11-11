@@ -1,6 +1,7 @@
 """Bounded complete-game imports: one POST publishes a fully translated game."""
 import asyncio
 import json
+import secrets
 import subprocess
 import sys
 
@@ -10,7 +11,7 @@ from starlette.concurrency import run_in_threadpool
 
 from game_platform.game_artifacts import validate_artifact, validate_test_rosters
 from game_platform.i18n import LOCALE_CODES as LANGUAGES
-from game_platform.models import GameRules
+from game_platform.models import GameRules, package_secret_hash
 from game_platform.schemas import GameOut, Name, PlayerCounts
 from game_platform.service import InvalidRequestError
 
@@ -62,8 +63,16 @@ class GameImport(BaseModel):
     # resubmitting with the same string. Sending the same string again updates
     # the game created with it instead of creating a duplicate: the request is
     # an update, not a new addition. Anyone holding the string can update the
-    # game, so keep it secret.
+    # game, so keep it secret. Only its SHA-256 hash is ever stored.
     game_addition_request_id_and_secret: str = Field(min_length=16, max_length=200)
+    # Optional: the id of the game this submission updates. With the game's
+    # own secret it merely pins the target — the two must belong together.
+    # With the configured master password in the secret field instead, it is
+    # required and is what identifies the game: the master password
+    # authorizes updating any game but names none, and the named game keeps
+    # its own secret. The field never identifies a payload (the game-test
+    # trace hashes exclude it), so a tested payload can be retargeted.
+    game_id: str | None = Field(default=None, min_length=1, max_length=100)
 
     @model_validator(mode='after')
     def _translations_cover_every_other_language(self):
@@ -156,6 +165,7 @@ def prepare(body):
     translations = _validate_translations(body, table, vocabulary(body.tutorial['html']))
     # The import package is the game's durable metadata: translations, the
     # resubmission secret, rules/UI text, tutorial, images and unit tests.
+    # (The service stores only the secret's hash — see import_agent_game.)
     # There is no workflow around it anymore (no job, approvals or history).
     package = {
         'translations': translations,
@@ -257,9 +267,31 @@ def make_router(platform_dependency, caller_dependency):
             except ValidationError as exc:
                 raise HTTPException(422, [{'loc': list(e['loc']), 'msg': e['msg'], 'type': e['type']}
                                           for e in exc.errors(include_input=False, include_context=False)]) from exc
+            # The master password may stand in for a game's secret, so an
+            # existing game can be refactored without knowing its secret —
+            # but it names no game, so game_id must name the target, and the
+            # test flow must have been run with the master password as the
+            # secret. A game_id sent with a game's own secret must belong to
+            # that secret.
+            from game_platform import game_traces
+            master_password = request.app.state.master_password
+            presented = body.game_addition_request_id_and_secret
+            is_master = bool(master_password) and secrets.compare_digest(
+                presented, master_password)
+            if is_master and body.game_id is None:
+                raise HTTPException(422, 'the master password can only update '
+                    'an existing game: pass game_id with it')
+            if body.game_id is not None:
+                target = await run_in_threadpool(platform.find_game_by_id, body.game_id)
+                if target is None:
+                    raise HTTPException(422, f'no game with id {body.game_id}')
+                if not is_master and not secrets.compare_digest(
+                        package_secret_hash(target.import_package) or '',
+                        game_traces.secret_hash(presented)):
+                    raise HTTPException(422, 'game_id does not match the '
+                        'game_addition_request_id_and_secret')
             # The game must have passed the full /game-test flow with this
             # secret, for exactly this payload, before it can be submitted.
-            from game_platform import game_traces
             from game_platform.service import InvalidRequestError
             try:
                 await run_in_threadpool(game_traces.assert_complete, platform, body)
@@ -276,7 +308,9 @@ def make_router(platform_dependency, caller_dependency):
                 name=body.name, description=body.description, rules=body.game_rules(),
                 code=body.client_code, server_code=body.server_code,
                 game_schemas=body.game_schemas(), import_package=package,
-                request_id=body.game_addition_request_id_and_secret)
+                request_id=body.game_addition_request_id_and_secret,
+                existing_game_id=body.game_id if is_master else None,
+                preserve_secret=is_master)
             return GameOut.of(game)
         finally:
             slots.release()

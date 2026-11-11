@@ -1896,6 +1896,27 @@ const Player = {
     return this.match.players.findIndex((p) => p.id === playerId);
   },
 
+  // Single-player modes (pass-and-play and against the computer) share
+  // one screen, which can act for only one seat at a time: a result whose
+  // turn names more than one player is a validation failure there, not a
+  // playable position. Returns true when the turn is allowed in the
+  // current mode (any non-empty turn is allowed in multiplayer, where
+  // every seat has its own screen). A failing result is discarded by the
+  // caller, and a recorded flow run fails outright.
+  checkSingleTurn(fn, result) {
+    if (this.multiFrame || !result || !Array.isArray(result.turn)) return true;
+    const mode = this.mode();
+    if (mode !== "single-pass" && mode !== "single-computers") return true;
+    if (result.turn.length <= 1) return true;
+    const message =
+      `${fn} returned a turn with ${result.turn.length} players; in the ` +
+      "single-player modes (pass-and-play and against the computer) a turn " +
+      "must name exactly one player, or null to end the match";
+    Log.add("error", message);
+    if (Flow.active) Flow.fail(`Step ${Flow.step}: ${message}`);
+    return false;
+  },
+
   roster() {
     const mode = this.mode();
     const count = this.playerCount();
@@ -2137,6 +2158,7 @@ const Player = {
       Log.add("error", `newMatch failed: ${e.message}`);
       return;
     }
+    if (!this.checkSingleTurn("newMatch", result)) return;
     this.match.state = result.state;
     this.match.turn = result.turn;
     this.snapshot(null, null);
@@ -2363,6 +2385,7 @@ const Player = {
       await this.sendStateChanged(null);
       return;
     }
+    if (!this.checkSingleTurn("applyMove", result)) return;
     this.match.state = result.state;
     this.match.turn = result.turn;
     this.match.payouts = result.payouts || null;
@@ -2420,6 +2443,7 @@ const Player = {
           Log.add("error", `applyMove rejected the computer's move: ${e.message}`);
           break;
         }
+        if (!this.checkSingleTurn("applyMove", result)) break;
         m.state = result.state;
         m.turn = result.turn;
         m.payouts = result.payouts || null;
@@ -2507,6 +2531,7 @@ const Player = {
       Log.add("error", `playerLeft failed: ${e.message}`);
       return;
     }
+    if (!this.checkSingleTurn("playerLeft", result)) return;
     leaver.active = false;
     this.match.state = result.state;
     this.match.turn = result.turn;
@@ -2559,6 +2584,10 @@ const Player = {
     } catch (e) {
       m.players.pop();
       Log.add("error", `playerJoined failed: ${e.message}`);
+      return;
+    }
+    if (!this.checkSingleTurn("playerJoined", result)) {
+      m.players.pop();
       return;
     }
     m.state = result.state;
@@ -3112,6 +3141,17 @@ const Flow = {
       return;
     }
     if (session.mode === "against_computers") {
+      // Step 4 is verified on the server too: the replay is strict about
+      // the single-player turn (exactly one player, or null), and a
+      // session stopped at the 100-move cap may end mid-match.
+      try {
+        await Trace.verifyMatch(session);
+      } catch (e) {
+        this.fail(
+          `Step 4: the server could not verify the finished session: ${e.message}`,
+        );
+        return;
+      }
       this.config4Index++;
       $("step4-progress").textContent =
         `${this.config4Index} of ${this.configs4.length} matches played`;

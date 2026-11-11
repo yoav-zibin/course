@@ -216,6 +216,40 @@ def test_verify_match_rejects_a_tampered_state(api):
     assert response.status_code == 422
 
 
+def test_verify_match_against_computers_allows_a_capped_end(api):
+    # Step 4 sessions are verified by replay too, strict about the
+    # single-player turn, but a session stopped at the move cap may end
+    # mid-match — the same payload as pass-and-play must end terminally.
+    submission_id = submit(api)
+    config = {
+        "num_players": 1,
+        "resolution": gt.RESOLUTIONS[0]["label"],
+        "orientation": "vertical",
+        "human_player_index": 0,
+    }
+    payload = {
+        "secret": SECRET,
+        "submission_id": submission_id,
+        "session_id": "s1",
+        "config": config,
+        "players": PLAYERS,
+        "pot": 0,
+        "match_seed": 7,
+        "states": STATES[:3],
+        "moves": [{"player_index": 0, "move": {"add": 1}} for _ in range(2)],
+    }
+    response = api.client.post(
+        "/game-test/verify-match",
+        json={**payload, "mode": "against_computers"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["verified"] is True
+    response = api.client.post(
+        "/game-test/verify-match", json={**payload, "mode": "pass_and_play"}
+    )
+    assert response.status_code == 422
+
+
 def test_full_flow_then_import(api):
     # The import gate refuses an untested game first.
     response = api.client.post("/games", json=BODY)

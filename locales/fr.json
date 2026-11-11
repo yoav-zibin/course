@@ -18,6 +18,7 @@
   "error.wrong_code": "code incorrect",
   "error.published_game_unavailable": "le jeu publié n'est plus disponible",
   "error.game_not_found": "jeu introuvable",
+  "error.game_id_not_found": "aucun jeu avec l’identifiant {game_id}",
   "error.game_version_not_found": "version du jeu introuvable",
   "error.game_deleted": "le jeu a été supprimé",
   "error.game_unpublished": "le jeu n'est pas publié ; soumettez-le à nouveau via POST /games pour le publier",

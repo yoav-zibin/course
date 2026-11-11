@@ -91,6 +91,16 @@ NONDETERMINISTIC_GAME = GOOD_GAME.replace(
     1,
 )
 
+MULTI_TURN_OPENING_GAME = GOOD_GAME.replace(
+    "newMatch(ctx) { return {state: {count: 0}, turn: [ctx.players[0].id]}; },",
+    "newMatch(ctx) { return {state: {count: 0}, turn: ctx.players.map(p => p.id)}; },",
+)
+
+MULTI_TURN_MOVE_GAME = GOOD_GAME.replace(
+    "turn: over ? null : [ids[(ids.indexOf(playerId) + 1) % ids.length]],",
+    "turn: over ? null : ids,",
+)
+
 # The tester itself.
 
 
@@ -107,6 +117,23 @@ def test_a_correct_game_passes():
     assert report.walks_completed > 100
     assert report.moves_made > 0
     assert not report.too_slow
+
+
+def test_multi_player_turns_pass_the_walks():
+    # The singleton-turn rule is scoped to the single-player modes
+    # (pass-and-play, against the computer), enforced on the test page
+    # and in the server's replay of steps 3–4 — not in the walks, which
+    # also serve simultaneous multiplayer games (Blackjack, ERS).
+    rules = GameRules(
+        allowed_player_counts=(2,),
+        allows_leave_mid_match=False,
+        allows_join_mid_match=False,
+    )
+    for game in (MULTI_TURN_OPENING_GAME, MULTI_TURN_MOVE_GAME):
+        report = run_game_tests(game, rules=rules, run_seed=7)
+        assert report.passed, report.failures
+        assert report.walks_completed > 0
+        assert report.moves_made > 0
 
 
 def test_a_crashing_apply_move_fails_with_a_usable_report():

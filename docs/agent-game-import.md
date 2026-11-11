@@ -20,8 +20,9 @@ unpublish it. Credentials that are sent but invalid return 401. Use HTTPS
 except on loopback. Never put passwords in URLs, payload files or source
 control. All authenticated platform users (including guest accounts)
 can publish their own game. Ownership comes exclusively from
-authentication. Unknown fields, including IDs, owners, publication and approval
-flags, are rejected. Missing credentials no longer return 401; invalid ones do,
+authentication. Unknown fields, including `id`, owner, publication and approval
+flags, are rejected (the one id-shaped field accepted is the optional
+`game_id` update target described under Request). Missing credentials no longer return 401; invalid ones do,
 before reading the body. This does not introduce an admin-only policy or an
 independent API-key system.
 
@@ -66,7 +67,22 @@ string again updates the game created with it instead of creating a duplicate:
 the name, description, rules, code, server code, schemas and translations are
 replaced and the game becomes a new version (a resubmission that changes nothing
 returns the game as is). Anyone holding the string can update the game, so keep
-it secret; a request without it is rejected.
+it secret; a request without it is rejected. Only the string's SHA-256 hash is
+ever stored on the game — resubmission matching compares hashes, and no API
+response returns the string.
+
+Optional: `game_id`, the id of the game this submission updates. With the
+game's own secret it merely pins the target (a game_id that does not belong to
+the secret is rejected). The configured master password may be sent in the
+secret field instead of a game's secret, to refactor an existing game whose
+secret is unknown: `game_id` is then required and names the target, the whole
+test flow must have been run with the master password as the secret, and the
+named game keeps its own secret — a later resubmission with the real secret
+still updates it. The master password without a `game_id` is rejected: it
+authorizes any game but identifies none, and it never creates a game.
+`game_id` is a targeting hint only — it is excluded from the payload identity
+the test-flow traces hash, so a tested payload can be retargeted without
+rerunning the flow.
 See [the server API](server-side-game-api.md), [translation contract](game-translation.md)
 and `game_artifacts.validate_artifact` for the authoritative detailed contracts.
 `examples/agent-game.json` is a runnable counter-game request example.

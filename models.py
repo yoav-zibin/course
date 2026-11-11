@@ -5,6 +5,7 @@ writes them back to the store, so a store never shares mutable state with its ca
 """
 
 import datetime as dt
+import hashlib
 from dataclasses import dataclass, field
 from typing import Any, Final, Literal
 
@@ -189,6 +190,52 @@ class Game:
     published: bool = True
 
 
+# The import package keys for the resubmission secret. Packages written
+# before the hash-only change carry the secret itself under
+# SECRET_PACKAGE_KEY; everything written now carries only its SHA-256 hash
+# under SECRET_HASH_PACKAGE_KEY — a resubmission check only ever compares
+# the presented secret against the stored one, so the plaintext never
+# needs to persist.
+SECRET_PACKAGE_KEY: Final = "game_addition_request_id_and_secret"
+SECRET_HASH_PACKAGE_KEY: Final = "game_addition_request_secret_hash"
+
+
+def package_secret_hash(package: dict[str, Any] | None) -> str | None:
+    """The SHA-256 hash of a package's resubmission secret, whichever form
+    the package stores, or None when it carries no secret."""
+    if not package:
+        return None
+    digest = package.get(SECRET_HASH_PACKAGE_KEY)
+    if isinstance(digest, str) and digest:
+        return digest
+    secret = package.get(SECRET_PACKAGE_KEY)
+    if isinstance(secret, str) and secret:
+        return hashlib.sha256(secret.encode("utf-8")).hexdigest()
+    return None
+
+
+def with_package_secret_hash(
+    package: dict[str, Any], digest: str | None
+) -> dict[str, Any]:
+    """A copy of [package] whose resubmission secret is stored as [digest]
+    (the secret's SHA-256 hash) only — the plaintext key never survives.
+    A digest of None drops the secret entirely."""
+    out = {key: value for key, value in package.items() if key != SECRET_PACKAGE_KEY}
+    if digest:
+        out[SECRET_HASH_PACKAGE_KEY] = digest
+    else:
+        out.pop(SECRET_HASH_PACKAGE_KEY, None)
+    return out
+
+
+def hash_package_secret(package: dict[str, Any]) -> dict[str, Any]:
+    """[package] with any plaintext resubmission secret replaced by its
+    hash (see package_secret_hash); the same dict when it carries none."""
+    if not package or SECRET_PACKAGE_KEY not in package:
+        return package
+    return with_package_secret_hash(package, package_secret_hash(package))
+
+
 def import_package_from_legacy_workflow(workflow: dict[str, Any]) -> dict[str, Any]:
     """The import package for a game whose stored record still carries the old
     builder workflow (games imported before the Builder deletion). The workflow
@@ -209,7 +256,7 @@ def import_package_from_legacy_workflow(workflow: dict[str, Any]) -> dict[str, A
     ui = value("ui")
     tutorial = value("tutorial")
     images = value("images")
-    return {
+    return hash_package_secret({
         "translations": workflow.get("translations") or {},
         "game_addition_request_id_and_secret": workflow.get("game_addition_request_id_and_secret"),
         "rules_text": logic.get("text", ""),
@@ -217,7 +264,7 @@ def import_package_from_legacy_workflow(workflow: dict[str, Any]) -> dict[str, A
         "tutorial": {"text": tutorial.get("text", ""), "html": tutorial.get("html", "")},
         "images": images.get("images", []) if isinstance(images, dict) else [],
         "unit_tests": value("tests"),
-    }
+    })
 
 
 @dataclass(frozen=True, kw_only=True)

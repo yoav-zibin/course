@@ -395,6 +395,110 @@ def test_existing_games_untouched(api):
     assert api.ok('GET', f'/games/{existing}') == before
 
 
+def test_import_stores_only_the_secret_hash(api):
+    import hashlib
+    import json
+    secret = 'hash-storage-secret-0123456789'
+    body = payload(); body['game_addition_request_id_and_secret'] = secret
+    created = api.ok('POST', '/games', json=body)
+    package = api.platform.find_game_by_id(created['id']).import_package
+    assert package['game_addition_request_secret_hash'] == \
+        hashlib.sha256(secret.encode()).hexdigest()
+    assert 'game_addition_request_id_and_secret' not in package
+    assert secret not in json.dumps(package)
+
+
+def master_api():
+    from game_platform.tests.helpers import Api
+    return Api(master_password='the-master-password-0123')
+
+
+def test_master_password_with_game_id_updates_the_named_game():
+    import hashlib
+    api = master_api()
+    secret = 'real-secret-0123456789abcdef'
+    body = payload(); body['game_addition_request_id_and_secret'] = secret
+    first = api.ok('POST', '/games', json=body)
+    updated = payload()
+    updated['game_addition_request_id_and_secret'] = 'the-master-password-0123'
+    updated['game_id'] = first['id']
+    updated['description'] = 'Refactored without knowing the secret.'
+    updated['translations'] = translations_for(updated)
+    second = api.ok('POST', '/games', json=updated)
+    assert second['id'] == first['id'] and second['version'] == 2
+    assert second['description'] == updated['description']
+    # The game kept its own secret: the stored hash is unchanged, and the
+    # real secret still updates the game afterwards.
+    package = api.platform.find_game_by_id(first['id']).import_package
+    assert package['game_addition_request_secret_hash'] == \
+        hashlib.sha256(secret.encode()).hexdigest()
+    again = payload(); again['game_addition_request_id_and_secret'] = secret
+    again['description'] = 'Updated with the real secret again.'
+    again['translations'] = translations_for(again)
+    third = api.ok('POST', '/games', json=again)
+    assert third['id'] == first['id'] and third['version'] == 3
+
+
+def test_master_password_without_game_id_is_rejected():
+    api = master_api()
+    body = payload()
+    body['game_addition_request_id_and_secret'] = 'the-master-password-0123'
+    assert api.request('POST', '/games', json=body).status_code == 422
+    assert_no_games(api)
+
+
+def test_master_password_with_an_unknown_game_id_is_rejected():
+    api = master_api()
+    body = payload()
+    body['game_addition_request_id_and_secret'] = 'the-master-password-0123'
+    body['game_id'] = 'no-such-game'
+    assert api.request('POST', '/games', json=body).status_code == 422
+    assert_no_games(api)
+
+
+def test_game_id_must_belong_to_the_secret(api):
+    secret = 'pinned-secret-0123456789'
+    body = payload(); body['game_addition_request_id_and_secret'] = secret
+    first = api.ok('POST', '/games', json=body)
+    wrong = payload()
+    wrong['game_addition_request_id_and_secret'] = 'other-secret-0123456789'
+    wrong['game_id'] = first['id']
+    assert api.request('POST', '/games', json=wrong).status_code == 422
+    assert api.ok('GET', f"/games/{first['id']}")['version'] == 1
+    pinned = payload(); pinned['game_addition_request_id_and_secret'] = secret
+    pinned['game_id'] = first['id']
+    pinned['description'] = 'Pinned update.'
+    pinned['translations'] = translations_for(pinned)
+    second = api.ok('POST', '/games', json=pinned)
+    assert second['id'] == first['id'] and second['version'] == 2
+
+
+def test_legacy_plaintext_package_still_matches_and_migrates(api):
+    import hashlib
+    from dataclasses import replace
+    secret = 'legacy-secret-0123456789'
+    body = payload(); body['game_addition_request_id_and_secret'] = secret
+    first = api.ok('POST', '/games', json=body)
+    # Rewrite the stored record the way pre-hash-only records look.
+    platform = api.platform
+    game = platform.find_game_by_id(first['id'])
+    legacy_package = {k: v for k, v in game.import_package.items()
+                      if k != 'game_addition_request_secret_hash'}
+    legacy_package['game_addition_request_id_and_secret'] = secret
+    platform._store._game_versions[first['id']][0] = \
+        replace(game, import_package=legacy_package)
+    assert platform.find_game_by_addition_request_id(secret).id == first['id']
+    updated = payload(); updated['game_addition_request_id_and_secret'] = secret
+    updated['description'] = 'Migrated on resubmission.'
+    updated['translations'] = translations_for(updated)
+    second = api.ok('POST', '/games', json=updated)
+    assert second['id'] == first['id'] and second['version'] == 2
+    migrated = platform.find_game_by_id(first['id']).import_package
+    assert 'game_addition_request_id_and_secret' not in migrated
+    assert migrated['game_addition_request_secret_hash'] == \
+        hashlib.sha256(secret.encode()).hexdigest()
+
+
 def test_workflow_limit_rejects_before_storage(api):
     owner = api.new_user('Owner'); body = payload()
     body['unit_tests']['extra_documentation'] = 'x' * 400000

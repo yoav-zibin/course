@@ -35,6 +35,12 @@ def body():
     return GameImport.model_validate(payload)
 
 
+def test_inputs_hash_ignores_the_game_id_targeting_hint():
+    base = {"name": "X", "game_addition_request_id_and_secret": SECRET}
+    assert gt.inputs_hash(base) == gt.inputs_hash({**base, "game_id": "some-game"})
+    assert gt.inputs_hash(base) == gt.inputs_hash({**base, "game_id": None})
+
+
 def submit(store, body, secret=SECRET):
     return gt.record_submission(
         store, secret=secret, game_name=body.name, body_dict=body.model_dump()
@@ -320,6 +326,90 @@ def test_replay_match_rejects_an_illegal_move(body):
         body, players=PLAYERS, pot=0, match_seed=7, states=states, moves=moves
     )
     assert not ok and failure["move_index"] == 1
+
+
+MULTI_TURN_CODE = (
+    "const game={newMatch(ctx){return {state:{n:0},turn:[ctx.players[0].id]};},"
+    "applyMove(state,id,move,ctx){if(move.add!==1)throw new InvalidMove('Add one');"
+    "const n=state.n+1;return n>=3?{state:{n},turn:null,payouts:{}}:"
+    "{state:{n},turn:ctx.players.map(p=>p.id)};},"
+    "viewFor(state,id,ctx){return {n:state.n};},"
+    "computerMove(){return {add:1}},randomMove(){return {add:1}}};"
+)
+
+TWO_PLAYERS = PLAYERS + [
+    {
+        "id": "human-2",
+        "kind": "human",
+        "display_name": "Player 2",
+        "picture_url": "",
+        "max_loss": 0,
+    }
+]
+
+
+def test_replay_match_strict_single_turn_rejects_a_multi_player_turn(body):
+    # Pass-and-play verification is strict: every next turn must name
+    # exactly one player (or be null, ending the match).
+    multi = body.model_copy(update={"server_code": MULTI_TURN_CODE})
+    states, moves = play_counter_match()
+    ok, failure = gt.replay_match(
+        multi,
+        players=TWO_PLAYERS,
+        pot=0,
+        match_seed=7,
+        states=states,
+        moves=moves,
+        strict_single_turn=True,
+    )
+    assert not ok and failure["move_index"] == 0
+    assert "exactly one player" in failure["error"]
+
+
+def test_replay_match_strict_single_turn_also_binds_a_capped_session(body):
+    # Against-the-computer sessions may end at the move cap without a
+    # terminal state (require_terminal=False), but the strict
+    # single-player turn check still applies to every move.
+    multi = body.model_copy(update={"server_code": MULTI_TURN_CODE})
+    states, moves = play_counter_match()
+    ok, failure = gt.replay_match(
+        multi,
+        players=TWO_PLAYERS,
+        pot=0,
+        match_seed=7,
+        states=states[:3],
+        moves=moves[:2],
+        strict_single_turn=True,
+        require_terminal=False,
+    )
+    assert not ok and failure["move_index"] == 0
+    assert "exactly one player" in failure["error"]
+
+
+def test_replay_match_capped_session_may_end_mid_match(body):
+    states, moves = play_counter_match()
+    ok, failure = gt.replay_match(
+        body,
+        players=PLAYERS,
+        pot=0,
+        match_seed=7,
+        states=states[:3],
+        moves=moves[:2],
+        strict_single_turn=True,
+        require_terminal=False,
+    )
+    assert ok, failure
+
+
+def test_replay_match_without_strict_single_turn_allows_a_multi_player_turn(body):
+    # Multiplayer verification (each seat on its own screen) keeps the
+    # runtime's set-valued turns.
+    multi = body.model_copy(update={"server_code": MULTI_TURN_CODE})
+    states, moves = play_counter_match()
+    ok, failure = gt.replay_match(
+        multi, players=TWO_PLAYERS, pot=0, match_seed=7, states=states, moves=moves
+    )
+    assert ok, failure
 
 
 def test_run_server_checks_records_walk_metadata(body):

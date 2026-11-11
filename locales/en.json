@@ -18,6 +18,7 @@
   "error.wrong_code": "wrong code",
   "error.published_game_unavailable": "published game is no longer available",
   "error.game_not_found": "game not found",
+  "error.game_id_not_found": "no game with id {game_id}",
   "error.game_version_not_found": "game version not found",
   "error.game_deleted": "the game has been deleted",
   "error.game_unpublished": "game is unpublished; submit it again through POST /games to publish it",

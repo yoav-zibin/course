@@ -29,6 +29,7 @@ from game_platform.models import (
     Game,
     GameTestSeeds,
     GameVersionError,
+    hash_package_secret,
     import_package_from_legacy_workflow,
     Invite,
     Match,
@@ -709,6 +710,13 @@ class QueryStore:
             legacy = json.loads(data["json"]).get("builder_workflow")
             if legacy and record.import_package is None:
                 record = replace(record, import_package=import_package_from_legacy_workflow(legacy))
+            if record.import_package:
+                # Packages written before the hash-only change carry the
+                # resubmission secret itself; normalize on read (the record
+                # is serialized in hash form on its next save).
+                normalized = hash_package_secret(record.import_package)
+                if normalized is not record.import_package:
+                    record = replace(record, import_package=normalized)
         if kind == "matches":
             count = data.get("move_count", 0)
             record = replace(

@@ -18,6 +18,7 @@
   "error.wrong_code": "رمز خاطئ",
   "error.published_game_unavailable": "اللعبة المنشورة لم تعد متاحة",
   "error.game_not_found": "لم يتم العثور على اللعبة",
+  "error.game_id_not_found": "لا توجد لعبة بالمعرف {game_id}",
   "error.game_version_not_found": "لم يتم العثور على إصدار اللعبة",
   "error.game_deleted": "تم حذف اللعبة",
   "error.game_unpublished": "اللعبة غير منشورة؛ أعد إرسالها عبر POST /games لنشرها",

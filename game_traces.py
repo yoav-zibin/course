@@ -12,8 +12,11 @@ before it accepts a game:
   walks completed, moves made, distinct states visited, terminal states);
 - one `move` row per move played in steps 3–5, holding the creation time,
   an md5 of the state, view and move, and the UI configuration played in;
-- one `match_verified` row per pass-and-play / multiplayer match the server
-  re-played and confirmed (steps 3 and 5).
+- one `match_verified` row per match the server re-played and confirmed:
+  pass-and-play and multiplayer matches played to the end (steps 3 and 5),
+  and against-the-computer sessions (step 4), which may stop at the move
+  cap. Verification of the two single-player modes is strict about the
+  turn: every next turn must name exactly one player (or be null).
 
 At submission time the latest `submission` row for the secret must hash to
 exactly the payload being submitted, and steps 2–5 must be complete for it:
@@ -46,7 +49,7 @@ MODE_PASS_AND_PLAY = "pass_and_play"
 MODE_AGAINST_COMPUTERS = "against_computers"
 MODE_MULTIPLAYER = "multiplayer"
 MODES = (MODE_PASS_AND_PLAY, MODE_AGAINST_COMPUTERS, MODE_MULTIPLAYER)
-VERIFIED_MODES = (MODE_PASS_AND_PLAY, MODE_MULTIPLAYER)
+VERIFIED_MODES = (MODE_PASS_AND_PLAY, MODE_AGAINST_COMPUTERS, MODE_MULTIPLAYER)
 # Step 4 evidence bar: every (player count, human seat) pair of
 # step4_required_pairs(), each with at least one recorded move (a match
 # can legitimately be shorter than any fixed move count — "Count to
@@ -72,6 +75,12 @@ def secret_hash(secret: str) -> str:
 
 
 def inputs_hash(body_dict) -> str:
+    # game_id is a submission-time targeting hint (which existing game a
+    # master-password update applies to), never part of the game's
+    # identity: it is excluded, so a payload hashes the same with and
+    # without it — including payloads stored before the field existed.
+    if isinstance(body_dict, dict) and "game_id" in body_dict:
+        body_dict = {k: v for k, v in body_dict.items() if k != "game_id"}
     return hashlib.sha256(canonical_json(body_dict).encode("utf-8")).hexdigest()
 
 
@@ -270,10 +279,17 @@ def run_server_checks_subprocess(body):
 # ---------------------------------------------------------------------------
 
 
-def replay_match(body, *, players, pot, match_seed, states, moves):
+def replay_match(body, *, players, pot, match_seed, states, moves, strict_single_turn=False, require_terminal=True):
     """Re-apply every recorded move with the submission's server code, in
     the page's own ctx/seed scheme, and compare each resulting state.
-    Returns (True, None) or (False, failure-detail-dict)."""
+    Returns (True, None) or (False, failure-detail-dict).
+
+    With [strict_single_turn] (the single-player modes: pass-and-play and
+    against the computer), every move's next turn must name exactly one
+    player, or be null ending the match: a multi-player turn cannot be
+    played on the single shared screen. With [require_terminal] false
+    (an against-the-computer session stopped at the move cap), the last
+    move may leave a next turn."""
     from game_platform.game_contract import ContractLogic
 
     logic = ContractLogic(
@@ -314,12 +330,19 @@ def replay_match(body, *, players, pot, match_seed, states, moves):
                 "actual": result.get("state"),
             }
         turn = result.get("turn")
+        if strict_single_turn and turn is not None and len(turn) != 1:
+            return False, {
+                "move_index": i,
+                "error": f"the next turn after move {i} names {len(turn)} players; "
+                "a single-player match must have exactly one player in the "
+                "next turn, or no next turn when the match ends",
+            }
         if i < len(moves) - 1 and turn is None:
             return False, {
                 "move_index": i,
                 "error": f"the match ended at move {i}, before all recorded moves were played",
             }
-        if i == len(moves) - 1 and turn is not None:
+        if require_terminal and i == len(moves) - 1 and turn is not None:
             return False, {
                 "move_index": i,
                 "error": "the match is not over: the final state still has a next turn",
@@ -707,7 +730,9 @@ def make_router(platform_dependency):
         check_secret(payload.secret)
         if payload.mode not in VERIFIED_MODES:
             raise HTTPException(
-                422, "match verification is for pass-and-play and multiplayer matches"
+                422,
+                "match verification is for pass-and-play, against-the-computer "
+                "and multiplayer matches",
             )
         if not payload.moves or len(payload.states) != len(payload.moves) + 1:
             raise HTTPException(
@@ -732,6 +757,9 @@ def make_router(platform_dependency):
             match_seed=payload.match_seed,
             states=payload.states,
             moves=[entry.model_dump() for entry in payload.moves],
+            strict_single_turn=payload.mode
+            in (MODE_PASS_AND_PLAY, MODE_AGAINST_COMPUTERS),
+            require_terminal=payload.mode != MODE_AGAINST_COMPUTERS,
         )
         if not ok:
             raise HTTPException(422, failure)
