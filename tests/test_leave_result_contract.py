@@ -68,7 +68,9 @@ def test_continuing_leave_keeps_indices_and_cannot_be_played_by_leaver(api):
     assert left["token_pot"] == 28
     assert [p["player_index"] for p in left["players"]] == [0, 1, 2]
     assert left["players"][2]["active"] is False
-    assert api.ok("GET", f"/matches/{mid}", as_user=users[2])["state"] is None
+    # The leaver spectates now: they get the game's spectator view
+    # (this game's viewFor is the same public view for everyone).
+    assert api.ok("GET", f"/matches/{mid}", as_user=users[2])["state"] == {"count": 0}
     assert all(p["kind"] == "human" for p in left["players"])
     assert _move(api, mid, as_user=users[2], add=1).status_code == 403
     for i in range(10):

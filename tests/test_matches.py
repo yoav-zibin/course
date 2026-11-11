@@ -271,17 +271,18 @@ def test_anyone_can_view_a_match(api: Api) -> None:
     anonymous = api.ok("GET", f"/matches/{match_id}")
     # Each response carries its own server_time; everything else is the same.
     assert {**as_stranger, "server_time": None} == {**anonymous, "server_time": None}
-    # A non-player sees the match but never a state: a state is only ever
-    # shown as a seated player's own view.
+    # A non-player sees the game's spectator view (the echo game's
+    # viewFor is the same public view for everyone, so it equals the
+    # state here) — never the full state itself.
     assert api.summary(anonymous) == {
         "status": "ongoing",
         "players": ["alice", "computer"],
         "turn": [0],
-        "state": None,
+        "state": {"pot": 5},
     }
     assert [
         move["new_state"] for move in api.ok("GET", f"/matches/{match_id}/moves")
-    ] == [None, None]
+    ] == [{"pot": 5}, {"pot": 5}]
     # Alice, seated, sees her views of both states.
     assert [
         move["new_state"]

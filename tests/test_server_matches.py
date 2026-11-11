@@ -99,10 +99,40 @@ def test_start_runs_new_match_and_views_are_per_player(api: Api):
     bob_view = api.ok("GET", f"/matches/{match_id}", as_user=bob)
     assert bob_view["state"] == {"count": 0, "your_secret": f"secret-of-{bob}"}
 
-    # A spectator (and the public list) never receives any state of a v2 match.
+    # A spectator receives the game's spectator view (viewFor with no
+    # player): the public count, but nobody's secret — never the state.
     carol = api.new_user("carol")
     spectator_view = api.ok("GET", f"/matches/{match_id}", as_user=carol)
-    assert spectator_view["state"] is None
+    assert spectator_view["state"]["count"] == 0
+    assert not spectator_view["state"].get("your_secret")
+
+
+def test_spectator_sees_the_public_view_live_and_in_history(api: Api):
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game_id = _create_game(api, alice)
+    match_id = _start(api, alice, game_id, joiner=bob)
+    carol = api.new_user("carol")
+
+    response = _move(api, match_id, as_user=alice, add=2)
+    assert response.status_code == 201
+
+    live = api.ok("GET", f"/matches/{match_id}", as_user=carol)
+    assert live["state"]["count"] == 2
+    assert not live["state"].get("your_secret")
+
+    history = api.ok("GET", f"/matches/{match_id}/history", as_user=carol)
+    views = [history["initial_state"]] + [m["new_state"] for m in history["moves"]]
+    assert [v["count"] for v in views] == [0, 2]
+    assert all(not v.get("your_secret") for v in views)
+
+    moves = api.ok("GET", f"/matches/{match_id}/moves", as_user=carol)
+    assert moves[0]["new_state"]["count"] == 2
+    assert not moves[0]["new_state"].get("your_secret")
+
+    # A seated player's history still shows their own secret throughout.
+    alice_history = api.ok("GET", f"/matches/{match_id}/history", as_user=alice)
+    assert alice_history["initial_state"]["your_secret"] == f"secret-of-{alice}"
+    assert alice_history["moves"][0]["new_state"]["your_secret"] == f"secret-of-{alice}"
 
 
 def test_missing_game_record_never_exposes_the_full_state(api: Api):
@@ -143,9 +173,10 @@ def test_moves_run_apply_move_and_are_recorded(api: Api):
     # The history shows the requesting player their own view of the state
     # after the move — never the full state (which holds bob's secret).
     assert moves[0]["new_state"] == {"count": 2, "your_secret": f"secret-of-{alice}"}
-    # A caller without a seat gets no view of any historical state.
+    # A caller without a seat gets the spectator view of the historical
+    # state: the public count, nobody's secret.
     anonymous_moves = api.ok("GET", f"/matches/{match_id}/moves")
-    assert anonymous_moves[0]["new_state"] is None
+    assert anonymous_moves[0]["new_state"] == {"count": 2}
 
 
 def test_wrong_turn_is_forbidden_and_illegal_move_is_a_400(api: Api):

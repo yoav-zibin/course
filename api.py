@@ -382,7 +382,8 @@ def _match_out(
     platform: GamePlatform, match: Match, caller_id: str | None = None
 ) -> MatchOut:
     """A match for the API, stamped with the platform's time (for speed-match
-    countdowns). The state is the caller's own view of it (see
+    countdowns). The state is the caller's view of it — their own viewFor
+    view when seated, the game's spectator view otherwise (see
     [GamePlatform.view_state]): the full state never leaves the server."""
     return MatchOut.of(
         replace(match, state=platform.view_state(match, caller_id)),

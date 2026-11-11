@@ -3472,10 +3472,12 @@ class GamePlatform:
     def view_state(self, match: Match, caller_id: str | None) -> JsonValue:
         """The state a caller may see of a match: the game's own viewFor
         for that caller, so private information (another player's cards)
-        never leaves the server. Anyone without a seat in an ongoing
-        match — the game owner included — sees no state: a state is only
-        ever shown as a seated player's own view. A failing viewFor is
-        recorded and shows no state rather than leaking the full one."""
+        never leaves the server. A seated player sees their own view;
+        anyone without a seat — a spectator, the game owner included —
+        sees the game's spectator view (viewFor with no player), which
+        every game must define for exactly this purpose. The full state
+        itself is never shown to anyone. A failing viewFor is recorded
+        and shows no state rather than leaking the full one."""
         game = self._store.get_game_version(match.game_id, match.game_version)
         if game is None or match.state is None:
             # No game record (or no state yet): show nothing. Never fall
@@ -3486,8 +3488,12 @@ class GamePlatform:
             # covers records that predate that requirement).
             return None
         seat = match.seat_of(caller_id) if caller_id else None
-        if seat is None or (not seat.active and match.status == "ongoing"):
-            return None
+        # Whose eyes: an active seat (or a seat in a finished match) sees
+        # through its own viewFor; everyone else — no seat, or a seat
+        # that left an ongoing match — spectates through viewFor with no
+        # player, the game's public view.
+        own_view = seat is not None and (seat.active or match.status != "ongoing")
+        player_id = match.player_id_of(seat) if own_view else None
         # viewFor is deterministic for a given match record (its seed is
         # derived from the record, and game code must not depend on the
         # wall clock), and every poll of every player used to pay a full
@@ -3502,7 +3508,7 @@ class GamePlatform:
             view = self._logic_for(game).call(
                 "viewFor",
                 match.state,
-                match.player_id_of(seat),
+                player_id,
                 ctx=self._game_ctx(match),
                 seed=self._call_seed(match),
                 now=self._clock(),
@@ -3510,7 +3516,7 @@ class GamePlatform:
         except GameLogicError as error:
             self._record_logic_error(
                 game, "viewFor", error,
-                match=match, args=(match.state, match.player_id_of(seat)),
+                match=match, args=(match.state, player_id),
             )
             return None
         if len(self._view_cache) > 1024:
@@ -3525,9 +3531,10 @@ class GamePlatform:
         the state after each move, each passed through viewFor for the
         caller exactly like the live state (see [view_state]) — a full
         state never leaves the server, not even in the history, and a
-        caller without a seat gets null views. Each historical state is
-        viewed with the move count it was recorded at, so its viewFor
-        gets the same call seed the state was computed with."""
+        caller without a seat gets the game's spectator views. Each
+        historical state is viewed with the move count it was
+        recorded at, so its viewFor gets the same call seed the state
+        was computed with."""
         moves = list(match.moves)
         initial_view = self.view_state(
             replace(match, state=match.initial_state, moves=()), caller_id

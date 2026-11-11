@@ -805,8 +805,10 @@ class MoveOut(BaseModel):
 
 
 class MatchHistoryOut(BaseModel):
-    # Every state here is the requesting player's own view of it (see
-    # [GamePlatform.view_history]): a full state is never in a response.
+    # Every state here is the requester's own view of it — a seated
+    # player's viewFor, or the game's spectator view for anyone else
+    # (see [GamePlatform.view_history]): a full state is never in a
+    # response.
     initial_state: JsonValue
     initial_turn_player_indices: list[int] | None
     moves: list[MoveOut]
