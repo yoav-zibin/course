@@ -508,7 +508,7 @@ class ScalablePlatform(GamePlatform):
             self._store.raw_put(ref, None)
         if computer or deadline:
             due = self._store.raw_get(ref)["due_at"]
-            delay = max(0.1, (due - dt.datetime.now(dt.timezone.utc)).total_seconds())
+            delay = max(0.1, (due - self._clock()).total_seconds())
             self._store._local.uow["after"].append(lambda: self._wake_after(delay))
 
     def resume_computer_moves(self):
@@ -638,7 +638,12 @@ class ScalablePlatform(GamePlatform):
     def run_due_jobs(self, limit=10):
         from google.cloud.firestore_v1.base_query import FieldFilter
 
-        now = dt.datetime.now(dt.timezone.utc)
+        # Job due times are written on the platform clock (turn deadlines,
+        # computer-move delays), so due-ness is measured on that same clock.
+        # The wall clock would call a job due early whenever the two differ,
+        # and processing a deadline job early consumes it without ending
+        # the match.
+        now = self._clock()
         docs = list(
             self._store.collection("jobs")
             .where(filter=FieldFilter("due_at", "<=", now))
