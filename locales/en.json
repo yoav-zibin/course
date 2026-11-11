@@ -697,5 +697,14 @@
   "ui.welcome.guest_error": "We couldn't create a guest account. Please try again.",
   "ui.match.wait_then_start": "Invite others to join, then start.",
   "ui.offline.err_server_unreachable": "Couldn't reach the server, and this data isn't saved on this device yet. Please try again.",
-  "ui.portal.hint_invite_friends": "Create a match, then invite friends to join."
+  "ui.portal.hint_invite_friends": "Create a match, then invite friends to join.",
+  "ui.proposal.title": "Missing a game? Propose it",
+  "ui.proposal.explainer": "Tell us which game you would like to play here. Our AI agents will review your proposal and create the game within 24 hours.",
+  "ui.proposal.name_label": "Game name",
+  "ui.proposal.description_label": "Why this game? (optional)",
+  "ui.proposal.rules_label": "Link to the rules (optional)",
+  "ui.proposal.your_name_label": "Your name (optional)",
+  "ui.proposal.submit": "Submit proposal",
+  "ui.proposal.thanks": "Thank you! Our AI agents will review your proposal and create the game within 24 hours.",
+  "ui.proposal.error": "Sorry, your proposal could not be submitted. Please try again."
 }

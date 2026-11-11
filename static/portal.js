@@ -2216,6 +2216,37 @@ async function main() {
     document.querySelectorAll("[data-game-filter]").forEach(item => item.setAttribute("aria-pressed", String(item.dataset.gameFilter === "all")));
     browseAllGames();
   });
+  $("proposal-form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const status = $("proposal-status"),
+      button = $("proposal-submit"),
+      body = {
+        game_name: $("proposal-name").value.trim(),
+        description: $("proposal-description").value.trim(),
+        rules_url: $("proposal-rules-url").value.trim(),
+        proposer_name: $("proposal-proposer").value.trim(),
+      };
+    if (!body.game_name) return;
+    button.disabled = true;
+    status.textContent = "";
+    try {
+      await portalFetch("POST", "/game-proposals", { body });
+      event.target.reset();
+      status.textContent = I18n.t(
+        "ui.proposal.thanks",
+        {},
+        "Thank you! Our AI agents will review your proposal and create the game within 24 hours.",
+      );
+    } catch {
+      status.textContent = I18n.t(
+        "ui.proposal.error",
+        {},
+        "Sorry, your proposal could not be submitted. Please try again.",
+      );
+    } finally {
+      button.disabled = false;
+    }
+  });
   $("match-stake").addEventListener("change", updateStakePreview);
   $("create").addEventListener("click", createMatch);
   window.addEventListener("hashchange", selectFromHash);

@@ -697,5 +697,14 @@
   "ui.welcome.guest_error": "Impossible de créer un compte invité. Veuillez réessayer.",
   "ui.match.wait_then_start": "Invitez d’autres personnes à vous rejoindre, puis démarrez.",
   "ui.offline.err_server_unreachable": "Impossible de joindre le serveur, et ces données ne sont pas encore enregistrées sur cet appareil. Veuillez réessayer.",
-  "ui.portal.hint_invite_friends": "Créez une partie, puis invitez vos amis à vous rejoindre."
+  "ui.portal.hint_invite_friends": "Créez une partie, puis invitez vos amis à vous rejoindre.",
+  "ui.proposal.title": "Un jeu manque ? Proposez-le",
+  "ui.proposal.explainer": "Dites-nous à quel jeu vous aimeriez jouer ici. Nos agents IA examineront votre proposition et créeront le jeu dans les 24 heures.",
+  "ui.proposal.name_label": "Nom du jeu",
+  "ui.proposal.description_label": "Pourquoi ce jeu ? (facultatif)",
+  "ui.proposal.rules_label": "Lien vers les règles (facultatif)",
+  "ui.proposal.your_name_label": "Votre nom (facultatif)",
+  "ui.proposal.submit": "Envoyer la proposition",
+  "ui.proposal.thanks": "Merci ! Nos agents IA examineront votre proposition et créeront le jeu dans les 24 heures.",
+  "ui.proposal.error": "Désolé, votre proposition n'a pas pu être envoyée. Veuillez réessayer."
 }

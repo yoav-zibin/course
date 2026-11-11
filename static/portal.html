@@ -18,7 +18,7 @@
     <link rel="manifest" href="/static/portal.webmanifest" />
     <title data-i18n="ui.page.portal">Game platform · Portal</title>
     <link rel="stylesheet" href="/static/common.css?v=17" />
-    <link rel="stylesheet" href="/static/portal.css?v=34" />
+    <link rel="stylesheet" href="/static/portal.css?v=35" />
     <link rel="stylesheet" href="/static/portal-match-layout.css?v=1" />
     <link rel="stylesheet" href="/static/portal-speed.css?v=2" />
     <link rel="stylesheet" href="/static/feedback-dialog.css?v=1" />
@@ -102,6 +102,22 @@
                 <p id="library-count" class="library-count" role="status"></p>
                 <div id="game-library" class="game-library-grid"></div>
                 <div id="library-empty" class="library-empty" hidden><h3 data-i18n="ui.games.no_games">No games found</h3><p data-i18n="ui.portal.empty_hint">Try another name, description, or player filter.</p><button id="reset-games" type="button" data-i18n="ui.portal.show_all">Show all games</button></div>
+              </section>
+              <section class="game-proposal" aria-labelledby="proposal-title">
+                <h3 id="proposal-title" data-i18n="ui.proposal.title">Missing a game? Propose it</h3>
+                <p data-i18n="ui.proposal.explainer">Tell us which game you would like to play here. Our AI agents will review your proposal and create the game within 24 hours.</p>
+                <form id="proposal-form">
+                  <label for="proposal-name" data-i18n="ui.proposal.name_label">Game name</label>
+                  <input id="proposal-name" type="text" required maxlength="120" autocomplete="off" />
+                  <label for="proposal-description" data-i18n="ui.proposal.description_label">Why this game? (optional)</label>
+                  <textarea id="proposal-description" rows="3" maxlength="2000"></textarea>
+                  <label for="proposal-rules-url" data-i18n="ui.proposal.rules_label">Link to the rules (optional)</label>
+                  <input id="proposal-rules-url" type="url" maxlength="500" autocomplete="off" />
+                  <label for="proposal-proposer" data-i18n="ui.proposal.your_name_label">Your name (optional)</label>
+                  <input id="proposal-proposer" type="text" maxlength="120" autocomplete="off" />
+                  <button id="proposal-submit" type="submit" data-i18n="ui.proposal.submit">Submit proposal</button>
+                  <p id="proposal-status" class="proposal-status" role="status"></p>
+                </form>
               </section>
             </div>
           </div>
@@ -189,6 +205,6 @@
     <script src="/static/push-notifications.js?v=3"></script>
     <script src="/static/storage-pages.js?v=4"></script>
     <script src="/static/tutorial-frame.js?v=1"></script>
-    <script src="/static/portal.js?v=87"></script>
+    <script src="/static/portal.js?v=88"></script>
   </body>
 </html>

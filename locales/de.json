@@ -697,5 +697,14 @@
   "ui.welcome.guest_error": "Gastkonto konnte nicht erstellt werden. Bitte versuche es erneut.",
   "ui.match.wait_then_start": "Lade andere zum Mitspielen ein und starte dann.",
   "ui.offline.err_server_unreachable": "Der Server ist nicht erreichbar und diese Daten sind noch nicht auf diesem Gerät gespeichert. Bitte versuche es erneut.",
-  "ui.portal.hint_invite_friends": "Erstelle ein Spiel und lade dann Freunde zum Mitspielen ein."
+  "ui.portal.hint_invite_friends": "Erstelle ein Spiel und lade dann Freunde zum Mitspielen ein.",
+  "ui.proposal.title": "Fehlt ein Spiel? Schlage es vor",
+  "ui.proposal.explainer": "Sag uns, welches Spiel du hier spielen möchtest. Unsere KI-Agenten prüfen deinen Vorschlag und erstellen das Spiel innerhalb von 24 Stunden.",
+  "ui.proposal.name_label": "Spielname",
+  "ui.proposal.description_label": "Warum dieses Spiel? (optional)",
+  "ui.proposal.rules_label": "Link zu den Regeln (optional)",
+  "ui.proposal.your_name_label": "Dein Name (optional)",
+  "ui.proposal.submit": "Vorschlag einreichen",
+  "ui.proposal.thanks": "Danke! Unsere KI-Agenten prüfen deinen Vorschlag und erstellen das Spiel innerhalb von 24 Stunden.",
+  "ui.proposal.error": "Dein Vorschlag konnte leider nicht übermittelt werden. Bitte versuche es erneut."
 }

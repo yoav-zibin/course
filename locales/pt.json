@@ -697,5 +697,14 @@
   "ui.welcome.guest_error": "Não foi possível criar uma conta de visitante. Tente novamente.",
   "ui.match.wait_then_start": "Convide outras pessoas para participar e depois comece.",
   "ui.offline.err_server_unreachable": "Não foi possível acessar o servidor e estes dados ainda não estão salvos neste dispositivo. Tente novamente.",
-  "ui.portal.hint_invite_friends": "Crie uma partida e depois convide seus amigos para participar."
+  "ui.portal.hint_invite_friends": "Crie uma partida e depois convide seus amigos para participar.",
+  "ui.proposal.title": "Falta um jogo? Proponha-o",
+  "ui.proposal.explainer": "Conte-nos qual jogo você gostaria de jogar aqui. Nossos agentes de IA analisarão sua proposta e criarão o jogo em até 24 horas.",
+  "ui.proposal.name_label": "Nome do jogo",
+  "ui.proposal.description_label": "Por que este jogo? (opcional)",
+  "ui.proposal.rules_label": "Link para as regras (opcional)",
+  "ui.proposal.your_name_label": "Seu nome (opcional)",
+  "ui.proposal.submit": "Enviar proposta",
+  "ui.proposal.thanks": "Obrigado! Nossos agentes de IA analisarão sua proposta e criarão o jogo em até 24 horas.",
+  "ui.proposal.error": "Desculpe, sua proposta não pôde ser enviada. Tente novamente."
 }

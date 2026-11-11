@@ -697,5 +697,14 @@
   "ui.welcome.guest_error": "无法创建访客账户。请重试。",
   "ui.match.wait_then_start": "邀请其他人加入，然后开始。",
   "ui.offline.err_server_unreachable": "无法连接服务器，而且此数据尚未保存在此设备上。请重试。",
-  "ui.portal.hint_invite_friends": "创建对局，然后邀请朋友加入。"
+  "ui.portal.hint_invite_friends": "创建对局，然后邀请朋友加入。",
+  "ui.proposal.title": "缺少某个游戏？来推荐它",
+  "ui.proposal.explainer": "告诉我们你想在这里玩哪个游戏。我们的人工智能代理将审核你的提议，并在 24 小时内创建该游戏。",
+  "ui.proposal.name_label": "游戏名称",
+  "ui.proposal.description_label": "为什么推荐这个游戏？（可选）",
+  "ui.proposal.rules_label": "规则链接（可选）",
+  "ui.proposal.your_name_label": "你的名字（可选）",
+  "ui.proposal.submit": "提交提议",
+  "ui.proposal.thanks": "谢谢！我们的人工智能代理将审核你的提议，并在 24 小时内创建该游戏。",
+  "ui.proposal.error": "抱歉，无法提交你的提议。请重试。"
 }

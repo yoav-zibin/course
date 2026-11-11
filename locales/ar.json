@@ -697,5 +697,14 @@
   "ui.welcome.guest_error": "تعذّر إنشاء حساب ضيف. يُرجى المحاولة مرة أخرى.",
   "ui.match.wait_then_start": "ادعُ الآخرين للانضمام، ثم ابدأ.",
   "ui.offline.err_server_unreachable": "تعذّر الاتصال بالخادم، وهذه البيانات لم تُحفظ على هذا الجهاز بعد. يُرجى المحاولة مرة أخرى.",
-  "ui.portal.hint_invite_friends": "أنشئ مباراة، ثم ادعُ أصدقاءك للانضمام."
+  "ui.portal.hint_invite_friends": "أنشئ مباراة، ثم ادعُ أصدقاءك للانضمام.",
+  "ui.proposal.title": "لعبة مفقودة؟ اقترحها",
+  "ui.proposal.explainer": "أخبرنا باللعبة التي تريد لعبها هنا. سيراجعها وكلاء الذكاء الاصطناعي لدينا ويقومون بإنشائها خلال 24 ساعة.",
+  "ui.proposal.name_label": "اسم اللعبة",
+  "ui.proposal.description_label": "لماذا هذه اللعبة؟ (اختياري)",
+  "ui.proposal.rules_label": "رابط القواعد (اختياري)",
+  "ui.proposal.your_name_label": "اسمك (اختياري)",
+  "ui.proposal.submit": "إرسال الاقتراح",
+  "ui.proposal.thanks": "شكرًا لك! سيراجع وكلاء الذكاء الاصطناعي لدينا اقتراحك ويقومون بإنشاء اللعبة خلال 24 ساعة.",
+  "ui.proposal.error": "عذرًا، لم يتم إرسال اقتراحك بنجاح. حاول مرة أخرى."
 }
