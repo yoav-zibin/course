@@ -69,7 +69,8 @@
       "Saved skin preference could not be read.",
       "Saved skin preference could not be stored in browser storage.",
       "Saved skin preference could not be stored.",
-      "Skin assignment is unavailable in this browser."
+      "Skin assignment is unavailable in this browser.",
+      "Skin discovery could not run."
     ],
     "console.html": [
       "X-User-Password"
