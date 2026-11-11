@@ -108,6 +108,16 @@ button#run-checks, button#new-match {
   margin: 12px 0;
   color: #7a1a14;
 }
+.move-alert {
+  background: #fdecea;
+  border: 2px solid #b3261e;
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin: 12px 0;
+  color: #7a1a14;
+  font-weight: 600;
+}
+.move-alert p { margin: 6px 0; }
 .step-instruction { font-weight: 600; }
 #game-box.multi { transform: none; overflow: visible; background: transparent; border: 0; }
 .seat-frame { margin: 0 0 16px; }

@@ -138,7 +138,14 @@
   so if you close this page mid-match, loading the stored inputs by secret
   brings you back to the step and the exact move where you left off. If a
   step fails, fix the code and start again from step 1 — the inputs must
-  not change during a run.
+  not change during a run. If the game rejects a move as illegal, the page
+  shows a clear red alert above the game with the game's reason — the move
+  is not recorded and the board is unchanged, so pick a different move.
+  During steps 3–5 every move must be played within 30 seconds of the
+  previous one; if 30 seconds pass with no move, the page shows an error
+  with a “Back to the beginning” button — and since every recorded move
+  stays on the server, loading the stored inputs by secret again resumes
+  the match at its last recorded move.
 </p>
 <div id="flow-banner" class="flow-banner" hidden></div>
 
@@ -269,6 +276,13 @@
   <span id="replay-label"></span>
   <span id="resolution-label" class="hint"></span>
 </p>
+<div id="move-alert" class="move-alert" role="alert" hidden>
+  <p id="move-alert-text"></p>
+  <p>
+    <button type="button" id="move-alert-dismiss">Dismiss</button>
+    <button type="button" id="move-alert-restart" hidden>Back to the beginning</button>
+  </p>
+</div>
 <div id="game-wrap">
   <div id="game-box"><p class="empty">Start a match to play here.</p></div>
 </div>
@@ -298,6 +312,6 @@
 <pre id="log" class="log" aria-live="polite"></pre>
 </section>
 </main>
-<script src="/static/game-test.js?v=10"></script>
+<script src="/static/game-test.js?v=11"></script>
 </body>
 </html>

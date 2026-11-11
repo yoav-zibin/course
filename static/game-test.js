@@ -2369,17 +2369,25 @@ const Player = {
         "info",
         "you are viewing history — use the forward button to return to the latest move before playing",
       );
+      MoveAlert.show(
+        "✕ That move was not played — you are viewing an earlier position. " +
+        "Go forward to the latest move first, then play.",
+      );
       return;
     }
     const seat = this.messageSeat != null ? this.messageSeat : this.actingSeat();
     this.messageSeat = null;
     if (seat === null) {
       Log.add("info", "you are watching as a viewer; pick a seat to play");
+      MoveAlert.show(
+        "✕ That move was not played — you are watching as a viewer; pick a seat to play.",
+      );
       return;
     }
     const mover = this.match.players[seat];
     if (!mover.active || !this.match.turn || !this.match.turn.includes(mover.id)) {
       Log.add("info", "it is not your turn");
+      MoveAlert.show("✕ That move was not played — it is not your turn.");
       return;
     }
     Log.add("api", `make_move ← ${JSON.stringify(message)}`);
@@ -2397,10 +2405,16 @@ const Player = {
       ).result;
     } catch (e) {
       Log.add("error", `applyMove rejected the move: ${e.message}`);
+      MoveAlert.show(
+        `✕ That move is ILLEGAL — it was not played, it was not recorded, ` +
+        `and the board is unchanged. The game rejected it: “${e.message}”. ` +
+        `Choose a different move.`,
+      );
       await this.sendStateChanged(null);
       return;
     }
     if (!this.checkSingleTurn("applyMove", result)) return;
+    MoveAlert.hide();
     this.match.state = result.state;
     this.match.turn = result.turn;
     this.match.payouts = result.payouts || null;
@@ -2457,6 +2471,11 @@ const Player = {
           ).result;
         } catch (e) {
           Log.add("error", `applyMove rejected the computer's move: ${e.message}`);
+          MoveAlert.show(
+            `✕ The computer's move was rejected as ILLEGAL: “${e.message}”. ` +
+            `That is a bug in the game's own move generation — the game ` +
+            `offered a move its server code will not accept.`,
+          );
           break;
         }
         if (!this.checkSingleTurn("applyMove", result)) break;
@@ -2752,6 +2771,7 @@ const Trace = {
   },
 
   endSession() {
+    MoveClock.stop();
     this.session = null;
     this.blocked = false;
   },
@@ -2786,6 +2806,7 @@ const Trace = {
       initial_turn: Player.match.turn === null ? null : [...Player.match.turn],
     });
     s.serverStarted = true;
+    MoveClock.arm();
   },
 
   async moveApplied({ stateBefore, seat, moverId, move, stateAfter }) {
@@ -2807,6 +2828,7 @@ const Trace = {
       });
     } catch (e) {
       this.blocked = true;
+      MoveClock.stop();
       Flow.banner(
         `Move ${moveNumber + 1} could not be recorded on the server: ${e.message} ` +
         `Every move before it is saved. Reload this page and load the stored ` +
@@ -2822,6 +2844,7 @@ const Trace = {
     }
     s.moves.push({ player_index: seat, move: clone(move) });
     s.states.push(clone(stateAfter));
+    MoveClock.arm();
     if (response && response.finished) s.serverFinished = true;
     if (Player.match && Player.match.status === "over") {
       await this.matchEnded();
@@ -2844,6 +2867,87 @@ const Trace = {
       secret: Flow.secret(),
       submission_id: Flow.submissionId,
     });
+  },
+};
+
+// A prominent alert above the game frame: an illegal move (or a stalled
+// match) must never fail silently into the log — the player has to see
+// that the move was not played and why.
+const MoveAlert = {
+  show(text, { restart = false } = {}) {
+    const box = $("move-alert");
+    if (!box) return;
+    $("move-alert-text").textContent = text;
+    $("move-alert-restart").hidden = !restart;
+    box.hidden = false;
+  },
+
+  hide() {
+    const box = $("move-alert");
+    if (box) box.hidden = true;
+  },
+};
+
+// The 30-second per-move clock for the recorded flow (steps 3–5): each
+// move must follow the previous applied move (or the match starting /
+// resuming) within 30 seconds. Only applied moves re-arm it — a rejected
+// move does not buy more time. When it fires, the match is not lost:
+// every recorded move stays on the server, and loading the stored inputs
+// by secret resumes the match at its last recorded move.
+const MOVE_TIMEOUT_MS = 30000;
+
+const MoveClock = {
+  timer: null,
+  // True once the timeout has fired for the current wait: the alert is
+  // re-shown every 30 seconds until a move is applied (an illegal-move
+  // alert may cover it in between), but the log line is written once.
+  expired: false,
+
+  conditions() {
+    return !!(
+      Trace.session &&
+      Player.match &&
+      Player.match.status === "ongoing" &&
+      !Trace.blocked
+    );
+  },
+
+  arm() {
+    this.expired = false;
+    this.schedule();
+  },
+
+  schedule() {
+    this.stop();
+    if (!this.conditions()) return;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      if (!this.conditions()) return;
+      const moveCount = Player.match.moveCount;
+      if (!this.expired) {
+        Log.add(
+          "error",
+          `no move was played within 30 seconds — the match is saved on the ` +
+          `server up to move ${moveCount}; reload and load by secret to resume there`,
+        );
+      }
+      this.expired = true;
+      MoveAlert.show(
+        `No move was played within 30 seconds. The match is saved on the server ` +
+        `up to the last recorded move (move ${moveCount} of this match). ` +
+        `Press “Back to the beginning”, enter the secret again and load the ` +
+        `stored inputs — the match resumes at that move.`,
+        { restart: true },
+      );
+      this.schedule();
+    }, MOVE_TIMEOUT_MS);
+  },
+
+  stop() {
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
   },
 };
 
@@ -3123,6 +3227,7 @@ const Flow = {
     } catch (e) {
       Log.add("error", `the saved match could not be brought back: ${e.message}`);
     }
+    MoveClock.arm();
   },
 
   async step1() {
@@ -3370,6 +3475,7 @@ const Flow = {
   },
 
   async sessionFinished(session) {
+    MoveClock.stop();
     if (!this.active) return;
     const finished = Player.match && Player.match.endReason === "finished";
     const capped =
@@ -3630,6 +3736,8 @@ function init() {
     inputsSection.addEventListener("input", () => Flow.inputsChanged());
     inputsSection.addEventListener("change", () => Flow.inputsChanged());
   }
+  $("move-alert-dismiss").addEventListener("click", () => MoveAlert.hide());
+  $("move-alert-restart").addEventListener("click", () => location.reload());
   $("new-match").addEventListener("click", () => Player.newMatch());
   $("back").addEventListener("click", () => Player.goBack());
   $("forward").addEventListener("click", () => Player.goForward());
