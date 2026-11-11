@@ -1,5 +1,7 @@
-"""Speed matches: an optional per-move clock, enforced by the server when matches are
-read, listed or moved in. The tests set the clock by hand; nothing waits for real."""
+"""Speed matches: an optional per-move clock, enforced by the server when
+matches are read, listed or moved in — and, on the scalable backend, by a
+durable deadline job the background worker runs (test_query_store.py covers
+that path). The tests set the clock by hand; nothing waits for real."""
 
 import datetime as dt
 import json
@@ -356,6 +358,67 @@ def test_the_match_ends_in_a_paid_match() -> None:
     world.platform.start_match(caller_id=world.ann, match_id=match.id)
     world.clock.advance(61)
     assert world.get(match.id).end_reason == "timed_out"
+
+
+def _balances(world: World) -> dict[str, int]:
+    return {
+        user: world.platform._store.get_user(user).token_balance
+        for user in (world.ann, world.bob, world.cy)
+    }
+
+
+def test_a_timeout_pays_the_pot_to_the_players_without_the_turn() -> None:
+    world = World()
+    match = world.platform.create_match(
+        caller_id=world.ann, game_id=world.game, num_computer_opponents=0, bet_per_player=2, turn_seconds=60
+    )
+    world.platform.join_match(caller_id=world.bob, match_id=match.id)
+    world.platform.join_match(caller_id=world.cy, match_id=match.id)
+    world.platform.start_match(caller_id=world.ann, match_id=match.id)
+    before = _balances(world)
+    # Ann (seat 0) holds the first turn and lets it run out.
+    world.clock.advance(61)
+    match = world.get(match.id)
+    assert match.end_reason == "timed_out"
+    # Ann gets nothing; Bob and Cy split the 6-token pot.
+    assert match.token_payouts == {1: 3, 2: 3}
+    after = _balances(world)
+    assert after[world.ann] == before[world.ann]
+    assert after[world.bob] == before[world.bob] + 3
+    assert after[world.cy] == before[world.cy] + 3
+
+
+def test_a_timeout_refunds_evenly_when_everyone_held_the_turn() -> None:
+    from dataclasses import replace as _replace
+
+    world = World()
+    match = world.platform.create_match(
+        caller_id=world.ann, game_id=world.game, num_computer_opponents=0, bet_per_player=2, turn_seconds=60
+    )
+    world.platform.join_match(caller_id=world.bob, match_id=match.id)
+    world.platform.start_match(caller_id=world.ann, match_id=match.id)
+    # Both seats hold the turn (a simultaneous turn): nobody was waiting,
+    # so the pot is refunded evenly.
+    stored = world.platform._store.get_match(match.id)
+    world.platform._store.put_match(
+        _replace(
+            stored,
+            turn_of_player_indices=frozenset({0, 1}),
+            initial_turn_player_indices=frozenset({0, 1}),
+        )
+    )
+    before = _balances(world)
+    world.clock.advance(61)
+    match = world.get(match.id)
+    assert match.end_reason == "timed_out"
+    assert sorted(t.user_id for t in match.timeouts) == sorted([world.ann, world.bob])
+    assert match.token_payouts == {0: 2, 1: 2}
+    after = _balances(world)
+    assert after[world.ann] == before[world.ann] + 2
+    assert after[world.bob] == before[world.bob] + 2
+
+
+
 
 
 def test_the_match_ends_when_no_humans_are_left() -> None:

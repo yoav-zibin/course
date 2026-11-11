@@ -4924,11 +4924,18 @@ class GamePlatform:
             if seat.user_id is not None
         )
         updated = replace(match, timeouts=(*match.timeouts, *timeouts))
-        # Timeouts never turn a multiplayer seat into a bot. Refund any
-        # outstanding stake before ending; repeated reads cannot pay twice.
+        # Timeouts never turn a multiplayer seat into a bot. Settle the
+        # outstanding pot before ending; repeated reads cannot pay twice.
+        # The players who let the clock run out get nothing: the pot goes to
+        # the players who were waiting for them, split evenly. Only when
+        # every active human held the turn — nobody was waiting — is the pot
+        # refunded evenly to all of them.
+        humans = [s for s in updated.seats if s.kind == "human" and s.active]
+        late_indices = {seat.player_index for seat in late}
+        waiting = [s for s in humans if s.player_index not in late_indices]
         payouts = self._settle_pot(
             updated.token_pot, dict(updated.token_payouts or {}),
-            recipients=[s for s in updated.seats if s.kind == "human" and s.active])
+            recipients=waiting if waiting else humans)
         updated = replace(self._ended_by_timeout(updated), token_pot=0,
                           token_payouts=payouts if updated.token_pot else updated.token_payouts,
                           pending_leave=None)

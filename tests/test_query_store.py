@@ -409,6 +409,63 @@ def test_quickjs_computer_turn_survives_restart_and_duplicate_job(store):
     assert len(store.get_match(match["id"]).moves) == 2
 
 
+def test_speed_match_deadline_job_ends_the_match_without_a_read(store):
+    """A speed match's turn deadline is a durable job: when it comes due, the
+    worker ends the match on its own — no read or move has to happen — and
+    the pot goes to the player who was left waiting."""
+    import datetime as dt
+
+    class ManualClock:
+        def __init__(self) -> None:
+            self.now = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+
+        def __call__(self) -> dt.datetime:
+            return self.now
+
+    clock = ManualClock()
+    api = Api(store=store)
+    api.client.app.state.platform = ScalablePlatform(
+        store=store, computer_move_delay_seconds=0, clock=clock
+    )
+    alice = api.new_user("alice")
+    bob = api.new_user("bob")
+    game_id = api.new_game(owner=alice, allowed_player_counts=(2,))
+    match = api.ok(
+        "POST",
+        "/matches",
+        as_user=alice,
+        json={"game_id": game_id, "bet_per_player": 2, "turn_seconds": 60},
+    )
+    api.ok("POST", f"/matches/{match['id']}/join", as_user=bob)
+    api.ok("POST", f"/matches/{match['id']}/start", as_user=alice, json={})
+
+    # Starting the match armed one durable job, due at the turn deadline.
+    ref = store.ref("jobs", match["id"])
+    job = store.raw_get(ref)
+    assert job is not None
+    started = store.get_match(match["id"])
+    assert started.turn_deadline is not None
+    assert job["due_at"] == started.turn_deadline
+
+    # The deadline passes with nobody reading or moving in the match; a
+    # fresh platform instance (a restarted server) runs the due jobs.
+    clock.now += dt.timedelta(seconds=61)
+    restarted = ScalablePlatform(
+        store=QueryStore(store.client, namespace=store.namespace),
+        computer_move_delay_seconds=0,
+        clock=clock,
+    )
+    restarted.run_due_jobs()
+
+    saved = store.get_match(match["id"])
+    assert (saved.status, saved.end_reason) == ("over", "timed_out")
+    assert [t.user_id for t in saved.timeouts] == [alice]
+    # Alice held the turn, so the whole 4-token pot went to Bob.
+    assert saved.token_pot == 0
+    assert sorted(saved.token_payouts.values()) == [4]
+    assert store.raw_get(ref) is None
+
+
 def test_seed_resume_is_idempotent_and_budget_is_checked_before_writes(store):
     from game_platform.scaling_tools import seed
 

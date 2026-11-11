@@ -190,7 +190,10 @@ match through the API or an invite; remove all computers in the waiting room
 first. Multiplayer lobbies and random matchmaking cannot add bots. Bot matches
 are excluded from open-match listings. Random walks cover either all humans or one human against computers.
 
-Timeouts end a match and refund its outstanding pot; they never create bots.
+Timeouts end a match — a server timer fires at the deadline, and reads and
+moves check too — and pay its outstanding pot to the players who did not hold
+the turn, split evenly (refunded evenly to everyone only when every player
+held the turn); they never create bots.
 Ongoing mixed rosters saved before this change end on their next read, move, or
 worker call with `end_reason: "solo_computers_only"`, refunding the remaining
 pot to active humans once. Waiting lobbies can remove their bots.

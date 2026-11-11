@@ -360,7 +360,10 @@ Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct
 - **Token stakes.** Every human's stake is taken when they join and held in the
   match's pot. The server code decides the split: the move that ends the match
   returns `payouts` totaling the pot, and the server pays them out at once. A match
-  that ends any other way — a timeout, the last human leaving — refunds the stakes.
+  that ends any other way — the last human leaving — refunds the stakes. A speed
+  match whose turn deadline passes is ended by a server timer, and its pot goes
+  to the players who did not hold the turn, split evenly (refunded evenly to
+  everyone only when every player held the turn).
 - Leaving a waiting match frees the seat (the owner must delete the match instead). Leaving
   an ongoing match replaces the leaver with a computer (which keeps the turn) if the game
   `allows_leave_mid_match`, and otherwise ends it (`end_reason: "player_left"`). The match
