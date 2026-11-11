@@ -2162,7 +2162,15 @@ const Player = {
     this.match.state = result.state;
     this.match.turn = result.turn;
     this.snapshot(null, null);
-    Trace.matchStarted();
+    try {
+      await Trace.matchStarted();
+    } catch (e) {
+      Log.add("error", `the match could not be recorded on the server: ${e.message}`);
+      if (Flow.active) {
+        Flow.fail(`Step ${Flow.step}: the match could not be recorded on the server: ${e.message}`);
+      }
+      return;
+    }
     await this.sendStateChanged(null);
     this.refreshOutputs();
     this.refreshButtons();
@@ -2341,6 +2349,13 @@ const Player = {
 
   async onMakeMove(message) {
     if (!this.match || !this.host) return;
+    if (Trace.blocked) {
+      Log.add(
+        "info",
+        "recording is paused — reload this page and load by secret to resume the saved match, or restart the step",
+      );
+      return;
+    }
     if (message.new_state !== undefined || message.next_turn_player_indices !== undefined) {
       Log.add(
         "error",
@@ -2412,6 +2427,7 @@ const Player = {
     try {
       for (let guard = 0; guard < 100; guard++) {
         const m = this.match;
+        if (Trace.blocked) break;
         if (!m || m.turn === null || m.historyIndex < m.history.length - 1) break;
         const next = m.turn
           .map((id) => m.players.find((p) => p.id === id))
@@ -2699,6 +2715,11 @@ async function traceFetch(path, options) {
 
 const Trace = {
   session: null,
+  // Set when a move could not be recorded: play halts (the in-page match
+  // is now ahead of the server's record), and the saved prefix is resumed
+  // by reloading the page and loading by secret. Restarting the step
+  // abandons the saved session on the server and clears this.
+  blocked: false,
 
   async post(path, payload) {
     return traceFetch(path, {
@@ -2708,7 +2729,12 @@ const Trace = {
     });
   },
 
+  async get(path) {
+    return traceFetch(path, { method: "GET" });
+  },
+
   beginSession(mode, config) {
+    this.blocked = false;
     this.session = {
       id:
         window.crypto && crypto.randomUUID
@@ -2720,14 +2746,20 @@ const Trace = {
       moves: [],
       roster: null,
       matchSeed: null,
+      serverStarted: false,
+      serverFinished: false,
     };
   },
 
   endSession() {
     this.session = null;
+    this.blocked = false;
   },
 
-  matchStarted() {
+  // Opens the match's session on the server before play begins: from
+  // here on every move is appended (and verified) as it is played, so
+  // the match's record is durable from its first move.
+  async matchStarted() {
     const s = this.session;
     if (!s || !Player.match) return;
     s.states = [clone(Player.match.state)];
@@ -2740,32 +2772,57 @@ const Trace = {
       max_loss: p.max_loss,
     }));
     s.matchSeed = Player.match.matchSeed;
+    if (!Flow.submissionId) return;
+    await this.post("/game-test/sessions", {
+      secret: Flow.secret(),
+      submission_id: Flow.submissionId,
+      session_id: s.id,
+      mode: s.mode,
+      config: s.config,
+      players: s.roster,
+      pot: Player.match.pot || 0,
+      match_seed: s.matchSeed,
+      initial_state: clone(Player.match.state),
+      initial_turn: Player.match.turn === null ? null : [...Player.match.turn],
+    });
+    s.serverStarted = true;
   },
 
   async moveApplied({ stateBefore, seat, moverId, move, stateAfter }) {
     const s = this.session;
-    if (!s || !Flow.submissionId) return;
+    if (!s || !Flow.submissionId || this.blocked) return;
     const moveNumber = s.moves.length;
+    let response;
     try {
       const view = await Player.traceView(stateBefore, moverId, moveNumber);
-      await this.post("/game-test/moves", {
+      response = await this.post(`/game-test/sessions/${s.id}/moves`, {
         secret: Flow.secret(),
         submission_id: Flow.submissionId,
-        session_id: s.id,
-        mode: s.mode,
-        config: s.config,
         player_index: seat,
-        move_number: moveNumber,
-        state: stateBefore,
-        view,
         move,
+        view,
+        state_after: clone(stateAfter),
+        turn_after:
+          Player.match.turn === null ? null : [...Player.match.turn],
       });
     } catch (e) {
-      Flow.fail(`Recording a move on the server failed: ${e.message}`);
+      this.blocked = true;
+      Flow.banner(
+        `Move ${moveNumber + 1} could not be recorded on the server: ${e.message} ` +
+        `Every move before it is saved. Reload this page and load the stored ` +
+        `inputs by secret to resume this match at move ${moveNumber}; or press ` +
+        `this step's Start button to discard the saved match and begin the step again.`,
+      );
+      Log.add(
+        "error",
+        `recording move ${moveNumber + 1} failed: ${e.message} — play is paused; ` +
+        `the recorded prefix (moves 0–${moveNumber - 1}) is saved on the server`,
+      );
       return;
     }
     s.moves.push({ player_index: seat, move: clone(move) });
     s.states.push(clone(stateAfter));
+    if (response && response.finished) s.serverFinished = true;
     if (Player.match && Player.match.status === "over") {
       await this.matchEnded();
     } else if (s.mode === "against_computers" && s.moves.length >= 100) {
@@ -2780,18 +2837,12 @@ const Trace = {
     await Flow.sessionFinished(s);
   },
 
-  async verifyMatch(s) {
-    return this.post("/game-test/verify-match", {
+  // A step-4 session stopped at the move cap has no terminal move; the
+  // server closes it (every move was verified as it was appended).
+  async closeSession(s) {
+    return this.post(`/game-test/sessions/${s.id}/close`, {
       secret: Flow.secret(),
       submission_id: Flow.submissionId,
-      session_id: s.id,
-      mode: s.mode,
-      config: s.config,
-      players: s.roster,
-      pot: 0,
-      match_seed: s.matchSeed,
-      states: s.states,
-      moves: s.moves,
     });
   },
 };
@@ -2892,6 +2943,186 @@ const Flow = {
     this.card(1, "done", `Recorded (${createdAt})`);
     Log.add("info", logMessage);
     this.refreshButtons();
+  },
+
+  // After loading stored inputs: pick the run up where the server left
+  // it. Steps the server already counts as done are marked, an open
+  // play session (a match in progress) is restored move for move, and
+  // otherwise the walkthrough lands on the first step still owed.
+  async resumeFromServer() {
+    const secret = encodeURIComponent(this.secret());
+    let status, open;
+    try {
+      status = await Trace.get(`/game-test/status?secret=${secret}`);
+      open = await Trace.get(`/game-test/open-session?secret=${secret}`);
+    } catch (e) {
+      Log.add("info", `could not check for a resumable run: ${e.message}`);
+      return;
+    }
+    const steps = status.steps || {};
+    if (steps.step2 && steps.step2.done) this.card(2, "done", "Passed (recorded earlier)");
+    if (steps.step3 && steps.step3.done) this.card(3, "done", "Passed");
+    if (steps.step4 && steps.step4.done) this.card(4, "done", "Passed");
+    if (steps.step5 && steps.step5.done) this.card(5, "done", "Passed");
+    // Seed the shared display planner with the coverage the server
+    // already has, so new matches prefer what is still missing.
+    this.planner = this.displayPlanner();
+    const missingRes = (steps.step5 && steps.step5.missing_resolutions) || [];
+    const missingOri = (steps.step5 && steps.step5.missing_orientations) || [];
+    this.planner.seed(
+      RESOLUTIONS.map((r) => r.label).filter((label) => !missingRes.includes(label)),
+      ["vertical", "horizontal"].filter((o) => !missingOri.includes(o)),
+    );
+    const session = open && open.session;
+    if (session) {
+      await this.restoreSession(session, steps);
+      return;
+    }
+    if (steps.complete) {
+      this.finish();
+      return;
+    }
+    this.step = !steps.step2 || !steps.step2.done ? 2
+      : !steps.step3 || !steps.step3.done ? 3
+      : !steps.step4 || !steps.step4.done ? 4
+      : 5;
+    this.refreshButtons();
+    Log.add(
+      "info",
+      `resumed the recorded run at step ${this.step} — press the step's Start button to continue`,
+    );
+  },
+
+  // Restore a match the server has a recorded prefix for: rebuild the
+  // in-page match from the recorded states and continue the same
+  // session, so the next move appends where the last session stopped.
+  async restoreSession(session, steps) {
+    const stepByMode = { pass_and_play: 3, against_computers: 4, multiplayer: 5 };
+    const step = stepByMode[session.mode];
+    if (!step) return;
+    const cfg = session.config;
+    if (step === 4) {
+      this.configs4 = this.step4Pairs().map(([count, humanSeat]) => ({
+        count,
+        humanSeat,
+        ...this.planner.next(),
+      }));
+      const played = (steps.step4 && steps.step4.configs) || 0;
+      this.config4Index = Math.min(played, this.configs4.length - 1);
+    } else {
+      const counts = this.submittedBody.allowed_player_counts;
+      this.combos = counts.map((count) => ({ count, ...this.planner.next() }));
+      if (step === 5) {
+        for (;;) {
+          const missing = this.planner.uncovered();
+          if (!missing.resolutions && !missing.orientations) break;
+          this.combos.push({ count: counts[0], ...this.planner.next() });
+        }
+      }
+      const verified = (steps[`step${step}`] && steps[`step${step}`].verified) || 0;
+      this.comboIndex = Math.min(verified, this.combos.length - 1);
+    }
+    $("mode").value =
+      session.mode === "pass_and_play" ? "single-pass"
+      : session.mode === "against_computers" ? "single-computers"
+      : "multiplayer";
+    populateSeats();
+    $("player-count").value = String(cfg.num_players);
+    populateSeats();
+    if (session.mode === "against_computers" && cfg.human_player_index !== null) {
+      $("my-seat").value = String(cfg.human_player_index);
+    }
+    const resolutionIndex = RESOLUTIONS.findIndex((r) => r.label === cfg.resolution);
+    if (resolutionIndex >= 0) $("resolution").value = String(resolutionIndex);
+    $("orientation").value = cfg.orientation;
+    Player.multiFrame = session.mode === "multiplayer";
+    Player.applyResolution();
+    const players = session.players.map((p) => ({ ...p, active: true }));
+    const last = session.move_count;
+    Player.match = {
+      players,
+      state: clone(session.states[last]),
+      turn: session.turns[last] === null ? null : [...session.turns[last]],
+      moveCount: last,
+      status: "ongoing",
+      endReason: null,
+      payouts: null,
+      pot: session.pot || 0,
+      matchSeed: session.match_seed,
+      history: [],
+      historyIndex: -1,
+      lastMove: null,
+      lastEvent: null,
+    };
+    for (let i = 0; i <= last; i++) {
+      Player.match.history.push({
+        state: clone(session.states[i]),
+        turn: session.turns[i] === null ? null : [...session.turns[i]],
+        moveCount: i,
+        status: "ongoing",
+        endReason: null,
+        payouts: null,
+        players: players.map((p) => ({ ...p })),
+        lastMove: i === 0 ? null : clone(session.moves[i - 1].move),
+        lastEvent: null,
+      });
+    }
+    Player.match.historyIndex = last;
+    $("match-seed").textContent = `match seed: ${session.match_seed}`;
+    Trace.session = {
+      id: session.session_id,
+      mode: session.mode,
+      config: {
+        num_players: cfg.num_players,
+        resolution: cfg.resolution,
+        orientation: cfg.orientation,
+        human_player_index: cfg.human_player_index,
+      },
+      states: session.states.map((s) => clone(s)),
+      moves: session.moves.map((m) => ({
+        player_index: m.player_index,
+        move: clone(m.move),
+      })),
+      roster: session.players.map((p) => ({ ...p })),
+      matchSeed: session.match_seed,
+      serverStarted: true,
+      serverFinished: false,
+    };
+    Trace.blocked = false;
+    this.step = step;
+    this.active = true;
+    this.card(step, "active", "Running…");
+    if (step === 4) {
+      $("step4-progress").textContent =
+        `${this.config4Index} of ${this.configs4.length} matches played`;
+      $("step4-instruction").textContent =
+        `Resumed a saved match at move ${last} — keep playing seat ${cfg.human_player_index} ` +
+        `against the computer: ${cfg.num_players} players, ${cfg.resolution}, ${cfg.orientation}.`;
+    } else {
+      $(`step${step}-progress`).textContent =
+        `${this.comboIndex} of ${this.combos.length} matches verified`;
+      $(`step${step}-instruction`).textContent =
+        `Resumed a saved match at move ${last} — play it to the end: ` +
+        `${cfg.num_players} players, ${cfg.resolution}, ${cfg.orientation}.`;
+    }
+    this.refreshButtons();
+    try {
+      const inputs = readInputs().inputs;
+      await Player.ensureHost();
+      Player.loadClient(inputs.clientCode);
+      await Player.frameReady;
+      await Player.sendStateChanged(null);
+      Player.refreshOutputs();
+      Player.refreshButtons();
+      Log.add(
+        "info",
+        `resumed the step ${step} match at move ${last} ` +
+        `(${cfg.num_players} players, ${cfg.resolution}, ${cfg.orientation})`,
+      );
+      await Player.autoPlayComputers();
+    } catch (e) {
+      Log.add("error", `the saved match could not be brought back: ${e.message}`);
+    }
   },
 
   async step1() {
@@ -3005,6 +3236,15 @@ const Flow = {
             (o) => !coveredOri.has(o),
           ).length,
         };
+      },
+      // Resume support: mark coverage the server already has (from an
+      // earlier page session) as covered, so new matches prefer the
+      // sizes and orientations still missing.
+      seed(coveredResolutionLabels, coveredOrientationNames) {
+        RESOLUTIONS.forEach((entry, i) => {
+          if (coveredResolutionLabels.includes(entry.label)) coveredRes.add(i);
+        });
+        for (const name of coveredOrientationNames) coveredOri.add(name);
       },
     };
   },
@@ -3141,16 +3381,19 @@ const Flow = {
       return;
     }
     if (session.mode === "against_computers") {
-      // Step 4 is verified on the server too: the replay is strict about
-      // the single-player turn (exactly one player, or null), and a
-      // session stopped at the 100-move cap may end mid-match.
-      try {
-        await Trace.verifyMatch(session);
-      } catch (e) {
-        this.fail(
-          `Step 4: the server could not verify the finished session: ${e.message}`,
-        );
-        return;
+      // Every move was verified on the server as it was appended. A
+      // session that reached a terminal move is already verified; one
+      // stopped at the 100-move cap is closed (and thereby verified)
+      // here — it may end mid-match.
+      if (!session.serverFinished) {
+        try {
+          await Trace.closeSession(session);
+        } catch (e) {
+          this.fail(
+            `Step 4: the server could not close the finished session: ${e.message}`,
+          );
+          return;
+        }
       }
       this.config4Index++;
       $("step4-progress").textContent =
@@ -3165,12 +3408,16 @@ const Flow = {
       }
       return;
     }
-    try {
-      await Trace.verifyMatch(session);
-    } catch (e) {
-      this.fail(
-        `Step ${this.step}: the server could not verify the finished match: ${e.message}`,
+    if (!session.serverFinished) {
+      // The page thinks the match ended, but the server's per-move
+      // record never saw a terminal move (its last recorded move still
+      // has a next turn). Treat it like an unfinished match and restart
+      // the combo; starting the new session abandons this one.
+      Log.add(
+        "info",
+        "the server has not recorded a terminal move for this match; restarting it",
       );
+      if (this.step === 3 || this.step === 5) return this.startCombo();
       return;
     }
     this.comboIndex++;
@@ -3354,6 +3601,7 @@ async function loadBySecret() {
     Flow.adoptSubmission(
       data.body, data.submission_id, data.created_at,
       `step 1 loaded from the stored inputs: submission ${data.submission_id}`);
+    await Flow.resumeFromServer();
   } catch (e) {
     Log.add("error", `could not load stored inputs: ${e.message}`);
   }

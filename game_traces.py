@@ -12,11 +12,21 @@ before it accepts a game:
   walks completed, moves made, distinct states visited, terminal states);
 - one `move` row per move played in steps 3–5, holding the creation time,
   an md5 of the state, view and move, and the UI configuration played in;
+- one `session` row per match played in steps 3–5, holding the match's
+  full record — roster, seed, and every state and move — appended one
+  move at a time as the match is played. Each appended move is verified
+  on arrival (the server re-applies it to the previous recorded state
+  and compares), so a match's evidence is durable from its first move:
+  if the page dies mid-match, the recorded prefix survives and the page
+  resumes the match from it when the inputs are loaded again;
 - one `match_verified` row per match the server re-played and confirmed:
   pass-and-play and multiplayer matches played to the end (steps 3 and 5),
   and against-the-computer sessions (step 4), which may stop at the move
   cap. Verification of the two single-player modes is strict about the
-  turn: every next turn must name exactly one player (or be null).
+  turn: every next turn must name exactly one player (or be null). A
+  session writes this row when its terminal move is appended (or, for a
+  capped step-4 session, when the session is closed); the whole-match
+  verify endpoint remains for pages that still record that way.
 
 At submission time the latest `submission` row for the secret must hash to
 exactly the payload being submitted, and steps 2–5 must be complete for it:
@@ -279,49 +289,88 @@ def run_server_checks_subprocess(body):
 # ---------------------------------------------------------------------------
 
 
-def replay_match(body, *, players, pot, match_seed, states, moves, strict_single_turn=False, require_terminal=True):
-    """Re-apply every recorded move with the submission's server code, in
-    the page's own ctx/seed scheme, and compare each resulting state.
-    Returns (True, None) or (False, failure-detail-dict).
-
-    With [strict_single_turn] (the single-player modes: pass-and-play and
-    against the computer), every move's next turn must name exactly one
-    player, or be null ending the match: a multi-player turn cannot be
-    played on the single shared screen. With [require_terminal] false
-    (an against-the-computer session stopped at the move cap), the last
-    move may leave a next turn."""
+def _logic_for(body):
     from game_platform.game_contract import ContractLogic
 
-    logic = ContractLogic(
+    return ContractLogic(
         body.server_code,
         body.unit_tests,
         game_schemas=body.game_schemas(),
         game_id="game-test-verify",
     )
-    ctx_players = [
+
+
+def _ctx_players(players):
+    return [
         {
             key: player[key]
             for key in ("id", "kind", "display_name", "picture_url", "max_loss")
         }
         for player in players
     ]
-    for i, entry in enumerate(moves):
-        mover = players[entry["player_index"]]["id"]
-        ctx = {
-            "players": [dict(p) for p in ctx_players],
-            "pot": pot,
-            "move_count": i,
+
+
+def apply_step(logic, *, players, pot, match_seed, index, state, entry):
+    """Apply one recorded move with the submission's server code, in the
+    page's own ctx/seed scheme. Returns (result, None) or
+    (None, failure-detail-dict). Shared by the whole-match replay and by
+    the per-move session validation, so the two can never drift apart."""
+    mover = players[entry["player_index"]]["id"]
+    ctx = {
+        "players": [dict(p) for p in _ctx_players(players)],
+        "pot": pot,
+        "move_count": index,
+    }
+    seed = (match_seed + index) % 2**32
+    try:
+        result = logic.call(
+            "applyMove", state, mover, entry["move"], ctx=ctx, seed=seed
+        )
+    except Exception as exc:
+        return None, {
+            "move_index": index,
+            "error": f"applyMove rejected or failed at move {index}: {exc}",
         }
-        seed = (match_seed + i) % 2**32
-        try:
-            result = logic.call(
-                "applyMove", states[i], mover, entry["move"], ctx=ctx, seed=seed
-            )
-        except Exception as exc:
-            return False, {
-                "move_index": i,
-                "error": f"applyMove rejected or failed at move {i}: {exc}",
-            }
+    return result, None
+
+
+def check_step_result(result, *, index, strict_single_turn):
+    """The turn-shape rules for one applied move: with
+    [strict_single_turn] (the single-player modes: pass-and-play and
+    against the computer), the next turn must name exactly one player, or
+    be null ending the match — a multi-player turn cannot be played on
+    the single shared screen. Returns a failure dict or None."""
+    turn = result.get("turn")
+    if strict_single_turn and turn is not None and len(turn) != 1:
+        return {
+            "move_index": index,
+            "error": f"the next turn after move {index} names {len(turn)} players; "
+            "a single-player match must have exactly one player in the "
+            "next turn, or no next turn when the match ends",
+        }
+    return None
+
+
+def replay_match(body, *, players, pot, match_seed, states, moves, strict_single_turn=False, require_terminal=True):
+    """Re-apply every recorded move with the submission's server code, in
+    the page's own ctx/seed scheme, and compare each resulting state.
+    Returns (True, None) or (False, failure-detail-dict).
+
+    With [require_terminal] false (an against-the-computer session
+    stopped at the move cap), the last move may leave a next turn."""
+    logic = _logic_for(body)
+    for i, entry in enumerate(moves):
+        result, failure = apply_step(
+            logic,
+            players=players,
+            pot=pot,
+            match_seed=match_seed,
+            index=i,
+            state=states[i],
+            entry=entry,
+        )
+        if failure is not None:
+            return False, failure
         if canonical_json(result.get("state")) != canonical_json(states[i + 1]):
             return False, {
                 "move_index": i,
@@ -329,14 +378,12 @@ def replay_match(body, *, players, pot, match_seed, states, moves, strict_single
                 "expected": states[i + 1],
                 "actual": result.get("state"),
             }
+        failure = check_step_result(
+            result, index=i, strict_single_turn=strict_single_turn
+        )
+        if failure is not None:
+            return False, failure
         turn = result.get("turn")
-        if strict_single_turn and turn is not None and len(turn) != 1:
-            return False, {
-                "move_index": i,
-                "error": f"the next turn after move {i} names {len(turn)} players; "
-                "a single-player match must have exactly one player in the "
-                "next turn, or no next turn when the match ends",
-            }
         if i < len(moves) - 1 and turn is None:
             return False, {
                 "move_index": i,
@@ -348,6 +395,354 @@ def replay_match(body, *, players, pot, match_seed, states, moves, strict_single
                 "error": "the match is not over: the final state still has a next turn",
             }
     return True, None
+
+
+# ---------------------------------------------------------------------------
+# Steps 3–5: incremental play sessions, one verified move at a time
+# ---------------------------------------------------------------------------
+
+
+class StepFailure(Exception):
+    """One move failed server-side validation; carries the failure dict
+    the endpoints return as the 422 detail."""
+
+    def __init__(self, failure):
+        super().__init__(failure.get("error", "step failed"))
+        self.failure = failure
+
+
+def _write_chunks(store, doc_ref, text):
+    """Store [text] under [doc_ref]'s chunks subcollection, the layout
+    submission bodies use; returns the chunk count."""
+    parts = [
+        text[i : i + CHUNK_CHARS] for i in range(0, len(text), CHUNK_CHARS)
+    ] or [""]
+    for i, part in enumerate(parts):
+        store.raw_put(
+            doc_ref.collection("chunks").document(f"{i:06}"), {"text": part}
+        )
+    return len(parts)
+
+
+def _read_chunks(store, doc_ref, count):
+    parts = []
+    for i in range(count):
+        chunk = store.raw_get(doc_ref.collection("chunks").document(f"{i:06}"))
+        if chunk is None:
+            raise ValueError("a stored chunk is missing")
+        parts.append(chunk["text"])
+    return "".join(parts)
+
+
+def _session_ref(store, session_id):
+    return store.ref(TRACE_KIND, session_id)
+
+
+def get_session(store, session_id):
+    row = store.raw_get(_session_ref(store, session_id))
+    if row is None or row.get("kind") != "session":
+        return None
+    return row
+
+
+def create_session(store, *, secret, submission_id, session_id, mode, config, players, pot, match_seed, initial_state, initial_turn):
+    """Open a play session for a match about to be played: store its
+    header and initial state. Any other open session for the submission
+    is abandoned — the page plays one match at a time, and a fresh start
+    supersedes the match it replaces (a reload instead resumes the open
+    session, see open_session)."""
+    ref = _session_ref(store, session_id)
+    if store.raw_get(ref) is not None:
+        raise ValueError("a session with this id already exists")
+    for other in _query_all(
+        store,
+        (
+            ("kind", "==", "session"),
+            ("submission_id", "==", submission_id),
+            ("status", "==", "open"),
+        ),
+    ):
+        if other["session_id"] == session_id:
+            continue
+        stale = dict(other)
+        stale["status"] = "abandoned"
+        store.raw_put(_session_ref(store, other["session_id"]), stale)
+    row = {
+        "kind": "session",
+        "session_id": session_id,
+        "secret_hash": secret_hash(secret),
+        "submission_id": submission_id,
+        "mode": mode,
+        "num_players": config["num_players"],
+        "resolution": config["resolution"],
+        "orientation": config["orientation"],
+        "human_player_index": config.get("human_player_index"),
+        "players": players,
+        "pot": pot,
+        "match_seed": match_seed,
+        "initial_turn": initial_turn,
+        "move_count": 0,
+        "status": "open",
+        "created_at": _now(),
+        "created_ns": time.time_ns(),
+        "updated_ns": time.time_ns(),
+    }
+    with store.atomic():
+        row["initial_chunks"] = _write_chunks(
+            store, ref, canonical_json(initial_state)
+        )
+        store.raw_put(ref, row)
+    return row
+
+
+def _entry_ref(store, session_id, index):
+    return _session_ref(store, session_id).collection("entries").document(
+        f"{index:06}"
+    )
+
+
+def _entry(store, session_id, index):
+    return store.raw_get(_entry_ref(store, session_id, index))
+
+
+def _state_before(store, row):
+    """The session's current (last recorded) state."""
+    if row["move_count"] == 0:
+        return json.loads(
+            _read_chunks(
+                store, _session_ref(store, row["session_id"]), row["initial_chunks"]
+            )
+        )
+    entry = _entry(store, row["session_id"], row["move_count"] - 1)
+    return json.loads(
+        _read_chunks(
+            store, _entry_ref(store, row["session_id"], row["move_count"] - 1),
+            entry["chunks"],
+        )
+    )
+
+
+def record_verified_row(store, *, secret, submission_id, session_id, mode, num_players, resolution, orientation, moves):
+    record_row(
+        store,
+        {
+            "kind": "match_verified",
+            "secret_hash": secret_hash(secret),
+            "submission_id": submission_id,
+            "session_id": session_id,
+            "mode": mode,
+            "num_players": num_players,
+            "resolution": resolution,
+            "orientation": orientation,
+            "moves": moves,
+        },
+    )
+
+
+def append_session_move(store, row, *, secret, body, player_index, move, view, state_after, turn_after):
+    """Verify and record one move of an open session. The move is
+    re-applied to the session's last recorded state with the submission's
+    server code; only when the result matches the claimed next state is
+    anything stored. Returns (session row, finished). Raises StepFailure
+    with the replay-style failure dict when the move does not check out —
+    the session is left exactly as it was, so play can resume from the
+    last recorded move."""
+    index = row["move_count"]
+    if index >= MAX_MOVES_PER_MATCH:
+        raise StepFailure(
+            {"move_index": index, "error": "too many moves in one match"}
+        )
+    state_before = _state_before(store, row)
+    result, failure = apply_step(
+        _logic_for(body),
+        players=row["players"],
+        pot=row["pot"],
+        match_seed=row["match_seed"],
+        index=index,
+        state=state_before,
+        entry={"player_index": player_index, "move": move},
+    )
+    if failure is not None:
+        raise StepFailure(failure)
+    if canonical_json(result.get("state")) != canonical_json(state_after):
+        raise StepFailure(
+            {
+                "move_index": index,
+                "error": f"the state after move {index} does not match the recorded match",
+                "expected": state_after,
+                "actual": result.get("state"),
+            }
+        )
+    failure = check_step_result(
+        result,
+        index=index,
+        strict_single_turn=row["mode"]
+        in (MODE_PASS_AND_PLAY, MODE_AGAINST_COMPUTERS),
+    )
+    if failure is not None:
+        raise StepFailure(failure)
+    turn = result.get("turn")
+    if canonical_json(turn) != canonical_json(turn_after):
+        raise StepFailure(
+            {
+                "move_index": index,
+                "error": f"the turn after move {index} reported by the page "
+                "does not match the server code's result",
+            }
+        )
+    record_row(
+        store,
+        {
+            "kind": "move",
+            "secret_hash": secret_hash(secret),
+            "submission_id": row["submission_id"],
+            "session_id": row["session_id"],
+            "mode": row["mode"],
+            "num_players": row["num_players"],
+            "resolution": row["resolution"],
+            "orientation": row["orientation"],
+            "human_player_index": row["human_player_index"],
+            "player_index": player_index,
+            "move_number": index,
+            "md5": move_md5(state_before, view, move),
+        },
+    )
+    finished = turn is None
+    updated = dict(row)
+    updated["move_count"] = index + 1
+    updated["updated_ns"] = time.time_ns()
+    if finished:
+        updated["status"] = "finished"
+    entry_ref = _entry_ref(store, row["session_id"], index)
+    with store.atomic():
+        chunks = _write_chunks(store, entry_ref, canonical_json(state_after))
+        store.raw_put(
+            entry_ref,
+            {
+                "player_index": player_index,
+                "move": move,
+                "turn_after": turn,
+                "chunks": chunks,
+            },
+        )
+        store.raw_put(_session_ref(store, row["session_id"]), updated)
+    if finished:
+        record_verified_row(
+            store,
+            secret=secret,
+            submission_id=row["submission_id"],
+            session_id=row["session_id"],
+            mode=row["mode"],
+            num_players=row["num_players"],
+            resolution=row["resolution"],
+            orientation=row["orientation"],
+            moves=index + 1,
+        )
+    return updated, finished
+
+
+def last_entry_matches(store, row, *, player_index, move, state_after):
+    """True when the session's last recorded move is exactly this one —
+    a retried append of a move that already landed (its response was
+    lost on the wire) succeeds without recording it twice."""
+    if row["move_count"] == 0:
+        return False
+    entry = _entry(store, row["session_id"], row["move_count"] - 1)
+    if entry is None or entry["player_index"] != player_index:
+        return False
+    if canonical_json(entry["move"]) != canonical_json(move):
+        return False
+    recorded = json.loads(
+        _read_chunks(
+            store,
+            _entry_ref(store, row["session_id"], row["move_count"] - 1),
+            entry["chunks"],
+        )
+    )
+    return canonical_json(recorded) == canonical_json(state_after)
+
+
+def close_session(store, row, *, secret):
+    """Finish a step-4 session that stopped at the move cap without a
+    terminal move: its moves were each verified as they were appended,
+    so closing only writes the verified row."""
+    if row["mode"] != MODE_AGAINST_COMPUTERS:
+        raise ValueError("only an against-the-computer session can be closed early")
+    if row["move_count"] < 1:
+        raise ValueError("the session has no recorded moves to verify")
+    updated = dict(row)
+    updated["status"] = "finished"
+    updated["updated_ns"] = time.time_ns()
+    store.raw_put(_session_ref(store, row["session_id"]), updated)
+    record_verified_row(
+        store,
+        secret=secret,
+        submission_id=row["submission_id"],
+        session_id=row["session_id"],
+        mode=row["mode"],
+        num_players=row["num_players"],
+        resolution=row["resolution"],
+        orientation=row["orientation"],
+        moves=row["move_count"],
+    )
+    return updated
+
+
+def abandon_session(store, row):
+    updated = dict(row)
+    updated["status"] = "abandoned"
+    updated["updated_ns"] = time.time_ns()
+    store.raw_put(_session_ref(store, row["session_id"]), updated)
+    return updated
+
+
+def open_session(store, submission_id):
+    """The submission's one open session (latest, if several somehow
+    remain), or None."""
+    rows = _query_all(
+        store,
+        (
+            ("kind", "==", "session"),
+            ("submission_id", "==", submission_id),
+            ("status", "==", "open"),
+        ),
+    )
+    if not rows:
+        return None
+    rows.sort(key=lambda r: (r.get("created_ns", 0), r["session_id"]))
+    return rows[-1]
+
+
+def session_payload(store, row):
+    """Everything the page needs to resume an open session: its header,
+    every recorded state (initial first), every move and every turn."""
+    ref = _session_ref(store, row["session_id"])
+    states = [json.loads(_read_chunks(store, ref, row["initial_chunks"]))]
+    moves = []
+    turns = [row.get("initial_turn")]
+    for i in range(row["move_count"]):
+        entry_ref = _entry_ref(store, row["session_id"], i)
+        entry = store.raw_get(entry_ref)
+        moves.append({"player_index": entry["player_index"], "move": entry["move"]})
+        turns.append(entry["turn_after"])
+        states.append(json.loads(_read_chunks(store, entry_ref, entry["chunks"])))
+    return {
+        "session_id": row["session_id"],
+        "mode": row["mode"],
+        "config": {
+            "num_players": row["num_players"],
+            "resolution": row["resolution"],
+            "orientation": row["orientation"],
+            "human_player_index": row["human_player_index"],
+        },
+        "players": row["players"],
+        "pot": row["pot"],
+        "match_seed": row["match_seed"],
+        "move_count": row["move_count"],
+        "states": states,
+        "moves": moves,
+        "turns": turns,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -763,21 +1158,178 @@ def make_router(platform_dependency):
         )
         if not ok:
             raise HTTPException(422, failure)
-        record_row(
+        record_verified_row(
             store,
-            {
-                "kind": "match_verified",
-                "secret_hash": secret_hash(payload.secret),
-                "submission_id": payload.submission_id,
-                "session_id": payload.session_id,
-                "mode": payload.mode,
-                "num_players": payload.config.num_players,
-                "resolution": payload.config.resolution,
-                "orientation": payload.config.orientation,
-                "moves": len(payload.moves),
-            },
+            secret=payload.secret,
+            submission_id=payload.submission_id,
+            session_id=payload.session_id,
+            mode=payload.mode,
+            num_players=payload.config.num_players,
+            resolution=payload.config.resolution,
+            orientation=payload.config.orientation,
+            moves=len(payload.moves),
         )
         return {"verified": True, "moves_verified": len(payload.moves)}
+
+    class SessionIn(BaseModel):
+        secret: str
+        submission_id: str
+        session_id: str = Field(min_length=1, max_length=100)
+        mode: str
+        config: ConfigIn
+        players: list[PlayerIn] = Field(min_length=1, max_length=10)
+        pot: int = 0
+        match_seed: int
+        initial_state: object
+        initial_turn: list[str] | None = None
+
+    class SessionMoveIn(BaseModel):
+        secret: str
+        submission_id: str
+        player_index: int = Field(ge=0, le=9)
+        move: object
+        view: object = None
+        state_after: object
+        turn_after: list[str] | None = None
+
+    class SessionRefIn(BaseModel):
+        secret: str
+        submission_id: str
+
+    def check_turn(turn, players, field):
+        if turn is None:
+            return
+        ids = {player.id for player in players}
+        if not isinstance(turn, list) or any(t not in ids for t in turn):
+            raise HTTPException(
+                422, f"{field} must be null or a list of roster player ids"
+            )
+
+    def owned_session(store, secret, submission_id, session_id):
+        row = get_session(store, session_id)
+        if (
+            row is None
+            or row["submission_id"] != submission_id
+            or row["secret_hash"] != secret_hash(secret)
+        ):
+            raise HTTPException(404, "no session with that id for this submission")
+        return row
+
+    @router.post("/game-test/sessions", status_code=201)
+    def start_session(payload: SessionIn, platform=Depends(platform_dependency)):
+        store = store_of(platform)
+        check_secret(payload.secret)
+        if payload.mode not in MODES:
+            raise HTTPException(422, f"unknown play mode {payload.mode!r}")
+        row = owned_submission(store, payload.secret, payload.submission_id)
+        body = stored_body(store, row)
+        check_config(payload.config, body)
+        if payload.config.num_players != len(payload.players):
+            raise HTTPException(
+                422, "the player roster does not match the configuration"
+            )
+        check_turn(payload.initial_turn, payload.players, "initial_turn")
+        try:
+            session = create_session(
+                store,
+                secret=payload.secret,
+                submission_id=payload.submission_id,
+                session_id=payload.session_id,
+                mode=payload.mode,
+                config=payload.config.model_dump(),
+                players=[player.model_dump() for player in payload.players],
+                pot=payload.pot,
+                match_seed=payload.match_seed,
+                initial_state=payload.initial_state,
+                initial_turn=payload.initial_turn,
+            )
+        except ValueError as exc:
+            raise HTTPException(409, str(exc))
+        return {"session_id": session["session_id"], "move_count": 0, "status": "open"}
+
+    @router.post("/game-test/sessions/{session_id}/moves", status_code=201)
+    def append_move(session_id: str, payload: SessionMoveIn, platform=Depends(platform_dependency)):
+        store = store_of(platform)
+        check_secret(payload.secret)
+        row = owned_session(store, payload.secret, payload.submission_id, session_id)
+        if payload.player_index >= len(row["players"]):
+            raise HTTPException(422, "the move names a player outside the roster")
+        if row["status"] == "finished":
+            return {
+                "move_count": row["move_count"],
+                "finished": True,
+                "duplicate": True,
+            }
+        if row["status"] != "open":
+            raise HTTPException(409, "the session is not open")
+        if last_entry_matches(
+            store,
+            row,
+            player_index=payload.player_index,
+            move=payload.move,
+            state_after=payload.state_after,
+        ):
+            return {
+                "move_count": row["move_count"],
+                "finished": False,
+                "duplicate": True,
+            }
+        sub = owned_submission(store, payload.secret, payload.submission_id)
+        body = stored_body(store, sub)
+        try:
+            updated, finished = append_session_move(
+                store,
+                row,
+                secret=payload.secret,
+                body=body,
+                player_index=payload.player_index,
+                move=payload.move,
+                view=payload.view,
+                state_after=payload.state_after,
+                turn_after=payload.turn_after,
+            )
+        except StepFailure as exc:
+            raise HTTPException(422, exc.failure)
+        return {"move_count": updated["move_count"], "finished": finished}
+
+    @router.post("/game-test/sessions/{session_id}/close")
+    def close(session_id: str, payload: SessionRefIn, platform=Depends(platform_dependency)):
+        store = store_of(platform)
+        check_secret(payload.secret)
+        row = owned_session(store, payload.secret, payload.submission_id, session_id)
+        if row["status"] == "finished":
+            return {"finished": True, "moves_verified": row["move_count"]}
+        if row["status"] != "open":
+            raise HTTPException(409, "the session is not open")
+        try:
+            updated = close_session(store, row, secret=payload.secret)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
+        return {"finished": True, "moves_verified": updated["move_count"]}
+
+    @router.post("/game-test/sessions/{session_id}/abandon")
+    def abandon(session_id: str, payload: SessionRefIn, platform=Depends(platform_dependency)):
+        store = store_of(platform)
+        check_secret(payload.secret)
+        row = owned_session(store, payload.secret, payload.submission_id, session_id)
+        if row["status"] == "open":
+            abandon_session(store, row)
+        return {"abandoned": True}
+
+    @router.get("/game-test/open-session")
+    def get_open_session(secret: str, platform=Depends(platform_dependency)):
+        store = store_of(platform)
+        check_secret(secret)
+        row = latest_submission(store, secret_hash(secret))
+        if row is None:
+            raise HTTPException(
+                404, "no inputs stored for this secret — store them first"
+            )
+        session = open_session(store, row["id"])
+        return {
+            "submission_id": row["id"],
+            "session": session_payload(store, session) if session else None,
+        }
 
     @router.get("/game-test/status")
     def status(secret: str, platform=Depends(platform_dependency)):

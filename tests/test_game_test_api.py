@@ -250,6 +250,183 @@ def test_verify_match_against_computers_allows_a_capped_end(api):
     assert response.status_code == 422
 
 
+SESSION_CONFIG = {
+    "num_players": 1,
+    "resolution": gt.RESOLUTIONS[0]["label"],
+    "orientation": "vertical",
+    "human_player_index": None,
+}
+
+
+def start_session(api, submission_id, session_id="sess-1", mode="pass_and_play", secret=SECRET):
+    response = api.client.post(
+        "/game-test/sessions",
+        json={
+            "secret": secret,
+            "submission_id": submission_id,
+            "session_id": session_id,
+            "mode": mode,
+            "config": SESSION_CONFIG,
+            "players": PLAYERS,
+            "pot": 0,
+            "match_seed": 7,
+            "initial_state": {"n": 0},
+            "initial_turn": ["human-1"],
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def append_move(api, session_id, n, secret=SECRET, state_after=None, turn_after="auto"):
+    if turn_after == "auto":
+        turn_after = ["human-1"] if n < 3 else None
+    response = api.client.post(
+        f"/game-test/sessions/{session_id}/moves",
+        json={
+            "secret": secret,
+            "submission_id": api_submission(api, secret),
+            "player_index": 0,
+            "move": {"add": 1},
+            "view": {"n": n - 1},
+            "state_after": state_after if state_after is not None else {"n": n},
+            "turn_after": turn_after,
+        },
+    )
+    return response
+
+
+def api_submission(api, secret=SECRET):
+    response = api.client.get("/game-test/submission", params={"secret": secret})
+    assert response.status_code == 200, response.text
+    return response.json()["submission_id"]
+
+
+def test_session_records_moves_incrementally_and_finishes(api):
+    submission_id = submit(api)
+    start_session(api, submission_id)
+    for n in (1, 2):
+        response = append_move(api, "sess-1", n)
+        assert response.status_code == 201, response.text
+        assert response.json() == {"move_count": n, "finished": False}
+    # Nothing is verified yet: the match is still in progress.
+    status = api.client.get("/game-test/status", params={"secret": SECRET}).json()
+    assert status["steps"]["step3"]["verified"] == 0
+    # The terminal move finishes and verifies the match on the spot.
+    response = append_move(api, "sess-1", 3)
+    assert response.status_code == 201, response.text
+    assert response.json() == {"move_count": 3, "finished": True}
+    status = api.client.get("/game-test/status", params={"secret": SECRET}).json()
+    assert status["steps"]["step3"]["verified"] == 1
+    assert status["steps"]["step3"]["missing"] == []
+    # No open session remains to resume.
+    data = api.client.get("/game-test/open-session", params={"secret": SECRET}).json()
+    assert data["session"] is None
+
+
+def test_session_open_session_returns_the_resume_payload(api):
+    submission_id = submit(api)
+    start_session(api, submission_id)
+    append_move(api, "sess-1", 1)
+    append_move(api, "sess-1", 2)
+    data = api.client.get("/game-test/open-session", params={"secret": SECRET}).json()
+    session = data["session"]
+    assert session["session_id"] == "sess-1"
+    assert session["mode"] == "pass_and_play"
+    assert session["move_count"] == 2
+    assert session["states"] == [{"n": 0}, {"n": 1}, {"n": 2}]
+    assert session["moves"] == [
+        {"player_index": 0, "move": {"add": 1}},
+        {"player_index": 0, "move": {"add": 1}},
+    ]
+    assert session["turns"] == [["human-1"], ["human-1"], ["human-1"]]
+    assert session["match_seed"] == 7
+
+
+def test_session_rejects_a_tampered_state_and_keeps_the_prefix(api):
+    submission_id = submit(api)
+    start_session(api, submission_id)
+    response = append_move(api, "sess-1", 1, state_after={"n": 99})
+    assert response.status_code == 422, response.text
+    # The failed move recorded nothing; the correct move still lands.
+    data = api.client.get("/game-test/open-session", params={"secret": SECRET}).json()
+    assert data["session"]["move_count"] == 0
+    response = append_move(api, "sess-1", 1)
+    assert response.status_code == 201, response.text
+
+
+def test_session_append_is_idempotent_for_a_retried_move(api):
+    submission_id = submit(api)
+    start_session(api, submission_id)
+    response = append_move(api, "sess-1", 1)
+    assert response.status_code == 201
+    # Same move posted again (its first response was lost on the wire):
+    # it succeeds as a duplicate and is not recorded twice.
+    response = append_move(api, "sess-1", 1)
+    assert response.status_code == 201, response.text
+    assert response.json()["duplicate"] is True
+    assert response.json()["move_count"] == 1
+
+
+def test_session_close_finishes_a_capped_computer_session(api):
+    submission_id = submit(api)
+    config = {**SESSION_CONFIG, "human_player_index": 0}
+    response = api.client.post(
+        "/game-test/sessions",
+        json={
+            "secret": SECRET,
+            "submission_id": submission_id,
+            "session_id": "sess-4",
+            "mode": "against_computers",
+            "config": config,
+            "players": PLAYERS,
+            "pot": 0,
+            "match_seed": 7,
+            "initial_state": {"n": 0},
+            "initial_turn": ["human-1"],
+        },
+    )
+    assert response.status_code == 201, response.text
+    for n in (1, 2):
+        response = api.client.post(
+            "/game-test/sessions/sess-4/moves",
+            json={
+                "secret": SECRET,
+                "submission_id": submission_id,
+                "player_index": 0,
+                "move": {"add": 1},
+                "view": {"n": n - 1},
+                "state_after": {"n": n},
+                "turn_after": ["human-1"],
+            },
+        )
+        assert response.status_code == 201, response.text
+    response = api.client.post(
+        "/game-test/sessions/sess-4/close",
+        json={"secret": SECRET, "submission_id": submission_id},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == {"finished": True, "moves_verified": 2}
+    # Step 4 counts the pair from the session's move rows.
+    status = api.client.get("/game-test/status", params={"secret": SECRET}).json()
+    assert status["steps"]["step4"]["done"] is True
+
+
+def test_new_session_abandons_the_previous_open_one(api):
+    submission_id = submit(api)
+    start_session(api, submission_id, session_id="sess-a")
+    start_session(api, submission_id, session_id="sess-b")
+    data = api.client.get("/game-test/open-session", params={"secret": SECRET}).json()
+    assert data["session"]["session_id"] == "sess-b"
+    response = api.client.post(
+        "/game-test/sessions/sess-b/abandon",
+        json={"secret": SECRET, "submission_id": submission_id},
+    )
+    assert response.status_code == 200, response.text
+    data = api.client.get("/game-test/open-session", params={"secret": SECRET}).json()
+    assert data["session"] is None
+
+
 def test_full_flow_then_import(api):
     # The import gate refuses an untested game first.
     response = api.client.post("/games", json=BODY)

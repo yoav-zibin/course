@@ -134,8 +134,11 @@
 <h2 id="flow-heading">The test flow</h2>
 <p>
   Follow the steps in order. Every step is recorded on the server under your
-  secret. If a step fails, fix the code and start again from step 1 — the
-  inputs must not change during a run.
+  secret — in steps 3–5 every move is saved (and verified) as you play it,
+  so if you close this page mid-match, loading the stored inputs by secret
+  brings you back to the step and the exact move where you left off. If a
+  step fails, fix the code and start again from step 1 — the inputs must
+  not change during a run.
 </p>
 <div id="flow-banner" class="flow-banner" hidden></div>
 
@@ -295,6 +298,6 @@
 <pre id="log" class="log" aria-live="polite"></pre>
 </section>
 </main>
-<script src="/static/game-test.js?v=9"></script>
+<script src="/static/game-test.js?v=10"></script>
 </body>
 </html>
