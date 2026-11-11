@@ -703,7 +703,11 @@ class PortalOffline {
     let value;
     const identity = this.key();
     try {
-      if (!this.online() || Date.now() < this.retryAfter)
+      // The retry backoff keeps background polls from hammering a dead
+      // connection; an explicit user action (options.force, e.g. starting
+      // pass-and-play) still gets its one network attempt. A device the
+      // browser reports offline is served from the saved copy either way.
+      if (!this.online() || (Date.now() < this.retryAfter && !options.force))
         throw Object.assign(new TypeError("Offline"), { cachedOnly: true });
       value = await this.request("GET", path, options);
       if (identity !== this.key())
@@ -746,8 +750,14 @@ class PortalOffline {
       if (!error.cachedOnly) this.retryAfter = Date.now() + 10000;
       value = this.cached(path);
       if (value === undefined)
-        throw new Error(
-          I18n.t("ui.offline.err_server_unreachable", {}, "Couldn't reach the server, and this data isn't saved on this device yet. Please try again."),
+        // Flagged notSaved so a caller acting on an explicit tap (starting
+        // pass-and-play) can say the data must be downloaded once online,
+        // instead of repeating this generic line.
+        throw Object.assign(
+          new Error(
+            I18n.t("ui.offline.err_server_unreachable", {}, "Couldn't reach the server, and this data isn't saved on this device yet. Please try again."),
+          ),
+          { notSaved: true },
         );
     }
     if (path.startsWith("/v2/matches?")) {

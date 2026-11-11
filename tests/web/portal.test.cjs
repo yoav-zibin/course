@@ -5,6 +5,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 
 function setup(request=async()=>{}, hash='', search='', storage) {
+  const practiceCalls=[];
   const nodes=new Map();
   const node=id=>{
     if(!nodes.has(id)) nodes.set(id,{value:'',hidden:false,disabled:false,dataset:{},children:[],classList:{toggle(){}},
@@ -14,7 +15,7 @@ function setup(request=async()=>{}, hash='', search='', storage) {
   const navigations=[];
   const pageErrors=[];
   const ctx=vm.createContext({StoragePages:{enabled:async()=>false,list:(request,path,options)=>request("GET",path,options),controls(){},search(){return false;}},console,Map,Set,URLSearchParams,
-    navigator:{onLine:true},localStorage:storage || {},PortalOffline:class {api(...args){return request(...args);}read(){return {};}write(){} writeCache(data){this.write(data);} async submitMove(match,body){const result=this.enqueue(match,body);await this.sync({force:true});return result;}} ,
+    navigator:{onLine:true},localStorage:storage || {},PortalOffline:class {api(...args){return request(...args);}read(){return {};}write(){} writeCache(data){this.write(data);} async practice(game,mode,count){practiceCalls.push({game,mode,count});return {id:'local-practice',game_id:game.id,game_version:game.version,players:[{player_index:0,kind:'human',user_id:'owner'}],status:'ongoing',move_count:0};} async submitMove(match,body){const result=this.enqueue(match,body);await this.sync({force:true});return result;}} ,
     document:{getElementById:node,body:{classList:{toggle(){}}}},window:{addEventListener(){}},
     location:{hash,search,assign(url){navigations.push(url);}},history:{replaceState(){}},
     Auth:{current:()=>({id:'owner'})},I18n:require('./i18n-stub.cjs'),GameFrame:class{load(){}unload(){}send(){}},
@@ -23,7 +24,7 @@ function setup(request=async()=>{}, hash='', search='', storage) {
   const run=code=>vm.runInContext(code,ctx);
   run('globalThis.originalRefresh=refresh;refresh=async()=>{};state.games=[{id:"game",version:2,name:"Hanoi",allowed_player_counts:[1]}]');
   node('new-game').value='game';
-  return {node,run,navigations,pageErrors};
+  return {node,run,navigations,pageErrors,practiceCalls};
 }
 
 test('creating a solo-only game starts one human immediately',async()=>{
@@ -463,6 +464,65 @@ test('games offer pass-and-play and offline instructions, with a player-count ch
  assert.equal(t.node('computer-player-count').value,'4'); // computer matches default to the largest count
  t.run("document.getElementById('practice-player-count').value='3';updateMatchSetup()");
  assert.equal(t.node('practice-player-count').value,'3'); // a still-valid choice survives a refresh
+});
+test('practice starts for a deep-linked game that is not in the loaded catalog yet',async()=>{
+  const calls=[],downloading=[];
+  let t;
+  t=setup(async(method,path,options)=>{
+    calls.push([method,path,options]);
+    if(path==='/games/deep') return {id:'deep',version:3,name:'Deep game',allowed_player_counts:[2,3]};
+    if(path==='/games/deep/versions/3') { downloading.push(t.node('create-message').textContent); return {id:'deep',version:3,code:'<div></div>',server_code:'rules',allowed_player_counts:[2,3]}; }
+    if(method==='POST') return {};
+    throw new Error('unexpected '+method+' '+path);
+  },'#game=deep');
+  t.run('state.games=[]');t.node('new-game').value='';
+  await t.run('practice()');
+  assert.deepEqual(calls.filter(([m])=>m==='GET').map(([,p])=>p),['/games/deep','/games/deep/versions/3']);
+  assert.ok(calls.filter(([m])=>m==='GET').every(([, ,options])=>options.force===true));
+  assert.deepEqual(downloading,['Downloading the game…']);
+  assert.equal(t.practiceCalls.length,1);
+  assert.equal(t.practiceCalls[0].game.server_code,'rules');
+  assert.equal(t.practiceCalls[0].mode,'pass');
+  assert.equal(t.run('state.selectedId'),'local-practice');
+  assert.equal(t.node('create-message').textContent,'');
+});
+test('practice downloads the full game with a forced fetch when it is not saved on the device',async()=>{
+  const calls=[];
+  const {run,practiceCalls}=setup(async(method,path,options)=>{
+    calls.push([method,path,options]);
+    if(path==='/games/game/versions/2') return {id:'game',version:2,code:'<div></div>',server_code:'rules',allowed_player_counts:[1]};
+    if(method==='POST') return {};
+    throw new Error('unexpected '+method+' '+path);
+  });
+  await run('practice()');
+  const fetch=calls.find(([m,p])=>m==='GET'&&p==='/games/game/versions/2');
+  assert.ok(fetch);assert.equal(fetch[2].force,true);
+  assert.equal(practiceCalls.length,1);
+  assert.equal(practiceCalls[0].game.server_code,'rules');
+});
+test('practice reuses the full game already saved on the device without fetching it',async()=>{
+  const calls=[];
+  const {run,practiceCalls}=setup(async(method,path)=>{
+    calls.push([method,path]);
+    if(method==='POST') return {};
+    throw new Error('no download expected');
+  });
+  run('state.gameCache.set("game@2",{id:"game",version:2,code:"<div></div>",server_code:"rules",allowed_player_counts:[1]})');
+  await run('practice()');
+  assert.deepEqual(calls.filter(([m])=>m==='GET'),[]);
+  assert.equal(practiceCalls.length,1);
+});
+test('practice says the game needs one online download when it cannot be fetched or found saved',async()=>{
+  const {node,run,practiceCalls}=setup(async(method,path)=>{
+    if(path==='/games/game/versions/2') throw Object.assign(new Error("Couldn't reach the server, and this data isn't saved on this device yet. Please try again."),{notSaved:true});
+    if(method==='POST') return {};
+    throw new Error('unexpected '+method+' '+path);
+  });
+  await run('practice()');
+  assert.equal(practiceCalls.length,0);
+  assert.match(node('create-message').textContent,/isn't saved on this device yet/);
+  assert.match(node('create-message').textContent,/Connect to the internet/);
+  assert.match(node('create-message').className,/error/);
 });
 test('duplicate names have stable distinct labels across search and catalog filters',()=>{
  const t=setup();t.run('state.games=[{id:"abcdefgh-one",name:"Gomoku",version:2},{id:"ijklmnop-two",name:" gomoku ",version:2},{id:"unique",name:"Chess",version:1}]');

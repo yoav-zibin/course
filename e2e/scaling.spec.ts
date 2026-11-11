@@ -1,11 +1,17 @@
 import {test, expect} from '@playwright/test';
-import { mockBatch } from './helpers';
+import { createUser, loginAs, mockBatch, uniqueName } from './helpers';
 
 test('paged catalog keeps its controls usable after navigation and polling',async({page, request})=>{
   const errors:string[]=[];
   page.on('pageerror',error=>errors.push(error.message));
+  // The portal requires a login; plant a real account in the browser.
+  await loginAs(page, await createUser(request, uniqueName('Scaling visitor')));
   await page.route('**/storage/capabilities',route=>route.fulfill({json:{pagination:true}}));
   await mockBatch(page, request, {
+    // A logged-in portal also pages its own matches; the real test server
+    // has no paginated storage, so this page must come from the mocks too —
+    // forwarded, its error would abort the whole refresh before rendering.
+    '/v2/matches': { items: [], next_cursor: null },
     '/v2/matches/open': { items: [], next_cursor: null },
     '/v2/games': (path: string) => {
       const second = new URL(path, 'http://test').searchParams.has('cursor');

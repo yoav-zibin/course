@@ -575,6 +575,40 @@ test("writeCache swallows a denied-storage error instead of failing the page", (
   assert.doesNotThrow(() => o.save("/new", { x: 1 }));
   assert.match(o.notice, /unavailable/);
 });
+test("a forced get downloads data that was never saved, ignoring the retry backoff", async () => {
+  let calls = 0;
+  const { o, setOnline } = setup(async () => { calls++; return { id: "g", server_code: "rules" }; });
+  setOnline(true);
+  o.retryAfter = Date.now() + 60000;
+  // Inside the backoff a plain get serves only the saved copy: there is none.
+  await assert.rejects(o.get("/games/g/versions/1"), /isn't saved on this device yet/);
+  assert.equal(calls, 0);
+  const game = await o.get("/games/g/versions/1", { force: true });
+  assert.equal(game.server_code, "rules");
+  assert.equal(calls, 1);
+  // The download is saved, so the game is available offline from now on.
+  setOnline(false);
+  assert.equal((await o.get("/games/g/versions/1")).server_code, "rules");
+});
+test("a forced get while offline serves the saved copy and flags a never-saved one", async () => {
+  let calls = 0;
+  const { o } = setup(async () => { calls++; return {}; });
+  o.save("/games/g/versions/1", { id: "g", server_code: "rules" });
+  // setup() starts offline: the saved copy is used, the network untouched.
+  assert.equal((await o.get("/games/g/versions/1", { force: true })).server_code, "rules");
+  assert.equal(calls, 0);
+  await assert.rejects(
+    o.get("/games/other/versions/1", { force: true }),
+    (error) => error.notSaved === true && /isn't saved on this device yet/.test(error.message),
+  );
+  assert.equal(calls, 0);
+});
+test("a forced get whose download fails falls back to the saved copy", async () => {
+  const { o, setOnline } = setup(async () => { throw new TypeError("connection reset"); });
+  o.save("/games/g/versions/1", { id: "g", server_code: "rules" });
+  setOnline(true);
+  assert.equal((await o.get("/games/g/versions/1", { force: true })).server_code, "rules");
+});
 test("a move is saved by reclaiming other accounts' cached answers when the device quota is full", () => {
   const storage = totalQuotaStorage(1_000_000);
   storage.keys = () => [...storage.map.keys()]; // like a real Storage object

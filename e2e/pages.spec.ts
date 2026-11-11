@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { createUser, loginAs, uniqueName } from './helpers';
 
 // Parameterized: every page must load (HTTP 200) without JavaScript errors.
 const pages = ['portal', 'admin', 'browse', 'invites', 'stats'];
@@ -14,7 +15,9 @@ for (const name of pages) {
   });
 }
 
-test('app navigation and language controls stay consistent across Portal and Admin', async ({ page }, testInfo) => {
+test('app navigation and language controls stay consistent across Portal and Admin', async ({ page, request }, testInfo) => {
+  // The portal requires a login; the admin page keeps its own sign-in.
+  await loginAs(page, await createUser(request, uniqueName('Pages visitor')));
   for (const name of ['portal', 'admin']) {
     await page.goto(`/static/${name}.html`);
     const header = page.locator('header.topbar');

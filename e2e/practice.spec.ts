@@ -43,7 +43,52 @@ test('local pass-and-play practice works after disconnect and reload, with no ma
   expect(writes).toEqual([]);
 });
 
-test('local rules have no portal storage or network access, and a looping game times out',async({page})=>{
+test('pass-and-play starts from a #game= link without searching, downloading the game first', async ({page,request})=>{
+  const owner=await createUser(request,uniqueName('Deep link owner'));
+  const name=uniqueName('Deep link noughts');
+  const game=await createGame(request,owner,name);
+  await loginAs(page,owner);
+  await page.goto(`/static/portal.html#game=${game}`);
+  await expect(page.locator('#practice')).toBeEnabled();
+  // The note promises an on-device game that downloads first when needed,
+  // not a trip through the online flow before pass-and-play can start.
+  await expect(page.locator('#practice-offline-note')).toContainText('downloads first');
+  await page.locator('#practice').click();
+  const board=page.frameLocator('#game-box iframe').locator('#board button');
+  await expect(board).toHaveCount(9);
+  await board.first().click();
+  await expect(board.filter({hasText:'X'})).toHaveCount(1);
+  await board.filter({hasText:/^$/}).first().click();
+  await expect(board.filter({hasText:'O'})).toHaveCount(1);
+});
+
+test('a logged-out visitor to a game link is sent to log in and returns to the game', async ({page,request})=>{
+  const owner=await createUser(request,uniqueName('Redirect owner'));
+  const name=uniqueName('Redirect noughts');
+  const game=await createGame(request,owner,name);
+  // No loginAs: this visitor has no account yet. Every account page sends
+  // them to the login page first (a guest account is one step)...
+  await page.goto(`/static/portal.html#game=${game}`);
+  await expect(page).toHaveURL(/\/\?next=/);
+  await expect(page.locator('#welcome-guest')).toBeVisible();
+  await page.locator('#welcome-guest-name').fill(uniqueName('Redirect guest'));
+  await page.locator('#welcome-guest').click();
+  // ...and after logging in they land back on the same game, where
+  // pass-and-play starts right away.
+  await expect(page).toHaveURL(new RegExp(`#game=${game}$`));
+  await expect(page.locator('#practice')).toBeEnabled();
+  await page.locator('#practice').click();
+  const board=page.frameLocator('#game-box iframe').locator('#board button');
+  await expect(board).toHaveCount(9);
+  await board.first().click();
+  await expect(board.filter({hasText:'X'})).toHaveCount(1);
+});
+
+test('local rules have no portal storage or network access, and a looping game times out',async({page,request})=>{
+  // The portal requires a login now; this test only needs the page loaded
+  // so it can drive the practice runner directly.
+  const owner=await createUser(request,uniqueName('Local owner'));
+  await loginAs(page,owner);
   await page.goto('/static/portal.html');
   const result=await page.evaluate(async()=>{
     const runner=(window as any).PortalPractice ?? PortalPractice;

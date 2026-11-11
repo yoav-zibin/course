@@ -16,6 +16,11 @@ test('skin assignment is consistent across the portal and admin', async ({ page,
 
 test('campaign link redirects to the portal and remembers its code', async ({ page }) => {
   await page.goto('/c/students-a');
+  // A logged-out visitor detours through the login page first; the
+  // campaign code survives the round trip in the return address.
+  await expect(page).toHaveURL(/\/\?next=/);
+  await page.locator('#welcome-guest-name').fill(uniqueName('Campaign guest'));
+  await page.locator('#welcome-guest').click();
   await expect(page).toHaveURL(/\/static\/portal\.html\?campaign=students-a$/);
   await expect
     .poll(() =>

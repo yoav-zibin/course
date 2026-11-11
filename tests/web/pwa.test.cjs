@@ -102,3 +102,12 @@ test('standalone apps hide installation help and prompt failure leaves manual in
   events.beforeinstallprompt({preventDefault(){},prompt:async()=>{throw Error('unavailable')}});
   await events['install-portalclick']();assert.match(nodes['install-message'].textContent,/browser/);assert.equal(nodes['install-portal'].disabled,false);
 });
+test('the portal asks for worker updates itself, never from a cached worker script',()=>{
+  const portal=read('static/portal.js');
+  // A cached copy of the worker script must never answer an update check,
+  // and the page checks on load and on every return to the tab instead of
+  // waiting for the browser's own throttled schedule.
+  assert.match(portal,/register\("\/static\/portal-sw\.js", \{ updateViaCache: "none" \}\)/);
+  assert.match(portal,/registration\.update\(\)/);
+  assert.match(portal,/visibilitychange/);
+});

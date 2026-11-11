@@ -198,6 +198,32 @@ const Auth = (() => {
   rememberInviter();
   window.addEventListener?.("hashchange", rememberInviter);
 
+  /** Sends a logged-out visitor to the login page, and back here after.
+   * Every account page requires a login — a guest account counts and takes
+   * seconds — so a visitor with no account never lands on a page that can
+   * only refuse them. Exempt: the login page itself, and /admin, the
+   * master-password page, which has its own sign-in. Runs only in a real
+   * page context (test harnesses load this file with a stub location). */
+  function requireLogin() {
+    const exempt = ["/", "/static/welcome.html", "/admin", "/static/admin.html"];
+    if (
+      typeof location.pathname !== "string" ||
+      typeof location.replace !== "function" ||
+      exempt.includes(location.pathname) ||
+      current()
+    )
+      return;
+    const back = location.pathname + location.search + location.hash;
+    location.replace(`/?next=${encodeURIComponent(back)}`);
+  }
+
+  requireLogin();
+
+  // Logging out (the last account removed) leaves the visitor logged out
+  // on this page: send them to the login page the same way, and back here
+  // if they log in again.
+  document.addEventListener?.("auth-changed", requireLogin);
+
   // Login dialog
 
   let configPromise = null;

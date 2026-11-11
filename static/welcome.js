@@ -11,7 +11,13 @@
   function continueToGames() {
     if (navigating || !Auth.current()) return;
     navigating = true;
-    location.replace("/portal");
+    // A page that sent a logged-out visitor here (e.g. pass-and-play on the
+    // portal) names where to return to in ?next=; only same-site paths are
+    // honored, anything else falls back to the games page.
+    const next = new URLSearchParams(location.search).get("next");
+    location.replace(
+      next && next.startsWith("/") && !next.startsWith("//") ? next : "/portal",
+    );
   }
 
   if (Auth.current()) {

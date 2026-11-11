@@ -365,10 +365,35 @@ function renderPortalAccountMenu() {
 
 function syncPortalRoutes() {
   const params = new URLSearchParams(location.search);
+  params.delete("game");
   const back = document.querySelector(".back-to-games");
   const query = params.toString();
   if (back)
     back.href = "/static/portal.html" + (query ? `?${query}` : "");
+}
+
+/** Leaves the game page for the catalog. The plain link is not enough: it
+ * only drops the address's game marker, which the page reads once at load
+ * (and the ?game= form is a full navigation back to the same game unless
+ * the parameter goes too), so the game page stayed open. */
+function leaveGamePage(event) {
+  event.preventDefault();
+  const params = new URLSearchParams(location.search);
+  params.delete("game");
+  const query = params.toString();
+  const target = "/static/portal.html" + (query ? `?${query}` : "");
+  if (location.pathname + location.search !== target) {
+    location.assign(target);
+    return;
+  }
+  // Only the hash differs, so navigating would stay in this document:
+  // reset the game view in place instead.
+  history.replaceState(null, "", target);
+  state.detailGameId = null;
+  state.requestedGameHandled = true;
+  $("match-creator").open = true;
+  render();
+  refresh();
 }
 
 /** A display name from the cache, or a short id while it loads. */
@@ -1267,14 +1292,16 @@ function updateMatchSetup() {
   $("show-creator").hidden = detailPage;
   const maximum = game ? Math.max(...game.allowed_player_counts) - 1 : 0;
   $("create").disabled = !me() || !game || state.creating || !navigator.onLine;
-  $("practice").disabled = !me() || !game;
+  // Practice stays clickable while logged out: practice() sends the
+  // visitor to the login page and back, rather than dead-ending here.
+  $("practice").disabled = !game;
   fillPlayerCounts($("practice-player-count"), $("practice-count-choice"), game?.allowed_player_counts ?? [], Math.min);
   fillPlayerCounts($("computer-player-count"), $("computer-count-choice"), game?.allowed_player_counts.filter((count) => count > 1) ?? [], Math.max);
   $("practice-offline-note").hidden = false;
   const gameVersion=game && gameOf(game.id,game.version);
   const supportsComputerMatch=Boolean(gameVersion?.server_code && game.allowed_player_counts.some(count=>count>1));
   $("computer-match-option").hidden=!supportsComputerMatch;
-  $("play-computers").disabled=!me() || !game || state.creating || !navigator.onLine;
+  $("play-computers").disabled=!game || state.creating || !navigator.onLine;
   const solo = game?.allowed_player_counts.length === 1 && maximum === 0;
   $("speed-choice").hidden = solo;
   updateStakePreview();
@@ -1905,26 +1932,69 @@ async function onMakeMove(move) {
   }
 }
 
+function goToLogin() {
+  // Everyone plays under an account (a guest account takes seconds), so a
+  // logged-out tap on a play action goes to the login page instead of
+  // dead-ending on a message — and comes back to this exact page after.
+  const back = location.pathname + location.search + location.hash;
+  location.assign(`/?next=${encodeURIComponent(back)}`);
+}
+
 async function practice() {
   if (state.creating) return;
   const user = me();
   if (!user) {
-    $("create-message").textContent = I18n.t("ui.portal.log_in_first", {}, "Log in first.");
-    $("create-message").className = "message error";
+    goToLogin();
     return;
   }
   let match;
   state.creating = true;
   $("practice").disabled = true;
-  const game = state.games.find((g) => g.id === $("new-game").value);
   try {
-    if (!game) throw new Error(I18n.t("ui.portal.choose_game_search_first", {}, "Choose a game from the search results first."));
-    const full = await portalRequest(
-      "GET",
-      `/games/${game.id}/versions/${game.version}`,
+    // The game on screen: on a game page (including a #game= link) that is
+    // the detail game; elsewhere it is the search selection. A linked game
+    // may not be in the loaded catalog yet — fetch its entry on demand
+    // rather than refusing.
+    let game = state.games.find(
+      (g) => g.id === (state.detailGameId || $("new-game").value),
     );
+    if (!game && state.detailGameId) {
+      try {
+        game = await portalRequest(
+          "GET",
+          `/games/${encodeURIComponent(state.detailGameId)}`,
+          { force: true },
+        );
+        state.games.push(game);
+      } catch {
+        // The entry could not be loaded; the message below stands.
+      }
+    }
+    if (!game) throw new Error(I18n.t("ui.portal.choose_game_search_first", {}, "Choose a game from the search results first."));
+    // Pass-and-play runs the game's code on this device, so the full game
+    // must be saved here. When it is not, download it as part of this tap:
+    // the forced fetch makes its network attempt even inside the offline
+    // layer's retry backoff, which only exists to keep background polls
+    // from hammering a dead connection. A game already saved on the device
+    // is served from that copy, online or off.
+    let full = gameOf(game.id, game.version);
+    if (!full?.server_code) {
+      $("create-message").textContent = I18n.t("ui.portal.downloading_game", {}, "Downloading the game…");
+      $("create-message").className = "message";
+      try {
+        full = await portalRequest(
+          "GET",
+          `/games/${game.id}/versions/${game.version}`,
+          { force: true },
+        );
+      } catch (error) {
+        if (error.notSaved)
+          throw new Error(I18n.t("ui.portal.practice_needs_download", {}, "This game isn't saved on this device yet. Connect to the internet and try again: it downloads once, then plays on this device any time."));
+        throw error;
+      }
+      state.gameCache.set(`${full.id}@${full.version}`, full);
+    }
     match = await offline.practice(full, "pass", Number($("practice-player-count").value) || undefined);
-    state.gameCache.set(`${full.id}@${full.version}`, full);
     if (navigator.onLine) {
       try {
         await portalRequest(
@@ -2007,8 +2077,7 @@ async function playWithAllComputers() {
   const user=me();
   const game=state.games.find(item=>item.id===(state.detailGameId || $("new-game").value));
   if (!user) {
-    $("create-message").textContent=I18n.t("ui.portal.log_in_first", {}, "Log in first.");
-    $("create-message").className="message error";
+    goToLogin();
     return;
   }
   if (!game) {
@@ -2080,6 +2149,7 @@ async function main() {
     syncPortalRoutes();
   });
   document.addEventListener("portal-layout-change", syncPortalRoutes);
+  document.querySelector(".back-to-games")?.addEventListener("click", leaveGamePage);
   $("notify-toggle").addEventListener("click", toggleNotifications);
   document.addEventListener("i18n-changed", redrawAfterLanguageChange);
   document.addEventListener("auth-changed", () => {
@@ -2303,8 +2373,19 @@ async function main() {
   setInterval(updateSpeedClock, 250);
   if ("serviceWorker" in navigator && !document.querySelector('meta[name="local-preview"]'))
     navigator.serviceWorker
-      .register("/static/portal-sw.js")
-      .then(async () => {
+      // Update checks must never be answered by a cached copy of the
+      // worker script, and the page asks for a check itself — on load and
+      // whenever the tab is shown again — instead of leaving discovery to
+      // the browser's own throttled schedule. A found update then runs the
+      // existing chain: skipWaiting, claim, and the shell-updated reload.
+      .register("/static/portal-sw.js", { updateViaCache: "none" })
+      .then(async (registration) => {
+        const checkForUpdate = () =>
+          registration.update().catch(() => {});
+        checkForUpdate();
+        document.addEventListener("visibilitychange", () => {
+          if (!document.hidden) checkForUpdate();
+        });
         // /static/portal.html is inside the worker's permitted scope; /portal isn't.
         if (location.pathname === "/portal") {
           const registration = await navigator.serviceWorker.getRegistration(
