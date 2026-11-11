@@ -179,8 +179,8 @@ viewer's seat as seat indices (`turn_of_player_indices`, `my_player_index`,
 | `POST /matches/{id}/maybeLeave`, `POST /matches/{id}/playerLeft` | Leave preview + confirm |
 | `POST /matches/{id}/start` | `{}` — the server calls `newMatch` |
 | `POST /matches/{id}/moves` | `{move, expected_move_count?}`, only from a human in `turn` (403 otherwise); 400 for `InvalidMove` |
-| `GET /matches/{id}` | The caller's `view` and the pot — never the state; the full state only in the debug tools |
-| `GET /matches/{id}/moves` | Each move's player id, move and time, with the caller's view of the resulting state |
+| `GET /matches/{id}` | The caller's `view` and the pot — never the state; the full state only in the debug tools. A caller without a seat gets the spectator view (`viewFor` with a null player), in history and move reads too, so a shared match link shows the game's public view |
+| `GET /matches/{id}/moves` | Each move's player id, move and time, with the caller's view of the resulting state (the spectator view for a caller without a seat) |
 | `GET /auth/me` | Your profile, including your token balance |
 
 ## Computer opponents: single-player only
