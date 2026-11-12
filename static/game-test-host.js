@@ -452,7 +452,13 @@ function validateResult(fn, result, ctx, args) {
       }
     }
   }
-  if (result && typeof result === "object" && !Array.isArray(result)) {
+  // Views and generated moves are game-defined values. Their own `turn`,
+  // `payout`, or `payouts` fields belong to the view/move schema, not to the
+  // result envelope returned by a state-changing function.
+  if (
+    fn !== "computerMove" && fn !== "randomMove" && fn !== "viewFor" &&
+    result && typeof result === "object" && !Array.isArray(result)
+  ) {
     if ("turn" in result && result.turn !== null) {
       const turn = result.turn;
       if (!Array.isArray(turn) || turn.length === 0) {
