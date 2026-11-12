@@ -7,7 +7,7 @@ import asyncio
 import random
 
 # The portal's view of the open match, read from its page (the portal keeps it in
-# `state.match`; `me()` and `seatOf()` are its own helpers). This only
+# `state.match`; `me()`, `seatOf()` and `gameMetaOf()` are its own helpers). This only
 # reads what the page already shows; it calls no API. `acting` is the viewer's
 # own seat when it is their turn, else null: a player only acts for themselves.
 READ_MATCH_JS = """() => {
@@ -16,7 +16,10 @@ READ_MATCH_JS = """() => {
   if (!m || !u) return null;
   const seat = seatOf(m, u.id);
   const mySeat = seat ? seat.player_index : null;
+  const game = typeof gameMetaOf === 'function' ? gameMetaOf(m.game_id, m.game_version) : null;
   return {
+    game_id: m.game_id ?? null, game_version: m.game_version ?? null, game_name: game?.name ?? null,
+    player_counts: game?.allowed_player_counts ?? null,
     id: m.id, status: m.status, end_reason: m.end_reason, move_count: m.move_count,
     turn: m.turn_of_player_indices, my_seat: mySeat,
     acting: (mySeat !== null && m.turn_of_player_indices?.includes(mySeat)) ? mySeat : null, owner: m.owner_user_id === u.id,

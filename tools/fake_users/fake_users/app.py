@@ -118,6 +118,9 @@ _STYLE = """
   .num { font:800 26px/1.1 var(--mono); font-variant-numeric:tabular-nums; } .lbl { font-size:12px; color:var(--muted); }
   table { width:100%; border-collapse:collapse; font-size:13px; } td, th { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
   th { color:var(--muted); font-weight:600; } td a { color:var(--lime); }
+  .scroll { overflow-x:auto; } td.count, th.count { text-align:right; font-family:var(--mono); } td.game { white-space:nowrap; }
+  .tag { font:600 11px var(--mono); padding:2px 6px; border-radius:999px; white-space:nowrap; background:#3a1f26; color:var(--red); }
+  .tag.couldnt_move { background:#3a2e10; color:#ffd98a; }
   fieldset { border:1px solid var(--line); border-radius:6px; padding:12px; } legend { color:var(--muted); font-size:13px; padding:0 6px; }
 </style>
 """
@@ -175,8 +178,10 @@ HEALTH_HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <div class="row"><h1>fake<b>/</b>users · health</h1><span id="state" class="state">…</span><span class="lbl" id="updated"></span></div>
 <nav><a href="/">Control</a><a href="/health">Health</a></nav>
 <section class="panel"><div class="grid" id="tiles"></div></section>
+<section class="panel"><h2 style="margin:0 0 8px;font-size:16px">Per game <span class="lbl">(since the generator started)</span></h2>
+<div class="scroll"><table><thead><tr><th>Game</th><th class="count">matches created</th><th class="count">matches finished</th><th class="count">moves made</th><th class="count">couldn't move</th></tr></thead><tbody id="games"></tbody></table></div></section>
 <section class="panel"><h2 style="margin:0 0 8px;font-size:16px">Last errors <span class="lbl" id="errcount"></span></h2>
-<table><thead><tr><th>When</th><th>User</th><th>Message</th><th>Screenshot</th></tr></thead><tbody id="errors"></tbody></table></section>
+<div class="scroll"><table><thead><tr><th>When</th><th>Kind</th><th>User</th><th>Game</th><th>Message</th><th>Match</th><th>Screenshot</th></tr></thead><tbody id="errors"></tbody></table></div></section>
 </main><script>
 const $ = id => document.getElementById(id);
 const TILES = [
@@ -187,17 +192,36 @@ const TILES = [
   ['speed_matches', 'speed matches'], ['moves', 'moves made'], ['leaves', 'left a match'],
   ['couldnt_move', "couldn't move"], ['skipped_games', 'skipped games (quick match)'], ['errors', 'errors'], ['median', 'portal median (ms)'], ['p95', 'portal p95 (ms)'],
 ];
+// A table row; each cell is text, {text, cls, span}, {href, text} (a link) or {tag, cls}.
+function row(cells) {
+  const tr = document.createElement('tr');
+  for (const c of cells) {
+    const td = document.createElement('td'), v = (c !== null && typeof c === 'object') ? c : {text: c};
+    if (v.href) { const a = document.createElement('a'); a.href = v.href; a.textContent = v.text; a.target = '_blank'; a.rel = 'noopener'; td.append(a); }
+    else if (v.tag) { const t = document.createElement('span'); t.className = 'tag ' + (v.cls || ''); t.textContent = v.tag; td.append(t); }
+    else { td.textContent = v.text ?? '—'; if (v.cls) td.className = v.cls; }
+    if (v.span) td.colSpan = v.span;
+    tr.append(td);
+  }
+  return tr;
+}
 function tile(value, label) { const d = document.createElement('div'); d.innerHTML = '<div class="num"></div><div class="lbl"></div>'; d.firstChild.textContent = value ?? '–'; d.lastChild.textContent = label; return d; }
 async function poll() {
   let s; try { s = await (await fetch('/status.json')).json(); } catch { return; }
   const st = s.stats; $('state').textContent = s.state; $('state').className = 'state ' + s.state;
   $('updated').textContent = 'updated ' + new Date().toLocaleTimeString();
   $('tiles').replaceChildren(...TILES.map(([k, l]) => tile(k in st ? st[k] : st.response_ms[k], l)));
-  $('errcount').textContent = `(${st.errors} in total; the last 20)`;
-  $('errors').replaceChildren(...st.last_errors.map(e => { const tr = document.createElement('tr');
-    for (const v of [new Date(e.at * 1000).toLocaleTimeString(), e.user, e.message]) { const td = document.createElement('td'); td.textContent = v; tr.append(td); }
-    const td = document.createElement('td'); if (e.screenshot) { const a = document.createElement('a'); a.href = '/screens/' + encodeURIComponent(e.screenshot); a.textContent = 'open'; a.target = '_blank'; td.append(a); } else td.textContent = '—';
-    tr.append(td); return tr; }));
+  $('games').replaceChildren(...(st.games.length ? st.games.map(g => row([
+    {text: g.name + (g.versions.length ? ' v' + g.versions.join(', v') : ''), cls: 'game'},
+    ...['matches_created', 'matches_finished', 'moves', 'couldnt_move'].map(k => ({text: g[k], cls: 'count'}))]))
+    : [row([{text: 'No matches yet.', span: 5}])]));
+  $('errcount').textContent = `(${st.errors} errors and ${st.couldnt_move} "couldn't move" in total; the last 20 of each)`;
+  $('errors').replaceChildren(...st.last_errors.map(e => row([
+    new Date(e.at * 1000).toLocaleTimeString(),
+    {tag: e.kind === 'couldnt_move' ? "couldn't move" : 'error', cls: e.kind},
+    e.user, e.game || '—', e.message,
+    e.match_url ? {href: e.match_url, text: 'open match'} : '—',
+    e.screenshot ? {href: '/screens/' + encodeURIComponent(e.screenshot), text: 'open'} : '—'])));
 }
 poll(); setInterval(poll, 3000);
 </script></body></html>"""

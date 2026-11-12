@@ -72,8 +72,13 @@ All of these can change on the control page while running (the starting values a
 | `lobby_wait_seconds` | How long a lobby owner waits for people before adding a computer |
 | `skip_games` | Game names never chosen (the debug game accepts any typed move) |
 
-With friends, the host presses **Invite friends** and the copied link goes to another fake
-user (counting toward `max_users`). If there's no room, the host adds a computer instead.
+Against computers, a fake user picks a player count on the game's page and presses **Play
+with computers**; the match starts right away. With friends, the host presses **Invite
+friends** and the copied link goes to another fake user (counting toward `max_users`). A
+lobby can't take computers, so a host whose lobby nobody joins deletes it.
+
+A new fake user arrives at the portal logged out, so the portal sends them to its welcome
+page; they continue as a guest there and come back.
 
 ## How fake users play any game
 
@@ -90,9 +95,17 @@ game on the skip list (counted as "skipped games").
 
 Active fake users, sessions started and finished, actions per minute, accounts and sign-ups
 through a link, matches created, joined and finished, Speed matches, moves, leaves,
-"couldn't move", errors (with the last 20 messages and a screenshot link), and the portal's
-response times (median and 95th percentile of the fake browsers' requests to the server). It
-refreshes every 3 seconds; the same numbers are at `/status.json`.
+"couldn't move", errors, and the portal's response times (median and 95th percentile of the
+fake browsers' requests to the server). It refreshes every 3 seconds; the same numbers are
+at `/status.json`.
+
+- **Per game:** matches created, matches finished, moves made and "couldn't move" for each
+  game (since the generator started).
+- **Last errors:** the last 20 errors and the last 20 "couldn't move", newest first, each
+  marked as one or the other. A "couldn't move" row shows where it happened: the fake user,
+  the game's name and version, a link to the match on the target server, and a screenshot
+  of the game at that moment. It isn't counted in "errors", and the two lists are kept
+  apart, so a game where fake users often get stuck can't push real errors off the table.
 
 ## Run it on a Google Cloud VM
 

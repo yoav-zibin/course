@@ -216,10 +216,31 @@ class Generator:
         if invited:
             self.stats.count("referral_signups")
 
-    def match_finished(self, match_id: str) -> None:
-        if match_id not in self._finished_matches:
-            self._finished_matches.add(match_id)
+    def match_finished(self, match: dict) -> None:
+        if match["id"] not in self._finished_matches:
+            self._finished_matches.add(match["id"])
             self.stats.count("matches_finished")
+            self.stats.game_count("matches_finished", match)
+
+    def match_url(self, match: dict | None) -> str | None:
+        """Where a person can open [match] on the target server."""
+        return f"{self.target}/portal#match={match['id']}" if match and match.get("id") else None
+
+    async def couldnt_move(self, user, match: dict | None) -> None:
+        """Records a turn where [user] couldn't move, with a screenshot of the game as it was."""
+        shot = None
+        page = getattr(user, "page", None)
+        if page is not None and not self.stop_event.is_set():
+            try:
+                self._screens.mkdir(parents=True, exist_ok=True)
+                path = self._screens / f"{int(time.time() * 1000)}-couldnt-move.png"
+                frame = page.locator("#game-box iframe.game-frame").first
+                target = frame if await frame.count() else page  # the game, else the whole page
+                await asyncio.wait_for(target.screenshot(path=str(path)), 5)
+                shot = path.name
+            except Exception:
+                pass
+        self.stats.couldnt_move(getattr(user, "name", "?"), match, self.match_url(match), shot)
 
     def screenshot_path(self, name: str) -> Path | None:
         path = self._screens / name

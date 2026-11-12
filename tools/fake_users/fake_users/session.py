@@ -92,12 +92,17 @@ class FakeUser:
         # Arriving through a link remembers who sent it (the referral), even before signing up.
         await self.page.goto(self.invite_link or f"{self.g.target}/portal")
         await self.page.wait_for_load_state()
-        await self.page.wait_for_selector("#account-menu", state="attached", timeout=20_000)
+        # A logged-out visitor is sent to the welcome page (and back after signing up);
+        # older portals show the portal with a "Log in" button instead.
+        await self.page.wait_for_selector("#account-menu, #welcome-guest-form", state="attached", timeout=20_000)
         await self.think(0.5, 2)
-        back = self.page.locator("#match-back")
-        if await back.is_visible():  # a match link opens the match page, which hides "Log in"
-            await back.click()
-        await self.sign_up()
+        if await self.page.locator("#welcome-guest-form").count():
+            await self.sign_up_on_welcome_page()
+        else:
+            back = self.page.locator("#match-back")
+            if await back.is_visible():  # a match link opens the match page, which hides "Log in"
+                await back.click()
+            await self.sign_up()
         if self.for_match:
             # Back to the invitation, now signed up, to take the seat.
             await self.page.goto(self.invite_link)
@@ -112,6 +117,16 @@ class FakeUser:
                 break
         await self.think(2, 8)  # look around a little before leaving the site
 
+    async def sign_up_on_welcome_page(self) -> None:
+        page = self.page
+        await page.locator("#welcome-guest-name").fill(self.name)
+        await self.think(0.3, 1.2)
+        await page.locator("#welcome-guest").click()
+        # The welcome page sends the new guest back to where they arrived (the portal).
+        await page.wait_for_selector("#account-menu", state="attached", timeout=20_000)
+        await page.wait_for_load_state()
+        await self.record_new_account()
+
     async def sign_up(self) -> None:
         page = self.page
         await page.get_by_role("button", name="Log in", exact=True).click()
@@ -121,7 +136,10 @@ class FakeUser:
         await self.think(0.3, 1.2)
         await dialog.get_by_role("button", name="Continue as guest").click()
         await dialog.wait_for(state="hidden", timeout=15_000)
-        account = await page.evaluate(
+        await self.record_new_account()
+
+    async def record_new_account(self) -> None:
+        account = await self.page.evaluate(
             f"() => JSON.parse(localStorage.getItem('{ACCOUNTS_KEY}') || '[]')"
             f".find(a => a.id === localStorage.getItem('{CURRENT_KEY}')) || null"
         )
@@ -145,6 +163,11 @@ class FakeUser:
         if await creator.count() and not await creator.evaluate("e => e.open"):
             await page.locator("#match-creator > summary").click()  # unfold "Find your next game"
         await page.wait_for_selector("#game-library > *", timeout=15_000)
+        try:  # the library shows "Random" first and the games a moment later
+            await page.wait_for_function(
+                "() => document.querySelectorAll('#game-library > *').length > 1", timeout=10_000)
+        except Exception:
+            pass  # really just "Random": create_match says so
 
     async def page_error(self) -> str:
         banner = self.page.locator("#page-error")
@@ -157,10 +180,11 @@ class FakeUser:
         await self.think(0.5, 2)
         if kind == "quick_match":
             return await self.quick_match()
-        await self.create_match(with_friends=kind == "with_friends")
-        return True
+        return await self.create_match(with_friends=kind == "with_friends")
 
-    async def create_match(self, *, with_friends: bool) -> None:
+    async def create_match(self, *, with_friends: bool) -> bool:
+        """Makes a match: against computers, or a lobby (inviting a friend when
+        [with_friends]). False when the lobby couldn't start and was deleted."""
         page = self.page
         cards = page.locator("#game-library > *")
         names = await cards.evaluate_all(
@@ -176,17 +200,31 @@ class FakeUser:
         if self.rng.uniform(0, 100) < self.settings.speed_match_percent and await speed.is_visible():
             await page.select_option("#match-speed", "60")
             self.g.stats.count("speed_matches")
-        await page.click("#create")
+        computers = page.locator("#play-computers")
+        if not with_friends and await computers.is_visible():
+            # Computers are picked before the match exists; it starts right away.
+            choice = page.locator("#computer-player-count")
+            if await choice.is_visible():  # hidden when the game has one player count
+                counts = await choice.locator("option").evaluate_all("os => os.map(o => o.value)")
+                if counts:
+                    await choice.select_option(self.rng.choice(counts))
+            await computers.click()
+        else:
+            await page.click("#create")
         await page.wait_for_selector("#match:not([hidden])", timeout=15_000)
         self.g.stats.count("matches_created")
         self.act()
         match = await self.wait_for_match()
+        self.g.stats.game_count("matches_created", match)
         if match["status"] != "waiting_for_players":
-            return  # a solo game starts by itself
+            return True  # against computers, or a solo game: it starts by itself
         await self.show_controls()
         if with_friends and self.g.invite_friend(await self.copy_invite_link()):
             await self.wait_for_people(match["humans"] + 1)
-        await self.start_lobby()
+        if not await self.start_lobby():
+            await self.abandon(await moves.read_match(self.page) or match)
+            return False
+        return True
 
     async def copy_invite_link(self) -> str | None:
         await self.show_controls()
@@ -216,9 +254,12 @@ class FakeUser:
             return False
         if match["owner"]:
             self.g.stats.count("matches_created")
+            self.g.stats.game_count("matches_created", match)
             await self.show_controls()
             await self.wait_for_people(2)
-            await self.start_lobby()
+            if not await self.start_lobby():
+                await self.abandon(await moves.read_match(self.page) or match)
+                return False
         else:
             self.g.stats.count("matches_joined")
         return True
@@ -264,25 +305,34 @@ class FakeUser:
                 return
             await self.think(1, 2)
 
-    async def start_lobby(self) -> None:
-        """Adds computers until the match can start, then starts it."""
+    async def start_lobby(self) -> bool:
+        """Starts the lobby once it can start; False if it can't (not enough people).
+        Portals that let a lobby add computers get them added first; current ones
+        pick computers before the match exists, so a lobby only has people."""
         for _ in range(12):
             match = await moves.read_match(self.page)
             if match and match["status"] != "waiting_for_players":
-                return
+                return True
             await self.show_controls()
             start = self.lobby_button("Start game")
-            if await start.count() and await start.is_enabled():
+            if await start.count() and await start.is_enabled() and match and match["seats"] >= self.fewest_players(match):
                 await self.think(0.3, 1.5)
                 await start.click()
                 self.act()
-                return
+                return True
             plus = self.page.locator("#actions button[aria-label='Add computer opponent']")
             if await plus.count() and await plus.is_enabled():
                 await plus.click()
                 self.act()
+            elif match and match["seats"] < self.fewest_players(match):
+                return False  # nobody came, and computers can't join a lobby
             await asyncio.sleep(1)
-        raise RuntimeError("couldn't start the lobby")
+        return False
+
+    @staticmethod
+    def fewest_players(match: dict) -> int:
+        counts = match.get("player_counts") or []
+        return min(counts) if counts else 1
 
     async def leave(self) -> None:
         await self.show_controls()
@@ -303,6 +353,7 @@ class FakeUser:
         idle_since = time.monotonic()
         reported_conflict = False
         last_count = None
+        waiting_since = None
         while not self.g.stop_event.is_set():
             match = await moves.read_match(self.page)
             if match is None:
@@ -311,10 +362,19 @@ class FakeUser:
             if match["move_count"] != last_count:
                 last_count, idle_since = match["move_count"], time.monotonic()
             if match["status"] == "over":
-                self.g.match_finished(match["id"])
+                self.g.match_finished(match)
                 return
             if match["my_seat"] is None and match["status"] == "ongoing":
                 return  # not seated anymore (left, or a speed-match timeout)
+            if match["status"] == "waiting_for_players":
+                # A lobby someone else runs; its owner starts it or deletes it. Don't
+                # wait much longer than an owner would.
+                waiting_since = waiting_since or time.monotonic()
+                if time.monotonic() - waiting_since > self.settings.lobby_wait_seconds + 30:
+                    await self.leave()
+                    return
+            else:
+                waiting_since = None
             if match["conflict"] and not reported_conflict:
                 reported_conflict = True
                 self.g.stats.error(self.name, "sync conflict: the portal asks to review offline moves")
@@ -324,6 +384,7 @@ class FakeUser:
                     my_moves += 1
                     idle_since = time.monotonic()
                     self.g.stats.count("moves")
+                    self.g.stats.game_count("moves", match)
                     self.act()
                     if my_moves >= self.settings.max_moves_per_match or self.rng.random() < self.settings.leave_probability:
                         await self.leave()
@@ -331,7 +392,7 @@ class FakeUser:
                 else:
                     again = await moves.read_match(self.page)
                     if moves.my_turn(again) and again["move_count"] == match["move_count"]:
-                        self.g.stats.count("couldnt_move")
+                        await self.g.couldnt_move(self, again)  # counts it, with a screenshot
                         await self.leave()
                         return
                 continue
