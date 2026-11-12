@@ -1,0 +1,26 @@
+[Unit]
+Description=Superfan hourly production monitoring for buildplay.fun
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/lib/superfan/superfan.py
+User=root
+UMask=0077
+StateDirectory=superfan
+StateDirectoryMode=0700
+TimeoutStartSec=5min
+Restart=on-failure
+RestartSec=5min
+Nice=15
+IOSchedulingClass=idle
+CPUQuota=25%
+MemoryMax=256M
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+RestrictSUIDSGID=true
+ReadWritePaths=/var/lib/superfan

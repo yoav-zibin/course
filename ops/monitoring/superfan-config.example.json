@@ -1,0 +1,9 @@
+{
+  "recipients": ["operator@example.com"],
+  "base_url": "https://buildplay.fun",
+  "local_health_url": "http://127.0.0.1:8000/health",
+  "app_config": "/opt/game-platform/config.json",
+  "log_file": "/var/log/game-platform/server.log",
+  "state_dir": "/var/lib/superfan",
+  "mounts": ["/", "/boot", "/boot/efi"]
+}

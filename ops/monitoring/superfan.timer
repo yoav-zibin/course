@@ -1,0 +1,11 @@
+[Unit]
+Description=Check buildplay.fun production every hour
+
+[Timer]
+OnCalendar=*-*-* *:00:00 UTC
+Persistent=true
+AccuracySec=30s
+Unit=superfan.service
+
+[Install]
+WantedBy=timers.target

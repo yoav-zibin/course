@@ -1,5 +1,9 @@
 # Monitoring, alerts and logs
 
+For the hourly VM and live-user checks, SMTP notifications, and systemd setup,
+see [Superfan](../ops/monitoring/SUPERFAN.md). This runs alongside the Cloud
+Monitoring integration described below.
+
 Goal: when something goes wrong, someone who needs to know is told, and the logs hold enough to
 find out why, for a person or an agent, without asking the user to repeat what they did.
 
