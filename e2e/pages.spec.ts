@@ -15,19 +15,20 @@ for (const name of pages) {
   });
 }
 
-test('app navigation and language controls stay consistent across Portal and Admin', async ({ page, request }, testInfo) => {
+test('Portal and Admin have direct entry points and no app navigation tabs', async ({ page, request }, testInfo) => {
   // The portal requires a login; the admin page keeps its own sign-in.
   await loginAs(page, await createUser(request, uniqueName('Pages visitor')));
-  for (const name of ['portal', 'admin']) {
-    await page.goto(`/static/${name}.html`);
+  for (const [name, path] of [['portal', '/'], ['admin', '/admin']]) {
+    await page.goto(path, { waitUntil: 'commit' });
+    await expect(page).toHaveURL(name === 'portal' ? /\/static\/portal\.html$/ : /\/admin(?:#.*)?$/);
     const header = page.locator('header.topbar');
-    await expect(header.locator('nav a')).toHaveText(['Portal', 'Admin']);
-    await expect(header.locator('nav a[aria-current="page"]')).toHaveAttribute('href', '/' + name);
+    await expect(page.locator('[data-i18n="ui.nav.portal"], [data-i18n="ui.nav.admin"]')).toHaveCount(0);
+    await expect(header.locator('.app-home-link')).toHaveAttribute('href', '/');
     await expect(header.getByRole('combobox', { name: 'Language' })).toBeVisible();
     await expect(header.locator('#account-menu')).toBeVisible();
     expect(await header.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     await header.screenshot({ path: testInfo.outputPath(`${name}-header.png`) });
   }
-  await page.locator('header.topbar nav').getByRole('link', { name: 'Portal', exact: true }).click();
+  await page.getByRole('link', { name: 'Game platform home', exact: true }).click();
   await expect(page).toHaveURL(/portal(?:\.html)?$/);
 });

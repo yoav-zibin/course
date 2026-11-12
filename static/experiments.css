@@ -274,22 +274,6 @@
   border: 1px solid var(--color-border-3);
   border-radius: var(--radius-sm);
 }
-.portal-app-menu { display:none; flex-direction:column; gap:3px; margin:0 0 4px; }
-.portal-app-menu a {
-  display:block;
-  padding:9px 11px;
-  border-radius:var(--radius-sm);
-  color:var(--color-text-secondary);
-  text-decoration:none;
-}
-.portal-app-menu a:hover,
-.portal-app-menu a[aria-current="page"] { background:var(--color-bg-2); color:var(--color-text-primary); }
-:root[data-portal-layout="left"] .topbar[data-app-page="portal"] nav,
-:root[data-portal-layout="hamburger"] .topbar[data-app-page="portal"] nav { display:none; }
-:root[data-portal-layout="left"] .portal-app-menu,
-:root[data-portal-layout="hamburger"] .portal-app-menu { display:flex; }
-:root[data-portal-layout="top"] .topbar[data-app-page="portal"] nav { display:flex; }
-
 /* Match setup and token panels use the same palette as the surrounding page. */
 :root[data-skin]:not([data-skin="classic"]) .portal-shell .play-option-icon,
 :root[data-skin]:not([data-skin="classic"]) .portal-shell .practice-option .play-option-icon,
@@ -449,8 +433,6 @@
   border-color: #3c305c;
   color: #f6f1ff;
 }
-:root[data-skin="immersive"] .portal-app-menu a:hover,
-:root[data-skin="immersive"] .portal-app-menu a[aria-current="page"] { background:#30244e; color:#f6f1ff; }
 :root[data-skin="immersive"] .portal-shell input,
 :root[data-skin="immersive"] .portal-shell select {
   background: #100c1d;

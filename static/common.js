@@ -507,7 +507,7 @@ function syncPortalPreviewLinks() {
   const source = new URLSearchParams(location.search);
   const previewKeys = ['skin', 'layout'];
   document.querySelectorAll(
-    '.topbar[data-app-page] .app-home-link, .topbar[data-app-page] nav a, .portal-app-menu a, .app-brand[href]',
+    '.topbar[data-app-page] .app-home-link, .app-brand[href]',
   ).forEach(link => {
     const target = new URL(link.getAttribute('href') || '/', location.origin);
     for (const key of previewKeys) {
@@ -524,16 +524,6 @@ function setUpAppTopbar() {
   if (!current) return;
   const brand = bar.querySelector('h1');
   brand.setAttribute('data-i18n', 'ui.app_name');
-  const nav = bar.querySelector('nav');
-  // Entry pages use the shared header without an app navigation menu.
-  nav?.replaceChildren(...[
-    ['portal', 'Portal'], ['admin', 'Admin'],
-  ].map(([page, label]) => el('a', {
-    href: '/' + page,
-    'data-i18n': 'ui.nav.' + page,
-    'aria-current': page === current ? 'page' : null,
-    textContent: label,
-  })));
   syncPortalPreviewLinks();
 }
 
@@ -544,7 +534,7 @@ function linkTopbarBrandToPortal() {
     if (heading.closest("a.app-home-link")) return;
     const link = el("a", {
       class: "app-home-link",
-      href: "/portal",
+      href: "/",
       "aria-label": I18n.t("ui.portal.home_aria", {}, "Game platform home"),
       title: I18n.t("ui.common.back_to_games", {}, "Back to games"),
     });
@@ -619,7 +609,7 @@ function setUpSidebarDrawer() {
   labelControls();
   document.addEventListener('i18n-changed',labelControls);
   sidebar.addEventListener('click',event=>{
-    if (!wide.matches && event.target.closest('.list-item, #new-game, #show-creator, .portal-app-menu a')) setOpen(false);
+    if (!wide.matches && event.target.closest('.list-item, #new-game, #show-creator')) setOpen(false);
   });
   document.addEventListener('keydown',event=>{
     if (!opened) return;
