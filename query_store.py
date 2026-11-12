@@ -1115,11 +1115,13 @@ class QueryStore:
 
     def _game_version(self, game_id, version, *, detail):
         game = self._get("game_versions", f"{game_id}@{version}", detail=detail)
+        if game is None:
+            return None
         # Only the current visibility flags are needed, even for a full version.
         current = self._get("games", game_id, detail=False)
         return (
             replace(game, deleted=current.deleted, published=current.published)
-            if game and current
+            if current
             else game
         )
 

@@ -1454,7 +1454,10 @@ class RequestLogMiddleware:
             record["response_body"] = RequestLogMiddleware._body_for_log(
                 bytes(response_body), response_headers, config, response_size
             )
-        logger.info("API_CALL %s", json.dumps(record, default=str, ensure_ascii=False))
+        logger.info(
+            "API_CALL %s",
+            json.dumps(record, default=str, ensure_ascii=False, separators=(",", ":")),
+        )
 
     @staticmethod
     def _body_for_log(
