@@ -282,6 +282,25 @@ class TranslationMemory:
         # One thread loads; the others serve the old copy (or wait for the very first one).
         if not self._load_lock.acquire(blocking=not self._loaded):
             return
+        if self._loaded and self._clock() < self._refresh_after:
+            self._load_lock.release()
+            return
+        if self._loaded:
+            # The first request after the TTL must not pay for reading and
+            # decoding every language's bundles. Serve the last complete copy
+            # while one background loader refreshes it for subsequent requests.
+            def refresh() -> None:
+                try:
+                    self._load()
+                finally:
+                    self._load_lock.release()
+
+            try:
+                threading.Thread(target=refresh, name="translation-bundle-refresh", daemon=True).start()
+            except BaseException:
+                self._load_lock.release()
+                raise
+            return
         try:
             if self._loaded and self._clock() < self._refresh_after:
                 return

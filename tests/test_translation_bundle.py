@@ -4,6 +4,7 @@ import datetime as dt
 import importlib.util
 import json
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -124,8 +125,92 @@ def test_another_servers_translations_show_up_after_the_ttl() -> None:
     clock["now"] = 59
     assert mine.get("es", [text_hash("Hi")]) == {} and mine.loads == 1
     clock["now"] = 61
-    assert text_hash("Hi") in mine.get("es", [text_hash("Hi")])
+    deadline = time.monotonic() + 2
+    while text_hash("Hi") not in mine.get("es", [text_hash("Hi")]):
+        assert time.monotonic() < deadline
+        threading.Event().wait(0.01)
     assert mine.loads == 2
+
+
+def test_expired_translation_memory_serves_cached_text_while_one_refresh_is_blocked() -> None:
+    client = FakeClient()
+    store = query_store(client=client)
+    store.put_translations([row("Hi", "Old")])
+    clock = {"now": 0.0}
+    backend = _BundleBackend(store)
+    memory = TranslationMemory(backend, ttl=60, clock=lambda: clock["now"])
+    source_hash = text_hash("Hi")
+    assert memory.get("es", [source_hash])[source_hash].text == "Old"
+    store.put_translations([row("Hi", "New")])
+    started, release, returned = threading.Event(), threading.Event(), threading.Event()
+    read_bundles = backend.read_bundles
+    calls = []
+
+    def blocked_read() -> Any:
+        calls.append(1)
+        started.set()
+        assert release.wait(5)
+        return read_bundles()
+
+    backend.read_bundles = blocked_read  # type: ignore[method-assign]
+    clock["now"] = 61
+    result = []
+
+    def request() -> None:
+        result.append(memory.get("es", [source_hash])[source_hash].text)
+        returned.set()
+
+    caller = threading.Thread(target=request)
+    caller.start()
+    try:
+        assert started.wait(2)
+        assert returned.wait(1), "the request waited for the expired cache to reload"
+        assert result == ["Old"]
+        for _ in range(10):
+            assert memory.get("es", [source_hash])[source_hash].text == "Old"
+        assert len(calls) == 1
+    finally:
+        release.set()
+        caller.join(2)
+    deadline = time.monotonic() + 2
+    while memory.get("es", [source_hash])[source_hash].text != "New":
+        assert time.monotonic() < deadline
+        threading.Event().wait(0.01)
+
+
+def test_a_refresh_cannot_overwrite_a_translation_saved_while_it_was_reading() -> None:
+    client = FakeClient()
+    store = query_store(client=client)
+    store.put_translations([row("Hi", "Old")])
+    clock = {"now": 0.0}
+    backend = _BundleBackend(store)
+    memory = TranslationMemory(backend, ttl=60, clock=lambda: clock["now"])
+    source_hash = text_hash("Hi")
+    assert memory.get("es", [source_hash])[source_hash].text == "Old"
+    started, release = threading.Event(), threading.Event()
+    read_bundles = backend.read_bundles
+
+    def blocked_read() -> Any:
+        snapshot = read_bundles()
+        started.set()
+        assert release.wait(5)
+        return snapshot
+
+    backend.read_bundles = blocked_read  # type: ignore[method-assign]
+    clock["now"] = 61
+    try:
+        memory.get("es", [source_hash])
+        assert started.wait(2)
+        memory.put([row("Hi", "Corrected", provider="manual")])
+    finally:
+        release.set()
+    # Refresh completion must keep the in-process, committed correction.
+    assert memory._load_lock.acquire(timeout=2)
+    try:
+        assert memory._rows["es"][source_hash].text == "Corrected"
+    finally:
+        memory._load_lock.release()
+    assert memory.get("es", [source_hash])[source_hash].text == "Corrected"
 
 
 def test_a_chunk_is_chosen_for_new_texts_and_all_chunks_load_in_one_query(monkeypatch: pytest.MonkeyPatch) -> None:
