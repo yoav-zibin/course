@@ -329,6 +329,17 @@ class ScalablePlatform(GamePlatform):
             rows[:FEEDBACK_ADMIN_LIMIT], len(rows) > FEEDBACK_ADMIN_LIMIT, stats
         )
 
+    def admin_set_feedback_status(self, *, feedback_id, status, changed_by):
+        # One Firestore read: a query for the feedback by id, inside the commit's
+        # transaction. Its document keeps its name, so the listing order doesn't change.
+        status, changed_by = self._feedback_status_change(status, changed_by)
+        feedback = self._store.set_feedback_status(
+            feedback_id, status=status, changed_by=changed_by, at=self._clock()
+        )
+        if feedback is None:
+            raise NotFoundError("there is no such feedback")
+        return self._feedback_row(feedback)
+
     def invite_stats(self):
         # The tree computation runs over the live users, read in bounded
         # pages; the result itself lists every user, so nothing is gained by

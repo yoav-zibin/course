@@ -63,6 +63,7 @@ from game_platform.schemas import (
     MatchCreate,
     FeedbackCreate,
     FeedbackOut,
+    FeedbackStatusChange,
     MatchOut,
     MatchSummaryOut,
     MatchHistoryOut,
@@ -1727,6 +1728,23 @@ def admin_feedback(
         target_type=target_type or None,
         target_id=target_id or None,
         status=status or None,
+    )
+
+
+@debug_router.post("/admin/feedback/{feedback_id}/status", dependencies=[MasterPassword])
+def admin_set_feedback_status(
+    platform: Platform,
+    feedback_id: str,
+    body: FeedbackStatusChange,
+    credentials: Annotated[HTTPBasicCredentials | None, Depends(_basic_auth)],
+) -> dict[str, JsonValue]:
+    """Marks one feedback "reviewed" or "dismissed", or reopens it ("open"), recording
+    who and when. Admins share the master password, so "who" is the user name typed
+    in the admin login box ("admin" if none). Returns the feedback as listed."""
+    return platform.admin_set_feedback_status(
+        feedback_id=feedback_id,
+        status=body.status,
+        changed_by=credentials.username if credentials else "",
     )
 
 

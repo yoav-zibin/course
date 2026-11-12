@@ -424,15 +424,22 @@ Any logged-in user (guests included) can send feedback in their own words:
 - At most 20 messages per person in a rolling 24 hours (429 `feedback_daily_limit`).
   Sending the same kind of feedback on the same target again within 24 hours replaces that
   message's text (200) instead of adding one (201), and doesn't count again.
-- Each message keeps its sender, its `status` (`"open"`; later `"reviewed"` or
-  `"dismissed"`), when it was sent and last updated, the target's and sender's names at
-  that time, and context: a game's version, a match's game, version and move count, and
-  the page it came from.
+- Each message keeps its sender, its `status` (`"open"`, `"reviewed"` or `"dismissed"`),
+  when it was sent and last updated, the target's and sender's names at that time, and
+  context: a game's version, a match's game, version and move count, and the page it came
+  from.
+- Admins mark feedback reviewed or dismissed, or reopen it, with the buttons in the
+  Feedback tab (`POST /admin/feedback/{id}/status {status}`). Each change records who and
+  when (`status_changed_by`, `status_changed_at`). Admins share one master password, so
+  "who" is the user name typed in the admin login box (`"admin"` if left empty). The
+  Feedback tab shows open feedback by default. A repeat of the same feedback (above) is
+  new text, so it reopens a reviewed or dismissed message.
 - Feedback is private: only admins list it (`GET /admin/feedback` and the Feedback tab of
   `/admin`), and nobody is told who sent it. Nothing is hidden or removed because of it.
 - With the Firestore query store, sending feedback reads Firestore twice (the login check,
   then one batch with the sender, their daily-limit document, the target and its
-  counters) and writes once; the admin listing is two queries.
+  counters) and writes once; the admin listing is two queries; changing a status is one
+  query (the feedback by id) and one write, and keeps the message's place in the list.
 
 ### Speed matches
 
@@ -880,6 +887,7 @@ don't need a user's credentials:
 | `GET /admin/stats` | The statistics behind `/stats` |
 | `GET /admin/invites` | The invite tree behind `/invites`: a summary, and per user their inviter, direct and total (transitive) invites and depth, sorted by total |
 | `GET /admin/feedback?kind=&target_type=&target_id=&status=` | Users' [feedback](#feedback), newest first (up to 200), and the 20 targets with the most "problem" reports |
+| `POST /admin/feedback/{id}/status {status}` | Mark one [feedback](#feedback) `"reviewed"` or `"dismissed"`, or reopen it (`"open"`), recording who (the name typed in the admin login box) and when; returns it as listed |
 | `DELETE /admin/users/{id}` | Delete a user and the matches they own; their games are marked deleted, and they leave the matches they're seated in |
 | `DELETE /admin/games/{id}` | Delete a game and all of its matches (held pots are refunded, invites deleted); versions are kept |
 | `DELETE /admin/matches/{id}` | Delete a match |

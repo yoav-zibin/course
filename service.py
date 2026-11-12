@@ -210,6 +210,9 @@ FEEDBACK_WINDOW: Final = dt.timedelta(hours=24)
 FEEDBACK_ADMIN_LIMIT: Final = 200
 FEEDBACK_KINDS: Final = ("bug", "suggestion", "problem")
 FEEDBACK_TARGET_TYPES: Final = ("user", "game", "match", "platform")
+FEEDBACK_STATUSES: Final = ("open", "reviewed", "dismissed")
+# The name recorded for an admin who typed none in the login box.
+FEEDBACK_ADMIN_NAME: Final = "admin"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -4864,6 +4867,45 @@ class GamePlatform:
                 matching[:FEEDBACK_ADMIN_LIMIT], len(matching) > FEEDBACK_ADMIN_LIMIT, list(stats.values())
             )
 
+    def admin_set_feedback_status(self, *, feedback_id: str, status: str, changed_by: str) -> dict:
+        """Marks one feedback open, reviewed or dismissed, recording who ([changed_by], the
+        name typed in the admin login box) and when; returns it as the admin listing does."""
+        status, changed_by = self._feedback_status_change(status, changed_by)
+        with self._lock:
+            feedback = self._store.get_feedback(feedback_id)
+            if feedback is None:
+                raise NotFoundError("there is no such feedback")
+            feedback = replace(feedback, status=status, status_changed_by=changed_by, status_changed_at=self._clock())
+            self._store.put_feedback(feedback)
+        return self._feedback_row(feedback)
+
+    @staticmethod
+    def _feedback_status_change(status: str, changed_by: str) -> tuple[str, str]:
+        """The checked status and admin name; raises InvalidRequestError for a wrong status."""
+        if status not in FEEDBACK_STATUSES:
+            raise InvalidRequestError("status must be open, reviewed or dismissed")
+        return status, (changed_by or "").strip()[:80] or FEEDBACK_ADMIN_NAME
+
+    @staticmethod
+    def _feedback_row(f: Feedback) -> dict:
+        """One feedback as the admin listing shows it."""
+        return {
+            "id": f.id,
+            "kind": f.kind,
+            "target_type": f.target_type,
+            "target_id": f.target_id,
+            "target_name": f.target_name,
+            "reporter_user_id": f.reporter_user_id,
+            "reporter_name": f.reporter_name,
+            "text": f.text,
+            "status": f.status,
+            "status_changed_by": f.status_changed_by,
+            "status_changed_at": f.status_changed_at.isoformat() if f.status_changed_at else None,
+            "context": f.context,
+            "created_at": f.created_at.isoformat(),
+            "updated_at": f.updated_at.isoformat(),
+        }
+
     @staticmethod
     def _feedback_listing(rows: list[Feedback], more: bool, stats: list[dict]) -> dict:
         """The admin listing: [rows] newest first, whether there are [more], and the 20
@@ -4879,23 +4921,7 @@ class GamePlatform:
             "most_reported": [
                 {**s, "last_reported_at": s["last_reported_at"].isoformat()} for s in most
             ],
-            "feedback": [
-                {
-                    "id": f.id,
-                    "kind": f.kind,
-                    "target_type": f.target_type,
-                    "target_id": f.target_id,
-                    "target_name": f.target_name,
-                    "reporter_user_id": f.reporter_user_id,
-                    "reporter_name": f.reporter_name,
-                    "text": f.text,
-                    "status": f.status,
-                    "context": f.context,
-                    "created_at": f.created_at.isoformat(),
-                    "updated_at": f.updated_at.isoformat(),
-                }
-                for f in rows
-            ],
+            "feedback": [GamePlatform._feedback_row(f) for f in rows],
         }
 
     def admin_delete_user(self, user_id: str) -> None:

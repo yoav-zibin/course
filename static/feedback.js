@@ -1,6 +1,6 @@
 // Feedback page: users' bugs, suggestions and reports of problems, about users, games,
-// matches and the platform, from /admin/feedback. Read-only for now: reviewing,
-// dismissing, unpublishing and banning come later.
+// matches and the platform, from /admin/feedback. Admins mark each one reviewed or
+// dismissed, or reopen it; unpublishing and banning come later.
 
 "use strict";
 
@@ -44,6 +44,47 @@ async function matchNames(rows) {
   }
 }
 
+const STATUS_LABELS = {
+  open: () => I18n.t("ui.admin.open", {}, "Open"),
+  reviewed: () => I18n.t("ui.admin.reviewed", {}, "Reviewed"),
+  dismissed: () => I18n.t("ui.admin.dismissed", {}, "Dismissed"),
+};
+
+/** Marks one feedback [status] ("reviewed", "dismissed" or "open"), then reloads the
+ * list (with the default "Open" filter, a reviewed one leaves the list). */
+async function setStatus(row, status, buttons) {
+  for (const button of buttons) button.disabled = true;
+  try {
+    const response = await fetch(`/admin/feedback/${encodeURIComponent(row.id)}/status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    if (!response.ok) throw new Error(String(response.status));
+    await refresh();
+  } catch (error) {
+    for (const button of buttons) button.disabled = false;
+    $("error").textContent = I18n.t("ui.admin.status_change_failed", { message: error.message }, "Couldn't change the status: {message}");
+  }
+}
+
+/** The Status cell: the status, who changed it and when, and the buttons to change it. */
+function statusCell(row) {
+  const label = STATUS_LABELS[row.status]?.() ?? row.status;
+  const choices = row.status === "open"
+    ? [["reviewed", I18n.t("ui.admin.mark_reviewed", {}, "Mark reviewed")], ["dismissed", I18n.t("ui.admin.dismiss", {}, "Dismiss")]]
+    : [["open", I18n.t("ui.admin.reopen", {}, "Reopen")]];
+  const buttons = choices.map(([status, text]) => el("button", { type: "button", textContent: text }));
+  buttons.forEach((button, i) => button.addEventListener("click", () => setStatus(row, choices[i][0], buttons)));
+  return el("td", { class: "status" },
+    el("span", { textContent: label }),
+    row.status_changed_by
+      ? el("span", { class: "status-by", textContent: I18n.t("ui.admin.status_changed_by",
+          { name: row.status_changed_by, time: formatTime(row.status_changed_at) }, "by {name}, {time}") })
+      : "",
+    el("span", { class: "status-actions" }, buttons));
+}
+
 function render(data, games) {
   const nameOf = (r) => r.target_type === "match" && !r.target_name
     ? `${games.get(`${r.context?.game_id}@${r.context?.game_version}`) ?? "A game"} match`
@@ -68,7 +109,7 @@ function render(data, games) {
           el("td", {}, targetLink(r.target_type, r.target_id, nameOf(r))),
           el("td", {}, el("span", { textContent: r.reporter_name }), el("span", { class: "id", textContent: r.reporter_user_id })),
           el("td", { class: "text", textContent: r.text }),
-          el("td", { textContent: r.status }))))
+          statusCell(r))))
     : el("p", { class: "muted", textContent: "No feedback matches these filters." }));
   $("target-filter").replaceChildren(targetFilter
     ? el("span", {}, `Only: ${targetFilter.name || targetFilter.id} `,

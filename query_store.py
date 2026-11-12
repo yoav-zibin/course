@@ -539,6 +539,27 @@ class QueryStore:
             self.raw_put(ref, self._feedback_data(feedback))
             self._count_feedback(feedback)
 
+    def set_feedback_status(self, feedback_id, *, status, changed_by, at):
+        """Changes one feedback's status (recording who and when) and returns it, or None
+        if there's no such feedback: one query by id inside the transaction, one write."""
+        with self.atomic():
+            docs = self._query("feedback", [("id", "==", feedback_id)], limit=1)
+            if not docs:
+                return None
+            doc = docs[0]
+            data = doc.to_dict()
+            # The query already read it: count it in the transaction's reads, so the
+            # write doesn't read it again.
+            self._local.uow["reads"].setdefault(doc.reference.path, data)
+            feedback = self._decode("feedback", data, doc.reference)
+            if feedback is None:
+                return None
+            feedback = replace(
+                feedback, status=status, status_changed_by=changed_by, status_changed_at=at
+            )
+            self.raw_put(doc.reference, self._feedback_data(feedback))
+        return feedback
+
     def list_feedback(self):
         """Legacy bounded listing; the admin listing uses [feedback_page]."""
         return self._list("feedback")

@@ -67,6 +67,7 @@ def index_config(namespace):
         "users": {"invited_by_user_id": "order"},
         # Equality filters, newest first by document name (merged single-field indexes).
         "feedback": {
+            "id": "order",  # an admin changing one feedback's status finds it by id
             "kind": "order",
             "target_type": "order",
             "target_id": "order",

@@ -551,6 +551,10 @@ class Feedback:
     # When it was sent: a game's version; a match's game_id, game_version and
     # move_count; and the page it came from (as the website sent it).
     context: dict[str, str | int] = field(default_factory=dict)
+    # Who last changed the status, and when (empty until an admin does). Admins share
+    # one master password, so "who" is the name typed in the admin login box.
+    status_changed_by: str = ""
+    status_changed_at: dt.datetime | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

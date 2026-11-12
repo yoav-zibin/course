@@ -40,6 +40,10 @@
       .kind-bug { color: var(--color-warn); }
       .kind-suggestion { color: var(--color-ok); }
       .kind-problem { color: var(--color-error); }
+      td.status { min-width: 150px; }
+      .status-by { display: block; font-size: var(--font-size-xs); color: var(--color-text-tertiary); }
+      .status-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+      .status-actions button { padding: 2px 8px; font-size: var(--font-size-xs); }
       button.linklike { padding: 0; border: 0; background: none; box-shadow: none; color: var(--color-accent-hover); text-decoration: underline; cursor: pointer; }
     </style>
   </head>
@@ -52,7 +56,7 @@
         <button id="refresh" type="button" data-i18n="ui.action.refresh">Refresh</button>
         <label><span data-i18n="ui.admin.kind">Kind</span> <select id="filter-kind"><option value="" data-i18n="ui.admin.all">All</option><option value="bug" data-i18n="ui.admin.bugs">Bugs</option><option value="suggestion" data-i18n="ui.admin.suggestions">Suggestions</option><option value="problem" data-i18n="ui.admin.problems">Problems</option></select></label>
         <label><span data-i18n="ui.admin.about">About</span> <select id="filter-type"><option value="" data-i18n="ui.admin.all">All</option><option value="user" data-i18n="ui.admin.users">Users</option><option value="game" data-i18n="ui.admin.games">Games</option><option value="match" data-i18n="ui.admin.matches">Matches</option><option value="platform" data-i18n="ui.admin.the_platform">The platform</option></select></label>
-        <label><span data-i18n="ui.admin.status">Status</span> <select id="filter-status"><option value="" data-i18n="ui.admin.all">All</option><option value="open" data-i18n="ui.admin.open">Open</option><option value="reviewed" data-i18n="ui.admin.reviewed">Reviewed</option><option value="dismissed" data-i18n="ui.admin.dismissed">Dismissed</option></select></label>
+        <label><span data-i18n="ui.admin.status">Status</span> <select id="filter-status"><option value="" data-i18n="ui.admin.all">All</option><option value="open" data-i18n="ui.admin.open" selected>Open</option><option value="reviewed" data-i18n="ui.admin.reviewed">Reviewed</option><option value="dismissed" data-i18n="ui.admin.dismissed">Dismissed</option></select></label>
         <span id="target-filter"></span>
         <span id="freshness" class="muted"></span>
         <span id="error"></span>
@@ -65,6 +69,6 @@
     <script src="/static/common.js?v=32"></script>
     <script src="/static/i18n.js?v=6"></script>
     <script src="/static/experiments.js?v=12"></script>
-    <script src="/static/feedback.js?v=2"></script>
+    <script src="/static/feedback.js?v=3"></script>
   </body>
 </html>

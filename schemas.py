@@ -529,6 +529,13 @@ class FeedbackCreate(_Request):
     page: str | None = None
 
 
+class FeedbackStatusChange(_Request):
+    model_config = _example({"status": "reviewed"})
+
+    # "open" (reopen it), "reviewed" or "dismissed".
+    status: Literal["open", "reviewed", "dismissed"]
+
+
 class FeedbackOut(BaseModel):
     """Feedback as its own sender sees it."""
 

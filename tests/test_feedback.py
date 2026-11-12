@@ -275,3 +275,170 @@ def test_feedback_without_a_kind_is_a_problem(tmp_path) -> None:
         del row["kind"]
     path.write_text(json.dumps(file))
     assert [f.kind for f in read_snapshot(path).feedback] == ["problem"]
+
+
+# Reviewing: admins mark feedback reviewed or dismissed, or reopen it
+
+
+def admin(platform, password="s3cret"):
+    return TestClient(create_app(platform, master_password=password))
+
+
+def test_an_admin_marks_feedback_reviewed_dismissed_or_open_again() -> None:
+    clock = ManualClock()
+    platform, ann, bob, game = world(clock)
+    sent, _ = feedback(platform, ann, "game", game, text="it flickers", kind="bug")
+    client = admin(platform)
+    clock.advance(hours=1)
+    reviewed = client.post(f"/admin/feedback/{sent.id}/status", json={"status": "reviewed"}, auth=("Marcelle", "s3cret"))
+    assert reviewed.status_code == 200, reviewed.text
+    row = reviewed.json()
+    assert row["id"] == sent.id and row["status"] == "reviewed"
+    assert row["status_changed_by"] == "Marcelle" and row["status_changed_at"] == (START + dt.timedelta(hours=1)).isoformat()
+    # The listing order comes from when it was sent, not from the review.
+    assert row["updated_at"] == sent.updated_at.isoformat()
+    dismissed = client.post(f"/admin/feedback/{sent.id}/status", json={"status": "dismissed"}, auth=("", "s3cret")).json()
+    assert dismissed["status"] == "dismissed" and dismissed["status_changed_by"] == "admin"  # no name typed
+    reopened = client.post(f"/admin/feedback/{sent.id}/status", json={"status": "open"}, auth=("Sam", "s3cret")).json()
+    assert reopened["status"] == "open" and reopened["status_changed_by"] == "Sam"
+    assert platform._store.get_feedback(sent.id).status == "open"
+
+
+def test_changing_a_status_needs_the_master_password() -> None:
+    platform, ann, bob, game = world()
+    sent, _ = feedback(platform, ann, "user", bob)
+    client = admin(platform)
+    path = f"/admin/feedback/{sent.id}/status"
+    assert client.post(path, json={"status": "reviewed"}).status_code == 401
+    assert client.post(path, json={"status": "reviewed"}, auth=("Marcelle", "wrong")).status_code == 401
+    # A user's own login doesn't do either.
+    headers = {"X-User-Id": ann, "X-User-Password": platform._store.get_user(ann).password}
+    assert client.post(path, json={"status": "reviewed"}, headers=headers).status_code == 401
+    assert platform._store.get_feedback(sent.id).status == "open"
+    assert path not in str(client.get("/openapi.json").json()["paths"])
+
+
+def test_wrong_statuses_and_unknown_feedback_are_refused() -> None:
+    platform, ann, bob, game = world()
+    sent, _ = feedback(platform, ann, "user", bob)
+    client = admin(platform)
+    auth = ("", "s3cret")
+    assert client.post(f"/admin/feedback/{sent.id}/status", json={"status": "deleted"}, auth=auth).status_code == 422
+    assert client.post(f"/admin/feedback/{sent.id}/status", json={}, auth=auth).status_code == 422
+    assert client.post("/admin/feedback/nope/status", json={"status": "reviewed"}, auth=auth).status_code == 404
+    with pytest.raises(Exception, match="open, reviewed or dismissed"):
+        platform.admin_set_feedback_status(feedback_id=sent.id, status="closed", changed_by="x")
+
+
+def test_the_status_filter_shows_the_right_feedback() -> None:
+    platform, ann, bob, game = world()
+    one, _ = feedback(platform, ann, "user", bob, text="bad name")
+    two, _ = feedback(platform, ann, "game", game, text="it flickers", kind="bug")
+    three, _ = feedback(platform, ann, "platform", text="the menu is slow", kind="bug")
+    client = admin(platform)
+    auth = ("Marcelle", "s3cret")
+    client.post(f"/admin/feedback/{one.id}/status", json={"status": "reviewed"}, auth=auth)
+    client.post(f"/admin/feedback/{two.id}/status", json={"status": "dismissed"}, auth=auth)
+
+    def ids(**params):
+        return {r["id"] for r in client.get("/admin/feedback", params=params, auth=auth).json()["feedback"]}
+
+    assert ids(status="open") == {three.id}
+    assert ids(status="reviewed") == {one.id}
+    assert ids(status="dismissed") == {two.id}
+    assert ids() == {one.id, two.id, three.id}
+    assert ids(status="dismissed", kind="bug") == {two.id}
+
+
+def test_a_repeat_reopens_reviewed_feedback() -> None:
+    clock = ManualClock()
+    platform, ann, bob, game = world(clock)
+    sent, _ = feedback(platform, ann, "user", bob, text="bad name")
+    platform.admin_set_feedback_status(feedback_id=sent.id, status="reviewed", changed_by="Marcelle")
+    clock.advance(hours=1)
+    again, new = feedback(platform, ann, "user", bob, text="still a bad name")
+    assert not new and again.id == sent.id and again.status == "open"
+
+
+def test_status_changes_survive_saving_and_reloading(tmp_path) -> None:
+    path = tmp_path / "data.json"
+    store = JsonFileStore(path)
+    platform, ann, bob, game = world(store=store)
+    sent, _ = feedback(platform, ann, "user", bob)
+    platform.admin_set_feedback_status(feedback_id=sent.id, status="dismissed", changed_by="Marcelle")
+    store.flush()
+    reloaded = JsonFileStore(path).get_feedback(sent.id)
+    assert reloaded.status == "dismissed" and reloaded.status_changed_by == "Marcelle"
+    assert reloaded.status_changed_at == START
+
+
+# Reviewing in query mode (Firestore; the only storage mode in production)
+
+
+def query_mode():
+    from game_platform.models import Feedback
+    from game_platform.scaling_service import ScalablePlatform
+    from game_platform.tests.fake_firestore import FakeClient, query_store
+
+    client = FakeClient()
+    store = query_store("fbstatus", client)
+    platform = ScalablePlatform(store=store, computer_move_delay_seconds=0)
+    sent = []
+    for i, (kind, target_type) in enumerate([("problem", "user"), ("bug", "game"), ("bug", "platform")]):
+        f = Feedback(
+            id=f"f{i}", reporter_user_id="ann", target_type=target_type, target_id="" if target_type == "platform" else f"t{i}",
+            kind=kind, text=f"feedback number {i}", created_at=START + dt.timedelta(minutes=i),
+            updated_at=START + dt.timedelta(minutes=i), reporter_name="ann",
+        )
+        store.put_feedback(f)
+        sent.append(f)
+    return admin(platform), client, store, sent
+
+
+def test_query_mode_changes_a_status_with_one_read_and_under_a_second() -> None:
+    import time
+
+    http, client, store, sent = query_mode()
+    auth = ("Marcelle", "s3cret")
+    for status in ("reviewed", "dismissed", "open"):
+        client.queries = client.reads = 0
+        client.read_paths.clear()
+        started = time.perf_counter()
+        response = http.post(f"/admin/feedback/{sent[1].id}/status", json={"status": status}, auth=auth)
+        took = time.perf_counter() - started
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == status and response.json()["status_changed_by"] == "Marcelle"
+        # Round trips: one query by id (no document gets), well within the 1-2 limit.
+        assert client.queries + len(client.read_paths) <= 2, (client.queries, client.read_paths)
+        assert client.queries == 1 and client.read_paths == []
+        assert took < 1, took
+    client.queries = 0
+    client.read_paths.clear()
+    assert http.post("/admin/feedback/nope/status", json={"status": "reviewed"}, auth=auth).status_code == 404
+    assert client.queries + len(client.read_paths) <= 2
+
+
+def test_query_mode_status_filter_and_listing_order() -> None:
+    http, client, store, sent = query_mode()
+    auth = ("Marcelle", "s3cret")
+    # The fake can't sort descending, which the "most reported" query needs: stand in
+    # for that one query (and count it). The emulator test covers the real one.
+    most_reported_calls = []
+    store.most_reported = lambda limit=20: most_reported_calls.append(limit) or []
+    listing = lambda **params: http.get("/admin/feedback", params=params, auth=auth).json()["feedback"]
+    before = [r["id"] for r in listing()]
+    assert before == ["f2", "f1", "f0"]  # newest first
+    http.post("/admin/feedback/f0/status", json={"status": "reviewed"}, auth=auth)
+    http.post("/admin/feedback/f1/status", json={"status": "dismissed"}, auth=auth)
+    # Seen right away (the change isn't hidden behind the read cache).
+    assert [r["id"] for r in listing(status="open")] == ["f2"]
+    assert [r["id"] for r in listing(status="reviewed")] == ["f0"]
+    assert [r["id"] for r in listing(status="dismissed")] == ["f1"]
+    # The change kept each feedback's place in the list (and its document).
+    assert [r["id"] for r in listing()] == before
+    assert sum(1 for path in client.docs if path.startswith("fbstatus_feedback/")) == 3
+    client.queries = 0
+    client.read_paths.clear()
+    most_reported_calls.clear()
+    listing(status="open")
+    assert client.queries + len(client.read_paths) + len(most_reported_calls) <= 2
