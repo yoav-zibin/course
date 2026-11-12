@@ -224,7 +224,7 @@ def test_computer_moves_on_the_server(api: Api):
     assert after["turn_of_player_indices"] == [0]
     moves = api.ok("GET", f"/matches/{match_id}/moves")
     assert [m["player_id"] for m in moves] == [alice, "computer-1"]
-    assert moves[1]["move"] == {"add": 1}
+    assert moves[1]["move"] is None  # Computer choices are private too.
 
 
 def test_resume_computer_moves_picks_up_matches_stuck_on_a_computer():
@@ -322,7 +322,7 @@ def test_match_seed_is_a_secret_and_never_in_responses(api: Api):
     assert "seed" not in api.match_summary(match_id)
 
     stored = api.platform._store.get_match(match_id)
-    assert stored.seed_version == 2
+    assert stored.seed_version == 3
     assert stored.seed not in (0, _legacy_seed(match_id))
 
     # Every match gets its own secret.
@@ -363,5 +363,5 @@ def test_legacy_match_is_rekeyed_when_it_starts(api: Api):
 
     api.ok("POST", f"/matches/{match_id}/start", as_user=alice, json={})
     stored = store.get_match(match_id)
-    assert stored.seed_version == 2
+    assert stored.seed_version == 3
     assert stored.seed != legacy

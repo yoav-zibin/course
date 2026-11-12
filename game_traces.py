@@ -96,7 +96,7 @@ def inputs_hash(body_dict) -> str:
 
 def move_md5(state, view, move) -> str:
     return hashlib.md5(
-        canonical_json([state, view, move]).encode("utf-8")
+        canonical_json([state, view, move]).encode("utf-8"), usedforsecurity=False
     ).hexdigest()
 
 
@@ -923,12 +923,24 @@ def _iso(value):
 
 
 def make_router(platform_dependency):
-    from fastapi import APIRouter, Depends, HTTPException
+    from fastapi import APIRouter, Depends, HTTPException, Request
     from pydantic import BaseModel, Field
 
     from game_platform.agent_import import GameImport
 
     router = APIRouter()
+
+    def validation_slot(request: Request):
+        # Share the import budget: test-page checks spawn the same expensive
+        # validators and must not provide an unbounded bypass around POST /games.
+        slots = request.app.state.import_slots
+        if not slots.acquire(blocking=False):
+            raise HTTPException(429, "game validation is busy; try again later",
+                                headers={"Retry-After": "15"})
+        try:
+            yield
+        finally:
+            slots.release()
 
     class ConfigIn(BaseModel):
         num_players: int = Field(ge=1, le=10)
@@ -1068,7 +1080,7 @@ def make_router(platform_dependency):
             "body": load_submission_body(store, row),
         }
 
-    @router.post("/game-test/server-check")
+    @router.post("/game-test/server-check", dependencies=[Depends(validation_slot)])
     def server_check(payload: ServerCheckIn, platform=Depends(platform_dependency)):
         store = store_of(platform)
         check_secret(payload.secret)
@@ -1119,7 +1131,7 @@ def make_router(platform_dependency):
         )
         return {"md5": digest}
 
-    @router.post("/game-test/verify-match")
+    @router.post("/game-test/verify-match", dependencies=[Depends(validation_slot)])
     def verify_match(payload: VerifyMatchIn, platform=Depends(platform_dependency)):
         store = store_of(platform)
         check_secret(payload.secret)

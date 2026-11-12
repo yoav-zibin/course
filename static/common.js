@@ -333,7 +333,7 @@ class GameFrame {
   }
 
   /** Loads [code] as the iframe's document. Scripts run, but in an opaque origin, so
-   * the game can't reach the platform's cookies, storage or API. */
+   * the game cannot read the platform's cookies, storage or API credentials. */
   load(code) {
     this.viewport = null;
     this.iframe = el("iframe", { className: "game-frame", title: I18n.t("ui.common.game_frame", {}, "Game") });

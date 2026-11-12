@@ -130,7 +130,7 @@ def test_full_move_history_is_recorded(api: Api) -> None:
             "created_at": moves[1]["created_at"],
             "new_state": {"winner": 1},
             "next_turn_player_indices": None,
-            "move": {"state": {"winner": 1}, "turn_indices": None},
+            "move": None,  # Bob's raw payload is private to Bob.
             "player_id": bob,
         },
     ]

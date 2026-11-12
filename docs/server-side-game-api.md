@@ -66,7 +66,7 @@ const game = {
 | `playerId` | A player's id string. In `viewFor`, `null` means a spectator |
 | `move` | Game-defined JSON from the client, e.g. `{"cell": 4}` |
 | `turn` | The ids of the players who may move next (any one of them), or `null` when the match is over. Never empty |
-| `payouts` | `{playerId: tokens}`: non-negative integers for active humans only. Terminal results distribute exactly `ctx.pot`; ongoing results may distribute at most `ctx.pot`. Applies to both `applyMove` and `playerLeft`. |
+| `payouts` | `{playerId: tokens}`: non-negative integers for active humans only. Terminal results distribute exactly `ctx.pot`; ongoing results may distribute at most `ctx.pot`. Applies to `newMatch`, `applyMove`, `playerJoined`, and `playerLeft`. |
 | `view` | Whatever the client needs for that player, including the result once the match is over |
 | `ctx.players` | `[{id, kind, display_name, picture_url, max_loss, active}]` in join order. In `playerJoined` it includes the joiner; in `playerLeft` it still includes the leaver |
 | `ctx.pot` | The tokens in the pot |
@@ -361,3 +361,23 @@ takeover now schedules the computer's moves like every other path —
 the takeover path originally never scheduled them (a human's browser
 used to submit computer moves), so a match stalled on the computer's
 turn (found by the Playwright speed test).
+
+### Privacy of history and randomness
+
+Every history state is projected through the caller's `viewFor`. Raw move
+payloads can contain private bids or card choices, so history only returns
+`move` to the authenticated human who submitted it; all other callers receive
+`null`. This applies to `/moves`, `/history`, and paginated v2 history, including
+finished matches. Public actions should be represented in the public game view.
+The player's own move remains available for offline acknowledgement matching.
+
+The match seed stays server-only. `viewFor` uses a separate deterministic random
+stream for each viewer and move count, so visible random values cannot reveal
+the next gameplay call's random stream. Game-runtime failures return a generic
+error; private inputs and diagnostic details remain in server/admin records.
+
+New online matches use a 256-bit secret and ChaCha20 streams (seed version 3).
+Initialization, moves, lifecycle callbacks, and per-player views are separated.
+The runner retains the numeric-seed generator for historical unit-test vectors;
+online keys are passed without truncation. Older live matches upgrade on their
+next gameplay move or start; an already dealt legacy hand is not silently reshuffled.

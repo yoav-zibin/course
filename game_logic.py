@@ -66,18 +66,51 @@ class InvalidMove extends Error {
   }
 }
 
-// Deterministic randomness (mulberry32). The generator is reseeded by
-// __invoke on every call, so Math.random and ctx.random draw from the
-// same reproducible sequence for that call and no call can leak RNG
-// state into the next one.
+// Online matches use a 256-bit ChaCha20 key (RFC 8439). Numeric seeds
+// retain Mulberry32 for published unit-test vectors and legacy fixtures.
+// Each invocation gets a distinct derived key; no stream state crosses calls.
 let __rngState = 0;
+let __secureState = null;
+let __secureBlock = [];
+let __secureIndex = 16;
 let __usedRandom = false;
 function __seedRandom(seed) {
   __usedRandom = false;
-  __rngState = seed >>> 0;
+  __secureState = null;
+  if (typeof seed === "string") {
+    const bytes = [];
+    for (let i = 0; i < 64; i += 2) bytes.push(parseInt(seed.slice(i, i + 2), 16));
+    __secureState = [0x61707865, 0x3320646e, 0x79622d32, 0x6b206574];
+    for (let i = 0; i < 32; i += 4)
+      __secureState.push((bytes[i] | bytes[i+1]<<8 | bytes[i+2]<<16 | bytes[i+3]<<24) >>> 0);
+    __secureState.push(0, 0, 0, 0); // counter, followed by a zero nonce
+    __secureIndex = 16;
+  } else __rngState = seed >>> 0;
+}
+function __chachaBlock() {
+  const x = __secureState.slice();
+  const rotate = (v, n) => (v << n) | (v >>> (32 - n));
+  const quarter = (a, b, c, d) => {
+    x[a] = (x[a] + x[b]) | 0; x[d] = rotate(x[d] ^ x[a], 16);
+    x[c] = (x[c] + x[d]) | 0; x[b] = rotate(x[b] ^ x[c], 12);
+    x[a] = (x[a] + x[b]) | 0; x[d] = rotate(x[d] ^ x[a], 8);
+    x[c] = (x[c] + x[d]) | 0; x[b] = rotate(x[b] ^ x[c], 7);
+  };
+  for (let i = 0; i < 10; i++) {
+    quarter(0,4,8,12); quarter(1,5,9,13); quarter(2,6,10,14); quarter(3,7,11,15);
+    quarter(0,5,10,15); quarter(1,6,11,12); quarter(2,7,8,13); quarter(3,4,9,14);
+  }
+  __secureBlock = x.map((v, i) => (v + __secureState[i]) >>> 0);
+  __secureState[12] = (__secureState[12] + 1) >>> 0;
+  if (__secureState[12] === 0) throw new Error("random stream exhausted");
+  __secureIndex = 0;
 }
 function __random() {
   __usedRandom = true;
+  if (__secureState) {
+    if (__secureIndex === 16) __chachaBlock();
+    return __secureBlock[__secureIndex++] / 4294967296;
+  }
   __rngState = (__rngState + 0x6D2B79F5) | 0;
   let t = __rngState;
   t = Math.imul(t ^ (t >>> 15), t | 1);
@@ -559,7 +592,7 @@ class GameLogic:
         function: str,
         *args: Any,
         ctx: dict[str, Any] | None = None,
-        seed: int = 0,
+        seed: int | str = 0,
         now: dt.datetime | None = None,
         time_limit_seconds: float | None = None,
     ) -> Any:
@@ -583,7 +616,7 @@ class GameLogic:
         function: str,
         *args: Any,
         ctx: dict[str, Any] | None = None,
-        seed: int = 0,
+        seed: int | str = 0,
         now: dt.datetime | None = None,
         time_limit_seconds: float | None = None,
     ) -> Any:
@@ -637,7 +670,7 @@ class GameLogic:
             envelope_text = self._invoke(
                 function,
                 input_json,
-                int(seed) & 0xFFFFFFFF,
+                seed if isinstance(seed, str) else (format(seed, "064x") if seed > 0xFFFFFFFF else int(seed) & 0xFFFFFFFF),
                 float(frozen_millis),
             )
         except quickjs.JSException as error:
@@ -850,7 +883,7 @@ class GameLogic:
                     f"game.{function} returned a turn naming non-players: {unknown}"
                 )
         payouts = result.get("payouts")
-        if (function in ("applyMove", "playerLeft") and result.get("turn") is None
+        if (function in ("newMatch", "applyMove", "playerJoined", "playerLeft") and result.get("turn") is None
                 and pot and payouts is None):
             raise GameLogicError(f"game.{function} ended without payouts for the pot")
         if payouts is not None:

@@ -182,7 +182,7 @@ class Api:
 
     def create_game(self, body: dict, owner: str) -> dict:
         """Creates a published game via the service and returns its GameOut dict.
-        POST /games is gone (the agent import is the HTTP creation path), so tests
+        POST /games is the agent-import API (not the old CRUD creation path), so tests
         that just need a game use this. A game without schemas gets the
         permissive test schemas, as the old HTTP helper injected."""
         from game_platform.schemas import GameOut

@@ -404,9 +404,10 @@ class Match:
     seed: int = 0
     # Seed scheme version: 1 = the seed was derived from the match id, so
     # anyone who knew the id could recompute it and predict the match's
-    # random outcomes; 2 = a random secret. Older data files load as 1 and
-    # are rekeyed to 2 before their next state-changing logic call (see
-    # Platform._rekey_seed).
+    # random outcomes; 2 = a random secret reduced to 32-bit call streams;
+    # 3 = a 256-bit secret with separated ChaCha20 streams. Older matches
+    # are rekeyed to 3 at their next gameplay move/start (Platform._rekey_seed).
+    # Rekeying cannot hide cards already dealt by a legacy stream.
     seed_version: int = 1
     # A pending leave-with-tokens preview (the playerLeft result
     # stored by POST /matches/{id}/maybeLeave): a JSON object with the leaving

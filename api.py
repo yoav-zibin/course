@@ -10,7 +10,6 @@ import mimetypes
 import secrets
 import threading
 import time
-import uuid
 from dataclasses import replace
 from collections.abc import Awaitable, Callable, Sequence
 from http import HTTPStatus
@@ -25,7 +24,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 import segno
 from starlette.concurrency import run_in_threadpool
-from starlette.datastructures import MutableHeaders, State
+from starlette.datastructures import MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -34,11 +33,10 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from game_platform.invariants import InvariantRequest, InvariantReport, check_invariants
 from game_platform import i18n, observability
 from game_platform.game_input_metrics import game_input_metrics
-from game_platform.models import Game, GameRules, Match, MatchStatus
+from game_platform.models import Match, MatchStatus
 from game_platform.schemas import (
     BatchSubRequest,
     BatchSubResponse,
-    CatalogOut,
     GameStringsOut,
     BundleOut,
     CatalogOut,
@@ -54,7 +52,6 @@ from game_platform.schemas import (
     ExperimentActiveUpdate,
     ExperimentVariantCreate,
     GameOut,
-    GameSchemas,
     GameSummaryOut,
     GameUpdate,
     GoogleLogin,
@@ -1120,7 +1117,7 @@ def get_match_history(platform: Platform, match_id: str, caller_id: OptionalCall
     # a full state never leaves the server.
     match = platform.get_match(match_id, caller_id=caller_id)
     initial_view, move_views = platform.view_history(match, caller_id)
-    return MatchHistoryOut.of(match, initial_view, move_views)
+    return MatchHistoryOut.of(match, initial_view, move_views, caller_id=caller_id)
 
 
 @router.get("/matches/{match_id}/moves")
@@ -1128,7 +1125,7 @@ def list_moves(platform: Platform, match_id: str, caller_id: OptionalCallerId) -
     match = platform.get_match(match_id, caller_id=caller_id)
     _, move_views = platform.view_history(match, caller_id)
     return [
-        MoveOut.of(move).model_copy(update={"new_state": view})
+        MoveOut.of(move, caller_id=caller_id).model_copy(update={"new_state": view})
         for move, view in zip(match.moves, move_views)
     ]
 
@@ -1364,11 +1361,18 @@ def push_config(request: Request) -> PushConfigOut:
 
 @push_router.post("/subscriptions")
 def subscribe_push(
-    platform: Platform, caller_id: CallerId, body: PushSubscribe, response: Response
+    platform: Platform, caller_id: CallerId, body: PushSubscribe, response: Response,
+    request: Request,
 ) -> PushSubscriptionOut:
     """Registers (201) or refreshes (200) the caller's browser subscription, keyed by
     endpoint: a browser re-subscribing, or a different login on the same browser,
     updates the existing record."""
+    if _push_config_of(request).provider == "webpush":
+        from game_platform.push import validate_push_endpoint
+        try:
+            validate_push_endpoint(body.endpoint)
+        except ValueError as error:
+            raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY, str(error)) from None
     subscription, created = platform.subscribe_push(
         caller_id=caller_id,
         endpoint=body.endpoint,
@@ -1460,8 +1464,11 @@ def console() -> FileResponse:
 
 
 @debug_router.get("/portal")
-def portal() -> FileResponse:
-    return FileResponse(_STATIC_DIR / "portal.html")
+def portal(request: Request) -> RedirectResponse:
+    # Canonicalize before rendering: a service-worker-triggered reload after
+    # the page becomes interactive discards open menus and in-progress input.
+    query = "?" + request.url.query if request.url.query else ""
+    return RedirectResponse("/static/portal.html" + query, status_code=307)
 
 
 @debug_router.get("/game-test")

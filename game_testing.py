@@ -26,7 +26,6 @@ import hashlib
 import json
 import random
 import time
-from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Callable, Final
 
@@ -101,7 +100,7 @@ class TestFailure:
 
 def _state_hash(state: JsonValue) -> str:
     return hashlib.md5(
-        json.dumps(state, sort_keys=True, default=str).encode()
+        json.dumps(state, sort_keys=True, default=str).encode(), usedforsecurity=False
     ).hexdigest()
 
 

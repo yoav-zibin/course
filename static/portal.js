@@ -295,7 +295,7 @@ async function updateTokenWallet(user, record) {
     walletBalance = record.token_balance;
     const balance = String(walletBalance);
     if ($("token-balance").textContent !== balance) $("token-balance").textContent = balance;
-    wallet.title = I18n.t("ui.portal.wallet_hint", {balance}, `${balance} virtual tokens · Earn 10 when starting your first eligible match each day`);
+    wallet.title = I18n.t("ui.portal.wallet_hint", {balance}, `${balance} virtual tokens · +10 daily allowance on your first paid match entry`);
     wallet.hidden = false;
     // No optimistic balance adjustments: the server may grant today's +10 at start.
     updateStakePreview();
@@ -1854,7 +1854,7 @@ async function syncGame() {
   const message = stateChangedMessage({
     state: view.state,
     // A client renders its viewFor view, which is what [state] holds
-    // for a participant; spectators get no view.
+    // for a participant; spectators get the game's public view.
     view: view.state ?? null,
     players: match.players.map((player) => ({
       player_index: player.player_index,
@@ -2386,29 +2386,9 @@ async function main() {
         document.addEventListener("visibilitychange", () => {
           if (!document.hidden) checkForUpdate();
         });
-        // /static/portal.html is inside the worker's permitted scope; /portal isn't.
-        if (location.pathname === "/portal") {
-          const registration = await navigator.serviceWorker.getRegistration(
-            "/static/portal.html",
-          );
-          const worker =
-            registration?.installing ||
-            registration?.waiting ||
-            registration?.active;
-          const enter = () =>
-            location.replace(
-              "/static/portal.html" + location.search + location.hash,
-            );
-          if (worker?.state === "activated") enter();
-          else
-            worker?.addEventListener("statechange", () => {
-              if (worker.state === "activated") enter();
-            });
-        } else {
-          await navigator.serviceWorker.ready;
-          shellReady = true;
-          offlineStatus();
-        }
+        await navigator.serviceWorker.ready;
+        shellReady = true;
+        offlineStatus();
       })
       .catch((error) =>
         showPageError(I18n.t("ui.offline.setup_failed", {message: error.message}, `Offline setup failed: ${error.message}`)),

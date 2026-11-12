@@ -580,7 +580,7 @@ stop the server at startup with an error naming the field.
 | `firestore.namespace`             | `""`                                     | The query schema's namespace inside the database; required when Firestore is enabled |
 | `firestore.allow_default_database_query` | `false`                             | Explicit opt-in to run the query schema in the `(default)` database |
 | `debug_tools`                     | `true`                                   | Serve `/console` and `/browse` (see [Pages](#pages)) |
-| `master_password`                 | `""`                                     | Password for `/browse` and the other admin pages (see [Master password](#master-password)). Empty means none, which is only allowed when `server.host` is a numeric IP address |
+| `master_password`                 | `""`                                     | Password for `/browse` and the other admin pages (see [Master password](#master-password)). Empty is for loopback development only; the server refuses a non-loopback bind with debug tools enabled and no password |
 | `log_level`                       | `"INFO"`                                 | `"DEBUG"`, `"INFO"`, `"WARNING"` or `"ERROR"` |
 | `translation.*`                   | `"provider": "off"`                      | Translate games' own texts with Google Translate, on first use (see [docs/game-translation.md](docs/game-translation.md)); `google_api_key`, `daily_character_limit` |
 | `monitoring.*`                    | see `config.example.json`                | JSON logs, a log file for the Ops Agent, and the thresholds for alerts (slow requests, sign-up floods, memory...); see [docs/monitoring.md](docs/monitoring.md) |
@@ -907,17 +907,19 @@ them with every request, including the other pages' fetches of the paged admin
 collections (so opening the portal or console asks for it too). The username is
 ignored; only the password is checked. The product API and `/docs` don't need it.
 
-It defaults to empty, which means no password. That is only allowed when `server.host`
-is a numeric IP address (such as the default `127.0.0.1`, or `0.0.0.0`). If `server.host`
-is a hostname (such as `localhost` or `games.example.com`) while debug tools are on, the
-server refuses to start until `master_password` is set. Like users' passwords, it travels
-in plain text over HTTP.
+It defaults to empty for loopback development (`127.0.0.1` or `::1`). With debug
+tools enabled, a non-loopback bind requires a master password. A reverse proxy
+can expose even a loopback server: always configure a strong password before
+putting it behind a public proxy. Use HTTPS because Basic authentication sends
+the password with each request.
 
 ## Game API
 
 A game's `code` is a complete HTML document. The portal and the builder run it in an
 iframe with `sandbox="allow-scripts"`: its scripts run, but in an isolated origin, so a
-game can't read the platform's cookies or storage or call the API. The page and the game
+game cannot read the platform's cookies, storage, or API credentials. It can still
+make anonymous requests to public endpoints; the sandbox is not a network firewall.
+The page and the game
 talk only through `postMessage`, with two messages.
 
 Every game has `server_code` (the server-side Game API, specified in
@@ -1069,15 +1071,18 @@ python -m pytest game_platform/tests
 The tests start the app in-process (no server or network needed) and use temporary
 directories for data files, so they don't touch your data.
 
-GitHub Actions runs these tests on every push and pull request
-(`.github/workflows/tests.yml`, Python 3.14). The web checks below aren't part of it yet.
+GitHub Actions runs these tests on pushes to `main` and on pull requests
+(`.github/workflows/ci.yml`, Python 3.14), together with JavaScript and
+Playwright checks and a production-only Python 3.12 import check. The separate
+`.github/workflows/scaling.yml` runs Firestore emulator tests. Its result does
+not gate the deployment job in `ci.yml`.
 
 ### Web regression checks
 
 All backend tests and their fixtures/helpers live in `tests/`; web checks live in
 `tests/web/`. Pytest defaults to `tests/` when run from this package directory.
 
-Run the complete web suite with `node --test tests/web` (Node.js 18+) from this
+Run the complete web suite with `node --test tests/web/*.test.cjs` (CI uses Node.js 22) from this
 package directory. Each script can also run directly with
 `node tests/web/<name>.test.cjs`.
 
@@ -1302,8 +1307,8 @@ are grouped across sizes. The audit is in `audit/audit.spec.ts`; add checks to `
 
 ### CI/CD
 
-`.github/workflows/ci.yml` runs the pytest suite and the UI tests on every push and pull
-request. On a push to `main`, once both pass, it SSHes into the Google Cloud VM and runs a
+`.github/workflows/ci.yml` runs the pytest suite and the UI tests on pushes to `main` and pull
+requests. On a push to `main`, once those and the production-runtime check pass, it SSHes into the Google Cloud VM and runs a
 command. Configure these repository secrets (Settings > Secrets and variables > Actions):
 
 | Secret | Meaning |

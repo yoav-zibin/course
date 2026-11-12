@@ -462,7 +462,7 @@ def test_webpush_notifier_hands_pywebpush_a_text_key(monkeypatch) -> None:
         subscription=WebPushSubscription(
             id="sub-1",
             user_id="user-1",
-            endpoint="https://push.example.com/s/1",
+            endpoint="https://fcm.googleapis.com/fcm/send/test",
             p256dh=keys["p256dh"],
             auth=keys["auth"],
             created_at=now,

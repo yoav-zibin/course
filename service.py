@@ -5,7 +5,7 @@ matters, and raises a subclass of [PlatformError] when a request can't be honore
 """
 
 import collections
-from game_platform.move_history import append_move
+from game_platform.move_history import append_move, history_prefix
 import datetime as dt
 import hashlib
 import hmac
@@ -31,7 +31,6 @@ from game_platform.models import (
     ExperimentAssignment,
     ExperimentEvent,
     ExperimentEventKind,
-    ExperimentKind,
     ExperimentVariant,
     Game,
     GameRules,
@@ -62,7 +61,6 @@ from game_platform.game_logic import (
 )
 from game_platform.game_testing import (
     GameTestReport,
-    TestFailure,
     test_server_code,
 )
 from game_platform.push import LogPushNotifier, PushMessage, PushNotifier
@@ -235,7 +233,7 @@ def _new_id() -> str:
 
 
 def _new_seed() -> int:
-    return secrets.randbits(64)
+    return secrets.randbits(256)
 
 
 def _new_password() -> str:
@@ -2508,7 +2506,7 @@ class GamePlatform:
             # clients, and knowing the match id reveals nothing about it,
             # so nobody can predict the match's random outcomes.
             seed = self._new_seed()
-            seed_version = 2
+            seed_version = 3
         match = Match(
             id=match_id,
             game_id=game.id,
@@ -2674,11 +2672,18 @@ class GamePlatform:
                 result = self._call_logic(
                     game, saved, "playerJoined", saved.state, caller_id
                 )
+                pot, payouts = self._pay_logic_result(saved, result)
+                turn = self._turn_indices(saved, result)
                 saved = self._save(
                     replace(
                         saved,
                         state=result.get("state"),
-                        turn_of_player_indices=self._turn_indices(saved, result),
+                        turn_of_player_indices=turn,
+                        status="ongoing" if turn is not None else "over",
+                        end_reason=None if turn is not None else "finished",
+                        token_pot=pot,
+                        token_payouts=payouts,
+                        turn_started_at=self._clock() if turn is not None and saved.turn_seconds else None,
                     )
                 )
             self._record_recent_game_for_user(caller_id, saved.game_id, occurred_at=saved.updated_at)
@@ -2973,7 +2978,8 @@ class GamePlatform:
 
     def _call_seed_at(self, match: Match, move_number: int) -> int:
         """The seed for the logic call made with [move_number] moves on the
-        match: derived from the match's secret seed and the move number,
+        match: derived from the match's secret seed and the move number
+        (-1 is reserved for initialization),
         so calls differ within a match but a replay with the same secret
         reproduces every call exactly. The derivation is a hash of the
         secret, so observed random outcomes reveal nothing about the
@@ -2982,21 +2988,40 @@ class GamePlatform:
             digest = hashlib.sha256(
                 f"call-seed:{match.seed}:{move_number}".encode()
             ).digest()
-            return int.from_bytes(digest[:4], "big")
+            return int.from_bytes(digest if match.seed_version >= 3 else digest[:4], "big")
         # Legacy matches (seed derived from the public match id, or 0) are
         # rekeyed before any state-changing logic call; this branch only
         # serves read-only calls (views, logs) until then.
         return (match.seed + move_number) % (2**32)
 
     def _rekey_seed(self, match: Match) -> Match:
-        """Replaces a legacy match's public seed (derived from its match id,
-        so anyone could recompute it and predict the match's random
-        outcomes) with a random secret one. Called before a match's
+        """Upgrades public/32-bit legacy streams to a fresh 256-bit secret.
+        This protects future draws; it cannot erase information about a
+        previously dealt legacy deck. Called before a match's
         state-changing logic calls; the caller saves the returned match,
         so the rekey persists."""
-        if self._legacy_match_seeds or match.seed_version >= 2:
+        if self._legacy_match_seeds or match.seed_version >= 3:
             return match
-        return replace(match, seed=self._new_seed(), seed_version=2)
+        return replace(match, seed=self._new_seed(), seed_version=3)
+
+    def _view_seed(self, match: Match, player_id: str | None) -> int:
+        # A view may legitimately use randomness. It must not reveal the RNG
+        # stream used by applyMove, nor another player's randomized view.
+        digest = hashlib.sha256(
+            f"view-seed:{match.seed}:{len(match.moves)}:{player_id}".encode()
+        ).digest()
+        return int.from_bytes(digest, "big")
+
+    def _logic_seed(self, match: Match, function: str) -> int:
+        if self._legacy_match_seeds or function == "applyMove":
+            return self._call_seed(match)
+        if function == "newMatch":
+            return self._call_seed_at(match, -1)
+        roster = [(match.player_id_of(seat), seat.active) for seat in match.seats]
+        digest = hashlib.sha256(
+            f"function-seed:{match.seed}:{function}:{len(match.moves)}:{roster}".encode()
+        ).digest()
+        return int.from_bytes(digest, "big")
 
     def _call_logic(
         self,
@@ -3015,7 +3040,7 @@ class GamePlatform:
                 function,
                 *args,
                 ctx=self._game_ctx(match),
-                seed=self._call_seed(match),
+                seed=self._logic_seed(match, function),
                 now=self._clock(),
                 time_limit_seconds=time_limit_seconds,
             )
@@ -3025,7 +3050,7 @@ class GamePlatform:
         except GameLogicError as error:
             self._record_logic_error(game, function, error, match=match, args=args)
             raise PlatformError(
-                f"the game's server code failed in {function}: {error}"
+                f"the game's server code failed in {function}"
             ) from error
         self._log_if_slow(
             game, match, function, args,
@@ -3068,7 +3093,7 @@ class GamePlatform:
                 match_id=match.id,
                 move_count=len(match.moves),
                 # With the state and the seed, a call can be repeated exactly.
-                seed=self._call_seed(match),
+                seed=self._logic_seed(match, function) if function != "viewFor" else None,
             )
         return fields
 
@@ -3285,13 +3310,16 @@ class GamePlatform:
             result = self._logic_for(game).call(
                 "newMatch",
                 ctx=self._game_ctx(funded_view),
-                seed=self._call_seed(match),
+                # Initialization must not reveal/reuse the first move's RNG.
+                # The fixture generator alone preserves its historical stream.
+                seed=self._logic_seed(match, "newMatch"),
                 now=self._clock(),
             )
+            pot, payouts = self._pay_logic_result(funded_view, result)
         except GameLogicError as error:
             self._record_logic_error(game, "newMatch", error, match=funded_view, args=())
             raise PlatformError(
-                f"the game's server code failed in newMatch: {error}"
+                "the game's server code failed in newMatch"
             ) from error
         turn_indices = self._turn_indices(match, result)
         saved = self._save(
@@ -3304,6 +3332,7 @@ class GamePlatform:
                 initial_turn_player_indices=turn_indices,
                 turn_of_player_indices=turn_indices,
                 token_pot=pot,
+                token_payouts=payouts,
                 turn_started_at=self._clock() if match.turn_seconds else None,
             )
         )
@@ -3510,7 +3539,7 @@ class GamePlatform:
                 match.state,
                 player_id,
                 ctx=self._game_ctx(match),
-                seed=self._call_seed(match),
+                seed=self._view_seed(match, player_id),
                 now=self._clock(),
             )
         except GameLogicError as error:
@@ -3533,15 +3562,15 @@ class GamePlatform:
         state never leaves the server, not even in the history, and a
         caller without a seat gets the game's spectator views. Each
         historical state is viewed with the move count it was
-        recorded at, so its viewFor gets the same call seed the state
-        was computed with."""
+        recorded at, so its viewFor gets the same viewer-specific random stream
+        as the corresponding live view."""
         moves = list(match.moves)
         initial_view = self.view_state(
             replace(match, state=match.initial_state, moves=()), caller_id
         )
         move_views = [
             self.view_state(
-                replace(match, state=move.new_state, moves=tuple(moves[: index + 1])),
+                replace(match, state=move.new_state, moves=history_prefix(moves, index + 1)),
                 caller_id,
             )
             for index, move in enumerate(moves)

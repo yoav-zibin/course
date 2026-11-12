@@ -2,7 +2,7 @@
 
 import base64
 import datetime as dt
-from typing import Annotated, Any, Final, Literal
+from typing import Annotated, Final, Literal
 from urllib.parse import urlsplit
 
 from pydantic import (
@@ -19,7 +19,6 @@ from jsonschema.exceptions import SchemaError
 from game_platform.game_schemas import compile_game_schemas
 
 from game_platform.models import (
-    Translation,
     MAX_PLAYERS,
     MIN_PLAYERS,
     EndReason,
@@ -39,7 +38,6 @@ from game_platform.models import (
     User,
     WebPushSubscription,
 )
-from game_platform.game_testing import GameTestReport, TestFailure
 from game_platform.i18n import LOCALE_CODES, Locale, get_locale, normalize_locale
 from game_platform.service import GameStrings, TranslationBundle
 
@@ -720,6 +718,8 @@ class MatchResultOut(BaseModel):
 
     @classmethod
     def of(cls, match: Match) -> "MatchResultOut | None":
+        if match.status != "over":
+            return None
         state = match.state
         if not isinstance(state, dict):
             return None
@@ -783,20 +783,22 @@ class MoveOut(BaseModel):
     # view was already computed or no state leaves the server).
     new_state: JsonValue
     next_turn_player_indices: list[int] | None
-    # The move the player sent and their player id (see [Move.move] /
-    # [Move.player_id]).
+    # The submitting human's own move only; null for other viewers. The
+    # public resulting action belongs in the game's projected view.
     move: JsonValue = None
     player_id: str | None = None
 
     @classmethod
-    def of(cls, move: Move) -> "MoveOut":
+    def of(cls, move: Move, *, caller_id: str | None = None) -> "MoveOut":
         return cls(
             move_number=move.move_number,
             player_index=move.player_index,
             made_by_user_id=move.made_by_user_id,
             created_at=move.created_at,
             new_state=move.new_state,
-            move=move.move,
+            # A move can contain a sealed bid or the identities of face-down
+            # cards. Only its author may recover it (e.g. offline deduplication).
+            move=move.move if caller_id and move.made_by_user_id == caller_id else None,
             player_id=move.player_id,
             next_turn_player_indices=None
             if move.next_turn_player_indices is None
@@ -815,13 +817,14 @@ class MatchHistoryOut(BaseModel):
 
     @classmethod
     def of(
-        cls, match: Match, initial_view: JsonValue, move_views: list[JsonValue]
+        cls, match: Match, initial_view: JsonValue, move_views: list[JsonValue],
+        *, caller_id: str | None = None,
     ) -> "MatchHistoryOut":
         return cls(
             initial_state=initial_view,
             initial_turn_player_indices=None if match.initial_turn_player_indices is None else sorted(match.initial_turn_player_indices),
             moves=[
-                MoveOut.of(move).model_copy(update={"new_state": view})
+                MoveOut.of(move, caller_id=caller_id).model_copy(update={"new_state": view})
                 for move, view in zip(match.moves, move_views)
             ],
         )

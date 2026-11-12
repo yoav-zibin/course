@@ -404,7 +404,8 @@ def game_fixture(outcome: Any, delay: float = 0.0) -> tuple[GamePlatform, Simple
     platform._logic_for = lambda game: FakeLogic(outcome, delay)  # type: ignore[method-assign]
     platform._game_ctx = lambda match: {"players": [{"id": "u1"}], "pot": 0}  # type: ignore[method-assign]
     game = SimpleNamespace(id="g1", version=3, name="Tic-tac-toe", owner_user_id="owner-1")
-    match = SimpleNamespace(id="m1", seed=40, moves=[1, 2])
+    match = SimpleNamespace(id="m1", seed=40, moves=[1, 2],
+        seats=[SimpleNamespace(active=True)], player_id_of=lambda seat: "u1")
     return platform, game, match
 
 

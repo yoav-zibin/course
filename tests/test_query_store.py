@@ -1379,3 +1379,14 @@ def test_agent_import_roundtrips_query_store(store):
     assert saved.published is True
     assert saved.import_package is not None
     assert saved.import_package['translations']['es']['display_name'] == body['translations']['es']['display_name']
+
+
+def test_history_move_privacy_on_query_backend(store):
+    from game_platform.tests.test_security_audit import test_history_redacts_private_move_payloads
+    test_history_redacts_private_move_payloads(api_for(store))
+
+
+@pytest.mark.parametrize("phase", ["start", "join"])
+def test_lifecycle_payout_settlement_on_query_backend(store, phase):
+    from game_platform.tests.test_security_audit import test_game_lifecycle_payouts_are_applied_exactly_once
+    test_game_lifecycle_payouts_are_applied_exactly_once(api_for(store), phase)

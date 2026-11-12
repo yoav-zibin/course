@@ -4,6 +4,7 @@ import re
 from dataclasses import replace
 from fastapi import HTTPException, Query, Response
 from game_platform.schemas import GameSummaryOut, UserOut, UserWithPasswordOut, MoveOut
+from game_platform.move_history import history_prefix
 
 
 def install(app, *, debug_tools):
@@ -250,7 +251,7 @@ def install(app, *, debug_tools):
         moves = match.moves[start:stop]
         # Apply per-player views to history as well as current state. Each
         # view is computed with the move prefix it was recorded at, so its
-        # viewFor gets the same call seed as in GamePlatform.view_history.
+        # viewFor gets the same isolated view seed as in GamePlatform.view_history.
         items = [
             MoveOut.of(
                 replace(
@@ -259,11 +260,11 @@ def install(app, *, debug_tools):
                         replace(
                             match,
                             state=move.new_state,
-                            moves=tuple(match.moves[: start + offset + 1]),
+                            moves=history_prefix(match.moves, start + offset + 1),
                         ),
                         caller_id,
                     ),
-                )
+                ), caller_id=caller_id
             )
             for offset, move in enumerate(moves)
         ]
