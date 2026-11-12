@@ -457,13 +457,17 @@ def test_speed_match_deadline_job_ends_the_match_without_a_read(store):
     )
     restarted.run_due_jobs()
 
-    saved = store.get_match(match["id"])
+    # Another process wrote the result. Read a fresh transaction rather than
+    # this store's intentionally stale-while-revalidate non-transactional cache.
+    with store.atomic():
+        saved = store.get_match(match["id"])
+        pending_job = store.raw_get(ref)
     assert (saved.status, saved.end_reason) == ("over", "timed_out")
     assert [t.user_id for t in saved.timeouts] == [alice]
     # Alice held the turn, so the whole 4-token pot went to Bob.
     assert saved.token_pot == 0
     assert sorted(saved.token_payouts.values()) == [4]
-    assert store.raw_get(ref) is None
+    assert pending_job is None
 
 
 def test_seed_resume_is_idempotent_and_budget_is_checked_before_writes(store):

@@ -16,6 +16,17 @@ async function continueAsGuest(page: Page, name: string) {
 
 test.describe('Guest login (real server)', () => {
   test('an open account menu keeps keyboard focus across portal polling', async ({page}) => {
+    let refreshPicture = false;
+    await page.route('**/batch?*', async route => {
+      const response = await route.fetch();
+      const body = await response.json();
+      if (refreshPicture) {
+        for (const item of body) {
+          if (item.body?.picture_url) item.body.picture_url += '?focus-refresh';
+        }
+      }
+      await route.fulfill({response, json: body});
+    });
     const name = uniqueName('Focus guest');
     await page.goto('/static/portal.html');
     await expect(page).toHaveURL(/\/\?next=/);
@@ -34,8 +45,12 @@ test.describe('Guest login (real server)', () => {
     const logout=page.locator('.auth-menu-panel').getByRole('button', {name:`Log out ${name}`, exact:true});
     await logout.focus();
     await expect(logout).toBeFocused();
+    // Force a profile update in the next poll, which rebuilds the menu even
+    // after its initial contents have settled. Focus must follow the action.
+    refreshPicture = true;
     // The portal polls in batches now: wait for a batch carrying the catalog.
     await page.waitForResponse(response => new URL(response.url()).pathname==='/batch' && response.request().method()==='GET');
+    await expect(page.locator('.auth-menu-button img')).toHaveAttribute('src', /focus-refresh/);
     await expect(logout).toBeFocused();
     await page.getByRole('heading',{name:'Game platform',exact:true}).click();
     await expect(page.locator('.auth-menu-panel')).toBeHidden();

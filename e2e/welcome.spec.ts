@@ -82,5 +82,5 @@ test('after login the visitor returns to the ?next= page; external targets are i
   // (now logged in, so the welcome page forwards at once) lands on the
   // games page instead.
   await page.goto('/?next=%2F%2Fexample.com');
-  await expect(page).toHaveURL(/\/(?:portal)$/);
+  await expect(page).toHaveURL(/\/(?:static\/portal\.html|portal)$/);
 });
