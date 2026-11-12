@@ -477,7 +477,8 @@ function validateResult(fn, result, ctx, args) {
     }
     const payouts = result.payouts;
     if (
-      (fn === "applyMove" || fn === "playerLeft") &&
+      (fn === "newMatch" || fn === "applyMove" ||
+        fn === "playerJoined" || fn === "playerLeft") &&
       result.turn === null && pot && payouts === undefined
     ) {
       fail("error", `game.${fn} ended without payouts for the pot`);

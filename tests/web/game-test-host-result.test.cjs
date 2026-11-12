@@ -8,14 +8,14 @@ const source = fs.readFileSync(
   path.join(__dirname, '../../static/game-test-host.js'), 'utf8',
 );
 
-function host(schemas) {
+function host(schemas, pot = 0) {
   const context = { postMessage() {} };
   vm.createContext(context);
   vm.runInContext(source, context);
   vm.runInContext(`__gameSchemas = ${JSON.stringify(schemas)}`, context);
   return (fn, result) => vm.runInContext('validateResult', context)(
     fn, result,
-    { players: [{ id: 'p0', kind: 'human' }], pot: 0 },
+    { players: [{ id: 'p0', kind: 'human' }], pot },
     [{}, 'p0'],
   );
 }
@@ -46,3 +46,20 @@ test('state-changing results still enforce platform turns', () => {
     /empty or non-list turn/,
   );
 });
+
+for (const fn of ['newMatch', 'applyMove', 'playerJoined', 'playerLeft']) {
+  test(`${fn} must distribute a terminal match's pot`, () => {
+    const validate = host({}, 10);
+    assert.throws(
+      () => validate(fn, { state: {}, turn: null }),
+      /ended without payouts for the pot/,
+    );
+    assert.throws(
+      () => validate(fn, { state: {}, turn: null, payouts: { p0: 9 } }),
+      /not the pot of 10/,
+    );
+    assert.doesNotThrow(
+      () => validate(fn, { state: {}, turn: null, payouts: { p0: 10 } }),
+    );
+  });
+}

@@ -147,7 +147,7 @@ class ServerHost {
     this.serverCode = serverCode;
     this.schemas = schemas;
     this.terminate();
-    this.worker = new Worker("/static/game-test-host.js?v=2");
+    this.worker = new Worker("/static/game-test-host.js?v=3");
     this.worker.onmessage = (event) => this.onMessage(event.data);
     this.worker.onerror = () => this.terminate();
     let entry;
