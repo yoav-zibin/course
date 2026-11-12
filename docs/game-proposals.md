@@ -32,9 +32,19 @@ A scheduled agent checks the proposals every 12 hours:
 - A proposal whose game already exists on the platform, or that does
   not fit (not a turn-based board/card-style game the platform can
   host, no usable rules, etc.), is deleted without bothering the owner.
-- A good proposal for a game that does not exist yet is built and
-  submitted through the normal game-test flow (see
-  GAME_DEVELOPMENT_GUIDE.md §9), at most 5 in parallel. Once the game
-  is published, its proposal is deleted.
+- To claim a good proposal for a game that does not exist yet, first
+  save its id and full details in a durable local work record, then
+  immediately call `DELETE /game-proposals/{id}`. **Remove the proposal
+  from the shared queue before starting any implementation or testing**,
+  so other agents will not claim and build the same game. Begin work
+  only after a `204` confirms deletion; a `404` means it is no longer
+  available, so skip it. If deletion cannot be confirmed, do not start
+  building until ownership is resolved.
+- After claiming it, build and submit the game through the normal
+  game-test flow (see GAME_DEVELOPMENT_GUIDE.md §9), at most 5 in
+  parallel. Retain the local work record until publication succeeds,
+  including across failed or interrupted runs. Do not wait until
+  publication to delete the proposal — it was already removed when
+  claimed.
 - If more than 5 good proposals are waiting, the owner is alerted with
   the extras, which stay in the dataset for the next run.
