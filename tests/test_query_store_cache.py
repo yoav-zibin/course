@@ -143,6 +143,38 @@ def test_popular_rankings_use_cache_and_refresh_after_committed_scores():
     store.close()
 
 
+def test_popular_refresh_cannot_restore_ranking_from_before_a_commit(monkeypatch):
+    from game_platform.tests.fake_firestore import Query
+
+    store, client, clock, jobs = make_store()
+    try:
+        first = store.collection("game_popularity").document("first")
+        second = store.collection("game_popularity").document("second")
+        first.set({"game_id": "first", "score": 2})
+        second.set({"game_id": "second", "score": 1})
+        assert store.list_popular_game_ids(1) == [("first", 2)]
+        clock[0] += 2
+        assert store.list_popular_game_ids(1) == [("first", 2)]
+
+        original = Query.stream
+        committed = False
+
+        def read_then_commit(query, transaction=None):
+            nonlocal committed
+            rows = original(query, transaction=transaction)
+            if query.collection.path == first.path.rsplit("/", 1)[0] and not committed:
+                committed = True
+                store.raw_put(second, {"game_id": "second", "score": 3})
+            return rows
+
+        monkeypatch.setattr(Query, "stream", read_then_commit)
+        drain(jobs)
+        assert committed
+        assert store.list_popular_game_ids(1) == [("second", 3)]
+    finally:
+        store.close()
+
+
 def test_move_batches_are_served_from_cache():
     store, client, clock, jobs = make_store()
     match_ref = store.ref("matches", "m1")

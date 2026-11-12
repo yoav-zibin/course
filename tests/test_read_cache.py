@@ -1,5 +1,7 @@
 """The stale-while-revalidate read cache in front of Firestore."""
 
+import pytest
+
 from game_platform.read_cache import ReadCache, default_max_bytes, estimate_size
 from game_platform.scaling_service import LOGIC_CACHE_LIMIT
 
@@ -90,6 +92,30 @@ def test_refresh_does_not_regress_a_write_through():
     assert cache.get_or_fetch("k", fetch) == {"v": 1}
     drain(jobs)
     assert cache.get_or_fetch("k", lambda: {"v": 9}) == {"v": 3}
+
+
+@pytest.mark.parametrize("batched", [False, True])
+@pytest.mark.parametrize("invalidation", ["drop", "clear"])
+def test_refresh_cannot_restore_an_invalidated_entry(batched, invalidation):
+    cache, clock, jobs = make_cache()
+    cache.put("k", {"v": 1})
+    clock.now += 2.0
+
+    def fetch():
+        # A write invalidates the old snapshot while its refresh is in flight.
+        if invalidation == "clear":
+            cache.clear()
+        else:
+            cache.drop_where(lambda key: key == "k")
+        return {"v": 2}
+
+    if batched:
+        assert cache.get_or_fetch_many(["k"], lambda keys: {"k": fetch()}) == {"k": {"v": 1}}
+    else:
+        assert cache.get_or_fetch("k", fetch) == {"v": 1}
+    drain(jobs)
+    # The invalidated snapshot must stay absent so this read loads current data.
+    assert cache.get_or_fetch("k", lambda: {"v": 3}) == {"v": 3}
 
 
 def test_put_writes_through():

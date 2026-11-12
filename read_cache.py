@@ -167,22 +167,26 @@ class ReadCache:
         A single value larger than the whole budget is not cached."""
         size = estimate_size(value)
         with self._lock:
-            old = self._entries.pop(key, None)
-            if old is not None:
-                self._total_bytes -= old.size
-            if size > self._max_bytes:
-                return
-            while self._entries and self._total_bytes + size > self._max_bytes:
-                _, evicted = self._entries.popitem(last=False)
-                self._total_bytes -= evicted.size
-            now = self._clock()
-            self._entries[key] = _Entry(
-                copy.deepcopy(value),
-                size,
-                now + self._refresh_seconds,
-                now + self._refresh_seconds,
-            )
-            self._total_bytes += size
+            self._put_locked(key, value, size)
+
+    def _put_locked(self, key, value, size):
+        """Store a value while holding _lock, including conditional refreshes."""
+        old = self._entries.pop(key, None)
+        if old is not None:
+            self._total_bytes -= old.size
+        if size > self._max_bytes:
+            return
+        while self._entries and self._total_bytes + size > self._max_bytes:
+            _, evicted = self._entries.popitem(last=False)
+            self._total_bytes -= evicted.size
+        now = self._clock()
+        self._entries[key] = _Entry(
+            copy.deepcopy(value),
+            size,
+            now + self._refresh_seconds,
+            now + self._refresh_seconds,
+        )
+        self._total_bytes += size
 
     def drop_where(self, predicate):
         """Evict every entry whose key satisfies [predicate]."""
@@ -217,14 +221,13 @@ class ReadCache:
     def _refresh(self, key, fetch, entry):
         try:
             value = fetch()
+            size = estimate_size(value)
             with self._lock:
-                # A write-through (or a newer refresh) may have replaced the
-                # entry while the fetch was in flight; never regress it with
-                # the older fetched value.
-                current = self._entries.get(key)
-                stale = current is entry or current is None
-            if stale:
-                self.put(key, value)
+                # Writes may replace or invalidate an entry mid-fetch. Check
+                # identity and store under the same lock so an older snapshot
+                # cannot undo either operation, including drop_where/clear.
+                if self._entries.get(key) is entry:
+                    self._put_locked(key, value, size)
         except Exception:
             pass  # Keep serving the stale value; the next window retries.
         finally:
@@ -235,11 +238,11 @@ class ReadCache:
         try:
             fetched = fetch_many(list(keys))
             for key in keys:
+                value = fetched[key]
+                size = estimate_size(value)
                 with self._lock:
-                    current = self._entries.get(key)
-                    stale = current is seen[key] or current is None
-                if stale:
-                    self.put(key, fetched[key])
+                    if self._entries.get(key) is seen[key]:
+                        self._put_locked(key, value, size)
         except Exception:
             pass
         finally:
