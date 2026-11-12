@@ -878,19 +878,32 @@ def get_game_strings(
 
 
 @router.get("/games/{game_id}/versions/{version}/cover")
-def get_game_cover(platform: Platform, game_id: str, version: int, caller_id: OptionalCallerId) -> Response:
+def get_game_cover(
+    request: Request, platform: Platform, game_id: str, version: int,
+    caller_id: OptionalCallerId,
+) -> Response:
     """The game's cover image (the first image of its import package), as SVG.
     Imported games always carry their cover in the package."""
     from game_platform.game_artifacts import validate_cover
 
-    game = platform.get_game_version(game_id, version, caller_id=caller_id)
+    game = platform.get_game_version(game_id, version, caller_id=caller_id, include_code=False)
     images = (game.import_package or {}).get("images") or []
     if not images:
         raise HTTPException(404, "No approved cover")
     validate_cover(images[0])
-    return Response(images[0]["svg"], media_type="image/svg+xml", headers={
+    svg = images[0]["svg"]
+    etag = '"' + hashlib.sha256(svg.encode()).hexdigest() + '"'
+    headers = {
         "Content-Security-Policy": "default-src 'none'; sandbox", "X-Content-Type-Options": "nosniff",
-        "Cache-Control": "public, max-age=3600"})
+        # Visibility may change, so public covers have a bounded lifetime rather
+        # than immutable caching. Private/retired covers must never be shared.
+        "Cache-Control": "public, max-age=3600" if game.published and not game.deleted else "private, no-store",
+        "ETag": etag,
+    }
+    # Resolve visibility before accepting a validator from an earlier response.
+    if _etag_matches(request.headers.get("if-none-match"), etag):
+        return Response(status_code=HTTPStatus.NOT_MODIFIED, headers=headers)
+    return Response(svg, media_type="image/svg+xml", headers=headers)
 
 
 @router.patch("/games/{game_id}")
@@ -2002,6 +2015,11 @@ async def _revalidate_pages(
     """Makes browsers check for newer pages and scripts on every load. Otherwise they
     may keep using a cached old script with a new page, which breaks it."""
     response = await call_next(request)
+    if (request.method == "GET" and request.scope.get("endpoint") is get_game_cover
+            and response.status_code in (HTTPStatus.OK, HTTPStatus.NOT_MODIFIED)):
+        # The cover endpoint explicitly chooses public caching or private
+        # no-store after checking visibility. Other game data stays private.
+        return response
     if request.url.path.startswith(("/games/", "/matches/", "/users/me/")):
         response.headers["Cache-Control"] = "private, no-store"
     elif request.method == "GET" and not response.headers.get(

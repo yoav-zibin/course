@@ -37,6 +37,24 @@ def store():
     )
 
 
+def test_cover_reads_only_metadata_and_warm_reads_use_cache(store):
+    from game_platform.tests.test_game_covers import create_cover
+
+    api = api_for(store)
+    _, game_id, url = create_cover(api)
+    store.clear_cache()
+    with patch.object(store, "_read_doc", wraps=store._read_doc) as read:
+        with patch.object(store.client, "transaction", side_effect=AssertionError("cover opened a transaction")):
+            first = api.request("GET", url)
+            assert first.status_code == 200
+            assert first.headers["cache-control"] == "public, max-age=3600"
+            assert [call.args[0].path for call in read.call_args_list] == [
+                store.ref("game_versions", f"{game_id}@1").path, store.ref("games", game_id).path]
+            read.reset_mock()
+            assert api.request("GET", url).status_code == 200
+            assert read.call_count == 0
+
+
 @pytest.mark.parametrize("with_handler", [True, False])
 def test_leave_payout_contract_is_atomic_and_survives_restart(store, with_handler):
     from game_platform.tests.test_leave_result_contract import test_leave_uses_game_distribution_and_pays_exactly_once

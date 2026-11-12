@@ -726,9 +726,9 @@ class QueryStore:
             )
         return record
 
-    def _get(self, kind, identity):
+    def _get(self, kind, identity, *, detail=True):
         ref = self.ref(kind, identity)
-        return self._decode(kind, self.raw_get(ref), ref)
+        return self._decode(kind, self.raw_get(ref), ref, detail=detail)
 
     def _put(self, kind, identity, record, **fields):
         with self.atomic():
@@ -1107,8 +1107,16 @@ class QueryStore:
         return self._get("games", game_id)
 
     def get_game_version(self, game_id, version):
-        game = self._get("game_versions", f"{game_id}@{version}")
-        current = self.get_game(game_id)
+        return self._game_version(game_id, version, detail=True)
+
+    def get_game_version_without_code(self, game_id, version):
+        """Cover metadata, with current visibility, without any code-chunk reads."""
+        return self._game_version(game_id, version, detail=False)
+
+    def _game_version(self, game_id, version, *, detail):
+        game = self._get("game_versions", f"{game_id}@{version}", detail=detail)
+        # Only the current visibility flags are needed, even for a full version.
+        current = self._get("games", game_id, detail=False)
         return (
             replace(game, deleted=current.deleted, published=current.published)
             if game and current

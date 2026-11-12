@@ -1973,11 +1973,19 @@ class GamePlatform:
                 raise NotFoundError("game not found")
             return game
 
-    def get_game_version(self, game_id: str, version: int, *, caller_id: str | None = None) -> Game:
+    def get_game_version(
+        self, game_id: str, version: int, *, caller_id: str | None = None,
+        include_code: bool = True,
+    ) -> Game:
         """Old versions stay available, even after the game is deleted, because matches
-        created with them still need their code."""
-        with self._lock:
-            game = self._store.get_game_version(game_id, version)
+        created with them still need their code. Covers can skip code loading and
+        use the ordinary read cache; the same visibility checks still apply."""
+        reader = self._store.get_game_version
+        if not include_code:
+            reader = getattr(self._store, "get_game_version_without_code", reader)
+
+        def read() -> Game:
+            game = reader(game_id, version)
             if game is None:
                 raise NotFoundError("game version not found")
             if not game.published and caller_id != game.owner_user_id:
@@ -1988,6 +1996,11 @@ class GamePlatform:
                 )):
                     raise NotFoundError("game version not found")
             return game
+
+        if not include_code:
+            return self._plain_read(read)
+        with self._lock:
+            return read()
 
     def get_game_versions(
         self, refs: list[tuple[str, int]], *, caller_id: str | None = None
