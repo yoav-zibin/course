@@ -23,7 +23,9 @@ drafts or matches; submitting one never touches those stores.
   the same check as the debug tools). Returns
   `{"proposals": [...]}` oldest first.
 - `DELETE /game-proposals/{id}` — master password. `204` on success,
-  `404` for an unknown id.
+  `404` for an unknown id. The existence check and deletion are atomic;
+  a competing claim may return `409`. Only a confirmed `204` claims the
+  proposal; after a conflict, reload the queue before retrying.
 
 ## Review loop
 

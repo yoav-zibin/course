@@ -9,8 +9,8 @@ games, drafts or matches, and nothing here touches those stores.
   capped, and that is the only write a visitor gets).
 - `GET /game-proposals` and `DELETE /game-proposals/{id}` require the
   master password (the same HTTP Basic check as the debug tools): they
-  are how the reviewing agents list what is waiting and remove a proposal
-  once it has been handled — built, or rejected as a duplicate / bad fit.
+  are how the reviewing agents list what is waiting and claim a proposal
+  before starting work, or reject a duplicate / bad fit.
 """
 
 import datetime as dt
@@ -64,12 +64,15 @@ def list_proposals(store):
 
 
 def delete_proposal(store, proposal_id):
-    """Remove one proposal; True when it existed."""
+    """Atomically claim/remove one proposal; True only for a committed deletion."""
     ref = store.ref(PROPOSAL_KIND, proposal_id)
-    if store.raw_get(ref) is None:
-        return False
-    # A None write deletes the document on commit (see QueryStore.atomic).
-    store.raw_put(ref, None)
+    # The existence check must bypass the read cache and belong to the same
+    # transaction as the delete, so two reviewing agents cannot both claim it.
+    with store.atomic():
+        if store.raw_get(ref) is None:
+            return False
+        # A None write deletes the document on commit (see QueryStore.atomic).
+        store.raw_put(ref, None)
     return True
 
 

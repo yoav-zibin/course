@@ -5,6 +5,7 @@ QueryStore."""
 import pytest
 
 from game_platform import game_proposals as gp
+from game_platform.read_cache import ReadCache
 from game_platform.scaling_service import ScalablePlatform
 from game_platform.tests.fake_firestore import FakeClient, query_store
 from game_platform.tests.helpers import Api
@@ -83,6 +84,25 @@ def test_delete_removes_the_proposal(api):
     # Deleting it again is a 404.
     response = api.client.delete(f"/game-proposals/{proposals[0]['id']}", auth=AUTH)
     assert response.status_code == 404
+
+
+def test_delete_cannot_claim_a_proposal_deleted_by_another_instance(api):
+    store = api.platform._store
+    # Keep the original instance's write-through copy stale deterministically.
+    store._cache.close()
+    store._cache = ReadCache(clock=lambda: 0.0, submit=lambda job: None)
+    proposal_id = propose(api).json()["id"]
+    other = query_store(store.namespace, store.client)
+    try:
+        peer = Api(store=other, master_password=MASTER)
+        url = f"/game-proposals/{proposal_id}"
+        assert peer.client.delete(url, auth=AUTH).status_code == 204
+        assert store.raw_get(store.ref(gp.PROPOSAL_KIND, proposal_id)) is not None
+        # A cached proposal must not authorize a second successful claim.
+        assert api.client.delete(url, auth=AUTH).status_code == 404
+    finally:
+        other.close()
+        store.close()
 
 
 def test_submission_validation(api):

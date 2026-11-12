@@ -326,6 +326,38 @@ def test_verification_attempts_persist_and_second_instance_can_finish_login(stor
         time.sleep(0.05)
 
 
+def test_two_instances_can_claim_a_game_proposal_only_once(store):
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+
+    from game_platform import game_proposals as gp
+
+    proposal = gp.create_proposal(
+        store, game_name="Azul", description="", rules_url="", proposer_name=""
+    )
+    barrier = threading.Barrier(2)
+
+    def claim(_):
+        other = QueryStore(store.client, namespace=store.namespace)
+        try:
+            # Both processes have already observed the shared queue entry.
+            assert other.raw_get(other.ref(gp.PROPOSAL_KIND, proposal["id"]))
+            barrier.wait(timeout=5)
+            try:
+                return "claimed" if gp.delete_proposal(other, proposal["id"]) else "unavailable"
+            except ConflictError:
+                return "conflict"
+        finally:
+            other.close()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(claim, range(2)))
+    assert results.count("claimed") == 1, results
+    assert all(result in ("claimed", "unavailable", "conflict") for result in results)
+    # The creator still has its cached copy; even that retry must lose.
+    assert gp.delete_proposal(store, proposal["id"]) is False
+
+
 def test_two_instances_racing_a_move_commit_only_once(store):
     from concurrent.futures import ThreadPoolExecutor
     import threading
