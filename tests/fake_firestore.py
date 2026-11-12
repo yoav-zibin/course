@@ -113,26 +113,31 @@ class Query:
         filters: tuple = (),
         limit_count: int | None = None,
         after_id: str | None = None,
+        ordering: tuple[tuple[str, str], ...] = (),
     ) -> None:
         self.collection = collection
         self.filters = filters
         self.limit_count = limit_count
         self.after_id = after_id
+        self.ordering = ordering
 
     def where(self, *, filter: Any) -> "Query":
         return Query(
-            self.collection, self.filters + (filter,), self.limit_count, self.after_id
+            self.collection, self.filters + (filter,), self.limit_count, self.after_id,
+            self.ordering,
         )
 
-    def order_by(self, field: str) -> "Query":
-        return self  # stream() always sorts by document name.
+    def order_by(self, field: str, direction: str = "ASCENDING") -> "Query":
+        return Query(self.collection, self.filters, self.limit_count, self.after_id,
+                     self.ordering + ((field, direction),))
 
     def limit(self, count: int) -> "Query":
-        return Query(self.collection, self.filters, count, self.after_id)
+        return Query(self.collection, self.filters, count, self.after_id, self.ordering)
 
     def start_after(self, snapshot: dict) -> "Query":
         return Query(
-            self.collection, self.filters, self.limit_count, snapshot["__name__"].id
+            self.collection, self.filters, self.limit_count, snapshot["__name__"].id,
+            self.ordering,
         )
 
     def stream(self, transaction: Any = None) -> list[Snapshot]:
@@ -145,6 +150,10 @@ class Query:
             if path.startswith(prefix) and "/" not in path[len(prefix) :]
             and all(_matches(data, f) for f in self.filters)
         ]
+        for field, direction in reversed(self.ordering):
+            if field != "__name__":
+                rows = [row for row in rows if field in row[1]]
+                rows.sort(key=lambda row: row[1][field], reverse=direction == "DESCENDING")
         if self.after_id is not None:
             rows = [row for row in rows if row[0].rsplit("/", 1)[-1] > self.after_id]
         if self.limit_count is not None:
@@ -166,8 +175,8 @@ class Collection:
     def where(self, *, filter: Any) -> Query:
         return Query(self).where(filter=filter)
 
-    def order_by(self, field: str) -> Query:
-        return Query(self)
+    def order_by(self, field: str, direction: str = "ASCENDING") -> Query:
+        return Query(self).order_by(field, direction=direction)
 
     def limit(self, count: int) -> Query:
         return Query(self, limit_count=count)

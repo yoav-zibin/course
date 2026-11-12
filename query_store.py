@@ -367,16 +367,23 @@ class QueryStore:
         )
 
     def list_popular_game_ids(self, limit):
-        query = self.collection("game_popularity").order_by(
-            "score", direction="DESCENDING"
-        ).limit(limit)
-        with timed_external("firestore"):
-            rows = list(query.stream())
-        return [
-            (data["game_id"], data["score"])
-            for row in rows
-            if (data := row.to_dict()) and data.get("score", 0) > 0
-        ]
+        def fetch():
+            query = self.collection("game_popularity").order_by(
+                "score", direction="DESCENDING"
+            ).limit(limit)
+            with timed_external("firestore"):
+                rows = list(query.stream())
+            return [
+                (data["game_id"], data["score"])
+                for row in rows
+                if (data := row.to_dict()) and data.get("score", 0) > 0
+            ]
+
+        if getattr(self._local, "uow", None) is not None:
+            return fetch()
+        # Use the same bounded, background-refreshed cache as other queries.
+        # Committed popularity writes invalidate this key immediately.
+        return self._cache.get_or_fetch(("query", "game_popularity", "ranking", limit), fetch)
 
     def game_popularity_score(self, game_id):
         data = self.raw_get(self.collection("game_popularity").document(key(game_id)))
@@ -1105,6 +1112,10 @@ class QueryStore:
 
     def get_game(self, game_id):
         return self._get("games", game_id)
+
+    def get_game_without_code(self, game_id):
+        """Current game metadata for summaries, without reading code chunks."""
+        return self._get("games", game_id, detail=False)
 
     def get_game_version(self, game_id, version):
         return self._game_version(game_id, version, detail=True)

@@ -2304,14 +2304,20 @@ class GamePlatform:
         """Returns the highest player-match totals from the persistent ranking."""
         if type(limit) is not int or not 1 <= limit <= 20:
             raise InvalidRequestError("limit must be between 1 and 20")
-        with self._lock:
+        from contextlib import nullcontext
+
+        read_game = getattr(self._store, "get_game_without_code", None)
+        # QueryStore serves these read-only summaries through its read cache;
+        # opening a write transaction would bypass it and fetch every row again.
+        with nullcontext() if read_game is not None else self._lock:
             list_rankings = getattr(self._store, "list_popular_game_ids", None)
             if list_rankings is None:
                 return []
             rankings = list_rankings(limit)
+            read_game = read_game or self._store.get_game
             games = []
             for game_id, _score in rankings:
-                game = self._store.get_game(game_id)
+                game = read_game(game_id)
                 if game is not None and game.published and not game.deleted:
                     games.append(game)
             return games

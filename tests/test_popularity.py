@@ -76,3 +76,41 @@ def test_server_computer_match_adds_all_players_exactly_once(api):
     assert api.ok("GET", f"/games/{game}/popularity")["score"] == 2
     assert api.request("POST", f"/matches/{match}/start", as_user=owner, json={}).status_code == 409
     assert api.ok("GET", f"/games/{game}/popularity")["score"] == 2
+
+
+def test_popular_summaries_skip_code_reads_and_respect_unpublishing(monkeypatch):
+    from game_platform.tests.fake_firestore import query_store
+
+    store = query_store()
+    try:
+        api = Api(store=store)
+        owner = api.new_user("popular metadata owner")
+        game_id = api.new_game(owner=owner)
+        store.record_game_match_start(game_id, 2)
+        store.clear_cache()
+        read_doc = store._read_doc
+        read_paths = []
+
+        def metadata_only(ref):
+            assert "/body/" not in ref.path, "summary fetched game code"
+            read_paths.append(ref.path)
+            return read_doc(ref)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(store, "_read_doc", metadata_only)
+            patch.setattr(store.client, "transaction", lambda: (_ for _ in ()).throw(
+                AssertionError("popular listing opened a write transaction")))
+            games = api.ok("GET", "/games/popular")
+            cold_reads = store.client.reads
+            cold_queries = store.client.queries
+            assert api.ok("GET", "/games/popular") == games
+            assert store.client.reads == cold_reads
+            assert store.client.queries == cold_queries
+        assert [game["id"] for game in games] == [game_id]
+        assert "code" not in games[0]
+        assert read_paths == [store.ref("games", game_id).path]
+
+        store.set_game_published(game_id, False)
+        assert api.ok("GET", "/games/popular") == []
+    finally:
+        store.close()

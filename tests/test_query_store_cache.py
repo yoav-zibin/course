@@ -120,6 +120,29 @@ def test_query_results_cached_and_invalidated_by_own_kind_writes():
     assert client.queries == queries + 2
 
 
+def test_popular_rankings_use_cache_and_refresh_after_committed_scores():
+    store, client, clock, jobs = make_store()
+    first = store.collection("game_popularity").document("first")
+    second = store.collection("game_popularity").document("second")
+    first.set({"game_id": "first", "score": 2})
+    second.set({"game_id": "second", "score": 1})
+    queries = client.queries
+    assert store.list_popular_game_ids(1) == [("first", 2)]
+    assert store.list_popular_game_ids(1) == [("first", 2)]
+    assert client.queries == queries + 1
+
+    store.raw_put(second, {"game_id": "second", "score": 3})
+    assert store.list_popular_game_ids(1) == [("second", 3)]
+    assert client.queries == queries + 2
+
+    first.set({"game_id": "first", "score": 4})  # another process commits
+    clock[0] += 2
+    assert store.list_popular_game_ids(1) == [("second", 3)]
+    drain(jobs)
+    assert store.list_popular_game_ids(1) == [("first", 4)]
+    store.close()
+
+
 def test_move_batches_are_served_from_cache():
     store, client, clock, jobs = make_store()
     match_ref = store.ref("matches", "m1")
