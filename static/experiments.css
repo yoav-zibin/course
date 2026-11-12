@@ -594,3 +594,152 @@
 :root[data-skin="midnight"] .topbar .token-wallet-number strong {
   color:#f7f2e2;
 }
+/* Party: a disco theme with a slow-moving rainbow gradient, neon borders,
+   and a rounded party font. The gradient drifts over a full minute instead
+   of flashing, and it stops entirely for reduced-motion users. */
+:root[data-skin="party"] {
+  color-scheme: dark;
+  --builder-accent-ink: #2a0045;
+  --color-bg-0: #1d004d;
+  --color-bg-1: #2b0066;
+  --color-bg-2: #3d0085;
+  --color-bg-3: #52009e;
+  --color-bg-4: #6d00b8;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #ffe3f6;
+  --color-text-tertiary: #cdb2ff;
+  --color-text-quaternary: #a98fe8;
+  --color-border-1: #4a148c;
+  --color-border-2: #ff2ea6;
+  --color-border-3: #00e5ff;
+  --color-border-4: #ffe93d;
+  --color-accent: #ff2ea6;
+  --color-accent-hover: #ffe93d;
+  --color-focus-ring: #00f5ff;
+  --color-ok: #2eff8f;
+  --color-warn: #ffd23d;
+  --color-error: #ff5d73;
+  --font-sans: "Fredoka", "Baloo 2", "Arial Rounded MT Bold", "Comic Sans MS",
+    "Chalkboard SE", "Trebuchet MS", sans-serif;
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-md: 16px;
+  --radius-sm: 10px;
+  --radius-md: 18px;
+  --shadow-1: 0 2px 0 rgb(255 46 166 / 45%);
+  --shadow-3:
+    0 2px 2px rgb(123 0 255 / 35%), 0 6px 14px rgb(255 46 166 / 30%),
+    0 12px 28px rgb(0 229 255 / 22%);
+}
+
+@keyframes party-lights {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+:root[data-skin="party"] body {
+  background: linear-gradient(115deg, #1d004d, #7b00ff, #ff2ea6, #ff7a00,
+    #b5179e, #00a2ff, #1d004d);
+  background-size: 350% 350%;
+  animation: party-lights 60s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-skin="party"] body,
+  :root[data-skin="party"] .portal-shell { animation: none; }
+}
+
+:root[data-skin="party"] .portal-shell {
+  --color-bg-0: #1d004d;
+  --color-bg-1: #2b0066;
+  --color-bg-2: #3d0085;
+  --color-bg-3: #52009e;
+  --color-bg-4: #6d00b8;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #ffe3f6;
+  --color-text-tertiary: #cdb2ff;
+  --color-border-2: #ff2ea6;
+  --color-border-3: #00e5ff;
+  --color-accent: #ff2ea6;
+  --color-accent-hover: #ffe93d;
+  --color-focus-ring: #00f5ff;
+  background: linear-gradient(115deg, #1d004d, #7b00ff, #ff2ea6, #ff7a00,
+    #b5179e, #00a2ff, #1d004d);
+  background-size: 350% 350%;
+  animation: party-lights 60s ease-in-out infinite;
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}
+:root[data-skin="party"] .portal-sidebar,
+:root[data-skin="party"] .match-creator,
+:root[data-skin="party"] .game-detail-page,
+:root[data-skin="party"] .match-stage,
+:root[data-skin="party"] .portal-shell .game-search-popup,
+:root[data-skin="party"] .portal-shell .match-tools {
+  background: rgb(43 0 102 / 90%);
+  border: 2px solid #ff2ea6;
+  color: #ffffff;
+}
+:root[data-skin="party"] .popular-games-section,
+:root[data-skin="party"] .play-option,
+:root[data-skin="party"] .portal-shell .library-card,
+:root[data-skin="party"] .selected-game-card {
+  background: rgb(61 0 133 / 88%);
+  border: 2px solid #00e5ff;
+  color: #ffffff;
+}
+:root[data-skin="party"] .portal-shell input,
+:root[data-skin="party"] .portal-shell select {
+  background: #1d004d;
+  border: 2px solid #00e5ff;
+  color: #ffffff;
+}
+:root[data-skin="party"] .portal-shell button.primary,
+:root[data-skin="party"] .portal-shell .library-toolbar button[aria-pressed="true"] {
+  background: #ff2ea6;
+  border: 2px solid #ffe93d;
+  color: #2a0045;
+}
+:root[data-skin="party"] .portal-shell button.primary:hover:not(:disabled) {
+  background: #ffe93d;
+  border-color: #ff2ea6;
+}
+:root[data-skin="party"] .portal-shell button:focus-visible,
+:root[data-skin="party"] .portal-shell summary:focus-visible,
+:root[data-skin="party"] .portal-shell .popular-game-card:focus-visible {
+  outline-color: #00f5ff;
+}
+:root[data-skin="party"] .creator-title,
+:root[data-skin="party"] .popular-games-heading h2,
+:root[data-skin="party"] .play-option-heading h3,
+:root[data-skin="party"] .selected-game-card h2 {
+  color: #ffffff;
+}
+:root[data-skin="party"] .creator-description,
+:root[data-skin="party"] .popular-period,
+:root[data-skin="party"] .play-option-heading p,
+:root[data-skin="party"] .play-option .play-option-note,
+:root[data-skin="party"] .library-description {
+  color: #cdb2ff;
+}
+
+:root[data-skin="party"] .builder-shell {
+  --color-bg-0:#1d004d;--color-bg-1:#2b0066;--color-bg-2:#3d0085;--color-bg-3:#52009e;--color-bg-4:#6d00b8;
+  --color-text-primary:#ffffff;--color-text-secondary:#ffe3f6;--color-text-tertiary:#cdb2ff;--color-text-quaternary:#a98fe8;
+  --color-border-1:#4a148c;--color-border-2:#ff2ea6;--color-border-3:#00e5ff;--color-border-4:#ffe93d;
+  --color-accent:#ff2ea6;--color-accent-hover:#ffe93d;--color-focus-ring:#00f5ff;--builder-accent-ink:#2a0045;
+}
+
+:root[data-skin="party"] .topbar .token-wallet {
+  background: linear-gradient(135deg, #ff2ea6, #7b00ff);
+  border: 2px solid #ffe93d;
+  color: #ffffff;
+  box-shadow: 0 4px 18px rgb(255 46 166 / 45%);
+}
+:root[data-skin="party"] .topbar .token-wallet-coin {
+  background: #ffe93d;
+  border-color: #ff2ea6;
+  color: #2a0045;
+}
+:root[data-skin="party"] .topbar .token-wallet-label { color: #ffe3f6; }
+:root[data-skin="party"] .topbar .token-wallet-number { color: #ffe3f6; }
+:root[data-skin="party"] .topbar .token-wallet-number strong { color: #ffffff; }
