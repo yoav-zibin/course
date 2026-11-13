@@ -509,7 +509,7 @@ function syncPortalPreviewLinks() {
   document.querySelectorAll(
     '.topbar[data-app-page] .app-home-link, .app-brand[href]',
   ).forEach(link => {
-    const target = new URL(link.getAttribute('href') || '/', location.origin);
+    const target = new URL(link.getAttribute('href') || '/', location.href);
     for (const key of previewKeys) {
       target.searchParams.delete(key);
       if (source.has(key)) target.searchParams.set(key, source.get(key));
@@ -523,7 +523,12 @@ function setUpAppTopbar() {
   const current = bar?.dataset?.appPage;
   if (!current) return;
   const brand = bar.querySelector('h1');
-  brand.setAttribute('data-i18n', 'ui.app_name');
+  if (bar.dataset.appBrand) {
+    brand.removeAttribute('data-i18n');
+    brand.textContent = bar.dataset.appBrand;
+  } else {
+    brand.setAttribute('data-i18n', 'ui.app_name');
+  }
   syncPortalPreviewLinks();
 }
 
@@ -534,8 +539,10 @@ function linkTopbarBrandToPortal() {
     if (heading.closest("a.app-home-link")) return;
     const link = el("a", {
       class: "app-home-link",
-      href: "/",
-      "aria-label": I18n.t("ui.portal.home_aria", {}, "Game platform home"),
+      href: heading.closest(".topbar")?.dataset?.appHomeHref || "/",
+      "aria-label": heading.closest(".topbar")?.dataset?.appBrand
+        ? `${heading.closest(".topbar").dataset.appBrand} home`
+        : I18n.t("ui.portal.home_aria", {}, "Game platform home"),
       title: I18n.t("ui.common.back_to_games", {}, "Back to games"),
     });
     heading.parentNode.insertBefore(link, heading);
