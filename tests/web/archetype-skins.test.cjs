@@ -202,13 +202,13 @@ function setupDiscovery() {
 
 test('skin discovery adds picker options for built-in archetype keys', () => {
   const {picker, run} = setupDiscovery();
-  run(`extendPortalSkins(['midnight', 'party', 'riso-club', 'isaac-bright-artsy', 'white',
+  run(`extendPortalSkins(['midnight', 'party', 'riso-club', 'isaac-ui', 'white',
     'focus', 'showcase', 'lobby', 'library', 'BAD KEY', ''])`);
   const values = picker.options.map((option) => option.value);
   for (const key of NEW_SKINS) assert.ok(values.includes(key), `${key} missing from picker`);
   assert.equal(picker.options.find((o) => o.value === 'focus').textContent, 'Focus');
   assert.equal(picker.options.find((o) => o.value === 'showcase').textContent, 'Showcase');
-  assert.equal(picker.options.find((o) => o.value === 'isaac-bright-artsy').textContent, 'Isaac Bright Artsy');
+  assert.equal(picker.options.find((o) => o.value === 'isaac-ui').textContent, 'Isaac ui');
   assert.ok(!values.includes('BAD KEY'), 'invalid keys must be skipped');
   assert.equal(values.filter((value) => value === '').length, 1, 'no empty option may be appended');
   const before = picker.options.length;
