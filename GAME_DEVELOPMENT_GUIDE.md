@@ -280,6 +280,21 @@ Rules:
 - The client must call `applyLocale(`. Use a `t(key, params)` helper that looks a key up in the installed translations (falling back to the source table) and fills `{placeholders}`.
 - Keep the page accessible and responsive: readable on phones, tablets, and laptops, in portrait and landscape. Clickable targets at least 30 by 30 CSS pixels. Text contrast at least 4.5:1 (3:1 for large text and essential control boundaries).
 
+### Client UI requirements (mandatory)
+
+The client is what a human actually plays. A game whose logic verifies but whose client is a bare template is not finished. Every generated client must meet all of these requirements:
+
+- **Center the layout.** The game board and all in-game UI are centered on the page. Left-aligned template layouts are not acceptable.
+- **Render the pieces.** Cards, tiles, dice and dominoes are drawn as real visual objects — card faces, tile faces, dice pips — not stacks of plain buttons or bare text rows.
+- **Explain the game inside the game.** The client states the game's goal and what the player should do now, in plain language, on the game screen itself.
+- **Put the rules in a collapsible panel.** The rules / how-to content lives in a panel that is collapsed by default and expands on demand.
+- **Selection is not submission.** Clicking a card or tile selects it; clicking it again deselects it. A click never sends a move by itself. A move goes out only through an explicit confirm / play button, and that button stays disabled until the current selection is a complete legal choice.
+- **Play forced draws automatically.** When a draw is forced, the client sends it itself instead of making the player click for it.
+- **Keep the selection across redraws.** A `state_changed` redraw must not clear the player's current selection.
+- **Never offer a move the server would reject.** Render controls only for moves that are legal in the current view; a control the server cannot accept must not appear.
+
+A client that fails any of these points counts as unfinished, even if the game's logic passes every check.
+
 ## 5. Translations
 
 `translations` has exactly one entry for each language other than the game's own language. If the game is written in English, the keys are exactly `es, fr, de, pt, zh, hi, ar`. Missing or extra languages are rejected. Each entry has:
