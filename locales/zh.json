@@ -899,5 +899,7 @@
   "ui.declarative.zoom.out": "缩小",
   "ui.declarative.zoom.reset": "适合棋盘",
   "ui.declarative.zoom.level": "缩放：{percent}%",
-  "ui.declarative.zoom.hint": "双指捏合可缩放。放大后拖动棋盘可平移。"
+  "ui.declarative.zoom.hint": "双指捏合可缩放。放大后拖动棋盘可平移。",
+  "ui.portal.quick_play": "▶ 开始",
+  "ui.portal.quick_play_aria": "立即与电脑玩{name}"
 }

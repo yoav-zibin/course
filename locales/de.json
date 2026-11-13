@@ -899,5 +899,7 @@
   "ui.declarative.zoom.out": "Verkleinern",
   "ui.declarative.zoom.reset": "Spielbrett einpassen",
   "ui.declarative.zoom.level": "Zoom: {percent}%",
-  "ui.declarative.zoom.hint": "Mit zwei Fingern zoomen. Das vergrößerte Spielbrett zum Verschieben ziehen."
+  "ui.declarative.zoom.hint": "Mit zwei Fingern zoomen. Das vergrößerte Spielbrett zum Verschieben ziehen.",
+  "ui.portal.quick_play": "▶ Spielen",
+  "ui.portal.quick_play_aria": "Jetzt {name} gegen Computer spielen"
 }

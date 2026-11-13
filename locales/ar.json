@@ -899,5 +899,7 @@
   "ui.declarative.zoom.out": "تصغير",
   "ui.declarative.zoom.reset": "ملاءمة اللوحة",
   "ui.declarative.zoom.level": "التكبير: {percent}%",
-  "ui.declarative.zoom.hint": "استخدم إصبعين للتكبير والتصغير. اسحب اللوحة المكبرة لتحريكها."
+  "ui.declarative.zoom.hint": "استخدم إصبعين للتكبير والتصغير. اسحب اللوحة المكبرة لتحريكها.",
+  "ui.portal.quick_play": "▶ العب",
+  "ui.portal.quick_play_aria": "العب {name} ضد الكمبيوتر الآن"
 }

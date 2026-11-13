@@ -899,5 +899,7 @@
   "ui.declarative.zoom.out": "Zoom out",
   "ui.declarative.zoom.reset": "Fit board",
   "ui.declarative.zoom.level": "Zoom: {percent}%",
-  "ui.declarative.zoom.hint": "Pinch to zoom. Drag the board to pan when zoomed."
+  "ui.declarative.zoom.hint": "Pinch to zoom. Drag the board to pan when zoomed.",
+  "ui.portal.quick_play": "▶ Play",
+  "ui.portal.quick_play_aria": "Play {name} against computers now"
 }

@@ -899,5 +899,7 @@
   "ui.declarative.zoom.out": "छोटा करें",
   "ui.declarative.zoom.reset": "पूरा बोर्ड दिखाएँ",
   "ui.declarative.zoom.level": "ज़ूम: {percent}%",
-  "ui.declarative.zoom.hint": "ज़ूम करने के लिए दो उँगलियों को पास या दूर करें। ज़ूम किए गए बोर्ड को खिसकाने के लिए खींचें।"
+  "ui.declarative.zoom.hint": "ज़ूम करने के लिए दो उँगलियों को पास या दूर करें। ज़ूम किए गए बोर्ड को खिसकाने के लिए खींचें।",
+  "ui.portal.quick_play": "▶ खेलें",
+  "ui.portal.quick_play_aria": "अभी कंप्यूटरों के विरुद्ध {name} खेलें"
 }

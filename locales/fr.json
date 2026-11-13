@@ -899,5 +899,7 @@
   "ui.declarative.zoom.out": "Réduire",
   "ui.declarative.zoom.reset": "Ajuster le plateau",
   "ui.declarative.zoom.level": "Zoom : {percent}%",
-  "ui.declarative.zoom.hint": "Pincez pour zoomer. Faites glisser le plateau agrandi pour le déplacer."
+  "ui.declarative.zoom.hint": "Pincez pour zoomer. Faites glisser le plateau agrandi pour le déplacer.",
+  "ui.portal.quick_play": "▶ Jouer",
+  "ui.portal.quick_play_aria": "Jouer à {name} contre des ordinateurs maintenant"
 }

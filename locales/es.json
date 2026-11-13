@@ -899,5 +899,7 @@
   "ui.declarative.zoom.out": "Alejar",
   "ui.declarative.zoom.reset": "Ajustar tablero",
   "ui.declarative.zoom.level": "Zoom: {percent}%",
-  "ui.declarative.zoom.hint": "Pellizca para cambiar el zoom. Arrastra el tablero para desplazarlo cuando esté ampliado."
+  "ui.declarative.zoom.hint": "Pellizca para cambiar el zoom. Arrastra el tablero para desplazarlo cuando esté ampliado.",
+  "ui.portal.quick_play": "▶ Jugar",
+  "ui.portal.quick_play_aria": "Jugar a {name} contra las computadoras ahora"
 }

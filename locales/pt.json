@@ -899,5 +899,7 @@
   "ui.declarative.zoom.out": "Reduzir",
   "ui.declarative.zoom.reset": "Ajustar tabuleiro",
   "ui.declarative.zoom.level": "Zoom: {percent}%",
-  "ui.declarative.zoom.hint": "Use dois dedos para alterar o zoom. Arraste o tabuleiro ampliado para movê-lo."
+  "ui.declarative.zoom.hint": "Use dois dedos para alterar o zoom. Arraste o tabuleiro ampliado para movê-lo.",
+  "ui.portal.quick_play": "▶ Jogar",
+  "ui.portal.quick_play_aria": "Jogar {name} contra computadores agora"
 }
