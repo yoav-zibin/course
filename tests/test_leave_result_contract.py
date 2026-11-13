@@ -55,9 +55,9 @@ def test_continuing_leave_keeps_indices_and_cannot_be_played_by_leaver(api):
                              "const ids = ctx.players.filter(p => p.active !== false).map(p => p.id);")
     code = code.replace("return {state: state, turn: [others[0]], payout: Math.floor(ctx.pot / 2)};",
                         "return {state, turn: [others[0]], payouts: {[playerId]: 2}};")
-    game = api.ok("POST", "/games", as_user=users[0], json={"name": "Elimination",
+    game = api.create_game({"name": "Elimination",
         "allowed_player_counts": [3], "allows_leave_mid_match": True,
-        "code": "<div></div>", "server_code": code})
+        "code": "<div></div>", "server_code": code}, users[0])
     match = api.ok("POST", "/matches", as_user=users[0], json={"game_id": game["id"], "max_loss": 10})
     mid = match["id"]
     for user in users[1:]:
@@ -68,7 +68,9 @@ def test_continuing_leave_keeps_indices_and_cannot_be_played_by_leaver(api):
     assert left["token_pot"] == 28
     assert [p["player_index"] for p in left["players"]] == [0, 1, 2]
     assert left["players"][2]["active"] is False
-    assert api.ok("GET", f"/matches/{mid}", as_user=users[2])["state"] is None
+    # The leaver spectates now: they get the game's spectator view
+    # (this game's viewFor is the same public view for everyone).
+    assert api.ok("GET", f"/matches/{mid}", as_user=users[2])["state"] == {"count": 0}
     assert all(p["kind"] == "human" for p in left["players"])
     assert _move(api, mid, as_user=users[2], add=1).status_code == 403
     for i in range(10):
@@ -93,14 +95,6 @@ def test_bots_cannot_be_added_to_multiplayer_or_joined_via_invite(api):
     api.ok("PATCH", f"/matches/{solo}", as_user=alice, json={"num_computer_opponents": 0})
     joined = api.ok("POST", f"/matches/{solo}/join", as_user=bob)
     assert all(p["kind"] == "human" for p in joined["players"])
-
-
-def test_emulator_rejects_mixed_multiplayer_but_accepts_solo_bots(api):
-    user = api.new_user("builder")
-    body = {"server_code": LEAVE_GAME, "players": [{"kind": "human"}, {"kind": "human"}, {"kind": "computer"}]}
-    assert api.request("POST", "/emulator/reset", as_user=user, json=body).status_code == 422
-    body["players"].pop(0)
-    assert api.request("POST", "/emulator/reset", as_user=user, json=body).status_code == 200
 
 
 def test_legacy_mixed_match_ends_and_refunds_once(api):

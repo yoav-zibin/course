@@ -121,6 +121,7 @@ function applyLocale(message) {
   if (message.direction) document.documentElement.dir = message.direction;
 }
 let latest=null;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 function applyStaticTexts(){
   document.querySelector("h1").textContent=t("heading");
   document.querySelector(".sub").textContent=t("sub");
@@ -139,7 +140,7 @@ function setName(id,color,text){
 let sentForMove=-1;
 function canAct(){
   if(!latest||latest.status!=="ongoing") return false;
-  return latest.acting_for_player_index!==null && latest.acting_for_player_index!==undefined;
+  return actingSeat()!==null && actingSeat()!==undefined;
 }
 function claim(i){
   if(!latest||!canAct()) return;

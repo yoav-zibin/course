@@ -12,7 +12,7 @@ function client(){
  vm.runInNewContext(code,{document,parent,addEventListener(type,fn){if(type==='message')receive=fn;}});
  return {nodes,sent,send(message){receive({source:parent,data:message});},foreign(message){receive({source:{},data:message});}};
 }
-function state(chips=2){return {type:'state_changed',status:'ongoing',move_count:40,acting_for_player_index:0,
+function state(chips=2){return {type:'state_changed',status:'ongoing',move_count:40,my_player_index:0,turn_of_player_indices:[0],
  players:[{name:'You'},{name:'Opponent'}],view:{phase:'betting',customNames:['',''],round:9,deckCount:52,
   chips:[chips,750],dealer:[],hands:[[],[]],results:['',''],pendingBets:{},needBet:[true,true],curP:0,curH:0,winners:null}};}
 function buttons(t){return t.nodes.get('actions').children;}
@@ -39,7 +39,7 @@ test('duplicate and stale handlers send once, unchanged authoritative refresh re
 });
 test('spectators and completed matches cannot submit through current or stale controls',()=>{
  const t=client();t.send(state());const old=buttons(t)[0];
- t.send({...state(),acting_for_player_index:null});old.onclick();assert.equal(t.sent.length,0);
- t.send({...state(),status:'over',acting_for_player_index:null,view:{...state().view,phase:'gameOver',winners:0}});
+ t.send({...state(),turn_of_player_indices:[1]});old.onclick();assert.equal(t.sent.length,0);
+ t.send({...state(),status:'over',view:{...state().view,phase:'gameOver',winners:0}});
  old.onclick();assert.equal(t.sent.length,0);assert.equal(buttons(t).length,0);
 });

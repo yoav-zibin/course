@@ -259,7 +259,6 @@ function experimentManagement() {
 }
 
 function gamesPanel(games) {
-  const detail = el("div", { class: "chat-detail" });
   const rows = games.map((g) =>
     el(
       "tr",
@@ -268,15 +267,6 @@ function gamesPanel(games) {
       el("td", { textContent: g.owner }),
       el("td", { class: "num", textContent: g.versions }),
       el("td", { class: "num", textContent: g.matches }),
-      el(
-        "td",
-        {},
-        el("button", {
-          type: "button",
-          textContent: "View",
-          onclick: () => showAgentConversation(g, detail),
-        }),
-      ),
     ),
   );
   return el(
@@ -293,57 +283,15 @@ function gamesPanel(games) {
             el(
               "tr",
               {},
-              ["Game", "Owner", "Versions", "Matches", "Agent conversation"].map((h, i) =>
-                el("th", { class: i > 0 && i < 4 ? "num" : "", textContent: h }),
+              ["Game", "Owner", "Versions", "Matches"].map((h, i) =>
+                el("th", { class: i > 0 ? "num" : "", textContent: h }),
               ),
             ),
           ),
           el("tbody", {}, rows),
         )
       : el("div", { class: "muted", textContent: "None yet." }),
-    detail,
   );
-}
-
-async function showAgentConversation(game, detail) {
-  detail.replaceChildren(
-    el("div", { class: "muted", textContent: `Loading the agent conversation for ${game.name}…` }),
-  );
-  try {
-    const response = await fetch(
-      `/admin/games/${encodeURIComponent(game.game_id)}/agent-conversation`,
-    );
-    if (response.status === 404) {
-      detail.replaceChildren(
-        el("div", { class: "muted", textContent: `No agent conversation recorded for ${game.name}.` }),
-      );
-      return;
-    }
-    if (!response.ok) throw new Error(`GET agent-conversation: ${response.status}`);
-    const conversation = await response.json();
-    detail.replaceChildren(
-      el("h4", {
-        textContent: `Agent conversation — ${game.name} (${conversation.entries.length} messages)`,
-      }),
-      ...conversation.entries.map((entry) =>
-        el(
-          "div",
-          { class: "chat-entry" },
-          el("div", {
-            class: "chat-meta",
-            textContent: `${entry.role === "user" ? "User" : "Agent"} · ${formatTime(entry.created_at)} · ${
-              entry.game_version ? `game version ${entry.game_version}` : "not yet published"
-            }`,
-          }),
-          el("div", { class: "chat-text", textContent: entry.text }),
-        ),
-      ),
-    );
-  } catch (error) {
-    detail.replaceChildren(
-      el("div", { class: "muted", textContent: `Couldn't load the conversation: ${error.message}` }),
-    );
-  }
 }
 
 function render(stats, experiments) {
@@ -371,19 +319,19 @@ function render(stats, experiments) {
       barChart("New matches per day", matches.new_per_day),
       table("Users by language", ["Language", "Users"], Object.entries(users.by_locale ?? {})),
     ),
-    el("h2", { textContent: "Builder: games" }),
+    el("h2", { textContent: "Games" }),
     cards([
       [games.live, "live games"],
       [games.deleted, "deleted games"],
       [games.versions, "versions saved"],
-      [games.builders, "game builders"],
+      [games.builders, "game creators"],
     ]),
     el(
       "div",
       { class: "panels" },
       barChart("New games per day", games.new_per_day),
       gamesPanel(games.per_game),
-      table("Top builders", ["User", "Live games"], games.top_builders.map((b) => [b.user, b.games])),
+      table("Top creators", ["User", "Live games"], games.top_builders.map((b) => [b.user, b.games])),
     ),
     el("h2", { textContent: "A/B experiments" }),
     el(

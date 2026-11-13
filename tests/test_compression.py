@@ -54,3 +54,19 @@ def test_the_portal_page_still_revalidates(api: Api) -> None:
     response = api.client.get("/portal")
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-cache"
+
+
+def test_the_portal_page_returns_304_when_unchanged(api: Api) -> None:
+    first = api.client.get("/static/portal.html")
+    assert first.status_code == 200
+    etag = first.headers.get("etag")
+    assert etag, "portal.html should carry an ETag"
+    again = api.client.get("/static/portal.html", headers={"If-None-Match": etag})
+    assert (again.status_code, again.content) == (304, b"")
+    assert again.headers["etag"] == etag
+    # A changed ETag still gets the full page.
+    changed = api.client.get(
+        "/static/portal.html", headers={"If-None-Match": '"does-not-match"'}
+    )
+    assert changed.status_code == 200
+    assert changed.content == first.content

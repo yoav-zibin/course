@@ -8,7 +8,7 @@ function setup(name){
  const fd=fakeDom(),handlers={},messages=[];const elements=new Proxy({},{get:(_,id)=>fd.document.getElementById(id)});
  const parent={postMessage(m){messages.push(JSON.parse(JSON.stringify(m)))}};
  const sb={parent,document:fd.document,addEventListener:(n,cb)=>handlers[n]=cb};vm.createContext(sb);vm.runInContext(pageScriptOf(path.join(ROOT,name+'.html'),fd.document),sb);
- const data={type:'state_changed',status:'ongoing',move_count:0,acting_for_player_index:0,my_player_index:0,players:[{name:'A'},{name:'B'}],view};
+ const data={type:'state_changed',status:'ongoing',move_count:0,turn_of_player_indices:[0],my_player_index:0,players:[{name:'A'},{name:'B'}],view};
  function update(source=parent,extra={}){handlers.message({source,data:{...data,...extra}})}
  update();
  function clickMove(){if(name==='mancala'){elements.botRow.children[2].onclick()}else{const m=view.moves[0];elements.board.children[m.from.r*8+m.from.c].onclick();elements.board.children[m.to.r*8+m.to.c].onclick()}}

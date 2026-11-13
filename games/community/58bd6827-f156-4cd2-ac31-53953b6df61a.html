@@ -89,6 +89,7 @@ function applyLocale(message) {
   if (message.direction) document.documentElement.dir = message.direction;
 }
 let latest=null,sentFor=-1,iPassed=false;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 function applyStaticTexts(){
  document.title=t("page_title");
  document.querySelector("h1").textContent=t("heading");
@@ -96,7 +97,7 @@ function applyStaticTexts(){
 }
 const $=id=>document.getElementById(id);
 function moveCount(){return latest?(latest.move_count??latest.moveCount??0):0;}
-function acting(){return latest&&latest.status==="ongoing"&&latest.acting_for_player_index!==null&&latest.acting_for_player_index!==undefined;}
+function acting(){return latest&&latest.status==="ongoing"&&actingSeat()!==null&&actingSeat()!==undefined;}
 function send(move){if(sentFor===moveCount())return;sentFor=moveCount();parent.postMessage({type:"make_move",move},"*");render();}
 function fourKind(hand){if(!hand||hand.length<4)return false;const r=hand[0].slice(0,-1);return hand.every(c=>c.slice(0,-1)===r);}
 function render(){

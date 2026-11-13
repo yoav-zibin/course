@@ -15,7 +15,7 @@ function setup(name){
   vm.runInNewContext(code,sandbox);
   return {nodes,sent,send:message=>receive({source:parent,data:message}),otherSend:message=>receive({source:{},data:message})};
 }
-const message={type:'state_changed',status:'ongoing',move_count:0,my_player_index:0,acting_for_player_index:0,
+const message={type:'state_changed',status:'ongoing',move_count:0,my_player_index:0,turn_of_player_indices:[0],
   players:[{name:'You'},{name:'Opponent'}],view:{hand:[42,9,7],playable:[9,7],top:22,suit:0,counts:[3,3],deckCount:40,turnIdx:0,done:false}};
 
 test('Crazy Eights disables illegal cards and guards their handlers',()=>{
@@ -45,7 +45,7 @@ test('Crazy Eights wild card requires one suit selection and sends only once',()
   assert.equal(t.sent.length,1);assert.equal(t.sent[0].move.card,7);assert.equal(t.sent[0].move.chosenSuit,1);
 });
 test('Crazy Eights spectators and finished games cannot submit',()=>{
-  const t=setup('crazy-eights');t.send({...message,acting_for_player_index:null});
+  const t=setup('crazy-eights');t.send({...message,turn_of_player_indices:[1]});
   for(const card of t.nodes.get('hand').children){assert.equal(card.disabled,true);card.onclick();}
   t.send({...message,status:'over',view:{...message.view,done:true,winner:0}});
   for(const card of t.nodes.get('hand').children){assert.equal(card.disabled,true);card.onclick();}

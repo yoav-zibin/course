@@ -44,8 +44,6 @@ def test_the_example_data_covers_many_match_states() -> None:
     assert [(game.id, game.version) for game in snapshot.game_versions] == [
         ("tictactoe", 1),
         ("poker", 1),
-        ("poker", 2),
-        ("debug", 1),
     ]
 
     def seats(match: Match) -> str:
@@ -94,10 +92,6 @@ def test_the_example_data_covers_many_match_states() -> None:
         ("poker-last-human-left", "over", "player_left", None, "user4 cpu"),
         ("poker-ready", "waiting_for_players", None, None, "user5 user6"),
         ("poker-open", "waiting_for_players", None, None, "user7"),
-        ("debug-waiting", "waiting_for_players", None, None, "user1"),
-        ("debug-ongoing", "ongoing", None, [0], "user1 user2 user3"),
-        ("debug-computer-to-move", "ongoing", None, [0], "user4 cpu"),
-        ("debug-over", "over", "finished", None, "user5 user6"),
     ]
 
 

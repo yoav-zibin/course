@@ -113,6 +113,7 @@ function applyLocale(message) {
 // nobody can peek at upcoming cards. Buttons send {type:"flip"} or
 // {type:"slap"}; the server validates and resolves everything.
 let L=null, sentFor=-1;
+function actingSeat(){if(!L||L.status!=="ongoing"||!L.turn_of_player_indices?.length)return null;const turn=L.turn_of_player_indices[0];if(turn===L.my_player_index)return turn;const humans=(L.players||[]).filter(p=>p.kind==="human");if(L.my_player_index!==null&&humans.length===1&&L.players[turn]?.kind==="computer")return turn;return null;}
 function staticTexts(){document.getElementById('title').textContent=t('title');document.getElementById('flip').textContent=t('flip');document.getElementById('slap').textContent=t('slap');document.getElementById('slapsHelp').textContent=t('slaps_help');document.getElementById('pileTitle').textContent=t('pile_title',{count:L&&(L.view||L.state)?(L.view||L.state).pile.length:0});}
 staticTexts();
 document.getElementById('status').textContent=t('waiting');
@@ -127,7 +128,7 @@ addEventListener('message',e=>{
  const st=L.view||L.state;
  const n=L.players.length;
  if(!st){document.getElementById('status').textContent=t('dealing');return;}
- const acting=L.status==='ongoing'?L.acting_for_player_index:null;
+ const acting=actingSeat();
  const my=L.my_player_index;
  const isSlap=!!st.slap;
  let s='';

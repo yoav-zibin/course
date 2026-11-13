@@ -9,7 +9,8 @@
 
 const $ = (id) => document.getElementById(id);
 const POLL_MS = 2000;
-async function portalTransport(method, path, { body, user, requestId } = {}) {
+const MATCH_POLL_MS = 1000;
+async function portalFetch(method, path, { body, user, requestId } = {}) {
   const controller = new AbortController(),
     timer = setTimeout(() => controller.abort(), 20000);
   try {
@@ -42,6 +43,88 @@ async function portalTransport(method, path, { body, user, requestId } = {}) {
   } finally {
     clearTimeout(timer);
   }
+}
+// Batched reads: GETs queue up and, 100ms after the last one arrives, go out as
+// a single /batch call; the responses are split back to the original callers.
+// A request that arrives while a batch is in flight starts the next batch, so
+// batches are at least 100ms apart. Queues are per user, so one batch never
+// mixes credentials. Only plain GETs are batched; anything with a body or an
+// idempotency key (a write) goes straight out, and the /batch call itself uses
+// portalFetch so it never re-enters the queue. A single match (GET
+// /matches/{id}) is never batched: it is the live game poll, and sharing a
+// batch with the catalog would let a slow catalog delay a move.
+const BATCH_WAIT_MS = 100;
+const batchQueues = new Map();
+function enqueueBatchGet(path, user) {
+  const key = user ? user.id : "anonymous";
+  let queue = batchQueues.get(key);
+  if (!queue) {
+    queue = { items: [], user, timer: null };
+    batchQueues.set(key, queue);
+  }
+  return new Promise((resolve, reject) => {
+    queue.items.push({ path, resolve, reject });
+    clearTimeout(queue.timer);
+    queue.timer = setTimeout(() => flushBatch(key), BATCH_WAIT_MS);
+  });
+}
+async function flushBatch(key) {
+  const queue = batchQueues.get(key);
+  if (!queue || !queue.items.length) return;
+  batchQueues.delete(key);
+  const items = queue.items;
+  const requests = items.map(({ path }) => ({ method: "GET", path }));
+  let results;
+  try {
+    results = await portalFetch(
+      "GET",
+      `/batch?requests=${encodeURIComponent(JSON.stringify(requests))}`,
+      { user: queue.user },
+    );
+  } catch (error) {
+    // The batch call itself failed: every queued request fails the same way,
+    // and PortalOffline falls back to its saved copy for each of them.
+    for (const item of items) item.reject(error);
+    return;
+  }
+  for (let i = 0; i < items.length; i++) {
+    const result = Array.isArray(results) ? results[i] : null;
+    if (!result || typeof result.status !== "number") {
+      items[i].reject(new Error(I18n.t("ui.error.invalid_response", {}, "Invalid server response")));
+      continue;
+    }
+    if (result.status >= 200 && result.status < 300) items[i].resolve(result.body);
+    else
+      items[i].reject(
+        new ApiError(result.status, result.body?.detail || String(result.status)),
+      );
+  }
+}
+async function portalTransport(method, path, { body, user, requestId } = {}) {
+  if (
+    method === "GET" &&
+    body === undefined &&
+    !requestId &&
+    !/^\/matches\/(?!open$)[^/]+$/.test(path)
+  )
+    return enqueueBatchGet(path, user);
+  return portalFetch(method, path, { body, user, requestId });
+}
+// Lazy-loads a portal script that is not needed for the first paint (speed
+// clock, sounds). The file is already in the service-worker shell cache, so
+// the load is local and fast. Concurrent calls for the same file share one load.
+const portalScriptLoads = new Map();
+function loadPortalScript(src) {
+  if (!portalScriptLoads.has(src)) {
+    portalScriptLoads.set(src, new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error(I18n.t("ui.error.script_load_failed", {src}, `Failed to load ${src}`)));
+      document.head.appendChild(script);
+    }));
+  }
+  return portalScriptLoads.get(src);
 }
 // Browsers that deny storage entirely (private mode, blocked cookies)
 // must not brick the portal: PortalOffline falls back to an in-memory
@@ -159,26 +242,13 @@ const state = {
     new URLSearchParams(location.hash.slice(1)).get("game"),
 };
 
-class PortalGameFrame extends GameFrame {
-  receive(event) {
-    if (event.source !== this.iframe?.contentWindow) return;
-    const data = event.data;
-    if (
-      data?.type === "make_move" &&
-      data.next_turn_player_indices === undefined &&
-      data.next_turn_player_index === null
-    )
-      return super.receive({
-        source: event.source,
-        data: { ...data, next_turn_player_indices: null },
-      });
-    super.receive(event);
-  }
-}
-const frame = new PortalGameFrame(
+const frame = new GameFrame(
   $("game-box"),
   (move) => onMakeMove(move),
-  (problem) => showMessage(problem, "error"),
+  // A game that posts anything but make_move is misbehaving, but that is the
+  // game's bug, not the player's: log it for debugging and stay silent in
+  // the UI instead of flashing an error the player cannot act on.
+  (problem) => console.error(problem),
 );
 
 // Data
@@ -205,11 +275,15 @@ function updateStakePreview() {
   }
 }
 
-async function updateTokenWallet(user) {
+async function updateTokenWallet(user, record) {
   const wallet = $("token-wallet");
   if (!user) { wallet.hidden = true; walletBalance = null; updateStakePreview(); return; }
   try {
-    const record = await portalTransport("GET", `/users/${encodeURIComponent(user.id)}`, {user});
+    // [record] is the /users/{id} row fetched with the catalog batch; when it
+    // is not supplied (or the batch fetch failed), fetch it directly.
+    if (record === undefined)
+      record = await portalTransport("GET", `/users/${encodeURIComponent(user.id)}`, {user});
+    if (!record) { wallet.hidden = true; walletBalance = null; updateStakePreview(); return; }
     if (me()?.id !== user.id) return;
     // Accounts saved before short invite links learn their referral code here.
     state.pictureCache.set(user.id, record.picture_url);
@@ -222,7 +296,7 @@ async function updateTokenWallet(user) {
     walletBalance = record.token_balance;
     const balance = String(walletBalance);
     if ($("token-balance").textContent !== balance) $("token-balance").textContent = balance;
-    wallet.title = I18n.t("ui.portal.wallet_hint", {balance}, `${balance} virtual tokens · Earn 10 when starting your first eligible match each day`);
+    wallet.title = I18n.t("ui.portal.wallet_hint", {balance}, `${balance} virtual tokens · +10 daily allowance on your first paid match entry`);
     wallet.hidden = false;
     // No optimistic balance adjustments: the server may grant today's +10 at start.
     updateStakePreview();
@@ -248,26 +322,6 @@ function updateMatchCurrency(match, user) {
   const notes = [];
   if (paid && match.status === "waiting_for_players")
     notes.push(el("p", {class:"token-summary-note", textContent:I18n.t("ui.stakes.pot_note", {}, "Pot is collected when the match starts. Paid matches need human players.")}));
-  const payoutPending = paid && match.status === "over" && match.proposed_payouts != null && match.payout_outcome == null;
-  if (payoutPending) {
-    const seat = user && match.players.find(p => p.user_id === user.id);
-    if (seat) {
-      const proposed = match.proposed_payouts[String(seat.player_index)] ?? 0;
-      const net = proposed - stake;
-      notes.push(el("div", {class:"token-summary-payout"},
-        el("span", {textContent:I18n.t("ui.stakes.proposed_payout", {}, "Proposed payout")}),
-        el("strong", {textContent:I18n.t("ui.stakes.tokens", {count: proposed}, `${proposed} tokens`)}),
-        el("small", {textContent:I18n.t("ui.stakes.net", {amount: `${net > 0 ? "+" : ""}${net}`}, `Net ${net > 0 ? "+" : ""}${net} tokens`)})));
-    }
-    const agreed = (match.payout_agreed_player_indices || []).includes(seat?.player_index);
-    notes.push(el("p", {class:"token-summary-note", textContent: agreed
-      ? I18n.t("ui.stakes.waiting_for_others", {}, "You agreed. Waiting for the other players to agree before tokens move.")
-      : I18n.t("ui.stakes.agreement_needed", {}, "Tokens move only once every player agrees to these payouts. A dispute, or no answer within an hour, refunds every stake.")}));
-  }
-  if (paid && match.status === "over" && (match.payout_outcome === "disputed" || match.payout_outcome === "expired"))
-    notes.push(el("p", {class:"token-summary-note", textContent: match.payout_outcome === "disputed"
-      ? I18n.t("ui.stakes.refunded_disputed", {}, "A player disputed the result, so every stake was refunded.")
-      : I18n.t("ui.stakes.refunded_expired", {}, "Not every player agreed in time, so every stake was refunded.")}));
   if (paid && match.status === "over" && match.token_payouts != null) {
     const seat = user && match.players.find(p => p.user_id === user.id);
     if (seat) {
@@ -306,20 +360,41 @@ function renderPortalAccountMenu() {
         document.querySelector(".topbar .sidebar-toggle")?.click();
       },
     }),
-    el("a", {
-      href: "/builder",
-      textContent: I18n.t("ui.builder.create_title", {}, "Create a game"),
-    }),
   );
   panel.prepend(menu);
 }
 
 function syncPortalRoutes() {
   const params = new URLSearchParams(location.search);
+  params.delete("game");
   const back = document.querySelector(".back-to-games");
   const query = params.toString();
   if (back)
     back.href = "/static/portal.html" + (query ? `?${query}` : "");
+}
+
+/** Leaves the game page for the catalog. The plain link is not enough: it
+ * only drops the address's game marker, which the page reads once at load
+ * (and the ?game= form is a full navigation back to the same game unless
+ * the parameter goes too), so the game page stayed open. */
+function leaveGamePage(event) {
+  event.preventDefault();
+  const params = new URLSearchParams(location.search);
+  params.delete("game");
+  const query = params.toString();
+  const target = "/static/portal.html" + (query ? `?${query}` : "");
+  if (location.pathname + location.search !== target) {
+    location.assign(target);
+    return;
+  }
+  // Only the hash differs, so navigating would stay in this document:
+  // reset the game view in place instead.
+  history.replaceState(null, "", target);
+  state.detailGameId = null;
+  state.requestedGameHandled = true;
+  $("match-creator").open = true;
+  render();
+  refresh();
 }
 
 /** A display name from the cache, or a short id while it loads. */
@@ -385,28 +460,21 @@ function seatOf(match, userId) {
   return match.players.find((player) => player.user_id === userId && player.active !== false) ?? null;
 }
 
-/** The seat this viewer moves for now: their own turn, or — in a v1 game — a
- * computer's turn, which the viewer's browser plays. In a v2 game computers
- * move on the server, so a viewer only ever acts for their own seat. */
-function actingFor(match, userId) {
+/** Whether this viewer may move now: their own seat is in the turn. Players
+ * only ever act for themselves. In pass-and-play the viewer's seat is the
+ * turn seat (see the mySeat computation where the message is built), so the
+ * same check covers it; computers move on the server, never through a client. */
+function canMove(match, userId) {
   if (
+    !match ||
+    !userId ||
     match.status !== "ongoing" ||
-    match.turn_of_player_indices === null ||
-    !userId
+    match.turn_of_player_indices === null
   )
-    return null;
-  if (match.localMode === "pass") return match.turn_of_player_indices[0];
+    return false;
+  if (match.localMode === "pass") return true;
   const seat = seatOf(match, userId);
-  if (!seat) return null;
-  const turn = match.turn_of_player_indices;
-  if (turn.includes(seat.player_index)) return seat.player_index;
-  const game = gameOf(match.game_id, match.game_version);
-  if (game && game.server_code) return null;
-  if (match.players.filter(player => player.kind === "human" && player.active !== false).length !== 1) return null;
-  const computer = turn
-    .map((index) => match.players[index])
-    .find((player) => player && player.kind === "computer");
-  return computer ? computer.player_index : null;
+  return seat !== null && match.turn_of_player_indices.includes(seat.player_index);
 }
 
 function isYourTurn(match, userId) {
@@ -431,7 +499,7 @@ function isJoinable(match, userId) {
 /** Fetches the player names for everything on screen, plus the full version
  * of the open match's game. Match lists render names and joinability from
  * the slim catalog (gameMetaOf), so their games' code is not fetched here;
- * the rest of the catalog warms lazily in the background (warmGameCache). */
+ * a game's code is fetched on demand when it is opened. */
 async function ensureDetails() {
   const userIds = new Set();
   const collect = (match) => {
@@ -502,29 +570,6 @@ async function ensureDetails() {
   ]);
 }
 
-let gameWarmupRunning = false;
-/** Fills the game cache with the rest of the catalog, one game at a time in
- * the background, so games are ready (and saved for offline play) without a
- * giant up-front download. Page loads never wait on this. */
-async function warmGameCache() {
-  if (gameWarmupRunning || typeof setTimeout !== "function") return;
-  gameWarmupRunning = true;
-  try {
-    for (const game of state.games) {
-      if (state.gameCache.get(`${game.id}@${game.version}`)?.code) continue;
-      if (!navigator.onLine || document.hidden) break;
-      try {
-        await fetchGameVersion(game.id, game.version);
-      } catch {
-        // Skip this game; a later refresh starts the warm-up again.
-      }
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-    }
-  } finally {
-    gameWarmupRunning = false;
-  }
-}
-
 // Coalesce polls before they enter Web Locks, so slow requests cannot build an
 // unbounded queue ahead of a player's move (including from the same tab).
 let refreshPending = null;
@@ -534,6 +579,34 @@ function refresh() {
     .catch(error => showPageError(error.message))
     .finally(() => { refreshPending = null; });
   return refreshPending;
+}
+
+// Poll the active online match independently of catalog/list refreshes. A slow
+// catalog request or another tab's offline lock must not delay the next turn.
+let matchPollPending = false;
+async function pollActiveMatch() {
+  const current = state.match, user = me();
+  if (matchPollPending || document.hidden || !navigator.onLine || !user ||
+      !current || current.localMode || current.status !== "ongoing" ||
+      state.selectedId !== current.id || state.moveInFlight ||
+      offline.read().queues?.[current.id]?.length) return;
+  matchPollPending = true;
+  try {
+    const next = await portalTransport("GET", `/matches/${encodeURIComponent(current.id)}`, {user});
+    if (me()?.id !== user.id || state.selectedId !== current.id || state.moveInFlight ||
+        !state.match || state.match.id !== current.id ||
+        offline.read().queues?.[current.id]?.length ||
+        next.move_count < state.match.move_count ||
+        (next.move_count === state.match.move_count && next.updated_at < state.match.updated_at)) return;
+    if (next.move_count === state.match.move_count && next.updated_at === state.match.updated_at) return;
+    state.match = offline.decorate(next);
+    render();
+    await syncGame();
+  } catch {
+    // The regular refresh owns offline fallback and user-visible errors.
+  } finally {
+    matchPollPending = false;
+  }
 }
 
 function invalidatePopularGames() {
@@ -661,7 +734,7 @@ async function refreshLocked() {
     const popularityRequestVersion = state.popularGamesRequestVersion;
     const recentGamesDue = Boolean(user) && (state.recentGamesForceRefresh || Date.now() - state.recentGamesFetchedAt >= 60_000);
     const recentGamesRequestVersion = state.recentGamesRequestVersion;
-    const [games, myMatches, openMatches, popularGames, recentGames] = await Promise.all([
+    const [games, myMatches, openMatches, popularGames, recentGames, userRecord] = await Promise.all([
       StoragePages.list(portalRequest, "/games", {user}),
       user ? StoragePages.list(portalRequest, "/matches", {user}) : [],
       StoragePages.list(portalRequest, "/matches/open", {user}),
@@ -670,6 +743,10 @@ async function refreshLocked() {
         : null,
       recentGamesDue
         ? portalRequest("GET", "/users/me/recent-games", {user}).catch(() => null)
+        : null,
+      // The token-wallet row rides the same batch instead of its own call.
+      user
+        ? portalRequest("GET", `/users/${encodeURIComponent(user.id)}`, {user}).catch(() => null)
         : null,
     ]);
     state.games = games;
@@ -699,10 +776,15 @@ async function refreshLocked() {
     }
     if (state.selectedId) {
       try {
-        state.match = await portalRequest(
+        const selectedId = state.selectedId;
+        const refreshedMatch = await portalRequest(
           "GET",
-          `/matches/${state.selectedId}`,
+          `/matches/${selectedId}`,
         );
+        if (state.selectedId === selectedId && (!state.match || state.match.id !== selectedId ||
+            refreshedMatch.move_count > state.match.move_count ||
+            (refreshedMatch.move_count === state.match.move_count && refreshedMatch.updated_at >= state.match.updated_at)))
+          state.match = refreshedMatch;
       } catch (error) {
         if (error.status !== 404) throw error;
         showMessage(I18n.t("ui.match.gone", {}, "This match no longer exists."), "error");
@@ -712,7 +794,7 @@ async function refreshLocked() {
     }
     await ensureDetails();
     if (user?.id !== me()?.id) return;
-    await updateTokenWallet(user);
+    await updateTokenWallet(user, userRecord);
     if (user?.id !== me()?.id) return;
     render();
     window.PortalFeedback?.update(state.match, user?.id, {
@@ -721,7 +803,6 @@ async function refreshLocked() {
       outcome: state.match ? matchOutcome(state.match, user?.id)?.kind : null,
     });
     await syncGame();
-    warmGameCache();
     showPageError("");
     offlineStatus();
   } catch (error) {
@@ -1179,6 +1260,22 @@ function renderMatchList(node, matches) {
 
 // The selected match
 
+/** Rebuilds a player-count select with [counts], keeping the current choice
+ * when it is still offered and otherwise falling back to [fallback] of the
+ * counts — the smallest for pass-and-play, the largest for computer matches,
+ * which are the counts those flows used before the choice existed. The
+ * select's label is hidden when the game offers fewer than two counts. */
+function fillPlayerCounts(select, label, counts, fallback) {
+  const previous = Number(select.value);
+  select.replaceChildren(
+    ...counts.map((count) => el("option", { value: String(count), textContent: String(count) })),
+  );
+  select.value = counts.length
+    ? String(counts.includes(previous) ? previous : fallback(...counts))
+    : "";
+  label.hidden = counts.length < 2;
+}
+
 function updateMatchSetup() {
   const detailPage = Boolean(state.detailGameId);
   if (detailPage && !state.detailCreatorInitialized) {
@@ -1196,13 +1293,16 @@ function updateMatchSetup() {
   $("show-creator").hidden = detailPage;
   const maximum = game ? Math.max(...game.allowed_player_counts) - 1 : 0;
   $("create").disabled = !me() || !game || state.creating || !navigator.onLine;
-  $("practice").disabled = !me() || !game;
-  $("practice-mode").disabled = false;
+  // Practice stays clickable while logged out: practice() sends the
+  // visitor to the login page and back, rather than dead-ending here.
+  $("practice").disabled = !game;
+  fillPlayerCounts($("practice-player-count"), $("practice-count-choice"), game?.allowed_player_counts ?? [], Math.min);
+  fillPlayerCounts($("computer-player-count"), $("computer-count-choice"), game?.allowed_player_counts.filter((count) => count > 1) ?? [], Math.max);
   $("practice-offline-note").hidden = false;
   const gameVersion=game && gameOf(game.id,game.version);
   const supportsComputerMatch=Boolean(gameVersion?.server_code && game.allowed_player_counts.some(count=>count>1));
   $("computer-match-option").hidden=!supportsComputerMatch;
-  $("play-computers").disabled=!me() || !game || state.creating || !navigator.onLine;
+  $("play-computers").disabled=!game || state.creating || !navigator.onLine;
   const solo = game?.allowed_player_counts.length === 1 && maximum === 0;
   $("speed-choice").hidden = solo;
   updateStakePreview();
@@ -1214,7 +1314,7 @@ function updateMatchSetup() {
   $("selected-game-name").textContent = (game && I18n.gameName(game.id, game.name)) || I18n.t("ui.games.choose", {}, "Choose a game");
   $("selected-game-description").textContent = (game && I18n.gameDescription(game.id, game.description)) || "";
   $("selected-game-mode").textContent = solo ? I18n.t("ui.games.solo_label", {}, "1 player · solo") : game ? I18n.t("ui.portal.mode_players", {counts: game.allowed_player_counts.join(", ")}, `${game.allowed_player_counts.join(", ")} players`) : "";
-  $("create-hint").textContent = solo ? I18n.t("ui.portal.hint_solo", {}, "Starts immediately. No opponent needed.") : game ? I18n.t("ui.portal.hint_invite_friends", {}, "Create a match, then invite friends to join.") : state.games.length ? I18n.t("ui.portal.hint_choose", {}, "Choose a game from the search results to continue.") : I18n.t("ui.portal.hint_publish", {}, "Publish a game in the builder to make it available here.");
+  $("create-hint").textContent = solo ? I18n.t("ui.portal.hint_solo", {}, "Starts immediately. No opponent needed.") : game ? I18n.t("ui.portal.hint_invite_friends", {}, "Create a match, then invite friends to join.") : state.games.length ? I18n.t("ui.portal.hint_choose", {}, "Choose a game from the search results to continue.") : I18n.t("ui.portal.hint_choose", {}, "Choose a game from the search results to continue.");
 }
 
 function selectMatch(id) {
@@ -1388,7 +1488,9 @@ function renderMatch() {
   if (game?.code)
     secondaryActions.push(
       actionButton(I18n.t("ui.match.new_practice", {}, "Start a new practice"), async () => {
-        const practiceMatch = await offline.practice(game, $("practice-mode").value);
+        // A local match's new practice mirrors its own mode and size; from a
+        // server match it is a pass-and-play game at that match's size.
+        const practiceMatch = await offline.practice(game, match.localMode ?? "pass", match.players.length);
         selectMatch(practiceMatch.id);
       }),
     );
@@ -1486,7 +1588,7 @@ function renderMatch() {
     }
   } else if (match.status === "ongoing" && mySeat && !match.localMode) {
     if (game && game.server_code) {
-      // Leaving a v2 match: the server first previews what leaving
+      // Leaving a match: the server first previews what leaving
       // would pay back (the game's playerLeft, or the platform's
       // split), and only a confirmed click applies that exact preview
       // — so the amount is always shown, staked match or not.
@@ -1511,19 +1613,6 @@ function renderMatch() {
       );
     }
   } else if (match.status === "over") {
-    // A v1 paid match's pot split waits for every human to agree: answer it first.
-    const mustAnswerPayouts = mySeat && !match.localMode && match.proposed_payouts != null &&
-      match.payout_outcome == null && mySeat.kind === "human" &&
-      !(match.payout_agreed_player_indices || []).includes(mySeat.player_index);
-    if (mustAnswerPayouts) {
-      actions.push(
-        actionButton(I18n.t("ui.stakes.agree", {}, "Agree to payouts"), call("POST", "/payouts", {agree: true}), {primary: true}),
-        actionButton(I18n.t("ui.stakes.dispute", {}, "Dispute"), call("POST", "/payouts", {agree: false}), {
-          danger: true,
-          confirm: I18n.t("ui.stakes.dispute_confirm", {}, "Dispute the result? Every player gets their stake back."),
-        }),
-      );
-    }
     if (mySeat && !match.localMode) {
       const playingSoloWithComputers =
         match.players.filter((player) => player.kind === "human").length === 1 &&
@@ -1771,12 +1860,9 @@ async function syncGame() {
   const currentGame = gameOf(match.game_id, match.game_version);
   const message = stateChangedMessage({
     state: view.state,
-    // A v2 client renders its viewFor view, which is what [state] holds
-    // for a participant; spectators get no view.
-    view:
-      currentGame && currentGame.server_code
-        ? (view.state ?? null)
-        : undefined,
+    // A client renders its viewFor view, which is what [state] holds
+    // for a participant; spectators get the game's public view.
+    view: view.state ?? null,
     players: match.players.map((player) => ({
       player_index: player.player_index,
       player_id: player.id,
@@ -1790,7 +1876,6 @@ async function syncGame() {
     endReason: view.end_reason && view.end_reason !== "finished" ? "player_left" : view.end_reason,
     moveCount: view.move_count,
     mySeat: mySeat ? mySeat.player_index : null,
-    actingFor: !replay && user && !match.conflict ? actingFor(match, user.id) : null,
   });
   message.token_pot = view.token_pot ?? 0;
   // Let game UIs distinguish a historical snapshot from a live opponent turn.
@@ -1815,9 +1900,9 @@ async function onMakeMove(move) {
         user = me();
       if (match?.id !== receivedFor.id) return;
       if ("move" in move) {
-        // A v2 game sent only its move: the server validates and applies
+        // A game sends only its move: the server validates and applies
         // it, so the client checks nothing but whose turn it is.
-        if (!match || !user || actingFor(match, user.id) === null)
+        if (!canMove(match, user?.id))
           throw new Error(I18n.t("ui.error.not_your_turn", {}, "It isn't your turn."));
         if (match.localMode) {
           const updated = await offline.practiceMove(match, move.move);
@@ -1826,11 +1911,11 @@ async function onMakeMove(move) {
           return;
         }
         if (offline.read().queues?.[match.id]?.length) {
-          // A v2 move is already waiting to sync. Unlike a v1 move it
-          // carries no resulting state, so a second click is a decision
-          // on the same stale view — queueing it behind the first could
-          // only conflict once the server answers. Drop it and push the
-          // pending move instead; the game replays from the synced state.
+          // A move is already waiting to sync. It carries no resulting
+          // state, so a second click is a decision on the same stale
+          // view — queueing it behind the first could only conflict once
+          // the server answers. Drop it and push the pending move
+          // instead; the game replays from the synced state.
           await offline.sync({ force: true });
           return;
         }
@@ -1841,17 +1926,9 @@ async function onMakeMove(move) {
         state.lastSent = null;
         return;
       }
-      const next = move.next_turn_player_indices;
-      const seats = new Set(match.players.map(player=>player.player_index));
-      if (!(next === null || (Array.isArray(next) && next.length && new Set(next).size === next.length && next.every(seat=>Number.isInteger(seat)&&seats.has(seat)))))
-        throw new Error(I18n.t("ui.portal.invalid_next_player", {}, "The game sent an invalid next player. Your move was not queued. Restart or repair this game in Builder."));
-      if (!match || !user || actingFor(match, user.id) === null)
-        throw new Error(I18n.t("ui.error.not_your_turn", {}, "It isn't your turn."));
-      state.match = await offline.submitMove(match, {
-        ...move,
-        expected_move_count: match.move_count,
-      });
-      state.lastSent = null;
+      // Anything else (a client-computed state, a next-turn claim) is
+      // not a move: every game runs on the server, so there is nothing
+      // to submit. Ignore it.
     });
   } catch (error) {
     showMessage(error.message, "error");
@@ -1862,26 +1939,69 @@ async function onMakeMove(move) {
   }
 }
 
+function goToLogin() {
+  // Everyone plays under an account (a guest account takes seconds), so a
+  // logged-out tap on a play action goes to the login page instead of
+  // dead-ending on a message — and comes back to this exact page after.
+  const back = location.pathname + location.search + location.hash;
+  location.assign(`/?next=${encodeURIComponent(back)}`);
+}
+
 async function practice() {
   if (state.creating) return;
   const user = me();
   if (!user) {
-    $("create-message").textContent = I18n.t("ui.portal.log_in_first", {}, "Log in first.");
-    $("create-message").className = "message error";
+    goToLogin();
     return;
   }
   let match;
   state.creating = true;
   $("practice").disabled = true;
-  const game = state.games.find((g) => g.id === $("new-game").value);
   try {
-    if (!game) throw new Error(I18n.t("ui.portal.choose_game_search_first", {}, "Choose a game from the search results first."));
-    const full = await portalRequest(
-      "GET",
-      `/games/${game.id}/versions/${game.version}`,
+    // The game on screen: on a game page (including a #game= link) that is
+    // the detail game; elsewhere it is the search selection. A linked game
+    // may not be in the loaded catalog yet — fetch its entry on demand
+    // rather than refusing.
+    let game = state.games.find(
+      (g) => g.id === (state.detailGameId || $("new-game").value),
     );
-    match = await offline.practice(full, $("practice-mode").value);
-    state.gameCache.set(`${full.id}@${full.version}`, full);
+    if (!game && state.detailGameId) {
+      try {
+        game = await portalRequest(
+          "GET",
+          `/games/${encodeURIComponent(state.detailGameId)}`,
+          { force: true },
+        );
+        state.games.push(game);
+      } catch {
+        // The entry could not be loaded; the message below stands.
+      }
+    }
+    if (!game) throw new Error(I18n.t("ui.portal.choose_game_search_first", {}, "Choose a game from the search results first."));
+    // Pass-and-play runs the game's code on this device, so the full game
+    // must be saved here. When it is not, download it as part of this tap:
+    // the forced fetch makes its network attempt even inside the offline
+    // layer's retry backoff, which only exists to keep background polls
+    // from hammering a dead connection. A game already saved on the device
+    // is served from that copy, online or off.
+    let full = gameOf(game.id, game.version);
+    if (!full?.server_code) {
+      $("create-message").textContent = I18n.t("ui.portal.downloading_game", {}, "Downloading the game…");
+      $("create-message").className = "message";
+      try {
+        full = await portalRequest(
+          "GET",
+          `/games/${game.id}/versions/${game.version}`,
+          { force: true },
+        );
+      } catch (error) {
+        if (error.notSaved)
+          throw new Error(I18n.t("ui.portal.practice_needs_download", {}, "This game isn't saved on this device yet. Connect to the internet and try again: it downloads once, then plays on this device any time."));
+        throw error;
+      }
+      state.gameCache.set(`${full.id}@${full.version}`, full);
+    }
+    match = await offline.practice(full, "pass", Number($("practice-player-count").value) || undefined);
     if (navigator.onLine) {
       try {
         await portalRequest(
@@ -1964,8 +2084,7 @@ async function playWithAllComputers() {
   const user=me();
   const game=state.games.find(item=>item.id===(state.detailGameId || $("new-game").value));
   if (!user) {
-    $("create-message").textContent=I18n.t("ui.portal.log_in_first", {}, "Log in first.");
-    $("create-message").className="message error";
+    goToLogin();
     return;
   }
   if (!game) {
@@ -1973,7 +2092,10 @@ async function playWithAllComputers() {
     $("create-message").className="message error";
     return;
   }
-  const playerCount=Math.max(...game.allowed_player_counts.filter(count=>count>1));
+  const chosenCount=Number($("computer-player-count").value);
+  const playerCount=chosenCount>1 && game.allowed_player_counts.includes(chosenCount)
+    ? chosenCount
+    : Math.max(...game.allowed_player_counts.filter(count=>count>1));
   if (!Number.isFinite(playerCount)) {
     $("create-message").textContent=I18n.t("ui.portal.needs_two_seats", {}, "This game needs at least two player seats.");
     $("create-message").className="message error";
@@ -2128,6 +2250,7 @@ async function main() {
     syncPortalRoutes();
   });
   document.addEventListener("portal-layout-change", syncPortalRoutes);
+  document.querySelector(".back-to-games")?.addEventListener("click", leaveGamePage);
   $("notify-toggle").addEventListener("click", toggleNotifications);
   document.addEventListener("i18n-changed", redrawAfterLanguageChange);
   document.addEventListener("auth-changed", () => {
@@ -2265,6 +2388,37 @@ async function main() {
     document.querySelectorAll("[data-game-filter]").forEach(item => item.setAttribute("aria-pressed", String(item.dataset.gameFilter === "all")));
     browseAllGames();
   });
+  $("proposal-form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const status = $("proposal-status"),
+      button = $("proposal-submit"),
+      body = {
+        game_name: $("proposal-name").value.trim(),
+        description: $("proposal-description").value.trim(),
+        rules_url: $("proposal-rules-url").value.trim(),
+        proposer_name: $("proposal-proposer").value.trim(),
+      };
+    if (!body.game_name) return;
+    button.disabled = true;
+    status.textContent = "";
+    try {
+      await portalFetch("POST", "/game-proposals", { body });
+      event.target.reset();
+      status.textContent = I18n.t(
+        "ui.proposal.thanks",
+        {},
+        "Thank you! Our AI agents will review your proposal and create the game within 24 hours.",
+      );
+    } catch {
+      status.textContent = I18n.t(
+        "ui.proposal.error",
+        {},
+        "Sorry, your proposal could not be submitted. Please try again.",
+      );
+    } finally {
+      button.disabled = false;
+    }
+  });
   $("match-stake").addEventListener("change", updateStakePreview);
   $("create").addEventListener("click", createMatch);
   window.addEventListener("hashchange", selectFromHash);
@@ -2278,6 +2432,15 @@ async function main() {
     ...Object.values(cached.local),
   ];
   state.openMatches = cached.responses["/matches/open"] || [];
+  // Render the catalog sections from the saved responses first, so a warm
+  // load shows the game list, popular ranking and recent games immediately;
+  // refresh() below re-fetches and re-renders with fresh data.
+  state.popularGames = cached.responses["/games/popular?limit=8"] || [];
+  state.recentGames = cached.responses["/users/me/recent-games"] || [];
+  if (state.popularGames.length) state.popularGamesStatus = "ranked";
+  // Tell refreshLocked this cached recent-games list already belongs to the
+  // current account, so it does not wipe it before the fresh fetch lands.
+  if (me()) state.recentGamesUserId = me().id;
   for (const [path, value] of Object.entries(cached.responses)) {
     const game = /^\/games\/([^/]+)\/versions\/(\d+)$/.exec(path);
     if (game) state.gameCache.set(`${game[1]}@${game[2]}`, value);
@@ -2297,43 +2460,42 @@ async function main() {
   } catch (error) {
     showPageError(error.message);
   }
+  // Start push setup first, so its /push/config fetch joins the same /batch
+  // call as the catalog refresh below instead of a second one.
+  setupNotifications();
   refresh();
+  // The speed clock and sounds are only used inside a match view, so they
+  // load after the first paint instead of blocking it. Both are already in
+  // the service-worker shell cache.
+  loadPortalScript("/static/portal-speed.js?v=2").catch(() => {});
+  loadPortalScript("/static/portal-feedback.js?v=4").catch(() => {});
   setInterval(() => {
     if (!document.hidden && !state.moveInFlight) refresh();
   }, POLL_MS);
+  setInterval(pollActiveMatch, MATCH_POLL_MS);
   setInterval(updateSpeedClock, 250);
   if ("serviceWorker" in navigator && !document.querySelector('meta[name="local-preview"]'))
     navigator.serviceWorker
-      .register("/static/portal-sw.js")
-      .then(async () => {
-        // /static/portal.html is inside the worker's permitted scope; /portal isn't.
-        if (location.pathname === "/portal") {
-          const registration = await navigator.serviceWorker.getRegistration(
-            "/static/portal.html",
-          );
-          const worker =
-            registration?.installing ||
-            registration?.waiting ||
-            registration?.active;
-          const enter = () =>
-            location.replace(
-              "/static/portal.html" + location.search + location.hash,
-            );
-          if (worker?.state === "activated") enter();
-          else
-            worker?.addEventListener("statechange", () => {
-              if (worker.state === "activated") enter();
-            });
-        } else {
-          await navigator.serviceWorker.ready;
-          shellReady = true;
-          offlineStatus();
-        }
+      // Update checks must never be answered by a cached copy of the
+      // worker script, and the page asks for a check itself — on load and
+      // whenever the tab is shown again — instead of leaving discovery to
+      // the browser's own throttled schedule. A found update then runs the
+      // existing chain: skipWaiting, claim, and the shell-updated reload.
+      .register("/static/portal-sw.js", { updateViaCache: "none" })
+      .then(async (registration) => {
+        const checkForUpdate = () =>
+          registration.update().catch(() => {});
+        checkForUpdate();
+        document.addEventListener("visibilitychange", () => {
+          if (!document.hidden) checkForUpdate();
+        });
+        await navigator.serviceWorker.ready;
+        shellReady = true;
+        offlineStatus();
       })
       .catch((error) =>
         showPageError(I18n.t("ui.offline.setup_failed", {message: error.message}, `Offline setup failed: ${error.message}`)),
       );
-  setupNotifications();
 }
 
 $("history-back").addEventListener("click", () => browseHistory(-1));

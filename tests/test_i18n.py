@@ -319,7 +319,7 @@ def test_errors_carry_the_values_they_mention(api: Api) -> None:
             "X-User-Password": api.passwords_by_user_id[alice],
             "Accept-Language": "fr",
         },
-        json={"new_state": 1, "next_turn_player_indices": [1], "expected_move_count": 7},
+        json={"move": {"state": 1, "turn_indices": [1]}, "expected_move_count": 7},
     )
     assert response.status_code == 409
     assert response.json() == {
@@ -445,7 +445,7 @@ def test_pages_with_translated_text_load_the_language_script() -> None:
         if "data-i18n" in text:
             assert "/static/i18n.js" in text, f"{page.name} has data-i18n but no i18n.js"
             # i18n.js must come before the scripts that call I18n.t
-            for later in ("/static/auth.js", "/static/portal.js", "/static/builder.js"):
+            for later in ("/static/auth.js", "/static/portal.js"):
                 if later in text:
                     assert text.index("/static/i18n.js") < text.index(later), page.name
 

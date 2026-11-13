@@ -70,6 +70,10 @@ def build(operations: Iterable[Mapping[str, Any]]) -> Snapshot:
         # Computer opponents move synchronously, so the generated file is
         # the same on every run (no timers racing the operations).
         computer_move_delay_seconds=0,
+        # The scripted scenario (and the committed snapshot) predate secret
+        # match seeds: its poker plays were authored against decks dealt
+        # from the old id-derived seeds, so reproduce that scheme here.
+        legacy_match_seeds=True,
     )
     for number, operation in enumerate(operations, start=1):
         try:
@@ -154,30 +158,14 @@ def _apply(
         platform.start_match(
             caller_id=operation["as"],
             match_id=operation["match"],
-            first_turn_player_indices=frozenset({0}),
-            initial_state=None,
         )
     elif kind == "move":
-        if "move" in operation:
-            # A v2 move: the game's server code computes the new state.
-            platform.make_move(
-                caller_id=operation["as"],
-                match_id=operation["match"],
-                new_state=None,
-                next_turn_player_indices=None,
-                expected_move_count=None,
-                move=operation["move"],
-            )
-            return
-        next_turn = operation["next_turn_player_indices"]
+        # The game's server code computes the new state.
         platform.make_move(
             caller_id=operation["as"],
             match_id=operation["match"],
-            new_state=operation["new_state"],
-            next_turn_player_indices=None
-            if next_turn is None
-            else frozenset(next_turn),
             expected_move_count=None,
+            move=operation["move"],
         )
     elif kind == "leave":
         platform.leave_match(caller_id=operation["as"], match_id=operation["match"])

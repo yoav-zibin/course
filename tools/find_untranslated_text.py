@@ -40,7 +40,6 @@ ALLOWLIST = Path(__file__).with_name("i18n_untranslated_allowlist.json")
 PRIORITY = [
     "portal.html", "portal.js", "portal-practice.js", "portal-speed.js", "portal-install.js",
     "portal-match-layout.js", "portal-offline.js", "portal-feedback.js",
-    "builder.html", "builder.js", "guided-builder.html", "guided-builder.js",
     "auth.js", "common.js", "push-notifications.js", "storage-pages.js",
     "feedback-dialog.js", "invites.html", "invites.js", "referral-pages.js",
 ]

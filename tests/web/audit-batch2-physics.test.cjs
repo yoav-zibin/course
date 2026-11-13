@@ -5,7 +5,7 @@ test('golf client animates authoritative server frames for the shooter after tur
  const code=pageScriptOf(path.join(__dirname,'../../games/audit-batch2/mini-golf-duels.html'),document);
  const handlers={},queue=[],elements={};function element(id){return elements[id]??={getContext:()=>({}),addEventListener(){},replaceChildren(){},appendChild(){},style:{}};}
  const parent={postMessage(){}};const sb={document,parent,addEventListener:(name,cb)=>handlers[name]=cb,requestAnimationFrame:cb=>queue.push(cb),Math};vm.createContext(sb);vm.runInContext(code,sb);
- queue.length=0;const data={type:'state_changed',status:'ongoing',move_count:1,acting_for_player_index:1,my_player_index:1,players:[{name:'A',kind:'human'},{name:'B',kind:'human'}],view:{hole:0,pos:[[40,50],[70,80]],sunk:[false,false],cur:[1,0],tot:[0,0],hist:[[],[]],par:2,course:{par:2,port:null},lastShot:{seat:0,hole:0,frames:[[10,20],[40,50]]}}};
+ queue.length=0;const data={type:'state_changed',status:'ongoing',move_count:1,turn_of_player_indices:[1],my_player_index:1,players:[{name:'A',kind:'human'},{name:'B',kind:'human'}],view:{hole:0,pos:[[40,50],[70,80]],sunk:[false,false],cur:[1,0],tot:[0,0],hist:[[],[]],par:2,course:{par:2,port:null},lastShot:{seat:0,hole:0,frames:[[10,20],[40,50]]}}};
  handlers.message({source:parent,data});assert.deepEqual(Array.from(vm.runInContext('posToDraw(0)',sb)),[10,20]);assert.equal(vm.runInContext('animSeat',sb),0);queue.shift()();assert.deepEqual(Array.from(vm.runInContext('posToDraw(0)',sb)),[40,50]);
  handlers.message({source:parent,data});assert.equal(vm.runInContext('animSeat',sb),0);queue.shift()();assert.equal(vm.runInContext('animBall',sb),null);
  assert.equal(vm.runInContext('typeof animatePreview',sb),'undefined');

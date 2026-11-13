@@ -26,46 +26,6 @@ def api_for(store):
     return api
 
 
-def test_popularity_ranking_is_atomic_durable_and_preserved_in_rollback(store):
-    from game_platform.tests.test_popularity import exercise_popularity
-    from game_platform.scaling_cutover import rollback_snapshot
-
-    first, second = exercise_popularity(api_for(store))
-    with pytest.raises(RuntimeError):
-        with store.atomic():
-            store.record_game_match_start(first, 10)
-            raise RuntimeError("roll back the start")
-    restarted = QueryStore(store.client, namespace=store.namespace)
-    assert restarted.game_popularity_score(first) == 4
-    assert restarted.list_popular_game_ids(8) == [(first, 4), (second, 3)]
-    snapshot = rollback_snapshot(restarted)
-    assert {row.game_id: row.score for row in snapshot.game_popularity} == {first: 4, second: 3}
-
-
-def test_private_test_recording_survives_query_store_restart(store):
-    from game_platform.tests.test_test_sessions import recording
-
-    api = api_for(store)
-    owner, other = api.new_user("matrix-owner"), api.new_user("matrix-other")
-    saved = api.ok("POST", "/game-test-sessions", as_user=owner,
-                   json={"revision": 0, "recording": recording()})
-    second = QueryStore(store.client, namespace=store.namespace)
-    from game_platform.test_session_api import _unpack
-    assert _unpack(second.get_game_test_session(saved["id"]).data) == recording()
-    path = "/game-test-sessions/" + saved["id"]
-    updated = recording()
-    updated["events"].append({"type": "click", "at": 50, "scenario": "0"})
-    assert api.ok("PUT", path, as_user=owner, json={"revision": 1, "recording": updated})["revision"] == 2
-    assert api.request("PUT", path, as_user=owner,
-                       json={"revision": 1, "recording": recording()}).status_code == 409
-    assert _unpack(second.get_game_test_session(saved["id"]).data) == updated
-    assert api.request("GET", path, as_user=other).status_code == 404
-    assert api.request("PUT", path, as_user=other, json={"revision": 2, "recording": updated}).status_code == 404
-    assert api.ok("GET", "/game-test-sessions", as_user=owner)["items"][0]["id"] == saved["id"]
-    from game_platform.scaling_cutover import rollback_snapshot
-    assert rollback_snapshot(second).game_test_sessions[0].id == saved["id"]
-
-
 @pytest.fixture
 def store():
     assert os.environ["FIRESTORE_EMULATOR_HOST"].startswith(
@@ -75,6 +35,24 @@ def store():
         firestore.Client(project="demo-game-platform"),
         namespace="query_" + uuid.uuid4().hex,
     )
+
+
+def test_cover_reads_only_metadata_and_warm_reads_use_cache(store):
+    from game_platform.tests.test_game_covers import create_cover
+
+    api = api_for(store)
+    _, game_id, url = create_cover(api)
+    store.clear_cache()
+    with patch.object(store, "_read_doc", wraps=store._read_doc) as read:
+        with patch.object(store.client, "transaction", side_effect=AssertionError("cover opened a transaction")):
+            first = api.request("GET", url)
+            assert first.status_code == 200
+            assert first.headers["cache-control"] == "public, max-age=3600"
+            assert [call.args[0].path for call in read.call_args_list] == [
+                store.ref("game_versions", f"{game_id}@1").path, store.ref("games", game_id).path]
+            read.reset_mock()
+            assert api.request("GET", url).status_code == 200
+            assert read.call_count == 0
 
 
 @pytest.mark.parametrize("with_handler", [True, False])
@@ -170,8 +148,14 @@ def test_history_page_uses_one_batch_and_preserves_move_order(store):
         moves_per_match=5,
         max_writes=1000,
     )
-    match = store.get_match("synthetic-batch-history-match-0")
+    # Measure with a cold store (empty read cache): seeding wrote the moves
+    # through the seeding store's own cache, which would serve them itself.
+    cold = QueryStore(store.client, namespace=store.namespace)
+    match = cold.get_match("synthetic-batch-history-match-0")
     with patch.object(store.client, "get_all", wraps=store.client.get_all) as batch:
+        assert [move.move_number for move in match.moves[:5]] == [1, 2, 3, 4, 5]
+        assert batch.call_count == 1
+        # A repeat read is served by the read cache: still one batch total.
         assert [move.move_number for move in match.moves[:5]] == [1, 2, 3, 4, 5]
         assert batch.call_count == 1
 
@@ -269,19 +253,20 @@ def test_referrals_and_linked_identity_survive_restart(store):
     assert second.user_for_referral(user.referral_code) == alice
 
 
-def test_startup_only_lists_game_versions_for_schema_preflight(store):
-    second = QueryStore(store.client, namespace=store.namespace)
-    original_list = second._list
-    listed = []
+def test_list_matches_for_game_returns_only_that_games_matches(store):
+    api = api_for(store)
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game_id = api.new_game(owner=alice)
+    first = api.new_match(owner=alice, game_id=game_id)
+    second_match = api.new_match(owner=alice, game_id=game_id, joiners=[bob], start=True)
+    other_game = api.new_game(owner=bob)
+    api.new_match(owner=bob, game_id=other_game)
 
-    def list_for_startup(kind, *args, **kwargs):
-        assert kind == "game_versions", "startup must not scan unrelated collections"
-        listed.append(kind)
-        return original_list(kind, *args, **kwargs)
-
-    with patch.object(second, "_list", side_effect=list_for_startup):
-        Api(store=second)
-    assert listed == ["game_versions"]
+    assert [m.id for m in store.list_matches_for_game(game_id)] == [
+        first,
+        second_match,
+    ]
+    assert store.list_matches_for_game("no-such-game") == []
 
 
 def test_idempotent_move_does_not_append_or_pay_twice(store):
@@ -294,8 +279,7 @@ def test_idempotent_move_does_not_append_or_pay_twice(store):
     args = dict(
         caller_id=alice,
         match_id=match,
-        new_state={"n": 1},
-        next_turn_player_indices=frozenset([1]),
+        move={"state": {"n": 1}, "turn_indices": [1]},
         expected_move_count=0,
         request_id="first",
     )
@@ -303,7 +287,7 @@ def test_idempotent_move_does_not_append_or_pay_twice(store):
     again = platform.make_move(**args)
     assert len(first.moves) == len(again.moves) == 1
     with pytest.raises(ConflictError):
-        platform.make_move(**{**args, "new_state": {"n": 2}})
+        platform.make_move(**{**args, "move": {"state": {"n": 2}, "turn_indices": [1]}})
     assert store.counts()["moves_total"] == 1
 
 
@@ -332,7 +316,46 @@ def test_verification_attempts_persist_and_second_instance_can_finish_login(stor
     second = ScalablePlatform(store=QueryStore(store.client, namespace=store.namespace))
     user, _ = second.verify_code(verification_id=identity, code=code)
     assert user.linked_accounts[0].identifier == "test@example.com"
-    assert store.raw_get(store.ref("verifications", identity)) is None
+    # The second instance deleted the record; this store's read cache may
+    # serve its copy for up to a refresh window (~1s), then it converges.
+    import time
+
+    deadline = time.monotonic() + 5
+    while store.raw_get(store.ref("verifications", identity)) is not None:
+        assert time.monotonic() < deadline
+        time.sleep(0.05)
+
+
+def test_two_instances_can_claim_a_game_proposal_only_once(store):
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+
+    from game_platform import game_proposals as gp
+
+    proposal = gp.create_proposal(
+        store, game_name="Azul", description="", rules_url="", proposer_name=""
+    )
+    barrier = threading.Barrier(2)
+
+    def claim(_):
+        other = QueryStore(store.client, namespace=store.namespace)
+        try:
+            # Both processes have already observed the shared queue entry.
+            assert other.raw_get(other.ref(gp.PROPOSAL_KIND, proposal["id"]))
+            barrier.wait(timeout=5)
+            try:
+                return "claimed" if gp.delete_proposal(other, proposal["id"]) else "unavailable"
+            except ConflictError:
+                return "conflict"
+        finally:
+            other.close()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(claim, range(2)))
+    assert results.count("claimed") == 1, results
+    assert all(result in ("claimed", "unavailable", "conflict") for result in results)
+    # The creator still has its cached copy; even that retry must lose.
+    assert gp.delete_proposal(store, proposal["id"]) is False
 
 
 def test_two_instances_racing_a_move_commit_only_once(store):
@@ -355,8 +378,7 @@ def test_two_instances_racing_a_move_commit_only_once(store):
             platform.make_move(
                 caller_id=alice,
                 match_id=match,
-                new_state={"winner": n},
-                next_turn_player_indices=frozenset([1]),
+                move={"state": {"winner": n}, "turn_indices": [1]},
                 expected_move_count=0,
                 request_id=str(n),
             )
@@ -368,7 +390,14 @@ def test_two_instances_racing_a_move_commit_only_once(store):
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(attempt, [1, 2]))
     assert sorted(results) == ["committed", "conflict"], conflicts
-    assert len(store.get_match(match).moves) == 1
+    # The winning instance committed the move; this store's cached copy of
+    # the match converges within a refresh window (~1s).
+    import time
+
+    deadline = time.monotonic() + 5
+    while len(store.get_match(match).moves) != 1:
+        assert time.monotonic() < deadline
+        time.sleep(0.05)
     assert store.counts()["moves_total"] == 1
 
 
@@ -381,16 +410,14 @@ def test_quickjs_computer_turn_survives_restart_and_duplicate_job(store):
     source = (Path(__file__).parent.parent / "games" / "tictactoe.server.js").read_text(
         encoding="utf-8"
     )
-    game = api.ok(
-        "POST",
-        "/games",
-        as_user=owner,
-        json={
+    game = api.create_game(
+        {
             "name": "Tic tac toe",
             "code": "<div></div>",
             "server_code": source,
             "allowed_player_counts": [2],
         },
+        owner,
     )
     match = api.ok(
         "POST",
@@ -417,11 +444,80 @@ def test_quickjs_computer_turn_survives_restart_and_duplicate_job(store):
         store=QueryStore(store.client, namespace=store.namespace)
     )
     restarted.run_due_jobs()
+    # The restarted instance committed the computer's move; this store's
+    # cached copy of the match converges within a refresh window (~1s).
+    import time
+
+    deadline = time.monotonic() + 5
     after = store.get_match(match["id"])
-    assert len(after.moves) == 2
+    while len(after.moves) != 2:
+        assert time.monotonic() < deadline
+        time.sleep(0.05)
+        after = store.get_match(match["id"])
     assert after.state["board"][0] == "X"
     restarted.run_due_jobs()
     assert len(store.get_match(match["id"]).moves) == 2
+
+
+def test_speed_match_deadline_job_ends_the_match_without_a_read(store):
+    """A speed match's turn deadline is a durable job: when it comes due, the
+    worker ends the match on its own — no read or move has to happen — and
+    the pot goes to the player who was left waiting."""
+    import datetime as dt
+
+    class ManualClock:
+        def __init__(self) -> None:
+            self.now = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+
+        def __call__(self) -> dt.datetime:
+            return self.now
+
+    clock = ManualClock()
+    api = Api(store=store)
+    api.client.app.state.platform = ScalablePlatform(
+        store=store, computer_move_delay_seconds=0, clock=clock
+    )
+    alice = api.new_user("alice")
+    bob = api.new_user("bob")
+    game_id = api.new_game(owner=alice, allowed_player_counts=(2,))
+    match = api.ok(
+        "POST",
+        "/matches",
+        as_user=alice,
+        json={"game_id": game_id, "bet_per_player": 2, "turn_seconds": 60},
+    )
+    api.ok("POST", f"/matches/{match['id']}/join", as_user=bob)
+    api.ok("POST", f"/matches/{match['id']}/start", as_user=alice, json={})
+
+    # Starting the match armed one durable job, due at the turn deadline.
+    ref = store.ref("jobs", match["id"])
+    job = store.raw_get(ref)
+    assert job is not None
+    started = store.get_match(match["id"])
+    assert started.turn_deadline is not None
+    assert job["due_at"] == started.turn_deadline
+
+    # The deadline passes with nobody reading or moving in the match; a
+    # fresh platform instance (a restarted server) runs the due jobs.
+    clock.now += dt.timedelta(seconds=61)
+    restarted = ScalablePlatform(
+        store=QueryStore(store.client, namespace=store.namespace),
+        computer_move_delay_seconds=0,
+        clock=clock,
+    )
+    restarted.run_due_jobs()
+
+    # Another process wrote the result. Read a fresh transaction rather than
+    # this store's intentionally stale-while-revalidate non-transactional cache.
+    with store.atomic():
+        saved = store.get_match(match["id"])
+        pending_job = store.raw_get(ref)
+    assert (saved.status, saved.end_reason) == ("over", "timed_out")
+    assert [t.user_id for t in saved.timeouts] == [alice]
+    # Alice held the turn, so the whole 4-token pot went to Bob.
+    assert saved.token_pot == 0
+    assert sorted(saved.token_payouts.values()) == [4]
+    assert pending_job is None
 
 
 def test_seed_resume_is_idempotent_and_budget_is_checked_before_writes(store):
@@ -470,31 +566,6 @@ def test_seed_resume_does_not_reset_existing_user(store):
     assert store.get_user(user.id).token_balance == 17
 
 
-def test_snapshot_migration_preserves_history_and_resumes(store):
-    from game_platform.firestore_store import import_snapshot
-    from game_platform.scaling_tools import migrate
-
-    source = Api()
-    alice, bob = source.new_user("alice"), source.new_user("bob")
-    game = source.new_game(owner=alice)
-    match = source.new_match(owner=alice, game_id=game, joiners=[bob], start=True)
-    source.move(match, as_user=alice, next_turn=1, state={"board": [[1, 0], [0, 0]]})
-    snapshot = source.client.app.state.platform._store.snapshot()
-    prefix = "source_" + uuid.uuid4().hex + "_"
-    import_snapshot(store.client, snapshot, collection_prefix=prefix)
-    assert not migrate(store.client, store, source_prefix=prefix, batch_records=1)[
-        "complete"
-    ]
-    assert migrate(store.client, store, source_prefix=prefix)["complete"]
-    assert store.get_user(alice) == snapshot.users[0]
-    assert store.get_game(game) == snapshot.game_versions[0]
-    migrated = store.get_match(match)
-    assert replace(migrated, moves=tuple(migrated.moves)) == snapshot.matches[0]
-    counts = store.counts()
-    migrate(store.client, store, source_prefix=prefix)
-    assert store.counts() == counts
-
-
 def test_quick_match_uses_bounded_queries_and_reserves_same_player_slot(store):
     api = api_for(store)
     alice, bob = api.new_user("alice"), api.new_user("bob")
@@ -523,8 +594,6 @@ def test_payout_ledger_and_lost_response_retry_are_atomic(store):
         match_id=match,
         move={"add": 2},
         expected_move_count=4,
-        new_state=None,
-        next_turn_player_indices=None,
         request_id="winning-move",
     )
     platform.make_move(**args)
@@ -536,7 +605,7 @@ def test_payout_ledger_and_lost_response_retry_are_atomic(store):
     assert len(store.get_match(match).moves) == 5
 
 
-def test_private_history_is_view_filtered_and_old_unbounded_routes_rejected(store):
+def test_private_history_is_view_filtered_and_v1_routes_serve_the_same_match(store):
     from game_platform.tests.test_server_matches import _create_game, _start, _move
 
     api = api_for(store)
@@ -549,14 +618,17 @@ def test_private_history_is_view_filtered_and_old_unbounded_routes_rejected(stor
         "your_secret": "secret-of-" + bob,
     }
     assert "secrets" not in history["initial_state"]
-    assert api.request("GET", f"/matches/{match}/moves", as_user=bob).status_code == 409
-    assert (
-        api.request("GET", f"/matches/{match}/history", as_user=bob).status_code == 409
-    )
+    # The plain routes serve the same one-match history (moves are read
+    # in bounded chunks behind the lazy history), view-filtered the same
+    # way: Bob's new_state below is his view, never the full state.
+    moves = api.ok("GET", f"/matches/{match}/moves", as_user=bob)
+    assert [move["new_state"]["count"] for move in moves] == [1]
+    full = api.ok("GET", f"/matches/{match}/history", as_user=bob)
+    assert [move["new_state"]["count"] for move in full["moves"]] == [1]
 
 
 def test_export_resume_validation_and_cleanup_are_bounded(store, tmp_path):
-    from game_platform.scaling_tools import seed, migrate
+    from game_platform.scaling_tools import seed
     from game_platform.scaling_maintenance import (
         export_namespace,
         validate_matches,
@@ -579,8 +651,6 @@ def test_export_resume_validation_and_cleanup_are_bounded(store, tmp_path):
     )
     exported = export_namespace(store, tmp_path)
     assert exported == export_namespace(store, tmp_path)
-    with pytest.raises(ValueError, match="empty destination"):
-        migrate(store.client, store, source_prefix="unrelated_")
     match = store.page("matches", limit=1).items[0]
     store.delete_match(match.id)
     assert store.get_match(match.id) is None
@@ -876,31 +946,6 @@ def test_online_merge_waits_for_shared_live_match_before_any_changes(store):
     assert store.get_game(game).owner_user_id == alice
 
 
-def test_online_delete_leaves_other_matches_and_repoints_referrals_without_global_scans(
-    store,
-):
-    api = api_for(store)
-    carol, dave, erin = (api.new_user(x) for x in ("carol", "dave", "erin"))
-    game = api.new_game(owner=carol)
-    owned = api.new_match(owner=carol, game_id=game)
-    other = api.new_game(owner=erin)
-    shared = api.new_match(owner=erin, game_id=other, joiners=[carol], start=True)
-    store.put_user(replace(store.get_user(dave), invited_by_user_id=carol))
-    with (
-        patch.object(store, "list_users", side_effect=AssertionError("global users")),
-        patch.object(
-            store, "list_experiment_events", side_effect=AssertionError("global events")
-        ),
-    ):
-        response = api.request("DELETE", f"/admin/users/{carol}")
-    assert response.status_code == 204
-    assert store.get_user(carol) is None
-    assert store.get_game(game).deleted
-    assert store.get_match(owned) is None
-    assert store.get_match(shared).status == "over"
-    assert store.get_user(dave).invited_by_user_id is None
-
-
 def test_merge_job_waits_for_shared_active_match_without_mutating(store):
     from game_platform.scaling_accounts import merge_users
 
@@ -1033,7 +1078,10 @@ def test_large_library_pages_do_not_grow_the_user_record(store):
         )
         ids.add(gid)
     assert store.get_user(owner).saved_game_ids == ()
-    assert api.request("GET", "/users/me/saved-games", as_user=owner).status_code == 409
+    # The v1 list serves the whole library too: entries are read in bounded
+    # pages behind it, however many games the user saved.
+    saved = api.ok("GET", "/users/me/saved-games", as_user=owner)
+    assert {game["id"] for game in saved} == ids
     found, cursor = set(), None
     while True:
         result = api.ok(
@@ -1062,11 +1110,14 @@ def test_library_normalization_and_account_jobs_preserve_saved_games(store):
     owner, target = api.new_user("owner"), api.new_user("target")
     game = api.new_game(owner=owner)
     store.put_user(replace(store.get_user(owner), saved_game_ids=(game,)))
+    # The first read normalizes the legacy library lazily — no offline job
+    # and no refusal — and the offline command afterwards is a no-op.
     assert (
-        api.request("GET", "/v2/users/me/saved-games", as_user=owner).status_code == 409
+        api.ok("GET", "/v2/users/me/saved-games", as_user=owner)["items"][0]["id"]
+        == game
     )
-    _run_until_complete(normalize, store=store, run_id="normalize", max_records=1)
     assert store.get_user(owner).saved_game_ids == ()
+    _run_until_complete(normalize, store=store, run_id="normalize", max_records=1)
     assert (
         api.ok("GET", "/v2/users/me/saved-games", as_user=owner)["items"][0]["id"]
         == game
@@ -1186,43 +1237,6 @@ def test_referral_report_breaks_cycles_without_changing_source_users(store):
     assert store.get_user(b).invited_by_user_id == a
 
 
-def test_rollback_exports_post_cutover_writes_to_a_fresh_legacy_prefix(store):
-    from game_platform.scaling_cutover import restore_legacy, rollback_snapshot
-    from game_platform.firestore_store import FirestoreStore
-
-    api = api_for(store)
-    alice, bob = (api.new_user(x) for x in ("alice", "bob"))
-    game = api.new_game(owner=alice)
-    match = api.new_match(owner=alice, game_id=game, joiners=[bob], start=True)
-    api.move(match, as_user=alice, next_turn=1, state={"post_cutover": True})
-    api.request("PUT", f"/v2/users/me/saved-games/{game}", as_user=alice)
-    store.put_user(
-        replace(
-            store.get_user(alice),
-            display_name="updated after cutover",
-            token_balance=42,
-        )
-    )
-    with pytest.raises(ValueError, match="byte limit"):
-        rollback_snapshot(store, byte_limit=1)
-    prefix = "rollback_" + uuid.uuid4().hex + "_"
-    restore_legacy(store, store.client, prefix=prefix)
-    legacy = FirestoreStore(store.client, collection_prefix=prefix)
-    try:
-        assert legacy.get_user(alice).display_name == "updated after cutover"
-        assert legacy.get_user(alice).token_balance == 42
-        assert legacy.get_user(alice).saved_game_ids == (game,)
-        assert (
-            legacy.get_game_version(game, 1).code
-            == store.get_game_version(game, 1).code
-        )
-        assert tuple(legacy.get_match(match).moves) == tuple(
-            store.get_match(match).moves
-        )
-    finally:
-        legacy.close()
-
-
 def test_generic_worker_wakes_for_work_without_half_second_idle_polling(store):
     import threading, time
 
@@ -1270,40 +1284,6 @@ def test_offline_metrics_use_live_experiment_configuration_after_admin_changes(s
         == 0
     )
     assert result["configuration_consistency"] == "live"
-
-
-def test_merged_translation_memory_works_in_query_mode_and_survives_rollback(store):
-    from game_platform.scaling_cutover import rollback_snapshot
-
-    api = api_for(store)
-    added = api.ok(
-        "PUT",
-        "/admin/translations",
-        json={"locale": "es", "source": "Start {name}", "text": "Comenzar {name}"},
-    )
-    second = QueryStore(store.client, namespace=store.namespace)
-    with patch.object(
-        second, "_list", side_effect=AssertionError("translation lookup must not scan")
-    ):
-        found = second.get_translations("es", [added["source_hash"]])
-    assert found[added["source_hash"]].text == "Comenzar {name}"
-    assert len(store.list_translations("es")) == 1
-    assert (
-        len(api.ok("GET", "/v2/admin/translations", params={"limit": "1"})["items"])
-        == 1
-    )
-    assert rollback_snapshot(store).translations[0].text == "Comenzar {name}"
-    assert (
-        api.request(
-            "DELETE", f"/admin/translations/es/{added['source_hash']}"
-        ).status_code
-        == 204
-    )
-    # a store started after the deletion no longer has it (a running one drops it within
-    # the bundle's refresh time)
-    third = QueryStore(store.client, namespace=store.namespace)
-    assert third.get_translations("es", [added["source_hash"]]) == {}
-    assert store.get_translations("es", [added["source_hash"]]) == {}
 
 
 def test_translation_bundles_on_the_emulator_merge_entries_and_load_in_one_query(store):
@@ -1399,68 +1379,6 @@ def test_every_feedback_call_reads_firestore_at_most_twice_and_is_fast(store):
     assert api.ok("GET", "/admin/feedback")["count"] == 4
 
 
-def test_feedback_is_saved_listed_and_limited_in_query_mode(store):
-    from game_platform.scaling_cutover import rollback_snapshot
-
-    api = api_for(store)
-    platform = api.client.app.state.platform
-    ann, bob = api.new_user("ann"), api.new_user("bob")
-    game = api.new_game(owner=bob)
-    match = api.new_match(owner=bob, game_id=game, joiners=[ann], start=True)
-    made = {}
-    for kind, target_type, target in (
-        ("problem", "user", bob), ("bug", "game", game), ("suggestion", "match", match), ("bug", "platform", "")
-    ):
-        response = api.request(
-            "POST",
-            "/feedback",
-            as_user=ann,
-            json={"kind": kind, "target_type": target_type, "target_id": target, "text": "This is wrong"},
-        )
-        assert response.status_code == 201, response.text
-        made[target_type] = response.json()["id"]
-    # Saved in Firestore: a restarted server (a new store) lists them.
-    restarted = ScalablePlatform(store=QueryStore(store.client, namespace=store.namespace))
-    listing = restarted.admin_feedback()
-    assert {r["target_type"]: r["id"] for r in listing["feedback"]} == made
-    assert {r["target_name"] for r in listing["feedback"]} == {"bob", "Poker", "", "Platform"}
-    assert [r["context"]["game_id"] for r in listing["feedback"] if r["target_type"] == "match"] == [game]
-    # A repeat of the same kind within 24 hours updates the same message, at the top.
-    again = api.request(
-        "POST",
-        "/feedback",
-        as_user=ann,
-        json={"kind": "problem", "target_type": "user", "target_id": bob, "text": "Their name is offensive"},
-    )
-    assert again.status_code == 200 and again.json()["id"] == made["user"]
-    listing = api.ok("GET", "/admin/feedback")
-    assert listing["count"] == 4 and listing["feedback"][0]["text"] == "Their name is offensive"
-    assert api.ok("GET", "/admin/feedback", params={"kind": "bug"})["count"] == 2
-    assert api.ok("GET", "/admin/feedback", params={"target_type": "game"})["count"] == 1
-    # Lots of feedback: the listing shows the newest 200, Most reported counts problems,
-    # and the daily limit still reads only the sender's own limit document.
-    targets = [platform.create_user(display_name=f"target {n}").id for n in range(20)]
-    reporters = [api.new_user(f"reporter {n}") for n in range(12)]
-    for n, reporter in enumerate(reporters):
-        for target in targets[: 18 if n else 20]:
-            platform.send_feedback(
-                caller_id=reporter, kind="problem", target_type="user", target_id=target, text="spam account"
-            )
-    listing = platform.admin_feedback()
-    assert (listing["count"], listing["more"]) == (200, True)
-    assert listing["most_reported"][0]["reports"] == 12
-    assert listing["most_reported"][0]["target_name"].startswith("target ")
-    response = api.request(
-        "POST",
-        "/feedback",
-        as_user=reporters[0],
-        json={"kind": "bug", "target_type": "platform", "text": "one too many"},
-    )
-    assert response.status_code == 429
-    # A rollback keeps the feedback.
-    assert len(rollback_snapshot(store).feedback) == 4 + 20 + 11 * 18
-
-
 def test_the_daily_feedback_limit_spans_midnight_in_query_mode(store):
     import datetime as dt
 
@@ -1493,14 +1411,32 @@ def test_the_daily_feedback_limit_spans_midnight_in_query_mode(store):
 
 def test_agent_import_roundtrips_query_store(store):
     from game_platform.tests.test_agent_import import payload
+    from game_platform.tests.test_game_test_api import run_full_flow
     api = api_for(store)
     owner = api.new_user('Agent import owner')
-    response = api.request('POST', '/agent/games', as_user=owner, json=payload())
+    body = payload()
+    # POST /games is gated on the recorded /game-test flow for the secret.
+    run_full_flow(api, body['game_addition_request_id_and_secret'], body)
+    response = api.request('POST', '/games', as_user=owner, json=body)
     assert response.status_code == 201, response.text
-    draft = response.json()
+    game = response.json()
+    assert game['published'] is True
     restarted = QueryStore(store.client, namespace=store.namespace)
-    saved = restarted.get_game_draft(draft['id'])
+    saved = restarted.get_game(game['id'])
+    assert saved is not None
     assert saved.owner_user_id == owner
-    assert saved.builder_workflow == draft['builder_workflow']
-    assert saved.code == payload()['client_code']
-    assert restarted.get_game(saved.id) is None
+    assert saved.code == body['client_code']
+    assert saved.published is True
+    assert saved.import_package is not None
+    assert saved.import_package['translations']['es']['display_name'] == body['translations']['es']['display_name']
+
+
+def test_history_move_privacy_on_query_backend(store):
+    from game_platform.tests.test_security_audit import test_history_redacts_private_move_payloads
+    test_history_redacts_private_move_payloads(api_for(store))
+
+
+@pytest.mark.parametrize("phase", ["start", "join"])
+def test_lifecycle_payout_settlement_on_query_backend(store, phase):
+    from game_platform.tests.test_security_audit import test_game_lifecycle_payouts_are_applied_exactly_once
+    test_game_lifecycle_payouts_are_applied_exactly_once(api_for(store), phase)

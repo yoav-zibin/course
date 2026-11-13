@@ -106,6 +106,7 @@ function applyLocale(message) {
   if (message.direction) document.documentElement.dir = message.direction;
 }
 let L=null;
+function actingSeat(){if(!L||L.status!=="ongoing"||!L.turn_of_player_indices?.length)return null;const turn=L.turn_of_player_indices[0];if(turn===L.my_player_index)return turn;const humans=(L.players||[]).filter(p=>p.kind==="human");if(L.my_player_index!==null&&humans.length===1&&L.players[turn]?.kind==="computer")return turn;return null;}
 function row(cells,className,tag){
   const tr=document.createElement('tr');
   if(className)tr.className=className;
@@ -152,7 +153,7 @@ applyStaticTexts();
 L=ev.data;
 const v=L.view||{};
 const me=L.my_player_index;
-const acting=L.status==='ongoing'?L.acting_for_player_index:null;
+const acting=actingSeat();
 const status=document.getElementById('status');
 const setupDiv=document.getElementById('setupDiv'),playDiv=document.getElementById('playDiv'),waitDiv=document.getElementById('waitDiv');
 if(L.status==='over'&&v.winner!==null&&v.winner!==undefined){

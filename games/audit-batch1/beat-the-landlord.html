@@ -106,6 +106,11 @@ function applyLocale(message) {
 
 
 let V=null,PL=[],ME=null,ACT=null,STATUS='ongoing';
+// The seat this client moves for: my own seat when it is my turn, or the
+// computer's seat when this client is the only human (this standalone
+// page computes the game locally, so it also plays the computer's turns).
+// Never another human's seat.
+function actingSeatOf(m){if(!m||m.status!=="ongoing"||!m.turn_of_player_indices?.length)return null;const turn=m.turn_of_player_indices[0];if(turn===m.my_player_index)return turn;const humans=(m.players||[]).filter(p=>p.kind==="human");if(m.my_player_index!==null&&humans.length===1&&m.players[turn]?.kind==="computer")return turn;return null;}
 let sel=new Set(),msgKey='';
 const root=document.getElementById('t');
 document.getElementById('title').textContent=t('title');
@@ -120,7 +125,7 @@ function cardEl(c,i,s,parent){const d=mk('div',RS[c.r],'card '+(isRed(c)?'red':'
 function seat(n){return t('seat',{n})}
 function sendMove(move){parent.postMessage({type:'make_move',move:move},'*')}
 function curSeat(){if(!V)return -1;if(typeof V.curSeat==='number')return V.curSeat;if(typeof V.turnSeat==='number')return V.turnSeat;return -1}
-window.addEventListener('message',e=>{let d=e.data;if(!d||d.type!=='state_changed')return;applyLocale(d);V=d.view;PL=d.players||[];ME=d.my_player_index;ACT=d.acting_for_player_index;STATUS=d.status;
+window.addEventListener('message',e=>{let d=e.data;if(!d||d.type!=='state_changed')return;applyLocale(d);V=d.view;PL=d.players||[];ME=d.my_player_index;ACT=actingSeatOf(d);STATUS=d.status;
  document.getElementById('title').textContent=t('title');
  if(d.status==='over'&&!V){root.textContent=t('game_over');return}
  if(!V){root.textContent=t('waiting');return}

@@ -90,6 +90,7 @@ function applyLocale(message) {
   if (message.direction) document.documentElement.dir = message.direction;
 }
 let latest=null,sentFor=-1;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 function applyStaticTexts(){
  document.title=t("page_title");
  document.querySelector("h1").textContent=t("heading");
@@ -100,7 +101,7 @@ const LADDERS={1:38,4:14,9:31,21:42,28:84,36:44,51:67,71:91,80:100};
 const CHUTES={16:6,47:26,49:11,56:53,62:19,64:60,87:24,93:73,95:75,98:78};
 const PIECES=["👑","🎩","🚢","🐶","🎒","🚗"];
 function moveCount(){return latest?(latest.move_count??latest.moveCount??0):0;}
-function myTurn(){return latest&&latest.status==="ongoing"&&latest.acting_for_player_index!==null&&latest.acting_for_player_index!==undefined;}
+function myTurn(){return actingSeat()!==null;}
 function send(move){if(sentFor===moveCount())return;sentFor=moveCount();parent.postMessage({type:"make_move",move},"*");render();}
 function name(i){return (latest.players&&latest.players[i]&&latest.players[i].name)||t("player_n",{number:i+1});}
 function render(){
@@ -113,7 +114,7 @@ function render(){
  if(over)status.textContent=t("wins",{name:name(v.winner)});
  else if(v.phase==="rolloff")status.textContent=spinNote(myTurn()?t("rolloff_mine"):t("rolloff_wait",{name:name(turnFirst)}));
  else if(v.phase==="select")status.textContent=myTurn()?t("select_mine"):t("select_wait");
- else status.textContent=spinNote(myTurn()?t("spin_mine",{name:name(latest.acting_for_player_index)}):t("spin_wait",{name:name(turnFirst)}));
+ else status.textContent=spinNote(myTurn()?t("spin_mine",{name:name(actingSeat())}):t("spin_wait",{name:name(turnFirst)}));
  // board: rows top(100..91) to bottom(1..10), boustrophedon
  board.replaceChildren();
  const at={};

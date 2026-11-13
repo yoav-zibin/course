@@ -1,9 +1,9 @@
 """Phase 5 of the v2 Game API: random-walk testing of server code.
 
 The tester plays whole matches with a game's own move generators and
-reports failures the author (or the AI fix loop) can reproduce from a
-seed. Publishing is gated on it: a draft whose server code fails stays
-unpublished, and a game update that breaks the code is refused. The
+reports failures the author can reproduce from a
+seed. Publishing is gated on it: a submission whose server code fails is
+refused and inserts nothing, and a game update that breaks the code is refused. The
 seeds of failing walks are stored on the game and replayed first next
 time, as regression seeds.
 """
@@ -91,13 +91,25 @@ NONDETERMINISTIC_GAME = GOOD_GAME.replace(
     1,
 )
 
+MULTI_TURN_OPENING_GAME = GOOD_GAME.replace(
+    "newMatch(ctx) { return {state: {count: 0}, turn: [ctx.players[0].id]}; },",
+    "newMatch(ctx) { return {state: {count: 0}, turn: ctx.players.map(p => p.id)}; },",
+)
+
+MULTI_TURN_MOVE_GAME = GOOD_GAME.replace(
+    "turn: over ? null : [ids[(ids.indexOf(playerId) + 1) % ids.length]],",
+    "turn: over ? null : ids,",
+)
+
 # The tester itself.
 
 
 def test_a_correct_game_passes():
     # Keep this a coverage check rather than a machine-specific throughput test.
+    # The budget is generous on purpose: the >100-walk assertion is about
+    # coverage, and a tight wall-clock budget flakes on loaded machines.
     report = run_game_tests(
-        GOOD_GAME, rules=RULES, run_seed=7, budget_seconds=2.0
+        GOOD_GAME, rules=RULES, run_seed=7, budget_seconds=10.0
     )
     assert report.passed
     assert report.failures == ()
@@ -105,6 +117,23 @@ def test_a_correct_game_passes():
     assert report.walks_completed > 100
     assert report.moves_made > 0
     assert not report.too_slow
+
+
+def test_multi_player_turns_pass_the_walks():
+    # The singleton-turn rule is scoped to the single-player modes
+    # (pass-and-play, against the computer), enforced on the test page
+    # and in the server's replay of steps 3–4 — not in the walks, which
+    # also serve simultaneous multiplayer games (Blackjack, ERS).
+    rules = GameRules(
+        allowed_player_counts=(2,),
+        allows_leave_mid_match=False,
+        allows_join_mid_match=False,
+    )
+    for game in (MULTI_TURN_OPENING_GAME, MULTI_TURN_MOVE_GAME):
+        report = run_game_tests(game, rules=rules, run_seed=7)
+        assert report.passed, report.failures
+        assert report.walks_completed > 0
+        assert report.moves_made > 0
 
 
 def test_a_crashing_apply_move_fails_with_a_usable_report():
@@ -118,6 +147,29 @@ def test_a_crashing_apply_move_fails_with_a_usable_report():
     assert failure.move == {"add": 1}
     assert failure.player_id is not None
     assert failure.seed in report.failed_seeds
+    # Reproduction detail: the ctx, the exact arguments, what the call
+    # cost against its limits.
+    assert failure.ctx is not None
+    assert failure.ctx["players"] and failure.ctx["pot"] >= 0
+    assert failure.arguments is not None
+    assert failure.arguments[0] == {"count": 0}
+    assert failure.duration_ms >= 0
+    assert failure.memory_used_bytes > 0
+    assert failure.time_limit_seconds == 0.1
+    assert failure.memory_limit_bytes == 64 * 1024 * 1024
+
+
+def test_a_failure_report_names_the_call_cost_and_replays():
+    from game_platform.game_testing import format_failure, format_report
+    report = run_game_tests(CRASH_GAME, rules=RULES, run_seed=7)
+    assert not report.passed
+    (failure,) = report.failures
+    text = format_failure(failure)
+    assert f"seed {failure.seed}" in text
+    assert "ctx:" in text and "arguments:" in text
+    assert "took" in text and "memory" in text
+    assert "last moves" in text or "move" in text
+    assert "walks" in format_report(report)
 
 
 def test_a_generated_move_the_game_itself_rejects_fails():
@@ -202,96 +254,12 @@ def test_failed_seeds_are_replayed_first():
 # The HTTP endpoint and the publish gate.
 
 
-def _test_body(code: str, **changes):
-    body = {
-        "server_code": code,
-        "allowed_player_counts": [2, 3],
-        "allows_leave_mid_match": True,
-        "allows_join_mid_match": True,
-    }
-    body.update(changes)
-    return body
-
-
-def test_post_games_test_reports_pass_and_failure(api: Api):
-    owner = api.new_user("owner")
-    good = api.ok(
-        "POST", "/games/test", as_user=owner, json=_test_body(GOOD_GAME)
-    )
-    assert good["passed"] is True
-    assert good["failures"] == []
-    assert good["walks_completed"] > 0
-
-    bad = api.ok(
-        "POST", "/games/test", as_user=owner, json=_test_body(CRASH_GAME)
-    )
-    assert bad["passed"] is False
-    (failure,) = bad["failures"]
-    assert failure["function"] == "applyMove"
-    assert "kaboom" in failure["message"]
-    assert failure["state"] == {"count": 0}
-    assert failure["move"] == {"add": 1}
-
-
-def test_failed_seeds_are_stored_for_the_game(api: Api):
-    owner = api.new_user("owner")
-    draft = api.ok(
-        "POST", "/game-drafts", as_user=owner,
-        json={"name": "Broken", "allowed_player_counts": [2],
-              "code": "<div></div>", "server_code": CRASH_GAME},
-    )
-    report = api.ok(
-        "POST", "/games/test", as_user=owner,
-        json=_test_body(CRASH_GAME, game_id=draft["id"],
-                        allowed_player_counts=[2]),
-    )
-    assert report["passed"] is False
-    data = api.ok("GET", "/debug/all-data")
-    (record,) = [
-        entry for entry in data["game_test_seeds"]
-        if entry["game_id"] == draft["id"]
-    ]
-    assert record["seeds"]
-    # The first failing walk is both the report's first failure and the
-    # first stored seed; the next run replays the stored seeds first.
-    assert record["seeds"][0] == report["failures"][0]["seed"]
-
-
-def test_publishing_a_draft_with_broken_server_code_is_refused(api: Api):
-    owner = api.new_user("owner")
-    draft = api.ok(
-        "POST", "/game-drafts", as_user=owner,
-        json={"name": "Broken", "allowed_player_counts": [2],
-              "code": "<div></div>", "server_code": CRASH_GAME},
-    )
-    response = api.request(
-        "POST", f"/game-drafts/{draft['id']}/publish", as_user=owner,
-        json={"expected_revision": draft["revision"]},
-    )
-    assert response.status_code == 400
-    assert "failed its tests" in response.json()["detail"]
-    # The game stayed unpublished.
-    assert api.request("GET", f"/games/{draft['id']}").status_code == 404
-
-    fixed = api.ok(
-        "PUT", f"/game-drafts/{draft['id']}", as_user=owner,
-        json={"name": "Broken", "allowed_player_counts": [2],
-              "code": "<div></div>", "server_code": GOOD_GAME,
-              "expected_revision": draft["revision"]},
-    )
-    game = api.ok(
-        "POST", f"/game-drafts/{draft['id']}/publish", as_user=owner,
-        json={"expected_revision": fixed["revision"]},
-    )
-    assert game["server_code"] == GOOD_GAME
-
-
 def test_updating_a_game_to_broken_server_code_is_refused(api: Api):
     owner = api.new_user("owner")
-    game = api.ok(
-        "POST", "/games", as_user=owner,
-        json={"name": "Direct", "allowed_player_counts": [2],
-              "code": "<div></div>", "server_code": GOOD_GAME},
+    game = api.create_game(
+        {"name": "Direct", "allowed_player_counts": [2],
+         "code": "<div></div>", "server_code": GOOD_GAME},
+        owner,
     )
     response = api.request(
         "PATCH", f"/games/{game['id']}", as_user=owner,

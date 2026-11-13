@@ -194,6 +194,7 @@ const FLEET=[{name:"Carrier",size:5},{name:"Battleship",size:4},{name:"Cruiser",
 const COLS="ABCDEFGHIJ";
 document.getElementById("status").textContent=t("waiting_platform");
 let latest=null, localShips=[], selIdx=0, horiz=true, localKey="";
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 let sendLock=false;
 function coordName(x,y){return COLS[x]+(y+1);}
 function cellsFor(sx,sy,size,h){const c=[];for(let i=0;i<size;i++)c.push([h?sx+i:sx,h?sy:sy+i]);return c;}
@@ -228,7 +229,7 @@ function render(){
   const status=document.getElementById("status"),sub=document.getElementById("sub");
   const setupDiv=document.getElementById("setup"),battleDiv=document.getElementById("battle");
   const v=latest.view, players=latest.players||[{name:t("player_n",{n:1})},{name:t("player_n",{n:2})}];
-  const acting=latest.status==="ongoing"?latest.acting_for_player_index:null;
+  const acting=actingSeat();
   const me=latest.my_player_index;
   updateBanner(v,players);
   if(!v){status.textContent=t("waiting");sub.textContent="";return;}

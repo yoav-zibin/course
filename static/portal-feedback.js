@@ -30,7 +30,10 @@
   }
   document.addEventListener('pointerdown', unlock, {passive:true});
   document.addEventListener('keydown', unlock);
-  document.addEventListener('DOMContentLoaded', () => {
+  // Wires the match-sounds toggle. Runs at DOMContentLoaded when the script
+  // loads with the page, or immediately when it is lazy-loaded after the
+  // document is already ready.
+  function wireSoundToggle() {
     const button = document.getElementById('match-sounds');
     if (!button) return;
     const label = () => {
@@ -46,7 +49,11 @@
       try {localStorage.setItem('portal-sounds', enabled ? 'on' : 'off');} catch {}
       label(); unlock();
     });
-  });
+  }
+  if (document.readyState === 'loading')
+    document.addEventListener('DOMContentLoaded', wireSoundToggle);
+  else
+    wireSoundToggle();
   root.PortalFeedback = {reset() { track = createTracker(); }, update(match, user, options) {
     const event = track(match, user, {...options, suppressed: options.suppressed || document.hidden});
     if (!event) return;

@@ -157,6 +157,14 @@
 .library-description { color:#a5aec2; font-size:12px; font-weight:400; line-height:1.6; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .library-select { margin-top:auto; padding-top:8px; color:#c6f432; font-size:11px; }
 .library-empty { padding:28px; text-align:center; border:1px dashed #44506b; border-radius:12px; color:#c9cfdc; }
+.game-proposal { margin:28px 0 8px; padding:20px; border:1px solid #44506b; border-radius:12px; }
+.game-proposal h3 { margin:0 0 6px; }
+.game-proposal p { margin:0 0 12px; color:#c9cfdc; }
+.game-proposal form { display:grid; gap:6px; max-width:520px; }
+.game-proposal label { margin-top:8px; font-weight:600; }
+.game-proposal input, .game-proposal textarea { width:100%; box-sizing:border-box; }
+.game-proposal button { margin-top:12px; justify-self:start; }
+.game-proposal .proposal-status { margin:10px 0 0; }
 .game-library-grid.is-list { grid-template-columns:1fr; }
 .portal-shell .is-list .library-card { flex-direction:row; align-items:stretch; }
 .is-list .library-art { width:150px; flex-shrink:0; aspect-ratio:auto; min-height:145px; }
@@ -180,9 +188,9 @@
 .play-option-heading h3 { margin:0 0 5px; color:#eef0f5; font-size:17px; }
 .play-option-heading p { margin:0; color:#a5aec2; font-size:12px; line-height:1.6; }
 .play-option .create-controls,.practice-controls { display:flex; flex-direction:column; align-items:stretch; gap:16px; margin-top:0; }
-.computer-match-controls { display:flex; flex-direction:column; align-items:stretch; }
+.computer-match-controls { display:flex; flex-direction:column; align-items:stretch; gap:16px; }
 .play-option .computer-setting,.practice-controls label { display:flex; flex-direction:column; align-items:stretch; gap:8px; color:#c9cfdc; font-size:12px; font-weight:600; }
-.play-option #computers,.play-option #practice-mode { width:100%; box-sizing:border-box; height:46px; padding:10px 12px; font-size:15px; }
+.play-option #computers,.play-option #practice-player-count,.play-option #computer-player-count { width:100%; box-sizing:border-box; height:46px; padding:10px 12px; font-size:15px; }
 .play-option #create,.play-option #practice,.play-option #play-computers { width:100%; min-width:0; min-height:48px; margin:0; font-size:14px; }
 .play-option #practice { background:#2a223c; border-color:#8067ac; color:#e1d3ff; }
 .play-option #practice:hover:not(:disabled) { background:#382d50; border-color:#c8b1ff; }

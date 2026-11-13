@@ -1,5 +1,9 @@
 # Small live scaling demonstration
 
+> **Retired Nov 6–7, 2026.** The scaling/demo VM and its address
+> (buildplay-demo.34.26.223.67.sslip.io) are gone, and the Builder was deleted.
+> Kept as a record of the demonstration.
+
 This is a dedicated protected virtual host on the existing scaling VM. It does
 not replace the pre-existing port-8000 service, change buildplay.fun, merge the PR into main,
 or use the default Firestore database. The live entrypoint is

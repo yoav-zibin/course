@@ -4,13 +4,13 @@ import datetime as dt
 import importlib.util
 import json
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from game_platform import translation_bundle
-from game_platform.firestore_store import FirestoreStore
 from game_platform.models import Translation
 from game_platform.query_store import ADAPTERS, QueryStore, _BundleBackend, key
 from game_platform.tests.fake_firestore import FakeClient, query_store
@@ -125,8 +125,92 @@ def test_another_servers_translations_show_up_after_the_ttl() -> None:
     clock["now"] = 59
     assert mine.get("es", [text_hash("Hi")]) == {} and mine.loads == 1
     clock["now"] = 61
-    assert text_hash("Hi") in mine.get("es", [text_hash("Hi")])
+    deadline = time.monotonic() + 2
+    while text_hash("Hi") not in mine.get("es", [text_hash("Hi")]):
+        assert time.monotonic() < deadline
+        threading.Event().wait(0.01)
     assert mine.loads == 2
+
+
+def test_expired_translation_memory_serves_cached_text_while_one_refresh_is_blocked() -> None:
+    client = FakeClient()
+    store = query_store(client=client)
+    store.put_translations([row("Hi", "Old")])
+    clock = {"now": 0.0}
+    backend = _BundleBackend(store)
+    memory = TranslationMemory(backend, ttl=60, clock=lambda: clock["now"])
+    source_hash = text_hash("Hi")
+    assert memory.get("es", [source_hash])[source_hash].text == "Old"
+    store.put_translations([row("Hi", "New")])
+    started, release, returned = threading.Event(), threading.Event(), threading.Event()
+    read_bundles = backend.read_bundles
+    calls = []
+
+    def blocked_read() -> Any:
+        calls.append(1)
+        started.set()
+        assert release.wait(5)
+        return read_bundles()
+
+    backend.read_bundles = blocked_read  # type: ignore[method-assign]
+    clock["now"] = 61
+    result = []
+
+    def request() -> None:
+        result.append(memory.get("es", [source_hash])[source_hash].text)
+        returned.set()
+
+    caller = threading.Thread(target=request)
+    caller.start()
+    try:
+        assert started.wait(2)
+        assert returned.wait(1), "the request waited for the expired cache to reload"
+        assert result == ["Old"]
+        for _ in range(10):
+            assert memory.get("es", [source_hash])[source_hash].text == "Old"
+        assert len(calls) == 1
+    finally:
+        release.set()
+        caller.join(2)
+    deadline = time.monotonic() + 2
+    while memory.get("es", [source_hash])[source_hash].text != "New":
+        assert time.monotonic() < deadline
+        threading.Event().wait(0.01)
+
+
+def test_a_refresh_cannot_overwrite_a_translation_saved_while_it_was_reading() -> None:
+    client = FakeClient()
+    store = query_store(client=client)
+    store.put_translations([row("Hi", "Old")])
+    clock = {"now": 0.0}
+    backend = _BundleBackend(store)
+    memory = TranslationMemory(backend, ttl=60, clock=lambda: clock["now"])
+    source_hash = text_hash("Hi")
+    assert memory.get("es", [source_hash])[source_hash].text == "Old"
+    started, release = threading.Event(), threading.Event()
+    read_bundles = backend.read_bundles
+
+    def blocked_read() -> Any:
+        snapshot = read_bundles()
+        started.set()
+        assert release.wait(5)
+        return snapshot
+
+    backend.read_bundles = blocked_read  # type: ignore[method-assign]
+    clock["now"] = 61
+    try:
+        memory.get("es", [source_hash])
+        assert started.wait(2)
+        memory.put([row("Hi", "Corrected", provider="manual")])
+    finally:
+        release.set()
+    # Refresh completion must keep the in-process, committed correction.
+    assert memory._load_lock.acquire(timeout=2)
+    try:
+        assert memory._rows["es"][source_hash].text == "Corrected"
+    finally:
+        memory._load_lock.release()
+    assert memory.get("es", [source_hash])[source_hash].text == "Corrected"
 
 
 def test_a_chunk_is_chosen_for_new_texts_and_all_chunks_load_in_one_query(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -239,34 +323,6 @@ def test_a_translation_corrected_after_the_migration_is_not_overwritten_by_runni
     store.put_translations([row("Hello", "Buenas", provider="manual")])
     tool.migrate(client, "test")
     assert query_store(client=client).list_translations("es")[0].text == "Buenas"
-
-
-# The Firestore store that keeps everything in memory
-
-
-def test_the_in_memory_firestore_store_saves_one_document_per_language_and_migrates_old_rows() -> None:
-    client = FakeClient()
-    legacy_document(FakeClient(), "x", row("ignored"))  # (just checks the helper)
-    for item in [row("Old one")]:
-        client.docs[f"translations/{item.locale}@{item.source_hash}"] = {
-            "json": ADAPTERS["translations"].dump_json(item).decode()
-        }
-    store = FirestoreStore(client, min_write_interval_seconds=0)
-    assert [t.source for t in store.list_translations("es")] == ["Old one"]  # read from the old rows
-    store.put_translations([row("New one"), row("Nouveau", locale="fr")])
-    store.close()  # saves
-    assert sorted(p for p in client.docs if p.startswith("translation_bundles/")) == [
-        "translation_bundles/es-000",
-        "translation_bundles/fr-000",
-    ]
-    assert not any(p.startswith("translations/") for p in client.docs)  # the old rows are gone
-    reopened = FirestoreStore(client, min_write_interval_seconds=0)
-    try:
-        assert {t.source for t in reopened.list_translations()} == {"Old one", "New one", "Nouveau"}
-        reopened.delete_translation("fr", text_hash("Nouveau"))
-    finally:
-        reopened.close()
-    assert "translation_bundles/fr-000" not in client.docs  # an empty language leaves no document
 
 
 # The bundle endpoint

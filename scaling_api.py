@@ -3,7 +3,8 @@
 import re
 from dataclasses import replace
 from fastapi import HTTPException, Query, Response
-from game_platform.schemas import GameSummaryOut, GameDraftOut, UserOut, MoveOut
+from game_platform.schemas import GameSummaryOut, UserOut, UserWithPasswordOut, MoveOut
+from game_platform.move_history import history_prefix
 
 
 def install(app, *, debug_tools):
@@ -83,26 +84,6 @@ def install(app, *, debug_tools):
             "next_cursor": result.next_cursor,
         }
 
-    @app.get("/v2/game-drafts")
-    def drafts(
-        platform: Platform,
-        caller_id: CallerId,
-        limit: int = Query(50, ge=1, le=100),
-        cursor: str | None = None,
-    ):
-        result = page(
-            store_of(platform),
-            "game_drafts",
-            filters=[("owner_user_id", "==", caller_id)],
-            limit=limit,
-            cursor=cursor,
-            scope=caller_id,
-        )
-        return {
-            "items": [GameDraftOut.of(x) for x in result.items],
-            "next_cursor": result.next_cursor,
-        }
-
     @app.get("/v2/users/me/referred-users")
     def referred_users(
         platform: Platform,
@@ -166,8 +147,9 @@ def install(app, *, debug_tools):
         cursor: str | None = None,
     ):
         store = store_of(platform)
-        if platform._require_user(caller_id).saved_game_ids:
-            raise HTTPException(409, "legacy library requires offline normalization")
+        # A legacy library (saved_game_ids on the user record) is normalized
+        # lazily on this first touch; it is one user's small list.
+        platform.ensure_library_normalized(caller_id)
         result = page(
             store,
             "libraries",
@@ -267,20 +249,27 @@ def install(app, *, debug_tools):
         match = platform.get_match(match_id=match_id, caller_id=caller_id)
         stop = min(start + limit, len(match.moves))
         moves = match.moves[start:stop]
-        # Apply per-player views to history as well as current state.
+        # Apply per-player views to history as well as current state. Each
+        # view is computed with the move prefix it was recorded at, so its
+        # viewFor gets the same isolated view seed as in GamePlatform.view_history.
         items = [
             MoveOut.of(
                 replace(
                     move,
                     new_state=platform.view_state(
-                        replace(match, state=move.new_state), caller_id
+                        replace(
+                            match,
+                            state=move.new_state,
+                            moves=history_prefix(match.moves, start + offset + 1),
+                        ),
+                        caller_id,
                     ),
-                )
+                ), caller_id=caller_id
             )
-            for move in moves
+            for offset, move in enumerate(moves)
         ]
         initial = platform.view_state(
-            replace(match, state=match.initial_state), caller_id
+            replace(match, state=match.initial_state, moves=()), caller_id
         )
         return {
             "items": items,
@@ -350,20 +339,19 @@ def install(app, *, debug_tools):
                 "games",
                 "game_versions",
                 "matches",
-                "game_drafts",
                 "game_version_errors",
-                "agent_conversations",
             ):
                 raise HTTPException(404, "unknown collection")
             result = page(
                 store_of(platform), kind, limit=limit, cursor=cursor, scope="admin"
             )
             if kind == "users":
-                items = [UserOut.of(x) for x in result.items]
+                # Master-password debug surface: like the other debug tools,
+                # it includes the password (the API credential the console
+                # needs to act as the user).
+                items = [UserWithPasswordOut.of_user(x) for x in result.items]
             elif kind == "matches":
                 items = [_match_out(platform, x) for x in result.items]
-            elif kind == "game_drafts":
-                items = [GameDraftOut.of(x) for x in result.items]
             elif kind in ("games", "game_versions"):
                 items = [GameSummaryOut.of(x) for x in result.items]
             else:

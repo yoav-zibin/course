@@ -91,7 +91,9 @@ function idKind(paramName) {
 }
 
 function byRecentUpdate(items) {
-  return [...items].sort((a, b) => a.updated_at.localeCompare(b.updated_at));
+  // Some records (e.g. agent-imported game versions) carry no updated_at;
+  // a missing timestamp sorts as oldest instead of throwing.
+  return [...items].sort((a, b) => String(a.updated_at ?? "").localeCompare(String(b.updated_at ?? "")));
 }
 
 function latestId(kind) {
@@ -130,18 +132,26 @@ function renderDatalists() {
 }
 
 async function refreshData() {
+  // Everything here is best-effort context for the request form: a failed
+  // or malformed response must never reject, or main() would die
+  // before the operations list renders. The known entities come from the
+  // paged admin collections, one bounded page at a time.
   try {
-    state.allData = await fetchAllData();
+    const [users, games, matches] = await Promise.all([
+      fetchAdminCollection("users"),
+      fetchAdminCollection("games"),
+      fetchAdminCollection("matches"),
+    ]);
+    state.allData = { users, game_versions: games, matches };
+    renderDatalists();
+    renderUserSelect();
+    // The password of the acting user may only now be known.
+    if (currentUserId() && !currentPassword()) {
+      $("user-password").value = knownPassword(currentUserId());
+      renderAuthNote();
+    }
   } catch (error) {
     toast(String(error));
-    return;
-  }
-  renderDatalists();
-  renderUserSelect();
-  // The password of the acting user may only now be known.
-  if (currentUserId() && !currentPassword()) {
-    $("user-password").value = knownPassword(currentUserId());
-    renderAuthNote();
   }
 }
 
@@ -170,7 +180,7 @@ function savePassword(userId, password) {
   localStorage.setItem(PASSWORDS_STORAGE_KEY, JSON.stringify(passwords));
 }
 
-/** The password of [userId] from /debug/all-data or else this browser's memory. */
+/** The password of [userId] from the admin user pages or else this browser's memory. */
 function knownPassword(userId) {
   const fromData = state.allData.users.find((user) => user.id === userId)?.password;
   return fromData ?? savedPasswords()[userId] ?? "";
@@ -672,8 +682,10 @@ async function main() {
 
   state.spec = await (await fetch("/openapi.json")).json();
   state.operations = parseOperations(state.spec);
-  await refreshData();
+  // Render the operations list first: it only needs the spec, and the page
+  // must stay usable even if the entity load below fails or hangs.
   renderOperations();
+  await refreshData();
   if (!applyHash() && state.operations.length) selectOperation(state.operations[0]);
 }
 

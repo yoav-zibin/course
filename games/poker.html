@@ -198,7 +198,8 @@ if (typeof window !== "undefined" && window.document) {
       }
       return;
     }
-    const acting = latest.status === "ongoing" ? latest.acting_for_player_index : null;
+    const myTurn = latest.status === "ongoing" && me !== null
+      && latest.turn_of_player_indices?.includes(me);
     const pot = s.contributed.reduce((a, b) => a + b, 0);
     $("title").textContent = t("title");
     const hand = { number: s.hand_number, small: s.small_blind, big: s.big_blind, pot };
@@ -207,7 +208,7 @@ if (typeof window !== "undefined" && window.document) {
 
     if (s.winner !== null) $("status").textContent = t("game_winner", { name: players[s.winner].name });
     else if (latest.status === "over") $("status").textContent = t("over");
-    else if (acting !== null) $("status").textContent = t("your_turn", { name: players[acting].name });
+    else if (myTurn) $("status").textContent = t("your_turn", { name: players[me].name });
     else if (players[s.to_act]) $("status").textContent = t("waiting_for", { name: players[s.to_act].name });
     else $("status").textContent = t("waiting_next");
     // A player who joined mid-hand is seated but not dealt in yet: say
@@ -245,7 +246,7 @@ if (typeof window !== "undefined" && window.document) {
       ...rows);
 
     const controls = [];
-    if (acting !== null && acting === me && s.to_act === acting && s.legal) {
+    if (myTurn && s.to_act === me && s.legal) {
       const options = s.legal;
       if (options.canFold) controls.push(el("button", { textContent: t("fold"), onclick: () => play({ type: "fold" }) }));
       if (options.canCheck) controls.push(el("button", { textContent: t("check"), onclick: () => play({ type: "check" }) }));

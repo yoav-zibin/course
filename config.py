@@ -45,19 +45,6 @@ class DataFileConfig(_Section):
     backup_keep: Annotated[int, Field(ge=1)] = 48
 
 
-class ModelApiConfig(_Section):
-    # Meta Model API key (get one at https://dev.meta.ai). Empty disables
-    # model features. Prefer the MUSE_SPARK_API_KEY environment variable
-    # over storing the key in this file.
-    api_key: str = ""
-    model: str = "muse-spark-1.3"
-    base_url: str = "https://api.ai.meta.com/v1"
-    # Operator-verified upper tariffs (including multimodal inputs) and provider context bound.
-    builder_input_usd_per_million: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None = None
-    builder_output_usd_per_million: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None = None
-    builder_max_input_tokens: Annotated[int, Field(gt=0)] | None = None
-
-
 
 class GoogleAuthConfig(_Section):
     # Google OAuth client ID for the website (Google Cloud Console > APIs & Services >
@@ -115,8 +102,8 @@ class PushConfig(_Section):
 
 
 class FirestoreConfig(_Section):
-    # query mode requires a migrated, explicitly named namespace.
-    mode: Literal["snapshot", "query"] = "snapshot"
+    # Firestore storage is the paginated query schema inside an explicitly named
+    # namespace; there is no other Firestore mode.
     namespace: str = ""
     # Save the data in Firestore instead of the data file (see "Firestore" in the
     # README). data_file is then unused.
@@ -128,25 +115,18 @@ class FirestoreConfig(_Section):
     # A separate acknowledgement is required before using the query schema in
     # the existing production database. It never migrates data at startup.
     allow_default_database_query: bool = False
-    # Prepended to every collection name, to keep several servers (e.g. staging) apart
-    # in one database.
-    collection_prefix: str = ""
-    # After a change, Firestore is written at most once per this many seconds.
-    save_interval_seconds: Annotated[float, Field(ge=0)] = 1.0
 
     @model_validator(mode="after")
     def _validate_query_mode(self):
-        if self.enabled and self.mode == "query":
+        if self.enabled:
             if (
                 not self.project_id
                 or not self.namespace
                 or not self.namespace.replace("_", "").replace("-", "").isalnum()
             ):
                 raise ValueError(
-                    "query mode requires an explicit project_id and alphanumeric namespace"
+                    "Firestore requires an explicit project_id and alphanumeric namespace"
                 )
-            if self.collection_prefix:
-                raise ValueError("query mode uses namespace, not collection_prefix")
         return self
 
 
@@ -167,7 +147,7 @@ class TranslationConfig(_Section):
     # Beyond it, new texts stay in their original language until tomorrow.
     daily_character_limit: Annotated[int, Field(ge=0)] = 200_000
     timeout_seconds: Annotated[float, Field(gt=0)] = 10.0
-    # Refuse, with HTTP 400, a new game, a draft publication or a new version whose client
+    # Refuse, with HTTP 400, a new game or a new version whose client
     # code fails the translation checker (no i18n-strings block, text written in the code, ...).
     # Admin saves, audited migrations and example data are exempt. Set false to allow any code.
     require_strings: bool = True
@@ -251,26 +231,20 @@ class Config(_Section):
     server: ServerConfig = ServerConfig()
     data_file: DataFileConfig = DataFileConfig()
     firestore: FirestoreConfig = FirestoreConfig()
-    # Serve the /console and /browse pages and /debug/all-data, which expose all data.
+    # Serve the /console and /browse pages, which expose all data.
     debug_tools: bool = True
-    # Protects /browse and /debug/all-data (HTTP basic auth, any username). Empty means
+    # Protects /browse and the other admin pages (HTTP basic auth, any username). Empty means
     # no password, which is only allowed when [server.host] is a numeric IP address.
     master_password: str = ""
     log_level: LogLevel = "INFO"
     monitoring: MonitoringConfig = MonitoringConfig()
     translation: TranslationConfig = TranslationConfig()
-    model_api: ModelApiConfig = ModelApiConfig()
     auth: AuthConfig = AuthConfig()
     push: PushConfig = PushConfig()
     # Seconds the server waits before a computer opponent moves in a v2 match
     # (server-side game API), so humans can watch the game unfold. 0 moves
     # immediately.
     computer_move_delay_seconds: float = 0.6
-    # How many times the game-building agent may regenerate a game's server
-    # code after it fails its random-walk tests, feeding each failure report
-    # back to the model (server-side game API). 0 disables the fix loop.
-    ai_max_fix_attempts: Annotated[int, Field(ge=0)] = 3
-
     @model_validator(mode="after")
     def _require_master_password_for_hostnames(self) -> "Config":
         if (

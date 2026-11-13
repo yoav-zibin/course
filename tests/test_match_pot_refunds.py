@@ -1,5 +1,6 @@
 """A paid match's pot is never lost: every way a match can end or be deleted
-without paying it out gives each human their stake back."""
+without the game paying it out settles the pot. Refunds go back to everyone —
+except a timeout, which pays the players who were left waiting."""
 
 import datetime as dt
 
@@ -18,7 +19,7 @@ def balance(api: Api, user_id: str) -> int:
 
 
 def paid_match(api: Api, *, turn_seconds: int | None = None) -> tuple[str, str, str]:
-    """A started v1 match between two players staking STAKE each. Both start with
+    """A started match between two players staking STAKE each. Both start with
     the 10-token daily grant, so each holds 10 - STAKE once it starts."""
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game_id = api.new_game(owner=alice, allowed_player_counts=(2,))
@@ -68,37 +69,20 @@ def test_deleting_the_owners_account_refunds_the_other_players_stake() -> None:
     assert balance(api, bob) == 10
 
 
-def test_deleting_a_match_whose_payouts_await_agreement_refunds_both_stakes() -> None:
-    api = Api(master_password=ADMIN)
-    match_id, alice, bob = paid_match(api)
-    api.ok(
-        "POST",
-        f"/matches/{match_id}/moves",
-        as_user=alice,
-        json={
-            "new_state": {},
-            "next_turn_player_indices": None,
-            "payout_player_indices": {"0": 10, "1": 0},
-        },
-    )
-    admin_delete(api, f"/admin/matches/{match_id}")
-    assert (balance(api, alice), balance(api, bob)) == (10, 10)
-
-
 def test_deleting_a_settled_match_pays_nothing_twice() -> None:
     api = Api(master_password=ADMIN)
     match_id, alice, bob = paid_match(api)
+    # The server game's move settles the pot itself: the match ends
+    # with payouts for the two seats, no agreement step.
     api.ok(
         "POST",
         f"/matches/{match_id}/moves",
         as_user=alice,
         json={
-            "new_state": {},
-            "next_turn_player_indices": None,
-            "payout_player_indices": {"0": 10, "1": 0},
+            "move": {"turn_indices": None, "payouts": {alice: 10, bob: 0}},
+            "expected_move_count": 0,
         },
     )
-    api.ok("POST", f"/matches/{match_id}/payouts", as_user=bob, json={"agree": True})
     assert (balance(api, alice), balance(api, bob)) == (15, 5)
     # The over match keeps recording its pot size, but holds no tokens any more.
     api.ok("DELETE", f"/matches/{match_id}", as_user=bob)  # only hides it for Bob
@@ -115,12 +99,14 @@ def test_leaving_a_paid_match_refunds_both_stakes() -> None:
     assert (balance(api, alice), balance(api, bob)) == (10, 10)
 
 
-def test_a_paid_speed_match_that_times_out_refunds_both_stakes() -> None:
+def test_a_paid_speed_match_timeout_pays_the_pot_to_the_waiting_player() -> None:
+    # Alice holds the first turn and lets it run out: she gets nothing back,
+    # and Bob — who was waiting for her — receives the whole pot.
     api = Api()
     match_id, alice, bob = paid_match(api, turn_seconds=60)
     api.platform._clock._now += dt.timedelta(minutes=5)  # type: ignore[attr-defined]
     match = api.ok("GET", f"/matches/{match_id}", as_user=bob)
     assert (match["status"], match["end_reason"]) == ("over", "timed_out")
-    assert (balance(api, alice), balance(api, bob)) == (10, 10)
+    assert (balance(api, alice), balance(api, bob)) == (10 - STAKE, 10 + STAKE)
     api.ok("GET", f"/matches/{match_id}", as_user=bob)  # reading again pays nothing more
-    assert (balance(api, alice), balance(api, bob)) == (10, 10)
+    assert (balance(api, alice), balance(api, bob)) == (10 - STAKE, 10 + STAKE)

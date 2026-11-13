@@ -114,8 +114,8 @@ if (typeof window !== "undefined" && window.document) {
 
   function render() {
     const state = view();
-    const acting = latest.status === "ongoing" ? latest.acting_for_player_index : null;
-    const myTurn = !latest.replay && acting !== null && acting === latest.my_player_index;
+    const myTurn = !latest.replay && latest.status === "ongoing" && latest.my_player_index !== null
+      && latest.turn_of_player_indices?.includes(latest.my_player_index);
     const name = (seat) => t("player_label", { name: latest.players[seat].name, mark: MARKS[seat] });
 
     let status;
@@ -123,7 +123,7 @@ if (typeof window !== "undefined" && window.document) {
     else if (state.winner !== null) status = t("wins", { name: name(state.winner) });
     else if (state.draw) status = t("draw");
     else if (latest.status === "over") status = t("over");
-    else if (myTurn) status = t("your_move", { name: name(acting) });
+    else if (myTurn) status = t("your_move", { name: name(latest.my_player_index) });
     else status = t("waiting_for", { names: latest.turn_of_player_indices.map((seat) => name(seat)).join(", ") });
     $("title").textContent = t("title");
     $("status").textContent = status;
@@ -162,6 +162,8 @@ if (typeof window !== "undefined" && window.document) {
     moveSent = false;
     render();
   });
+  // The listener is installed: the platform may send the first state_changed.
+  window.parent.postMessage({ type: "game_ready" }, "*");
 }
 </script>
 </body>

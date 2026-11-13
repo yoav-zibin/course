@@ -51,17 +51,13 @@ assert BROKEN_VIEW_GAME != COUNTER_GAME
 
 
 def _create_game(api: Api, owner: str, server_code: str = COUNTER_GAME) -> str:
-    game = api.ok(
-        "POST", "/games", as_user=owner,
-        json={
-            "name": "Counter race",
-            "allowed_player_counts": [2],
-            "allows_leave_mid_match": True,
-            "code": "<div>counter</div>",
-            "server_code": server_code,
-        },
-    )
-    return game["id"]
+    return api.create_game({
+        "name": "Counter race",
+        "allowed_player_counts": [2],
+        "allows_leave_mid_match": True,
+        "code": "<div>counter</div>",
+        "server_code": server_code,
+    }, owner)["id"]
 
 
 def _start(api: Api, owner: str, game_id: str, joiner: str) -> str:
@@ -141,11 +137,11 @@ def test_match_list_never_runs_view_for(api: Api) -> None:
     match_id = _start(api, alice, game_id, joiner=bob)
 
     def view_errors() -> int:
-        errors = api.ok("GET", "/debug/all-data")["game_version_errors"]
+        errors = api.client.app.state.platform.all_data().game_version_errors
         return sum(
             1
             for error in errors
-            if error["game_id"] == game_id and error["function"] == "viewFor"
+            if error.game_id == game_id and error.function == "viewFor"
         )
 
     # Starting the match already ran (and recorded) the broken viewFor once

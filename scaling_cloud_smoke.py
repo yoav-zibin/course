@@ -48,8 +48,6 @@ def run(project, database):
         caller_id=alice,
         match_id=match,
         move={"add": 2},
-        new_state=None,
-        next_turn_player_indices=None,
         expected_move_count=4,
         request_id="cloud-winning-move",
     )

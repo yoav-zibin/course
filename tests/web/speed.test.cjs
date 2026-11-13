@@ -195,11 +195,14 @@ test('the choice is hidden for solo-only games',()=>{
   assert.equal(node('speed-choice').hidden,true);
 });
 
-test('the offline cache lists the speed files and the page loads them before portal.js',()=>{
-  const sw=read('portal-sw.js'),html=read('portal.html');
-  for(const file of ['portal-speed.js','portal-speed.css']) {
-    const version=html.match(new RegExp(`/static/${file.replace('.','\\.')}\\?v=\\d+`))[0];
-    assert.ok(sw.includes(`"${version}"`),`${version} in portal-sw.js`);
-  }
-  assert.ok(html.indexOf('portal-speed.js')<html.indexOf('/static/portal.js'));
+test('the offline cache lists the speed files and the page loads the script after the first paint',()=>{
+  const sw=read('portal-sw.js'),html=read('portal.html'),portal=read('portal.js');
+  // The speed stylesheet is still a blocking <link>; the speed script is
+  // lazy-loaded from portal.js after the first render, but still pre-cached.
+  const cssVersion=html.match(/\/static\/portal-speed\.css\?v=\d+/)[0];
+  assert.ok(sw.includes(`"${cssVersion}"`),`${cssVersion} in portal-sw.js`);
+  const jsVersion=portal.match(/\/static\/portal-speed\.js\?v=\d+/)[0];
+  assert.ok(sw.includes(`"${jsVersion}"`),`${jsVersion} in portal-sw.js`);
+  assert.ok(portal.includes('loadPortalScript("/static/portal-speed.js'));
+  assert.ok(!html.includes('portal-speed.js'));
 });

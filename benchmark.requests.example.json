@@ -6,7 +6,7 @@
   },
   {
     "method": "GET",
-    "path": "/games?include_code=false",
+    "path": "/games",
     "weight": 2
   },
   {

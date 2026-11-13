@@ -31,7 +31,7 @@ def _create_game(api: Api, owner: str, name: str, **fields) -> dict:
         "game_schemas": _game_schemas(name),
     }
     body.update(fields)
-    return api.ok("POST", "/games", as_user=owner, json=body)
+    return api.create_game(body, owner)
 
 
 def _move(api: Api, match_id: str, user: str, move, expected: int) -> dict:
@@ -63,32 +63,6 @@ def test_tictactoe_plays_a_full_match_against_the_server_computer(api: Api):
     # Minimax never loses: the game is a draw or a computer win.
     assert current["state"]["winner"] in (1, None)
     assert current["state"]["draw"] is (current["state"]["winner"] is None)
-
-
-def test_tictactoe_through_the_emulator(api: Api):
-    user = api.new_user("dev")
-    server_code = (GAMES_DIR / "tictactoe.server.js").read_text()
-    players = [{"kind": "human", "name": "Dev"}, {"kind": "computer", "name": "Bot"}]
-    reply = api.ok(
-        "POST", "/emulator/reset", as_user=user,
-        json={"server_code": server_code, "game_schemas": _game_schemas("tictactoe"), "players": players, "seed": 3},
-    )
-    assert reply["error"] is None
-    for _ in range(9):
-        if reply["status"] == "over":
-            break
-        cell = reply["state"]["board"].index("")
-        reply = api.ok(
-            "POST", "/emulator/act", as_user=user,
-            json={
-                "server_code": server_code, "game_schemas": _game_schemas("tictactoe"), "players": players, "seed": 3,
-                "state": reply["state"], "turn": reply["turn"],
-                "move_count": reply["move_count"],
-                "player_id": "human-1", "move": {"cell": cell},
-            },
-        )
-        assert reply["error"] is None
-    assert reply["status"] == "over"
 
 
 def test_debug_game_passes_turns_and_ends(api: Api):

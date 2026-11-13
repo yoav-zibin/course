@@ -11,7 +11,8 @@
     ],
     "portal.js": [
       "Join an open match of any game",
-      "Couldn't redraw after a language change:", "Couldn't send the game its new language:",
+      "Couldn't redraw after a language change:",
+      "Couldn't send the game its new language:",
       "Random"
     ],
     "portal-offline.js": [
@@ -42,16 +43,9 @@
       "Create a cover and start, middle and ending previews using the approved rules and layout.",
       "Create reproducible initial, intermediate and terminal examples using the approved rules."
     ],
-    "game-test.js": [
-      "Laptop",
-      "Tablet",
-      "Small phone",
-      "Phone",
-      "Large phone"
-    ],
     "common.js": [
       "New Builder",
-      "GET /debug/all-data: {}",
+      "GET /v2/admin/{}: {}",
       "Campaign attribution is unavailable in this browser.",
       "Campaign attribution could not be saved in this browser.",
       "Admin",
@@ -75,17 +69,21 @@
       "Saved skin preference could not be read.",
       "Saved skin preference could not be stored in browser storage.",
       "Saved skin preference could not be stored.",
-      "Skin assignment is unavailable in this browser."
+      "Skin assignment is unavailable in this browser.",
+      "Skin discovery could not run."
     ],
     "console.html": [
       "X-User-Password"
     ]
   },
   "ratchet": {
-    "privacy.html": 26,
-    "browse.js": 62,
+    "privacy.html": 24,
+    "browse.js": 3,
     "console.js": 20,
     "feedback.js": 18,
-    "stats.js": 84
+    "stats.js": 77,
+    "game-test.html": 109,
+    "game-test.js": 88,
+    "game-test-host.js": 9
   }
 }

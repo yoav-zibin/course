@@ -1,6 +1,6 @@
 # A/B experiments
 
-The portal and builder use the persisted experiment framework in `models.py`,
+The portal uses the persisted experiment framework in `models.py`,
 `store.py`, and `service.py`. Experiment data is included in JSON snapshots and
 Firestore snapshots. The first pilot creates two active experiments:
 

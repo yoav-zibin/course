@@ -36,11 +36,11 @@ def test_all_data_survives_a_restart(tmp_path: Path) -> None:
     api.move(match_id, as_user=alice, next_turn=None, state={"winner": [0, "alice"]})
     api.ok("DELETE", f"/matches/{match_id}", as_user=bob)
     api.ok("DELETE", f"/games/{game_id}", as_user=alice)
-    before = api.ok("GET", "/debug/all-data")
+    before = api.client.app.state.platform.all_data()
     store.close()
 
     restarted = JsonFileStore(path)
-    after = Api(store=restarted).ok("GET", "/debug/all-data")
+    after = Api(store=restarted).client.app.state.platform.all_data()
     restarted.close()
     assert after == before
 
@@ -107,14 +107,12 @@ def test_a_missing_file_starts_empty_and_is_created_on_the_first_change(
     path = tmp_path / "data.json"
     store = JsonFileStore(path)
     api = Api(store=store)
-    assert api.ok("GET", "/debug/all-data") == {
-        "users": [],
-        "game_versions": [],
-        "matches": [],
-        "agent_conversations": [],
-        "game_version_errors": [],
-        "game_test_seeds": [],
-    }
+    empty = api.client.app.state.platform.all_data()
+    assert empty.users == []
+    assert empty.game_versions == []
+    assert empty.matches == []
+    assert empty.game_version_errors == []
+    assert empty.game_test_seeds == []
     assert not path.exists()
 
     api.new_user("alice")
@@ -154,43 +152,14 @@ def test_reads_do_not_rewrite_the_file(tmp_path: Path) -> None:
     written_at = path.stat().st_mtime_ns
 
     api.ok("GET", f"/users/{user_id}")
-    api.ok("GET", "/debug/all-data")
+    api.client.app.state.platform.all_data()
     store.close()
     assert path.stat().st_mtime_ns == written_at
 
 
-def test_a_version_1_file_is_migrated_to_turn_sets(tmp_path: Path) -> None:
-    path = tmp_path / "data.json"
-    store = JsonFileStore(path)
-    api = Api(store=store)
-    alice, bob = api.new_user("alice"), api.new_user("bob")
-    game_id = api.new_game(owner=alice)
-    match_id = api.new_match(owner=alice, game_id=game_id, joiners=[bob], start=True)
-    api.move(match_id, as_user=alice, next_turn=1, state={"pot": 10})
-    store.close()
-
-    # Rewrite the file in the old layout: single-index turns, format version 1.
-    file = json.loads(path.read_text())
-    assert file["format_version"] == FORMAT_VERSION
-    file["format_version"] = 1
-    match = file["data"]["matches"][0]
-    turn = match.pop("turn_of_player_indices")
-    match["turn_of_player_index"] = turn[0] if turn is not None else None
-    move = match["moves"][0]
-    next_turn = move.pop("next_turn_player_indices")
-    move["next_turn_player_index"] = next_turn[0] if next_turn is not None else None
-    path.write_text(json.dumps(file))
-
-    restarted = JsonFileStore(path)
-    after = Api(store=restarted).ok("GET", "/debug/all-data")
-    restarted.close()
-    assert after["matches"][0]["turn_of_player_indices"] == [1]
-    assert after["matches"][0]["moves"][0]["next_turn_player_indices"] == [1]
-
-
 def test_an_unreadable_file_is_rejected_rather_than_overwritten(tmp_path: Path) -> None:
     path = tmp_path / "data.json"
-    path.write_text('{"format_version": 2, "data": {"users": "oops"}}')
+    path.write_text('{"format_version": 1, "data": {"users": "oops"}}')
     with pytest.raises(ValidationError):
         JsonFileStore(path)
 

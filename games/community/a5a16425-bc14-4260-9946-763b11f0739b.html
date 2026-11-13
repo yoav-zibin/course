@@ -131,6 +131,7 @@ function applyLocale(message) {
   if (message.direction) document.documentElement.dir = message.direction;
 }
 let S=null,selFrom=null,errState=null,draftSplit=null;
+function actingSeat(){if(!S||S.status!=="ongoing"||!S.turn_of_player_indices?.length)return null;const turn=S.turn_of_player_indices[0];if(turn===S.my_player_index)return turn;const humans=(S.players||[]).filter(p=>p.kind==="human");if(S.my_player_index!==null&&humans.length===1&&S.players[turn]?.kind==="computer")return turn;return null;}
 function applyStaticTexts(){
  document.querySelector('h1').textContent=t("heading");
  document.getElementById('cancelBtn').textContent=t("clear_selection");
@@ -253,14 +254,14 @@ function render(){
    else status=t("game_over");
  }else if(turn.length){
    const list=turn.map(i=>names[i]).join(', ');
-   status=S.acting_for_player_index!=null?t("turn_mine",{names:list}):t("turn_wait",{names:list});
+   status=actingSeat()!=null?t("turn_mine",{names:list}):t("turn_wait",{names:list});
  }
  const cooling=Date.now()<cooldownUntil;
  if(cooling&&S.status!=='over')status=t("cooling",{status:status});
  msg.textContent=status;
  const errEl=document.getElementById('err');if(errEl)errEl.textContent=errState?errState():'';
  if(!vw){const empty=document.createElement('div');empty.className='card';empty.textContent=t("no_view");bd.replaceChildren(empty);return;}
- const myTurn=S.acting_for_player_index!=null&&!cooling;
+ const myTurn=actingSeat()!=null&&!cooling;
  const opp=me==null?1:(me===0?1:0);
  const myIdx=(me==null?vw.turnIndex:me);
  const myHands=vw.hands[myIdx]||[0,0];
@@ -276,7 +277,7 @@ function render(){
    for(let k=0;k<2;k++){
      const c=h[k],dead=c===0;
      let cls=dead?'dead':'';
-     if(S.acting_for_player_index!=null&&pi===me&&k===selFrom)cls+=' sel';
+     if(actingSeat()!=null&&pi===me&&k===selFrom)cls+=' sel';
      if(anim){
        if(anim.fromP===pi&&anim.fromK===k)cls+=(isTop?' att-top':' att-bot');
        if(anim.toP===pi&&anim.toK===k)cls+=' victim';
@@ -319,7 +320,7 @@ function render(){
  }
  bd.replaceChildren(...nodes);
  bd.querySelectorAll('.hand').forEach(el=>{el.addEventListener('click',()=>{
-   if(S.acting_for_player_index==null)return;
+   if(actingSeat()==null)return;
    if(Date.now()<cooldownUntil){setErr(()=>t("wait_animation"));return;}
    const p=+el.getAttribute('data-p'),k=+el.getAttribute('data-k');
    const mine=vw.hands[me];
@@ -344,7 +345,7 @@ function render(){
    setErr(null);send({kind:'split',left:l,right:r});
  });
  document.getElementById('cancelBtn').onclick=()=>{selFrom=null;setErr(null);render();};
- if(S.acting_for_player_index==null){bd.querySelectorAll('button').forEach(b=>b.disabled=true);document.getElementById('cancelBtn').disabled=true;}
+ if(actingSeat()==null){bd.querySelectorAll('button').forEach(b=>b.disabled=true);document.getElementById('cancelBtn').disabled=true;}
  if(cooling){bd.querySelectorAll('button').forEach(b=>b.disabled=true);}
  if(S.status==='over')document.getElementById('cancelBtn').disabled=true;
 }

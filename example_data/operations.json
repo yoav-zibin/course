@@ -1,1019 +1,850 @@
 [
- {
-  "op": "create_user",
-  "id": "user1",
-  "display_name": "user1",
-  "password": "user1"
- },
- {
-  "op": "create_user",
-  "id": "user2",
-  "display_name": "user2",
-  "password": "user2"
- },
- {
-  "op": "create_user",
-  "id": "user3",
-  "display_name": "user3",
-  "password": "user3"
- },
- {
-  "op": "create_user",
-  "id": "user4",
-  "display_name": "user4",
-  "password": "user4"
- },
- {
-  "op": "create_user",
-  "id": "user5",
-  "display_name": "user5",
-  "password": "user5"
- },
- {
-  "op": "create_user",
-  "id": "user6",
-  "display_name": "user6",
-  "password": "user6"
- },
- {
-  "op": "create_user",
-  "id": "user7",
-  "display_name": "user7",
-  "password": "user7"
- },
- {
-  "op": "create_user",
-  "id": "user8",
-  "display_name": "user8",
-  "password": "user8"
- },
- {
-  "op": "create_game",
-  "id": "tictactoe",
-  "as": "user1",
-  "name": "Tic-tac-toe",
-  "description": "Three in a row wins. X moves first.",
-  "allowed_player_counts": [
-   2
-  ],
-  "allows_leave_mid_match": false,
-  "allows_join_mid_match": false,
-  "code_file": "tictactoe.html",
-  "server_code_file": "tictactoe.server.js",
-  "schema_file": "tictactoe.schema.json"
- },
- {
-  "op": "create_game",
-  "id": "poker",
-  "as": "user1",
-  "name": "Poker",
-  "description": "No-limit Texas hold'em, 1000 chips each, blinds 10/20 doubling every 10 hands.",
-  "allowed_player_counts": [
-   2,
-   3,
-   4,
-   5,
-   6,
-   7,
-   8
-  ],
-  "allows_leave_mid_match": true,
-  "allows_join_mid_match": true,
-  "code_file": "poker.html",
-  "server_code_file": "poker.server.js",
-  "schema_file": "poker.schema.json"
- },
- {
-  "op": "create_game",
-  "id": "debug",
-  "as": "user1",
-  "name": "Debug game",
-  "description": "Shows every state_changed message and sends any make_move you enter.",
-  "allowed_player_counts": [
-   2,
-   3,
-   4,
-   5,
-   6,
-   7,
-   8,
-   9,
-   10
-  ],
-  "allows_leave_mid_match": true,
-  "allows_join_mid_match": true,
-  "code_file": "debug.html",
-  "server_code_file": "debug.server.js",
-  "schema_file": "debug.schema.json"
- },
- {
-  "op": "create_match",
-  "id": "ttt-ongoing",
-  "as": "user1",
-  "game": "tictactoe",
-  "num_computer_opponents": 0
- },
- {
-  "op": "join",
-  "as": "user2",
-  "match": "ttt-ongoing"
- },
- {
-  "op": "start",
-  "as": "user1",
-  "match": "ttt-ongoing"
- },
- {
-  "op": "move",
-  "as": "user1",
-  "match": "ttt-ongoing",
-  "move": {
-   "cell": 4
+  {
+    "op": "create_user",
+    "id": "user1",
+    "display_name": "user1",
+    "password": "user1"
+  },
+  {
+    "op": "create_user",
+    "id": "user2",
+    "display_name": "user2",
+    "password": "user2"
+  },
+  {
+    "op": "create_user",
+    "id": "user3",
+    "display_name": "user3",
+    "password": "user3"
+  },
+  {
+    "op": "create_user",
+    "id": "user4",
+    "display_name": "user4",
+    "password": "user4"
+  },
+  {
+    "op": "create_user",
+    "id": "user5",
+    "display_name": "user5",
+    "password": "user5"
+  },
+  {
+    "op": "create_user",
+    "id": "user6",
+    "display_name": "user6",
+    "password": "user6"
+  },
+  {
+    "op": "create_user",
+    "id": "user7",
+    "display_name": "user7",
+    "password": "user7"
+  },
+  {
+    "op": "create_user",
+    "id": "user8",
+    "display_name": "user8",
+    "password": "user8"
+  },
+  {
+    "op": "create_game",
+    "id": "tictactoe",
+    "as": "user1",
+    "name": "Tic-tac-toe",
+    "description": "Three in a row wins. X moves first.",
+    "allowed_player_counts": [
+      2
+    ],
+    "allows_leave_mid_match": false,
+    "allows_join_mid_match": false,
+    "code_file": "tictactoe.html",
+    "server_code_file": "tictactoe.server.js",
+    "schema_file": "tictactoe.schema.json"
+  },
+  {
+    "op": "create_game",
+    "id": "poker",
+    "as": "user1",
+    "name": "Poker",
+    "description": "No-limit Texas hold'em, 1000 chips each, blinds 10/20 doubling every 10 hands.",
+    "allowed_player_counts": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "allows_leave_mid_match": true,
+    "allows_join_mid_match": true,
+    "code_file": "poker.html",
+    "server_code_file": "poker.server.js",
+    "schema_file": "poker.schema.json"
+  },
+  {
+    "op": "create_match",
+    "id": "ttt-ongoing",
+    "as": "user1",
+    "game": "tictactoe",
+    "num_computer_opponents": 0
+  },
+  {
+    "op": "join",
+    "as": "user2",
+    "match": "ttt-ongoing"
+  },
+  {
+    "op": "start",
+    "as": "user1",
+    "match": "ttt-ongoing"
+  },
+  {
+    "op": "move",
+    "as": "user1",
+    "match": "ttt-ongoing",
+    "move": {
+      "cell": 4
+    }
+  },
+  {
+    "op": "move",
+    "as": "user2",
+    "match": "ttt-ongoing",
+    "move": {
+      "cell": 0
+    }
+  },
+  {
+    "op": "move",
+    "as": "user1",
+    "match": "ttt-ongoing",
+    "move": {
+      "cell": 8
+    }
+  },
+  {
+    "op": "create_match",
+    "id": "ttt-vs-computer",
+    "as": "user3",
+    "game": "tictactoe",
+    "num_computer_opponents": 1
+  },
+  {
+    "op": "start",
+    "as": "user3",
+    "match": "ttt-vs-computer"
+  },
+  {
+    "op": "move",
+    "as": "user3",
+    "match": "ttt-vs-computer",
+    "move": {
+      "cell": 4
+    }
+  },
+  {
+    "op": "move",
+    "as": "user3",
+    "match": "ttt-vs-computer",
+    "move": {
+      "cell": 0
+    }
+  },
+  {
+    "op": "create_match",
+    "id": "ttt-computer-to-move",
+    "as": "user6",
+    "game": "tictactoe",
+    "num_computer_opponents": 1
+  },
+  {
+    "op": "start",
+    "as": "user6",
+    "match": "ttt-computer-to-move"
+  },
+  {
+    "op": "move",
+    "as": "user6",
+    "match": "ttt-computer-to-move",
+    "move": {
+      "cell": 4
+    }
+  },
+  {
+    "op": "create_match",
+    "id": "ttt-x-won",
+    "as": "user2",
+    "game": "tictactoe",
+    "num_computer_opponents": 0
+  },
+  {
+    "op": "join",
+    "as": "user4",
+    "match": "ttt-x-won"
+  },
+  {
+    "op": "start",
+    "as": "user2",
+    "match": "ttt-x-won"
+  },
+  {
+    "op": "move",
+    "as": "user2",
+    "match": "ttt-x-won",
+    "move": {
+      "cell": 0
+    }
+  },
+  {
+    "op": "move",
+    "as": "user4",
+    "match": "ttt-x-won",
+    "move": {
+      "cell": 3
+    }
+  },
+  {
+    "op": "move",
+    "as": "user2",
+    "match": "ttt-x-won",
+    "move": {
+      "cell": 1
+    }
+  },
+  {
+    "op": "move",
+    "as": "user4",
+    "match": "ttt-x-won",
+    "move": {
+      "cell": 4
+    }
+  },
+  {
+    "op": "move",
+    "as": "user2",
+    "match": "ttt-x-won",
+    "move": {
+      "cell": 2
+    }
+  },
+  {
+    "op": "delete_match",
+    "as": "user4",
+    "match": "ttt-x-won"
+  },
+  {
+    "op": "create_match",
+    "id": "ttt-draw",
+    "as": "user5",
+    "game": "tictactoe",
+    "num_computer_opponents": 0
+  },
+  {
+    "op": "join",
+    "as": "user6",
+    "match": "ttt-draw"
+  },
+  {
+    "op": "start",
+    "as": "user5",
+    "match": "ttt-draw"
+  },
+  {
+    "op": "move",
+    "as": "user5",
+    "match": "ttt-draw",
+    "move": {
+      "cell": 0
+    }
+  },
+  {
+    "op": "move",
+    "as": "user6",
+    "match": "ttt-draw",
+    "move": {
+      "cell": 1
+    }
+  },
+  {
+    "op": "move",
+    "as": "user5",
+    "match": "ttt-draw",
+    "move": {
+      "cell": 2
+    }
+  },
+  {
+    "op": "move",
+    "as": "user6",
+    "match": "ttt-draw",
+    "move": {
+      "cell": 4
+    }
+  },
+  {
+    "op": "move",
+    "as": "user5",
+    "match": "ttt-draw",
+    "move": {
+      "cell": 3
+    }
+  },
+  {
+    "op": "move",
+    "as": "user6",
+    "match": "ttt-draw",
+    "move": {
+      "cell": 5
+    }
+  },
+  {
+    "op": "move",
+    "as": "user5",
+    "match": "ttt-draw",
+    "move": {
+      "cell": 7
+    }
+  },
+  {
+    "op": "move",
+    "as": "user6",
+    "match": "ttt-draw",
+    "move": {
+      "cell": 6
+    }
+  },
+  {
+    "op": "move",
+    "as": "user5",
+    "match": "ttt-draw",
+    "move": {
+      "cell": 8
+    }
+  },
+  {
+    "op": "create_match",
+    "id": "ttt-computer-won",
+    "as": "user7",
+    "game": "tictactoe",
+    "num_computer_opponents": 1
+  },
+  {
+    "op": "start",
+    "as": "user7",
+    "match": "ttt-computer-won"
+  },
+  {
+    "op": "move",
+    "as": "user7",
+    "match": "ttt-computer-won",
+    "move": {
+      "cell": 0
+    }
+  },
+  {
+    "op": "move",
+    "as": "user7",
+    "match": "ttt-computer-won",
+    "move": {
+      "cell": 1
+    }
+  },
+  {
+    "op": "move",
+    "as": "user7",
+    "match": "ttt-computer-won",
+    "move": {
+      "cell": 3
+    }
+  },
+  {
+    "op": "create_match",
+    "id": "ttt-player-left",
+    "as": "user1",
+    "game": "tictactoe",
+    "num_computer_opponents": 0
+  },
+  {
+    "op": "join",
+    "as": "user3",
+    "match": "ttt-player-left"
+  },
+  {
+    "op": "start",
+    "as": "user1",
+    "match": "ttt-player-left"
+  },
+  {
+    "op": "move",
+    "as": "user1",
+    "match": "ttt-player-left",
+    "move": {
+      "cell": 4
+    }
+  },
+  {
+    "op": "move",
+    "as": "user3",
+    "match": "ttt-player-left",
+    "move": {
+      "cell": 2
+    }
+  },
+  {
+    "op": "leave",
+    "as": "user3",
+    "match": "ttt-player-left"
+  },
+  {
+    "op": "create_match",
+    "id": "ttt-waiting",
+    "as": "user4",
+    "game": "tictactoe",
+    "num_computer_opponents": 0
+  },
+  {
+    "op": "create_match",
+    "id": "ttt-ready",
+    "as": "user8",
+    "game": "tictactoe",
+    "num_computer_opponents": 1
+  },
+  {
+    "op": "create_match",
+    "id": "poker-heads-up",
+    "as": "user1",
+    "game": "poker",
+    "num_computer_opponents": 0
+  },
+  {
+    "op": "join",
+    "as": "user2",
+    "match": "poker-heads-up"
+  },
+  {
+    "op": "start",
+    "as": "user1",
+    "match": "poker-heads-up"
+  },
+  {
+    "op": "create_match",
+    "id": "poker-four-on-the-flop",
+    "as": "user3",
+    "game": "poker",
+    "num_computer_opponents": 0
+  },
+  {
+    "op": "join",
+    "as": "user4",
+    "match": "poker-four-on-the-flop"
+  },
+  {
+    "op": "join",
+    "as": "user5",
+    "match": "poker-four-on-the-flop"
+  },
+  {
+    "op": "join",
+    "as": "user6",
+    "match": "poker-four-on-the-flop"
+  },
+  {
+    "op": "start",
+    "as": "user3",
+    "match": "poker-four-on-the-flop"
+  },
+  {
+    "op": "create_match",
+    "id": "poker-full-table",
+    "as": "user1",
+    "game": "poker",
+    "num_computer_opponents": 0
+  },
+  {
+    "op": "join",
+    "as": "user2",
+    "match": "poker-full-table"
+  },
+  {
+    "op": "join",
+    "as": "user3",
+    "match": "poker-full-table"
+  },
+  {
+    "op": "join",
+    "as": "user4",
+    "match": "poker-full-table"
+  },
+  {
+    "op": "join",
+    "as": "user5",
+    "match": "poker-full-table"
+  },
+  {
+    "op": "join",
+    "as": "user6",
+    "match": "poker-full-table"
+  },
+  {
+    "op": "join",
+    "as": "user7",
+    "match": "poker-full-table"
+  },
+  {
+    "op": "join",
+    "as": "user8",
+    "match": "poker-full-table"
+  },
+  {
+    "op": "start",
+    "as": "user1",
+    "match": "poker-full-table"
+  },
+  {
+    "op": "move",
+    "as": "user4",
+    "match": "poker-full-table",
+    "move": {
+      "type": "call"
+    }
+  },
+  {
+    "op": "move",
+    "as": "user5",
+    "match": "poker-full-table",
+    "move": {
+      "type": "call"
+    }
+  },
+  {
+    "op": "move",
+    "as": "user6",
+    "match": "poker-full-table",
+    "move": {
+      "type": "call"
+    }
+  },
+  {
+    "op": "move",
+    "as": "user7",
+    "match": "poker-full-table",
+    "move": {
+      "type": "call"
+    }
+  },
+  {
+    "op": "move",
+    "as": "user8",
+    "match": "poker-full-table",
+    "move": {
+      "type": "call"
+    }
+  },
+  {
+    "op": "move",
+    "as": "user1",
+    "match": "poker-full-table",
+    "move": {
+      "type": "call"
+    }
+  },
+  {
+    "op": "move",
+    "as": "user2",
+    "match": "poker-full-table",
+    "move": {
+      "type": "call"
+    }
+  },
+  {
+    "op": "move",
+    "as": "user3",
+    "match": "poker-full-table",
+    "move": {
+      "type": "check"
+    }
+  },
+  {
+    "op": "create_match",
+    "id": "poker-player-left",
+    "as": "user6",
+    "game": "poker",
+    "num_computer_opponents": 0
+  },
+  {
+    "op": "join",
+    "as": "user7",
+    "match": "poker-player-left"
+  },
+  {
+    "op": "join",
+    "as": "user8",
+    "match": "poker-player-left"
+  },
+  {
+    "op": "start",
+    "as": "user6",
+    "match": "poker-player-left"
+  },
+  {
+    "op": "move",
+    "as": "user6",
+    "match": "poker-player-left",
+    "move": {
+      "type": "call"
+    }
+  },
+  {
+    "op": "move",
+    "as": "user7",
+    "match": "poker-player-left",
+    "move": {
+      "type": "call"
+    }
+  },
+  {
+    "op": "move",
+    "as": "user8",
+    "match": "poker-player-left",
+    "move": {
+      "type": "check"
+    }
+  },
+  {
+    "op": "move",
+    "as": "user7",
+    "match": "poker-player-left",
+    "move": {
+      "type": "check"
+    }
+  },
+  {
+    "op": "leave",
+    "as": "user6",
+    "match": "poker-player-left"
+  },
+  {
+    "op": "create_match",
+    "id": "poker-player-joined",
+    "as": "user2",
+    "game": "poker",
+    "num_computer_opponents": 0
+  },
+  {
+    "op": "join",
+    "as": "user3",
+    "match": "poker-player-joined"
+  },
+  {
+    "op": "start",
+    "as": "user2",
+    "match": "poker-player-joined"
+  },
+  {
+    "op": "move",
+    "as": "user2",
+    "match": "poker-player-joined",
+    "move": {
+      "type": "call"
+    }
+  },
+  {
+    "op": "move",
+    "as": "user3",
+    "match": "poker-player-joined",
+    "move": {
+      "type": "check"
+    }
+  },
+  {
+    "op": "join",
+    "as": "user4",
+    "match": "poker-player-joined"
+  },
+  {
+    "op": "create_match",
+    "id": "poker-solo-computers",
+    "as": "user5",
+    "game": "poker",
+    "num_computer_opponents": 2
+  },
+  {
+    "op": "start",
+    "as": "user5",
+    "match": "poker-solo-computers"
+  },
+  {
+    "op": "move",
+    "as": "user5",
+    "match": "poker-solo-computers",
+    "move": {
+      "type": "call"
+    }
+  },
+  {
+    "op": "create_match",
+    "id": "poker-over",
+    "as": "user2",
+    "game": "poker",
+    "num_computer_opponents": 1
+  },
+  {
+    "op": "start",
+    "as": "user2",
+    "match": "poker-over"
+  },
+  {
+    "op": "move",
+    "as": "user2",
+    "match": "poker-over",
+    "move": {
+      "type": "raise",
+      "to": 1000
+    }
+  },
+  {
+    "op": "move",
+    "as": "user2",
+    "match": "poker-over",
+    "move": {
+      "type": "raise",
+      "to": 1020
+    }
+  },
+  {
+    "op": "move",
+    "as": "user2",
+    "match": "poker-over",
+    "move": {
+      "type": "raise",
+      "to": 1040
+    }
+  },
+  {
+    "op": "move",
+    "as": "user2",
+    "match": "poker-over",
+    "move": {
+      "type": "raise",
+      "to": 1060
+    }
+  },
+  {
+    "op": "move",
+    "as": "user2",
+    "match": "poker-over",
+    "move": {
+      "type": "raise",
+      "to": 1080
+    }
+  },
+  {
+    "op": "move",
+    "as": "user2",
+    "match": "poker-over",
+    "move": {
+      "type": "raise",
+      "to": 1100
+    }
+  },
+  {
+    "op": "move",
+    "as": "user2",
+    "match": "poker-over",
+    "move": {
+      "type": "raise",
+      "to": 1120
+    }
+  },
+  {
+    "op": "move",
+    "as": "user2",
+    "match": "poker-over",
+    "move": {
+      "type": "raise",
+      "to": 1140
+    }
+  },
+  {
+    "op": "move",
+    "as": "user2",
+    "match": "poker-over",
+    "move": {
+      "type": "raise",
+      "to": 1160
+    }
+  },
+  {
+    "op": "move",
+    "as": "user2",
+    "match": "poker-over",
+    "move": {
+      "type": "raise",
+      "to": 320
+    }
+  },
+  {
+    "op": "move",
+    "as": "user2",
+    "match": "poker-over",
+    "move": {
+      "type": "raise",
+      "to": 340
+    }
+  },
+  {
+    "op": "move",
+    "as": "user2",
+    "match": "poker-over",
+    "move": {
+      "type": "raise",
+      "to": 380
+    }
+  },
+  {
+    "op": "create_match",
+    "id": "poker-last-human-left",
+    "as": "user4",
+    "game": "poker",
+    "num_computer_opponents": 1
+  },
+  {
+    "op": "start",
+    "as": "user4",
+    "match": "poker-last-human-left"
+  },
+  {
+    "op": "move",
+    "as": "user4",
+    "match": "poker-last-human-left",
+    "move": {
+      "type": "call"
+    }
+  },
+  {
+    "op": "leave",
+    "as": "user4",
+    "match": "poker-last-human-left"
+  },
+  {
+    "op": "create_match",
+    "id": "poker-ready",
+    "as": "user5",
+    "game": "poker",
+    "num_computer_opponents": 0
+  },
+  {
+    "op": "join",
+    "as": "user6",
+    "match": "poker-ready"
+  },
+  {
+    "op": "create_match",
+    "id": "poker-open",
+    "as": "user7",
+    "game": "poker",
+    "num_computer_opponents": 0
   }
- },
- {
-  "op": "move",
-  "as": "user2",
-  "match": "ttt-ongoing",
-  "move": {
-   "cell": 0
-  }
- },
- {
-  "op": "move",
-  "as": "user1",
-  "match": "ttt-ongoing",
-  "move": {
-   "cell": 8
-  }
- },
- {
-  "op": "create_match",
-  "id": "ttt-vs-computer",
-  "as": "user3",
-  "game": "tictactoe",
-  "num_computer_opponents": 1
- },
- {
-  "op": "start",
-  "as": "user3",
-  "match": "ttt-vs-computer"
- },
- {
-  "op": "move",
-  "as": "user3",
-  "match": "ttt-vs-computer",
-  "move": {
-   "cell": 4
-  }
- },
- {
-  "op": "move",
-  "as": "user3",
-  "match": "ttt-vs-computer",
-  "move": {
-   "cell": 0
-  }
- },
- {
-  "op": "create_match",
-  "id": "ttt-computer-to-move",
-  "as": "user6",
-  "game": "tictactoe",
-  "num_computer_opponents": 1
- },
- {
-  "op": "start",
-  "as": "user6",
-  "match": "ttt-computer-to-move"
- },
- {
-  "op": "move",
-  "as": "user6",
-  "match": "ttt-computer-to-move",
-  "move": {
-   "cell": 4
-  }
- },
- {
-  "op": "create_match",
-  "id": "ttt-x-won",
-  "as": "user2",
-  "game": "tictactoe",
-  "num_computer_opponents": 0
- },
- {
-  "op": "join",
-  "as": "user4",
-  "match": "ttt-x-won"
- },
- {
-  "op": "start",
-  "as": "user2",
-  "match": "ttt-x-won"
- },
- {
-  "op": "move",
-  "as": "user2",
-  "match": "ttt-x-won",
-  "move": {
-   "cell": 0
-  }
- },
- {
-  "op": "move",
-  "as": "user4",
-  "match": "ttt-x-won",
-  "move": {
-   "cell": 3
-  }
- },
- {
-  "op": "move",
-  "as": "user2",
-  "match": "ttt-x-won",
-  "move": {
-   "cell": 1
-  }
- },
- {
-  "op": "move",
-  "as": "user4",
-  "match": "ttt-x-won",
-  "move": {
-   "cell": 4
-  }
- },
- {
-  "op": "move",
-  "as": "user2",
-  "match": "ttt-x-won",
-  "move": {
-   "cell": 2
-  }
- },
- {
-  "op": "delete_match",
-  "as": "user4",
-  "match": "ttt-x-won"
- },
- {
-  "op": "create_match",
-  "id": "ttt-draw",
-  "as": "user5",
-  "game": "tictactoe",
-  "num_computer_opponents": 0
- },
- {
-  "op": "join",
-  "as": "user6",
-  "match": "ttt-draw"
- },
- {
-  "op": "start",
-  "as": "user5",
-  "match": "ttt-draw"
- },
- {
-  "op": "move",
-  "as": "user5",
-  "match": "ttt-draw",
-  "move": {
-   "cell": 0
-  }
- },
- {
-  "op": "move",
-  "as": "user6",
-  "match": "ttt-draw",
-  "move": {
-   "cell": 1
-  }
- },
- {
-  "op": "move",
-  "as": "user5",
-  "match": "ttt-draw",
-  "move": {
-   "cell": 2
-  }
- },
- {
-  "op": "move",
-  "as": "user6",
-  "match": "ttt-draw",
-  "move": {
-   "cell": 4
-  }
- },
- {
-  "op": "move",
-  "as": "user5",
-  "match": "ttt-draw",
-  "move": {
-   "cell": 3
-  }
- },
- {
-  "op": "move",
-  "as": "user6",
-  "match": "ttt-draw",
-  "move": {
-   "cell": 5
-  }
- },
- {
-  "op": "move",
-  "as": "user5",
-  "match": "ttt-draw",
-  "move": {
-   "cell": 7
-  }
- },
- {
-  "op": "move",
-  "as": "user6",
-  "match": "ttt-draw",
-  "move": {
-   "cell": 6
-  }
- },
- {
-  "op": "move",
-  "as": "user5",
-  "match": "ttt-draw",
-  "move": {
-   "cell": 8
-  }
- },
- {
-  "op": "create_match",
-  "id": "ttt-computer-won",
-  "as": "user7",
-  "game": "tictactoe",
-  "num_computer_opponents": 1
- },
- {
-  "op": "start",
-  "as": "user7",
-  "match": "ttt-computer-won"
- },
- {
-  "op": "move",
-  "as": "user7",
-  "match": "ttt-computer-won",
-  "move": {
-   "cell": 0
-  }
- },
- {
-  "op": "move",
-  "as": "user7",
-  "match": "ttt-computer-won",
-  "move": {
-   "cell": 1
-  }
- },
- {
-  "op": "move",
-  "as": "user7",
-  "match": "ttt-computer-won",
-  "move": {
-   "cell": 3
-  }
- },
- {
-  "op": "create_match",
-  "id": "ttt-player-left",
-  "as": "user1",
-  "game": "tictactoe",
-  "num_computer_opponents": 0
- },
- {
-  "op": "join",
-  "as": "user3",
-  "match": "ttt-player-left"
- },
- {
-  "op": "start",
-  "as": "user1",
-  "match": "ttt-player-left"
- },
- {
-  "op": "move",
-  "as": "user1",
-  "match": "ttt-player-left",
-  "move": {
-   "cell": 4
-  }
- },
- {
-  "op": "move",
-  "as": "user3",
-  "match": "ttt-player-left",
-  "move": {
-   "cell": 2
-  }
- },
- {
-  "op": "leave",
-  "as": "user3",
-  "match": "ttt-player-left"
- },
- {
-  "op": "create_match",
-  "id": "ttt-waiting",
-  "as": "user4",
-  "game": "tictactoe",
-  "num_computer_opponents": 0
- },
- {
-  "op": "create_match",
-  "id": "ttt-ready",
-  "as": "user8",
-  "game": "tictactoe",
-  "num_computer_opponents": 1
- },
- {
-  "op": "create_match",
-  "id": "poker-heads-up",
-  "as": "user1",
-  "game": "poker",
-  "num_computer_opponents": 0
- },
- {
-  "op": "join",
-  "as": "user2",
-  "match": "poker-heads-up"
- },
- {
-  "op": "start",
-  "as": "user1",
-  "match": "poker-heads-up"
- },
- {
-  "op": "create_match",
-  "id": "poker-four-on-the-flop",
-  "as": "user3",
-  "game": "poker",
-  "num_computer_opponents": 0
- },
- {
-  "op": "join",
-  "as": "user4",
-  "match": "poker-four-on-the-flop"
- },
- {
-  "op": "join",
-  "as": "user5",
-  "match": "poker-four-on-the-flop"
- },
- {
-  "op": "join",
-  "as": "user6",
-  "match": "poker-four-on-the-flop"
- },
- {
-  "op": "start",
-  "as": "user3",
-  "match": "poker-four-on-the-flop"
- },
- {
-  "op": "update_game",
-  "as": "user1",
-  "game": "poker",
-  "description": "No-limit Texas hold'em: 1000 chips each, blinds 10/20 doubling every 10 hands. Last player with chips wins."
- },
- {
-  "op": "create_match",
-  "id": "poker-full-table",
-  "as": "user1",
-  "game": "poker",
-  "num_computer_opponents": 0
- },
- {
-  "op": "join",
-  "as": "user2",
-  "match": "poker-full-table"
- },
- {
-  "op": "join",
-  "as": "user3",
-  "match": "poker-full-table"
- },
- {
-  "op": "join",
-  "as": "user4",
-  "match": "poker-full-table"
- },
- {
-  "op": "join",
-  "as": "user5",
-  "match": "poker-full-table"
- },
- {
-  "op": "join",
-  "as": "user6",
-  "match": "poker-full-table"
- },
- {
-  "op": "join",
-  "as": "user7",
-  "match": "poker-full-table"
- },
- {
-  "op": "join",
-  "as": "user8",
-  "match": "poker-full-table"
- },
- {
-  "op": "start",
-  "as": "user1",
-  "match": "poker-full-table"
- },
- {
-  "op": "move",
-  "as": "user4",
-  "match": "poker-full-table",
-  "move": {
-   "type": "call"
-  }
- },
- {
-  "op": "move",
-  "as": "user5",
-  "match": "poker-full-table",
-  "move": {
-   "type": "call"
-  }
- },
- {
-  "op": "move",
-  "as": "user6",
-  "match": "poker-full-table",
-  "move": {
-   "type": "call"
-  }
- },
- {
-  "op": "move",
-  "as": "user7",
-  "match": "poker-full-table",
-  "move": {
-   "type": "call"
-  }
- },
- {
-  "op": "move",
-  "as": "user8",
-  "match": "poker-full-table",
-  "move": {
-   "type": "call"
-  }
- },
- {
-  "op": "move",
-  "as": "user1",
-  "match": "poker-full-table",
-  "move": {
-   "type": "call"
-  }
- },
- {
-  "op": "move",
-  "as": "user2",
-  "match": "poker-full-table",
-  "move": {
-   "type": "call"
-  }
- },
- {
-  "op": "move",
-  "as": "user3",
-  "match": "poker-full-table",
-  "move": {
-   "type": "check"
-  }
- },
- {
-  "op": "create_match",
-  "id": "poker-player-left",
-  "as": "user6",
-  "game": "poker",
-  "num_computer_opponents": 0
- },
- {
-  "op": "join",
-  "as": "user7",
-  "match": "poker-player-left"
- },
- {
-  "op": "join",
-  "as": "user8",
-  "match": "poker-player-left"
- },
- {
-  "op": "start",
-  "as": "user6",
-  "match": "poker-player-left"
- },
- {
-  "op": "move",
-  "as": "user6",
-  "match": "poker-player-left",
-  "move": {
-   "type": "call"
-  }
- },
- {
-  "op": "move",
-  "as": "user7",
-  "match": "poker-player-left",
-  "move": {
-   "type": "call"
-  }
- },
- {
-  "op": "move",
-  "as": "user8",
-  "match": "poker-player-left",
-  "move": {
-   "type": "check"
-  }
- },
- {
-  "op": "move",
-  "as": "user7",
-  "match": "poker-player-left",
-  "move": {
-   "type": "check"
-  }
- },
- {
-  "op": "leave",
-  "as": "user6",
-  "match": "poker-player-left"
- },
- {
-  "op": "create_match",
-  "id": "poker-player-joined",
-  "as": "user2",
-  "game": "poker",
-  "num_computer_opponents": 0
- },
- {
-  "op": "join",
-  "as": "user3",
-  "match": "poker-player-joined"
- },
- {
-  "op": "start",
-  "as": "user2",
-  "match": "poker-player-joined"
- },
- {
-  "op": "move",
-  "as": "user2",
-  "match": "poker-player-joined",
-  "move": {
-   "type": "call"
-  }
- },
- {
-  "op": "move",
-  "as": "user3",
-  "match": "poker-player-joined",
-  "move": {
-   "type": "check"
-  }
- },
- {
-  "op": "join",
-  "as": "user4",
-  "match": "poker-player-joined"
- },
- {
-  "op": "create_match",
-  "id": "poker-solo-computers",
-  "as": "user5",
-  "game": "poker",
-  "num_computer_opponents": 2
- },
- {
-  "op": "start",
-  "as": "user5",
-  "match": "poker-solo-computers"
- },
- {
-  "op": "move",
-  "as": "user5",
-  "match": "poker-solo-computers",
-  "move": {
-   "type": "call"
-  }
- },
- {
-  "op": "create_match",
-  "id": "poker-over",
-  "as": "user2",
-  "game": "poker",
-  "num_computer_opponents": 1
- },
- {
-  "op": "start",
-  "as": "user2",
-  "match": "poker-over"
- },
- {
-  "op": "move",
-  "as": "user2",
-  "match": "poker-over",
-  "move": {
-   "type": "raise",
-   "to": 1000
-  }
- },
- {
-  "op": "move",
-  "as": "user2",
-  "match": "poker-over",
-  "move": {
-   "type": "raise",
-   "to": 1020
-  }
- },
- {
-  "op": "move",
-  "as": "user2",
-  "match": "poker-over",
-  "move": {
-   "type": "raise",
-   "to": 1040
-  }
- },
- {
-  "op": "move",
-  "as": "user2",
-  "match": "poker-over",
-  "move": {
-   "type": "raise",
-   "to": 1060
-  }
- },
- {
-  "op": "move",
-  "as": "user2",
-  "match": "poker-over",
-  "move": {
-   "type": "raise",
-   "to": 1080
-  }
- },
- {
-  "op": "move",
-  "as": "user2",
-  "match": "poker-over",
-  "move": {
-   "type": "raise",
-   "to": 1100
-  }
- },
- {
-  "op": "move",
-  "as": "user2",
-  "match": "poker-over",
-  "move": {
-   "type": "raise",
-   "to": 1120
-  }
- },
- {
-  "op": "move",
-  "as": "user2",
-  "match": "poker-over",
-  "move": {
-   "type": "raise",
-   "to": 1140
-  }
- },
- {
-  "op": "move",
-  "as": "user2",
-  "match": "poker-over",
-  "move": {
-   "type": "raise",
-   "to": 1160
-  }
- },
- {
-  "op": "move",
-  "as": "user2",
-  "match": "poker-over",
-  "move": {
-   "type": "raise",
-   "to": 320
-  }
- },
- {
-  "op": "move",
-  "as": "user2",
-  "match": "poker-over",
-  "move": {
-   "type": "raise",
-   "to": 340
-  }
- },
- {
-  "op": "move",
-  "as": "user2",
-  "match": "poker-over",
-  "move": {
-   "type": "raise",
-   "to": 380
-  }
- },
- {
-  "op": "create_match",
-  "id": "poker-last-human-left",
-  "as": "user4",
-  "game": "poker",
-  "num_computer_opponents": 1
- },
- {
-  "op": "start",
-  "as": "user4",
-  "match": "poker-last-human-left"
- },
- {
-  "op": "move",
-  "as": "user4",
-  "match": "poker-last-human-left",
-  "move": {
-   "type": "call"
-  }
- },
- {
-  "op": "leave",
-  "as": "user4",
-  "match": "poker-last-human-left"
- },
- {
-  "op": "create_match",
-  "id": "poker-ready",
-  "as": "user5",
-  "game": "poker",
-  "num_computer_opponents": 0
- },
- {
-  "op": "join",
-  "as": "user6",
-  "match": "poker-ready"
- },
- {
-  "op": "create_match",
-  "id": "poker-open",
-  "as": "user7",
-  "game": "poker",
-  "num_computer_opponents": 0
- },
- {
-  "op": "create_match",
-  "id": "debug-waiting",
-  "as": "user1",
-  "game": "debug",
-  "num_computer_opponents": 0
- },
- {
-  "op": "create_match",
-  "id": "debug-ongoing",
-  "as": "user1",
-  "game": "debug",
-  "num_computer_opponents": 0
- },
- {
-  "op": "join",
-  "as": "user2",
-  "match": "debug-ongoing"
- },
- {
-  "op": "join",
-  "as": "user3",
-  "match": "debug-ongoing"
- },
- {
-  "op": "start",
-  "as": "user1",
-  "match": "debug-ongoing"
- },
- {
-  "op": "move",
-  "as": "user1",
-  "match": "debug-ongoing",
-  "move": {
-   "new_state": {
-    "counter": 1,
-    "note": "user1 moved"
-   },
-   "next_turn_player_indices": [
-    1
-   ]
-  }
- },
- {
-  "op": "move",
-  "as": "user2",
-  "match": "debug-ongoing",
-  "move": {
-   "new_state": {
-    "counter": 2,
-    "note": "user2 moved"
-   },
-   "next_turn_player_indices": [
-    2
-   ]
-  }
- },
- {
-  "op": "move",
-  "as": "user3",
-  "match": "debug-ongoing",
-  "move": {
-   "new_state": {
-    "counter": 3,
-    "note": "user3 moved; back to user1"
-   },
-   "next_turn_player_indices": [
-    0
-   ]
-  }
- },
- {
-  "op": "create_match",
-  "id": "debug-computer-to-move",
-  "as": "user4",
-  "game": "debug",
-  "num_computer_opponents": 1
- },
- {
-  "op": "start",
-  "as": "user4",
-  "match": "debug-computer-to-move"
- },
- {
-  "op": "move",
-  "as": "user4",
-  "match": "debug-computer-to-move",
-  "move": {
-   "new_state": {
-    "counter": 1,
-    "note": "user4 passed the turn to the computer"
-   },
-   "next_turn_player_indices": [
-    1
-   ]
-  }
- },
- {
-  "op": "create_match",
-  "id": "debug-over",
-  "as": "user5",
-  "game": "debug",
-  "num_computer_opponents": 0
- },
- {
-  "op": "join",
-  "as": "user6",
-  "match": "debug-over"
- },
- {
-  "op": "start",
-  "as": "user5",
-  "match": "debug-over"
- },
- {
-  "op": "move",
-  "as": "user5",
-  "match": "debug-over",
-  "move": {
-   "new_state": {
-    "counter": 1,
-    "note": "user5 moved"
-   },
-   "next_turn_player_indices": [
-    1
-   ]
-  }
- },
- {
-  "op": "move",
-  "as": "user6",
-  "match": "debug-over",
-  "move": {
-   "new_state": {
-    "counter": 2,
-    "note": "user6 ended the match"
-   },
-   "next_turn_player_indices": null
-  }
- }
 ]

@@ -57,3 +57,10 @@ def append_move(history: Sequence[Move], move: Move):
     return (
         history.append(move) if isinstance(history, MoveHistory) else (*history, move)
     )
+
+
+def history_prefix(history: Sequence[Move], count: int) -> MoveHistory:
+    """A read-only prefix for historical views, without fetching old moves."""
+    if not 0 <= count <= len(history):
+        raise ValueError("history prefix is out of bounds")
+    return MoveHistory(count, lambda start, stop: list(history[start:stop]))

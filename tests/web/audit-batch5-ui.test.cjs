@@ -26,7 +26,7 @@ function setup(name,n=2){
  let seed=20261106;const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296};
  const ctx={players:Array.from({length:n},(_,i)=>({id:'p'+i,kind:'human',display_name:'P'+i,max_loss:10})),pot:10*n,move_count:0,random};let current=game.newMatch(ctx);
  function advance(move){current=game.applyMove(current.state,current.turn[0],move,ctx);ctx.move_count++;return current}
- function message(viewer,source=parent,extra={}){const me=ctx.players.findIndex(p=>p.id===viewer);receive({source,data:{type:'state_changed',status:current.turn?'ongoing':'over',move_count:ctx.move_count,players:ctx.players.map(p=>({name:p.display_name})),my_player_index:me<0?null:me,acting_for_player_index:current.turn?ctx.players.findIndex(p=>p.id===current.turn[0]):null,view:game.viewFor(current.state,viewer,ctx),...extra}})}
+ function message(viewer,source=parent,extra={}){const me=ctx.players.findIndex(p=>p.id===viewer);receive({source,data:{type:'state_changed',status:current.turn?'ongoing':'over',move_count:ctx.move_count,players:ctx.players.map(p=>({name:p.display_name})),my_player_index:me<0?null:me,turn_of_player_indices:current.turn?current.turn.map(id=>ctx.players.findIndex(p=>p.id===id)):null,view:game.viewFor(current.state,viewer,ctx),...extra}})}
  function walk(){for(let i=0;i<1000&&current.turn;i++)advance(game.randomMove(current.state,current.turn[0],ctx));assert.equal(current.turn,null);return current}
  return {nodes,sent,game,ctx,advance,message,walk,current:()=>current,parent,timers};
 }

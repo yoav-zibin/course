@@ -146,6 +146,46 @@ class PortalOffline {
       return undefined;
     }
   }
+  /** Stored response-cache keys belonging to OTHER accounts on this
+   * device, least recently used first (from each account's recency log;
+   * unlogged entries count as oldest). Only `.r.` pieces are listed:
+   * another account's queues, practice matches and archives are durable
+   * data and are never reclaimed. */
+  foreignResponseKeys() {
+    const mine = `${this.key()}.`;
+    const accounts = new Map();
+    for (const stored of this.storedKeys()) {
+      if (!stored.startsWith(PORTAL_PREFIX) || stored.startsWith(mine)) continue;
+      const rest = stored.slice(PORTAL_PREFIX.length);
+      const dot = rest.indexOf(".");
+      if (dot < 0) continue;
+      const account = rest.slice(0, dot);
+      if (!accounts.has(account)) accounts.set(account, { recency: null, responses: [] });
+      const entry = accounts.get(account);
+      if (rest.slice(dot) === ".recency") {
+        const log = this.readJson(stored);
+        entry.recency = new Map(
+          (Array.isArray(log?.entries) ? log.entries : []).map((item) => [item.path, item.at || 0]),
+        );
+      } else if (rest.slice(dot).startsWith(".r.")) {
+        entry.responses.push(stored);
+      }
+    }
+    const found = [];
+    for (const [account, entry] of accounts) {
+      const base = `${PORTAL_PREFIX}${account}`;
+      for (const stored of entry.responses) {
+        let path = stored.slice(base.length + 3);
+        try {
+          path = decodeURIComponent(path);
+        } catch {
+          // An undecodable suffix sorts as oldest; the key is still cache.
+        }
+        found.push({ key: stored, at: entry.recency?.get(path) || 0 });
+      }
+    }
+    return found.sort((a, b) => a.at - b.at).map((item) => item.key);
+  }
   storedKeys() {
     try {
       if (typeof this.storage.keys === "function") return this.storage.keys();
@@ -562,6 +602,22 @@ class PortalOffline {
       evictOne();
       failed = this.fanOut(data);
     }
+    // The quota is per browser origin, not per account: when this account
+    // has nothing left to drop, the space may be held by other accounts'
+    // cached answers on this device. Those are refetchable GET responses
+    // (never queues, practice matches or archives), so reclaim them
+    // before declaring the device full.
+    if (failed.length) {
+      const foreign = this.foreignResponseKeys();
+      while (failed.length && foreign.length) {
+        try {
+          this.storage.removeItem(foreign.shift());
+        } catch {
+          // A denied removal must not mask the original failure.
+        }
+        failed = this.fanOut(data);
+      }
+    }
     if (failed.length) {
       const message =
         "Device storage is full or unavailable. This move was not saved; free space and retry.";
@@ -620,7 +676,7 @@ class PortalOffline {
     };
   }
   apply(match, body) {
-    // A v2 move ({move}) carries no resulting state: the server computes
+    // A move ({move}) carries no resulting state: the server computes
     // it. The optimistic copy keeps the current view until the sync lands.
     if (!("new_state" in body)) {
       return { ...match, move_count: body.expected_move_count + 1 };
@@ -647,7 +703,11 @@ class PortalOffline {
     let value;
     const identity = this.key();
     try {
-      if (!this.online() || Date.now() < this.retryAfter)
+      // The retry backoff keeps background polls from hammering a dead
+      // connection; an explicit user action (options.force, e.g. starting
+      // pass-and-play) still gets its one network attempt. A device the
+      // browser reports offline is served from the saved copy either way.
+      if (!this.online() || (Date.now() < this.retryAfter && !options.force))
         throw Object.assign(new TypeError("Offline"), { cachedOnly: true });
       value = await this.request("GET", path, options);
       if (identity !== this.key())
@@ -690,8 +750,14 @@ class PortalOffline {
       if (!error.cachedOnly) this.retryAfter = Date.now() + 10000;
       value = this.cached(path);
       if (value === undefined)
-        throw new Error(
-          I18n.t("ui.offline.err_server_unreachable", {}, "Couldn't reach the server, and this data isn't saved on this device yet. Please try again."),
+        // Flagged notSaved so a caller acting on an explicit tap (starting
+        // pass-and-play) can say the data must be downloaded once online,
+        // instead of repeating this generic line.
+        throw Object.assign(
+          new Error(
+            I18n.t("ui.offline.err_server_unreachable", {}, "Couldn't reach the server, and this data isn't saved on this device yet. Please try again."),
+          ),
+          { notSaved: true },
         );
     }
     if (path.startsWith("/v2/matches?")) {
@@ -778,8 +844,19 @@ class PortalOffline {
       this.write(data, {cacheOnly: !reportFailure});
       return data.local[id];
     }
-    const base = data.responses[`/matches/${id}`] || match;
+    // The in-memory match can run ahead of the saved response: the active-match
+    // poll refreshes state.match straight from the server without rewriting
+    // the offline cache, so a move made right after an opponent's (or the
+    // computer's) move would otherwise be rejected as "changed in another
+    // tab" even though it is based on the fresh view. But the saved response
+    // is the base the queued moves were built on, so only treat it as stale
+    // when the match has advanced past it plus the queued moves; a saved
+    // response that is ahead still means this view is stale.
+    const cached = data.responses[`/matches/${id}`];
     const queue = data.queues[id] || [];
+    const base = cached && match.move_count > cached.move_count + queue.length
+      ? match
+      : cached || match;
     if (base.move_count + queue.length !== body.expected_move_count)
       throw new Error(
         I18n.t("ui.offline.err_match_other_tab", {}, "This match changed in another tab. Refresh before moving."),
@@ -944,11 +1021,15 @@ class PortalOffline {
     if (conflict.remote) d.responses[`/matches/${id}`] = conflict.remote;
     this.writeBestEffort(d);
   }
-  async practice(game, mode = "computer") {
+  async practice(game, mode = "computer", playerCount = undefined) {
     const user = this.user();
     if (!user)
       throw new Error(I18n.t("ui.offline.err_login_first", {}, "Log in online once before starting offline practice."));
-    const count = Math.min(...game.allowed_player_counts),
+    // An explicitly chosen count wins when the game allows it; otherwise the
+    // smallest allowed count, as before the choice existed.
+    const count = game.allowed_player_counts.includes(playerCount)
+        ? playerCount
+        : Math.min(...game.allowed_player_counts),
       id = `local-${crypto.randomUUID()}`;
     const match = {
       id,

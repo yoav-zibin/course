@@ -122,6 +122,7 @@ function applyLocale(message) {
 
 
 let latest=null, selected=null, pending=false;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 function cur(){ return latest && latest.view ? latest.view : null; }
 function countPieces(b){ let a=[0,0]; if(!b) return a; for(let r=0;r<8;r++)for(let c=0;c<8;c++) if(b[r][c]) a[b[r][c].c]++; return a; }
 document.getElementById("msg").textContent=t("waiting_platform");
@@ -131,7 +132,7 @@ function render(){
   if(!st) return;
   document.getElementById("title").textContent=t("title");
   const players=latest.players||[{name:t("red")},{name:t("black")}];
-  const acting=latest.status==="ongoing"?latest.acting_for_player_index:null;
+  const acting=actingSeat();
   const toMove=(st.toMove==null?st.turn:st.toMove);
   const boardEl=document.getElementById("board");
   boardEl.replaceChildren();
@@ -197,7 +198,7 @@ function render(){
 }
 function onSquare(r,c){
   if(!latest||pending) return;
-  const acting=latest.status==="ongoing"?latest.acting_for_player_index:null;
+  const acting=actingSeat();
   if(acting===null) return;
   const st=cur();
   if(!st||st.winner!==null&&st.winner!==undefined||st.draw) return;

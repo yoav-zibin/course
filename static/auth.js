@@ -1,4 +1,4 @@
-// Accounts and login, shared by the portal and the builder.
+// Accounts and login, shared by the site's pages.
 //
 // The browser remembers every logged-in account in localStorage:
 // [{id, display_name, password, linked: [{kind, identifier, linked_at}]}].
@@ -197,6 +197,32 @@ const Auth = (() => {
 
   rememberInviter();
   window.addEventListener?.("hashchange", rememberInviter);
+
+  /** Sends a logged-out visitor to the login page, and back here after.
+   * Every account page requires a login — a guest account counts and takes
+   * seconds — so a visitor with no account never lands on a page that can
+   * only refuse them. Exempt: the login page itself, and /admin, the
+   * master-password page, which has its own sign-in. Runs only in a real
+   * page context (test harnesses load this file with a stub location). */
+  function requireLogin() {
+    const exempt = ["/", "/static/welcome.html", "/admin", "/static/admin.html"];
+    if (
+      typeof location.pathname !== "string" ||
+      typeof location.replace !== "function" ||
+      exempt.includes(location.pathname) ||
+      current()
+    )
+      return;
+    const back = location.pathname + location.search + location.hash;
+    location.replace(`/?next=${encodeURIComponent(back)}`);
+  }
+
+  requireLogin();
+
+  // Logging out (the last account removed) leaves the visitor logged out
+  // on this page: send them to the login page the same way, and back here
+  // if they log in again.
+  document.addEventListener?.("auth-changed", requireLogin);
 
   // Login dialog
 
@@ -471,11 +497,17 @@ const Auth = (() => {
     const key = JSON.stringify([account?.id, all.map(user => [user.id, user.display_name, user.picture_url, user.linked]), I18n.revision?.() ?? 0]);
     if (container._authRenderKey === key && container.querySelector(".auth-menu-button")) return container;
     const panelWasOpen = container.querySelector(".auth-menu-panel")?.hidden === false;
+    // A profile picture or translation can arrive during a poll while the
+    // menu is in use. Restore the same action after replacing its DOM.
+    const focusedAction = container.contains(document.activeElement)
+      && container._authAccountId === account?.id
+      ? document.activeElement.dataset.authAction : null;
     container.replaceChildren();
     const button = el("button", {
       type: "button",
       class: "auth-menu-button",
       "aria-haspopup": "true",
+      "data-auth-action": "toggle",
     },
       avatarImg(account?.picture_url),
       account ? account.display_name : I18n.t("ui.auth.log_in", {}, "Log in")
@@ -518,9 +550,10 @@ const Auth = (() => {
         );
       }
       panel.append(
-        el("button", { type: "button", textContent: I18n.t("ui.auth.link_method", {}, "Link a login method"), onclick: () => { hidePanel(); openDialog("link"); } }),
+        el("button", { type: "button", "data-auth-action": "link", textContent: I18n.t("ui.auth.link_method", {}, "Link a login method"), onclick: () => { hidePanel(); openDialog("link"); } }),
         el("button", {
           type: "button",
+          "data-auth-action": "invite",
           textContent: I18n.t("ui.auth.copy_invite", {}, "Copy my invite link"),
           title: I18n.t("ui.auth.invite_hint", {}, "Everyone who signs up through this link counts as invited by you"),
           onclick: () => {
@@ -535,6 +568,7 @@ const Auth = (() => {
         window.FeedbackDialog ? el("button", {
           type: "button",
           class: "feedback-menu-item",
+          "data-auth-action": "feedback",
           textContent: I18n.t("ui.feedback.send_feedback", {}, "Send feedback"),
           onclick: () => {
             hidePanel();
@@ -551,6 +585,7 @@ const Auth = (() => {
         panel.append(
           el("button", {
             type: "button",
+            "data-auth-action": `switch:${other.id}`,
             textContent: other.display_name,
             onclick: () => setCurrent(other.id),
           })
@@ -558,16 +593,21 @@ const Auth = (() => {
       }
     }
     panel.append(
-      el("button", { type: "button", textContent: account ? I18n.t("ui.auth.add_account", {}, "Add another account") : I18n.t("ui.auth.log_in", {}, "Log in"), onclick: () => { hidePanel(); openDialog("login"); } })
+      el("button", { type: "button", "data-auth-action": "login", textContent: account ? I18n.t("ui.auth.add_account", {}, "Add another account") : I18n.t("ui.auth.log_in", {}, "Log in"), onclick: () => { hidePanel(); openDialog("login"); } })
     );
     if (account) {
       panel.append(
-        el("button", { type: "button", textContent: I18n.t("ui.auth.log_out_name", { name: account.display_name }, `Log out ${account.display_name}`), onclick: () => remove(account.id) }),
-        el("button", { type: "button", textContent: I18n.t("ui.auth.log_out_all", {}, "Log out of all accounts"), onclick: removeAll })
+        el("button", { type: "button", "data-auth-action": "logout", textContent: I18n.t("ui.auth.log_out_name", { name: account.display_name }, `Log out ${account.display_name}`), onclick: () => remove(account.id) }),
+        el("button", { type: "button", "data-auth-action": "logout-all", textContent: I18n.t("ui.auth.log_out_all", {}, "Log out of all accounts"), onclick: removeAll })
       );
     }
     container.append(button, panel);
     container._authRenderKey = key;
+    container._authAccountId = account?.id;
+    if (focusedAction) {
+      Array.from(container.querySelectorAll("[data-auth-action]"))
+        .find(node => node.dataset.authAction === focusedAction)?.focus({preventScroll: true});
+    }
     return container;
   }
 

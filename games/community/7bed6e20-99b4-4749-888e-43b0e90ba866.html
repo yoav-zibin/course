@@ -129,6 +129,7 @@ function applyLocale(message) {
   if (message.direction) document.documentElement.dir = message.direction;
 }
 let latest=null;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 function applyStaticTexts(){
  document.querySelector('h1').textContent=t("heading");
  document.querySelector('.sub').textContent=t("sub");
@@ -152,8 +153,8 @@ function boardOf(){const v=view();return v&&v.board?v.board:Array.from({length:R
 function lowestEmpty(board,col){for(let r=ROWS-1;r>=0;r--)if(board[r][col]===0)return r;return -1;}
 function canHumanAct(){
  if(!latest||latest.status!=='ongoing')return false;
- if(latest.acting_for_player_index===null||latest.acting_for_player_index===undefined)return false;
- if(latest.acting_for_player_index!==latest.my_player_index)return false;
+ if(actingSeat()===null||actingSeat()===undefined)return false;
+ if(actingSeat()!==latest.my_player_index)return false;
  const v=view();
  return v&&v.status==='IN_PROGRESS';
 }
@@ -207,7 +208,7 @@ function render(){
    const turnName=names[tm-1]||t("player_n",{number:tm});
    const red=tm===1;
    cls=red?'r':'y';
-   const a=latest.acting_for_player_index;
+   const a=actingSeat();
    if(a===null||a===undefined){
     if(turnsOf&&turnsOf.length){const tn=latest.players[turnsOf[0]]?latest.players[turnsOf[0]].name:turnName;txt=red?t("red_to_move",{name:tn}):t("yellow_to_move",{name:tn});}
     else txt=red?t("red_to_move_plain",{name:turnName}):t("yellow_to_move_plain",{name:turnName});

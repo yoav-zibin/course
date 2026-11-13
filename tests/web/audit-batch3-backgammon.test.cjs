@@ -7,7 +7,7 @@ function setup(name, state){
  const document={getElementById(id){return elements[id]??=el()},createElement:el};
  const parent={postMessage(m){messages.push(JSON.parse(JSON.stringify(m)))}};
  const sb={document,parent,addEventListener:(event,cb)=>handlers[event]=cb};vm.createContext(sb);vm.runInContext(pageScript(html,document),sb);
- function update(count=1){handlers.message({source:parent,data:{type:'state_changed',status:'ongoing',move_count:count,acting_for_player_index:0,my_player_index:0,players:[{name:'A'},{name:'B'}],view:state}})}
+ function update(count=1){handlers.message({source:parent,data:{type:'state_changed',status:'ongoing',move_count:count,turn_of_player_indices:[0],my_player_index:0,players:[{name:'A'},{name:'B'}],view:state}})}
  update();
  function point(idx){return [...elements.left.children,...elements.right.children].find(e=>Number(e.children[0].textContent)===idx+1)}
  return {elements,messages,point,update};

@@ -22,15 +22,14 @@ function reporter(width,height) {
   return {body,ctx,callbacks,queue,messages,flush(){while(queue.length)queue.shift()();}};
 }
 
-function host(builder=false,initialHeight=480) {
+function host(gameTest=false,initialHeight=480) {
   const iframe={style:{},contentWindow:{}};
-  let focused=false;
-  const container={id:builder?'test-frame':'game-box',clientWidth:390,clientHeight:initialHeight,
+  const container={id:gameTest?'test-frame':'game-box',clientWidth:390,clientHeight:initialHeight,
     get offsetHeight(){return this.clientHeight+2;},style:{removeProperty(){container.clientHeight=initialHeight;},setProperty(k,v){container.clientHeight=parseFloat(v)-2;}}};
-  const ctx=browserContext({window:{addEventListener(){}},document:{body:{classList:{contains:()=>focused}}},container,iframe});
+  const ctx=browserContext({window:{addEventListener(){}},document:{body:{classList:{contains:()=>false}}},container,iframe});
   vm.runInContext(source,ctx);
   vm.runInContext('frame=new GameFrame(container,()=>{},()=>{});frame.iframe=iframe;frame.resizeViewport()',ctx);
-  return {iframe,container,ctx,focus(value){focused=value;vm.runInContext('frame.resizeViewport()',ctx);},report(width,height,extra={}){
+  return {iframe,container,ctx,report(width,height,extra={}){
     ctx.message={type:'game_viewport',width,height,viewport_width:parseInt(iframe.style.width),viewport_height:parseInt(iframe.style.height),...extra};
     vm.runInContext('frame.receive({source:iframe.contentWindow,data:message})',ctx);
   },view(){return vm.runInContext('frame.viewport',ctx);}};
@@ -81,7 +80,7 @@ test('fitting stays inside the script-only sandbox and preserves the move protoc
   assert.equal(calls.length,1);assert.equal(calls[0].new_state.n,1);
 });
 
-test('inline Builder grows for a portrait game instead of shrinking its width',()=>{
+test('game-test frame grows for a portrait game instead of shrinking its width',()=>{
   const t=host(true,214);
   t.report(390,760);
   assert.equal(t.view().scale,1);
@@ -89,9 +88,7 @@ test('inline Builder grows for a portrait game instead of shrinking its width',(
   for(let i=0;i<20;i++)t.report(390,t.container.clientHeight+1);
   assert.equal(t.container.clientHeight,762); // 100vh plus rounding must not grow forever
   assert.equal(t.view().passes,1);
-  t.focus(true);t.report(390,900);
-  assert.ok(t.view().scale<1); // Focus still fits its fixed viewport
-  t.focus(false);t.report(390,760);
+  t.report(390,760);
   assert.equal(t.view().scale,1);assert.equal(t.container.clientHeight,762);
 });
 
@@ -108,6 +105,48 @@ test('inline previews bound viewport-dependent growth and reset for a narrower p
   assert.equal(t.view().passes,8);assert.equal(t.view().scale,1);
   t.container.clientWidth=320;vm.runInContext('frame.resizeViewport()',t.ctx);
   assert.equal(t.container.clientHeight,480);assert.equal(t.view().passes,0);
+});
+
+test('a game ready handshake is accepted silently; unknown messages are still reported',()=>{
+  const bad=[],moves=[];
+  const context=browserContext({window:{addEventListener(){}},document:{createElement(tag){
+    return {tag,contentWindow:{},style:{},setAttribute(){},addEventListener(){}};
+  }},Node:class{},container:{replaceChildren(){}},onMove:m=>moves.push(m),onBad:p=>bad.push(p)});
+  vm.runInContext(source,context);
+  vm.runInContext('frame = new GameFrame(container,onMove,onBad);frame.load("<h1>Game</h1>")',context);
+  const receive=(data)=>vm.runInContext(`frame.receive({source:frame.iframe.contentWindow,data:${JSON.stringify(data)}})`,context);
+  receive({type:'ready'});
+  assert.equal(bad.length,0);assert.equal(moves.length,0);
+  receive({type:'game_ready'});
+  assert.equal(bad.length,0);assert.equal(moves.length,0);
+  receive({type:'something_else'});
+  assert.equal(bad.length,1);assert.match(bad[0],/isn't make_move/);
+});
+
+test('sends wait for the game_ready handshake, with a timeout fallback',async()=>{
+  const sent=[],bad=[];
+  const node={contentWindow:{postMessage:m=>sent.push(m)},style:{},setAttribute(){},listeners:{},
+    addEventListener(name,fn){this.listeners[name]=fn;}};
+  const context=browserContext({window:{addEventListener(){}},setTimeout,clearTimeout,
+    document:{createElement:()=>node},Node:class{},container:{replaceChildren(){}},
+    onMove:()=>{},onBad:p=>bad.push(p)});
+  vm.runInContext(source,context);
+  vm.runInContext('frame = new GameFrame(container,onMove,onBad);frame.load("<h1>Game</h1>")',context);
+  const sending=vm.runInContext('frame.send({type:"state_changed"})',context);
+  await new Promise(r=>setTimeout(r,20));
+  assert.equal(sent.length,0); // frame has not loaded yet
+  node.listeners.load();
+  await new Promise(r=>setTimeout(r,20));
+  assert.equal(sent.length,0); // loaded, but the game has not posted game_ready
+  vm.runInContext('frame.receive({source:frame.iframe.contentWindow,data:{type:"game_ready"}})',context);
+  await sending;
+  assert.equal(sent.length,1);assert.equal(bad.length,0);
+  // A game that never handshakes still gets its state after the timeout.
+  vm.runInContext('frame.readyTimeoutMs=10;frame.load("<h1>Game</h1>")',context);
+  const sending2=vm.runInContext('frame.send({type:"state_changed"})',context);
+  node.listeners.load();
+  await sending2;
+  assert.equal(sent.length,2);
 });
 
 test('observed resize work is deferred and independent of page scroll position',()=>{

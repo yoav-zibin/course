@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createUser, loginAs, uniqueName } from './helpers';
 
-test('skin assignment is consistent across the portal and builder', async ({ page, request }) => {
+test('skin assignment is consistent across the portal and admin', async ({ page, request }) => {
   const user = await createUser(request, uniqueName('Skin'));
   await loginAs(page, user);
 
@@ -10,12 +10,34 @@ test('skin assignment is consistent across the portal and builder', async ({ pag
   await expect(root).toHaveAttribute('data-skin', /^(classic|aurora|sunset)$/);
   const skin = await root.getAttribute('data-skin');
 
-  await page.goto('/static/builder.html');
+  await page.goto('/static/admin.html');
   await expect(root).toHaveAttribute('data-skin', skin!);
+});
+
+test('Party skin preview respects reduced motion', async ({ page, request }, testInfo) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await loginAs(page, await createUser(request, uniqueName('Party motion')));
+  await page.goto('/static/portal.html?skin=party');
+  await expect(page.locator('html')).toHaveAttribute('data-skin', 'party');
+  const wallet = page.locator('#token-wallet');
+  await expect(wallet).toBeVisible();
+  await wallet.screenshot({ path: testInfo.outputPath('party-wallet.png') });
+  const animations = () => page.evaluate(() => [
+    getComputedStyle(document.body).animationName,
+    getComputedStyle(document.querySelector('.portal-shell')!).animationName,
+  ]);
+  await expect.poll(animations).toEqual(['none', 'none']);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await expect.poll(animations).toEqual(['party-lights', 'party-lights']);
 });
 
 test('campaign link redirects to the portal and remembers its code', async ({ page }) => {
   await page.goto('/c/students-a');
+  // A logged-out visitor detours through the login page first; the
+  // campaign code survives the round trip in the return address.
+  await expect(page).toHaveURL(/\/\?next=/);
+  await page.locator('#welcome-guest-name').fill(uniqueName('Campaign guest'));
+  await page.locator('#welcome-guest').click();
   await expect(page).toHaveURL(/\/static\/portal\.html\?campaign=students-a$/);
   await expect
     .poll(() =>

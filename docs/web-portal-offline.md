@@ -9,7 +9,7 @@ from main `674ae95` are retained, including game deep links and computer limits.
 
 ## Published games
 
-Published through buildplay.fun's builder using the student's Google-linked account:
+Published through buildplay.fun's POST /games import using the student's Google-linked account:
 
 | Game | Players | Published game ID |
 | --- | --- | --- |
@@ -57,7 +57,7 @@ competitive card service. No API change is proposed here.
   sizes, the five largest cached responses, the eviction order and next
   entry to evict, queued moves and practice broken down per match, totals
   for every account on this device, other saved data on this origin
-  (accounts, language, builder), the service-worker shell cache size, and
+  (accounts, language), the service-worker shell cache size, and
   the browser's estimated total origin usage and quota when available.
   **Clear recoverable cache** removes only that account's refetchable
   responses; queued-match snapshots, local practice game code, queues and
@@ -145,7 +145,7 @@ accepted a human move and a computer reply offline, then synchronized exactly fo
 moves after resuming the backend. The pending count returned to zero; an independent
 server read confirmed four moves. No production server was paused or restarted.
 
-The final JavaScript run passed 51 tests (13 game/offline checks, 27 builder checks, and 11 portal checks).
+The final JavaScript run passed its game/offline and portal checks.
 The portal test harness includes the offline adapter. Python: 206 passed, one existing stale
 example-data fixture failure. No backend files differ from upstream main.
 
@@ -157,15 +157,14 @@ deleted afterward. This is API-client coverage, not two physical phones.
 The local tests cover box completion/extra turns, Reversi captures and termination,
 100 simulated Crazy Eights matches, reload durability, account isolation, lost
 acknowledgements, conflicting remote moves, ordered queue replay, bounded conflict
-retries, and storage exhaustion. Shared builder checks are also run unchanged.
+retries, and storage exhaustion.
 
 ## Deployment handoff
 
 Publishing games updates cloud data immediately. Pushing portal code to GitHub
-alone does not deploy it: there is no checked-in automatic deployment workflow.
-
-The VM administrator should review the PR and use their established deployment
-procedure to update the actual served checkout. The portal-specific static files
+deploys it automatically when CI passes: `.github/workflows/ci.yml` runs the
+tests and, on a green push to main, SSH-deploys to the VM and restarts
+`game-platform.service`. The portal-specific static files
 are `portal.html`, `portal.js`, `portal-offline.js`, `portal-sw.js`,
 `portal.webmanifest`, and `portal-icon.svg`; keep them together with the current
 main versions of `common.css`, `common.js`, and `auth.js`.

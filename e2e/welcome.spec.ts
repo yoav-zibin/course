@@ -20,7 +20,9 @@ test('a fresh visitor continues as a guest and keeps the account', async ({ page
   expect(errors).toEqual([]);
   await expect(page.locator('#page-error')).toBeHidden();
 
-  await page.goto('/');
+  // Logged-in welcome immediately redirects; waiting for its load event
+  // races that navigation. Check the final destination and account below.
+  await page.goto('/', { waitUntil: 'commit' });
   await expect(page).toHaveURL(/\/(?:static\/portal\.html|portal)$/);
   await expect(page.locator('#account-menu').getByRole('button', { name, exact: true })).toBeVisible();
   expect(creations).toBe(1);
@@ -70,4 +72,17 @@ test('successful login from the welcome dialog continues to the games page', asy
   await expect(page).toHaveURL(/\/(?:static\/portal\.html|portal)$/);
   await expect(page.locator('#account-menu').getByRole('button', { name: user.display_name, exact: true })).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test('after login the visitor returns to the ?next= page; external targets are ignored', async ({ page }) => {
+  // A same-site return path named by the page that sent the visitor here.
+  await page.goto('/?next=%2Fstatic%2Fportal.html');
+  await page.locator('#welcome-guest-name').fill(uniqueName('Next guest'));
+  await page.locator('#welcome-guest').click();
+  await expect(page).toHaveURL(/\/static\/portal\.html$/);
+  // An external or protocol-relative target is never honored: the visitor
+  // (now logged in, so the welcome page forwards at once) lands on the
+  // games page instead.
+  await page.goto('/?next=%2F%2Fexample.com', { waitUntil: 'commit' });
+  await expect(page).toHaveURL(/\/(?:static\/portal\.html|portal)$/);
 });

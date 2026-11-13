@@ -192,6 +192,7 @@ function dot(cid,parent){ var d=el('span',null,'dot',parent); d.style.background
 var CIDS=COLORS.map(function(c){return c.id;});
 var CMAP={};COLORS.forEach(function(c){CMAP[c.id]=c;});
 var latest=null, selected=-1, errorKey='';
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 function sendMove(move){ parent.postMessage({type:'make_move',move:move},'*'); }
 function canPlay(col,card){ if(!col||col.length===0) return true; return card.v>col[col.length-1].v; }
 function liveScores(view,players){
@@ -254,7 +255,7 @@ function render(){
  if(!view){ statusEl.textContent=t('dealing'); return; }
  var my=latest.my_player_index;
  var turnIdx=(latest.turn_of_player_indices&&latest.turn_of_player_indices.length)?latest.turn_of_player_indices[0]:null;
- var acting=latest.acting_for_player_index;
+ var acting=actingSeat();
  var canAct=acting!==null&&acting!==undefined&&latest.status!=='over'&&view.phase!=='over';
  var myIdx=(my!==null&&my!==undefined)?my:(typeof view.myIndex==='number'?view.myIndex:0);
  var cur=typeof view.current==='number'?view.current:turnIdx;

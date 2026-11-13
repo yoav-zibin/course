@@ -1262,11 +1262,6 @@ class RequestLogMiddleware:
         request_id = headers.get("x-request-id", "")[:64] or uuid.uuid4().hex[:16]
         client = _client_of(scope, headers)
         method, path = scope["method"], scope["path"]
-        private_test_body = (
-            path == "/game-test-sessions"
-            or path.startswith("/game-test-sessions/")
-            or path in ("/game-test-emulator/reset", "/game-test-emulator/act")
-        )
         query = scope.get("query_string", b"").decode("latin-1")
         body = bytearray()
         body_size = 0
@@ -1282,7 +1277,7 @@ class RequestLogMiddleware:
             if message["type"] == "http.request":
                 chunk = message.get("body", b"")
                 body_size += len(chunk)
-                if not private_test_body and len(body) < config.max_logged_body_bytes + 1:
+                if len(body) < config.max_logged_body_bytes + 1:
                     body.extend(chunk[: config.max_logged_body_bytes + 1 - len(body)])
             return message
 
@@ -1301,7 +1296,7 @@ class RequestLogMiddleware:
             elif message["type"] == "http.response.body":
                 chunk = message.get("body", b"")
                 response_size += len(chunk)
-                if not private_test_body and len(response_body) < config.max_logged_body_bytes + 1:
+                if len(response_body) < config.max_logged_body_bytes + 1:
                     response_body.extend(
                         chunk[: config.max_logged_body_bytes + 1 - len(response_body)]
                     )

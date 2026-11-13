@@ -10,7 +10,7 @@ const root = path.resolve(__dirname,'../..');
 const screenshots = process.env.MATCH_SCREENSHOTS;
 const user = {id:'layout-user',display_name:'Layout tester',password:'fixture-only',linked:[],picture_url:''};
 const game = {id:'layout-game',name:'Tic-Tac-Toe',version:1,description:'Layout fixture',allowed_player_counts:[2],published:true,code:fs.readFileSync(path.join(root,'games/tictactoe.html'),'utf8'),server_code:fs.readFileSync(path.join(root,'games/tictactoe.server.js'),'utf8')};
-const fresh = (status='ongoing') => ({id:'layout-match',game_id:game.id,game_version:1,owner_user_id:user.id,status,move_count:0,state:{board:['','','','','','','','',''],winner:null,draw:false},turn_of_player_indices:[0],created_at:'2026-10-22T12:00:00Z',players:[{player_index:0,kind:'human',user_id:user.id},{player_index:1,kind:'human',user_id:'friend'}]});
+const fresh = (status='ongoing') => ({id:'layout-match',game_id:game.id,game_version:1,owner_user_id:user.id,status,move_count:0,state:{board:['','','','','','','','',''],winner:null,draw:false},turn_of_player_indices:[0],created_at:'2026-10-22T12:00:00Z',updated_at:'2026-10-22T12:00:00Z',players:[{player_index:0,kind:'human',user_id:user.id},{player_index:1,kind:'human',user_id:'friend'}]});
 let match = fresh(), writes=0;
 const server = http.createServer(async(req,res)=>{
  const url = new URL(req.url,'http://localhost');
@@ -27,10 +27,14 @@ const server = http.createServer(async(req,res)=>{
   // The v2 protocol: the client sends only its move ({cell}); the fixture,
   // standing in for the server, applies it as seat 0's X.
   writes++;const board=[...match.state.board];board[body.move.cell]='X';
-  match={...match,state:{board,winner:null,draw:false},turn_of_player_indices:[1],move_count:match.move_count+1,status:'ongoing'};
+  match={...match,state:{board,winner:null,draw:false},turn_of_player_indices:[1],move_count:match.move_count+1,updated_at:new Date().toISOString(),status:'ongoing'};
   return json(match);
  }
  const responses={'/games':[game],'/matches':[match],'/matches/open':[], '/matches/layout-match':match,'/games/layout-game/versions/1':game,'/users/layout-user':{display_name:user.display_name},'/users/friend':{display_name:'Friend'},'/auth/config':{},'/push/config':{enabled:false}};
+ if(url.pathname==='/batch')return json(JSON.parse(url.searchParams.get('requests')).map(({path:requestPath})=>{
+  const pathname=new URL(requestPath,'http://localhost').pathname;
+  return pathname in responses ? {status:200,body:responses[pathname]} : {status:404,body:{detail:'No fixture for '+pathname}};
+ }));
  if(url.pathname in responses)return json(responses[url.pathname]);
  return json({detail:'No fixture for '+url.pathname},404);
 });
@@ -68,7 +72,7 @@ const server = http.createServer(async(req,res)=>{
     assert.ok(await iframe.evaluate(e=>e===document.querySelector('#game-box iframe')),'rotation preserves iframe');
     assert.equal(await board.locator('#board button').first().textContent(),'X');
     // Opponent response, then a real offline queued human move and rotation.
-    match={...match,move_count:2,state:{board:['X','O','','','','','','',''],winner:null,draw:false},turn_of_player_indices:[0]};
+    match={...match,move_count:2,updated_at:new Date().toISOString(),state:{board:['X','O','','','','','','',''],winner:null,draw:false},turn_of_player_indices:[0]};
     await page.waitForFunction(()=>document.querySelector('#match-meta').textContent.includes('2 moves'));
     await context.setOffline(true);await board.locator('#board button').nth(3).click();
     await page.waitForFunction(()=>document.querySelector('#match-play-notice').textContent.includes('saved on this device'));
@@ -78,7 +82,8 @@ const server = http.createServer(async(req,res)=>{
     await page.waitForFunction(()=>document.querySelector('#offline-status').textContent.includes('0 pending moves'));
     assert.equal(writes,2);
     // End state must expose results and rematch without obscuring them forever.
-    match={...match,status:'over',end_reason:'finished',turn_of_player_indices:null};
+    match={...match,status:'over',end_reason:'finished',turn_of_player_indices:null,move_count:5,updated_at:new Date().toISOString(),
+      state:{board:['X','X','X','O','O','','','',''],winner:0,draw:false,line:[0,1,2]}};
     await page.waitForFunction(()=>!document.querySelector('#match-result').hidden);
     assert.equal(await page.locator('#match-tools').isVisible(),true);
     assert.equal(await page.getByRole('button',{name:'Request rematch',exact:true}).isVisible(),true);

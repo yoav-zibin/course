@@ -4,9 +4,13 @@ No startup scans and no background snapshot writer. Service operations run in a
 unit of work: reads acquire Firestore transaction versions, writes are buffered
 until the operation succeeds, then committed atomically. A conflicting operation
 returns a conflict; it is never replayed with uncontrolled external side effects.
+Reads outside a unit of work are served by the stale-while-revalidate cache in
+read_cache.py (background refresh at most once a second, LRU-evicted at half
+the machine's RAM); transactional reads never touch it.
 """
 
 import contextlib
+import copy
 import datetime as dt
 import hashlib
 import json
@@ -22,13 +26,11 @@ from game_platform.models import (
     Experiment,
     ExperimentAssignment,
     ExperimentEvent,
-    AgentConversation,
-    AgentConversationEntry,
     Game,
-    GameDraft,
-    GameTestSession,
     GameTestSeeds,
     GameVersionError,
+    hash_package_secret,
+    import_package_from_legacy_workflow,
     Invite,
     Match,
     Move,
@@ -41,6 +43,7 @@ from game_platform.move_history import MoveHistory
 from game_platform.observability import timed_external
 from game_platform.scaling_library import LibraryEntry
 from game_platform.paging import Page, decode_cursor, encode_cursor, page_size
+from game_platform.read_cache import ReadCache
 from game_platform.translation_bundle import TranslationMemory
 
 TYPES = {
@@ -52,14 +55,11 @@ TYPES = {
     "users": User,
     "game_versions": Game,
     "games": Game,
-    "game_drafts": GameDraft,
-    "game_test_sessions": GameTestSession,
     "matches": Match,
     "invites": Invite,
     "push_subscriptions": WebPushSubscription,
     "game_version_errors": GameVersionError,
     "game_test_seeds": GameTestSeeds,
-    "agent_conversations": AgentConversation,
     "feedback": Feedback,
 }
 INTERNAL_COLLECTIONS = frozenset(
@@ -85,6 +85,8 @@ INTERNAL_COLLECTIONS = frozenset(
         "game_popularity",
         "feedback_limits",
         "feedback_targets",
+        "game_test_traces",
+        "game_proposals",
     }
 )
 COLLECTIONS = frozenset(TYPES) | INTERNAL_COLLECTIONS
@@ -121,6 +123,28 @@ class _Operation:
 
     def __exit__(self, *args):
         return self.store._local.contexts.pop().__exit__(*args)
+
+
+class _CachedSnapshot:
+    """A query result snapshot served from the read cache: the reference of
+    the document plus its cached payload."""
+
+    __slots__ = ("reference", "_data")
+
+    def __init__(self, reference, data):
+        self.reference = reference
+        self._data = data
+
+    @property
+    def id(self):
+        return self.reference.id
+
+    @property
+    def exists(self):
+        return self._data is not None
+
+    def to_dict(self):
+        return copy.deepcopy(self._data)
 
 
 class _BundleBackend:
@@ -175,6 +199,10 @@ class QueryStore:
         self.namespace = namespace
         self._local = threading.local()
         self.operation_lock = _Operation(self)
+        # Non-transactional reads are served by this stale-while-revalidate
+        # cache (see read_cache.py); transactional reads always go through
+        # their Firestore transaction.
+        self._cache = ReadCache()
         self.translation_memory = TranslationMemory(_BundleBackend(self))
         marker = self.collection("meta").document("schema").get()
         if not marker.exists or marker.to_dict().get("version") != SCHEMA:
@@ -254,6 +282,9 @@ class QueryStore:
                 with timed_external("firestore"):
                     uow["reads"][ref.path] = ref.get(transaction=uow["tx"]).to_dict()
             return uow["reads"][ref.path]
+        return self._cache.get_or_fetch(("doc", ref.path), lambda: self._read_doc(ref))
+
+    def _read_doc(self, ref):
         with timed_external("firestore"):
             return ref.get().to_dict()
 
@@ -264,9 +295,37 @@ class QueryStore:
             return
         self.raw_get(ref)  # Includes absent documents in the transaction read set.
         self._local.uow["writes"][ref.path] = (ref, data)
+        # Write through to the read cache only once the transaction commits
+        # (the unit of work runs its after-callbacks solely on success), and
+        # drop cached query results for the written document's kind: a cached
+        # list cannot be patched precisely, so it is refetched on next use.
+        self._local.uow["after"].append(
+            lambda path=ref.path, data=data: self._cache_committed(path, data)
+        )
+
+    def clear_cache(self):
+        """Drop every cached read; the next read of each record refetches
+        from Firestore. Used by callers that invalidate cached state
+        end-to-end (the live demo's epoch invalidation)."""
+        self._cache.clear()
+
+    def _cache_committed(self, path, data):
+        self._cache.put(("doc", path), data)
+        kind = self._kind_for_path(path)
+        if kind is None:
+            self._cache.drop_where(lambda k: k[0] == "query")
+        else:
+            self._cache.drop_where(lambda k: k[0] == "query" and k[1] == kind)
+
+    def _kind_for_path(self, path):
+        prefix = self.namespace + "_"
+        for segment in path.split("/"):
+            if segment.startswith(prefix) and segment[len(prefix) :] in COLLECTIONS:
+                return segment[len(prefix) :]
+        return None
 
     def close(self):
-        pass
+        self._cache.close()
 
     def put_experiment(self, experiment):
         self._put("experiments", experiment.id, experiment)
@@ -308,16 +367,23 @@ class QueryStore:
         )
 
     def list_popular_game_ids(self, limit):
-        query = self.collection("game_popularity").order_by(
-            "score", direction="DESCENDING"
-        ).limit(limit)
-        with timed_external("firestore"):
-            rows = list(query.stream())
-        return [
-            (data["game_id"], data["score"])
-            for row in rows
-            if (data := row.to_dict()) and data.get("score", 0) > 0
-        ]
+        def fetch():
+            query = self.collection("game_popularity").order_by(
+                "score", direction="DESCENDING"
+            ).limit(limit)
+            with timed_external("firestore"):
+                rows = list(query.stream())
+            return [
+                (data["game_id"], data["score"])
+                for row in rows
+                if (data := row.to_dict()) and data.get("score", 0) > 0
+            ]
+
+        if getattr(self._local, "uow", None) is not None:
+            return fetch()
+        # Use the same bounded, background-refreshed cache as other queries.
+        # Committed popularity writes invalidate this key immediately.
+        return self._cache.get_or_fetch(("query", "game_popularity", "ranking", limit), fetch)
 
     def game_popularity_score(self, game_id):
         data = self.raw_get(self.collection("game_popularity").document(key(game_id)))
@@ -499,6 +565,34 @@ class QueryStore:
         pass  # Every successful operation has already committed.
 
     def _query(self, kind, filters=(), *, limit=101, after=None):
+        uow = getattr(self._local, "uow", None)
+        if uow is not None:
+            return self._run_query(
+                kind, filters, limit=limit, after=after, transaction=uow["tx"]
+            )
+        try:
+            cache_key = ("query", kind, tuple(filters), limit, after)
+            hash(cache_key)
+        except TypeError:
+            return self._run_query(
+                kind, filters, limit=limit, after=after, transaction=None
+            )
+        rows = self._cache.get_or_fetch(
+            cache_key,
+            lambda: [
+                (doc.id, doc.to_dict())
+                for doc in self._run_query(
+                    kind, filters, limit=limit, after=after, transaction=None
+                )
+            ],
+        )
+        collection = self.collection(kind)
+        return [
+            _CachedSnapshot(collection.document(doc_id), data)
+            for doc_id, data in rows
+        ]
+
+    def _run_query(self, kind, filters, *, limit, after, transaction):
         query = self.collection(kind)
         for field, op, value in filters:
             query = query.where(filter=FieldFilter(field, op, value))
@@ -507,9 +601,8 @@ class QueryStore:
             query = query.start_after(
                 {"__name__": self.collection(kind).document(after)}
             )
-        uow = getattr(self._local, "uow", None)
         with timed_external("firestore"):
-            return list(query.limit(limit).stream(transaction=uow["tx"] if uow else None))
+            return list(query.limit(limit).stream(transaction=transaction))
 
     def page(self, kind, *, filters=(), limit=50, cursor=None, scope=None):
         page_size(limit)
@@ -539,41 +632,79 @@ class QueryStore:
             encode_cursor(scope, docs[limit - 1].id) if len(docs) > limit else None,
         )
 
+    def _collect(self, kind, filters, docs, *, detail=True, seen=None):
+        """Decoded records for [docs], with this unit of work's staged writes
+        merged in. [seen], when given, holds the document paths already emitted
+        (paged reads) or staged (their committed version must not reappear)."""
+        rows = {}
+        for doc in docs:
+            if seen is not None:
+                if doc.reference.path in seen:
+                    continue
+                seen.add(doc.reference.path)
+            rows[doc.reference.path] = (doc.reference, doc.to_dict())
+        uow = getattr(self._local, "uow", None)
+        if uow:
+            prefix = self.collection(kind).id + "/"
+            for path, (ref, data) in uow["writes"].items():
+                if not path.startswith(prefix) or "/" in path[len(prefix) :]:
+                    continue
+                if seen is not None:
+                    if path in seen:
+                        continue
+                    seen.add(path)
+                rows.pop(path, None)
+                if data and all(
+                    data.get(field) == value
+                    if op == "=="
+                    else value in (data.get(field) or [])
+                    for field, op, value in filters
+                ):
+                    rows[path] = (ref, data)
+        return [
+            record
+            for ref, data in rows.values()
+            if (record := self._decode(kind, data, ref, detail=detail)) is not None
+        ]
+
     def _list(self, kind, filters=()):
+        """At most LEGACY_LIMIT records: a safety rail for callers that have not
+        moved to bounded reads. Callers that legitimately need every match use
+        _list_all."""
         docs = self._query(kind, filters, limit=LEGACY_LIMIT + 1)
         if len(docs) > LEGACY_LIMIT:
             raise conflict(
                 "result exceeds 100 records; use the paginated API or an administrative job"
             )
-        rows = {d.reference.path: (d.reference, d.to_dict()) for d in docs}
-        uow = getattr(self._local, "uow", None)
-        if uow:
-            prefix = self.collection(kind).id + "/"
-            for path, (ref, data) in uow["writes"].items():
-                if path.startswith(prefix) and "/" not in path[len(prefix) :]:
-                    rows.pop(path, None)
-                    if data and all(
-                        data.get(field) == value
-                        if op == "=="
-                        else value in (data.get(field) or [])
-                        for field, op, value in filters
-                    ):
-                        rows[path] = (ref, data)
+        rows = self._collect(kind, filters, docs)
         if len(rows) > LEGACY_LIMIT:
             raise conflict(
                 "result exceeds 100 records; use the paginated API or an administrative job"
             )
-        return [
-            record
-            for ref, data in rows.values()
-            if (record := self._decode(kind, data, ref)) is not None
-        ]
+        return rows
+
+    def _list_all(self, kind, filters=(), *, detail=True):
+        """Every matching record, read in bounded pages: each Firestore query
+        fetches at most LEGACY_LIMIT documents, so the store never streams a
+        whole collection in one read. The decoded result is the caller's own
+        payload (a catalog, one user's matches), not a dataset snapshot."""
+        records = []
+        seen: set[str] = set()
+        after = None
+        while True:
+            docs = self._query(kind, filters, limit=LEGACY_LIMIT, after=after)
+            records.extend(
+                self._collect(kind, filters, docs, detail=detail, seen=seen)
+            )
+            if len(docs) < LEGACY_LIMIT:
+                return records
+            after = docs[-1].id
 
     def _decode(self, kind, data, ref, *, detail=True):
         if data is None or data.get("tombstone"):
             return None
         record = ADAPTERS[kind].validate_json(data["json"])
-        if kind in ("games", "game_versions", "game_drafts") and detail:
+        if kind in ("games", "game_versions") and detail:
             chunks = data.get("body_chunks", 0)
             body = "".join(
                 self.raw_get(ref.collection("body").document(f"{i:06}"))["text"]
@@ -581,6 +712,19 @@ class QueryStore:
             )
             if body:
                 record = replace(record, **json.loads(body))
+        if kind in ("games", "game_versions"):
+            # Records written before the Builder deletion carry the old builder
+            # workflow instead of an import package; convert on read.
+            legacy = json.loads(data["json"]).get("builder_workflow")
+            if legacy and record.import_package is None:
+                record = replace(record, import_package=import_package_from_legacy_workflow(legacy))
+            if record.import_package:
+                # Packages written before the hash-only change carry the
+                # resubmission secret itself; normalize on read (the record
+                # is serialized in hash form on its next save).
+                normalized = hash_package_secret(record.import_package)
+                if normalized is not record.import_package:
+                    record = replace(record, import_package=normalized)
         if kind == "matches":
             count = data.get("move_count", 0)
             record = replace(
@@ -589,15 +733,15 @@ class QueryStore:
             )
         return record
 
-    def _get(self, kind, identity):
+    def _get(self, kind, identity, *, detail=True):
         ref = self.ref(kind, identity)
-        return self._decode(kind, self.raw_get(ref), ref)
+        return self._decode(kind, self.raw_get(ref), ref, detail=detail)
 
     def _put(self, kind, identity, record, **fields):
         with self.atomic():
             ref = self.ref(kind, identity)
             old = self.raw_get(ref)
-            if kind in ("games", "game_versions", "game_drafts"):
+            if kind in ("games", "game_versions"):
                 body = json.dumps(
                     {"code": record.code, "server_code": record.server_code}
                 )
@@ -643,7 +787,7 @@ class QueryStore:
                 **metadata,
                 **fields,
             }
-            if kind in ("games", "game_drafts"):
+            if kind == "games":
                 import re
 
                 words = set(
@@ -721,6 +865,26 @@ class QueryStore:
             ref.collection("moves").document(f"{i:012}") for i in range(start, stop)
         ]
         uow = getattr(self._local, "uow", None)
+        if uow is None:
+            # Moves are immutable once written, so the read cache serves them
+            # in one batch; only cache misses reach Firestore (one get_all).
+            by_path = {r.path: r for r in refs}
+            values = self._cache.get_or_fetch_many(
+                [("doc", r.path) for r in refs],
+                lambda keys: {
+                    ("doc", snap.reference.path): snap.to_dict()
+                    for snap in self.client.get_all(
+                        [by_path[path] for _, path in keys]
+                    )
+                },
+            )
+            result = []
+            for move_ref in refs:
+                data = values[("doc", move_ref.path)]
+                if data is None:
+                    raise RuntimeError("missing persisted move")
+                result.append(MOVE_ADAPTER.validate_json(data["json"]))
+            return result
         pending = [
             r
             for r in refs
@@ -807,11 +971,34 @@ class QueryStore:
         self._delete("matches", match_id)
 
     def list_matches_involving(self, user_id):
-        return self._list("matches", [("participants", "array_contains", user_id)])
+        return self._list_all("matches", [("participants", "array_contains", user_id)])
+
+    def list_matches_for_game(self, game_id):
+        """All matches played with [game_id], oldest first, paging past the
+        100-record legacy cap (a popular game can have more matches than that)."""
+        matches = []
+        cursor = None
+        while True:
+            page = self.page(
+                "matches",
+                filters=[("game_id", "==", game_id)],
+                limit=100,
+                cursor=cursor,
+            )
+            matches.extend(page.items)
+            cursor = page.next_cursor
+            if not cursor:
+                # The paged query returns document-id order, not creation
+                # order, so the "oldest first" contract needs an explicit
+                # sort (a query without order_by is unordered in Firestore,
+                # which made this test flaky: the two matches' ids sorted
+                # the other way round).
+                return sorted(matches, key=lambda m: m.created_at)
 
     def list_matches_by_status(self, status):
-        """Legacy bounded status listing; scalable clients use the paged v2 API."""
-        return self._list("matches", [("status", "==", status)])
+        """Every match with [status], read in bounded pages; scalable clients
+        that only need a page use the paged v2 API instead."""
+        return self._list_all("matches", [("status", "==", status)])
 
     def list_all_matches(self):
         return self._list("matches")
@@ -908,30 +1095,6 @@ class QueryStore:
     def delete_user(self, user_id):
         self._delete("users", user_id)
 
-    def put_game_test_session(self, session):
-        self._put("game_test_sessions", session.id, session)
-
-    def get_game_test_session(self, session_id):
-        return self._get("game_test_sessions", session_id)
-
-    def list_game_test_sessions(self, *, owner_user_id):
-        return self._list("game_test_sessions", [("owner_user_id", "==", owner_user_id)])
-
-    def delete_game_test_session(self, session_id):
-        self._delete("game_test_sessions", session_id)
-
-    def put_game_draft(self, draft):
-        self._put("game_drafts", draft.id, draft)
-
-    def get_game_draft(self, draft_id):
-        return self._get("game_drafts", draft_id)
-
-    def delete_game_draft(self, draft_id):
-        self._delete("game_drafts", draft_id)
-
-    def list_game_drafts(self, *, owner_user_id):
-        return self._list("game_drafts", [("owner_user_id", "==", owner_user_id)])
-
     def add_game_version(self, game):
         with self.atomic():
             current = self.get_game(game.id)
@@ -950,9 +1113,21 @@ class QueryStore:
     def get_game(self, game_id):
         return self._get("games", game_id)
 
+    def get_game_without_code(self, game_id):
+        """Current game metadata for summaries, without reading code chunks."""
+        return self._get("games", game_id, detail=False)
+
     def get_game_version(self, game_id, version):
-        game = self._get("game_versions", f"{game_id}@{version}")
-        current = self.get_game(game_id)
+        return self._game_version(game_id, version, detail=True)
+
+    def get_game_version_without_code(self, game_id, version):
+        """Cover metadata, with current visibility, without any code-chunk reads."""
+        return self._game_version(game_id, version, detail=False)
+
+    def _game_version(self, game_id, version, *, detail):
+        game = self._get("game_versions", f"{game_id}@{version}", detail=detail)
+        # Only the current visibility flags are needed, even for a full version.
+        current = self._get("games", game_id, detail=False)
         return (
             replace(game, deleted=current.deleted, published=current.published)
             if game and current
@@ -965,25 +1140,16 @@ class QueryStore:
             filters.append(("owner_user_id", "==", owner_user_id))
         if not include_unpublished:
             filters.append(("published", "==", True))
-        return self._list("games", filters)
+        return self._list_all("games", filters)
 
     def list_games_without_code(self, *, owner_user_id=None, include_unpublished=False):
-        """Like [list_games], but the games have no code: one query and no body reads."""
+        """Like [list_games], but the games have no code: paged queries and no body reads."""
         filters = [("deleted", "==", False)]
         if owner_user_id is not None:
             filters.append(("owner_user_id", "==", owner_user_id))
         if not include_unpublished:
             filters.append(("published", "==", True))
-        docs = self._query("games", filters, limit=LEGACY_LIMIT + 1)
-        if len(docs) > LEGACY_LIMIT:
-            raise conflict(
-                "result exceeds 100 records; use the paginated API or an administrative job"
-            )
-        return [
-            game
-            for doc in docs
-            if (game := self._decode("games", doc.to_dict(), doc.reference, detail=False))
-        ]
+        return self._list_all("games", filters, detail=False)
 
     def list_all_game_versions(self):
         return self._list("game_versions")
@@ -1058,7 +1224,7 @@ class QueryStore:
         self._delete("invites", token)
 
     def list_invites(self, *, created_by_user_id=None, match_id=None):
-        return self._list(
+        return self._list_all(
             "invites",
             [
                 (k, "==", v)
@@ -1119,59 +1285,3 @@ class QueryStore:
         record = self.get_push_subscription_by_endpoint(endpoint)
         if record:
             self.delete_push_subscription(record.id)
-
-    def append_agent_conversation_entries(self, game_id, entries):
-        with self.atomic():
-            ref = self.ref("agent_conversations", game_id)
-            row = self.raw_get(ref) or {}
-            count = row.get("entry_count", 0)
-            adapter = TypeAdapter(AgentConversationEntry)
-            for i, entry in enumerate(entries, count):
-                self.raw_put(
-                    ref.collection("entries").document(f"{i:012}"),
-                    {"json": adapter.dump_json(entry).decode()},
-                )
-            self._put(
-                "agent_conversations",
-                game_id,
-                AgentConversation(game_id=game_id),
-                entry_count=count + len(entries),
-            )
-
-    def put_agent_conversation(self, conversation):
-        with self.atomic():
-            ref = self.ref("agent_conversations", conversation.game_id)
-            self.raw_get(ref) or {}
-            adapter = TypeAdapter(AgentConversationEntry)
-            if len(conversation.entries) > 400:
-                raise conflict("use paginated conversation import for large histories")
-            for i, entry in enumerate(conversation.entries):
-                self.raw_put(
-                    ref.collection("entries").document(f"{i:012}"),
-                    {"json": adapter.dump_json(entry).decode()},
-                )
-            self._put(
-                "agent_conversations",
-                conversation.game_id,
-                replace(conversation, entries=()),
-                entry_count=len(conversation.entries),
-            )
-
-    def get_agent_conversation(self, game_id):
-        ref = self.ref("agent_conversations", game_id)
-        row = self.raw_get(ref)
-        if not row or row.get("tombstone"):
-            return None
-        adapter = TypeAdapter(AgentConversationEntry)
-        count = row.get("entry_count", 0)
-        # Existing AI exchange callers only need a bounded recent context.
-        entries = [
-            adapter.validate_json(
-                self.raw_get(ref.collection("entries").document(f"{i:012}"))["json"]
-            )
-            for i in range(max(0, count - 100), count)
-        ]
-        return AgentConversation(game_id=game_id, entries=tuple(entries))
-
-    def list_agent_conversations(self):
-        return self._list("agent_conversations")

@@ -106,6 +106,7 @@ function applyLocale(message) {
   if (message.direction) document.documentElement.dir = message.direction;
 }
 let latest=null, sel=null;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 function applyStaticTexts(){
   document.querySelector("h2").textContent=t("heading");
   document.querySelector("#setup p").textContent=t("choose_difficulty");
@@ -133,7 +134,7 @@ function render(){
   const setup=document.getElementById("setup");
   const game=document.getElementById("game");
   const s=latest.view;
-  const canAct=latest.status==="ongoing"&&latest.acting_for_player_index!==null;
+  const canAct=latest.status==="ongoing"&&actingSeat()!==null;
   const started=s&&s.phase==="play"&&s.pegs;
   if(!started){
     setup.style.display="";game.style.display="none";
@@ -169,8 +170,8 @@ addEventListener("message",(e)=>{
   applyLocale(e.data);applyStaticTexts();
   latest=e.data;sel=null;render();
 });
-document.querySelectorAll("#setup button").forEach(b=>b.onclick=()=>{if(latest&&latest.acting_for_player_index!==null)sendMove({setup:parseInt(b.dataset.d,10)});});
-document.getElementById("restart").onclick=()=>{if(latest&&latest.acting_for_player_index!==null)sendMove({setup:(latest.view&&latest.view.disks)||3});};
+document.querySelectorAll("#setup button").forEach(b=>b.onclick=()=>{if(latest&&actingSeat()!==null)sendMove({setup:parseInt(b.dataset.d,10)});});
+document.getElementById("restart").onclick=()=>{if(latest&&actingSeat()!==null)sendMove({setup:(latest.view&&latest.view.disks)||3});};
 </script>
 </body>
 </html>

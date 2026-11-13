@@ -1,5 +1,9 @@
 # Reviewed catalog deduplication
 
+> **Completed one-off cleanup.** The draft/working-copy mechanism described
+> below no longer exists — there are no drafts anymore; unpublishing is a pure
+> flag flip (`service.py`). Kept as the record of the reviewed pairs.
+
 The user requested one entry per duplicate game. This release reversibly
 unpublishes three reviewed entries, preserving versions, schemas, private
 working copies and old matches. It does not physically delete games or drafts.
@@ -31,14 +35,11 @@ The marker makes this a one-time release cleanup. Normal author republishing,
 even without a version/code change, survives later server restarts. Concurrent
 author changes abort the transaction instead of leaving a partial draft/hide
 or marker. InMemoryStore tests keep in-memory markers; unknown persistent
-adapters without a transactional journal are skipped. Both production Firestore modes are supported through the real metrics wrapper.
-Query mode uses the atomic migration journal above. Legacy snapshot mode uses a
-receipt in its existing prefixed meta collection, claimed before any visibility
-change, then flushes the snapshot and marks completion. A crash or failed save
-leaves a claim for operator review and never automatically re-hides a later
-restoration. It cannot claim atomic rollback across the snapshot and receipt.
-Snapshot restart, restored publication, failed claim and crash-after-claim are
-covered explicitly. Other unknown persistent adapters still skip safely.
+adapters without a transactional journal are skipped. Production is supported
+through the real metrics wrapper: the query store uses the atomic migration
+journal above. (The legacy snapshot store had its own receipt-based path; it
+was removed with snapshot mode on Nov 9, 2026.) Other unknown persistent
+adapters still skip safely.
 No snapshot format, configuration or access changes are introduced.
 
 31 focused tests cover both-side guards, whole-manifest prevalidation,
@@ -49,7 +50,7 @@ fake independently changes the keeper before commit and verifies complete
 rollback of hide/draft/marker. Unsupported persistent adapters are refused.
 
 ```sh
-PYTHONPATH=.. python -m pytest game_platform/tests/test_catalog_deduplication.py game_platform/tests/test_unpublish.py
+PYTHONPATH=.. python -m pytest game_platform/tests/test_unpublish.py
 ```
 
 Release is direct to yoav-zibin/course main, no branch merge. Foundation, data,

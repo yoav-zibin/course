@@ -22,7 +22,7 @@ function setup(name){
   const actor=current.turn?.[0],seat=ctx.players.findIndex(p=>p.id===actor),mine=ctx.players.findIndex(p=>p.id===viewer);
   return {type:'state_changed',status:current.turn?'ongoing':'over',move_count:ctx.move_count,
    players:ctx.players.map(p=>({name:p.display_name,player_id:p.id})),my_player_index:mine<0?null:mine,
-   acting_for_player_index:actor===viewer?seat:null,turn_of_player_indices:current.turn?[seat]:null,
+   turn_of_player_indices:current.turn?[seat]:null,
    view:game.viewFor(current.state,viewer,ctx),...extra};
  }
  function send(extra={},viewer){receive({source:parent,data:message(extra,viewer)});}
@@ -71,7 +71,7 @@ test('Golf spectators do not see stock-drawn card or get action handlers',()=>{
 });
 test('Golf displays all tied low scorers instead of naming an exclusive winner',()=>{
  const t=setup('six-card-golf');t.startPlay();const view=t.message().view;
- t.send({status:'over',acting_for_player_index:null,view:{...view,phase:'over',scores:[32,32],winner:0}});
+ t.send({status:'over',view:{...view,phase:'over',scores:[32,32],winner:0}});
  assert.match(t.nodes.get('status').textContent,/Tie: P0 & P1 with 32/);
  assert.doesNotMatch(t.nodes.get('status').textContent,/P0 wins/);
  vm.runInContext('window.clickStock();window.clickReplace(0);',t.sandbox);assert.equal(t.sent.length,0);

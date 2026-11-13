@@ -42,7 +42,7 @@ def warn_about_insecure_setup(config: Config, platform: GamePlatform) -> None:
     if config.debug_tools and not config.master_password:
         logger.warning(
             "debug_tools is on with no master_password: anyone who can reach this "
-            "server can read every user's password via /browse and /debug/all-data"
+            "server can read every user's password via the admin pages"
         )
     if getattr(platform._store, "scalable", False):
         return  # Full-database hygiene checks belong to offline maintenance.
@@ -102,6 +102,9 @@ def main() -> None:
     if args.print_config:
         print(config.model_dump_json(indent=2))
         return
+    if (config.debug_tools and not config.master_password
+            and config.server.host not in ("127.0.0.1", "::1", "localhost")):
+        raise ValueError("master_password is required when debug tools bind outside loopback")
     push_config = config.push
     if env_key := os.environ.get("GAME_PLATFORM_VAPID_PRIVATE_KEY"):
         push_config = push_config.model_copy(update={"vapid_private_key": env_key})
@@ -111,14 +114,14 @@ def main() -> None:
     )
     monitor = observability.Monitor(config.monitoring)
     store: SavingStore
-    if config.firestore.enabled and config.firestore.mode == "query":
+    if config.firestore.enabled:
         if (
             config.firestore.database == "(default)"
             and not config.firestore.allow_default_database_query
             and not os.environ.get("FIRESTORE_EMULATOR_HOST")
         ):
             raise ValueError(
-                "query mode in the default database requires explicit production opt-in after migration"
+                "Firestore in the default database requires explicit production opt-in after migration"
             )
         from google.cloud import firestore
         from game_platform.query_store import QueryStore
@@ -129,21 +132,6 @@ def main() -> None:
                 database=config.firestore.database,
             ),
             namespace=config.firestore.namespace,
-        )
-    elif config.firestore.enabled:
-        # Imported here so that servers using the data file don't load the client.
-        from game_platform.firestore_store import FirestoreStore
-
-        store = FirestoreStore.connect(
-            project_id=config.firestore.project_id,
-            database=config.firestore.database,
-            collection_prefix=config.firestore.collection_prefix,
-            min_write_interval_seconds=config.firestore.save_interval_seconds,
-        )
-        logger.info(
-            "Using Firestore database %s (collection prefix %r)",
-            config.firestore.database,
-            config.firestore.collection_prefix,
         )
     else:
         data_file = config.data_file.path.expanduser()
@@ -159,13 +147,6 @@ def main() -> None:
     store = observability.TimedStore(store, monitor)
     push_notifier: PushNotifier | None = None
     try:
-        # Recover only reviewed frozen versions before logic is cached or old
-        # matches/computer turns resume. Unknown/author-edited records are skipped.
-        from game_platform.legacy_schema_migrations import apply_legacy_schema_recovery
-
-        recovery_results = apply_legacy_schema_recovery(store)
-        if any(result["status"] == "updated" for result in recovery_results):
-            store.flush()
         push_notifier = make_push_notifier(push_config, store=store)
         platform_class = GamePlatform
         if getattr(store, "scalable", False):
@@ -185,33 +166,12 @@ def main() -> None:
             purge_example_data(platform)
             return
         # Published community games live in the data store, not in games/.
-        # These bounded release migrations only touch the audited originals;
-        # hash/version guards preserve subsequent author edits and old matches.
-        from game_platform.game_patch_migrations import (
-            apply_audit_batch1, apply_audit_batch2, apply_audit_batch3, apply_audit_batch4, apply_audit_batch5, apply_audit_batch6,
-        )
-
-        patch_results = [
-            *apply_audit_batch1(platform), *apply_audit_batch2(platform),
-            *apply_audit_batch3(platform), *apply_audit_batch4(platform),
-            *apply_audit_batch5(platform), *apply_audit_batch6(platform),
-        ]
-        if any(result["status"] == "updated" for result in patch_results):
-            store.flush()
-        # Retire only the three reviewed duplicate catalog entries. This keeps
-        # drafts/history and journals completion so an author can republish.
-        from game_platform.catalog_deduplication import apply_catalog_deduplication
-
-        catalog_results = apply_catalog_deduplication(platform)
-        if any(result["status"] == "unpublished" for result in catalog_results):
-            store.flush()
         platform.resume_computer_moves()
         warn_about_insecure_setup(config, platform)
         app = create_app(
             platform,
             debug_tools=config.debug_tools,
             master_password=config.master_password,
-            model_api_config=config.model_api,
             auth_config=config.auth,
             push_config=push_config,
             sms_sender=make_sms_sender(config.auth.sms),
@@ -220,7 +180,6 @@ def main() -> None:
             email_sender=make_email_sender(config.auth.email),
             cors_allow_origins=config.server.cors_allow_origins,
             public_base_url=config.server.public_base_url,
-            ai_max_fix_attempts=config.ai_max_fix_attempts,
             monitor=monitor,
         )
         if config.monitoring.cloud_metrics_enabled:

@@ -33,7 +33,7 @@ test('worker serves saved shell offline and leaves APIs and other students pages
   let response;
   handlers.fetch({request:{method:'GET',url:'https://example.test/static/portal.html'},respondWith:p=>response=p});
   assert.equal(await response,saved);
-  for(const [method,url] of [['GET','/matches'],['GET','/static/builder.html'],['POST','/matches/m/moves']]) {
+  for(const [method,url] of [['GET','/matches'],['GET','/static/admin.html'],['POST','/matches/m/moves']]) {
     handlers.fetch({request:{method,url:'https://example.test'+url},respondWith(){assert.fail('request intercepted')}});
   }
 });
@@ -59,7 +59,7 @@ test('worker activation signals portal reload without awaiting navigation',async
   context.caches={keys:async()=>['playroom-portal-shell-v1'],delete:async key=>deleted.push(key)};
   context.self.clients={claim:async()=>{},matchAll:async()=>[
     {url:'https://example.test/static/portal.html',postMessage:message=>messages.push(message.type)},
-    {url:'https://example.test/static/builder.html',postMessage:()=>assert.fail('wrong page')}
+    {url:'https://example.test/static/admin.html',postMessage:()=>assert.fail('wrong page')}
   ]};
   let activation;
   handlers.activate({waitUntil:promise=>activation=promise});
@@ -101,4 +101,13 @@ test('standalone apps hide installation help and prompt failure leaves manual in
   const {events,nodes}=install();
   events.beforeinstallprompt({preventDefault(){},prompt:async()=>{throw Error('unavailable')}});
   await events['install-portalclick']();assert.match(nodes['install-message'].textContent,/browser/);assert.equal(nodes['install-portal'].disabled,false);
+});
+test('the portal asks for worker updates itself, never from a cached worker script',()=>{
+  const portal=read('static/portal.js');
+  // A cached copy of the worker script must never answer an update check,
+  // and the page checks on load and on every return to the tab instead of
+  // waiting for the browser's own throttled schedule.
+  assert.match(portal,/register\("\/static\/portal-sw\.js", \{ updateViaCache: "none" \}\)/);
+  assert.match(portal,/registration\.update\(\)/);
+  assert.match(portal,/visibilitychange/);
 });

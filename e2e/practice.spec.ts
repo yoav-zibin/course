@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createGame, createUser, loginAs, uniqueName } from './helpers';
 
-test('v2 practice works against a computer after disconnect and reload, with no match writes', async ({page,request,context})=>{
+test('local pass-and-play practice works after disconnect and reload, with no match writes', async ({page,request,context})=>{
   const owner=await createUser(request,uniqueName('Offline owner'));
   const name=uniqueName('Offline noughts');
   await createGame(request,owner,name);
@@ -15,8 +15,12 @@ test('v2 practice works against a computer after disconnect and reload, with no 
   await page.locator('#practice').click();
   const board=page.frameLocator('#game-box iframe').locator('#board button');
   await expect(board).toHaveCount(9);
+  // Pass-and-play: the two seats alternate on this device, so each mark is
+  // placed by its own click (there is no computer reply to wait for).
   await board.first().click();
   await expect(board.filter({hasText:'X'})).toHaveCount(1);
+  await expect(board.filter({hasText:'O'})).toHaveCount(0);
+  await board.filter({hasText:/^$/}).first().click();
   await expect(board.filter({hasText:'O'})).toHaveCount(1);
   await page.evaluate(()=>navigator.serviceWorker.ready.then(()=>undefined));
   await expect.poll(()=>page.evaluate(()=>Boolean(navigator.serviceWorker.controller))).toBe(true);
@@ -26,6 +30,7 @@ test('v2 practice works against a computer after disconnect and reload, with no 
   await expect(board.filter({hasText:'O'})).toHaveCount(1);
   await board.filter({hasText:/^$/}).first().click();
   await expect(board.filter({hasText:'X'})).toHaveCount(2);
+  await board.filter({hasText:/^$/}).first().click();
   await expect(board.filter({hasText:'O'})).toHaveCount(2);
   await page.locator('#match-controls-toggle').click();
   await page.locator('#history-back').click();
@@ -38,7 +43,52 @@ test('v2 practice works against a computer after disconnect and reload, with no 
   expect(writes).toEqual([]);
 });
 
-test('local rules have no portal storage or network access, and a looping game times out',async({page})=>{
+test('pass-and-play starts from a #game= link without searching, downloading the game first', async ({page,request})=>{
+  const owner=await createUser(request,uniqueName('Deep link owner'));
+  const name=uniqueName('Deep link noughts');
+  const game=await createGame(request,owner,name);
+  await loginAs(page,owner);
+  await page.goto(`/static/portal.html#game=${game}`);
+  await expect(page.locator('#practice')).toBeEnabled();
+  // The note promises an on-device game that downloads first when needed,
+  // not a trip through the online flow before pass-and-play can start.
+  await expect(page.locator('#practice-offline-note')).toContainText('downloads first');
+  await page.locator('#practice').click();
+  const board=page.frameLocator('#game-box iframe').locator('#board button');
+  await expect(board).toHaveCount(9);
+  await board.first().click();
+  await expect(board.filter({hasText:'X'})).toHaveCount(1);
+  await board.filter({hasText:/^$/}).first().click();
+  await expect(board.filter({hasText:'O'})).toHaveCount(1);
+});
+
+test('a logged-out visitor to a game link is sent to log in and returns to the game', async ({page,request})=>{
+  const owner=await createUser(request,uniqueName('Redirect owner'));
+  const name=uniqueName('Redirect noughts');
+  const game=await createGame(request,owner,name);
+  // No loginAs: this visitor has no account yet. Every account page sends
+  // them to the login page first (a guest account is one step)...
+  await page.goto(`/static/portal.html#game=${game}`);
+  await expect(page).toHaveURL(/\/\?next=/);
+  await expect(page.locator('#welcome-guest')).toBeVisible();
+  await page.locator('#welcome-guest-name').fill(uniqueName('Redirect guest'));
+  await page.locator('#welcome-guest').click();
+  // ...and after logging in they land back on the same game, where
+  // pass-and-play starts right away.
+  await expect(page).toHaveURL(new RegExp(`#game=${game}$`));
+  await expect(page.locator('#practice')).toBeEnabled();
+  await page.locator('#practice').click();
+  const board=page.frameLocator('#game-box iframe').locator('#board button');
+  await expect(board).toHaveCount(9);
+  await board.first().click();
+  await expect(board.filter({hasText:'X'})).toHaveCount(1);
+});
+
+test('local rules have no portal storage or network access, and a looping game times out',async({page,request})=>{
+  // The portal requires a login now; this test only needs the page loaded
+  // so it can drive the practice runner directly.
+  const owner=await createUser(request,uniqueName('Local owner'));
+  await loginAs(page,owner);
   await page.goto('/static/portal.html');
   const result=await page.evaluate(async()=>{
     const runner=(window as any).PortalPractice ?? PortalPractice;
@@ -70,5 +120,6 @@ test('saved local practice can move while storage metadata is unresponsive',asyn
   await expect(board).toHaveCount(9);
   await board.first().click();
   await expect(board.filter({hasText:'X'})).toHaveCount(1);
+  await board.filter({hasText:/^$/}).first().click();
   await expect(board.filter({hasText:'O'})).toHaveCount(1);
 });

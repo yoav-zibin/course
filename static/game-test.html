@@ -1,72 +1,317 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title data-i18n="ui.game_test.title">Game test matrix</title>
-  <link rel="stylesheet" href="/static/common.css?v=16">
-  <link rel="stylesheet" href="/static/game-test.css?v=3">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test a game before you submit it — BuildPlay</title>
+<link rel="stylesheet" href="/static/game-test.css?v=2">
 </head>
 <body>
-<header class="topbar" data-app-page="builder">
-  <h1 data-i18n="ui.app_name">Game platform</h1>
-  <nav aria-label="Game platform" data-i18n-aria-label="ui.app_name"></nav>
-  <span class="spacer"></span>
-  <span id="account-menu"></span>
-</header>
-<main class="test-page">
-  <h1 data-i18n="ui.game_test.title">Game test matrix</h1>
-  <p data-i18n="ui.game_test.privacy">Sign in to record. Recordings are private to your account and include game code, moves and every player's views. Do not enter real secrets.</p>
-  <p data-i18n="ui.game_test.instructions">Test one supported seat count at a time. Mixed human/computer scenarios are simulations only; the Portal does not support them. Complete several randomly chosen matches in each applicable scenario; verify every clicked target is at least 30 × 30 CSS pixels and text and controls have sufficient contrast.</p>
-  <p data-i18n="ui.game_test.random_help">Random play tries visible buttons and reports when a game requires manual interaction. It does not replace browser-agent or Portal testing; contrast that cannot be measured needs manual review.</p>
-  <button id="load-draft" type="button" hidden data-i18n="ui.game_test.load_draft">Load the selected Builder draft</button>
-  <label for="client-code" data-i18n="ui.game_test.client_code">Client HTML (iframe game code)</label>
-  <textarea id="client-code" rows="8" spellcheck="false"></textarea>
-  <label for="server-code" data-i18n="ui.game_test.server_code">Server JavaScript</label>
-  <textarea id="server-code" rows="8" spellcheck="false"></textarea>
-  <label for="counts" data-i18n="ui.game_test.counts">Supported player counts (comma-separated)</label>
-  <input id="counts" value="2">
-  <label for="count" data-i18n="ui.game_test.count">Seat count to test</label>
-  <input id="count" type="number" min="1" max="10" value="2">
-  <div class="actions">
-    <button id="start" type="button" data-i18n="ui.game_test.start">Start and record matrix</button>
-    <button id="random-play" type="button" disabled data-i18n="ui.game_test.random">Play 3 random matches per scenario</button>
-    <button id="stop-random" type="button" disabled data-i18n="ui.game_test.random_stop">Stop random play</button>
-    <button id="save" type="button" disabled data-i18n="ui.game_test.save">Save recording now</button>
-    <button id="download" type="button" disabled data-i18n="ui.game_test.download">Download recording backup</button>
-    <button id="end" type="button" disabled data-i18n="ui.game_test.end">End current session</button>
-    <button id="refresh" type="button" data-i18n="ui.game_test.refresh">Refresh recordings</button>
-    <button id="delete" type="button" data-i18n="ui.game_test.delete">Delete selected recording</button>
+<main>
+<h1>Test a game before you submit it</h1>
+<p>
+  Fill in your game below and run the five-step test flow. The server records
+  every step, and <code>POST /games</code> only accepts the game once the flow
+  is complete for the exact payload you submit — if the code changes after
+  step 1, the run starts over. See the
+  <a href="https://github.com/yoav-zibin/course/blob/main/GAME_DEVELOPMENT_GUIDE.md">guide to writing a game for BuildPlay</a>
+  for what each field means.
+</p>
+<p class="note">
+  What the local pre-checks on this page do <strong>not</strong> check: how
+  much memory the server code uses (the platform allows 64 MiB per call) and
+  the exact 100&nbsp;ms per-call time limit (this page allows 5&nbsp;s per
+  call, 10&nbsp;s to load). Step 2 runs the server-side checks on the server,
+  with the platform's real limits.
+</p>
+
+<section aria-labelledby="inputs-heading">
+<h2 id="inputs-heading">Game inputs</h2>
+<p>
+  <button type="button" id="load-example">Load the counter example</button>
+  <span class="hint">Fills every field with the “Count to three” example, so you can see the page working.</span>
+</p>
+<p>
+  <button type="button" id="load-by-secret">Load stored inputs by secret</button>
+  <span class="hint">If you already stored this game's inputs with the API (the usual agent flow), type the secret below and load them — every field is filled and step 1 is already recorded.</span>
+</p>
+<div class="field-row">
+  <div class="field">
+    <label for="game-name">Game name (unique)</label>
+    <input id="game-name" type="text" placeholder="e.g. Count to three">
   </div>
-  <p id="status" role="status" aria-live="polite"></p>
-  <p id="checks" role="status"></p>
-  <p id="random-status" role="status" aria-live="polite"></p>
-  <section class="replay-toolbar" aria-label="Replay and scenario controls" data-i18n-aria-label="ui.game_test.replay_controls">
-    <div class="replay-controls">
-    <button id="replay" type="button" data-i18n="ui.game_test.replay">Replay</button>
-    <button id="pause-replay" type="button" disabled data-i18n-managed>Pause</button>
-    <button id="stop-replay" type="button" disabled data-i18n="ui.game_test.stop_replay">Stop replay</button>
-    <label for="speed" data-i18n="ui.game_test.speed">Replay speed</label>
-    <select id="speed"><option value="1">1×</option><option value="10">10×</option><option value="100">100×</option></select>
-    <label for="recordings" data-i18n="ui.game_test.recordings">Saved recordings</label>
-    <select id="recordings"><option value="" data-i18n-managed>Select a recording</option></select>
-    </div>
-    <div class="replay-controls">
-    <label for="scenario-filter" data-i18n="ui.game_test.view">View</label>
-    <select id="scenario-filter"><option value="" data-i18n-managed>All scenarios</option></select>
-    <button id="previous-scenario" type="button" disabled data-i18n="ui.game_test.previous">Previous</button>
-    <button id="next-scenario" type="button" disabled data-i18n="ui.game_test.next">Next</button>
-    <label class="follow-label"><input id="replay-selected" type="checkbox" disabled> <span data-i18n="ui.game_test.selected_only">Replay only this scenario</span></label>
-    <label class="follow-label"><input id="follow-replay" type="checkbox" checked> <span data-i18n="ui.game_test.follow">Follow replay</span></label>
-    <button id="jump-active" type="button" disabled data-i18n="ui.game_test.active">Show active</button>
-    </div>
-    <p id="replay-progress" role="status" aria-live="off" data-i18n-managed>Choose a recording and press Replay. Scroll the controls horizontally on smaller screens.</p>
-  </section>
-  <div id="matrix"></div>
+  <div class="field">
+    <label for="game-secret">Secret string (the same <code>game_addition_request_id_and_secret</code> you will submit with)</label>
+    <input id="game-secret" type="text" placeholder="16–200 characters, your own random string">
+  </div>
+</div>
+<div class="field">
+  <label for="description">Short description</label>
+  <textarea id="description" spellcheck="false" rows="2" placeholder="One or two sentences shown next to the game"></textarea>
+</div>
+<div class="field">
+  <label for="server-code">Server code (the <code>game</code> object)</label>
+  <textarea id="server-code" spellcheck="false" rows="12" placeholder="const game = { newMatch(ctx) { ... }, applyMove(state, playerId, move) { ... }, ... }"></textarea>
+</div>
+<div class="field">
+  <label for="client-code">Client code (the game page, including its <code>&lt;script type="application/json" id="i18n-strings"&gt;</code> block)</label>
+  <textarea id="client-code" spellcheck="false" rows="12" placeholder="&lt;!doctype html&gt; ..."></textarea>
+</div>
+<div class="schemas">
+  <div class="field">
+    <label for="schema-state">State schema (JSON)</label>
+    <textarea id="schema-state" spellcheck="false" rows="8" placeholder="{&quot;type&quot;: &quot;object&quot;, ...}"></textarea>
+  </div>
+  <div class="field">
+    <label for="schema-view">View schema (JSON)</label>
+    <textarea id="schema-view" spellcheck="false" rows="8" placeholder="{&quot;type&quot;: &quot;object&quot;, ...}"></textarea>
+  </div>
+  <div class="field">
+    <label for="schema-move">Move schema (JSON)</label>
+    <textarea id="schema-move" spellcheck="false" rows="8" placeholder="{&quot;type&quot;: &quot;object&quot;, ...}"></textarea>
+  </div>
+</div>
+<div class="field">
+  <label for="cases">Unit test cases (JSON — a list of cases, or the whole <code>unit_tests</code> object)</label>
+  <textarea id="cases" spellcheck="false" rows="10" placeholder="[{&quot;name&quot;: ..., &quot;kind&quot;: &quot;initial&quot;, &quot;ctx&quot;: {...}, ...}]"></textarea>
+  <p class="hint">
+    Needed for the approved-examples check and the move-agreement check.
+    Without them those two checks are skipped.
+  </p>
+</div>
+<div class="field-row">
+  <div class="field">
+    <label for="allowed-player-counts">Allowed player counts</label>
+    <input id="allowed-player-counts" type="text" value="2" placeholder="e.g. 2 or 1, 2, 4">
+  </div>
+  <div class="field">
+    <label for="language">Source language of the texts</label>
+    <select id="language">
+      <option value="en" selected>English (en)</option>
+      <option value="es">Spanish (es)</option>
+      <option value="fr">French (fr)</option>
+      <option value="de">German (de)</option>
+      <option value="zh">Chinese (zh)</option>
+      <option value="hi">Hindi (hi)</option>
+      <option value="pt">Portuguese (pt)</option>
+      <option value="ar">Arabic (ar)</option>
+    </select>
+  </div>
+  <div class="field checkbox">
+    <label><input id="allows-leave" type="checkbox"> A player may leave mid-match</label>
+    <label><input id="allows-join" type="checkbox"> A player may join mid-match</label>
+  </div>
+</div>
+<div class="field">
+  <label for="rules-text">Rules text (how the game works, for players and for the platform)</label>
+  <textarea id="rules-text" spellcheck="false" rows="5"></textarea>
+</div>
+<div class="field">
+  <label for="ui-text">UI instructions (how the client presents the game)</label>
+  <textarea id="ui-text" spellcheck="false" rows="5"></textarea>
+</div>
+<div class="field-row">
+  <div class="field">
+    <label for="tutorial-text">Tutorial text</label>
+    <textarea id="tutorial-text" spellcheck="false" rows="4"></textarea>
+  </div>
+  <div class="field">
+    <label for="tutorial-html">Tutorial HTML</label>
+    <textarea id="tutorial-html" spellcheck="false" rows="4"></textarea>
+  </div>
+</div>
+<div class="field">
+  <label for="images-json">Images (JSON array of <code>{caption, svg}</code>, 4–6, the 16:9 cover first)</label>
+  <textarea id="images-json" spellcheck="false" rows="6" placeholder="[{&quot;caption&quot;: ..., &quot;svg&quot;: ...}]"></textarea>
+</div>
+<div class="field">
+  <label for="translations-json">Translations (JSON object keyed by the 7 locales other than the source language)</label>
+  <textarea id="translations-json" spellcheck="false" rows="6" placeholder="{&quot;es&quot;: {&quot;display_name&quot;: ..., &quot;short_description&quot;: ..., &quot;game_logic_rules&quot;: ..., &quot;game_ui_rules&quot;: ..., &quot;tutorial_strings&quot;: {...}, &quot;client_strings&quot;: {...}}, ...}"></textarea>
+</div>
+</section>
+
+<section aria-labelledby="flow-heading">
+<h2 id="flow-heading">The test flow</h2>
+<p>
+  Follow the steps in order. Every step is recorded on the server under your
+  secret — in steps 3–5 every move is saved (and verified) as you play it,
+  so if you close this page mid-match, loading the stored inputs by secret
+  brings you back to the step and the exact move where you left off. If a
+  step fails, fix the code and start again from step 1 — the inputs must
+  not change during a run. If the game rejects a move as illegal, the page
+  shows a clear red alert above the game with the game's reason — the move
+  is not recorded and the board is unchanged, so pick a different move.
+  During steps 3–5 every move must be played within 30 seconds of the
+  previous one; if 30 seconds pass with no move, the page shows an error
+  with a “Back to the beginning” button — and since every recorded move
+  stays on the server, loading the stored inputs by secret again resumes
+  the match at its last recorded move.
+</p>
+<div id="flow-banner" class="flow-banner" hidden></div>
+
+<div class="step-card" id="step-card-1">
+  <h3>Step 1 — Submit the inputs</h3>
+  <p>Send everything above (both code fields, the schemas, the unit tests and the other parameters) to the server, which runs the full submission checks on them and stores them with the time of the call. Agents usually do this step with the API before opening this page, then use “Load stored inputs by secret” above instead of this button.</p>
+  <p>
+    <button type="button" id="step1-submit">Submit the inputs</button>
+    <span id="step1-status" class="check-status" role="status"></span>
+  </p>
+</div>
+
+<div class="step-card" id="step-card-2">
+  <h3>Step 2 — Server code tests</h3>
+  <p>The server runs its tests on the submitted server code: the unit test cases, the settlement and move-agreement probes, and the random walks (each function is called twice to prove it is deterministic). The run's metadata — how long it took, how many states were visited, how many terminal states were reached — is recorded.</p>
+  <p>
+    <button type="button" id="step2-run" disabled>Run the server tests</button>
+    <span id="step2-status" class="check-status" role="status"></span>
+  </p>
+  <ul id="step2-results" class="check-results"></ul>
+</div>
+
+<div class="step-card" id="step-card-3">
+  <h3>Step 3 — Pass-and-play</h3>
+  <p>Play pass-and-play matches to the very end (until there is no next turn): one match for each allowed number of players. When a match ends, the page sends its states and moves to the server, which replays them with the step 1 server code and checks every transition and that the match truly ended. Screen sizes and orientations are covered once across steps 3–5 together, not once per step — see step 5.</p>
+  <p>
+    <button type="button" id="step3-start" disabled>Start step 3</button>
+    <span id="step3-status" class="check-status" role="status"></span>
+  </p>
+  <p id="step3-progress" class="hint"></p>
+  <p id="step3-instruction" class="step-instruction"></p>
+</div>
+
+<div class="step-card" id="step-card-4">
+  <h3>Step 4 — Play against the computer</h3>
+  <p>Play against the computer from the seats that matter: the smallest player count from its first and last seat, plus the largest player count from its last seat when the game allows more than one count — up to 100 moves per match. Every move is recorded on the server.</p>
+  <p>
+    <button type="button" id="step4-start" disabled>Start step 4</button>
+    <span id="step4-status" class="check-status" role="status"></span>
+  </p>
+  <p id="step4-progress" class="hint"></p>
+  <p id="step4-instruction" class="step-instruction"></p>
+</div>
+
+<div class="step-card" id="step-card-5">
+  <h3>Step 5 — Multiplayer</h3>
+  <p>Like step 3, but multiplayer: one frame per player, each showing only that player's view. Play every seat from its own frame until the match is over: one match for each allowed number of players, plus a match for each screen size or orientation that steps 3–5 have not covered yet — across the three steps, each of the 5 screen sizes and both orientations comes up at least once. Each finished match is verified on the server the same way as step 3.</p>
+  <p>
+    <button type="button" id="step5-start" disabled>Start step 5</button>
+    <span id="step5-status" class="check-status" role="status"></span>
+  </p>
+  <p id="step5-progress" class="hint"></p>
+  <p id="step5-instruction" class="step-instruction"></p>
+</div>
+
+<div class="step-card" id="flow-finish" hidden>
+  <h3>Testing complete</h3>
+  <p>
+    All five steps passed for exactly this payload. Submit it with
+    <code>POST /games</code> — the server checks the recorded traces for your
+    secret, verifies the payload is identical to the tested inputs, and
+    publishes the game.
+  </p>
+  <div class="field">
+    <label for="submission-json">The exact submission payload (JSON)</label>
+    <textarea id="submission-json" readonly spellcheck="false" rows="10"></textarea>
+  </div>
+</div>
+</section>
+
+<section aria-labelledby="checks-heading">
+<h2 id="checks-heading">Local pre-checks (optional)</h2>
+<p>
+  The same checks, run instantly in this page — a fast pre-flight before
+  step 2 runs them on the server. The page's own seeds are used for the
+  random walks here.
+</p>
+<p>
+  <button type="button" id="run-checks">Run the local checks</button>
+  <span id="check-status" class="check-status" role="status"></span>
+</p>
+<ul id="check-results" class="check-results"></ul>
+</section>
+
+<section aria-labelledby="play-heading">
+<h2 id="play-heading">Play the game</h2>
+<div class="field-row">
+  <div class="field">
+    <label for="mode">Mode</label>
+    <select id="mode">
+      <option value="single-pass">Single player — pass-and-play</option>
+      <option value="single-computers">Single player — play against computers</option>
+      <option value="multiplayer">Multiplayer</option>
+    </select>
+  </div>
+  <div class="field" id="player-count-row">
+    <label for="player-count">Number of players</label>
+    <input id="player-count" type="number" min="1" max="10" value="2">
+  </div>
+  <div class="field" id="my-seat-row">
+    <label for="my-seat">Your seat</label>
+    <select id="my-seat"></select>
+  </div>
+</div>
+<div class="field-row">
+  <div class="field">
+    <label for="resolution">Screen size</label>
+    <select id="resolution"></select>
+  </div>
+  <div class="field">
+    <label for="orientation">Orientation</label>
+    <select id="orientation">
+      <option value="vertical">Vertical</option>
+      <option value="horizontal">Horizontal</option>
+    </select>
+  </div>
+</div>
+<p>
+  <button type="button" id="new-match">Start a new match</button>
+  <button type="button" id="back" disabled>← Back</button>
+  <button type="button" id="forward" disabled>Forward →</button>
+  <button type="button" id="leave">Leave match</button>
+  <button type="button" id="join">Add a player</button>
+  <span id="match-seed" class="hint"></span>
+</p>
+<p>
+  <span id="seat-label"></span>
+  <span id="replay-label"></span>
+  <span id="resolution-label" class="hint"></span>
+</p>
+<div id="move-alert" class="move-alert" role="alert" hidden>
+  <p id="move-alert-text"></p>
+  <p>
+    <button type="button" id="move-alert-dismiss">Dismiss</button>
+    <button type="button" id="move-alert-restart" hidden>Back to the beginning</button>
+  </p>
+</div>
+<div id="game-wrap">
+  <div id="game-box"><p class="empty">Start a match to play here.</p></div>
+</div>
+<div class="outputs">
+  <div class="field">
+    <label for="state-out">State (read-only — the full state, as the author sees it)</label>
+    <textarea id="state-out" readonly spellcheck="false" rows="8"></textarea>
+  </div>
+  <div class="field">
+    <label for="view-out">View (read-only — what the client is shown)</label>
+    <textarea id="view-out" readonly spellcheck="false" rows="8"></textarea>
+  </div>
+  <div class="field">
+    <label for="last-move-out">Last move (read-only)</label>
+    <textarea id="last-move-out" readonly spellcheck="false" rows="4"></textarea>
+  </div>
+</div>
+</section>
+
+<section aria-labelledby="log-heading">
+<h2 id="log-heading">Log</h2>
+<p class="hint">
+  Every game API exchange (<code>make_move</code> from the client,
+  <code>state_changed</code> to the client) is logged here and to the browser
+  console.
+</p>
+<pre id="log" class="log" aria-live="polite"></pre>
+</section>
 </main>
-<script src="/static/common.js?v=24"></script>
-<script src="/static/i18n.js?v=5"></script>
-<script src="/static/auth.js?v=12"></script>
-<script src="/static/game-test.js?v=8"></script>
+<script src="/static/game-test.js?v=13"></script>
 </body>
 </html>

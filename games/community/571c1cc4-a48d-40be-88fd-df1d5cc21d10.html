@@ -108,6 +108,7 @@ function applyLocale(message) {
   if (message.direction) document.documentElement.dir = message.direction;
 }
 let latest = null;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 function applyStaticTexts() {
   document.title = t("page_title");
   document.querySelector("h1").textContent = t("heading");
@@ -123,7 +124,7 @@ function getView() {
   return { piles: [3,5,7], winnerIndex: null };
 }
 function canAct() {
-  return !!(latest && latest.status === "ongoing" && latest.acting_for_player_index !== null && latest.acting_for_player_index !== undefined && !moveSent);
+  return !!(latest && latest.status === "ongoing" && actingSeat() !== null && actingSeat() !== undefined && !moveSent);
 }
 function nameOf(i) {
   if (latest && latest.players && latest.players[i]) {
@@ -154,7 +155,7 @@ function render() {
     const turns = latest.turn_of_player_indices || [];
     if (turns.length > 0) {
       const first = turns[0];
-      if (latest.acting_for_player_index !== null && latest.acting_for_player_index !== undefined) status.textContent = t("your_turn", { name: nameOf(first) });
+      if (actingSeat() !== null && actingSeat() !== undefined) status.textContent = t("your_turn", { name: nameOf(first) });
       else status.textContent = t("their_turn", { name: nameOf(first) });
     } else status.textContent = t("waiting_players");
   }

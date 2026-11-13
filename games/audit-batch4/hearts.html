@@ -161,6 +161,7 @@ function applyLocale(message) {
 
 
 let latest=null;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 function el(tag,text,cls,parent){const e=document.createElement(tag);if(text!==undefined&&text!==null)e.textContent=text;if(cls)e.className=cls;if(parent)parent.appendChild(e);return e}
 document.getElementById('status').textContent=t('waiting');
 const SYM={C:'♣',D:'♦',S:'♠',H:'♥'};
@@ -170,7 +171,7 @@ function isRed(c){return suit(c)==='H'||suit(c)==='D'}
 function cardEl(c){const d=el('div',null,'pcard'+(isRed(c)?' red':''));const r=rankStr(c),s=SYM[suit(c)];const tl=el('div',null,'corner tl',d);el('span',r,'r',tl);el('span',s,'s',tl);const pip=el('div',null,'pip',d);el('span',s,'bigS',pip);el('span',r,'bigR',pip);const br=el('div',null,'corner br',d);el('span',r,'r',br);el('span',s,'s',br);return d}
 function play(card){parent.postMessage({type:'make_move',move:{card:card}},'*')}
 function render(){
- const m=latest,st=m.view,players=m.players,my=m.my_player_index,acting=m.acting_for_player_index;
+ const m=latest,st=m.view,players=m.players,my=m.my_player_index,acting=actingSeat();
  const status=document.getElementById('status'),scoresEl=document.getElementById('scores'),handEl=document.getElementById('hand'),label=document.getElementById('handLabel');
  document.getElementById('title').textContent=t('title');document.getElementById('subtitle').textContent=t('subtitle');
  handEl.replaceChildren();scoresEl.replaceChildren();

@@ -1,5 +1,12 @@
 # BuildPlay deployment findings and builder acceptance checks
 
+> Historical note (2026-11-07): the Builder this document's acceptance
+> checks describe was deleted — drafts, `/games/test`, `/agent/chat` and
+> the builder workflow are gone, and `POST /games` is the only way to
+> create a game. The findings below are kept as a record of the
+> deployment as it stood in October 2026; the builder checks no longer
+> apply.
+
 Hosting observations were checked 2026-10-15 against the public website.
 The repository was rechecked and this branch rebased onto `origin/main` at
 `6d3bac2` on 2026-10-16.

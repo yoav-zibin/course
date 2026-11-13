@@ -34,6 +34,7 @@ Design notes:
 import datetime as dt
 import json
 import threading
+import time
 from typing import Any, Mapping
 
 import quickjs
@@ -65,18 +66,51 @@ class InvalidMove extends Error {
   }
 }
 
-// Deterministic randomness (mulberry32). The generator is reseeded by
-// __invoke on every call, so Math.random and ctx.random draw from the
-// same reproducible sequence for that call and no call can leak RNG
-// state into the next one.
+// Online matches use a 256-bit ChaCha20 key (RFC 8439). Numeric seeds
+// retain Mulberry32 for published unit-test vectors and legacy fixtures.
+// Each invocation gets a distinct derived key; no stream state crosses calls.
 let __rngState = 0;
+let __secureState = null;
+let __secureBlock = [];
+let __secureIndex = 16;
 let __usedRandom = false;
 function __seedRandom(seed) {
   __usedRandom = false;
-  __rngState = seed >>> 0;
+  __secureState = null;
+  if (typeof seed === "string") {
+    const bytes = [];
+    for (let i = 0; i < 64; i += 2) bytes.push(parseInt(seed.slice(i, i + 2), 16));
+    __secureState = [0x61707865, 0x3320646e, 0x79622d32, 0x6b206574];
+    for (let i = 0; i < 32; i += 4)
+      __secureState.push((bytes[i] | bytes[i+1]<<8 | bytes[i+2]<<16 | bytes[i+3]<<24) >>> 0);
+    __secureState.push(0, 0, 0, 0); // counter, followed by a zero nonce
+    __secureIndex = 16;
+  } else __rngState = seed >>> 0;
+}
+function __chachaBlock() {
+  const x = __secureState.slice();
+  const rotate = (v, n) => (v << n) | (v >>> (32 - n));
+  const quarter = (a, b, c, d) => {
+    x[a] = (x[a] + x[b]) | 0; x[d] = rotate(x[d] ^ x[a], 16);
+    x[c] = (x[c] + x[d]) | 0; x[b] = rotate(x[b] ^ x[c], 12);
+    x[a] = (x[a] + x[b]) | 0; x[d] = rotate(x[d] ^ x[a], 8);
+    x[c] = (x[c] + x[d]) | 0; x[b] = rotate(x[b] ^ x[c], 7);
+  };
+  for (let i = 0; i < 10; i++) {
+    quarter(0,4,8,12); quarter(1,5,9,13); quarter(2,6,10,14); quarter(3,7,11,15);
+    quarter(0,5,10,15); quarter(1,6,11,12); quarter(2,7,8,13); quarter(3,4,9,14);
+  }
+  __secureBlock = x.map((v, i) => (v + __secureState[i]) >>> 0);
+  __secureState[12] = (__secureState[12] + 1) >>> 0;
+  if (__secureState[12] === 0) throw new Error("random stream exhausted");
+  __secureIndex = 0;
 }
 function __random() {
   __usedRandom = true;
+  if (__secureState) {
+    if (__secureIndex === 16) __chachaBlock();
+    return __secureBlock[__secureIndex++] / 4294967296;
+  }
   __rngState = (__rngState + 0x6D2B79F5) | 0;
   let t = __rngState;
   t = Math.imul(t ^ (t >>> 15), t | 1);
@@ -450,6 +484,21 @@ class GameLogic:
         self._invoke: quickjs.Object | None = None
         self._available_functions: dict[str, bool] = {}
         self._lock = threading.RLock()
+        # Metrics of the most recent call (set by _call, even when the
+        # call raises): how long the QuickJS evaluation took, how much
+        # memory the context held afterwards, and the limits in effect.
+        # The tester reads these when it records a failure so the report
+        # can say exactly what the call cost.
+        self.last_call_duration_seconds: float = 0.0
+        self.last_call_memory_used_bytes: int = 0
+        self.last_call_memory_delta_bytes: int = 0
+        self.last_call_time_limit_seconds: float = time_limit_seconds
+        self.last_call_memory_limit_bytes: int = memory_limit_bytes
+        # The JSON result of the most recent call, set once the envelope
+        # is parsed and before it is validated; None when the call raised
+        # before producing a result. The tester reads it when a result
+        # fails validation, so the report can show what the game returned.
+        self.last_call_result: Any = None
 
     def _new_context(self) -> quickjs.Context:
         context = quickjs.Context()
@@ -497,6 +546,25 @@ class GameLogic:
         self._invoke = None
         self._available_functions = {}
 
+    def _memory_used_bytes(self) -> int:
+        """Bytes the QuickJS context currently holds, or 0 if unavailable."""
+        if self._context is None:
+            return 0
+        try:
+            return int(self._context.memory().get("memory_used_size", 0))
+        except Exception:
+            return 0
+
+    def _record_call_metrics(self, started: float, memory_before: int) -> None:
+        """Stores how long the last QuickJS call took and how much memory
+        it left the context holding. Called on both success and failure
+        (before the context is dropped on error), so a failure report can
+        say exactly what the call cost."""
+        self.last_call_duration_seconds = max(0.0, time.monotonic() - started)
+        used = self._memory_used_bytes()
+        self.last_call_memory_used_bytes = used
+        self.last_call_memory_delta_bytes = max(0, used - memory_before)
+
     def has(self, function: str) -> bool:
         """Whether the game defines [function] (some functions are optional)."""
         with self._lock:
@@ -524,7 +592,7 @@ class GameLogic:
         function: str,
         *args: Any,
         ctx: dict[str, Any] | None = None,
-        seed: int = 0,
+        seed: int | str = 0,
         now: dt.datetime | None = None,
         time_limit_seconds: float | None = None,
     ) -> Any:
@@ -548,7 +616,7 @@ class GameLogic:
         function: str,
         *args: Any,
         ctx: dict[str, Any] | None = None,
-        seed: int = 0,
+        seed: int | str = 0,
         now: dt.datetime | None = None,
         time_limit_seconds: float | None = None,
     ) -> Any:
@@ -589,19 +657,27 @@ class GameLogic:
         )
         if override is not None:
             self._context.set_time_limit(override)
+        self.last_call_time_limit_seconds = (
+            override if override is not None else self._time_limit_seconds
+        )
+        self.last_call_memory_limit_bytes = self._memory_limit_bytes
+        self.last_call_result = None
+        started = time.monotonic()
+        memory_before = self._memory_used_bytes()
         try:
             if self._invoke is None:
                 raise GameLogicError("the game's QuickJS context is unavailable")
             envelope_text = self._invoke(
                 function,
                 input_json,
-                int(seed) & 0xFFFFFFFF,
+                seed if isinstance(seed, str) else (format(seed, "064x") if seed > 0xFFFFFFFF else int(seed) & 0xFFFFFFFF),
                 float(frozen_millis),
             )
         except quickjs.JSException as error:
             # Nothing came back: the call was interrupted (timeout/memory)
             # or the prelude itself failed. The context may be in a bad
             # state, so it is rebuilt before the next call.
+            self._record_call_metrics(started, memory_before)
             self._drop_context()
             if _is_timeout(error):
                 raise GameLogicTimeout(
@@ -612,10 +688,12 @@ class GameLogic:
         finally:
             if override is not None and self._context is not None:
                 self._context.set_time_limit(self._time_limit_seconds)
+        self._record_call_metrics(started, memory_before)
         envelope = json.loads(envelope_text)
         if envelope.get("ok"):
             self.last_call_used_random = bool(envelope.get("used_random"))
             result = envelope.get("result")
+            self.last_call_result = result
             if function == "playerLeft" and isinstance(result, dict) and "payout" in result:
                 # Old published versions used a scalar payout and expected a bot
                 # takeover. Settle them without changing their pinned source.
@@ -805,7 +883,7 @@ class GameLogic:
                     f"game.{function} returned a turn naming non-players: {unknown}"
                 )
         payouts = result.get("payouts")
-        if (function in ("applyMove", "playerLeft") and result.get("turn") is None
+        if (function in ("newMatch", "applyMove", "playerJoined", "playerLeft") and result.get("turn") is None
                 and pot and payouts is None):
             raise GameLogicError(f"game.{function} ended without payouts for the pot")
         if payouts is not None:

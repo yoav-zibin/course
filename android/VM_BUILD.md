@@ -70,10 +70,10 @@ so they can coexist and have separate guest accounts.
 
 - Run `connectedDebugAndroidTest` on the development emulator; this needs a device
   and is intentionally separate from the headless VM build.
-- Confirm the deployed backend's JSON data path is on retained persistent storage.
+- Confirm the deployed backend is using the production Firestore database/namespace.
 - With the class administrator's approval, create a test match, cleanly restart
   the existing backend service, and verify the same users/match/moves after restart.
-  Do not delete/reseed the data file or launch a second server writing to it.
+  Do not delete/reseed production data or launch a second server writing to it.
 - Check the shutdown signal. In local validation, an immediate SIGTERM after a move
   lost pending writes, while SIGINT (Ctrl-C) flushed them successfully. The installed
   uvicorn re-raises SIGTERM before `main.py` reaches `store.close()`. Existing store

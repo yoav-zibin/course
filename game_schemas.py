@@ -1,11 +1,33 @@
 """JSON Schema helpers for the v2 server-side game contract."""
 
 from collections.abc import Mapping
+from functools import lru_cache
+import json
 from typing import Any
 
 from jsonschema import Draft202012Validator, ValidationError
+from referencing import Registry
 
 SCHEMA_KEYS = frozenset({"state", "move", "view"})
+
+
+@lru_cache(maxsize=512)
+def _check_schema_once(encoded_schema: str) -> None:
+    """Validate unchanged schema content once, never cache failures."""
+    schema = json.loads(encoded_schema)
+    def local_refs(value):
+        if isinstance(value, dict):
+            for name, child in value.items():
+                if name in ("$ref", "$dynamicRef", "$recursiveRef") and (
+                    not isinstance(child, str) or not child.startswith("#")
+                ):
+                    raise ValueError("game schemas may only use local fragment references")
+                local_refs(child)
+        elif isinstance(value, list):
+            for child in value:
+                local_refs(child)
+    local_refs(schema)
+    Draft202012Validator.check_schema(schema)
 
 
 def compile_game_schemas(game_schemas: Mapping[str, Any]) -> dict[str, Draft202012Validator]:
@@ -21,8 +43,10 @@ def compile_game_schemas(game_schemas: Mapping[str, Any]) -> dict[str, Draft2020
 
     validators: dict[str, Draft202012Validator] = {}
     for key, schema in game_schemas.items():
-        Draft202012Validator.check_schema(schema)
-        validators[key] = Draft202012Validator(schema)
+        _check_schema_once(json.dumps(schema, sort_keys=True, separators=(",", ":"), allow_nan=False))
+        # No implicit URL/file retrieval, even if a future schema keyword
+        # introduces another reference form that bypasses the input check.
+        validators[key] = Draft202012Validator(schema, registry=Registry())
     return validators
 
 

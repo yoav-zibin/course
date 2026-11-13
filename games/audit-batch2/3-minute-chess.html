@@ -155,6 +155,7 @@ function applyLocale(message) {
 
 
 var latest=null, sel=null, flipped=null, timeoutSentFor=null;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
 var START_MS=3*60*1000;
 function moveLine(i,hist){var parts=[String(i/2+1).concat('.'),hist[i]];if(hist[i+1])parts.push(hist[i+1]);return parts.join(' ');}
 var FILES=['a','b','c','d','e','f','g','h'];
@@ -196,8 +197,8 @@ return M;}
 function cloneB(b){return b.map(function(r){return r.slice();});}
 function applyOnBoard(b,m){var nb=cloneB(b);var p=nb[m.fr][m.fc];nb[m.fr][m.fc]=null;if(m.ep)nb[m.fr][m.tc]=null;nb[m.tr][m.tc]=m.promo?p[0]+m.promo:p;if(m.castle){if(m.tr===7){if(m.tc===6){nb[7][5]=nb[7][7];nb[7][7]=null;}else{nb[7][3]=nb[7][0];nb[7][0]=null;}}else{if(m.tc===6){nb[0][5]=nb[0][7];nb[0][7]=null;}else{nb[0][3]=nb[0][0];nb[0][0]=null;}}}return nb;}
 function st(){return latest?latest.view:null;}
-function canAct(){return latest&&latest.status==='ongoing'&&latest.acting_for_player_index!==null;}
-function myColor(){if(!canAct())return null;var s=latest.acting_for_player_index;return s===0?'w':s===1?'b':null;}
+function canAct(){return actingSeat()!==null;}
+function myColor(){if(!canAct())return null;var s=actingSeat();return s===0?'w':s===1?'b':null;}
 function legalHints(r,c){var s=st();if(!s||s.winner!=null)return [];var sd=sideOf(s);var p=s.board[r][c];if(!p||p[0]!==sd)return [];return pseudo(s.board,r,c,s.castling,s.ep).filter(function(m){return !inCheck(applyOnBoard(s.board,m),sd);});}
 function liveMs(color){var s=st();if(!s)return START_MS;var base=color==='w'?(s.wMs!=null?s.wMs:START_MS):(s.bMs!=null?s.bMs:START_MS);if(latest.status==='ongoing'&&s.winner==null&&sideOf(s)===color){base-=Math.max(0,Date.now()-(s.stamp||Date.now()));}return Math.max(0,base);}
 function fmt(ms){ms=Math.max(0,Math.ceil(ms/100)*100);var s=Math.floor(ms/1000);var m=Math.floor(s/60);var sec=s%60;var tenths=Math.floor((ms%1000)/100);return m+':'+String(sec).padStart(2,'0')+'.'+tenths;}

@@ -4,11 +4,12 @@ The shared portal includes a grid/list gallery, name/description search, player-
 
 After a finished online match, each human participant can request a rematch. The first request creates a public lobby for the same game version; other original participants can join from the completed match, while other users can join through the open-match list. For a match with one human and computer opponents, **Play again** immediately starts a new match with the same game version and number of computer opponents.
 
-## Image integration pending
+## Gallery artwork
 
-The current game model and API do not have an artwork field or an image generation job. Gallery artwork currently uses CSS monogram placeholders; these are not AI-generated images. Do not describe the image-at-creation requirement as complete.
-
-Confirm the owner of image generation with the class before changing the REST API. The builder/backend owner needs to define how a generated cover is persisted and returned with game metadata (including failure/pending behavior), then the portal can render it with placeholder fallback and offline caching. Credentials and provider calls belong on the server. Existing games will also need a backfill or a documented fallback.
+Imported games carry package images: the first is the cover, exposed as
+`cover_url` on the game and served by `GET /games/{id}/versions/{version}/cover`.
+Games without package images (older records) fall back to CSS monogram
+placeholders in the gallery.
 
 ## Verification
 

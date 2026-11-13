@@ -75,17 +75,13 @@ const game = {
 
 
 def _create_game(api: Api, owner: str, server_code: str = LEAVE_GAME) -> str:
-    game = api.ok(
-        "POST", "/games", as_user=owner,
-        json={
-            "name": "Counter race",
-            "allowed_player_counts": [2],
-            "allows_leave_mid_match": True,
-            "code": "<div>counter</div>",
-            "server_code": server_code,
-        },
-    )
-    return game["id"]
+    return api.create_game({
+        "name": "Counter race",
+        "allowed_player_counts": [2],
+        "allows_leave_mid_match": True,
+        "code": "<div>counter</div>",
+        "server_code": server_code,
+    }, owner)["id"]
 
 
 def _paid_match(api: Api, owner: str, game_id: str, joiner: str) -> str:

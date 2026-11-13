@@ -100,6 +100,7 @@ function applyLocale(message) {
 
 
 let L=null, sel=new Set();
+function actingSeat(){if(!L||L.status!=="ongoing"||!L.turn_of_player_indices?.length)return null;const turn=L.turn_of_player_indices[0];if(turn===L.my_player_index)return turn;const humans=(L.players||[]).filter(p=>p.kind==="human");if(L.my_player_index!==null&&humans.length===1&&L.players[turn]?.kind==="computer")return turn;return null;}
 const RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
 const SUITS=['♠','♥','♦','♣'];
 function cr(c){let r=Math.floor(c/4),s=c%4;return{t:RANKS[r]+SUITS[s],red:(s==1||s==2)};}
@@ -139,9 +140,9 @@ function render(){
  let myHand=(me!==null&&v.myHand)?v.myHand.slice().sort((a,b)=>a-b):[];
  myHand.forEach(c=>{let o=cr(c);let d=document.createElement('div');d.id='card';if(o.red)d.classList.add('red');if(sel.has(c))d.classList.add('sel');
   d.appendChild(document.createTextNode(RANKS[Math.floor(c/4)]));const sm=document.createElement('small');sm.textContent=SUITS[c%4];d.appendChild(sm);
-  d.onclick=()=>{if(L.acting_for_player_index!==me||v.phase!=='play'||v.current!==me)return;if(sel.has(c))sel.delete(c);else{if(sel.size>=4)return;sel.add(c);}render();};
+  d.onclick=()=>{if(actingSeat()!==me||v.phase!=='play'||v.current!==me)return;if(sel.has(c))sel.delete(c);else{if(sel.size>=4)return;sel.add(c);}render();};
   hb.appendChild(d);});
- let acting=L.status==='ongoing'?L.acting_for_player_index:null;
+ let acting=actingSeat();
  let canPlay=acting===me&&v.phase==='play'&&v.current===me&&sel.size>=1&&sel.size<=4;
  let canBS=me!==null&&acting===me&&v.phase==='challenge'&&v.pending&&me!==v.pending.player;
  let canPass=me!==null&&acting===me&&v.phase==='challenge'&&v.pending&&me!==v.pending.player;
@@ -156,7 +157,7 @@ function render(){
  else if(v.phase==='challenge')st.textContent=t('call_or_ok',{name:L.players[acting].name});
  else st.textContent=t('turn_play',{name:L.players[acting].name,rank:RANKS[req]});
 }
-document.getElementById('playBtn').onclick=()=>{if(!L||!L.view)return;let v=L.view,me=L.acting_for_player_index;if(me===null)return;if(sel.size<1||sel.size>4)return;sendMove({kind:'play',cards:[...sel]});};
-document.getElementById('bsBtn').onclick=()=>{if(!L||L.acting_for_player_index===null)return;sendMove({kind:'bs'});};
-document.getElementById('passBtn').onclick=()=>{if(!L||L.acting_for_player_index===null)return;sendMove({kind:'pass'});};
+document.getElementById('playBtn').onclick=()=>{if(!L||!L.view)return;let v=L.view,me=actingSeat();if(me===null)return;if(sel.size<1||sel.size>4)return;sendMove({kind:'play',cards:[...sel]});};
+document.getElementById('bsBtn').onclick=()=>{if(!L||actingSeat()===null)return;sendMove({kind:'bs'});};
+document.getElementById('passBtn').onclick=()=>{if(!L||actingSeat()===null)return;sendMove({kind:'pass'});};
 </script></body></html>

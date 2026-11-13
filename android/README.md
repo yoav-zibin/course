@@ -35,8 +35,6 @@ public HTTPS backend even when the local Python server is stopped.
 2. Copy the match link. Open it on a second computer/phone in the web portal.
 3. The second player logs in with a different guest account and joins.
 4. The Android host presses **Start game**. Alternate moves to complete a win or draw.
-   For the currently deployed TicTacToe version, let Android make the final move;
-   the web portal has a legacy end-message bug described in [VALIDATION.md](VALIDATION.md).
 5. Reopen Playroom or rotate the device: the account and selected match are retained.
 6. Turn off the emulator's network, then restore it. The app shows a connection
    failure and reloads the server's state; **Retry** requests an immediate refresh.
