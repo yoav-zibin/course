@@ -2387,14 +2387,17 @@
   color-scheme: light;
   --riso-paper: #faf1d9;
   --riso-panel: #fff8e7;
+  --riso-stock: #f4e6c5;
+  --riso-wash: #ecd9ad;
+  --riso-shade: #e4cc9c;
   --riso-ink: #19295f;
   --riso-cobalt: #2545ad;
   --riso-red: #a72d30;
   --color-bg-0: var(--riso-paper);
   --color-bg-1: var(--riso-panel);
-  --color-bg-2: #f4e6c5;
-  --color-bg-3: #ecd9ad;
-  --color-bg-4: #e4cc9c;
+  --color-bg-2: var(--riso-stock);
+  --color-bg-3: var(--riso-wash);
+  --color-bg-4: var(--riso-shade);
   --color-text-primary: var(--riso-ink);
   --color-text-secondary: #3f4770;
   --color-text-tertiary: #514860;
@@ -2428,9 +2431,23 @@
 :root[data-skin="riso-club"] .portal-shell {
   --color-bg-0: var(--riso-paper);
   --color-bg-1: var(--riso-panel);
+  --color-bg-2: var(--riso-stock);
+  --color-bg-3: var(--riso-wash);
+  --color-bg-4: var(--riso-shade);
   --color-text-primary: var(--riso-ink);
+  --color-text-secondary: #3f4770;
+  --color-text-tertiary: #514860;
+  --color-text-quaternary: #5b4a4f;
+  --color-border-1: #d1bf9e;
+  --color-border-2: #b7a583;
+  --color-border-3: #8b775a;
+  --color-border-4: #6e5c46;
   --color-accent: var(--riso-cobalt);
+  --color-accent-hover: #183583;
+  --color-focus-ring: var(--riso-red);
   --color-ok: #285a42;
+  --color-warn: #795012;
+  --color-error: var(--riso-red);
   background: var(--riso-paper);
   color: var(--riso-ink);
 }
@@ -2507,7 +2524,7 @@
 }
 
 :root[data-skin="riso-club"] .portal-shell :is(.game-option:hover, .game-option[aria-selected="true"], .library-card:hover) {
-  background: #f4e6c5;
+  background: var(--riso-stock);
   color: var(--riso-ink);
   border-color: var(--riso-cobalt);
 }
@@ -2524,7 +2541,7 @@
 
 :root[data-skin="riso-club"] .topbar .token-wallet,
 :root[data-skin="riso-club"] .portal-shell :is(.group-count, .popular-game-rank) {
-  background: #ecd9ad;
+  background: var(--riso-wash);
   border-color: #b7a583;
   color: var(--riso-ink);
 }
@@ -2538,37 +2555,29 @@
   border-color: var(--riso-red);
   color: var(--riso-panel);
 }
-/* Softer shape: rounder corners and slightly thicker outlines on panels, cards, fields and the search box. */
-:root[data-skin="meadow"] {
-  --radius-sm: 12px;
-  --radius-md: 22px;
+
+:root[data-skin="riso-club"] .portal-shell .speed-choice {
+  color: var(--color-text-secondary);
 }
-:root[data-skin="meadow"] .portal-sidebar,
-:root[data-skin="meadow"] .match-creator,
-:root[data-skin="meadow"] .game-detail-page,
-:root[data-skin="meadow"] .match-stage,
-:root[data-skin="meadow"] .portal-shell .game-search-popup,
-:root[data-skin="meadow"] .portal-shell .match-tools,
-:root[data-skin="meadow"] .popular-games-section,
-:root[data-skin="meadow"] .play-option,
-:root[data-skin="meadow"] .portal-shell .library-card,
-:root[data-skin="meadow"] .portal-shell .popular-game-card,
-:root[data-skin="meadow"] .selected-game-card {
-  border-width: 2px;
-  border-style: solid;
-  border-radius: var(--radius-md);
+
+:root[data-skin="riso-club"] .portal-shell .play-option-heading > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
-:root[data-skin="meadow"] .match-creator,
-:root[data-skin="meadow"] .game-detail-page,
-:root[data-skin="meadow"] .match-stage,
-:root[data-skin="meadow"] .portal-shell .game-search-popup { border-radius: 28px; }
-:root[data-skin="meadow"] .portal-shell .popular-game-card { overflow: hidden; }
-:root[data-skin="meadow"] .portal-shell input,
-:root[data-skin="meadow"] .portal-shell select,
-:root[data-skin="meadow"] .portal-shell textarea {
-  border-width: 2px;
-  border-radius: var(--radius-sm);
+
+:root[data-skin="riso-club"] .portal-shell .play-option-icon svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
-:root[data-skin="meadow"] .portal-shell input[type="search"],
-:root[data-skin="meadow"] .portal-shell input[type="text"] { border-radius: 16px; }
-:root[data-skin="meadow"] .portal-shell button { border-width: 2px; }
+
+:root[data-skin="riso-club"] .portal-shell .computer-match-illustration img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
