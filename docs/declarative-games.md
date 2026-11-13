@@ -125,8 +125,14 @@ their top-left; paths use viewport coordinates. Rotation is clockwise degrees
 around the piece center. Uniform `scale` multiplies its dimensions.
 
 Keep the same piece ID when that physical piece moves. For multiplayer and
-computer matches, the portal animates changed piece positions and transforms
-over 1,440 ms between authoritative scenes. Initial rendering, replay,
+computer matches, the portal animates opponent and computer moves over 1,440 ms.
+The viewer's own moves update immediately, including pieces captured by that
+move. The host uses `state_changed.last_move_player_index`, rather than the next
+turn, to identify the actor. Unknown actors update immediately. If a snapshot
+combines an own move with computer replies, the portal first applies the last
+own position immediately using viewer-filtered history, then animates the
+opponent changes. Missing history or large gaps update immediately. Initial
+rendering, replay,
 pass-and-play and reduced-motion preferences use immediate updates. A scene is
 still a complete snapshot; no animation commands or delays belong in game
 logic. For games whose server stores counts rather than individual pieces,

@@ -227,7 +227,7 @@ class DeclarativeLogic:
 
 def client_document(spec):
     """Platform-owned compatibility host for existing test/practice clients."""
-    return _client_document(spec, asset_query="?v=4")
+    return _client_document(spec, asset_query="?v=5")
 
 
 def _client_document(spec, *, asset_query):
@@ -254,11 +254,12 @@ def accepted_platform_host(spec, code):
     """Exact current/legacy trusted templates, preserving recorded payload hashes.
 
     New submissions without client_code use the current versioned asset URLs.
-    Stored submissions keep their known v2/v3 or original unversioned host
+    Stored submissions keep their known v2/v3/v4 or original unversioned host
     byte-for-byte so recorded publication evidence and pinned code remain valid.
     """
     return code in (
         client_document(spec),
+        _client_document(spec, asset_query="?v=4"),
         _client_document(spec, asset_query="?v=3"),
         _client_document(spec, asset_query="?v=2"),
         _client_document(spec, asset_query=""),

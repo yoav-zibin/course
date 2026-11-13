@@ -496,6 +496,97 @@ test('identical polls share a downloaded game without remounting its camera',asy
  assert.equal(t.run('sent.length'),1);
 });
 
+function transitionSetup(request) {
+ const t=setup(request);
+ t.run('frame.declarative={};frame.lastMessage={move_count:0,my_player_index:0,replay:null};globalThis.transitionMessage={type:"state_changed",move_count:4,my_player_index:0,last_move_player_index:1,state:{n:4},view:{n:4},status:"ongoing",replay:null};globalThis.transitionMoves=Array.from({length:4},(_,i)=>({move_number:i+1,player_index:i%2,new_state:{n:i+1},next_turn_player_indices:[(i+1)%2]}))');
+ return t;
+}
+
+test('a mixed local own and computer chain snaps the latest own view before opponent motion',async()=>{
+ const t=transitionSetup();
+ const result=await t.run('declarativeTransition({id:"m",localMode:"computer",moves:transitionMoves},transitionMessage)');
+ assert.equal(result.baseline.move_count,3);
+ assert.equal(result.baseline.last_move_player_index,0);
+ assert.equal(result.baseline.acting_for_player_index,null);
+ assert.equal(result.baseline.view.n,3);
+ assert.equal(result.previous,t.run('frame.lastMessage'));
+});
+
+test('online animation baselines use the authenticated viewer-filtered history page',async()=>{
+ const calls=[];
+ const t=transitionSetup(async(method,path,options)=>{
+  calls.push([method,path,options.user.id]);
+  return {items:Array.from({length:4},(_,i)=>({move_number:i+1,player_index:i%2,
+   new_state:{publicCount:i+1},next_turn_player_indices:[(i+1)%2]}))};
+ });
+ t.run('StoragePages.enabled=async()=>true');
+ const result=await t.run('declarativeTransition({id:"m"},transitionMessage)');
+ assert.deepEqual(calls,[['GET','/v2/matches/m/history?start=0&limit=4','owner']]);
+ assert.equal(result.baseline.view.publicCount,3);
+ assert.equal(result.baseline.last_move_player_index,0);
+});
+
+test('opponent-only gaps need no own baseline and own final moves never animate',async()=>{
+ const t=transitionSetup();
+ t.run('transitionMoves.forEach(move=>move.player_index=1)');
+ const other=await t.run('declarativeTransition({id:"m",localMode:"computer",moves:transitionMoves},transitionMessage)');
+ assert.equal(other.baseline,undefined);assert.notEqual(other.animate,false);
+ t.run('transitionMessage.last_move_player_index=0');
+ const own=await t.run('declarativeTransition({id:"m",localMode:"computer",moves:transitionMoves},transitionMessage)');
+ assert.equal(own.animate,false);assert.equal(own.baseline,undefined);
+});
+
+test('malformed, unavailable and excessively large history gaps settle without motion',async()=>{
+ const t=transitionSetup(async()=>{throw new Error('history unavailable')});
+ assert.equal((await t.run('declarativeTransition({id:"m"},transitionMessage)')).animate,false);
+ for(const change of ['transitionMoves.pop()','transitionMoves[1].move_number=90',
+  'delete transitionMoves[1].new_state','transitionMoves[1].player_index=null']) {
+  const next=transitionSetup();next.run(change);
+  const result=await next.run('declarativeTransition({id:"m",localMode:"computer",moves:transitionMoves},transitionMessage)');
+  assert.equal(result.animate,false);
+ }
+ t.run('transitionMessage.move_count=101');
+ assert.equal((await t.run('declarativeTransition({id:"m"},transitionMessage)')).animate,false);
+});
+
+test('a revision-cancelled renderer send never advances the recorded rendered move',async()=>{
+ const t=setup();
+ t.run('globalThis.rendererWaiters=[];frame.declarative={send:()=>new Promise(resolve=>rendererWaiters.push(resolve))};frame.lastMessage={move_count:0,my_player_index:0,replay:null}');
+ const older=t.run('frame.send({move_count:1,my_player_index:0,replay:null})');
+ const newer=t.run('frame.send({move_count:2,my_player_index:0,replay:null})');
+ t.run('rendererWaiters[0](false)');await older;
+ assert.equal(t.run('frame.lastMessage.move_count'),0);
+ t.run('rendererWaiters[1](true)');await newer;
+ assert.equal(t.run('frame.lastMessage.move_count'),2);
+});
+
+function transitionSyncSetup() {
+ const t=gameSyncSetup();
+ t.run('state.loaded="match@game@2";state.match={...state.match,move_count:4,state:{n:4},last_move_player_index:1};globalThis.originalPrevious={move_count:0,my_player_index:0,replay:null};frame.declarative={};frame.lastMessage=originalPrevious;globalThis.stateChangedMessage=options=>({type:"state_changed",state:options.state,view:options.view,move_count:options.moveCount,my_player_index:options.mySeat,replay:null});frame.send=async(message,options={})=>{sent.push({message,options});return true;}');
+ return t;
+}
+
+test('a history baseline made obsolete by another rendered update cannot animate the combined final state',async()=>{
+ const t=transitionSyncSetup();
+ t.run('declarativeTransition=()=>new Promise(resolve=>{globalThis.releaseTransition=resolve})');
+ const pending=t.run('syncGame()');await new Promise(resolve=>setImmediate(resolve));
+ t.run('frame.lastMessage={move_count:2,my_player_index:0,replay:null};releaseTransition({previous:originalPrevious,baseline:{move_count:3,view:{n:3},my_player_index:0,last_move_player_index:0}})');
+ await pending;
+ assert.equal(t.run('sent.length'),1);
+ assert.equal(t.run('sent[0].message.move_count'),4);
+ assert.equal(t.run('sent[0].options.animate'),false);
+});
+
+test('a baseline rejected by the presentation reducer forces the final opponent snapshot to settle immediately',async()=>{
+ const t=transitionSyncSetup();
+ t.run('declarativeTransition=async()=>({previous:originalPrevious,baseline:{move_count:3,view:{malformed:true},my_player_index:0,last_move_player_index:0}});frame.send=async(message,options={})=>{sent.push({message,options});return message.move_count!==3;}');
+ await t.run('syncGame()');
+ assert.equal(t.run('sent.length'),2);
+ assert.equal(t.run('sent[0].options.animate'),false);
+ assert.equal(t.run('sent[1].message.move_count'),4);
+ assert.equal(t.run('sent[1].options.animate'),false);
+});
+
 test('current account avatar wins over stale match profile cache',()=>{
   const {run}=setup();
   run('Auth.current=()=>({id:"owner",picture_url:"/saved-deer.png"});state.pictureCache.set("owner","/old-puppy.png")');

@@ -3,6 +3,10 @@ import path from 'node:path';
 import {test,expect,type APIRequestContext,type Page} from '@playwright/test';
 import {createUser,loginAs,uniqueName} from './helpers';
 
+declare const state:any;
+declare const offline:any;
+declare function selectMatch(id:string):void;
+
 const auth=(user:any)=>({'X-User-Id':user.id,'X-User-Password':user.password});
 
 async function backgammon(request:APIRequestContext){
@@ -46,13 +50,39 @@ async function nextAction(page:Page){
 
 async function countAnimations(page:Page){
   await page.addInitScript(()=>{
-    const original=Element.prototype.animate;
-    (window as any).backgammonAnimations=[];
+    const w=window as any,original=Element.prototype.animate;
+    w.backgammonAnimations=[];w.backgammonAnimationRecords=[];w.backgammonRendered=[];w.backgammonMountCount=0;
     Element.prototype.animate=function(...args:any[]){
-      if(this.classList?.contains('declarative-piece'))(window as any).backgammonAnimations.push(this.getAttribute('data-ui-id'));
-      return original.apply(this,args as any);
+      const animation=original.apply(this,args as any);
+      if(this.classList?.contains('declarative-piece')){
+        const id=this.getAttribute('data-ui-id'),message=w.backgammonLastSent;
+        w.backgammonAnimations.push(id);
+        w.backgammonAnimationRecords.push({id,host_id:message?.host_id,move_count:message?.move_count,actor:message?.last_move_player_index,viewer:message?.my_player_index,actor_kind:message?.players?.find((player:any)=>player.player_index===message?.last_move_player_index)?.kind,duration:animation.effect?.getTiming().duration});
+      }
+      return animation;
     };
+    let api:any;
+    Object.defineProperty(w,'DeclarativeUI',{configurable:true,get:()=>api,set:value=>{
+      api=value;const mount=api.mount;
+      api.mount=(...args:any[])=>{
+        const host=mount(...args),send=host.send.bind(host),hostId=++w.backgammonMountCount;w.backgammonActiveHostId=hostId;
+        host.send=async(message:any,options:any)=>{
+          w.backgammonLastSent={...message,host_id:hostId};const applied=await send(message,options);
+          if(applied===true)w.backgammonRendered.push({host_id:hostId,move_count:message.move_count,actor:message.last_move_player_index,viewer:message.my_player_index,animate_override:options?.animate});
+          return applied;
+        };
+        return host;
+      };
+    }});
   });
+}
+
+async function expectOwnMoveImmediate(page:Page,moveCount:number,seat:number){
+  // Wait for the actual reducer/host completion; the HTTP response alone does
+  // not prove the accepted state has been drawn yet.
+  await expect.poll(()=>page.evaluate(count=>(window as any).backgammonRendered.some((message:any)=>message.host_id===(window as any).backgammonActiveHostId&&message.move_count===count),moveCount)).toBe(true);
+  const observed=await page.evaluate(({count,seat})=>({messages:(window as any).backgammonRendered.filter((message:any)=>message.host_id===(window as any).backgammonActiveHostId&&message.move_count===count&&message.viewer===seat),animated:(window as any).backgammonAnimationRecords.filter((item:any)=>item.host_id===(window as any).backgammonActiveHostId&&item.move_count===count)}),{count:moveCount,seat});
+  expect(observed.messages.length).toBeGreaterThan(0);expect(observed.messages.every((message:any)=>message.actor===seat)).toBe(true);expect(observed.animated).toEqual([]);
 }
 
 test('Backgammon appears in the ordinary catalog and finishes a two-player portal match',async({browser,request},testInfo)=>{
@@ -84,19 +114,24 @@ test('Backgammon appears in the ordinary catalog and finishes a two-player porta
       await expect(page.locator('#game-box .declarative-piece[data-ui-id^="checker_"]')).toHaveCount(30);
     }
     let current=await(await request.get(`/matches/${created.id}`,{headers:auth(alice)})).json();
-    let moves=0;
+    let moves=0,ownTurnEndingCheckerMoves=0;
     while(current.status==='ongoing'&&moves<305){
       const seat=current.turn_of_player_indices[0],page=pages[seat];
       const response=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`/matches/${created.id}/moves`);
       await nextAction(page);const result=await response;expect(result.ok(),await result.text()).toBeTruthy();
       current=await result.json();moves++;
+      expect(current.last_move_player_index).toBe(seat);await expectOwnMoveImmediate(page,current.move_count,seat);
+      if(result.request().postDataJSON()?.move?.action==='move'&&current.status==='ongoing'&&!current.turn_of_player_indices.includes(seat))ownTurnEndingCheckerMoves++;
       if(moves===2)await testInfo.attach('backgammon-legal-move',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
     }
-    expect(current.status).toBe('over');expect(moves).toBeGreaterThan(2);
-    for(const [seat,page] of pages.entries())await expect.poll(()=>page.evaluate(otherSeat=>(window as any).backgammonAnimations.some((id:string)=>id.startsWith('checker_'+otherSeat+'_')),1-seat)).toBe(true);
+    expect(current.status).toBe('over');expect(moves).toBeGreaterThan(2);expect(ownTurnEndingCheckerMoves).toBeGreaterThan(0);
+    for(const [seat,page] of pages.entries()){
+      await expect.poll(()=>page.evaluate(otherSeat=>(window as any).backgammonAnimationRecords.some((item:any)=>item.actor===otherSeat),1-seat)).toBe(true);
+      expect(await page.evaluate(()=>(window as any).backgammonAnimationRecords.every((item:any)=>Number.isInteger(item.actor)&&item.actor!==item.viewer))).toBe(true);
+    }
     await expect(pages[0].locator('#game-box .actionable')).toHaveCount(0);
     await testInfo.attach('backgammon-finished',{body:await pages[0].screenshot({fullPage:true}),contentType:'image/png'});
-    await testInfo.attach('backgammon-match-evidence',{body:JSON.stringify({game:game.id,version:game.version,match:created.id,moves,status:current.status,errors}),contentType:'application/json'});
+    await testInfo.attach('backgammon-match-evidence',{body:JSON.stringify({game:game.id,version:game.version,match:created.id,moves,own_turn_ending_checker_moves:ownTurnEndingCheckerMoves,status:current.status,errors}),contentType:'application/json'});
     expect(errors).toEqual([]);
   }finally{for(const context of contexts)await context.close();}
 });
@@ -123,12 +158,40 @@ test('Backgammon pass-and-play is immediate and computer play uses the ordinary 
   await expect(page.locator('#game-box .declarative-stage')).toBeVisible();
   for(let i=0;i<8;i++){
     const moving=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`/matches/${match.id}/moves`);
-    await nextAction(page);expect((await moving).ok()).toBeTruthy();
+    await nextAction(page);const accepted=await moving;expect(accepted.ok()).toBeTruthy();const result=await accepted.json();expect(result.last_move_player_index).toBe(0);await expectOwnMoveImmediate(page,result.move_count,0);
   }
   const current=await(await request.get(`/matches/${match.id}`,{headers:auth(user)})).json();
   expect(current.players.filter((player:any)=>player.kind==='computer')).toHaveLength(1);
   expect(current.move_count).toBeGreaterThanOrEqual(8);
-  await expect.poll(()=>page.evaluate(()=>(window as any).backgammonAnimations.length)).toBeGreaterThan(0);
+  await expect.poll(()=>page.evaluate(()=>(window as any).backgammonAnimationRecords.filter((item:any)=>item.actor_kind==='computer'&&item.actor!==item.viewer).length)).toBeGreaterThan(0);
+  expect(await page.evaluate(()=>(window as any).backgammonAnimationRecords.every((item:any)=>Number.isInteger(item.actor)&&item.actor!==item.viewer))).toBe(true);
   await expect(page.locator('#game-box .declarative-error:visible')).toHaveCount(0);
   await testInfo.attach('backgammon-computer',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
+});
+
+
+test('a device computer reply snaps the accepted own baseline before animating the combined opponent snapshot',async({page,request},testInfo)=>{
+  test.setTimeout(120000);
+  const game=await backgammon(request),full=await(await request.get(`/games/${game.id}/versions/${game.version}`)).json(),user=await createUser(request,uniqueName('Backgammon device actors'));
+  await countAnimations(page);await loginAs(page,user);await page.goto(`/static/portal.html#game=${game.id}`);
+  const writes:string[]=[];page.on('request',request=>{if(request.method()!=='GET'&&new URL(request.url()).pathname.startsWith('/matches'))writes.push(request.url());});
+  await page.evaluate(async game=>{const match=await offline.practice(game,'computer',2);selectMatch(match.id);},full);
+  await expect(page.locator('#game-box .declarative-stage')).toBeVisible();
+  let mixed:any=null;
+  for(let i=0;i<12&&!mixed;i++){
+    const before=await page.evaluate(()=>({count:state.match.move_count,rendered:(window as any).backgammonRendered.length,checker:!state.match.state.needRoll}));
+    await nextAction(page);
+    const after=await page.evaluate(()=>state.match.move_count);
+    await expect.poll(()=>page.evaluate(count=>(window as any).backgammonRendered.some((message:any)=>message.host_id===(window as any).backgammonActiveHostId&&message.move_count===count),after)).toBe(true);
+    if(before.checker&&after>before.count+1){
+      mixed=await page.evaluate(({start,before,after})=>({before,after,renders:(window as any).backgammonRendered.slice(start).filter((message:any)=>message.host_id===(window as any).backgammonActiveHostId),animations:(window as any).backgammonAnimationRecords.filter((item:any)=>item.host_id===(window as any).backgammonActiveHostId&&item.move_count>before)}),{start:before.rendered,before:before.count,after});
+    }
+  }
+  expect(mixed).not.toBeNull();
+  const baseline=mixed.renders.findIndex((message:any)=>message.move_count===mixed.before+1&&message.actor===0&&message.animate_override===false),opponent=mixed.renders.findIndex((message:any)=>message.move_count===mixed.after&&message.actor===1);
+  expect(baseline).toBeGreaterThanOrEqual(0);expect(opponent).toBeGreaterThan(baseline);
+  expect(mixed.animations.some((item:any)=>item.actor===1&&item.actor_kind==='computer'&&item.duration===1440)).toBe(true);
+  expect(mixed.animations.every((item:any)=>item.actor!==item.viewer)).toBe(true);
+  expect(writes).toEqual([]);await expect(page.locator('#game-box .declarative-error:visible')).toHaveCount(0);
+  await testInfo.attach('device-computer-mixed-actor-evidence',{body:JSON.stringify(mixed),contentType:'application/json'});
 });

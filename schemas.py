@@ -643,6 +643,10 @@ class MatchOut(BaseModel):
     turn_of_player_indices: list[int] | None
     state: JsonValue
     move_count: int
+    # The authoritative actor of the most recently accepted move. The next
+    # turn can retain that same seat or name several seats, so it cannot
+    # identify who just moved. No private move payload is included.
+    last_move_player_index: int | None = None
     bet_per_player: int = 0
     # The v2 name for [bet_per_player]: the stake each human put in the pot.
     max_loss: int = 0
@@ -674,7 +678,10 @@ class MatchOut(BaseModel):
     server_time: dt.datetime | None = None
 
     @classmethod
-    def of(cls, match: Match, now: dt.datetime | None = None) -> "MatchOut":
+    def of(cls, match: Match, now: dt.datetime | None = None, *,
+           include_last_move: bool = True) -> "MatchOut":
+        from game_platform.move_history import last_move_player_index
+
         return cls(
             turn_seconds=match.turn_seconds,
             turn_deadline=match.turn_deadline,
@@ -698,6 +705,7 @@ class MatchOut(BaseModel):
             else sorted(match.turn_of_player_indices),
             state=match.state,
             move_count=len(match.moves),
+            last_move_player_index=last_move_player_index(match.moves) if include_last_move else None,
             bet_per_player=match.bet_per_player,
             max_loss=match.bet_per_player,
             pending_leave_player_id=(
@@ -785,7 +793,9 @@ class MatchSummaryOut(BaseModel):
 
     @classmethod
     def of(cls, match: Match, now: dt.datetime | None = None) -> "MatchSummaryOut":
-        full = MatchOut.of(match, now=now).model_dump(exclude={"state"})
+        # Catalog/list summaries must not look up a legacy match's last move.
+        full = MatchOut.of(match, now=now, include_last_move=False).model_dump(
+            exclude={"state", "last_move_player_index"})
         return cls(**full, result=MatchResultOut.of(match))
 
 

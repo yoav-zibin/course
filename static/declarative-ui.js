@@ -251,6 +251,7 @@
     container.append(hintMessage, cameraTools, stage, pieceTools, controls, errorBox);
     const engine = createEngine(container);
     let latest = null, localState = null, revision = 0, renderedRevision = -1, destroyed = false, moveSent = false, selected = null, dragging = null, nativeDragging = null, currentScene = null, suppressClick = false;
+    let lastStateMoveCount = null, lastStateWasReplay = false;
     // The camera belongs to the host. It never reaches the reducer or make_move,
     // and survives complete scene snapshots, including replay and turn changes.
     const camera={x:0,y:0,zoom:1},touches=new Map();
@@ -522,10 +523,10 @@
       if(activeId)for(const node of container.querySelectorAll("[data-ui-id]"))if(node.dataset.uiId===activeId){node.focus({preventScroll:true});break;}
       if(activePieceAction)for(const node of pieceTools.querySelectorAll("[data-piece-action]"))if(node.dataset.pieceAction===activePieceAction){node.focus({preventScroll:true});break;}
     }
-    async function reduce(message, atRevision) {
-      if(destroyed || atRevision!==revision || message.type==="ui_event"&&!canAct())return;
+    async function reduce(message, atRevision, options = {}) {
+      if(destroyed || atRevision!==revision || message.type==="ui_event"&&!canAct())return false;
       const result=await engine.call(spec.ui_code,message,localState);
-      if(destroyed || atRevision!==revision)return;
+      if(destroyed || atRevision!==revision)return false;
       knownObject(result,["scene","local_state","make_move"],["scene"]);
       finiteJSON(result);
       if(result.make_move!==undefined && (message.type!=="ui_event" || !canAct()))throw new Error(t("ui.declarative.error.only_a_current_player_ui_event_may_emit_make_move", {}, "Only a current player UI event may emit make_move"));
@@ -534,19 +535,30 @@
       localState=result.local_state===undefined?null:clone(result.local_state);
       errorBox.hidden=true;
       if(result.make_move!==undefined && message.type==="ui_event" && canAct()) {moveSent=true;callbacks.onMove?.(clone(result.make_move));}
-      const animate=message.type==="state_changed"&&callbacks.animate===true&&!latest?.replay&&!global.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      const motionEnabled=message.type==="state_changed"&&options.animate!==false&&callbacks.animate===true&&!latest?.replay&&!global.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      // The actor belongs to the completed move, not the next turn. Missing
+      // metadata snaps conservatively; an own move never animates captures either.
+      const actor=message.last_move_player_index;
+      const viewer=message.my_player_index;
+      const knownOther=viewer===null||(Number.isInteger(viewer)&&viewer>=0&&viewer<10&&actor!==viewer);
+      const animate=motionEnabled&&!lastStateWasReplay&&Number.isInteger(lastStateMoveCount)&&Number.isInteger(message.move_count)&&message.move_count>lastStateMoveCount&&Number.isInteger(actor)&&actor>=0&&actor<10&&knownOther;
       // Polls can arrive just after a move starts. Keep the existing elements
       // and their animation clocks when the authoritative scene is unchanged.
-      if(animate&&currentScene&&JSON.stringify(scene)===JSON.stringify(currentScene)){
+      if(motionEnabled&&currentScene&&JSON.stringify(scene)===JSON.stringify(currentScene)){
         stage.setAttribute("aria-busy",String(moveSent));updateHints();
       }else draw(scene,animate);
+      if(message.type==="state_changed"){
+        lastStateMoveCount=Number.isInteger(message.move_count)?message.move_count:null;
+        lastStateWasReplay=Boolean(message.replay);
+      }
       callbacks.onScene?.(clone(scene));
+      return true;
     }
     callbacks.onReady?.();
     return {
-      send(message) {
+      send(message, options = {}) {
         latest=clone(message);revision++;moveSent=false;selected=null;dragging=null;nativeDragging=null;updateHints();const atRevision=revision;
-        queue=queue.then(()=>reduce(latest,atRevision)).catch(error);return queue;
+        queue=queue.then(()=>reduce(latest,atRevision,options)).catch(error);return queue;
       },
       destroy(){destroyed=true;revision++;touches.clear();cameraGesture=null;for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();global.removeEventListener("pointermove",cameraPointerMove);global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game");},
       dispatch,
@@ -556,10 +568,10 @@
     const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
     const data=value=>JSON.stringify(canonical(value)).replace(/</g,"\\u003c");
     return '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<link rel="stylesheet" href="/static/declarative-ui.css?v=4"><div id="declarative-game"></div>' +
+      '<link rel="stylesheet" href="/static/declarative-ui.css?v=5"><div id="declarative-game"></div>' +
       '<script type="application/json" id="i18n-strings">'+data(spec.strings || {})+'<'+'/script>' +
       '<script type="application/json" id="declarative-spec">'+data(spec)+'<'+'/script>' +
-      '<script src="/static/declarative-ui.js?v=4"><'+'/script><script>' +
+      '<script src="/static/declarative-ui.js?v=5"><'+'/script><script>' +
       'const host=DeclarativeUI.mount(document.getElementById("declarative-game"),' +
       'JSON.parse(document.getElementById("declarative-spec").textContent),' +
       '{onMove:move=>parent.postMessage({type:"make_move",move},"*"),' +

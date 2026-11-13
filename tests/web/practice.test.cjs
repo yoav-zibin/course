@@ -30,9 +30,12 @@ function setup(gameName='tictactoe',mode='computer') {
 test('v2 computer practice initializes, rejects illegal moves atomically, and survives offline reload',async()=>{
  const t=setup();let m=await t.offline.practice(t.game);
  assert.equal(m.state.board.length,9);assert.equal(m.token_pot,0);
+ assert.equal(m.last_move_player_index,null);
  m=await t.offline.practiceMove(m,{cell:0});
  assert.equal(m.move_count,2);assert.equal(m.state.board.filter(Boolean).length,2);
  assert.equal(m.turn_of_player_indices[0],0);
+ assert.deepEqual(Array.from(m.moves,move=>move.player_index),[0,1]);
+ assert.equal(m.last_move_player_index,1);
  const saved=JSON.stringify(t.offline.read().local);
  await assert.rejects(t.offline.practiceMove(m,{cell:0}),/taken/);
  // An illegal move must not change the saved practice match. (Cache
@@ -45,6 +48,7 @@ test('v2 computer practice initializes, rejects illegal moves atomically, and su
  const history=await restored.get(`/matches/${m.id}/history`);
  assert.equal(history.initial_state.board.filter(Boolean).length,0);
  assert.equal(history.moves.length,m.move_count);
+ assert.deepEqual(Array.from(history.moves,move=>move.player_index),[0,1,0,1]);
  assert.equal(t.requests,0);
 });
 test('pass-and-play v2 reaches a win with no computer or network moves',async()=>{
@@ -52,6 +56,8 @@ test('pass-and-play v2 reaches a win with no computer or network moves',async()=
  for(const cell of [0,3,1,4,2])m=await t.offline.practiceMove(m,{cell});
  assert.equal(m.status,'over');assert.equal(m.state.winner,0);assert.equal(m.move_count,5);
  assert.equal(m.turn_of_player_indices,null);assert.equal(t.requests,0);
+ assert.deepEqual(Array.from(m.moves,move=>move.player_index),[0,1,0,1,0]);
+ assert.equal(m.last_move_player_index,0);
  await assert.rejects(t.offline.practiceMove(m,{cell:8}),/changed/);
 });
 test('poker practice keeps full rules state separate from the human view and runs its computer',async()=>{
@@ -68,4 +74,57 @@ test('online match ids are never accepted by the local rules runner',async()=>{
 test('v1 practice still starts with browser-owned state',async()=>{
  const t=setup();delete t.game.server_code;
  const m=await t.offline.practice(t.game);assert.equal(m.state,null);assert.equal(m.move_count,0);
+ assert.equal(m.last_move_player_index,null);
+});
+test('local history records the human and every actor in a multi-computer reply chain',async()=>{
+ const t=setup();
+ t.game={...t.game,id:'actor-chain',allowed_player_counts:[3],server_code:`
+ const sequence=[0,1,1,2];
+ const game={
+  newMatch(ctx){return {state:{n:0,secret:42},turn:[ctx.players[0].id]};},
+  applyMove(state,playerId,move,ctx){
+   if(playerId!==ctx.players[sequence[state.n%4]].id||move.action!=='advance')throw new InvalidMove();
+   const n=state.n+1;return {state:{n,secret:42},turn:[ctx.players[sequence[n%4]].id]};
+  },
+  computerMove(){return {action:'advance'};},
+  viewFor(state){return {n:state.n};}
+ };`};
+ let m=await t.offline.practice(t.game,'computer',3);
+ assert.equal(m.last_move_player_index,null);
+ m=await t.offline.practiceMove(m,{action:'advance'});
+ assert.equal(m.move_count,4);assert.equal(m.last_move_player_index,2);
+ assert.deepEqual(Array.from(m.moves,move=>move.player_index),[0,1,1,2]);
+ assert.deepEqual(Array.from(m.moves,move=>move.new_state.n),[1,2,3,4]);
+ assert.ok(m.moves.every(move=>!('secret' in move.new_state)));
+ assert.deepEqual(Array.from(m.turn_of_player_indices),[0]);
+ const history=await t.offline.get(`/matches/${m.id}/history`);
+ assert.deepEqual(Array.from(history.moves,move=>move.player_index),[0,1,1,2]);
+ const startsWithComputer={...t.game,id:'computer-start',server_code:t.game.server_code.replace(
+  'state:{n:0,secret:42},turn:[ctx.players[0].id]',
+  'state:{n:3,secret:42},turn:[ctx.players[2].id]')};
+ const opening=await t.offline.practice(startsWithComputer,'computer',3);
+ assert.equal(opening.initialState.n,3);assert.equal(opening.move_count,1);
+ assert.equal(opening.last_move_player_index,2);
+ assert.deepEqual(Array.from(opening.moves,move=>move.player_index),[2]);
+ assert.equal(t.requests,0);
+});
+test('legacy saved practice history keeps unknown actors null without guessing or rewriting saves',async()=>{
+ const t=setup();let m=await t.offline.practice(t.game,'pass');
+ m=await t.offline.practiceMove(m,{cell:0});
+ const data=t.offline.read();
+ delete data.local[m.id].last_move_player_index;
+ for(const move of data.local[m.id].moves)delete move.player_index;
+ t.offline.write(data);
+ const saved=JSON.stringify(t.offline.read().local);
+ const restored=await t.offline.get(`/matches/${m.id}`);
+ assert.equal(restored.last_move_player_index,null);
+ assert.equal(restored.moves[0].player_index,null);
+ const history=await t.offline.get(`/matches/${m.id}/history`);
+ assert.equal(history.moves[0].player_index,null);
+ assert.equal((await t.offline.get(`/matches/${m.id}/moves`))[0].player_index,null);
+ assert.equal(JSON.stringify(t.offline.read().local),saved);
+ m=await t.offline.practiceMove(restored,{cell:3});
+ assert.equal(m.last_move_player_index,1);
+ assert.equal(m.moves[0].player_index,null);
+ assert.equal(m.moves[1].player_index,1);
 });

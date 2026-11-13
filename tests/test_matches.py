@@ -29,6 +29,7 @@ def test_create_a_match_with_computer_opponents(api: Api) -> None:
         "turn_of_player_indices": None,
         "state": None,
         "move_count": 0,
+        "last_move_player_index": None,
         "bet_per_player": 0,
         "max_loss": 0,
         "pending_leave_player_id": None,

@@ -116,6 +116,8 @@ def test_query_legacy_roster_refund_is_idempotent(store):
 
 
 def test_restart_and_second_instance_read_committed_move_without_loading_history(store):
+    from game_platform.schemas import MatchOut
+
     api = api_for(store)
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game = api.new_game(owner=alice)
@@ -133,6 +135,7 @@ def test_restart_and_second_instance_read_committed_move_without_loading_history
         record = second.get_match(match)
         assert len(record.moves) == 1
         assert record.state == {"board": [[1, 2], [3, 4]]}
+        assert MatchOut.of(record).last_move_player_index == 0
     assert second.get_match(match).moves[0].new_state == record.state
 
 

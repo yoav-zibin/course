@@ -258,6 +258,7 @@ const htmlFrame = new GameFrame(
 // replay and device practice. Declarative UI never receives platform credentials.
 const frame = {
   declarative: null,
+  lastMessage: null,
   load(code, spec, options = {}) {
     this.unload();
     if (spec) {
@@ -268,9 +269,19 @@ const frame = {
       });
     } else htmlFrame.load(code);
   },
-  send(message) { return this.declarative ? this.declarative.send(message) : htmlFrame.send(message); },
+  async send(message, options = {}) {
+    const host = this.declarative;
+    if (!host) return htmlFrame.send(message);
+    const applied = await host.send(message, options);
+    if (applied === true && this.declarative === host) this.lastMessage = {
+      move_count: message.move_count, replay: message.replay,
+      my_player_index: message.my_player_index,
+    };
+    return applied === true;
+  },
   unload() {
     if (this.declarative) { this.declarative.destroy(); this.declarative = null; }
+    this.lastMessage = null;
     htmlFrame.unload();
   },
 };
@@ -2038,6 +2049,51 @@ function redrawAfterLanguageChange() {
   }
 }
 
+// A poll or local computer chain can contain both our move and its replies.
+// Put the latest own move in place first, using only viewer-filtered history;
+// movement from there to the final snapshot then belongs to other players.
+async function declarativeTransition(match, message) {
+  const previous = frame.lastMessage;
+  if (!frame.declarative || !previous) return {};
+  if (previous.replay || message.replay) return {animate: false};
+  const delta = message.move_count - previous.move_count;
+  if (delta < 0) return {animate: false};
+  if (delta <= 1 || message.my_player_index === null) return {};
+  if (message.last_move_player_index === message.my_player_index || delta > 100) return {animate: false};
+  try {
+    let moves;
+    if (match.localMode) moves = (match.moves || []).slice(previous.move_count, message.move_count);
+    else if (typeof StoragePages !== "undefined" && await StoragePages.enabled()) {
+      const page = await portalRequest("GET", `/v2/matches/${match.id}/history?start=${previous.move_count}&limit=${delta}`, {user: me()});
+      moves = page.items;
+    } else {
+      const history = await portalRequest("GET", `/matches/${match.id}/moves`, {user: me()});
+      moves = history.slice(previous.move_count, message.move_count);
+    }
+    if (!Array.isArray(moves) || moves.length !== delta || moves.some((move, index) =>
+      !Number.isInteger(move.player_index) || move.player_index < 0 || move.player_index > 9 ||
+      !Object.hasOwn(move, "new_state") || !Object.hasOwn(move, "next_turn_player_indices") ||
+      (move.move_number !== undefined && move.move_number !== previous.move_count + index + 1))) return {animate: false};
+    let ownIndex = -1;
+    for (let index = moves.length - 1; index >= 0; index--) if (moves[index].player_index === message.my_player_index) { ownIndex = index; break; }
+    if (ownIndex < 0) return {};
+    const own = moves[ownIndex];
+    if (ownIndex === moves.length - 1) return {animate: false};
+    return {previous, baseline: {...message,
+      state: own.new_state, view: own.new_state,
+      turn_of_player_indices: own.next_turn_player_indices,
+      acting_for_player_index: null,
+      status: own.next_turn_player_indices === null ? "over" : "ongoing",
+      end_reason: own.next_turn_player_indices === null ? "finished" : null,
+      move_count: previous.move_count + ownIndex + 1,
+      last_move_player_index: own.player_index,
+    }};
+  } catch {
+    // Recovering from missing/old history must never animate our own move.
+    return {animate: false};
+  }
+}
+
 async function syncGame() {
   const match = state.match;
   if (!match || match.status === "waiting_for_players") {
@@ -2100,6 +2156,7 @@ async function syncGame() {
     mySeat: mySeat ? mySeat.player_index : null,
   });
   message.token_pot = view.token_pot ?? 0;
+  message.last_move_player_index = replay ? null : (match.last_move_player_index ?? null);
   if (PORTAL_SKINNED_GAME_IDS.has(match.game_id)) message.skin_palette = portalGameSkinPalette();
   // Let game UIs distinguish a historical snapshot from a live opponent turn.
   message.replay = replay ? { index: replay.index, total: match.move_count } : null;
@@ -2109,8 +2166,18 @@ async function syncGame() {
   Object.assign(message, texts);
   const json = JSON.stringify(message);
   if (json !== state.lastSent) {
+    const transition = await declarativeTransition(match, message);
+    if (!stillCurrent() || state.loaded !== key || json === state.lastSent) return;
     state.lastSent = json;
-    frame.send(message);
+    if (transition.baseline) {
+      if (frame.lastMessage !== transition.previous) transition.animate = false;
+      else {
+        const applied = await frame.send(transition.baseline, {animate: false});
+        if (!stillCurrent() || state.loaded !== key) return;
+        if (!applied) transition.animate = false;
+      }
+    }
+    await frame.send(message, {animate: transition.animate});
   }
 }
 

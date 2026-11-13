@@ -924,6 +924,12 @@
           "type": "integer",
           "minimum": 0
         },
+        "last_move_player_index": {
+          "description": "Actor of the last accepted move, independent of whose turn is next. Unknown or no move is null. Hosts animate only known opponent actors; the viewer's own moves update immediately.",
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 9
+        },
         "players": {
           "type": "array",
           "maxItems": 10,

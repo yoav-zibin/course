@@ -756,7 +756,8 @@ class QueryStore:
             count = data.get("move_count", 0)
             record = replace(
                 record,
-                moves=MoveHistory(count, lambda a, b: self._read_moves(ref, a, b)),
+                moves=MoveHistory(count, lambda a, b: self._read_moves(ref, a, b),
+                                  last_move_player_index=data.get("last_move_player_index")),
             )
         return record
 
@@ -976,6 +977,8 @@ class QueryStore:
                 match.id,
                 replace(match, moves=()),
                 move_count=len(match.moves),
+                last_move_player_index=(new_moves[-1].player_index if new_moves
+                                        else old.get("last_move_player_index")),
                 participants=participants,
                 historical_participants=sorted(
                     set(old.get("historical_participants", ()))

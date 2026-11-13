@@ -769,8 +769,11 @@ class PortalOffline {
       const history = localId.endsWith("/moves") || snapshot;
       const match = this.read().local[snapshot ? localId.slice(0, -8) : history ? localId.slice(0, -6) : localId];
       if (!match) throw new Error(I18n.t("ui.offline.err_practice_gone", {}, "Local practice is no longer saved."));
-      if (snapshot) return {initial_state: match.initialState ?? null, initial_turn_player_indices: Object.hasOwn(match,"initialTurn") ? match.initialTurn : (match.historyStart === 0 ? [0] : null), moves: match.moves || []};
-      return history ? (match.moves || []) : match;
+      // Saved games from before actor metadata keep an unknown actor. Never
+      // infer it from whose turn follows a move (a seat may move repeatedly).
+      const moves = (match.moves || []).map(move=>({...move,player_index:move.player_index??null}));
+      if (snapshot) return {initial_state: match.initialState ?? null, initial_turn_player_indices: Object.hasOwn(match,"initialTurn") ? match.initialTurn : (match.historyStart === 0 ? [0] : null), moves};
+      return history ? moves : {...match,last_move_player_index:match.last_move_player_index??null,...(match.moves?{moves}:{})};
     }
     let value;
     const identity = this.key();
@@ -912,7 +915,8 @@ class PortalOffline {
         );
       const previous = data.local[id];
       data.local[id] = this.apply(previous, body);
-      data.local[id].moves = [...(previous.moves || []), {new_state: body.new_state, next_turn_player_indices: body.next_turn_player_indices}];
+      data.local[id].last_move_player_index = null;
+      data.local[id].moves = [...(previous.moves || []), {player_index:null,new_state: body.new_state, next_turn_player_indices: body.next_turn_player_indices}];
       this.write(data, {cacheOnly: !reportFailure});
       return data.local[id];
     }
@@ -1118,6 +1122,7 @@ class PortalOffline {
       state: null,
       turn_of_player_indices: [0],
       move_count: 0,
+      last_move_player_index: null,
       end_reason: null,
       created_at: new Date().toISOString(),
       localMode: mode,
@@ -1141,7 +1146,7 @@ class PortalOffline {
     this.write(d);
     return match;
   }
-  async practiceResult(game, match, result, record = true) {
+  async practiceResult(game, match, result, record = true, actor = null) {
     const ids = match.players.map(p=>p.id);
     if (!result || !("state" in result) || !(result.turn === null ||
         (Array.isArray(result.turn) && result.turn.length &&
@@ -1151,11 +1156,12 @@ class PortalOffline {
     match.turn_of_player_indices = result.turn === null ? null : result.turn.map(id=>ids.indexOf(id));
     match.status = result.turn === null ? "over" : "ongoing";
     match.end_reason = result.turn === null ? "finished" : null;
-    if (record) match.move_count++;
+    const playerIndex = Number.isInteger(actor) && actor >= 0 && actor < ids.length ? actor : null;
+    if (record) {match.move_count++;match.last_move_player_index=playerIndex;}
     const seat = match.localMode === "pass" ? (match.turn_of_player_indices?.[0] ?? 0) : 0;
     match.state = await PortalPractice.call(game,"viewFor",[match.logicState,ids[seat]],match);
-    if (record) match.moves = [...(match.moves || []), {
-      new_state:match.state,next_turn_player_indices:match.turn_of_player_indices}];
+    if (record) match.moves = [...(match.moves || []).map(move=>({...move,player_index:move.player_index??null})), {
+      player_index:playerIndex,new_state:match.state,next_turn_player_indices:match.turn_of_player_indices}];
   }
   async practiceComputers(game, match) {
     for (let count=0;match.status === "ongoing";count++) {
@@ -1164,7 +1170,7 @@ class PortalOffline {
       if (count >= 200) throw new Error(I18n.t("ui.offline.err_move_limit", {}, "Local game exceeded the computer move limit."));
       const move = await PortalPractice.call(game,"computerMove",[match.logicState,computer.id],match);
       const result = await PortalPractice.call(game,"applyMove",[match.logicState,computer.id,move],match);
-      await this.practiceResult(game,match,result);
+      await this.practiceResult(game,match,result,true,computer.player_index);
     }
   }
   async practiceMove(match, move) {
@@ -1180,7 +1186,7 @@ class PortalOffline {
     const seat = next.localMode === "pass" ? next.turn_of_player_indices[0] : 0;
     if (!next.turn_of_player_indices.includes(seat)) throw new Error(I18n.t("ui.error.not_your_turn", {}, "It isn't your turn."));
     const result = await PortalPractice.call(game,"applyMove",[next.logicState,next.players[seat].id,move],next);
-    await this.practiceResult(game,next,result);
+    await this.practiceResult(game,next,result,true,seat);
     await this.practiceComputers(game,next);
     if (identity !== this.key()) throw new Error(I18n.t("ui.offline.err_account_move", {}, "Account changed; move was not saved."));
     const data = this.read();

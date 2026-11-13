@@ -10,10 +10,13 @@ class MoveHistory(Sequence[Move]):
         count: int,
         read: Callable[[int, int], list[Move]],
         appended: tuple[Move, ...] = (),
+        *,
+        last_move_player_index: int | None = None,
     ):
         self.persisted_count = count
         self._read = read
         self.appended = appended
+        self._last_move_player_index = last_move_player_index
 
     def __len__(self) -> int:
         return self.persisted_count + len(self.appended)
@@ -50,7 +53,26 @@ class MoveHistory(Sequence[Move]):
         yield from self.appended
 
     def append(self, move: Move) -> "MoveHistory":
-        return MoveHistory(self.persisted_count, self._read, (*self.appended, move))
+        return MoveHistory(self.persisted_count, self._read, (*self.appended, move),
+                           last_move_player_index=move.player_index)
+
+    @property
+    def last_move_player_index(self) -> int | None:
+        if not len(self):
+            return None
+        if self.appended:
+            return self.appended[-1].player_index
+        if self._last_move_player_index is None:
+            # Matches written before actor metadata need at most one bounded
+            # immutable-history read, never a scan of their preceding moves.
+            self._last_move_player_index = self[-1].player_index
+        return self._last_move_player_index
+
+
+def last_move_player_index(history: Sequence[Move]) -> int | None:
+    if not history:
+        return None
+    return history.last_move_player_index if isinstance(history, MoveHistory) else history[-1].player_index
 
 
 def append_move(history: Sequence[Move], move: Move):

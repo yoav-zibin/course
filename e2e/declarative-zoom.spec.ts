@@ -7,7 +7,7 @@ async function mountBoard(page:Page,animate=true){
   await page.evaluate(async animate=>{
     const box=document.createElement('div');box.id='zoom-test';box.style.cssText='position:fixed;inset:0;z-index:9999;background:#102330';document.body.append(box);
     const spec={format:'buildplay-ui',version:1,viewport:{width:600,height:420},boards:[{id:'table',kind:'zone',x:0,y:0,width:600,height:420}],piece_types:{token:{shape:'circle',color:'#a7f070',width:50,height:50}},ui_code:`const gameUI={reduce(message){const s=message.type==='ui_event'?message.state_changed:message;const e=message.event;return {scene:{pieces:[{id:'checker',type:'token',board:'table',position:{x:s.view.x||220,y:210},text:'P',actions:['move'],move_targets:['home']}],targets:[{id:'home',board:'table',position:{x:380,y:210},label:'Home'}],labels:[{id:'event',x:20,y:20,text:e?e.type:'state'}]},...(e?.type==='drop'?{make_move:{to:e.target_id}}:{})};}};`};
-    const w=window as any;w.zoomMoves=[];w.zoomScenes=0;w.zoomSpec=spec;w.zoomMessage={type:'state_changed',view:{x:220},state:{},status:'ongoing',my_player_index:0,acting_for_player_index:0,move_count:0};
+    const w=window as any;w.zoomMoves=[];w.zoomScenes=0;w.zoomSpec=spec;w.zoomMessage={type:'state_changed',view:{x:220},state:{},status:'ongoing',players:[{player_index:0,kind:'human'},{player_index:1,kind:'human'}],my_player_index:0,acting_for_player_index:0,turn_of_player_indices:[0],last_move_player_index:null,move_count:0};
     w.zoomHost=w.DeclarativeUI.mount(box,spec,{animate,onMove:(move:any)=>w.zoomMoves.push(move),onScene:()=>w.zoomScenes++});await w.zoomHost.send(w.zoomMessage);
   },animate);
 }
@@ -79,7 +79,7 @@ test('pinch zoom stays anchored, pans, preserves state and still drops the legal
   await test.info().attach('zoom-board',{body:await page.locator('#zoom-test').screenshot(),contentType:'image/png'});
 });
 
-test('server moves animate stable pieces, while replay, local mode and reduced motion settle immediately',async({page})=>{
+test('only opponent and computer actors animate; own accepted moves, replay and reduced motion settle immediately',async({page})=>{
   await mountBoard(page);
   const pieces=page.locator('#zoom-test .declarative-piece');
   expect(await pieces.evaluate(node=>node.getAnimations().length)).toBe(0);
@@ -87,30 +87,45 @@ test('server moves animate stable pieces, while replay, local mode and reduced m
   const panStart=await screenPoint(page,300,300),beforePan=await camera(page);
   await page.mouse.move(panStart.x,panStart.y);await page.mouse.down();await page.mouse.move(panStart.x+20,panStart.y);await page.mouse.up();
   expect((await camera(page)).x).toBeLessThan(beforePan.x);
-  await page.evaluate(async()=>{const w=window as any;await w.zoomHost.send({...w.zoomMessage,view:{x:380},move_count:1});});
+  // The accepted actor is still me after my move passes the turn to seat 1.
+  await page.evaluate(async()=>{const w=window as any;await w.zoomHost.send({...w.zoomMessage,view:{x:300},move_count:1,last_move_player_index:0,turn_of_player_indices:[1],acting_for_player_index:null});});
+  expect(await pieces.evaluate(node=>node.getAnimations().length)).toBe(0);
+  await expect(pieces).toHaveAttribute('transform',/translate\(300 210\)/);
+  // Conversely, an opponent move remains an opponent move when it gives me the turn.
+  await page.evaluate(async()=>{const w=window as any;w.opponentMessage={...w.zoomMessage,view:{x:380},move_count:2,last_move_player_index:1,turn_of_player_indices:[0],acting_for_player_index:0};await w.zoomHost.send(w.opponentMessage);});
   expect(await pieces.evaluate(node=>node.getAnimations().length)).toBe(1);
   expect(await pieces.evaluate(node=>node.getAnimations()[0].effect!.getTiming().duration)).toBe(1440);
-  // An ordinary poll can land anywhere in the 2s polling cycle, including in
-  // the middle of a move. It must keep the same animation and elapsed time.
   await pieces.evaluate(node=>{(window as any).inFlightMove=node.getAnimations()[0];});
   await page.waitForFunction(()=>(window as any).inFlightMove.currentTime>=1000);
   expect(await page.evaluate(()=>(window as any).inFlightMove.playState)).toBe('running');
-  await page.evaluate(async()=>{const w=window as any;await w.zoomHost.send({...w.zoomMessage,view:{x:380},move_count:1});});
+  await page.evaluate(async()=>{const w=window as any;await w.zoomHost.send(w.opponentMessage);});
   const afterPoll=await pieces.evaluate(node=>{const animation=node.getAnimations()[0];return {same:animation===(window as any).inFlightMove,time:animation?.currentTime,state:animation?.playState};});
   expect(afterPoll.same).toBe(true);expect(Number(afterPoll.time)).toBeGreaterThanOrEqual(1000);expect(afterPoll.state).toBe('running');
   const during=await pieces.evaluate(node=>node.getCTM()!.e);
   await expect.poll(()=>pieces.evaluate(node=>node.getAnimations().length)).toBe(0);
   expect(await page.evaluate(()=>(window as any).inFlightMove.currentTime)).toBe(1440);
-  expect(await page.evaluate(()=>(window as any).zoomMoves)).toEqual([]);
   const settled=await pieces.evaluate(node=>node.getCTM()!.e);expect(settled).toBeGreaterThan(during);
-  await page.evaluate(async()=>{const w=window as any;await w.zoomHost.send({...w.zoomMessage,view:{x:220},move_count:0,replay:{index:0,total:1}});});
+  await page.evaluate(async()=>{const w=window as any;await w.zoomHost.send({...w.opponentMessage,view:{x:340}});});
+  expect(await pieces.evaluate(node=>node.getAnimations().length)).toBe(0);
+  await page.evaluate(async()=>{const w=window as any;await w.zoomHost.send({...w.zoomMessage,view:{x:260},move_count:3,last_move_player_index:null});});
+  expect(await pieces.evaluate(node=>node.getAnimations().length)).toBe(0);
+  await page.evaluate(async()=>{const w=window as any,message={...w.zoomMessage,view:{x:290},move_count:4,last_move_player_index:1};delete message.my_player_index;await w.zoomHost.send(message);});
+  expect(await pieces.evaluate(node=>node.getAnimations().length)).toBe(0);
+  await page.evaluate(async()=>{const w=window as any;await w.zoomHost.send({...w.zoomMessage,view:{x:220},move_count:0,last_move_player_index:1,replay:{index:0,total:4}});});
   expect(await pieces.evaluate(node=>node.getAnimations().length)).toBe(0);
   await page.emulateMedia({reducedMotion:'reduce'});
-  await page.evaluate(async()=>{const w=window as any;await w.zoomHost.send({...w.zoomMessage,view:{x:380},move_count:2});});
+  await page.evaluate(async()=>{const w=window as any;await w.zoomHost.send({...w.zoomMessage,view:{x:380},move_count:4,last_move_player_index:1});});
   expect(await pieces.evaluate(node=>node.getAnimations().length)).toBe(0);
   await page.emulateMedia({reducedMotion:'no-preference'});
-  await page.evaluate(async()=>{const w=window as any;w.zoomHost.destroy();w.zoomHost=w.DeclarativeUI.mount(document.getElementById('zoom-test'),w.zoomSpec,{animate:false});await w.zoomHost.send(w.zoomMessage);await w.zoomHost.send({...w.zoomMessage,view:{x:380},move_count:1});});
+  await page.evaluate(async()=>{const w=window as any;w.zoomHost.destroy();w.zoomHost=w.DeclarativeUI.mount(document.getElementById('zoom-test'),w.zoomSpec,{animate:false});await w.zoomHost.send(w.zoomMessage);await w.zoomHost.send({...w.zoomMessage,view:{x:380},move_count:1,last_move_player_index:1});});
   expect(await pieces.evaluate(node=>node.getAnimations().length)).toBe(0);
+  await page.evaluate(async()=>{const w=window as any;w.zoomHost.destroy();w.zoomHost=w.DeclarativeUI.mount(document.getElementById('zoom-test'),w.zoomSpec,{animate:true});const message={...w.zoomMessage,players:[{player_index:0,kind:'human'},{player_index:1,kind:'computer'}]};await w.zoomHost.send(message);await w.zoomHost.send({...message,view:{x:380},move_count:1,last_move_player_index:1});});
+  expect(await pieces.evaluate(node=>node.getAnimations().length)).toBe(1);
+  expect(await pieces.evaluate(node=>node.getAnimations()[0].effect!.getTiming().duration)).toBe(1440);
+  await page.evaluate(async()=>{const w=window as any;await w.zoomHost.send({...w.zoomMessage,view:{x:260},move_count:2,last_move_player_index:1},{animate:false});});
+  expect(await pieces.evaluate(node=>node.getAnimations().length)).toBe(0);
+  await page.evaluate(async()=>{const w=window as any;w.zoomHost.destroy();w.zoomHost=w.DeclarativeUI.mount(document.getElementById('zoom-test'),w.zoomSpec,{animate:true});const message={...w.zoomMessage,my_player_index:null,acting_for_player_index:null};await w.zoomHost.send(message);await w.zoomHost.send({...message,view:{x:380},move_count:1,last_move_player_index:0});});
+  expect(await pieces.evaluate(node=>node.getAnimations().length)).toBe(1);
   expect(await page.evaluate(()=>(window as any).zoomMoves)).toEqual([]);
 });
 
@@ -119,8 +134,8 @@ test('Backgammon legal drops work when pinched on phone and tablet, and opponent
   const example=JSON.parse(fs.readFileSync(path.join(__dirname,'../games/declarative/backgammon.json'),'utf8'));
   // Reuse the package's ordinary-server test vector and its filtered views.
   const step=example.unit_tests.cases[1],seat=step.ctx.players.findIndex((player:any)=>player.id===step.player_id);
-  const message=(view:any,count:number)=>({type:'state_changed',state:view,view,players:step.ctx.players.map((player:any,index:number)=>({player_index:index,player_id:player.id,name:player.display_name,kind:player.kind})),status:'ongoing',acting_for_player_index:seat,my_player_index:seat,turn_of_player_indices:[view.cur],move_count:count});
-  const before=message(step.view_of_mover,step.ctx.move_count),after=message(step.expected_view_of_mover,step.ctx.move_count+1);
+  const message=(view:any,count:number,viewer=seat,actor:number|null=null)=>({type:'state_changed',state:view,view,players:step.ctx.players.map((player:any,index:number)=>({player_index:index,player_id:player.id,name:player.display_name,kind:player.kind})),status:view.winner===null?'ongoing':'over',acting_for_player_index:view.winner===null&&view.cur===viewer?viewer:null,my_player_index:viewer,turn_of_player_indices:view.winner===null?[view.cur]:null,last_move_player_index:actor,move_count:count});
+  const before=message(step.view_of_mover,step.ctx.move_count),after=message(step.expected_view_of_mover,step.ctx.move_count+1,seat,seat);
   await page.goto('/static/declarative-test.html');
   await page.evaluate(async({spec,before,after})=>{
     const box=document.createElement('div');box.id='zoom-test';box.style.cssText='position:fixed;inset:0;z-index:9999;background:#102330';document.body.append(box);
@@ -145,8 +160,8 @@ test('Backgammon legal drops work when pinched on phone and tablet, and opponent
   await expect.poll(()=>page.evaluate(()=>(window as any).bgMoves)).toEqual([step.move]);
   const fittedCamera=await camera(page);
   await page.evaluate(async()=>{const w=window as any;await w.bgHost.send(w.bgAfter);});
-  expect(await piece.evaluate(node=>node.getAnimations().length)).toBe(1);
-  await expect.poll(()=>piece.evaluate(node=>node.getAnimations().length)).toBe(0);
+  // The accepted move belongs to this viewer, so it settles immediately.
+  expect(await piece.evaluate(node=>node.getAnimations().length)).toBe(0);
   expect(await camera(page)).toEqual(fittedCamera);
   // Watch the same authoritative move as the opponent, with no actionable pieces.
   await page.evaluate(async()=>{const w=window as any;w.bgHost.destroy();w.bgHost=w.DeclarativeUI.mount(document.getElementById('zoom-test'),w.bgSpec,{animate:true,onMove:(move:any)=>w.bgMoves.push(move)});await w.bgHost.send({...w.bgBefore,my_player_index:1-w.bgBefore.my_player_index,acting_for_player_index:null});});
@@ -160,12 +175,18 @@ test('Backgammon legal drops work when pinched on phone and tablet, and opponent
   // Hits, bar re-entry and bearing off keep the physical checker IDs, so their
   // movements animate just like ordinary moves without inventing UI rules.
   for(const vector of example.unit_tests.cases.filter((item:any)=>['Hit a blot','Re-enter from bar','Bear off'].includes(item.name))){
-    const beforeVector=message(vector.view_of_mover,vector.ctx.move_count),afterVector=message(vector.expected_view_of_mover,vector.ctx.move_count+1);
+    const actor=vector.ctx.players.findIndex((player:any)=>player.id===vector.player_id),viewer=1-actor;
+    // A hit can also displace the other player's checker; the move actor still
+    // determines whether both displaced pieces should animate.
+    await page.evaluate(async({before,after})=>{const w=window as any;w.bgHost.destroy();w.bgHost=w.DeclarativeUI.mount(document.getElementById('zoom-test'),w.bgSpec,{animate:true});await w.bgHost.send(before);await w.bgHost.send(after);},{before:message(vector.view_of_mover,vector.ctx.move_count,actor),after:message(vector.expected_view_of_mover,vector.ctx.move_count+1,actor,actor)});
+    expect(await page.locator('#zoom-test').evaluate(node=>node.getAnimations({subtree:true}).length)).toBe(0);
+    const beforeVector=message(vector.view_of_mover,vector.ctx.move_count,viewer),afterVector=message(vector.expected_view_of_mover,vector.ctx.move_count+1,viewer,actor);
     await page.evaluate(async({before,after})=>{const w=window as any;w.bgHost.destroy();w.bgHost=w.DeclarativeUI.mount(document.getElementById('zoom-test'),w.bgSpec,{animate:true,onScene:(scene:any)=>w.bgScene=scene});await w.bgHost.send(before);w.bgAfter=after;w.bgIds=w.bgScene.pieces.filter((piece:any)=>piece.id.startsWith('checker_')).map((piece:any)=>piece.id).sort();},{before:beforeVector,after:afterVector});
     await page.locator('#zoom-test [data-camera-action="in"]').click();
     await page.evaluate(async()=>{const w=window as any;await w.bgHost.send(w.bgAfter);});
-    const animationState=await page.locator('#zoom-test').evaluate(node=>{const w=window as any;return {ids:w.bgScene.pieces.filter((piece:any)=>piece.id.startsWith('checker_')).map((piece:any)=>piece.id).sort(),before:w.bgIds,moving:node.getAnimations({subtree:true}).length};});
+    const animationState=await page.locator('#zoom-test').evaluate(node=>{const w=window as any;return {ids:w.bgScene.pieces.filter((piece:any)=>piece.id.startsWith('checker_')).map((piece:any)=>piece.id).sort(),before:w.bgIds,moving:node.getAnimations({subtree:true}).length,animated:[...node.querySelectorAll('.declarative-piece')].filter(piece=>piece.getAnimations().length).map((piece:HTMLElement)=>piece.dataset.uiId)};});
     expect(animationState.ids).toEqual(animationState.before);expect(animationState.ids.length).toBe(30);expect(animationState.moving).toBeGreaterThanOrEqual(vector.name==='Hit a blot'?2:1);
+    if(vector.name==='Hit a blot'){expect(animationState.animated.some(id=>id?.startsWith('checker_'+actor+'_'))).toBe(true);expect(animationState.animated.some(id=>id?.startsWith('checker_'+viewer+'_'))).toBe(true);}
     await expect.poll(()=>page.locator('#zoom-test').evaluate(node=>node.getAnimations({subtree:true}).length)).toBe(0);
   }
   const evidence=path.join('/tmp',`declarative-backgammon-${testInfo.project.name==='chromium'?'tablet':'phone'}.png`);

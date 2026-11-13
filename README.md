@@ -26,7 +26,8 @@ legal destinations. The [authoring guide](docs/declarative-games.md#always-show-
 also describes click, rotation and resize hints for browser and native hosts.
 Declarative games use the regular catalog and match APIs and are labeled
 **(Declarative)** in the portal. Their board supports pinch zoom and panning;
-multiplayer and computer matches animate pieces between server updates.
+multiplayer and computer matches animate opponent moves between server updates.
+Your own moves update immediately.
 Backgammon shares the regular game's authoritative rules JavaScript.
 
 - **Game**: a playable rules package with authoritative QuickJS `server_code`
