@@ -161,11 +161,13 @@ function setupPortal(request) {
       replaceChildren(...children){this.children=children;},setAttribute(){},addEventListener(){},focus(){}});
     return nodes.get(id);
   };
-  const window={addEventListener(){}};
+  const window={addEventListener(){},scrollTo(){}};
+  const fakeLocation={pathname:'/static/portal.html',hash:'',search:'',assign(){}};
+  const setUrl=url=>{if(url==null)return;const m=String(url).match(/^([^?#]*)(\?[^#]*)?(#.*)?$/);if(m[2]!==undefined){fakeLocation.search=m[2];fakeLocation.hash=m[3]||'';}else if(m[3]!==undefined){fakeLocation.hash=m[3];}else if(m[1]===''){}else{fakeLocation.search='';fakeLocation.hash='';}};
   const ctx=vm.createContext({StoragePages:{enabled:async()=>false,list:(request,path,options)=>request("GET",path,options),controls(){},search(){return false;}},console,Map,Set,URLSearchParams,Date,Math,Number,String,
     navigator:{onLine:true},localStorage:{},PortalOffline:class {api(...args){return request(...args);}read(){return {};}write(){}},
-    document:{getElementById:node,body:{classList:{toggle(){}}}},window,
-    location:{hash:'',search:'',assign(){}},history:{replaceState(){}},
+    document:{getElementById:node,body:{dataset:{},classList:{toggle(){}}},documentElement:{dataset:{}},querySelector(){return null;},querySelectorAll(){return [];}},window,
+    location:fakeLocation,history:{replaceState(s,title,url){setUrl(url);},pushState(s,title,url){setUrl(url);}},
     Auth:{current:()=>({id:'owner'})},I18n,GameFrame:class{load(){}unload(){}send(){}},
     apiRequest:request,formatTime:()=>'',shortId:x=>x,showPageError(){},el:(tag,attrs={},...children)=>({...attrs,children})});
   vm.runInContext(read('portal-speed.js'),ctx);

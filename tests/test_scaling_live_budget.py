@@ -178,7 +178,7 @@ def test_real_sdk_and_event_driven_worker_use_budgeted_emulator(tmp_path):
             demo = http.get("/demo", auth=("demo", "test"), follow_redirects=False)
             assert demo.headers["location"] == "/portal"
             portal = http.get("/portal", auth=("demo", "test"))
-            assert "Game platform · Portal" in portal.text
+            assert "BuildPlay.fun · Games" in portal.text
             assert "Play. Replay." not in portal.text
             assert http.get("/storage/capabilities", auth=("demo", "test")).json()[
                 "pagination"
