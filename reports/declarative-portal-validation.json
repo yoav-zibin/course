@@ -117,8 +117,8 @@
     ],
     "visual_verification": "Inspected final navy game background, readable title/turn, bright X and O after the scoped frame background fix",
     "screenshot_paths": [
-      "/tmp/declarative-evidence/declarative-practice.png",
-      "/tmp/declarative-evidence/declarative-covered-card.png"
+      "../docs/images/declarative-practice.png",
+      "../docs/images/declarative-covered-card.png"
     ]
   }
 }

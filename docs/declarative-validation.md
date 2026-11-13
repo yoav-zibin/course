@@ -47,6 +47,10 @@ Memory views, practice reload, replay, offline moves, and face-down artwork and
 accessibility labels. A visual review also confirmed readable game titles and
 player-colored marks against the portal's dark game surface.
 
+Representative captured browser screens:
+[offline practice](images/declarative-practice.png) and
+[explicit card-back artwork](images/declarative-covered-card.png).
+
 ## Contract and regression checks
 
 The focused Python tests cover the schema and ID/topology references, image
