@@ -102,9 +102,6 @@ def main() -> None:
     if args.print_config:
         print(config.model_dump_json(indent=2))
         return
-    if (config.debug_tools and not config.master_password
-            and config.server.host not in ("127.0.0.1", "::1", "localhost")):
-        raise ValueError("master_password is required when debug tools bind outside loopback")
     push_config = config.push
     if env_key := os.environ.get("GAME_PLATFORM_VAPID_PRIVATE_KEY"):
         push_config = push_config.model_copy(update={"vapid_private_key": env_key})

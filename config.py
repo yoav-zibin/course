@@ -246,25 +246,29 @@ class Config(_Section):
     # immediately.
     computer_move_delay_seconds: float = 0.6
     @model_validator(mode="after")
-    def _require_master_password_for_hostnames(self) -> "Config":
+    def _require_master_password_outside_loopback(self) -> "Config":
+        # The debug tools publish every user's password (/debug/all-data) and the
+        # admin delete endpoints, so only a server that this machine alone can reach
+        # may run them without a password. 0.0.0.0 and :: listen on every interface.
         if (
             self.debug_tools
             and not self.master_password
-            and not _is_ip_address(self.server.host)
+            and not _is_loopback(self.server.host)
         ):
             raise ValueError(
                 f"master_password must be set when server.host ({self.server.host!r}) "
-                "is a hostname rather than a numeric IP address"
+                "is not a loopback address (127.0.0.1, ::1 or localhost)"
             )
         return self
 
 
-def _is_ip_address(host: str) -> bool:
+def _is_loopback(host: str) -> bool:
+    if host == "localhost":
+        return True
     try:
-        ipaddress.ip_address(host)
+        return ipaddress.ip_address(host).is_loopback
     except ValueError:
         return False
-    return True
 
 
 def load_config(path: Path) -> Config:

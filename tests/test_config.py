@@ -73,19 +73,24 @@ def test_invalid_configs_are_rejected(tmp_path: Path) -> None:
     ("config", "expected_error"),
     [
         ({"server": {"host": "127.0.0.1"}}, None),
-        ({"server": {"host": "0.0.0.0"}}, None),
-        ({"server": {"host": "::"}}, None),
-        (
-            {"server": {"host": "localhost"}},
-            "Value error, master_password must be set when server.host ('localhost') "
-            "is a hostname rather than a numeric IP address",
+        ({"server": {"host": "::1"}}, None),
+        ({"server": {"host": "localhost"}}, None),
+        # Regression (bug 18): every interface, or any real address or hostname,
+        # needs a password.
+        *(
+            (
+                {"server": {"host": host}},
+                f"Value error, master_password must be set when server.host ({host!r}) "
+                "is not a loopback address (127.0.0.1, ::1 or localhost)",
+            )
+            for host in ("0.0.0.0", "::", "10.0.0.5", "example.com")
         ),
-        ({"server": {"host": "localhost"}, "master_password": "s3cret"}, None),
+        ({"server": {"host": "0.0.0.0"}, "master_password": "s3cret"}, None),
         # Without debug tools there is nothing for the password to protect.
-        ({"server": {"host": "localhost"}, "debug_tools": False}, None),
+        ({"server": {"host": "0.0.0.0"}, "debug_tools": False}, None),
     ],
 )
-def test_a_hostname_needs_a_master_password(
+def test_a_non_loopback_host_needs_a_master_password(
     tmp_path: Path, config: object, expected_error: str | None
 ) -> None:
     path = _write_config(tmp_path, config)
