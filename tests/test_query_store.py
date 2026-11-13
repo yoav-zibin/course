@@ -314,7 +314,11 @@ def test_verification_attempts_persist_and_second_instance_can_finish_login(stor
         first.verify_code(verification_id=identity, code="wrong")
     assert store.raw_get(store.ref("verifications", identity))["attempts"] == 1
     second = ScalablePlatform(store=QueryStore(store.client, namespace=store.namespace))
-    user, _ = second.verify_code(verification_id=identity, code=code)
+    api = api_for(second._store)
+    response = api.client.post("/auth/email/verify", json={"verification_id": identity, "code": code},
+                               headers={"X-Campaign-Code": "students-a"})
+    assert response.status_code == 200, response.text
+    user = second._store.get_user(response.json()["user_id"])
     assert user.linked_accounts[0].identifier == "test@example.com"
     # The second instance deleted the record; this store's read cache may
     # serve its copy for up to a refresh window (~1s), then it converges.
@@ -324,6 +328,20 @@ def test_verification_attempts_persist_and_second_instance_can_finish_login(stor
     while store.raw_get(store.ref("verifications", identity)) is not None:
         assert time.monotonic() < deadline
         time.sleep(0.05)
+
+
+@pytest.mark.parametrize("provider", ["email", "google"])
+def test_http_signup_preserves_match_invites_in_firestore(store, provider, monkeypatch):
+    from game_platform.tests.test_auth_match_invites import signup_api, assert_invited_signup
+
+    api, sender = signup_api(store)
+    assert_invited_signup(api, sender, provider, monkeypatch)
+
+
+def test_external_phone_http_verification_uses_firestore_challenges(store):
+    from game_platform.tests.test_auth_match_invites import assert_external_phone_signup
+
+    assert_external_phone_signup(store)
 
 
 def test_two_instances_can_claim_a_game_proposal_only_once(store):

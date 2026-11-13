@@ -2326,6 +2326,7 @@
 :root[data-skin="meadow"] .creator-toggle { color:#328038; }
 
 :root[data-skin="meadow"] .portal-shell .library-toolbar button { color:#4a7250; }
+:root[data-skin="meadow"] .portal-shell #browse-games { color:#175f2c; border-color:#3a7d4b; }
 
 :root[data-skin="meadow"] .portal-sidebar .list-item:hover,
 :root[data-skin="meadow"] .portal-sidebar .list-item[aria-selected="true"] { background:#bdfacc; }
@@ -2563,6 +2564,10 @@
 
 :root[data-skin="riso-club"] .portal-shell button.primary:hover:not(:disabled) {
   background: #183583;
+}
+
+:root[data-skin="riso-club"] .portal-shell .library-toolbar button[aria-pressed="false"] {
+  color: var(--riso-ink);
 }
 
 :root[data-skin="riso-club"] .portal-shell :is(.game-option:hover, .game-option[aria-selected="true"], .library-card:hover) {

@@ -108,7 +108,11 @@ def test_scene_rejects_unknown_references_bad_geometry_and_markup(scene):
 
 
 @pytest.mark.parametrize("message", [state_changed(), {"type": "ui_event", "event": {"type": "tap", "id": "a"},
-    "state_changed": state_changed(acting_for_player_index=None)}])
+    "state_changed": state_changed(acting_for_player_index=None)},
+    {"type": "ui_event", "event": {"type": "tap", "id": "a"},
+     "state_changed": state_changed(replay={})},
+    {"type": "ui_event", "event": {"type": "tap", "id": "a"},
+     "state_changed": state_changed(replay={"index": 0, "total": 2})}])
 def test_presentation_may_only_move_from_current_player_event(message):
     ui = spec("const gameUI={reduce(){return {scene:{},make_move:{add:1}}}}")
     with pytest.raises(DeclarativeUIError, match="current player UI event"):

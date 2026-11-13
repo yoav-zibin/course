@@ -600,6 +600,7 @@ def _login_or_link(
     picture_url: str = "",
     as_user_id: str | None,
     invited_by_user_id: str | None = None,
+    invite_token: str | None = None,
     campaign_code: str | None = None,
 ) -> AuthResponse:
     user, merged_from = platform.login_with_linked_account(
@@ -610,6 +611,7 @@ def _login_or_link(
         picture_url=picture_url,
         as_user_id=as_user_id,
         invited_by_user_id=invited_by_user_id,
+        invite_token=invite_token,
         campaign_code=campaign_code,
     )
     return AuthResponse.of(user, merged_from_user_id=merged_from)
@@ -645,6 +647,7 @@ def auth_google(
         picture_url=picture_url,
         as_user_id=caller_id,
         invited_by_user_id=body.invited_by_user_id,
+        invite_token=body.invite_token,
         campaign_code=x_campaign_code,
     )
 
@@ -723,6 +726,7 @@ def phone_verify(
             display_name=body.display_name,
             as_user_id=caller_id,
             invited_by_user_id=body.invited_by_user_id,
+            invite_token=body.invite_token,
             campaign_code=x_campaign_code,
         )
     else:
@@ -732,6 +736,7 @@ def phone_verify(
             display_name=body.display_name,
             as_user_id=caller_id,
             invited_by_user_id=body.invited_by_user_id,
+            invite_token=body.invite_token,
             campaign_code=x_campaign_code,
         )
     return AuthResponse.of(
@@ -776,6 +781,7 @@ def email_verify(
         display_name=body.display_name,
         as_user_id=caller_id,
         invited_by_user_id=body.invited_by_user_id,
+        invite_token=body.invite_token,
         campaign_code=x_campaign_code,
     )
     return AuthResponse.of(user, merged_from_user_id=merged_from)

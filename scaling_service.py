@@ -817,6 +817,42 @@ class ScalablePlatform(GamePlatform):
             )
         return identity, code, normalized
 
+    def _pending_phone_record(self, verification_id):
+        record = self._store.raw_get(self._store.ref("verifications", verification_id))
+        if (not record or record["kind"] != "phone"
+                or record["expires_at"] < self._clock()):
+            raise NotFoundError("verification not found or expired")
+        if record["attempts"] >= VERIFICATION_MAX_ATTEMPTS:
+            raise ConflictError("too many wrong codes; request a new one")
+        return record
+
+    def pending_external_phone(self, verification_id):
+        with self._store.atomic():
+            return self._pending_phone_record(verification_id)["identifier"]
+
+    def finish_external_phone(
+        self, verification_id, *, approved, display_name=None, as_user_id=None,
+        invited_by_user_id=None, invite_token=None, campaign_code=None,
+    ):
+        # The provider check happens outside the transaction. Re-read the durable
+        # challenge before consuming it, so retries/other instances cannot reuse it.
+        ref = self._store.ref("verifications", verification_id)
+        with self._store.atomic():
+            record = self._pending_phone_record(verification_id)
+            if not approved:
+                self._store.raw_put(ref, {**record, "attempts": record["attempts"] + 1})
+            else:
+                result = self.login_with_linked_account(
+                    kind="phone", identifier=record["identifier"],
+                    display_name=display_name or record["identifier"],
+                    as_user_id=as_user_id, invited_by_user_id=invited_by_user_id,
+                    invite_token=invite_token, campaign_code=campaign_code,
+                )
+                self._store.raw_put(ref, None)
+        if not approved:
+            raise InvalidRequestError("wrong code")
+        return result
+
     def verify_code(
         self,
         *,
@@ -825,6 +861,8 @@ class ScalablePlatform(GamePlatform):
         display_name=None,
         as_user_id=None,
         invited_by_user_id=None,
+        invite_token=None,
+        campaign_code=None,
     ):
         ref = self._store.ref("verifications", verification_id)
         error = None
@@ -850,6 +888,8 @@ class ScalablePlatform(GamePlatform):
                     display_name=display_name or record["identifier"].split("@")[0],
                     as_user_id=as_user_id,
                     invited_by_user_id=invited_by_user_id,
+                    invite_token=invite_token,
+                    campaign_code=campaign_code,
                 )
                 self._store.raw_put(ref, None)
         if error:

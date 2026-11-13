@@ -1447,6 +1447,7 @@ class GamePlatform:
         display_name: str | None = None,
         as_user_id: str | None = None,
         invited_by_user_id: str | None = None,
+        invite_token: str | None = None,
         campaign_code: str | None = None,
     ) -> tuple[User, str | None]:
         with self._lock:
@@ -1461,6 +1462,7 @@ class GamePlatform:
                 display_name=display_name or entry.identifier,
                 as_user_id=as_user_id,
                 invited_by_user_id=invited_by_user_id,
+                invite_token=invite_token,
                 campaign_code=campaign_code,
             )
 
@@ -1472,6 +1474,7 @@ class GamePlatform:
         display_name: str | None = None,
         as_user_id: str | None = None,
         invited_by_user_id: str | None = None,
+        invite_token: str | None = None,
         campaign_code: str | None = None,
     ) -> tuple[User, str | None]:
         """Checks a login code, then logs the owner in (see
@@ -1507,6 +1510,7 @@ class GamePlatform:
                 display_name=name,
                 as_user_id=as_user_id,
                 invited_by_user_id=invited_by_user_id,
+                invite_token=invite_token,
                 campaign_code=campaign_code,
             )
 
@@ -1520,6 +1524,7 @@ class GamePlatform:
         picture_url: str = "",
         as_user_id: str | None = None,
         invited_by_user_id: str | None = None,
+        invite_token: str | None = None,
         campaign_code: str | None = None,
     ) -> tuple[User, str | None]:
         """Logs in with a verified Google subject, phone number or email.
@@ -1548,6 +1553,7 @@ class GamePlatform:
                             picture_url=picture_url.strip(),
                             linked_accounts=(linked,),
                             invited_by_user_id=invited_by_user_id,
+                            invite_token=invite_token,
                             campaign_code=campaign_code,
                         ),
                         None,

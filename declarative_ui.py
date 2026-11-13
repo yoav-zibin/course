@@ -219,7 +219,8 @@ class DeclarativeLogic:
         validate_response(self.spec, response)
         if "make_move" in response:
             state = message if message["type"] == "state_changed" else message.get("state_changed", {})
-            if message["type"] != "ui_event" or state.get("acting_for_player_index") is None or state.get("status") != "ongoing":
+            if (message["type"] != "ui_event" or state.get("acting_for_player_index") is None
+                    or state.get("status") != "ongoing" or state.get("replay") is not None):
                 raise DeclarativeUIError("Only a current player UI event may emit make_move")
         return response
 

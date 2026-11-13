@@ -171,10 +171,21 @@ def validate_image(image):
         # Inline HTML tolerates a missing namespace; standalone SVG <img>
         # documents do not. Normalize accepted model output before saving it.
         import re
-        def namespace(match):
-            attrs = re.sub(r'\sxmlns\s*=\s*([\"\'])\1', '', match.group(1))
-            return '<svg xmlns="http://www.w3.org/2000/svg"' + attrs + '>'
-        image['svg'] = re.sub(r'<svg\b([^>]*)>', namespace, svg, count=1)
+        # Skip the XML prolog and comments, and respect quoted attributes. A
+        # sketch of <svg> in a comment is not the document's opening element.
+        opening = re.match(
+            r'''\A(?:\ufeff|\s|<!--.*?-->|<\?.*?\?>)*(<svg\b((?:"[^"]*"|'[^']*'|[^'">])*)>)''',
+            svg, re.S,
+        )
+        if opening is None:
+            raise InvalidRequestError('Expected SVG opening element')
+        attrs = re.sub(
+            r'''\s+([^\s=]+)\s*=\s*("[^"]*"|'[^']*')''',
+            lambda match: '' if match[1] == 'xmlns' and match[2] in ('""', "''") else match[0],
+            opening[2],
+        )
+        image['svg'] = (svg[:opening.start(1)] + '<svg xmlns="http://www.w3.org/2000/svg"'
+                        + attrs + '>' + svg[opening.end(1):])
 
 
 def validate_cover(image):

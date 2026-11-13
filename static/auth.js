@@ -180,7 +180,9 @@ const Auth = (() => {
     try {
       ref = localStorage.getItem(INVITER_KEY);
     } catch {}
-    return ref ? { ...body, invited_by_user_id: ref } : body;
+    const token = inviteTokenInUrl();
+    const attributed = token ? { ...body, invite_token: token } : body;
+    return ref ? { ...attributed, invited_by_user_id: ref } : attributed;
   }
 
   /** A link that credits [account] with everyone who signs up through it: the short
@@ -479,11 +481,8 @@ const Auth = (() => {
 
   async function createGuest(displayName = "") {
     const name = displayName.trim() || I18n.t("ui.auth.guest_default_name", { number: accounts().length + 1 }, `Guest ${accounts().length + 1}`);
-    // Signing up from a match invite link (/portal#invite=<token>) credits its
-    // creator with the referral.
-    const inviteToken = inviteTokenInUrl();
     const user = await apiRequest("POST", "/users", {
-      body: newAccountBody(inviteToken ? { display_name: name, invite_token: inviteToken } : { display_name: name }),
+      body: newAccountBody({ display_name: name }),
     });
     return {
       user_id: user.id,

@@ -112,6 +112,8 @@ test(`a guest created from a match invite link ${where} carries the token`,async
     window:{addEventListener(){}},document:{dispatchEvent(){}},el:()=>({}),I18n:{t:(key,params,fallback)=>fallback},
     apiRequest:async(method,pathname,{body})=>{sent={method,pathname,body};return {id:'u',display_name:'Bob',password:'pw'};}});
   vm.runInContext(AUTH_JS+'\nthis.Auth=Auth;',ctx);
+  for (const body of [{id_token:'fake-google-token'}, {verification_id:'local-code',code:'123456'}])
+    assert.deepEqual({...ctx.Auth.newAccountBody(body)},{...body,invite_token:'tok123'});
   await ctx.Auth.createGuest('Bob');
   assert.equal(sent.pathname,'/users');
   assert.deepEqual({...sent.body},{display_name:'Bob',invite_token:'tok123'});

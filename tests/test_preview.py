@@ -54,11 +54,28 @@ def test_preview_forwards_every_api_area_the_pages_call():
         return httpx.Response(200, json={})
     with TestClient(preview.create_preview('https://buildplay.fun', transport=httpx.MockTransport(backend))) as client:
         for path in ['/games', '/i18n/locales', '/i18n/catalogs/es', '/push/config', '/invites/x',
-                     '/matchmaking/quick-match', '/storage/capabilities', '/v2/games']:
+                     '/matchmaking/quick-match', '/storage/capabilities', '/v2/games',
+                     '/batch?requests=%5B%5D']:
             method = client.post if path.startswith('/matchmaking') else client.get
             assert method(path).status_code == 200, path
         assert client.get('/admin/stats').status_code == 404
     assert '/push/config' in seen and '/invites/x' in seen
+
+
+def test_preview_preserves_product_request_headers_and_retry_advice():
+    def backend(request):
+        for name, value in {'idempotency-key': 'move-123', 'accept-language': 'es',
+                            'x-campaign-code': 'students-a'}.items():
+            assert request.headers[name] == value
+        assert 'x-api-key' not in request.headers
+        return httpx.Response(429, json={'detail': 'busy'}, headers={'Retry-After': '15'})
+    with TestClient(preview.create_preview('https://buildplay.fun', transport=httpx.MockTransport(backend))) as client:
+        response = client.post('/matches/test/moves', json={'move': {}}, headers={
+            'Idempotency-Key': 'move-123', 'Accept-Language': 'es',
+            'X-Campaign-Code': 'students-a', 'X-Api-Key': 'not-forwarded',
+        })
+        assert response.status_code == 429
+        assert response.headers['retry-after'] == '15'
 
 
 def test_preview_short_invite_links_open_the_local_portal():

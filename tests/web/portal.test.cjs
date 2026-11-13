@@ -8,7 +8,7 @@ function setup(request=async()=>{}, hash='', search='', storage) {
   const practiceCalls=[];
   const nodes=new Map();
   const node=id=>{
-    if(!nodes.has(id)) nodes.set(id,{value:'',hidden:false,disabled:false,dataset:{},children:[],classList:{toggle(){}},
+    if(!nodes.has(id)) nodes.set(id,{value:'',hidden:false,disabled:false,dataset:{},children:[],options:[],classList:{toggle(){}},
       replaceChildren(...children){this.children=children;},setAttribute(){},addEventListener(){},focus(){}});
     return nodes.get(id);
   };
@@ -727,4 +727,13 @@ test('the stake preview sizes the pot by the smallest multiplayer count',()=>{
   node('new-game').value='duo';
   run('walletBalance=25;updateStakePreview()');
   assert.equal(preview(),'10 tokens per person · 20 tokens in a 2-player pot · Wallet: 25 tokens');
+});
+
+test('gem wording keeps the invite amount placeholder and switches back to tokens',()=>{
+  const {run}=setup();
+  run('document.documentElement.dataset.portalCurrency="gems"');
+  assert.equal(run('portalCurrencyText("ui.invite.stake",{tokens:5},"This match stakes {tokens} tokens per player.")'),'This match stakes 5 gems per player.');
+  assert.equal(run('portalCurrencyAmount(10)'),'10 gems');
+  run('document.documentElement.dataset.portalCurrency="tokens"');
+  assert.equal(run('portalCurrencyAmount(10)'),'10 tokens');
 });

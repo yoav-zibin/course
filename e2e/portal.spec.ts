@@ -40,7 +40,30 @@ test.describe('Portal', () => {
       await expect(page.locator('#game-detail-page')).toBeHidden();
       await expect(page.locator('#game-search')).toBeVisible();
       await expect(page).not.toHaveURL(/game=/);
+      await page.goBack();
+      await expect(page.locator('#game-detail-page')).toBeVisible();
+      await expect(page.locator('#selected-game-name')).toContainText('Detail noughts');
+      await page.goForward();
+      await expect(page.locator('#game-detail-page')).toBeHidden();
     }
+  });
+
+  test('stake labels follow the language and skin after switching either', async ({ page, request }) => {
+    await login(page, request);
+    await page.goto('/static/portal.html?skin=arcade');
+    await page.evaluate("I18n.choose('es')");
+    await expect(page.locator('#match-stake option[value="1"]')).toHaveText('1 gema');
+    await expect(page.locator('#stake-help')).toContainText('+10 gemas');
+    await expect(page.locator('#stake-preview')).toContainText('gemas');
+    await page.locator('#account-menu .auth-menu-button').click();
+    await page.selectOption('#portal-skin-picker', 'classic');
+    await expect(page.locator('#match-stake option[value="1"]')).toHaveText('1 ficha');
+    await expect(page.locator('#stake-help')).toContainText('+10 fichas');
+    await page.evaluate("I18n.choose('fr')");
+    await expect(page.locator('#match-stake option[value="1"]')).toHaveText('1 jeton');
+    await page.selectOption('#portal-skin-picker', 'neon');
+    await expect(page.locator('#match-stake option[value="1"]')).toHaveText('1 gemme');
+    await expect(page.locator('#stake-help')).toContainText('+10 gemmes');
   });
 
   test('match groups start empty', async ({ page, request }) => {

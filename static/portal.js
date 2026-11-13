@@ -281,29 +281,29 @@ function portalCurrencyName() {
   return document.documentElement?.dataset?.portalCurrency === "gems" ? "gems" : "tokens";
 }
 function portalCurrencyAmount(amount) {
-  const name = portalCurrencyName();
-  if (name === "gems") return `${I18n.number(amount)} gems`;
-  return I18n.t("ui.stakes.tokens", {count:amount}, `${I18n.number(amount)} tokens`);
+  return portalCurrencyText("ui.stakes.tokens", {count:I18n.number(amount)}, "{count} tokens");
 }
-function portalCurrencyText(text) {
-  return portalCurrencyName() === "gems" ? text.replace(/\btokens?\b/gi, "gems") : text;
+function portalCurrencyText(key, params, fallback) {
+  const gems = portalCurrencyName() === "gems";
+  return I18n.t(gems ? `${key}_gems` : key, params, gems ? fallback.replace(/\btokens?\b(?!})/gi, word => word.toLowerCase() === "token" ? "gem" : "gems") : fallback);
 }
 function syncPortalCurrencyLabels() {
-  const name = portalCurrencyName();
   const stake = $("match-stake");
   if (stake) {
     for (const option of stake.options) {
-      option._portalOriginalLabel ??= option.textContent;
-      const word = Number(option.value) === 1 ? name.slice(0, -1) : name;
-      option.textContent = option._portalOriginalLabel.replace(/tokens?/i, word);
+      option.textContent = portalCurrencyText(option.dataset.i18n, {}, option._i18nDefault ?? option.textContent);
     }
   }
   const help = $("stake-help");
   if (help) {
-    help._portalOriginalText ??= help.textContent;
-    help.textContent = help._portalOriginalText.replace(/tokens?/gi, name);
+    help.textContent = portalCurrencyText("ui.stakes.help", {}, help._i18nDefault ?? help.textContent);
   }
+  if (walletBalance !== null) syncWalletTitle();
   updateStakePreview();
+}
+function syncWalletTitle() {
+  const wallet = $("token-wallet");
+  if (wallet) wallet.title = portalCurrencyText("ui.portal.wallet_hint", {balance:I18n.number(walletBalance)}, "{balance} virtual tokens · +10 daily allowance on your first paid match entry");
 }
 function updateStakePreview() {
   const select = $("match-stake"), preview = $("stake-preview"), panel = $("token-stake-panel");
@@ -315,19 +315,18 @@ function updateStakePreview() {
   if (solo && select.value !== "0") select.value = "0";
   const amount = Number(select.value);
   if (!amount || solo) {
-    preview.replaceChildren(el("span", {class:"stake-preview-text", textContent: solo ? I18n.t("ui.stakes.preview_solo", {}, "Solo game · No wager") : portalCurrencyText(I18n.t("ui.stakes.preview_free", {}, "Free game · No tokens at risk"))}));
+    preview.replaceChildren(el("span", {class:"stake-preview-text", textContent: solo ? I18n.t("ui.stakes.preview_solo", {}, "Solo game · No wager") : portalCurrencyText("ui.stakes.preview_free", {}, "Free game · No tokens at risk")}));
   } else {
     // The smallest pot the match can have: its game's smallest multiplayer count
     // (the final count is only known at the start).
     const multiplayer = (game?.allowed_player_counts || []).filter(count => count > 1);
     const players = multiplayer.length ? Math.min(...multiplayer) : 2;
-    const params = {amount, pot: amount * players, players, balance: walletBalance};
-    const previewText = I18n.t(walletBalance === null ? "ui.stakes.preview" : "ui.stakes.preview_wallet", {
+    const previewText = portalCurrencyText(walletBalance === null ? "ui.stakes.preview" : "ui.stakes.preview_wallet", {
         amount:I18n.number(amount), pot:I18n.number(amount * players), players, balance:I18n.number(walletBalance ?? 0),
       }, walletBalance === null
         ? "{amount} tokens per person · {pot} tokens in a {players}-player pot"
         : "{amount} tokens per person · {pot} tokens in a {players}-player pot · Wallet: {balance} tokens");
-    preview.replaceChildren(el("span", {class:"stake-preview-text", textContent:portalCurrencyText(previewText)}));
+    preview.replaceChildren(el("span", {class:"stake-preview-text", textContent:previewText}));
   }
 }
 
@@ -352,7 +351,7 @@ async function updateTokenWallet(user, record) {
     walletBalance = record.token_balance;
     const balance = String(walletBalance);
     if ($("token-balance").textContent !== balance) $("token-balance").textContent = balance;
-    wallet.title = portalCurrencyText(I18n.t("ui.portal.wallet_hint", {balance}, "{balance} virtual tokens · +10 daily allowance on your first paid match entry"));
+    syncWalletTitle();
     wallet.hidden = false;
     // No optimistic balance adjustments: the server may grant today's +10 at start.
     updateStakePreview();
@@ -387,11 +386,11 @@ function updateMatchCurrency(match, user) {
       notes.push(el("div", {class:"token-summary-payout"},
         el("span", {textContent:I18n.t("ui.stakes.your_payout", {}, "Your payout")}),
         el("strong", {textContent:portalCurrencyAmount(payout)}),
-        el("small", {textContent:portalCurrencyText(I18n.t("ui.stakes.net", {amount:netAmount}, `Net ${netAmount} tokens`))})));
+        el("small", {textContent:portalCurrencyText("ui.stakes.net", {amount:netAmount}, "Net {amount} tokens")})));
     } else notes.push(el("p", {class:"token-summary-note", textContent:I18n.t("ui.stakes.settled", {}, "Payouts settled for all players.")}));
   }
   if (!paid && match.status === "over")
-    notes.push(el("p", {class:"token-summary-note", textContent:portalCurrencyText(I18n.t("ui.stakes.none_wagered", {}, "No tokens were wagered in this game."))}));
+    notes.push(el("p", {class:"token-summary-note", textContent:portalCurrencyText("ui.stakes.none_wagered", {}, "No tokens were wagered in this game.")}));
   box.replaceChildren(title, values, ...notes);
   box.hidden = false;
 }
@@ -1723,7 +1722,7 @@ function renderMatch() {
           const ends = preview.pending_leave_ends_match
             ? " " + I18n.t("ui.match.leave_ends_all", {}, "Leaving ends the match for everyone.")
             : "";
-          if (!confirm(I18n.t("ui.match.leave_refund", {payout}, `You will get ${payout} tokens back — leave?`) + ends)) return;
+          if (!confirm(portalCurrencyText("ui.match.leave_refund", {payout}, "You will get {payout} tokens back — leave?") + ends)) return;
           await portalRequest("POST", `${path}/playerLeft`, { user });
         }, { danger: true }),
       );
@@ -1946,6 +1945,7 @@ function renderHistory() {
 function redrawAfterLanguageChange() {
   try {
     renderPortalAccountMenu();
+    syncPortalCurrencyLabels();
     render();
     renderLibrary();
     updateMatchSetup();
@@ -2261,7 +2261,7 @@ async function playWithAllComputers() {
 function selectFromHash() {
   syncPortalScreen();
   const params = new URLSearchParams(location.hash.slice(1));
-  const nextGameId = params.get("game");
+  const nextGameId = params.get("game") || new URLSearchParams(location.search).get("game");
   if (!params.has("match") && nextGameId !== state.detailGameId) {
     state.detailGameId = nextGameId;
     state.detailCreatorInitialized = false;
@@ -2328,8 +2328,8 @@ async function openInviteFromHash() {
     box.append(el("div", {style: "display:flex;gap:var(--space-sm);flex-wrap:wrap"}, notNow));
   } else {
     if (match.bet_per_player > 0)
-      box.append(el("p", {class: "muted", textContent: I18n.t("ui.invite.stake", {tokens: match.bet_per_player},
-        `This match stakes ${match.bet_per_player} tokens per player.`)}));
+      box.append(el("p", {class: "muted", textContent: portalCurrencyText("ui.invite.stake", {tokens: match.bet_per_player},
+        "This match stakes {tokens} tokens per player.")}));
     let primary;
     if (!user) {
       box.append(el("p", {class: "muted", textContent: I18n.t("ui.invite.log_in_first", {}, "Log in or continue as a guest to take your seat.")}));

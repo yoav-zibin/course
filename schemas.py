@@ -255,6 +255,7 @@ class GoogleLogin(_Request):
     # The user whose invite link brought this person here: a 5-digit referral code or
     # a user id. Recorded only when this creates a new account; unknown ones are ignored.
     invited_by_user_id: str | None = None
+    invite_token: str | None = None
 
 
 class PhoneStart(_Request):
@@ -286,6 +287,7 @@ class VerifyCode(_Request):
     # The user whose invite link brought this person here: a 5-digit referral code or
     # a user id. Recorded only when this creates a new account; unknown ones are ignored.
     invited_by_user_id: str | None = None
+    invite_token: str | None = None
 
 
 class MergeRequest(_Request):

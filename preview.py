@@ -23,7 +23,7 @@ STATIC = Path(__file__).resolve().parent / "static"
 # with the pages: a missing area answers "not available in the local preview".
 FORWARDED = frozenset({
     "auth", "users", "games", "matches", "v2", "i18n", "push", "invites",
-    "matchmaking", "storage", "feedback", "client-errors",
+    "matchmaking", "storage", "feedback", "client-errors", "batch",
 })
 
 
@@ -106,7 +106,10 @@ void (async () => {{
         if path.split("/", 1)[0] not in FORWARDED:
             return Response("This page is not available in the local preview.", status_code=404)
         # Forward only product API headers; the model key never enters the browser.
-        headers = {key: request.headers[key] for key in ("content-type", "x-user-id", "x-user-password") if key in request.headers}
+        headers = {key: request.headers[key] for key in (
+            "content-type", "x-user-id", "x-user-password", "idempotency-key",
+            "accept-language", "x-campaign-code", "if-none-match",
+        ) if key in request.headers}
         target = "/" + path
         if request.url.query:
             target += "?" + request.url.query
@@ -119,9 +122,12 @@ void (async () => {{
                 return JSONResponse({"detail": "Muse did not return within 15 minutes. Your prompt is preserved."}, status_code=504)
             except httpx.HTTPError:
                 return JSONResponse({"detail": "The course backend connection failed. Your prompt is preserved; try again."}, status_code=502)
-            return Response(upstream.content, status_code=upstream.status_code,
-                            headers={"content-type": upstream.headers.get("content-type", "application/json"),
-                                     "cache-control": upstream.headers.get("cache-control", "private, no-store")})
+            response_headers = {"content-type": upstream.headers.get("content-type", "application/json"),
+                                "cache-control": upstream.headers.get("cache-control", "private, no-store")}
+            for key in ("retry-after", "etag"):
+                if key in upstream.headers:
+                    response_headers[key] = upstream.headers[key]
+            return Response(upstream.content, status_code=upstream.status_code, headers=response_headers)
 
         return await forward()
 

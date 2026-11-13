@@ -272,8 +272,8 @@ def balanced_end(src: str, start: int, limit: int = 1500) -> int:
 
 def spans_of_i18n(src: str) -> list[tuple[int, int]]:
     spans = []
-    # I18n.t(...), I18n.plural(...) and a local alias t("ui.some.key", ...)
-    pattern = r"\bI18n\s*\.\s*(?:t|plural)\s*\(|(?<![\w.$])t\(\s*[\"'](?:ui|error|status|seat|end_reason|notify)\."
+    # Translation calls and the Portal's wrapper selecting token/gem catalog keys.
+    pattern = r"\bI18n\s*\.\s*(?:t|plural)\s*\(|(?<![\w.$])(?:t|portalCurrencyText)\(\s*[\"'](?:ui|error|status|seat|end_reason|notify)\."
     for m in re.finditer(pattern, src):
         spans.append((m.start(), balanced_end(src, m.end())))
     return spans
