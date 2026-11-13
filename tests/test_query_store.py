@@ -33,7 +33,8 @@ def test_admin_match_browse_primes_code_in_batches_and_keeps_spectator_projectio
     match_id = api.new_match(owner=alice, game_id=game_id, joiners=[bob], start=True)
     store.clear_cache()
     with patch.object(store, 'prefetch_game_versions', wraps=store.prefetch_game_versions) as prefetch:
-        with patch.object(api.platform, 'view_state', wraps=api.platform.view_state) as view:
+        platform = api.client.app.state.platform
+        with patch.object(platform, 'view_state', wraps=platform.view_state) as view:
             page = api.ok('GET', '/v2/admin/matches')
     assert [row['id'] for row in page['items']] == [match_id]
     prefetch.assert_called_once()
