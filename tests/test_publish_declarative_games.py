@@ -112,3 +112,20 @@ def test_resume_checks_actual_published_source_and_skips_unchanged_import(tmp_pa
     calls.clear()
     release.publish("https://example.test", path, ["tictactoe"])
     assert any(route == "/games/declarative" for route, _ in calls)
+
+
+def test_idempotent_import_retries_a_concurrent_catalog_update(monkeypatch):
+    requests = []
+
+    def opening(request, **kwargs):
+        requests.append(request.data)
+        if len(requests) == 1:
+            raise urllib.error.HTTPError(request.full_url, 409, "concurrent update", {}, io.BytesIO(b'{}'))
+        return io.BytesIO(b'{"id":"same-publication"}')
+
+    monkeypatch.setattr(release.urllib.request, "urlopen", opening)
+    monkeypatch.setattr(release.time, "sleep", lambda _: None)
+    result = release.request("https://example.test", "/games/declarative",
+                             {"game_addition_request_id_and_secret": "private-release-secret"})
+    assert result == {"id": "same-publication"}
+    assert len(requests) == 2 and requests[0] == requests[1]

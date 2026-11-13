@@ -45,6 +45,8 @@ Backgammon game. Its strict move schema describes roll, pass and moves from a
 point or bar to a point or off tray. Only the server rolls dice and computes
 `view.legalMoves`, including forced bar entry, maximum dice use and bearing off.
 The presentation only displays those legal choices and sends the selected move.
+See [Backgammon's package notes](../games/declarative/BACKGAMMON.md) for the
+source hash, preserved variant rules and native event examples.
 
 `declarative_ui.ui_code` defines a separate global object:
 

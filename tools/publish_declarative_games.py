@@ -126,7 +126,11 @@ def request(base, path, data=None):
             with urllib.request.urlopen(req, timeout=210) as response:
                 return json.load(response)
         except urllib.error.HTTPError as exc:
-            if exc.code == 429 and attempt < 4:
+            # The import secret makes publication an upsert. A concurrent
+            # catalog/translation update may reject its transaction before
+            # commit; retry that idempotent operation with the same secret.
+            retryable = exc.code == 429 or (exc.code == 409 and path == "/games/declarative")
+            if retryable and attempt < 4:
                 time.sleep(min(15, int(exc.headers.get("Retry-After", "5"))))
                 continue
             detail = exc.read().decode(errors="replace")
