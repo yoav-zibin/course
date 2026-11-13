@@ -3610,3 +3610,27 @@
   background: #f1f3f4;
   border-color: #dadce0;
 }
+
+/* Recolor generated catalog art from the active skin's palette tokens.
+   Keep the per-game hue so game identities still read as distinct. */
+:root[data-skin] .portal-shell .popular-game-art,
+:root[data-skin] .portal-shell .library-art:not(img) {
+  background:
+    radial-gradient(circle at 85% 15%, color-mix(in srgb, hsl(var(--art-hue) 78% 72%) 50%, var(--color-accent)) 0%, transparent 56%),
+    linear-gradient(135deg, color-mix(in srgb, hsl(var(--art-hue) 58% 38%) 42%, var(--color-bg-2)), var(--color-bg-0));
+  transition: background 240ms ease;
+}
+:root[data-skin] .portal-shell .library-art::before,
+:root[data-skin] .portal-shell .library-art::after {
+  border-color: color-mix(in srgb, var(--color-text-primary) 22%, transparent);
+}
+:root[data-skin] .portal-shell .popular-game-monogram,
+:root[data-skin] .portal-shell .library-monogram {
+  color: var(--color-text-primary);
+  text-shadow: 0 3px 12px color-mix(in srgb, var(--color-text-primary) 18%, transparent);
+  transition: color 240ms ease, text-shadow 240ms ease;
+}
+:root[data-skin] .portal-shell .library-art-label {
+  color: var(--color-text-secondary);
+  text-shadow: 0 1px 4px color-mix(in srgb, var(--color-bg-0) 70%, transparent);
+}
