@@ -293,7 +293,7 @@
     // The Riso brand uses only the first word of its stable skin key.
     if (key === "riso-club") words.length = 1;
     // Isaac's skin shows its name exactly as its owner spells it.
-    if (key === "isaac-ui") return "Isaac ui";
+    if (key === "isaac-ui") return "Isaac UI";
     return words
       .map((word) => (word ? word[0].toUpperCase() + word.slice(1) : word))
       .join(" ");

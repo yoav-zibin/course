@@ -4,9 +4,12 @@ import path from 'node:path';
 import vm from 'node:vm';
 
 const portal = fs.readFileSync(path.resolve(__dirname, '../static/portal.js'), 'utf8');
+const skinCss = fs.readFileSync(path.resolve(__dirname, '../static/portal-game-skin.css'), 'utf8');
 const adapter = portal.slice(portal.indexOf('const PORTAL_SKINNED_GAME_IDS ='),
   portal.indexOf('async function onMakeMove('));
-const context = vm.createContext({});
+const context = vm.createContext({
+  fetch: () => Promise.resolve({ok: true, text: () => Promise.resolve(skinCss)}),
+});
 vm.runInContext(adapter, context);
 // Both games use the same disc glyph for each player; owner colors carry
 // essential board information, independent of the surrounding portal skin.
@@ -25,7 +28,7 @@ const client = `<html><head><style>
 for (const [name, id] of [['Tsoro Yematatu', '41b88e29-3402-4a1c-920d-8429c7b880e5'],
   ['Teeko', 'dad2260d-cc40-47e0-be43-e51539df694f']]) {
   test(`${name} keeps player pieces distinct when its portal palette changes`, async ({page}) => {
-    const code = vm.runInContext(`withPortalSkinAdapter(${JSON.stringify(id)}, ${JSON.stringify(client)})`, context);
+    const code = await vm.runInContext(`withPortalSkinAdapter(${JSON.stringify(id)}, ${JSON.stringify(client)})`, context);
     await page.setContent('<iframe id="game" sandbox="allow-scripts"></iframe>');
     await page.locator('#game').evaluate((element, source) => { (element as HTMLIFrameElement).srcdoc = source; }, code);
     const frame = page.frameLocator('#game');
