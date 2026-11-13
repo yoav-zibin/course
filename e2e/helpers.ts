@@ -103,35 +103,46 @@ export async function importGame(
       client_strings: Object.fromEntries(Object.entries(opts.clientStrings).map(([k, v]) => [k, tag + v])),
     };
   }
-  const res = await request.post('/games', {
-    headers: { 'X-User-Id': owner.id, 'X-User-Password': owner.password },
-    data: {
-      name: opts.name,
-      description: opts.description,
-      allowed_player_counts: opts.allowedPlayerCounts,
-      allows_leave_mid_match: opts.allowsLeaveMidMatch ?? false,
-      allows_join_mid_match: opts.allowsJoinMidMatch ?? false,
-      client_code: opts.clientCode,
-      server_code: opts.serverCode,
-      rules: opts.rules,
-      ui_instructions: opts.uiInstructions,
-      tutorial: { text: opts.tutorialText, html: opts.tutorialHtml },
-      images: [
-        { caption: opts.name, svg: COVER_SVG },
-        labelSvg('Board'),
-        labelSvg('A win'),
-        labelSvg('A draw'),
-      ],
-      unit_tests: {
-        state_schema: opts.schemas.state,
-        move_schema: opts.schemas.move,
-        view_schema: opts.schemas.view,
-        cases: opts.cases,
-      },
-      translations,
-      game_addition_request_id_and_secret: `e2e-${Date.now()}-${Math.floor(Math.random() * 1e9)}-secret`,
+  const data = {
+    name: opts.name,
+    description: opts.description,
+    allowed_player_counts: opts.allowedPlayerCounts,
+    allows_leave_mid_match: opts.allowsLeaveMidMatch ?? false,
+    allows_join_mid_match: opts.allowsJoinMidMatch ?? false,
+    client_code: opts.clientCode,
+    server_code: opts.serverCode,
+    rules: opts.rules,
+    ui_instructions: opts.uiInstructions,
+    tutorial: { text: opts.tutorialText, html: opts.tutorialHtml },
+    images: [
+      { caption: opts.name, svg: COVER_SVG },
+      labelSvg('Board'),
+      labelSvg('A win'),
+      labelSvg('A draw'),
+    ],
+    unit_tests: {
+      state_schema: opts.schemas.state,
+      move_schema: opts.schemas.move,
+      view_schema: opts.schemas.view,
+      cases: opts.cases,
     },
+    translations,
+    game_addition_request_id_and_secret: `e2e-${Date.now()}-${Math.floor(Math.random() * 1e9)}-secret`,
+  };
+  // The server validates at most two uploads at once and answers 429 "Validation
+  // capacity is busy" with a Retry-After; parallel workers hit that, so wait and retry.
+  let res = await request.post('/games', {
+    headers: { 'X-User-Id': owner.id, 'X-User-Password': owner.password },
+    data,
   });
+  for (let attempt = 0; res.status() === 429 && attempt < 20; attempt++) {
+    const seconds = Number(res.headers()['retry-after']) || 2;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(seconds, 3) * 1000 * (0.5 + Math.random())));
+    res = await request.post('/games', {
+      headers: { 'X-User-Id': owner.id, 'X-User-Password': owner.password },
+      data,
+    });
+  }
   expect(res.ok(), await res.text()).toBeTruthy();
   return (await res.json()).id;
 }

@@ -10,7 +10,7 @@ ARTIFACT_ROOT = Path(os.environ.get('BUILDER_ARTIFACT_DIR', str(Path(__file__).p
 def render_game(draft_id, job_id, code, cases, timeout=300, tutorial=None):
     # Also repair namespaces in saved examples created before normalization.
     import copy
-    from game_platform.builder_flow import validate_image
+    from game_platform.game_artifacts import validate_image
     cases = copy.deepcopy(cases)
     for case in cases:
         for image in case.get('images', []):
