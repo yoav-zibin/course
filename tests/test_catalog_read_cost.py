@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from dataclasses import replace
 from unittest.mock import Mock, patch
 import threading
+import json
 from concurrent.futures import ThreadPoolExecutor
 
 from game_platform.service import GamePlatform
@@ -39,6 +40,52 @@ def test_popularity_metadata_read_preserves_private_game_visibility_without_tran
     with patch.object(store.client, 'transaction', side_effect=AssertionError('private popularity transaction')):
         assert api.request('GET', f'/games/{game_id}/popularity').status_code == 404
         assert api.ok('GET', f'/games/{game_id}/popularity', as_user=owner)['score'] == 0
+
+
+def test_modern_game_metadata_does_not_decode_the_full_import_package_twice():
+    store = query_store()
+    api = Api(store=store)
+    owner = api.new_user('metadata owner')
+    game_id = api.new_game(owner=owner)
+    game = replace(store.get_game(game_id), import_package={'images': []})
+    store.put_game_version(game)
+    raw = store.raw_get(store.ref('games', game_id))['json']
+    with patch('game_platform.query_store.json.loads', wraps=json.loads) as loads:
+        metadata = store.get_game_without_code(game_id)
+    assert metadata.import_package == {'images': []}
+    assert not any(call.args and call.args[0] == raw for call in loads.call_args_list)
+
+
+def test_legacy_game_metadata_still_converts_import_artifacts():
+    store = query_store()
+    api = Api(store=store)
+    owner = api.new_user('legacy metadata owner')
+    game_id = api.new_game(owner=owner)
+    ref = store.ref('games', game_id)
+    raw = store.raw_get(ref)
+    record = json.loads(raw['json'])
+    assert record.get('import_package') is None
+    record['builder_workflow'] = {'artifacts': {'logic': {'value': {'text': 'Legacy rules'}}}}
+    store.raw_put(ref, {**raw, 'json': json.dumps(record)})
+    assert store.get_game_without_code(game_id).import_package['rules_text'] == 'Legacy rules'
+
+
+def test_recent_games_summary_uses_metadata_and_keeps_visibility_and_order():
+    store = query_store()
+    api = Api(store=store)
+    owner = api.new_user('recent owner')
+    first, hidden, last = [api.new_game(owner=owner) for _ in range(3)]
+    api.ok('POST', f'/games/{hidden}/unpublish', as_user=owner)
+    store.put_user(replace(store.get_user(owner), recent_game_ids=(last, hidden, first)))
+    store.clear_cache()
+    store.client.read_paths.clear()
+    with patch.object(store.client, 'transaction', side_effect=AssertionError('recent games transaction')):
+        games = api.platform.list_recent_games(caller_id=owner, include_code=False)
+    assert [game.id for game in games] == [last, first]
+    assert not any('/body/' in path for path in store.client.read_paths)
+    rows = api.ok('GET', '/users/me/recent-games', as_user=owner)
+    assert [row['id'] for row in rows] == [last, first]
+    assert all('code' not in row and 'server_code' not in row for row in rows)
 
 
 def test_translation_bundle_batches_only_the_game_tables_not_already_cached():

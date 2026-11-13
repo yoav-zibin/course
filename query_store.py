@@ -741,9 +741,10 @@ class QueryStore:
         if kind in ("games", "game_versions"):
             # Records written before the Builder deletion carry the old builder
             # workflow instead of an import package; convert on read.
-            legacy = json.loads(data["json"]).get("builder_workflow")
-            if legacy and record.import_package is None:
-                record = replace(record, import_package=import_package_from_legacy_workflow(legacy))
+            if record.import_package is None:
+                legacy = json.loads(data["json"]).get("builder_workflow")
+                if legacy:
+                    record = replace(record, import_package=import_package_from_legacy_workflow(legacy))
             if record.import_package:
                 # Packages written before the hash-only change carry the
                 # resubmission secret itself; normalize on read (the record
