@@ -24,21 +24,16 @@ test.describe('Layout at different screen sizes', () => {
     }
   }
 
-  // The sidebar is a slide-in drawer at every screen size.
+  // The redesigned portal replaced the sidebar drawer with main navigation tabs.
   for (const size of [sizes[1], sizes[4]]) {
-    test(`portal: the sidebar drawer opens and closes on ${size.name}`, async ({ page, request }) => {
-      await loginAs(page, await createUser(request, uniqueName('Sidebar')));
+    test(`portal: the main navigation is usable on ${size.name}`, async ({ page, request }) => {
+      await loginAs(page, await createUser(request, uniqueName('Nav')));
       await page.setViewportSize({ width: size.width, height: size.height });
       await page.goto('/static/portal.html');
-      const sidebar = page.locator('#app-sidebar');
-      const toggle = page.getByRole('button', { name: 'Open sidebar' });
-
-      await expect(sidebar).toBeHidden();
-      await toggle.click();
-      await expect(sidebar).toBeVisible();
-      await expect(sidebar.getByRole('button', { name: /New match/ })).toBeVisible();
-      await sidebar.getByRole('button', { name: /Close sidebar/ }).click();
-      await expect(sidebar).toBeHidden();
+      const nav = page.getByRole('navigation', { name: 'Main navigation' });
+      await expect(nav.getByRole('link', { name: 'Games' })).toBeVisible();
+      await expect(nav.getByRole('link', { name: /Matches/ })).toBeVisible();
+      await expect(nav.getByRole('link', { name: 'Leaderboards' })).toBeVisible();
     });
   }
 
