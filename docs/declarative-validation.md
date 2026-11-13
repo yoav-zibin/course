@@ -72,6 +72,15 @@ transitions. The covered-card browser check exercised a declared back asset
 and confirmed front artwork/text was absent from the rendered card and its
 accessible name.
 
+Localization verification passed all 53 tests in `tests/test_i18n.py` and
+`tests/test_i18n_audit.py`. The new renderer/authoring labels, accessible names,
+diagnostics and complete-package update error have 98 shared catalog entries
+in all eight supported languages, with identical placeholder sets. The
+untranslated-text audit passes without increasing existing ratchets or
+excluding the new files. The standalone compatibility host retains English
+framework fallbacks when the platform language library is unavailable; game
+text continues to use the translated table in `state_changed`.
+
 The authoring guide's standalone Count to three UI example was separately
 executed through the actual Python `DeclarativeLogic`: its state message
 renders the counter, and its button event emits `{add:1}`. The spreadsheet
