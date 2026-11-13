@@ -2663,12 +2663,12 @@
 :root[data-skin="meadow"] .portal-shell input[type="text"] { border-radius: 16px; }
 :root[data-skin="meadow"] .portal-shell button { border-width: 2px; }
 
-/* Isaac's: a light, airy skin — warm blush-cream surfaces, a raspberry
+/* Isaac ui: a light, airy skin — warm blush-cream surfaces, a raspberry
    accent, a violet focus ring, big rounded corners, and soft pink-tinted
    shadows. Clean first, cute second: one accent colour, no gradients on
    surfaces except the token wallet, and the base theme's spacing/type scale
    inherited unchanged. */
-:root[data-skin="isaac-bright-artsy"] {
+:root[data-skin="isaac-ui"] {
   color-scheme: light;
   --color-bg-0: #fffbfd;
   --color-bg-1: #fff5f8;
@@ -2699,7 +2699,7 @@
 }
 
 /* The Portal has a richer component palette than the shared app shell. */
-:root[data-skin="isaac-bright-artsy"] .portal-shell {
+:root[data-skin="isaac-ui"] .portal-shell {
   --color-bg-0: #fffbfd;
   --color-bg-1: #fff5f8;
   --color-bg-2: #ffeef4;
@@ -2716,105 +2716,105 @@
   background: var(--color-bg-0);
   color: var(--color-text-primary);
 }
-:root[data-skin="isaac-bright-artsy"] .portal-sidebar,
-:root[data-skin="isaac-bright-artsy"] .match-creator,
-:root[data-skin="isaac-bright-artsy"] .game-detail-page,
-:root[data-skin="isaac-bright-artsy"] .match-stage,
-:root[data-skin="isaac-bright-artsy"] .portal-shell .game-search-popup,
-:root[data-skin="isaac-bright-artsy"] .portal-shell .match-tools {
+:root[data-skin="isaac-ui"] .portal-sidebar,
+:root[data-skin="isaac-ui"] .match-creator,
+:root[data-skin="isaac-ui"] .game-detail-page,
+:root[data-skin="isaac-ui"] .match-stage,
+:root[data-skin="isaac-ui"] .portal-shell .game-search-popup,
+:root[data-skin="isaac-ui"] .portal-shell .match-tools {
   background: #fff5f8;
   border-color: #f0d3e0;
   color: #453040;
 }
-:root[data-skin="isaac-bright-artsy"] .popular-games-section,
-:root[data-skin="isaac-bright-artsy"] .play-option,
-:root[data-skin="isaac-bright-artsy"] .portal-shell .library-card,
-:root[data-skin="isaac-bright-artsy"] .selected-game-card {
+:root[data-skin="isaac-ui"] .popular-games-section,
+:root[data-skin="isaac-ui"] .play-option,
+:root[data-skin="isaac-ui"] .portal-shell .library-card,
+:root[data-skin="isaac-ui"] .selected-game-card {
   background: #ffeef4;
   border-color: #f0d3e0;
   color: #453040;
 }
-:root[data-skin="isaac-bright-artsy"] .portal-shell input,
-:root[data-skin="isaac-bright-artsy"] .portal-shell select {
+:root[data-skin="isaac-ui"] .portal-shell input,
+:root[data-skin="isaac-ui"] .portal-shell select {
   background: #fffefd;
   border-color: #e3aec6;
   color: #453040;
 }
-:root[data-skin="isaac-bright-artsy"] .portal-shell button.primary,
-:root[data-skin="isaac-bright-artsy"] .portal-shell .library-toolbar button[aria-pressed="true"] {
+:root[data-skin="isaac-ui"] .portal-shell button.primary,
+:root[data-skin="isaac-ui"] .portal-shell .library-toolbar button[aria-pressed="true"] {
   background: #d6336c;
   border-color: #d6336c;
   color: #ffffff;
 }
-:root[data-skin="isaac-bright-artsy"] .portal-shell button.primary:hover:not(:disabled) { background:#b8235a; border-color:#b8235a; }
-:root[data-skin="isaac-bright-artsy"] .portal-shell button:focus-visible,
-:root[data-skin="isaac-bright-artsy"] .portal-shell summary:focus-visible,
-:root[data-skin="isaac-bright-artsy"] .portal-shell .popular-game-card:focus-visible {
+:root[data-skin="isaac-ui"] .portal-shell button.primary:hover:not(:disabled) { background:#b8235a; border-color:#b8235a; }
+:root[data-skin="isaac-ui"] .portal-shell button:focus-visible,
+:root[data-skin="isaac-ui"] .portal-shell summary:focus-visible,
+:root[data-skin="isaac-ui"] .portal-shell .popular-game-card:focus-visible {
   outline-color: #6c4fd8;
 }
-:root[data-skin="isaac-bright-artsy"] .creator-title,
-:root[data-skin="isaac-bright-artsy"] .popular-games-heading h2,
-:root[data-skin="isaac-bright-artsy"] .play-option-heading h3,
-:root[data-skin="isaac-bright-artsy"] .selected-game-card h2,
-:root[data-skin="isaac-bright-artsy"] .portal-shell .game-option {
+:root[data-skin="isaac-ui"] .creator-title,
+:root[data-skin="isaac-ui"] .popular-games-heading h2,
+:root[data-skin="isaac-ui"] .play-option-heading h3,
+:root[data-skin="isaac-ui"] .selected-game-card h2,
+:root[data-skin="isaac-ui"] .portal-shell .game-option {
   color: #453040;
 }
-:root[data-skin="isaac-bright-artsy"] .creator-description,
-:root[data-skin="isaac-bright-artsy"] .game-label,
-:root[data-skin="isaac-bright-artsy"] .popular-period,
-:root[data-skin="isaac-bright-artsy"] .popular-eyebrow,
-:root[data-skin="isaac-bright-artsy"] .play-option-heading p,
-:root[data-skin="isaac-bright-artsy"] .play-option .play-option-note,
-:root[data-skin="isaac-bright-artsy"] .library-description,
-:root[data-skin="isaac-bright-artsy"] .library-count,
-:root[data-skin="isaac-bright-artsy"] .library-empty,
-:root[data-skin="isaac-bright-artsy"] .search-note,
-:root[data-skin="isaac-bright-artsy"] .stake-help,
-:root[data-skin="isaac-bright-artsy"] .offline-controls,
-:root[data-skin="isaac-bright-artsy"] .selected-game-card p {
+:root[data-skin="isaac-ui"] .creator-description,
+:root[data-skin="isaac-ui"] .game-label,
+:root[data-skin="isaac-ui"] .popular-period,
+:root[data-skin="isaac-ui"] .popular-eyebrow,
+:root[data-skin="isaac-ui"] .play-option-heading p,
+:root[data-skin="isaac-ui"] .play-option .play-option-note,
+:root[data-skin="isaac-ui"] .library-description,
+:root[data-skin="isaac-ui"] .library-count,
+:root[data-skin="isaac-ui"] .library-empty,
+:root[data-skin="isaac-ui"] .search-note,
+:root[data-skin="isaac-ui"] .stake-help,
+:root[data-skin="isaac-ui"] .offline-controls,
+:root[data-skin="isaac-ui"] .selected-game-card p {
   color: #7d5a6d;
 }
-:root[data-skin="isaac-bright-artsy"] .creator-toggle { color:#b8235a; }
-:root[data-skin="isaac-bright-artsy"] .portal-shell .library-toolbar button { color:#7d5a6d; }
-:root[data-skin="isaac-bright-artsy"] .portal-sidebar .list-item:hover,
-:root[data-skin="isaac-bright-artsy"] .portal-sidebar .list-item[aria-selected="true"] { background:#ffdfeb; }
-:root[data-skin="isaac-bright-artsy"] .portal-shell .game-option:hover,
-:root[data-skin="isaac-bright-artsy"] .portal-shell .game-option[aria-selected="true"] {
+:root[data-skin="isaac-ui"] .creator-toggle { color:#b8235a; }
+:root[data-skin="isaac-ui"] .portal-shell .library-toolbar button { color:#7d5a6d; }
+:root[data-skin="isaac-ui"] .portal-sidebar .list-item:hover,
+:root[data-skin="isaac-ui"] .portal-sidebar .list-item[aria-selected="true"] { background:#ffdfeb; }
+:root[data-skin="isaac-ui"] .portal-shell .game-option:hover,
+:root[data-skin="isaac-ui"] .portal-shell .game-option[aria-selected="true"] {
   background: #ffdfeb;
   color: #453040;
 }
-:root[data-skin="isaac-bright-artsy"] .portal-shell .popular-game-card {
+:root[data-skin="isaac-ui"] .portal-shell .popular-game-card {
   background: #ffeef4;
   border-color: #f0d3e0;
   color: #453040;
 }
-:root[data-skin="isaac-bright-artsy"] .popular-game-title { color: #453040; }
-:root[data-skin="isaac-bright-artsy"] .popular-game-players,
-:root[data-skin="isaac-bright-artsy"] .popular-game-open,
-:root[data-skin="isaac-bright-artsy"] .library-mode,
-:root[data-skin="isaac-bright-artsy"] .library-select,
-:root[data-skin="isaac-bright-artsy"] .back-to-games { color: #b8235a; }
-:root[data-skin="isaac-bright-artsy"] .mode-label { color:#7d5a6d; background:#fff5f8; border-color:#e3aec6; }
-:root[data-skin="isaac-bright-artsy"] .portal-shell .result-win { color:#256b3a; background:#e2f4e4; border-color:#9fd3a8; }
-:root[data-skin="isaac-bright-artsy"] .portal-shell .result-loss { color:#a12a48; background:#fbe3ea; border-color:#e5a3b8; }
-:root[data-skin="isaac-bright-artsy"] .portal-shell .result-draw { color:#2b5f8a; background:#e0eefb; border-color:#a5c8e8; }
-:root[data-skin="isaac-bright-artsy"] .portal-shell .result-neutral { color:#715563; background:#fdf0e6; border-color:#e8cdb4; }
+:root[data-skin="isaac-ui"] .popular-game-title { color: #453040; }
+:root[data-skin="isaac-ui"] .popular-game-players,
+:root[data-skin="isaac-ui"] .popular-game-open,
+:root[data-skin="isaac-ui"] .library-mode,
+:root[data-skin="isaac-ui"] .library-select,
+:root[data-skin="isaac-ui"] .back-to-games { color: #b8235a; }
+:root[data-skin="isaac-ui"] .mode-label { color:#7d5a6d; background:#fff5f8; border-color:#e3aec6; }
+:root[data-skin="isaac-ui"] .portal-shell .result-win { color:#256b3a; background:#e2f4e4; border-color:#9fd3a8; }
+:root[data-skin="isaac-ui"] .portal-shell .result-loss { color:#a12a48; background:#fbe3ea; border-color:#e5a3b8; }
+:root[data-skin="isaac-ui"] .portal-shell .result-draw { color:#2b5f8a; background:#e0eefb; border-color:#a5c8e8; }
+:root[data-skin="isaac-ui"] .portal-shell .result-neutral { color:#715563; background:#fdf0e6; border-color:#e8cdb4; }
 
 /* Keep the wallet aligned with the active portal skin. */
-:root[data-skin="isaac-bright-artsy"] .topbar .token-wallet {
+:root[data-skin="isaac-ui"] .topbar .token-wallet {
   background:linear-gradient(135deg,#fff5f8,#ffe3ec);
   border-color:#e3aec6;
   color:#715563;
   box-shadow:0 4px 18px rgb(214 51 108 / 0.10);
 }
-:root[data-skin="isaac-bright-artsy"] .topbar .token-wallet-coin {
+:root[data-skin="isaac-ui"] .topbar .token-wallet-coin {
   background:#d6336c;
   border-color:#b8235a;
   color:#fffbfd;
 }
-:root[data-skin="isaac-bright-artsy"] .topbar .token-wallet-label { color:#7d5a6d; }
-:root[data-skin="isaac-bright-artsy"] .topbar .token-wallet-number { color:#715563; }
-:root[data-skin="isaac-bright-artsy"] .topbar .token-wallet-number strong { color:#453040; }
+:root[data-skin="isaac-ui"] .topbar .token-wallet-label { color:#7d5a6d; }
+:root[data-skin="isaac-ui"] .topbar .token-wallet-number { color:#715563; }
+:root[data-skin="isaac-ui"] .topbar .token-wallet-number strong { color:#453040; }
 
 /* ------------------------------------------------------------------ */
 /* Archetype skins (cd3464): Focus, Showcase, Lobby, Library.          */
@@ -3636,7 +3636,7 @@
 }
 
 /* These light skins must also replace Portal's hard-coded dark-theme inks. */
-:root:is([data-skin="isaac-bright-artsy"], [data-skin="lobby"], [data-skin="library"], [data-skin="white"]) .portal-shell #browse-games {
+:root:is([data-skin="isaac-ui"], [data-skin="lobby"], [data-skin="library"], [data-skin="white"]) .portal-shell #browse-games {
   color: var(--color-accent-hover);
   border-color: var(--color-accent);
 }
