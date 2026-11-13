@@ -459,7 +459,7 @@ class GamePlatform:
         new_seed: Callable[[], int] = _new_seed,
         push_notifier: PushNotifier | None = None,
         max_push_subscriptions_per_user: int = 10,
-        computer_move_delay_seconds: float = 0.6,
+        computer_move_delay_seconds: float = 0.1,
         translator: Translator | None = None,
         translation_daily_character_limit: int = 200_000,
         bundle_wait_seconds: float = 3.0,
@@ -3472,9 +3472,15 @@ class GamePlatform:
             # is bounded by time as well: past a minimum burst of actions, a
             # chain that has held the lock longer than the budget continues
             # on a timer instead of starving every other request.
+            # The same chain runs on the scalable (durable-job) store: the
+            # job's revision fence is checked when the job is claimed, the
+            # match is re-read under the lock at entry, and every action
+            # saves through the store before the next one is computed, so
+            # one job run may advance all consecutive computer turns instead
+            # of paying the move delay again for each computer seat.
             started = time.perf_counter()
             actions = 0
-            for _ in range(1 if getattr(self._store, "scalable", False) else 1000):
+            for _ in range(1000):
                 if (
                     current.status != "ongoing"
                     or not current.turn_of_player_indices
@@ -3541,6 +3547,19 @@ class GamePlatform:
                 )
                 actions += 1
                 self._chain_timeout_retries.pop(match_id, None)
+                if getattr(self._store, "scalable", False):
+                    # The query store fences every save on the persisted
+                    # move history, whose count only advances when the match
+                    # is re-read; a chain that kept applying moves to the
+                    # in-memory record would be rejected as stale on its
+                    # second action. This process's committed writes are
+                    # written through to its read cache, so the re-read is
+                    # the just-saved record — the same fresh start the next
+                    # durable job would get.
+                    refreshed = self._store.get_match(match_id)
+                    if refreshed is None:
+                        return
+                    current = refreshed
             # The loop stopped (time budget or action cap) while a computer
             # may still hold the turn: continue on a timer, with the lock
             # released in between.
