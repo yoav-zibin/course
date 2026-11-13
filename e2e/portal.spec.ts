@@ -12,8 +12,8 @@ test.describe('Portal', () => {
   test('loads with the right title and heading', async ({ page, request }) => {
     await login(page, request);
     await page.goto('/static/portal.html');
-    await expect(page).toHaveTitle(/Portal/);
-    await expect(page.getByRole('heading', { name: 'Game platform' })).toBeVisible();
+    await expect(page).toHaveTitle(/Games/);
+    await expect(page.getByRole('heading', { name: 'BuildPlay.fun' })).toBeVisible();
   });
 
   test('sends logged-out visitors to the login page and back', async ({ page }) => {
@@ -23,7 +23,7 @@ test.describe('Portal', () => {
     await page.locator('#welcome-guest-name').fill(uniqueName('Portal guest'));
     await page.locator('#welcome-guest').click();
     await expect(page).toHaveURL(/\/static\/portal\.html$/);
-    await expect(page.getByRole('heading', { name: 'Game platform' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'BuildPlay.fun' })).toBeVisible();
   });
 
   test('the All games link leaves a game page however it was opened', async ({ page, request }) => {
@@ -59,7 +59,7 @@ test.describe('Portal', () => {
       '/games': { status: 500, body: { detail: 'boom' } },
     });
     await page.goto('/static/portal.html');
-    await expect(page.getByRole('heading', { name: 'Game platform' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'BuildPlay.fun' })).toBeVisible();
     expect(errors).toEqual([]);
   });
 
