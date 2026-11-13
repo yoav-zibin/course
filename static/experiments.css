@@ -2581,3 +2581,37 @@
   height: 100%;
   object-fit: contain;
 }
+/* Softer shape: rounder corners and slightly thicker outlines on panels, cards, fields and the search box. */
+:root[data-skin="meadow"] {
+  --radius-sm: 12px;
+  --radius-md: 22px;
+}
+:root[data-skin="meadow"] .portal-sidebar,
+:root[data-skin="meadow"] .match-creator,
+:root[data-skin="meadow"] .game-detail-page,
+:root[data-skin="meadow"] .match-stage,
+:root[data-skin="meadow"] .portal-shell .game-search-popup,
+:root[data-skin="meadow"] .portal-shell .match-tools,
+:root[data-skin="meadow"] .popular-games-section,
+:root[data-skin="meadow"] .play-option,
+:root[data-skin="meadow"] .portal-shell .library-card,
+:root[data-skin="meadow"] .portal-shell .popular-game-card,
+:root[data-skin="meadow"] .selected-game-card {
+  border-width: 2px;
+  border-style: solid;
+  border-radius: var(--radius-md);
+}
+:root[data-skin="meadow"] .match-creator,
+:root[data-skin="meadow"] .game-detail-page,
+:root[data-skin="meadow"] .match-stage,
+:root[data-skin="meadow"] .portal-shell .game-search-popup { border-radius: 28px; }
+:root[data-skin="meadow"] .portal-shell .popular-game-card { overflow: hidden; }
+:root[data-skin="meadow"] .portal-shell input,
+:root[data-skin="meadow"] .portal-shell select,
+:root[data-skin="meadow"] .portal-shell textarea {
+  border-width: 2px;
+  border-radius: var(--radius-sm);
+}
+:root[data-skin="meadow"] .portal-shell input[type="search"],
+:root[data-skin="meadow"] .portal-shell input[type="text"] { border-radius: 16px; }
+:root[data-skin="meadow"] .portal-shell button { border-width: 2px; }
