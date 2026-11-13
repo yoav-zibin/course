@@ -137,6 +137,12 @@
 .popular-game-title { width:100%; overflow:hidden; color:#f1f3f8; font-size:14px; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
 .popular-game-players { color:#b49bff; font-size:10px; }
 .popular-game-open { margin-top:3px; color:#c6f432; font-size:10px; }
+.popular-game-card-wrap { position:relative; display:flex; min-width:0; scroll-snap-align:start; }
+.popular-game-card-wrap > .popular-game-card { flex:1; width:100%; }
+.library-card-wrap { position:relative; display:flex; min-width:0; }
+.library-card-wrap > .library-card { flex:1; width:100%; }
+.game-quick-play { position:absolute; z-index:2; right:10px; bottom:10px; padding:7px 16px; border-radius:999px; font-size:13px; font-weight:700; box-shadow:0 2px 10px rgb(0 0 0 / .45); }
+.selected-game-card #quick-play { margin-top:10px; padding:9px 22px; border-radius:999px; font-size:15px; font-weight:700; }
 .library-toolbar,.library-filters,.library-views { display:flex; flex-wrap:wrap; gap:8px; }
 .library-toolbar { justify-content:space-between; align-items:center; gap:16px; }
 .portal-shell .library-toolbar button { border-radius:24px; font-size:12px; background:transparent; color:#c9cfdc; }

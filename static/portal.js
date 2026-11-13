@@ -1178,7 +1178,7 @@ function renderLibrary() {
     const arcadeSelectLabel = document.documentElement.dataset.skin === "arcade"
       ? selectLabel.replace(/\s*[↗→➜]\s*$/, "")
       : selectLabel;
-    return el("button", {type:"button", class:"library-card", "aria-pressed":String(game.id === selected),
+    const card = el("button", {type:"button", class:"library-card", "aria-pressed":String(game.id === selected),
       "aria-label":random ? `${name}. ${description}` : I18n.t("ui.games.open_aria", { name, players: gameCountLabel(game) }, `Open ${name}, ${gameCountLabel(game)}`),
       disabled:random && state.randomJoining,
       onclick:() => random ? joinRandomMatch() : openGamePage(game.id)},
@@ -1189,6 +1189,8 @@ function renderLibrary() {
         el("span", {class:"library-title", textContent:name}),
         el("span", {class:"library-description", textContent:description || I18n.t("ui.games.default_description", {}, "Choose this game to start a new match.")}),
         el("span", {class:"library-select", textContent:arcadeSelectLabel})));
+    if (!canQuickStart(game)) return card;
+    return el("div", {class: "library-card-wrap"}, card, quickPlayButton(game));
   }));
 }
 
@@ -1214,7 +1216,7 @@ function gameCarouselCards(games, ranked = false) {
     const hue = Array.from(game.id).reduce((value, letter) => value + letter.charCodeAt(0), 0) % 360;
     const name = catalogGameLabel(game);
     const initials = name.trim().split(/\s+/).slice(0, 2).map(word => Array.from(word)[0] || "").join("");
-    return el("button", {
+    const card = el("button", {
       type: "button",
       class: "popular-game-card",
       "aria-label": I18n.t("ui.games.open_aria", {name, players: gameCountLabel(game)}, `Open ${name}, ${gameCountLabel(game)}`),
@@ -1227,6 +1229,8 @@ function gameCarouselCards(games, ranked = false) {
         el("span", {class: "popular-game-title", textContent: name}),
         el("span", {class: "popular-game-players", textContent: gameCountLabel(game)}),
         el("span", {class: "popular-game-open", textContent: I18n.t("ui.games.open_game", {}, "Play game ↗")})));
+    if (!canQuickStart(game)) return card;
+    return el("div", {class: "popular-game-card-wrap"}, card, quickPlayButton(game));
   });
 }
 
@@ -1447,6 +1451,9 @@ function updateMatchSetup() {
   const supportsComputerMatch=Boolean(gameVersion?.server_code && game.allowed_player_counts.some(count=>count>1));
   $("computer-match-option").hidden=!supportsComputerMatch;
   $("play-computers").disabled=!game || state.creating || !navigator.onLine;
+  $("quick-play").hidden = !canQuickStart(game);
+  $("quick-play").disabled = state.creating || !navigator.onLine;
+  $("quick-play").textContent = I18n.t("ui.portal.quick_play", {}, "▶ Play");
   const solo = game?.allowed_player_counts.length === 1 && maximum === 0;
   $("speed-choice").hidden = solo;
   updateStakePreview();
@@ -2245,10 +2252,28 @@ async function createMatch() {
   }
 }
 
-async function playWithAllComputers() {
+// Quick start: a game can skip the setup page when "play with computers"
+// needs no further choice — it has a seat count above one to preselect.
+function canQuickStart(game) {
+  return Boolean(game) && !isRandomGame(game)
+    && Array.isArray(game.allowed_player_counts)
+    && game.allowed_player_counts.some((count) => count > 1);
+}
+
+function quickPlayButton(game) {
+  return el("button", {type: "button", class: "game-quick-play primary",
+    "aria-label": I18n.t("ui.portal.quick_play_aria", {name: catalogGameLabel(game)}, `Play ${catalogGameLabel(game)} against computers now`),
+    onclick: (event) => { event.stopPropagation(); void playWithAllComputers(game); }},
+    I18n.t("ui.portal.quick_play", {}, "▶ Play"));
+}
+
+async function playWithAllComputers(quickGame) {
   if (state.creating) return;
   const user=me();
-  const game=state.games.find(item=>item.id===(state.detailGameId || $("new-game").value));
+  // Quick start (a card's or the detail page's Play button) passes its game;
+  // the dialog's own button passes the click event, which has no game id.
+  const quick = quickGame && typeof quickGame.id === "string" ? quickGame : null;
+  const game=quick ?? state.games.find(item=>item.id===(state.detailGameId || $("new-game").value));
   if (!user) {
     goToLogin();
     return;
@@ -2258,19 +2283,24 @@ async function playWithAllComputers() {
     $("create-message").className="message error";
     return;
   }
-  const chosenCount=Number($("computer-player-count").value);
+  // The dialog's count select belongs to the detail game; for any other
+  // game the dialog default is its preselection: the largest seat count.
+  const chosenCount = quick && state.detailGameId !== quick.id ? NaN : Number($("computer-player-count").value);
   const playerCount=chosenCount>1 && game.allowed_player_counts.includes(chosenCount)
     ? chosenCount
     : Math.max(...game.allowed_player_counts.filter(count=>count>1));
   if (!Number.isFinite(playerCount)) {
+    if (quick) { openGamePage(game.id); return; }
     $("create-message").textContent=I18n.t("ui.portal.needs_two_seats", {}, "This game needs at least two player seats.");
     $("create-message").className="message error";
     return;
   }
   let match;
   state.creating=true;
-  $("play-computers").disabled=true;
-  $("play-computers").textContent=I18n.t("ui.portal.starting_match", {}, "Starting match…");
+  if (!quick) {
+    $("play-computers").disabled=true;
+    $("play-computers").textContent=I18n.t("ui.portal.starting_match", {}, "Starting match…");
+  }
   $("create-message").textContent=I18n.plural("ui.portal.starting_computers", playerCount-1, {}, {one: "Starting a free match against 1 computer…", many: `Starting a free match against ${playerCount-1} computers…`});
   $("create-message").className="message";
   try {
@@ -2290,9 +2320,10 @@ async function playWithAllComputers() {
       : error.message;
     $("create-message").className="message error";
     if (match) selectMatch(match.id);
+    else if (quick) openGamePage(game.id);
   } finally {
     state.creating=false;
-    $("play-computers").textContent=I18n.t("ui.portal.computers_button", {}, "Play with computers ↗");
+    if (!quick) $("play-computers").textContent=I18n.t("ui.portal.computers_button", {}, "Play with computers ↗");
     renderLists();
   }
 }
@@ -2486,6 +2517,10 @@ async function main() {
   });
   $("practice").addEventListener("click", practice);
   $("play-computers").addEventListener("click", playWithAllComputers);
+  $("quick-play").addEventListener("click", () => {
+    const game = state.games.find((item) => item.id === state.detailGameId);
+    if (game) void playWithAllComputers(game);
+  });
   $("retry-sync").addEventListener("click", () => {
     offline.retryAfter = 0;
     state.lastSent = null;
