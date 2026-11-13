@@ -26,6 +26,20 @@ def api_for(store):
     return api
 
 
+def test_legacy_catalog_and_popularity_use_metadata_without_transactions_or_code_reads(store):
+    api = api_for(store)
+    owner = api.new_user('catalog reader')
+    game_id = api.new_game(owner=owner)
+    store.clear_cache()
+    with patch.object(store.client, 'transaction', side_effect=AssertionError('read opened transaction')):
+        with patch.object(store, '_read_doc', wraps=store._read_doc) as reads:
+            rows = api.ok('GET', '/games')
+            assert [row['id'] for row in rows] == [game_id]
+            assert 'code' not in rows[0] and 'server_code' not in rows[0]
+            assert api.ok('GET', f'/games/{game_id}/popularity')['score'] == 0
+            assert all('/body/' not in call.args[0].path for call in reads.call_args_list)
+
+
 def test_admin_match_browse_primes_code_in_batches_and_keeps_spectator_projection(store):
     api = api_for(store)
     alice, bob = api.new_user('alice'), api.new_user('bob')

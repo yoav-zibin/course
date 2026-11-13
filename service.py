@@ -1981,34 +1981,46 @@ class GamePlatform:
         SHA-256 hash is stored on the game's import package, so the lookup
         hashes the presented id and compares hashes; packages written before
         the hash-only change, which carry the id itself, match too (see
-        models.package_secret_hash). The lookup scans the published games,
-        which is cheap (imports are rare and the list is small). Unpublished
+        models.package_secret_hash). The lookup scans game metadata and reads
+        code only for the matching game. Unpublished
         games are included: a resubmission of one re-publishes it (see
         import_agent_game)."""
         digest = hashlib.sha256(request_id.encode("utf-8")).hexdigest()
+        reader = getattr(self._store, 'list_games_without_code', self._store.list_games)
         with self._lock:
-            for game in self._store.list_games(owner_user_id=None, include_unpublished=True):
+            for game in reader(owner_user_id=None, include_unpublished=True):
                 stored = package_secret_hash(game.import_package)
                 if stored is not None and secrets.compare_digest(stored, digest):
-                    return game
+                    return self._store.get_game(game.id)
         return None
 
     def find_game_by_id(self, game_id: str) -> Game | None:
-        """The game with [game_id], published or not, or None. The scan
-        mirrors find_game_by_addition_request_id: imports are rare and the
-        list is small."""
+        """The non-deleted game with [game_id], published or not, or None."""
+        if not game_id:
+            return None
         with self._lock:
-            for game in self._store.list_games(owner_user_id=None, include_unpublished=True):
-                if game.id == game_id:
-                    return game
-        return None
+            game = self._store.get_game(game_id)
+            return game if game is not None and not game.deleted else None
 
-    def get_game(self, game_id: str, *, caller_id: str | None = None) -> Game:
-        with self._lock:
-            game = self._get_game(game_id)
+    def get_game(
+        self, game_id: str, *, caller_id: str | None = None, include_code: bool = True,
+    ) -> Game:
+        reader = self._store.get_game
+        if not include_code:
+            reader = getattr(self._store, 'get_game_without_code', reader)
+
+        def read() -> Game:
+            game = reader(game_id)
+            if game is None:
+                raise NotFoundError('game not found')
             if not game.published and caller_id != game.owner_user_id:
                 raise NotFoundError("game not found")
             return game
+
+        if not include_code:
+            return self._plain_read(read)
+        with self._lock:
+            return read()
 
     def get_game_version(
         self, game_id: str, version: int, *, caller_id: str | None = None,
@@ -2150,6 +2162,11 @@ class GamePlatform:
         if code is None:
             raise NotFoundError(f"language not supported: {locale}")
         games = self._bundle_published_games()
+        prefetch = getattr(self._store, 'prefetch_game_versions', None)
+        missing = [(game.id, game.version) for game in games
+                   if not game.code and (game.id, game.version) not in self._bundle_tables]
+        if prefetch is not None and missing:
+            self._plain_read(lambda: prefetch(missing))
         tables = {game.id: self._bundle_table(game) for game in games}
         wanted = [
             text
@@ -2303,7 +2320,7 @@ class GamePlatform:
         """(status, {game id: {"name", "description"}}) for the published games, in [locale]:
         what a portal shows on its game cards. Like [game_strings], it never fails because
         of the translator."""
-        games = self.list_games(owner_user_id=None)
+        games = self.list_games(owner_user_id=None, include_code=False)
         translated = self._translation.translate(
             [text for game in games for text in (game.name, game.description)], locale
         )
@@ -2323,19 +2340,18 @@ class GamePlatform:
             self._store.set_game_published(game_id, False)
             return self._get_game(game_id)
 
-    def list_games(self, *, owner_user_id: str | None, query: str = "") -> list[Game]:
+    def list_games(
+        self, *, owner_user_id: str | None, query: str = '', include_code: bool = True,
+    ) -> list[Game]:
         """Published games, optionally one owner's. A [query] keeps the games whose
         name or description contains every one of its words, ignoring case."""
         words = query.casefold().split()
-        with self._lock:
-            return [
-                game
-                for game in self._store.list_games(owner_user_id=owner_user_id)
-                if all(
-                    word in f"{game.name} {game.description}".casefold()
-                    for word in words
-                )
-            ]
+        reader = self._store.list_games
+        if not include_code:
+            reader = getattr(self._store, 'list_games_without_code', reader)
+        games = self._plain_read(lambda: reader(owner_user_id=owner_user_id))
+        return [game for game in games
+                if all(word in f'{game.name} {game.description}'.casefold() for word in words)]
 
     def list_popular_games(self, *, limit: int = 8) -> list[Game]:
         """Returns the highest player-match totals from the persistent ranking."""
@@ -2363,9 +2379,9 @@ class GamePlatform:
         self, *, game_id: str, caller_id: str | None = None
     ) -> int:
         """Returns a visible game's cumulative player count in started matches."""
-        game = self.get_game(game_id, caller_id=caller_id)
+        game = self.get_game(game_id, caller_id=caller_id, include_code=False)
         reader = getattr(self._store, "game_popularity_score", None)
-        return int(reader(game.id)) if reader is not None else 0
+        return self._plain_read(lambda: int(reader(game.id))) if reader is not None else 0
 
     def _record_game_match_start(self, match: Match) -> None:
         """Adds this start once, in the same storage unit of work as the match."""

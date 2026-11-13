@@ -802,7 +802,7 @@ def list_games(
     must match, ignoring case). The list never includes code: with every game's
     client and server code included, it was over a megabyte, and nobody reads
     code from a list. Load one game in full from /games/{id}/versions/{version}."""
-    games = platform.list_games(owner_user_id=owner_user_id, query=q)
+    games = platform.list_games(owner_user_id=owner_user_id, query=q, include_code=False)
     return [GameSummaryOut.of(game) for game in games]
 
 
