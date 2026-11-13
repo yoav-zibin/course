@@ -1,0 +1,66 @@
+{
+  "environment": "disposable loopback in-memory store",
+  "submission_endpoint": "POST /games/declarative",
+  "games": [
+    {
+      "kind": "tictactoe",
+      "id": "cf584c89-80b6-4acf-b1a3-676a38feb6d3",
+      "version": 1,
+      "submission_status": 201
+    },
+    {
+      "kind": "connect4",
+      "id": "2d275874-380d-4958-b13e-5803648cf9ee",
+      "version": 1,
+      "submission_status": 201
+    },
+    {
+      "kind": "reversi",
+      "id": "2d080e3b-9c85-4b66-b59b-2026c6e6f8ce",
+      "version": 1,
+      "submission_status": 201
+    },
+    {
+      "kind": "nim",
+      "id": "6c06b3b9-46d3-46f0-bbf2-c6f0a2b5afe3",
+      "version": 1,
+      "submission_status": 201
+    },
+    {
+      "kind": "mancala",
+      "id": "f4b64845-786c-425c-be73-11f9dc1b0e5b",
+      "version": 1,
+      "submission_status": 201
+    },
+    {
+      "kind": "gomoku",
+      "id": "284f2e18-2ada-4dd2-b5c2-4d785fd94943",
+      "version": 1,
+      "submission_status": 201
+    },
+    {
+      "kind": "hex",
+      "id": "83925af6-6311-4cc0-a381-4b285ed9f4d9",
+      "version": 1,
+      "submission_status": 201
+    },
+    {
+      "kind": "domineering",
+      "id": "7d0ff789-2a51-4768-ac8a-48ecc6fcbe9f",
+      "version": 1,
+      "submission_status": 201
+    },
+    {
+      "kind": "memory",
+      "id": "9ae6ce56-3de0-4165-a575-3ca233ddebe6",
+      "version": 1,
+      "submission_status": 201
+    },
+    {
+      "kind": "pig",
+      "id": "8e1483aa-0510-4014-a0c6-0e4d33438dfe",
+      "version": 1,
+      "submission_status": 201
+    }
+  ]
+}

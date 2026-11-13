@@ -1,6 +1,7 @@
 // Portal: list your matches, create, join, start, leave and delete them, and play them.
 
-// The selected match's game runs in a sandboxed iframe; the page polls the server and
+// HTML games use a sandbox; declarative games render platform-owned scene nodes.
+// The page polls the server and
 // sends the game state_changed whenever the match changes.
 // Identity comes from Auth (the account menu); data comes from the public and
 // authenticated API endpoints, never from the debug tools.
@@ -242,7 +243,7 @@ const state = {
     new URLSearchParams(location.hash.slice(1)).get("game"),
 };
 
-const frame = new GameFrame(
+const htmlFrame = new GameFrame(
   $("game-box"),
   (move) => onMakeMove(move),
   // A game that posts anything but make_move is misbehaving, but that is the
@@ -250,6 +251,27 @@ const frame = new GameFrame(
   // the UI instead of flashing an error the player cannot act on.
   (problem) => console.error(problem),
 );
+
+
+// Both presentation formats share the authoritative move path, version pinning,
+// replay and device practice. Declarative UI never receives platform credentials.
+const frame = {
+  declarative: null,
+  load(code, spec) {
+    this.unload();
+    if (spec) {
+      this.declarative = DeclarativeUI.mount($("game-box"), spec, {
+        onMove: move => onMakeMove({move}),
+        onError: error => console.error(I18n.t("ui.declarative.error_prefix", {}, "Declarative game UI:"), error),
+      });
+    } else htmlFrame.load(code);
+  },
+  send(message) { return this.declarative ? this.declarative.send(message) : htmlFrame.send(message); },
+  unload() {
+    if (this.declarative) { this.declarative.destroy(); this.declarative = null; }
+    htmlFrame.unload();
+  },
+};
 
 // Data
 
@@ -1947,7 +1969,8 @@ async function syncGame() {
     const userId = me()?.id;
     const code = await gameCode(match);
     if (state.match?.id !== match.id || me()?.id !== userId) return;
-    frame.load(code);
+    const fullGame = state.gameCache.get(`${match.game_id}@${match.game_version}`);
+    frame.load(code, fullGame?.declarative_ui);
     state.loaded = key;
     state.lastSent = null;
   }

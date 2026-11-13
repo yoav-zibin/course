@@ -11,6 +11,13 @@ it created (a new version if anything changed).
 Imported source is checked but not visually reviewed by this API. Retain the
 original payload for comparison.
 
+For [declarative games](declarative-games.md), supply `declarative_ui` instead
+of `client_code`. `POST /games/declarative` is the same publication path with
+the declarative package required. It keeps all existing artifact, translation,
+server-rule and recorded-test checks. The schema is at
+`GET /games/declarative/schema`; `POST /games/declarative/validate` is a
+non-persisting QuickJS presentation probe, not a publication/test-flow bypass.
+
 ## Authentication and ownership
 
 Credentials are optional. Send the existing account credentials in
@@ -34,7 +41,10 @@ an unauthenticated `GET /games/schema`.
 Required fields:
 
 - `name`, `description`, `allowed_player_counts` (unique integers 1–10).
-- `client_code`: complete iframe HTML following the v2 message and translation contracts.
+- Either `client_code` (complete iframe HTML following the v2 message and
+  translation contracts) or `declarative_ui` (portable package following
+  `schemas/declarative-ui.schema.json`). Omit `client_code` for declarative
+  imports; the platform generates its compatibility host.
 - `server_code`: deterministic QuickJS JavaScript implementing the platform game API.
 - `rules`, `ui_instructions`: substantive specifications.
 - `tutorial`: `{text, html}`, with a responsive viewport; interactive tutorials

@@ -1571,7 +1571,13 @@ async function testServerCode(host, inputs, onProgress) {
 function readInputs() {
   const errors = [];
   const serverCode = $("server-code").value;
-  const clientCode = $("client-code").value;
+  let declarativeUI = null;
+  const declarativeText = $("declarative-spec")?.value?.trim();
+  if (declarativeText) {
+    try { declarativeUI = JSON.parse(declarativeText); }
+    catch (error) { errors.push(I18n.t("ui.declarative.test_invalid_json", {message:error.message}, "The declarative UI spec is not valid JSON: {message}")); }
+  }
+  const clientCode = declarativeUI ? DeclarativeUI.clientDocument(declarativeUI) : $("client-code").value;
   if (!serverCode.trim()) errors.push("paste the server code");
   if (!clientCode.trim()) errors.push("paste the client code");
   const schemas = {};
@@ -1648,6 +1654,7 @@ function readInputs() {
     inputs: {
       serverCode,
       clientCode,
+      declarativeUI,
       schemas,
       cases,
       allowedPlayerCounts,
@@ -1722,6 +1729,10 @@ function buildImportBody() {
     allows_leave_mid_match: inputs.allowsLeaveMidMatch,
     allows_join_mid_match: inputs.allowsJoinMidMatch,
   };
+  if (inputs.declarativeUI) {
+    body.declarative_ui = inputs.declarativeUI;
+    delete body.client_code;
+  }
   return { body, errors };
 }
 
@@ -1740,14 +1751,14 @@ async function runChecks(inputs, onProgress, createHost) {
   } catch (e) {
     loadError = e;
   }
-  const lint = lintClientCode(inputs.clientCode, inputs.serverCode);
-  if (!inputs.clientCode.includes("applyLocale(")) {
+  const lint = inputs.declarativeUI ? [] : lintClientCode(inputs.clientCode, inputs.serverCode);
+  if (!inputs.declarativeUI && !inputs.clientCode.includes("applyLocale(")) {
     lint.push("Missing applyLocale(message) integration");
   }
   push(
     "localization",
     lint.length ? "failed" : "passed",
-    lint.length ? lint : ["the client code passes the translation lint"],
+    lint.length ? lint : [inputs.declarativeUI ? I18n.t("ui.declarative.test_server_validation", {}, "Declarative string coverage and QuickJS scene validation run on the server in step 1.") : "the client code passes the translation lint"],
   );
   if (!inputs.cases) {
     push("approved_examples", "skipped", ["paste unit test cases to run this check"]);
@@ -1973,6 +1984,7 @@ const Player = {
     const codeChanged =
       !this.inputs ||
       this.inputs.serverCode !== inputs.serverCode ||
+      this.inputs.clientCode !== inputs.clientCode ||
       JSON.stringify(this.inputs.schemas) !== JSON.stringify(inputs.schemas);
     if (codeChanged) {
       if (this.host) this.host.terminate();
@@ -2268,7 +2280,7 @@ const Player = {
     m.view = view;
     const message = {
       type: "state_changed",
-      state: m.state,
+      state: this.inputs?.declarativeUI ? view : m.state,
       view,
       players: m.players.map((p, i) => ({
         player_index: i,
@@ -2313,7 +2325,7 @@ const Player = {
       if (seat === 0) m.view = view;
       const message = {
         type: "state_changed",
-        state: m.state,
+        state: this.inputs?.declarativeUI ? view : m.state,
         view,
         players: m.players.map((p, i) => ({
           player_index: i,
@@ -3041,7 +3053,8 @@ const Flow = {
     $("step2-results").replaceChildren();
     $("flow-finish").hidden = true;
     this.submissionId = submissionId;
-    this.submittedBody = body;
+    this.submittedBody = clone(body);
+    if (this.submittedBody.declarative_ui) delete this.submittedBody.client_code;
     this.step = 2;
     this.active = true;
     this.card(1, "done", `Recorded (${createdAt})`);
@@ -3661,6 +3674,7 @@ function fillForm(example) {
     $("description").value = example.description || "";
     $("server-code").value = example.server_code || "";
     $("client-code").value = example.client_code || "";
+    if ($("declarative-spec")) $("declarative-spec").value = example.declarative_ui ? pretty(example.declarative_ui) : "";
     $("schema-state").value = pretty(tests.state_schema || {});
     $("schema-view").value = pretty(tests.view_schema || {});
     $("schema-move").value = pretty(tests.move_schema || {});
@@ -3720,6 +3734,29 @@ function init() {
     option.value = String(i);
     option.textContent = entry.label;
     resolutionSelect.appendChild(option);
+  });
+  fetch("/games/declarative/examples").then(response=>response.json()).then(data=>{
+    for(const example of data.examples || []) {
+      const option=document.createElement("option");option.value=example.url;option.textContent=example.name;
+      $("declarative-example")?.appendChild(option);
+    }
+  }).catch(()=>{});
+  $("load-declarative-example")?.addEventListener("click",async()=>{
+    try {
+      const url=$("declarative-example").value;if(!url)return;
+      const response=await fetch(url);if(!response.ok)throw new Error(I18n.t("ui.declarative.test_example_failed", {}, "Example could not be loaded"));
+      Flow.abandon();fillForm(await response.json());Log.add("info",I18n.t("ui.declarative.test_example_loaded", {}, "Loaded declarative example. Choose a private secret and begin step 1."));
+    }catch(error){Log.add("error",error.message);}
+  });
+  $("import-package-file")?.addEventListener("change", async event => {
+    try {
+      const file = event.target.files[0];
+      if (!file) return;
+      if (file.size > 900000) throw new Error(I18n.t("ui.declarative.test_package_limit", {}, "Package exceeds 900000 bytes"));
+      const body = JSON.parse(await file.text());
+      Flow.abandon(); fillForm(body);
+      Log.add("info", I18n.t("ui.declarative.test_package_loaded", {}, "Loaded game package. Begin step 1 to record validation."));
+    } catch (error) { Log.add("error", I18n.t("ui.declarative.test_package_failed", {}, "Could not load package:") + " " + error.message); }
   });
   $("run-checks").addEventListener("click", runChecksUi);
   $("load-example").addEventListener("click", loadExample);

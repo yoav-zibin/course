@@ -1,0 +1,1177 @@
+{
+  "name": "Tic-tac-toe · Declarative",
+  "description": "Place X or O in an empty square. Make a line of three to win. A full board without a line is a draw.",
+  "game_addition_request_id_and_secret": "example-only-declarative-tictactoe-replace-before-publishing",
+  "allowed_player_counts": [
+    2
+  ],
+  "server_code": "const KIND=\"tictactoe\";\n// Shared rules for the ten declarative examples. The generated package prefixes\n// this file with a constant KIND. No rendering, network or device APIs are used.\nfunction fresh() {\n  const sizes = {tictactoe:9, connect4:42, reversi:64, gomoku:81, hex:49, domineering:36, memory:16};\n  const s = {board:Array(sizes[KIND] || 0).fill(-1), turn:0, scores:[0,0],\n    selected:[], matched:[], roll:0, total:0, winner:-1, turns:0, over:false};\n  if (KIND === 'reversi') {s.board[27]=1;s.board[28]=0;s.board[35]=0;s.board[36]=1;}\n  if (KIND === 'nim') s.board = [15];\n  if (KIND === 'mancala') s.board = [4,4,4,4,4,4,0,4,4,4,4,4,4,0];\n  return s;\n}\nfunction flips(s, cell, seat) {\n  if (s.board[cell] !== -1) return [];\n  const out=[], r=Math.floor(cell/8), c=cell%8;\n  for (let dr=-1;dr<=1;dr++) for (let dc=-1;dc<=1;dc++) {\n    if (!dr && !dc) continue;\n    let rr=r+dr,cc=c+dc,path=[];\n    while (rr>=0&&rr<8&&cc>=0&&cc<8&&s.board[rr*8+cc]===1-seat) {\n      path.push(rr*8+cc);rr+=dr;cc+=dc;\n    }\n    if (path.length&&rr>=0&&rr<8&&cc>=0&&cc<8&&s.board[rr*8+cc]===seat) out.push(...path);\n  }\n  return out;\n}\nfunction legal(s) {\n  if (s.over) return [];\n  if (KIND === 'pig') return [{action:'roll'},...(s.total ? [{action:'hold'}] : [])];\n  if (KIND === 'nim') return [1,2,3].filter(n=>n<=s.board[0]).map(take=>({take}));\n  if (KIND === 'mancala') return s.board.flatMap((n,pit)=>n&&pit>=(s.turn?7:0)&&pit<(s.turn?13:6)?[{pit}]:[]);\n  if (KIND === 'connect4') return Array.from({length:7},(_,column)=>({column})).filter(m=>s.board[m.column]===-1);\n  if (KIND === 'reversi') return s.board.flatMap((_,cell)=>flips(s,cell,s.turn).length?[{cell}]:[]);\n  if (KIND === 'domineering') return s.board.flatMap((v,cell)=>v===-1&&\n    (s.turn ? cell%6<5&&s.board[cell+1]===-1 : cell<30&&s.board[cell+6]===-1)?[{cell}]:[]);\n  if (KIND === 'memory') return s.board.flatMap((_,cell)=>!s.matched.includes(cell)&&\n    !(s.selected.length===1&&s.selected.includes(cell))?[{cell}]:[]);\n  return s.board.flatMap((v,cell)=>v===-1?[{cell}]:[]);\n}\nfunction lineWon(s, cell, n, need) {\n  const r=Math.floor(cell/n),c=cell%n,seat=s.turn;\n  return [[0,1],[1,0],[1,1],[1,-1]].some(([dr,dc])=>{\n    let count=1;\n    for (const sign of [-1,1]) {\n      let rr=r+dr*sign,cc=c+dc*sign;\n      while(rr>=0&&rr<Math.ceil(s.board.length/n)&&cc>=0&&cc<n&&s.board[rr*n+cc]===seat) {\n        count++;rr+=dr*sign;cc+=dc*sign;\n      }\n    }\n    return count>=need;\n  });\n}\nfunction hexWon(s) {\n  const n=7,seen=new Set(),todo=[];\n  for(let i=0;i<n;i++){const cell=s.turn?i*n:i;if(s.board[cell]===s.turn){seen.add(cell);todo.push(cell);}}\n  while(todo.length) {\n    const cell=todo.pop(),r=Math.floor(cell/n),c=cell%n;\n    if(s.turn?c===n-1:r===n-1)return true;\n    for(const [dr,dc] of [[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0]]) {\n      const rr=r+dr,cc=c+dc,k=rr*n+cc;\n      if(rr>=0&&rr<n&&cc>=0&&cc<n&&s.board[k]===s.turn&&!seen.has(k)){seen.add(k);todo.push(k);}\n    }\n  }\n  return false;\n}\nfunction finish(s,winner){s.over=true;s.winner=winner;}\nfunction majority(s,a,b){finish(s,a===b?-1:a>b?0:1);}\nfunction payout(s,ctx) {\n  const humans=ctx.players.filter(p=>p.kind==='human'&&p.active!==false),winner=ctx.players[s.winner];\n  const recipients=winner&&winner.kind==='human'&&winner.active!==false?[winner]:humans;\n  const out={};if(!recipients.length)return out;\n  recipients.forEach((p,i)=>out[p.id]=Math.floor(ctx.pot/recipients.length)+(i<ctx.pot%recipients.length?1:0));\n  return out;\n}\nfunction apply(s,move,ctx) {\n  const seat=s.turn;s.turns++;\n  if(KIND==='nim') {s.board[0]-=move.take;if(!s.board[0])finish(s,seat);}\n  else if(KIND==='pig') {\n    if(move.action==='roll') {s.roll=1+Math.floor(ctx.random()*6);if(s.roll===1){s.total=0;s.turn=1-seat;}else s.total+=s.roll;}\n    else{s.scores[seat]+=s.total;s.total=0;s.turn=1-seat;if(s.scores[seat]>=30)finish(s,seat);}\n    // A finite match even when both random opponents keep rolling.\n    if(!s.over&&s.turns>=300)majority(s,s.scores[0],s.scores[1]);\n    return;\n  } else if(KIND==='memory') {\n    if(s.selected.length===2)s.selected=[];\n    s.selected.push(move.cell);\n    if(s.selected.length===2) {\n      if(s.board[s.selected[0]]===s.board[s.selected[1]]){s.matched.push(...s.selected);s.scores[seat]++;s.selected=[];}\n      else s.turn=1-seat;\n      if(s.matched.length===16)majority(s,s.scores[0],s.scores[1]);\n    }\n    return;\n  } else if(KIND==='mancala') {\n    let i=move.pit,stones=s.board[i];s.board[i]=0;\n    while(stones){i=(i+1)%14;if(i===(seat?6:13))continue;s.board[i]++;stones--;}\n    const store=seat?13:6,own=i>=(seat?7:0)&&i<(seat?13:6);\n    if(own&&s.board[i]===1&&s.board[12-i]){s.board[store]+=1+s.board[12-i];s.board[i]=s.board[12-i]=0;}\n    if(s.board.slice(0,6).every(n=>!n)||s.board.slice(7,13).every(n=>!n)||s.turns>=300) {\n      for(let j=0;j<6;j++){s.board[6]+=s.board[j];s.board[j]=0;s.board[13]+=s.board[j+7];s.board[j+7]=0;}\n      majority(s,s.board[6],s.board[13]);\n    } else s.turn=i===store?seat:1-seat;\n    return;\n  } else if(KIND==='reversi') {\n    for(const cell of flips(s,move.cell,seat))s.board[cell]=seat;\n    s.board[move.cell]=seat;s.turn=1-seat;\n    if(!legal(s).length){s.turn=seat;if(!legal(s).length)majority(s,s.board.filter(v=>v===0).length,s.board.filter(v=>v===1).length);}\n    return;\n  } else if(KIND==='domineering') {\n    s.board[move.cell]=seat;s.board[move.cell+(seat?1:6)]=seat;\n    s.turn=1-seat;if(!legal(s).length)finish(s,seat);return;\n  } else {\n    let cell=move.cell;\n    if(KIND==='connect4'){cell=move.column;while(cell+7<42&&s.board[cell+7]===-1)cell+=7;}\n    s.board[cell]=seat;\n    const won=KIND==='hex'?hexWon(s):lineWon(s,cell,KIND==='tictactoe'?3:KIND==='connect4'?7:9,KIND==='tictactoe'?3:KIND==='connect4'?4:5);\n    if(won)finish(s,seat);else if(s.board.every(v=>v!==-1))finish(s,-1);\n  }\n  s.turn=1-seat;\n}\nconst game={\n  newMatch(ctx){const s=fresh();if(KIND==='memory'){s.board=Array.from({length:16},(_,i)=>i%8);for(let i=15;i>0;i--){const j=Math.floor(ctx.random()*(i+1));[s.board[i],s.board[j]]=[s.board[j],s.board[i]];}}return {state:s,turn:[ctx.players[0].id]};},\n  applyMove(state,id,move,ctx){\n    if(state.over||ctx.players[state.turn].id!==id||!move||typeof move!=='object'||Array.isArray(move))throw new InvalidMove('Illegal move');\n    const options=legal(state),keys=Object.keys(move);\n    if(!options.some(m=>Object.keys(m).length===keys.length&&keys.every(k=>Object.prototype.hasOwnProperty.call(m,k)&&m[k]===move[k])))throw new InvalidMove('Illegal move');\n    const s=JSON.parse(JSON.stringify(state));apply(s,move,ctx);\n    return s.over?{state:s,turn:null,payouts:payout(s,ctx)}:{state:s,turn:[ctx.players[s.turn].id]};\n  },\n  viewFor(state,id,ctx){\n    const s=JSON.parse(JSON.stringify(state));\n    if(KIND==='memory')s.board=s.board.map((v,i)=>s.matched.includes(i)||s.selected.includes(i)?v:-1);\n    // Only the active viewer receives interactive affordances. Spectators see\n    // the same public board, with no legal targets or private card values.\n    s.legal=id===ctx.players[state.turn].id&&!state.over?legal(state):[];return s;\n  },\n  randomMove(s,id,ctx){const options=legal(s);return options[Math.floor(ctx.random()*options.length)];},\n  computerMove(s,id,ctx){\n    const options=legal(s);\n    if(KIND==='pig')return {action:s.total>=10?'hold':'roll'};\n    return options[Math.floor(ctx.random()*options.length)];\n  }\n};\n",
+  "declarative_ui": {
+    "format": "buildplay-ui",
+    "version": 1,
+    "viewport": {
+      "width": 600,
+      "height": 560
+    },
+    "boards": [
+      {
+        "id": "main",
+        "kind": "grid",
+        "x": 24,
+        "y": 100,
+        "width": 400.0,
+        "height": 400.0,
+        "rows": 3,
+        "columns": 3,
+        "color": "#172743",
+        "alternate_color": "#1e3352",
+        "line_color": "#5c7190"
+      }
+    ],
+    "piece_types": {
+      "p0": {
+        "shape": "text",
+        "width": 101.33333333333334,
+        "height": 101.33333333333334,
+        "text_color": "#a7f070",
+        "color": "#a7f070"
+      },
+      "p1": {
+        "shape": "text",
+        "width": 101.33333333333334,
+        "height": 101.33333333333334,
+        "text_color": "#ff9dca",
+        "color": "#ff9dca"
+      },
+      "card": {
+        "shape": "card",
+        "width": 93.33333333333333,
+        "height": 113.33333333333334,
+        "color": "#fff7df",
+        "text_color": "#172743"
+      },
+      "back": {
+        "shape": "image",
+        "width": 93.33333333333333,
+        "height": 113.33333333333334,
+        "back_asset": "card_back"
+      },
+      "die": {
+        "shape": "dice",
+        "width": 100,
+        "height": 100,
+        "color": "#fff7df",
+        "text_color": "#172743"
+      },
+      "total": {
+        "shape": "text",
+        "width": 160,
+        "height": 100,
+        "text_color": "#a7f070"
+      },
+      "store": {
+        "shape": "rect",
+        "width": 42,
+        "height": 150,
+        "color": "#ad7a3d",
+        "text_color": "#ffffff"
+      },
+      "domino": {
+        "shape": "rect",
+        "width": 44,
+        "height": 95,
+        "color": "#a7f070"
+      }
+    },
+    "assets": {
+      "card_back": {
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MCAxMDAiPjxyZWN0IHdpZHRoPSI4MCIgaGVpZ2h0PSIxMDAiIHJ4PSI4IiBmaWxsPSIjMzM0ZDg4Ii8+PHBhdGggZD0iTTEwIDUwTDQwIDEwTDcwIDUwTDQwIDkwWiIgZmlsbD0iI2E3ZjA3MCIvPjwvc3ZnPg==",
+        "media_type": "image/svg+xml"
+      }
+    },
+    "strings": {
+      "title": "Tic-tac-toe",
+      "turn": "Player {n}",
+      "finished": "Finished",
+      "roll": "Roll",
+      "hold": "Hold",
+      "take": "Take {n}",
+      "cell": "Cell {n}",
+      "sow": "Sow pit {n}",
+      "server_invalid": "Illegal move",
+      "score": "{a} : {b}"
+    },
+    "ui_code": "const KIND=\"tictactoe\";\nconst SOURCE_STRINGS={\"title\": \"Tic-tac-toe\", \"turn\": \"Player {n}\", \"finished\": \"Finished\", \"roll\": \"Roll\", \"hold\": \"Hold\", \"take\": \"Take {n}\", \"cell\": \"Cell {n}\", \"sow\": \"Sow pit {n}\", \"server_invalid\": \"Illegal move\", \"score\": \"{a} : {b}\"};\n// Prefix with KIND and SOURCE_STRINGS when packaging. Same script runs in\n// QuickJS on native hosts and in the portal's isolated presentation worker.\nconst gameUI = {\n  reduce(message, localState) {\n    const m=message.type==='ui_event'?message.state_changed:message;\n    const s=m.view||m.state;\n    const strings=Object.assign({},SOURCE_STRINGS,m.strings||{});\n    const t=(key,args={})=>(strings[key]||key).replace(/\\{(\\w+)\\}/g,(_,k)=>String(args[k]===undefined?'':args[k]));\n    const active=m.status!=='over'&&m.acting_for_player_index!==null&&m.acting_for_player_index!==undefined;\n    const legal=active?(s.legal||[]):[];\n    const pieces=[],targets=[],controls=[];\n    const labels=[{id:'title',text:t('title'),x:24,y:18,font_size:26},\n      {id:'turn',text:s.over?t('finished'):t('turn',{n:s.turn+1}),x:24,y:54,font_size:18}];\n    if(KIND==='pig'||KIND==='memory')labels.push({id:'score',text:t('score',{a:s.scores[0],b:s.scores[1]}),x:350,y:54,font_size:20});\n    const keyOf=move=>Object.keys(move).map(k=>k+'_'+move[k]).join('_');\n    if(KIND==='nim'){\n      for(let i=0;i<s.board[0];i++)pieces.push({id:'stone_'+i,type:'p0',board:'main',position:{x:35+(i%5)*95,y:50+Math.floor(i/5)*105},text:String(i+1)});\n      legal.forEach(move=>controls.push({id:keyOf(move),kind:'button',label:t('take',{n:move.take})}));\n    }else if(KIND==='pig'){\n      pieces.push({id:'die',type:'die',board:'main',position:{x:120,y:130},text:String(s.roll||1),rotation:s.roll*15,scale:1});\n      pieces.push({id:'total',type:'total',board:'main',position:{x:340,y:130},text:String(s.total)});\n      legal.forEach(move=>controls.push({id:keyOf(move),kind:'button',label:t(move.action)}));\n    }else if(KIND==='mancala'){\n      s.board.forEach((n,cell)=>pieces.push({id:'stonepit_'+cell,type:cell===6||cell===13?'store':'p0',board:'main',position:{cell:String(cell)},text:String(n)}));\n      legal.forEach(move=>targets.push({id:keyOf(move),board:'main',position:{cell:String(move.pit)},label:t('sow',{n:move.pit+1})}));\n    }else{\n      s.board.forEach((value,cell)=>{\n        if(KIND==='memory')pieces.push({id:'card_'+cell,type:value===-1?'back':'card',board:'main',position:{cell:String(cell)},text:value===-1?'':String(value+1),face:value===-1?'back':'front',scale:s.matched.includes(cell)?0.86:1,opacity:s.matched.includes(cell)?0.6:1});\n        else if(value!==-1)pieces.push({id:'piece_'+cell,type:'p'+value,board:'main',position:{cell:String(cell)},text:KIND==='tictactoe'?(value===0?'X':'O'):'',rotation:KIND==='domineering'&&value===1?90:0});\n      });\n      legal.forEach(move=>targets.push({id:keyOf(move),board:'main',position:{cell:String(KIND==='connect4'?move.column:move.cell)},label:t('cell',{n:(KIND==='connect4'?move.column:move.cell)+1})}));\n      if(KIND==='domineering'&&active)pieces.push({id:'domino',type:'domino',board:'tray',position:{x:60,y:70},rotation:s.turn?90:0,draggable:true,move_targets:targets.map(p=>p.id)});\n    }\n    const scene={pieces,targets,controls,labels};\n    const out={scene,local_state:{}};\n    if(message.type==='ui_event'&&active){\n      const e=message.event;\n      let id=e.type==='drop'?e.target_id:e.id;\n      // Covered cards are pieces, so a piece tap is equivalent to the cell's\n      // legal target. No rule or hidden state is calculated in presentation.\n      if(KIND==='memory'&&id&&id.startsWith('card_'))id='cell_'+id.slice(5);\n      if(KIND==='mancala'&&id&&id.startsWith('stonepit_'))id='pit_'+id.slice(9);\n      const move=legal.find(option=>keyOf(option)===id);\n      if(move)out.make_move=move;\n    }\n    return out;\n  }\n};\n"
+  },
+  "rules": "Place X or O in an empty square. Make a line of three to win. A full board without a line is a draw.",
+  "ui_instructions": "Tap a highlighted legal target or use an action button. The board scales to the screen. Only your turn is interactive.",
+  "tutorial": {
+    "text": "Place X or O in an empty square. Make a line of three to win. A full board without a line is a draw.",
+    "html": "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><p>Place X or O in an empty square. Make a line of three to win. A full board without a line is a draw.</p>"
+  },
+  "images": [
+    {
+      "caption": "Cover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" fill=\"#102039\"/><circle cx=\"55\" cy=\"45\" r=\"25\" fill=\"#a7f070\"/><circle cx=\"105\" cy=\"45\" r=\"25\" fill=\"#ff9dca\"/></svg>"
+    },
+    {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Tic-tac-toe</text><rect x=\"30\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"30\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"30\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/></svg>"
+    },
+    {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Tic-tac-toe</text><rect x=\"30\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"30\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"30\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/></svg>"
+    },
+    {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Tic-tac-toe</text><rect x=\"30\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"30\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"106\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"30\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/></svg>"
+    }
+  ],
+  "unit_tests": {
+    "state_schema": {
+      "type": "object",
+      "required": [
+        "board",
+        "turn",
+        "scores",
+        "selected",
+        "matched",
+        "roll",
+        "total",
+        "winner",
+        "turns",
+        "over"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "board": {
+          "type": "array",
+          "maxItems": 9,
+          "items": {
+            "type": "integer",
+            "minimum": -1,
+            "maximum": 48
+          },
+          "minItems": 9
+        },
+        "turn": {
+          "enum": [
+            0,
+            1
+          ]
+        },
+        "scores": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2000
+          }
+        },
+        "selected": {
+          "type": "array",
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 15
+          }
+        },
+        "matched": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 15
+          }
+        },
+        "roll": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 6
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2000
+        },
+        "winner": {
+          "enum": [
+            -1,
+            0,
+            1
+          ]
+        },
+        "turns": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "over": {
+          "type": "boolean"
+        }
+      }
+    },
+    "view_schema": {
+      "type": "object",
+      "required": [
+        "board",
+        "turn",
+        "scores",
+        "selected",
+        "matched",
+        "roll",
+        "total",
+        "winner",
+        "turns",
+        "over",
+        "legal"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "board": {
+          "type": "array",
+          "maxItems": 9,
+          "items": {
+            "type": "integer",
+            "minimum": -1,
+            "maximum": 48
+          },
+          "minItems": 9
+        },
+        "turn": {
+          "enum": [
+            0,
+            1
+          ]
+        },
+        "scores": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2000
+          }
+        },
+        "selected": {
+          "type": "array",
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 15
+          }
+        },
+        "matched": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 15
+          }
+        },
+        "roll": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 6
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2000
+        },
+        "winner": {
+          "enum": [
+            -1,
+            0,
+            1
+          ]
+        },
+        "turns": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "over": {
+          "type": "boolean"
+        },
+        "legal": {
+          "type": "array",
+          "maxItems": 81,
+          "items": {
+            "type": "object",
+            "required": [
+              "cell"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "cell": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 80
+              }
+            }
+          }
+        }
+      }
+    },
+    "move_schema": {
+      "type": "object",
+      "required": [
+        "cell"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "cell": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 80
+        }
+      }
+    },
+    "cases": [
+      {
+        "name": "Initial move",
+        "description": "Place X or O in an empty square. Make a line of three to win. A full board without a line is a draw.",
+        "kind": "initial",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "kind": "human",
+              "display_name": "Bob",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 0,
+          "seed": 11
+        },
+        "state": {
+          "board": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1
+          ],
+          "turn": 0,
+          "scores": [
+            0,
+            0
+          ],
+          "selected": [],
+          "matched": [],
+          "roll": 0,
+          "total": 0,
+          "winner": -1,
+          "turns": 0,
+          "over": false
+        },
+        "view_of_mover": {
+          "board": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1
+          ],
+          "turn": 0,
+          "scores": [
+            0,
+            0
+          ],
+          "selected": [],
+          "matched": [],
+          "roll": 0,
+          "total": 0,
+          "winner": -1,
+          "turns": 0,
+          "over": false,
+          "legal": [
+            {
+              "cell": 0
+            },
+            {
+              "cell": 1
+            },
+            {
+              "cell": 2
+            },
+            {
+              "cell": 3
+            },
+            {
+              "cell": 4
+            },
+            {
+              "cell": 5
+            },
+            {
+              "cell": 6
+            },
+            {
+              "cell": 7
+            },
+            {
+              "cell": 8
+            }
+          ]
+        },
+        "view_of_other": {
+          "board": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1
+          ],
+          "turn": 0,
+          "scores": [
+            0,
+            0
+          ],
+          "selected": [],
+          "matched": [],
+          "roll": 0,
+          "total": 0,
+          "winner": -1,
+          "turns": 0,
+          "over": false,
+          "legal": []
+        },
+        "player_id": "u1",
+        "other_player_id": null,
+        "move": {
+          "cell": 4
+        },
+        "expected_state": {
+          "board": [
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1
+          ],
+          "turn": 1,
+          "scores": [
+            0,
+            0
+          ],
+          "selected": [],
+          "matched": [],
+          "roll": 0,
+          "total": 0,
+          "winner": -1,
+          "turns": 1,
+          "over": false
+        },
+        "expected_turn": [
+          "u2"
+        ],
+        "expected_view_of_mover": {
+          "board": [
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1
+          ],
+          "turn": 1,
+          "scores": [
+            0,
+            0
+          ],
+          "selected": [],
+          "matched": [],
+          "roll": 0,
+          "total": 0,
+          "winner": -1,
+          "turns": 1,
+          "over": false,
+          "legal": []
+        },
+        "expected_view_of_other": {
+          "board": [
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1
+          ],
+          "turn": 1,
+          "scores": [
+            0,
+            0
+          ],
+          "selected": [],
+          "matched": [],
+          "roll": 0,
+          "total": 0,
+          "winner": -1,
+          "turns": 1,
+          "over": false,
+          "legal": []
+        },
+        "images": [
+          {
+            "caption": "Before: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Tic-tac-toe</text><rect x=\"30\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"30\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"30\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Tic-tac-toe</text><rect x=\"30\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"30\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"30\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/></svg>"
+          },
+          {
+            "caption": "After: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Tic-tac-toe</text><rect x=\"30\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"30\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"106\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"30\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Tic-tac-toe</text><rect x=\"30\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"30\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"106\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"30\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Intermediate move",
+        "description": "Place X or O in an empty square. Make a line of three to win. A full board without a line is a draw.",
+        "kind": "intermediate",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "kind": "human",
+              "display_name": "Bob",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 1,
+          "seed": 12
+        },
+        "state": {
+          "board": [
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1
+          ],
+          "turn": 1,
+          "scores": [
+            0,
+            0
+          ],
+          "selected": [],
+          "matched": [],
+          "roll": 0,
+          "total": 0,
+          "winner": -1,
+          "turns": 1,
+          "over": false
+        },
+        "view_of_mover": {
+          "board": [
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1
+          ],
+          "turn": 1,
+          "scores": [
+            0,
+            0
+          ],
+          "selected": [],
+          "matched": [],
+          "roll": 0,
+          "total": 0,
+          "winner": -1,
+          "turns": 1,
+          "over": false,
+          "legal": [
+            {
+              "cell": 0
+            },
+            {
+              "cell": 1
+            },
+            {
+              "cell": 2
+            },
+            {
+              "cell": 3
+            },
+            {
+              "cell": 5
+            },
+            {
+              "cell": 6
+            },
+            {
+              "cell": 7
+            },
+            {
+              "cell": 8
+            }
+          ]
+        },
+        "view_of_other": {
+          "board": [
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1
+          ],
+          "turn": 1,
+          "scores": [
+            0,
+            0
+          ],
+          "selected": [],
+          "matched": [],
+          "roll": 0,
+          "total": 0,
+          "winner": -1,
+          "turns": 1,
+          "over": false,
+          "legal": []
+        },
+        "player_id": "u2",
+        "other_player_id": null,
+        "move": {
+          "cell": 2
+        },
+        "expected_state": {
+          "board": [
+            -1,
+            -1,
+            1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1
+          ],
+          "turn": 0,
+          "scores": [
+            0,
+            0
+          ],
+          "selected": [],
+          "matched": [],
+          "roll": 0,
+          "total": 0,
+          "winner": -1,
+          "turns": 2,
+          "over": false
+        },
+        "expected_turn": [
+          "u1"
+        ],
+        "expected_view_of_mover": {
+          "board": [
+            -1,
+            -1,
+            1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1
+          ],
+          "turn": 0,
+          "scores": [
+            0,
+            0
+          ],
+          "selected": [],
+          "matched": [],
+          "roll": 0,
+          "total": 0,
+          "winner": -1,
+          "turns": 2,
+          "over": false,
+          "legal": []
+        },
+        "expected_view_of_other": {
+          "board": [
+            -1,
+            -1,
+            1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1
+          ],
+          "turn": 0,
+          "scores": [
+            0,
+            0
+          ],
+          "selected": [],
+          "matched": [],
+          "roll": 0,
+          "total": 0,
+          "winner": -1,
+          "turns": 2,
+          "over": false,
+          "legal": []
+        },
+        "images": [
+          {
+            "caption": "Before: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Tic-tac-toe</text><rect x=\"30\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"30\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"106\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"30\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Tic-tac-toe</text><rect x=\"30\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"30\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"106\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"30\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/></svg>"
+          },
+          {
+            "caption": "After: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Tic-tac-toe</text><rect x=\"30\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#ff9dca\"/><rect x=\"30\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"106\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"30\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Tic-tac-toe</text><rect x=\"30\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#ff9dca\"/><rect x=\"30\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"106\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"30\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"106\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Terminal move",
+        "description": "Place X or O in an empty square. Make a line of three to win. A full board without a line is a draw.",
+        "kind": "terminal",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "kind": "human",
+              "display_name": "Bob",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 8,
+          "seed": 19
+        },
+        "state": {
+          "board": [
+            1,
+            0,
+            1,
+            1,
+            0,
+            0,
+            -1,
+            1,
+            0
+          ],
+          "turn": 0,
+          "scores": [
+            0,
+            0
+          ],
+          "selected": [],
+          "matched": [],
+          "roll": 0,
+          "total": 0,
+          "winner": -1,
+          "turns": 8,
+          "over": false
+        },
+        "view_of_mover": {
+          "board": [
+            1,
+            0,
+            1,
+            1,
+            0,
+            0,
+            -1,
+            1,
+            0
+          ],
+          "turn": 0,
+          "scores": [
+            0,
+            0
+          ],
+          "selected": [],
+          "matched": [],
+          "roll": 0,
+          "total": 0,
+          "winner": -1,
+          "turns": 8,
+          "over": false,
+          "legal": [
+            {
+              "cell": 6
+            }
+          ]
+        },
+        "view_of_other": {
+          "board": [
+            1,
+            0,
+            1,
+            1,
+            0,
+            0,
+            -1,
+            1,
+            0
+          ],
+          "turn": 0,
+          "scores": [
+            0,
+            0
+          ],
+          "selected": [],
+          "matched": [],
+          "roll": 0,
+          "total": 0,
+          "winner": -1,
+          "turns": 8,
+          "over": false,
+          "legal": []
+        },
+        "player_id": "u1",
+        "other_player_id": null,
+        "move": {
+          "cell": 6
+        },
+        "expected_state": {
+          "board": [
+            1,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0
+          ],
+          "turn": 1,
+          "scores": [
+            0,
+            0
+          ],
+          "selected": [],
+          "matched": [],
+          "roll": 0,
+          "total": 0,
+          "winner": -1,
+          "turns": 9,
+          "over": true
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "board": [
+            1,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0
+          ],
+          "turn": 1,
+          "scores": [
+            0,
+            0
+          ],
+          "selected": [],
+          "matched": [],
+          "roll": 0,
+          "total": 0,
+          "winner": -1,
+          "turns": 9,
+          "over": true,
+          "legal": []
+        },
+        "expected_view_of_other": {
+          "board": [
+            1,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0
+          ],
+          "turn": 1,
+          "scores": [
+            0,
+            0
+          ],
+          "selected": [],
+          "matched": [],
+          "roll": 0,
+          "total": 0,
+          "winner": -1,
+          "turns": 9,
+          "over": true,
+          "legal": []
+        },
+        "images": [
+          {
+            "caption": "Before: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Tic-tac-toe</text><rect x=\"30\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#ff9dca\"/><rect x=\"68\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"106\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#ff9dca\"/><rect x=\"30\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#ff9dca\"/><rect x=\"68\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"106\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"30\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#ff9dca\"/><rect x=\"106\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Tic-tac-toe</text><rect x=\"30\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#ff9dca\"/><rect x=\"68\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"106\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#ff9dca\"/><rect x=\"30\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#ff9dca\"/><rect x=\"68\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"106\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"30\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#213858\"/><rect x=\"68\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#ff9dca\"/><rect x=\"106\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/></svg>"
+          },
+          {
+            "caption": "After: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Tic-tac-toe</text><rect x=\"30\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#ff9dca\"/><rect x=\"68\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"106\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#ff9dca\"/><rect x=\"30\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#ff9dca\"/><rect x=\"68\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"106\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"30\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"68\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#ff9dca\"/><rect x=\"106\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Tic-tac-toe</text><rect x=\"30\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#ff9dca\"/><rect x=\"68\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"106\" y=\"60\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#ff9dca\"/><rect x=\"30\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#ff9dca\"/><rect x=\"68\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"106\" y=\"94\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"30\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/><rect x=\"68\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#ff9dca\"/><rect x=\"106\" y=\"128\" width=\"32\" height=\"28\" rx=\"5\" fill=\"#a7f070\"/></svg>"
+          }
+        ],
+        "expected_payouts": {
+          "u1": 0,
+          "u2": 0
+        }
+      }
+    ]
+  },
+  "translations": {
+    "es": {
+      "display_name": "Tres en raya · Declarative",
+      "short_description": "Coloca X u O en una casilla vacía. Forma una línea de tres para ganar. Un tablero lleno sin línea es empate.",
+      "game_logic_rules": "Coloca X u O en una casilla vacía. Forma una línea de tres para ganar. Un tablero lleno sin línea es empate.",
+      "game_ui_rules": "Toca un destino legal resaltado o usa un botón. El tablero se adapta a la pantalla. Solo tu turno es interactivo.",
+      "tutorial_strings": {
+        "Place X or O in an empty square. Make a line of three to win. A full board without a line is a draw.": "Coloca X u O en una casilla vacía. Forma una línea de tres para ganar. Un tablero lleno sin línea es empate."
+      },
+      "client_strings": {
+        "title": "Tres en raya",
+        "turn": "Jugador {n}",
+        "finished": "Terminado",
+        "roll": "Lanzar",
+        "hold": "Plantarse",
+        "take": "Retirar {n}",
+        "cell": "Casilla {n}",
+        "sow": "Sembrar hoyo {n}",
+        "server_invalid": "Jugada ilegal",
+        "score": "{a} : {b}"
+      }
+    },
+    "fr": {
+      "display_name": "Morpion · Declarative",
+      "short_description": "Placez X ou O dans une case vide. Alignez trois symboles pour gagner. Une grille pleine sans ligne est nulle.",
+      "game_logic_rules": "Placez X ou O dans une case vide. Alignez trois symboles pour gagner. Une grille pleine sans ligne est nulle.",
+      "game_ui_rules": "Touchez une cible légale surlignée ou un bouton. Le plateau s’adapte à l’écran. Seul votre tour est interactif.",
+      "tutorial_strings": {
+        "Place X or O in an empty square. Make a line of three to win. A full board without a line is a draw.": "Placez X ou O dans une case vide. Alignez trois symboles pour gagner. Une grille pleine sans ligne est nulle."
+      },
+      "client_strings": {
+        "title": "Morpion",
+        "turn": "Joueur {n}",
+        "finished": "Terminé",
+        "roll": "Lancer",
+        "hold": "Garder",
+        "take": "Prendre {n}",
+        "cell": "Case {n}",
+        "sow": "Semer trou {n}",
+        "server_invalid": "Coup interdit",
+        "score": "{a} : {b}"
+      }
+    },
+    "de": {
+      "display_name": "Drei gewinnt · Declarative",
+      "short_description": "Setze X oder O auf ein freies Feld. Drei in einer Reihe gewinnen. Ein volles Brett ohne Reihe ist unentschieden.",
+      "game_logic_rules": "Setze X oder O auf ein freies Feld. Drei in einer Reihe gewinnen. Ein volles Brett ohne Reihe ist unentschieden.",
+      "game_ui_rules": "Tippe auf ein markiertes legales Ziel oder eine Aktion. Das Brett passt sich dem Bildschirm an. Nur dein Zug ist interaktiv.",
+      "tutorial_strings": {
+        "Place X or O in an empty square. Make a line of three to win. A full board without a line is a draw.": "Setze X oder O auf ein freies Feld. Drei in einer Reihe gewinnen. Ein volles Brett ohne Reihe ist unentschieden."
+      },
+      "client_strings": {
+        "title": "Drei gewinnt",
+        "turn": "Spieler {n}",
+        "finished": "Beendet",
+        "roll": "Würfeln",
+        "hold": "Sichern",
+        "take": "Nimm {n}",
+        "cell": "Feld {n}",
+        "sow": "Mulde {n} säen",
+        "server_invalid": "Ungültiger Zug",
+        "score": "{a} : {b}"
+      }
+    },
+    "pt": {
+      "display_name": "Jogo da velha · Declarative",
+      "short_description": "Coloque X ou O numa casa vazia. Faça uma linha de três para vencer. Tabuleiro cheio sem linha é empate.",
+      "game_logic_rules": "Coloque X ou O numa casa vazia. Faça uma linha de três para vencer. Tabuleiro cheio sem linha é empate.",
+      "game_ui_rules": "Toque num destino legal destacado ou use um botão. O tabuleiro se adapta à tela. Só a sua vez é interativa.",
+      "tutorial_strings": {
+        "Place X or O in an empty square. Make a line of three to win. A full board without a line is a draw.": "Coloque X ou O numa casa vazia. Faça uma linha de três para vencer. Tabuleiro cheio sem linha é empate."
+      },
+      "client_strings": {
+        "title": "Jogo da velha",
+        "turn": "Jogador {n}",
+        "finished": "Terminado",
+        "roll": "Rolar",
+        "hold": "Guardar",
+        "take": "Retirar {n}",
+        "cell": "Casa {n}",
+        "sow": "Semear buraco {n}",
+        "server_invalid": "Jogada ilegal",
+        "score": "{a} : {b}"
+      }
+    },
+    "zh": {
+      "display_name": "井字棋 · Declarative",
+      "short_description": "轮流在空格放置X或O。连成三个获胜。棋盘填满且无人连线则平局。",
+      "game_logic_rules": "轮流在空格放置X或O。连成三个获胜。棋盘填满且无人连线则平局。",
+      "game_ui_rules": "点击高亮合法目标或操作按钮。棋盘适应屏幕。仅在自己的回合可操作。",
+      "tutorial_strings": {
+        "Place X or O in an empty square. Make a line of three to win. A full board without a line is a draw.": "轮流在空格放置X或O。连成三个获胜。棋盘填满且无人连线则平局。"
+      },
+      "client_strings": {
+        "title": "井字棋",
+        "turn": "玩家{n}",
+        "finished": "已结束",
+        "roll": "掷骰",
+        "hold": "保留",
+        "take": "拿走{n}",
+        "cell": "格{n}",
+        "sow": "撒子坑{n}",
+        "server_invalid": "非法着法",
+        "score": "{a} : {b}"
+      }
+    },
+    "hi": {
+      "display_name": "टिक टैक टो · Declarative",
+      "short_description": "खाली खाने में X या O रखें। तीन की पंक्ति बनाकर जीतें। भरा बोर्ड बिना पंक्ति के बराबरी है।",
+      "game_logic_rules": "खाली खाने में X या O रखें। तीन की पंक्ति बनाकर जीतें। भरा बोर्ड बिना पंक्ति के बराबरी है।",
+      "game_ui_rules": "दिखाए वैध लक्ष्य या बटन दबाएँ। बोर्ड स्क्रीन के अनुसार ढलता है। केवल अपनी बारी में खेलें।",
+      "tutorial_strings": {
+        "Place X or O in an empty square. Make a line of three to win. A full board without a line is a draw.": "खाली खाने में X या O रखें। तीन की पंक्ति बनाकर जीतें। भरा बोर्ड बिना पंक्ति के बराबरी है।"
+      },
+      "client_strings": {
+        "title": "टिक टैक टो",
+        "turn": "खिलाड़ी {n}",
+        "finished": "समाप्त",
+        "roll": "फेंकें",
+        "hold": "बचाएँ",
+        "take": "{n} लें",
+        "cell": "खाना {n}",
+        "sow": "गड्ढा {n} बोएँ",
+        "server_invalid": "अवैध चाल",
+        "score": "{a} : {b}"
+      }
+    },
+    "ar": {
+      "display_name": "إكس أو · Declarative",
+      "short_description": "ضع X أو O في خانة فارغة. تفوز بثلاثة على خط واحد. امتلاء اللوحة دون خط يعني التعادل.",
+      "game_logic_rules": "ضع X أو O في خانة فارغة. تفوز بثلاثة على خط واحد. امتلاء اللوحة دون خط يعني التعادل.",
+      "game_ui_rules": "اضغط هدفًا قانونيًا مميزًا أو زر إجراء. تتكيف اللوحة مع الشاشة. التفاعل متاح في دورك فقط.",
+      "tutorial_strings": {
+        "Place X or O in an empty square. Make a line of three to win. A full board without a line is a draw.": "ضع X أو O في خانة فارغة. تفوز بثلاثة على خط واحد. امتلاء اللوحة دون خط يعني التعادل."
+      },
+      "client_strings": {
+        "title": "إكس أو",
+        "turn": "اللاعب {n}",
+        "finished": "انتهت",
+        "roll": "ارمِ",
+        "hold": "احتفظ",
+        "take": "خذ {n}",
+        "cell": "الخانة {n}",
+        "sow": "وزّع الحفرة {n}",
+        "server_invalid": "حركة غير قانونية",
+        "score": "{a} : {b}"
+      }
+    }
+  }
+}

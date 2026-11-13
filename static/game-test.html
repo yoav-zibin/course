@@ -27,6 +27,8 @@
 
 <section aria-labelledby="inputs-heading">
 <h2 id="inputs-heading">Game inputs</h2>
+<p><label for="declarative-example" data-i18n="ui.declarative.test_examples_label">Declarative examples</label> <select id="declarative-example"><option value="" data-i18n="ui.declarative.test_choose_example">Choose an example…</option></select> <button id="load-declarative-example" type="button" data-i18n="ui.declarative.test_load_example">Load example</button></p>
+<p><label for="import-package-file" data-i18n="ui.declarative.test_load_package">Load a complete game JSON package</label> <input id="import-package-file" type="file" accept="application/json,.json"></p>
 <p>
   <button type="button" id="load-example">Load the counter example</button>
   <span class="hint">Fills every field with the “Count to three” example, so you can see the page working.</span>
@@ -52,6 +54,11 @@
 <div class="field">
   <label for="server-code">Server code (the <code>game</code> object)</label>
   <textarea id="server-code" spellcheck="false" rows="12" placeholder="const game = { newMatch(ctx) { ... }, applyMove(state, playerId, move) { ... }, ... }"></textarea>
+</div>
+<div class="field">
+  <label for="declarative-spec" data-i18n="ui.declarative.test_package_label">Declarative UI package (JSON, optional)</label>
+  <textarea id="declarative-spec" spellcheck="false" rows="12" data-i18n-placeholder="ui.declarative.package_placeholder" placeholder="Paste a declarative UI JSON package"></textarea>
+  <p class="hint"><span data-i18n="ui.declarative.test_package_hint">For native-ready games, paste the declarative_ui object here. The platform renderer supplies the client.</span> <a href="/static/declarative-test.html" data-i18n="ui.declarative.test_open_playground">Open the scene playground</a> <span data-i18n="ui.declarative.test_playground_hint">to inspect messages and try reducers before the recorded test flow.</span></p>
 </div>
 <div class="field">
   <label for="client-code">Client code (the game page, including its <code>&lt;script type="application/json" id="i18n-strings"&gt;</code> block)</label>
@@ -312,6 +319,8 @@
 <pre id="log" class="log" aria-live="polite"></pre>
 </section>
 </main>
-<script src="/static/game-test.js?v=13"></script>
+<script src="/static/i18n.js?v=5"></script>
+<script src="/static/declarative-ui.js?v=1"></script>
+<script src="/static/game-test.js?v=14"></script>
 </body>
 </html>

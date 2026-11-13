@@ -2107,6 +2107,8 @@ def create_app(
     app.state.email_sender = email_sender if email_sender is not None else LogSender()
     from game_platform.agent_import import make_router as make_import_router
     app.include_router(make_import_router(_get_platform, _get_caller_id_or_anonymous))
+    from game_platform.declarative_ui import make_router as make_declarative_router
+    app.include_router(make_declarative_router(_get_caller_id_or_anonymous))
     from game_platform.game_traces import make_router as make_game_test_router
     app.include_router(make_game_test_router(_get_platform))
     from game_platform.game_proposals import make_router as make_proposals_router

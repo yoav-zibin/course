@@ -456,6 +456,7 @@ class GameSummaryOut(BaseModel):
     published: bool
     supports_local_practice: bool = True
     cover_url: str = ""
+    renderer_type: Literal["html", "declarative"] = "html"
 
     @classmethod
     def of(cls, game: Game) -> "GameSummaryOut":
@@ -475,6 +476,7 @@ class GameSummaryOut(BaseModel):
             published=game.published,
             supports_local_practice=True,
             cover_url=f"/games/{game.id}/versions/{game.version}/cover" if (game.import_package or {}).get("images") else "",
+            renderer_type="declarative" if (game.import_package or {}).get("declarative_ui") else "html",
         )
 
 
@@ -482,12 +484,14 @@ class GameOut(GameSummaryOut):
     game_logic_rules: str = ""
     game_ui_rules: str = ""
     tutorial_html: str = ""
+    tutorial_text: str = ""
     translations: dict[str, JsonValue] = {}
     code: str
     # The two parts of a game: [client_code] is the same code as [code];
     # [server_code] runs the game's logic on the server. Every game has both.
     client_code: str
     server_code: str | None = None
+    declarative_ui: dict[str, JsonValue] | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @classmethod
     def of(cls, game: Game) -> "GameOut":
@@ -496,10 +500,12 @@ class GameOut(GameSummaryOut):
             game_logic_rules=(game.import_package or {}).get("rules_text", ""),
             game_ui_rules=(game.import_package or {}).get("ui_text", ""),
             tutorial_html=(game.import_package or {}).get("tutorial", {}).get("html", ""),
+            tutorial_text=(game.import_package or {}).get("tutorial", {}).get("text", ""),
             translations=(game.import_package or {}).get("translations", {}),
             code=game.code,
             client_code=game.code,
             server_code=game.server_code,
+            declarative_ui=(game.import_package or {}).get("declarative_ui"),
         )
 
 

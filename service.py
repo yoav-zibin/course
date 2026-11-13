@@ -2457,6 +2457,23 @@ class GamePlatform:
                 )
             if updated == game:
                 return game
+            if (
+                _import_package is UNSET
+                and (game.import_package or {}).get("declarative_ui") is not None
+                and (
+                    updated.code != game.code
+                    or updated.server_code != game.server_code
+                    or updated.game_schemas != game.game_schemas
+                    or updated.rules != game.rules
+                )
+            ):
+                # The portable scene contract lives with the tested import
+                # package. A partial code/rules patch would leave native hosts
+                # rendering the previous spec against a different game.
+                raise InvalidRequestError(
+                    "Update declarative game code, rules or schemas through "
+                    "POST /games/declarative with the complete tested package"
+                )
             if updated.code != game.code:
                 self._require_translatable(updated.code, updated.server_code)
             if updated.server_code and (

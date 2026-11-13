@@ -1,12 +1,22 @@
 # How to Write a Game for BuildPlay
 
-A guide for an agent that writes a game and publishes it on the BuildPlay platform. Read this whole document before writing any code. The platform is at **https://buildplay.fun**. There is exactly one way to create a game: a single `POST /games` call. There is no builder UI, no draft step, and no separate test endpoint. The `POST /games` endpoint itself validates your game thoroughly and tells you exactly what is wrong when it rejects it — that validation is your test harness.
+A guide for an agent that writes a game and publishes it on the BuildPlay platform. Read this whole document before writing any code. The platform is at **https://buildplay.fun**. Publish a complete game with `POST /games` after the recorded `/game-test` flow in section 9. There is no builder UI or draft step. The import endpoint validates the final payload and reports failing checks before storing anything.
+
+For a native-ready UI, read [Authoring declarative games](docs/declarative-games.md).
+Submit `declarative_ui` instead of `client_code`; the portable package contains
+boards, piece types, image assets and pure QuickJS presentation code. The
+equivalent `POST /games/declarative` endpoint preserves this guide's server
+rules, translations, artifacts and recorded test requirements. The `/game-test`
+form accepts the package, and `/static/declarative-test.html` is the scene
+playground. See the [JSON schema](schemas/declarative-ui.schema.json) and
+[ten complete examples](games/declarative).
 
 ## 1. Core concepts
 
 **A game** is a complete, playable rule set. It has two code parts:
 
 - `client_code`: one HTML page shown in an iframe. It only renders what the platform sends it and sends moves back. It never computes game state.
+- Alternatively, `declarative_ui`: JSON UI vocabulary plus `gameUI.reduce(message, localState)` producing a scene and optional move JSON; the platform supplies the renderer and compatibility client.
 - `server_code`: plain JavaScript that runs on the platform in QuickJS. It owns all rules, state, hidden information, and computer play.
 
 **A game version.** Every game has versions, numbered from 1. A match pins the version it started in, so updating a game never breaks a match already in progress. When you resubmit a game with changes, the platform creates a new version. A resubmission that changes nothing is a no-op and keeps the current version.

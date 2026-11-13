@@ -30,6 +30,13 @@ def move_agreement(code, server, spec, rules):
 
 
 def localization(code, server, spec, rules):
+    from game_platform.declarative_ui import embedded_spec, localization_errors
+    declarative = embedded_spec(code)
+    if declarative is not None:
+        # Declarative text is data rendered by the trusted host. Its finite
+        # strings map replaces the HTML-specific t()/DOM lint contract.
+        errors = localization_errors(declarative, server)
+        return {'passed': not errors, 'details': errors}
     errors = game_text.lint(code, server)
     if 'applyLocale(' not in code:
         errors.append('Missing applyLocale(message) integration')

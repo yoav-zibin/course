@@ -11,8 +11,17 @@ An in-memory REST backend for a multiplayer turn-based games platform, built wit
 > — the complete guide to the `POST /games` import API, the server and client
 > contracts, and the checks every game must pass.
 
-- **Game**: a game built in the game builder. Its `code` runs in a sandboxed iframe on the
-  client; the server never executes it.
+**Native-ready declarative games:** [authoring guide](docs/declarative-games.md),
+[JSON schema](schemas/declarative-ui.schema.json),
+[spreadsheet coverage review](docs/declarative-game-coverage.md), and
+[ten complete examples](games/declarative). Submit a `declarative_ui` package
+instead of game HTML; pure QuickJS presentation turns state messages into JSON
+boards, pieces, images and controls, then requests moves through the existing
+API. The portal includes its renderer; native apps implement the same scene
+contract without a game WebView.
+
+- **Game**: a playable rules package with authoritative QuickJS `server_code`
+  and either a declarative UI package or sandboxed HTML client.
 - **Match**: playing a game with a set of players (humans and computer opponents).
 - **Move**: a turn that replaces the match's opaque JSON state and either passes the turn
   to a set of players (any of whom may move next) or ends the match.
@@ -46,6 +55,7 @@ in bounded, paginated queries.
 | `requirements-dev.txt` | pip packages also needed to run the tests              |
 | `service.py` | `GamePlatform`: all business rules, independent of HTTP         |
 | `schemas.py` | Pydantic request/response bodies                                |
+| `schemas/declarative-ui.schema.json`, `declarative_ui.py` | Portable UI schema, bounded QuickJS reducer and validation API |
 | `api.py`     | FastAPI routes and `create_app`                                 |
 | `main.py`    | Server binary (`game_platform_server`)                          |
 | `static/`    | Web pages: portal, API console and data browser                 |
@@ -302,6 +312,9 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `POST /users/{id}/merge` | yes | Merge this account into `into_user_id` (authenticate as this user and send `into_password`, the target's password) |
 | `GET /matches/open` |  | Matches anyone may join (waiting, or ongoing with mid-match joins) |
 | `POST /games` | optional | Import and publish a complete game (see GAME_DEVELOPMENT_GUIDE.md) |
+| `POST /games/declarative` | optional | Import a native-ready game with `declarative_ui`, using the same tests and publication gates |
+| `GET /games/declarative/schema` | | Declarative package and scene JSON Schema |
+| `POST /games/declarative/validate` | optional | Execute one presentation message in bounded QuickJS, validate its scene, and return JSON without storing a game |
 | `GET /games?owner_user_id=&q=` |  | List published games that aren't deleted, optionally by owner. `q` searches names and descriptions (every word must match, ignoring case). The list never includes code, which is most of each game; load one game in full from `GET /games/{id}` |
 | `GET /games/{id}` |  | Get the latest version of a game |
 | `GET /games/{id}/versions/{version}` |  | Get a specific version of a game |
@@ -922,7 +935,13 @@ the password with each request.
 
 ## Game API
 
-A game's `code` is a complete HTML document. The portal and the builder run it in an
+Games can use a [declarative UI package](docs/declarative-games.md): a portable
+JSON scene vocabulary and pure JavaScript presentation reducer. The portal
+renders these games with platform-owned boards, pieces and controls; native
+apps can run the same reducer in QuickJS and implement native scene rendering.
+Its JSON `make_move` output uses the normal authoritative move API.
+
+For HTML games, `code` is a complete HTML document. The portal runs it in an
 iframe with `sandbox="allow-scripts"`: its scripts run, but in an isolated origin, so a
 game cannot read the platform's cookies, storage, or API credentials. It can still
 make anonymous requests to public endpoints; the sandbox is not a network firewall.

@@ -1,0 +1,124 @@
+{
+  "executed_at_utc": "2026-11-13T12:27:53.594175+00:00",
+  "environment": "Disposable loopback in-memory platform at http://127.0.0.1:8134",
+  "browser": "Playwright Chromium",
+  "command": "E2E_PORT=8134 E2E_PYTHON=/home/yoav_zibin/dev/venv/bin/python node node_modules/@playwright/test/cli.js test e2e/declarative.spec.ts --project=chromium --workers=1 --grep \"submit and finish\" --reporter=line",
+  "result": "10 passed (2.8m)",
+  "submission_evidence": "declarative-submissions-local.json",
+  "scope": "Every example was accepted by POST /games/declarative full validators in the disposable store. Browser tests reused those published games, created two separate human accounts and online matches, and clicked scene controls until status over. Every move used the real POST /matches/{id}/moves route. Firestore recorded-flow enforcement remains a separate backend gate test.",
+  "assertions": [
+    "All ten online matches reached over within 350 visible UI moves",
+    "Every submitted browser move returned success",
+    "No visible game iframe; scene is platform-owned DOM",
+    "No page JavaScript errors",
+    "Five games used 390x844 viewports and five used 1280x900 viewports"
+  ],
+  "games": [
+    {
+      "kind": "tictactoe",
+      "id": "cf584c89-80b6-4acf-b1a3-676a38feb6d3",
+      "version": 1,
+      "submission_status": 201,
+      "portal_result": "passed",
+      "terminal_status": "over",
+      "viewport": "1280x900"
+    },
+    {
+      "kind": "connect4",
+      "id": "2d275874-380d-4958-b13e-5803648cf9ee",
+      "version": 1,
+      "submission_status": 201,
+      "portal_result": "passed",
+      "terminal_status": "over",
+      "viewport": "390x844"
+    },
+    {
+      "kind": "reversi",
+      "id": "2d080e3b-9c85-4b66-b59b-2026c6e6f8ce",
+      "version": 1,
+      "submission_status": 201,
+      "portal_result": "passed",
+      "terminal_status": "over",
+      "viewport": "1280x900"
+    },
+    {
+      "kind": "nim",
+      "id": "6c06b3b9-46d3-46f0-bbf2-c6f0a2b5afe3",
+      "version": 1,
+      "submission_status": 201,
+      "portal_result": "passed",
+      "terminal_status": "over",
+      "viewport": "390x844"
+    },
+    {
+      "kind": "mancala",
+      "id": "f4b64845-786c-425c-be73-11f9dc1b0e5b",
+      "version": 1,
+      "submission_status": 201,
+      "portal_result": "passed",
+      "terminal_status": "over",
+      "viewport": "1280x900"
+    },
+    {
+      "kind": "gomoku",
+      "id": "284f2e18-2ada-4dd2-b5c2-4d785fd94943",
+      "version": 1,
+      "submission_status": 201,
+      "portal_result": "passed",
+      "terminal_status": "over",
+      "viewport": "390x844"
+    },
+    {
+      "kind": "hex",
+      "id": "83925af6-6311-4cc0-a381-4b285ed9f4d9",
+      "version": 1,
+      "submission_status": 201,
+      "portal_result": "passed",
+      "terminal_status": "over",
+      "viewport": "1280x900"
+    },
+    {
+      "kind": "domineering",
+      "id": "7d0ff789-2a51-4768-ac8a-48ecc6fcbe9f",
+      "version": 1,
+      "submission_status": 201,
+      "portal_result": "passed",
+      "terminal_status": "over",
+      "viewport": "390x844"
+    },
+    {
+      "kind": "memory",
+      "id": "9ae6ce56-3de0-4165-a575-3ca233ddebe6",
+      "version": 1,
+      "submission_status": 201,
+      "portal_result": "passed",
+      "terminal_status": "over",
+      "viewport": "1280x900"
+    },
+    {
+      "kind": "pig",
+      "id": "8e1483aa-0510-4014-a0c6-0e4d33438dfe",
+      "version": 1,
+      "submission_status": 201,
+      "portal_result": "passed",
+      "terminal_status": "over",
+      "viewport": "390x844"
+    }
+  ],
+  "additional_browser_checks": {
+    "environment": "Fresh final-source disposable demo at http://127.0.0.1:8135",
+    "result": "4 presentation/practice checks passed after localization; movement check passed separately (1.2s)",
+    "checks": [
+      "Reducer has no DOM, storage or network APIs; looping code terminates; HTML-looking labels remain text",
+      "Existing game-test loads declarative example, a real tap places X, and Memory receives sixteen redacted values in state",
+      "Portal local practice preserves moves after reload, replay disables actions, and another move succeeds offline without match writes",
+      "Covered image pieces hide front image/text/ARIA, and render only an explicitly declared back_asset",
+      "Keyboard piece selection followed by a legal target emits drop; disallowed mouse drag emits no move; touch drop emits move; rotation45/scale1.5 remain; only one move is accepted per state_changed"
+    ],
+    "visual_verification": "Inspected final navy game background, readable title/turn, bright X and O after the scoped frame background fix",
+    "screenshot_paths": [
+      "/tmp/declarative-evidence/declarative-practice.png",
+      "/tmp/declarative-evidence/declarative-covered-card.png"
+    ]
+  }
+}

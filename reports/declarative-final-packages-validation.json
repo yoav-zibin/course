@@ -1,0 +1,78 @@
+{
+  "environment": "disposable loopback in-memory store",
+  "submission_endpoint": "POST /games/declarative",
+  "games": [
+    {
+      "kind": "tictactoe",
+      "id": "7f8ade0c-a774-472b-b38f-e9acb708d4c0",
+      "version": 1,
+      "submission_status": 201,
+      "package_sha256_without_secret": "84e11b087c82360be51bff3b8ec172387b8ff34e19ba71e6e2561377e624349b"
+    },
+    {
+      "kind": "connect4",
+      "id": "34494820-67f8-4a5f-94f5-3cef2355d808",
+      "version": 1,
+      "submission_status": 201,
+      "package_sha256_without_secret": "d1a7c64f5e2035ea3522d161c43f982e29805c92eee578ab683eabdb2d753b56"
+    },
+    {
+      "kind": "reversi",
+      "id": "ae7d6f88-923c-4ea5-979d-2bb3590a80b2",
+      "version": 1,
+      "submission_status": 201,
+      "package_sha256_without_secret": "cc7575b1936ac61c620f57de9f3cd6cea4a71227a8f062b6ae2ab76b2fed0f8b"
+    },
+    {
+      "kind": "nim",
+      "id": "86bf095a-6495-4ce7-bb25-73c103e2af05",
+      "version": 1,
+      "submission_status": 201,
+      "package_sha256_without_secret": "bd0c3441e2205a5e59b51805d1033a1d722297a2e4317097481bcb42d9dff878"
+    },
+    {
+      "kind": "mancala",
+      "id": "3104fcc7-349a-4bcd-a8da-5e365a3dc1d4",
+      "version": 1,
+      "submission_status": 201,
+      "package_sha256_without_secret": "38da147aea3fd05654cbce16d4583961fe79f5a358f5264cfa0b7ff84c9a69cc"
+    },
+    {
+      "kind": "gomoku",
+      "id": "7e817624-934b-4374-b1c9-475840718601",
+      "version": 1,
+      "submission_status": 201,
+      "package_sha256_without_secret": "7720b62e126d57f3ad9c171baf82fe1721bad69654a7fc7f8faab4539cbd16be"
+    },
+    {
+      "kind": "hex",
+      "id": "4538ef3a-9b57-4a4c-912d-9cbec58609e3",
+      "version": 1,
+      "submission_status": 201,
+      "package_sha256_without_secret": "1cd9dc679e1bf3450d9e302f648c75120f126f74dd0a4670975c7a36d14d2a3a"
+    },
+    {
+      "kind": "domineering",
+      "id": "57a6513a-a425-4dd0-87a9-947ec382f97c",
+      "version": 1,
+      "submission_status": 201,
+      "package_sha256_without_secret": "fcec8ba57058ecce386e299daa07fcb52e286a5ed388a33f2cfaea18e88526d1"
+    },
+    {
+      "kind": "memory",
+      "id": "4c9f4fdc-ecd1-47a6-9c0a-acd4d4d00eec",
+      "version": 1,
+      "submission_status": 201,
+      "package_sha256_without_secret": "cd91be0aa133602f7f673640a50505ec9179f1f7b9a88b765ecf87c19f1336d9"
+    },
+    {
+      "kind": "pig",
+      "id": "4be43f16-3457-4e8f-9e4b-7c7fb5f108ed",
+      "version": 1,
+      "submission_status": 201,
+      "package_sha256_without_secret": "d5d28916413009f9be9ee511ed448baf8c8405fa123626d02321241cbd3f6dd9"
+    }
+  ],
+  "executed_at_utc": "2026-11-13T12:32:38.788469+00:00",
+  "scope": "Revalidated all ten final packages after explicit back_asset and Tic-tac-toe contrast fixes through the full normal submission validator. Prior portal match evidence is in declarative-portal-validation.json; this report identifies final fixture payloads, excluding only the private submission secret."
+}

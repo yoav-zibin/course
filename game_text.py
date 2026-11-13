@@ -139,6 +139,10 @@ def lint(code: str, server_code: str | None = None) -> list[str]:
     game looks fine. The checks are heuristics: they find the common mistakes. With
     [server_code], every text the server writes (the reason of an `InvalidMove`, a log line or
     a label in the match state) must also match a `server_` template of the table."""
+    from game_platform.declarative_ui import embedded_spec, localization_errors
+    declarative = embedded_spec(code)
+    if declarative is not None:
+        return localization_errors(declarative, server_code) if server_code else []
     try:
         table = extract_strings(code)
     except StringsError as error:
