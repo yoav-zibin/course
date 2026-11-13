@@ -22,7 +22,8 @@ async function contrast(locator: Locator) {
   });
 }
 
-for (const skin of ['isaac-ui', 'lobby', 'library', 'white']) {
+for (const skin of ['isaac-ui', 'lobby', 'library', 'white',
+  'one-punch-man', 'frieren', 'my-hero-academia', 'spy-x-family']) {
   test(`${skin} keeps discovery controls and game names readable`, async ({page, request}) => {
     await loginAs(page, await createUser(request, uniqueName('Light skin')));
     await page.goto(`/static/portal.html?skin=${skin}#games`);

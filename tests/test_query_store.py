@@ -400,8 +400,14 @@ def test_two_instances_can_claim_a_game_proposal_only_once(store):
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(claim, range(2)))
-    assert results.count("claimed") == 1, results
+    assert results.count("claimed") <= 1, results
     assert all(result in ("claimed", "unavailable", "conflict") for result in results)
+    if "claimed" not in results:
+        # Firestore may abort both contending read-then-delete transactions.
+        # The claim API permits 409s: neither agent owns the proposal until
+        # a retry commits. An unclaimed proposal must remain available.
+        assert results == ["conflict", "conflict"], results
+        assert gp.delete_proposal(store, proposal["id"]) is True
     # The creator still has its cached copy; even that retry must lose.
     assert gp.delete_proposal(store, proposal["id"]) is False
 
