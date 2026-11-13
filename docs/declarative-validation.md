@@ -53,6 +53,13 @@ Representative captured browser screens:
 
 ## Contract and regression checks
 
+The final frozen-source backend run passed **1,689 tests**, with 56
+environment-dependent tests skipped, in 7 minutes 25 seconds. It ran from the
+package parent as `python -m pytest game_platform/tests -q`. The complete web
+unit run passed **380 tests** with `node --test tests/web/*.test.cjs`.
+All ten portal matches, five focused declarative browser checks, and seven
+existing HTML play/practice browser checks passed across the recorded runs.
+
 The focused Python tests cover the schema and ID/topology references, image
 data validation, bounded QuickJS execution, JSON interaction state, rejected
 out-of-turn/autonomous moves, import serialization, immutable version pinning,
