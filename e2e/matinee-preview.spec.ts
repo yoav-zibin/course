@@ -1,0 +1,20 @@
+import {test,expect} from '@playwright/test';
+import {createUser,loginAs,uniqueName} from './helpers';
+test('admin previews Matinee and Arcade independently',async({page,request})=>{
+  await loginAs(page,await createUser(request,uniqueName('Preview')));
+  await page.goto('/static/admin.html');
+  await page.locator('#admin-skin-preview').selectOption('matinee');
+  const preview=page.waitForEvent('popup');
+  await page.locator('#admin-open-preview').click();
+  const tab=await preview;
+  await expect(tab.locator('html')).toHaveAttribute('data-skin','matinee');
+  await expect(tab.getByRole('heading',{name:'Now playing',exact:true})).toBeVisible();
+  await expect(tab.locator('.library-card').first()).toBeVisible();
+  await page.locator('#admin-skin-preview').selectOption('arcade');
+  const second=page.waitForEvent('popup');
+  await page.locator('#admin-open-preview').click();
+  const arcade=await second;
+  await expect(arcade.locator('html')).toHaveAttribute('data-skin','arcade');
+  await expect(arcade.locator('.matinee-marquee')).toBeHidden();
+  await expect(tab.locator('html')).toHaveAttribute('data-skin','matinee');
+});

@@ -45,3 +45,20 @@ function main() {
 }
 
 main();
+
+// Preview in a separate portal tab; this never calls an assignment or admin write API.
+(() => {
+  const picker = document.getElementById("admin-skin-preview");
+  if (!picker) return;
+  const link = document.getElementById("admin-open-preview");
+  picker.onchange = () => { link.href = "/static/portal.html?skin=" + encodeURIComponent(picker.value); };
+  const sheet = document.querySelector('link[href*="experiments.css"]');
+  if (!sheet) return;
+  fetch(sheet.href).then(r => r.ok ? r.text() : "").then(css => {
+    const names = new Set(Array.from(css.matchAll(/data-skin="([a-z0-9-]+)"/g), m => m[1]));
+    for (const key of [...names].sort()) {
+      if (![...picker.options].some(o => o.value === key))
+        picker.add(new Option(key.split("-").map(w => w[0].toUpperCase()+w.slice(1)).join(" "),key));
+    }
+  }).catch(() => {}); // Keep the two built-in comparison options if discovery fails.
+})();

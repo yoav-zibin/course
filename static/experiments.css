@@ -3786,3 +3786,51 @@
 :root[data-skin="black-clover"] .topbar .token-wallet-number strong {
   color: #f5f1df;
 }
+
+/* Matinee: a repertory cinema, with brass ticket stubs and a printed programme. */
+:root[data-skin="matinee"] {
+  color-scheme: dark;
+  --color-bg-0:#191416; --color-bg-1:#251b20; --color-bg-2:#34252a;
+  --color-bg-3:#453139; --color-bg-4:#533840;
+  --color-text-primary:#fff3da; --color-text-secondary:#e5cfb1;
+  --color-text-tertiary:#d4b99e; --color-text-quaternary:#c7aa91;
+  --color-border-1:#503940; --color-border-2:#6b5051; --color-border-3:#886b62;
+  --color-accent:#f2c47f; --color-accent-hover:#ffe4b2; --color-focus-ring:#ffdc93;
+  --font-sans:system-ui,sans-serif; --radius-md:3px; --radius-sm:2px;
+}
+:root[data-skin="matinee"] .topbar {
+  background:#25191f; border-bottom:3px double #a57e55;
+}
+:root[data-skin="matinee"] :is(.topbar h1,.library-title,.popular-game-title,.popular-games-heading h2,.game-detail-page h2) {
+  font-family:Georgia,"Times New Roman",serif; font-weight:500; letter-spacing:-.025em;
+}
+:root[data-skin="matinee"] .portal-sidebar { background:#23191e; border-inline-end:1px solid #765745; }
+:root[data-skin="matinee"] .portal-main { background:linear-gradient(115deg,#361f29,#191416 65%); }
+:root[data-skin="matinee"] .match-creator { background:#251b20; border:1px solid #957150; border-radius:3px; }
+:root[data-skin="matinee"] .matinee-marquee {
+  display:block; text-align:center; margin:0 0 1.25rem; padding:clamp(1.25rem,4vw,3rem) 1rem;
+  color:#fff0cd; border-block:4px double #bf9563;
+  background:repeating-linear-gradient(90deg,#511e30 0,#703243 5%,#421d2a 10%);
+}
+.matinee-marquee {display:none}
+:root[data-skin="matinee"] .matinee-marquee small {font:600 .68rem system-ui;letter-spacing:.26em;text-transform:uppercase}
+:root[data-skin="matinee"] .matinee-marquee h2 {margin:.3rem 0;font:normal clamp(2rem,6vw,4rem)/1.08 Georgia,serif;color:#fff1cf}
+:root[data-skin="matinee"] .matinee-marquee p {margin:.35rem 0 0;color:#f5dfcd}
+:root[data-skin="matinee"] .game-library-grid {grid-template-columns:repeat(auto-fit,minmax(min(100%,23rem),1fr));gap:12px}
+:root[data-skin="matinee"] .portal-shell .library-card {
+  flex-direction:row; align-items:stretch; color:#2e1d22; background:#f5e6ca;
+  border:1px solid #b69366;border-radius:3px; box-shadow:0 3px 0 #120d0f;
+}
+:root[data-skin="matinee"] .library-card .library-art {
+  width:clamp(4.5rem,10vw,7rem); flex:none;aspect-ratio:auto;border-inline-end:2px dashed #ab875b;
+  background:repeating-linear-gradient(135deg,#492b34 0 9px,#502f39 9px 10px);
+}
+:root[data-skin="matinee"] .library-monogram {font:italic 2.1rem Georgia,serif;color:#f7d49c;text-shadow:none;letter-spacing:-.04em}
+:root[data-skin="matinee"] .library-art-label {display:none}
+:root[data-skin="matinee"] .library-copy {padding:14px 16px;gap:6px}
+:root[data-skin="matinee"] .library-title {font-size:1.5rem;color:#301c22}
+:root[data-skin="matinee"] :is(.library-mode,.library-select) {color:#782b42}
+:root[data-skin="matinee"] .library-description {color:#54413f}
+:root[data-skin="matinee"] .portal-shell .library-card:hover {background:#fff4de;border-color:#efc485}
+:root[data-skin="matinee"] .portal-shell .library-card[aria-pressed=true] {outline:2px solid #f2c47f;outline-offset:2px}
+:root[data-skin="matinee"] .game-library-grid.is-list {grid-template-columns:1fr}
