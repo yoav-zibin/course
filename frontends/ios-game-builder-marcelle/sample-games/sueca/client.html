@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --felt:#0f5132; --felt-dark:#0a3a24; --ink:#f4f1e8; --muted:#cfe3d6; --gold:#f2c94c; --card:#fffdf7; --red:#b3261e; --black:#1b1b1b; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: radial-gradient(circle at 50% 40%, var(--felt), var(--felt-dark)); color: var(--ink);
+         font: 16px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif; display: flex; flex-direction: column; min-height: 100%; }
+  header { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(0,0,0,.25); }
+  h1 { margin: 0; font-size: 20px; letter-spacing: .5px; }
+  .scores { display: flex; gap: 8px; flex-wrap: wrap; }
+  .score { background: rgba(0,0,0,.3); border-radius: 8px; padding: 4px 10px; font-size: 14px; }
+  .score b { color: var(--gold); }
+  .score.mine { outline: 2px solid var(--gold); }
+  .info { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; padding: 6px 12px; font-size: 14px; color: var(--muted); }
+  .trump { display: flex; align-items: center; gap: 6px; color: var(--ink); }
+  /* The table keeps one direction in every language, so each seat stays next to the cards it
+     plays (the trick positions are fixed); the text inside still reads right to left in Arabic. */
+  main { direction: ltr; flex: 1 0 auto; display: grid; grid-template-columns: 1fr 2fr 1fr; grid-template-rows: auto 1fr auto; gap: 6px; padding: 6px 10px; min-height: 300px; }
+  .seat { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 14px; text-align: center; }
+  .seat > div, .table .note { unicode-bidi: plaintext; }
+  .seat .name { font-weight: 600; max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .seat .meta { color: var(--muted); font-size: 13px; }
+  .seat.turn .name { color: var(--gold); }
+  .seat.turn .name::before { content: "▸ "; }
+  .seat.top { grid-column: 2; grid-row: 1; }
+  .seat.left { grid-column: 1; grid-row: 2; }
+  .seat.right { grid-column: 3; grid-row: 2; }
+  .seat.bottom { grid-column: 2; grid-row: 3; }
+  .table { grid-column: 2; grid-row: 2; position: relative; min-height: 190px; border-radius: 50%; background: rgba(0,0,0,.15); }
+  .slot { position: absolute; transform: translate(-50%, -50%); }
+  .slot.bottom { left: 50%; top: 78%; } .slot.top { left: 50%; top: 22%; }
+  .slot.left { left: 20%; top: 50%; } .slot.right { left: 80%; top: 50%; }
+  .table .note { position: absolute; left: 50%; bottom: -4px; transform: translateX(-50%); font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .table.past .card { opacity: .75; }
+  .card { width: 52px; height: 74px; border-radius: 7px; background: var(--card); color: var(--black); border: 1px solid #c9c2b0;
+          display: inline-flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 700; font-size: 20px; line-height: 1.05;
+          box-shadow: 0 2px 4px rgba(0,0,0,.35); }
+  .card.red { color: var(--red); }
+  .card .suit { font-size: 22px; }
+  .card.small { width: 34px; height: 48px; font-size: 14px; } .card.small .suit { font-size: 15px; }
+  .backs { display: flex; } .back { width: 16px; height: 26px; margin-left: -8px; border-radius: 3px; background: repeating-linear-gradient(45deg, #2d4f8f, #2d4f8f 3px, #3d63ad 3px, #3d63ad 6px); border: 1px solid #fff8; }
+  .back:first-child { margin-left: 0; }
+  footer { padding: 8px 10px 12px; background: rgba(0,0,0,.25); }
+  .status { min-height: 1.4em; margin-bottom: 6px; font-weight: 600; text-align: center; }
+  .status.win { color: var(--gold); font-size: 18px; }
+  .hand { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .hand button.card { cursor: pointer; padding: 0; min-width: 44px; min-height: 44px; font-family: inherit; }
+  .hand button.card:disabled { cursor: default; filter: grayscale(.6) brightness(.75); }
+  .hand button.card.playable { outline: 3px solid var(--gold); outline-offset: 1px; }
+  .hand button.card:not(:disabled):hover, .hand button.card:focus-visible { transform: translateY(-4px); }
+  .summary { text-align: center; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
+  @media (max-width: 520px) {
+    main { grid-template-columns: 1fr 1.6fr 1fr; padding: 4px; }
+    .card { width: 44px; height: 62px; font-size: 17px; } .card .suit { font-size: 18px; }
+    .table { min-height: 170px; }
+    .seat .name { max-width: 9ch; }
+  }
+  @media (orientation: landscape) and (max-height: 500px) {
+    main { min-height: 0; gap: 2px; padding: 2px 8px; } .table { min-height: 140px; }
+    .seat .backs { display: none; }
+    .seat { gap: 0; }
+    .card { width: 40px; height: 56px; font-size: 16px; } .card .suit { font-size: 17px; }
+    header, .info { padding-top: 4px; padding-bottom: 4px; }
+    footer { padding: 4px 8px 8px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title"></h1>
+  <div class="scores" id="scores"></div>
+</header>
+<div class="info" id="info"></div>
+<main id="board">
+  <div class="seat top" id="seat-top"></div>
+  <div class="seat left" id="seat-left"></div>
+  <div class="table" id="table"></div>
+  <div class="seat right" id="seat-right"></div>
+  <div class="seat bottom" id="seat-bottom"></div>
+</main>
+<footer>
+  <div class="summary" id="summary"></div>
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+  <div class="hand" id="hand" role="group"></div>
+</footer>
+<script type="application/json" id="i18n-strings">
+{
+  "title": "Sueca",
+  "suit_c": "clubs",
+  "suit_d": "diamonds",
+  "suit_h": "hearts",
+  "suit_s": "spades",
+  "rank_A": "A",
+  "rank_K": "K",
+  "rank_J": "J",
+  "rank_Q": "Q",
+  "card_name": "{rank} of {suit}",
+  "trump": "Trump: {suit}",
+  "trump_card": "Trump card held by {name}: {card}",
+  "trump_card_you": "You hold the trump card: {card}",
+  "deal_number": "Deal {number}",
+  "dealer": "Dealer",
+  "team_names": "{first} and {second}",
+  "your_team": "Your team",
+  "game_points": "{team}: {points} of {target}",
+  "card_points": "{points} card points this deal",
+  "tricks": "Tricks: {count}",
+  "cards_left": "Cards: {count}",
+  "you": "You",
+  "your_turn": "Your turn: play a card.",
+  "follow_suit": "Your turn: follow {suit} if you can.",
+  "waiting_for": "Waiting for {name}.",
+  "last_trick": "{name} took the last trick.",
+  "last_deal": "Last deal: {first} card points to {second}, game points {awarded_first} and {awarded_second}.",
+  "you_win": "Your team wins the match!",
+  "you_lose": "The other team wins the match.",
+  "team_wins": "{team} win the match.",
+  "watching": "You are watching this match.",
+  "your_hand": "Your hand",
+  "server_send_a_card_to_play": "send a card to play",
+  "server_the_match_is_over": "the match is over",
+  "server_it_is_not_your_turn": "it is not your turn",
+  "server_that_card_is_not_in_your_hand": "that card is not in your hand",
+  "server_you_must_follow_the_suit_that_was_led": "you must follow the suit that was led"
+}
+</script>
+<script>
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings) strings = { ...SOURCE_STRINGS, ...message.strings };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+
+const SYMBOLS = { c: "♣", d: "♦", h: "♥", s: "♠" };
+const POSITIONS = ["bottom", "right", "top", "left"];
+const $ = (id) => document.getElementById(id);
+let current = null;
+let sent = false;
+
+// Literal keys only, so the translation checker sees every one.
+function rankText(card) {
+  switch (card[0]) {
+    case "A": return t("rank_A");
+    case "K": return t("rank_K");
+    case "J": return t("rank_J");
+    case "Q": return t("rank_Q");
+    default: return card[0];
+  }
+}
+function suitName(suit) {
+  switch (suit) {
+    case "c": return t("suit_c");
+    case "d": return t("suit_d");
+    case "h": return t("suit_h");
+    default: return t("suit_s");
+  }
+}
+function cardName(card) { return t("card_name", { rank: rankText(card), suit: suitName(card[1]) }); }
+
+/** A card face as an element: rank over suit symbol, red for hearts and diamonds. */
+function cardFace(card, tag, small) {
+  const el = document.createElement(tag || "div");
+  el.className = "card" + (card[1] === "h" || card[1] === "d" ? " red" : "") + (small ? " small" : "");
+  const rank = document.createElement("span");
+  rank.textContent = rankText(card);
+  const suit = document.createElement("span");
+  suit.className = "suit";
+  suit.textContent = SYMBOLS[card[1]];
+  suit.ariaHidden = true;
+  el.append(rank, suit);
+  el.setAttribute("aria-label", cardName(card));
+  if (tag !== "button") el.setAttribute("role", "img");
+  return el;
+}
+
+function playerName(message, seat) {
+  const me = message.my_player_index;
+  if (me !== null && seat === me && message.acting_for_player_index !== null) return t("you");
+  const player = message.players[seat];
+  return player ? player.name : "";
+}
+
+function teamName(message, team) {
+  return t("team_names", { first: playerName(message, team), second: playerName(message, team + 2) });
+}
+
+function render(message) {
+  const view = message.view || message.state;
+  if (!view) return;
+  const me = view.my_seat;
+  const base = me === null ? 0 : me;
+  const myTeam = me === null ? null : me % 2;
+  $("title").textContent = t("title");
+
+  // Scores: game points for each team, out of the target.
+  const scores = $("scores");
+  scores.replaceChildren(...[0, 1].map((team) => {
+    const box = document.createElement("div");
+    box.className = "score" + (team === myTeam ? " mine" : "");
+    const label = team === myTeam ? t("your_team") : teamName(message, team);
+    const text = document.createElement("span");
+    text.textContent = t("game_points", { team: label, points: view.game_points[team], target: view.target });
+    box.append(text);
+    return box;
+  }));
+
+  // Trump, deal number and the trump card while the dealer still holds it.
+  const info = $("info");
+  const trump = document.createElement("span");
+  trump.className = "trump";
+  const trumpText = document.createElement("span");
+  trumpText.textContent = t("trump", { suit: suitName(view.trump_suit) });
+  trump.append(trumpText, cardFace(view.trump_card, "div", true));
+  const dealNo = document.createElement("span");
+  dealNo.textContent = t("deal_number", { number: view.deal_number });
+  info.replaceChildren(trump, dealNo);
+  if (view.trump_shown) {
+    const held = document.createElement("span");
+    held.textContent = me !== null && view.dealer === me
+      ? t("trump_card_you", { card: cardName(view.trump_card) })
+      : t("trump_card", { name: playerName(message, view.dealer), card: cardName(view.trump_card) });
+    info.append(held);
+  }
+
+  // Seats around the table, the viewer at the bottom.
+  for (let seat = 0; seat < 4; seat++) {
+    const pos = POSITIONS[(seat - base + 4) % 4];
+    const box = $("seat-" + pos);
+    box.className = "seat " + pos + (view.to_play === seat ? " turn" : "");
+    const name = document.createElement("div");
+    name.className = "name";
+    name.textContent = playerName(message, seat);
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = t("cards_left", { count: view.hand_counts[seat] });
+    const parts = [name, meta];
+    if (seat === view.dealer) {
+      const dealer = document.createElement("div");
+      dealer.className = "meta";
+      dealer.textContent = t("dealer");
+      parts.push(dealer);
+    }
+    if (pos !== "bottom" || me === null) {
+      const backs = document.createElement("div");
+      backs.className = "backs";
+      backs.ariaHidden = true;
+      for (let i = 0; i < view.hand_counts[seat]; i++) {
+        const back = document.createElement("div");
+        back.className = "back";
+        backs.append(back);
+      }
+      parts.push(backs);
+    }
+    box.replaceChildren(...parts);
+  }
+
+  // The trick in the middle: the current one, or the last one taken.
+  const table = $("table");
+  const showing = view.trick.length ? view.trick : (view.last_trick ? view.last_trick.cards : []);
+  table.className = "table" + (view.trick.length ? "" : " past");
+  table.replaceChildren(...showing.map((playOf) => {
+    const slot = document.createElement("div");
+    slot.className = "slot " + POSITIONS[(playOf.seat - base + 4) % 4];
+    slot.append(cardFace(playOf.card));
+    return slot;
+  }));
+  if (!view.trick.length && view.last_trick) {
+    const note = document.createElement("div");
+    note.className = "note";
+    note.textContent = t("last_trick", { name: playerName(message, view.last_trick.winner) });
+    table.append(note);
+  }
+
+  // This deal's points, and the last deal's result at the start of a new deal.
+  const summary = $("summary");
+  const parts = [];
+  if (myTeam !== null) {
+    parts.push(t("card_points", { points: view.deal_points[myTeam] }), t("tricks", { count: view.tricks_won[myTeam] }));
+  }
+  const fresh = view.hand_counts.every((count) => count === 10) && view.trick.length === 0;
+  if (view.last_deal && (fresh || view.winner_team !== null)) {
+    const first = myTeam === null ? 0 : myTeam;
+    parts.push(t("last_deal", {
+      first: view.last_deal.points[first], second: view.last_deal.points[1 - first],
+      awarded_first: view.last_deal.awarded[first], awarded_second: view.last_deal.awarded[1 - first],
+    }));
+  }
+  summary.textContent = parts.join(" · ");
+
+  // Status line: the result, whose turn, or what to do.
+  const status = $("status");
+  status.className = "status";
+  const myTurn = message.status === "ongoing" && message.acting_for_player_index !== null &&
+    me !== null && view.to_play === me;
+  if (view.winner_team !== null) {
+    status.className = "status win";
+    status.textContent = myTeam === null ? t("team_wins", { team: teamName(message, view.winner_team) })
+      : (view.winner_team === myTeam ? t("you_win") : t("you_lose"));
+  } else if (myTurn) {
+    status.textContent = view.trick.length ? t("follow_suit", { suit: suitName(view.trick[0].card[1]) }) : t("your_turn");
+  } else if (me === null) {
+    status.textContent = t("watching");
+  } else {
+    status.textContent = t("waiting_for", { name: playerName(message, view.to_play) });
+  }
+
+  // The viewer's hand: playable cards are buttons.
+  const hand = $("hand");
+  hand.setAttribute("aria-label", t("your_hand"));
+  hand.replaceChildren(...view.hand.map((card) => {
+    const button = cardFace(card, "button");
+    button.type = "button";
+    const playable = myTurn && !message.replay && view.playable.includes(card);
+    button.disabled = !playable;
+    if (playable) button.classList.add("playable");
+    button.addEventListener("click", () => {
+      if (sent || !playable) return;
+      sent = true;
+      parent.postMessage({ type: "make_move", move: { card } }, "*");
+    });
+    return button;
+  }));
+}
+
+window.addEventListener("message", (event) => {
+  const message = event.data;
+  if (!message || message.type !== "state_changed") return;
+  applyLocale(message);
+  current = message;
+  sent = false;
+  render(message);
+});
+parent.postMessage({ type: "game_ready" }, "*");
+</script>
+</body>
+</html>
