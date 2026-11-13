@@ -700,3 +700,14 @@ test('leaving an ongoing server-coded match previews the payout, confirms, then 
   await leave.onclick();
   assert.deepEqual(calls,[['POST','/matches/match/maybeLeave'],['POST','/matches/match/playerLeft']]);
 });
+
+
+test('the catalog count leaves out the Random game card',()=>{
+  // Regression (bug 15): three games read "4 games to explore".
+  const {node,run}=setup();
+  run('state.games=["a","b","c"].map(id=>({id,version:1,name:id.toUpperCase(),allowed_player_counts:[2]}));state.libraryKey=null;renderLibrary()');
+  assert.equal(run('libraryGames().length'),4);
+  assert.equal(node('library-count').textContent,'3 games to explore');
+  run('state.games=[];state.libraryKey=null;renderLibrary()');
+  assert.equal(node('library-count').textContent,'0 games to explore');
+});

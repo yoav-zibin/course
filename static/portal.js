@@ -1024,7 +1024,9 @@ function renderLibrary() {
   const key = JSON.stringify([games, games.map(catalogGameLabel), selected, state.libraryView, state.libraryFilter, state.randomJoining, I18n.revision()]);
   if (state.libraryKey === key) return;
   state.libraryKey = key;
-  $("library-count").textContent = I18n.t("ui.games.count", { count: games.length }, `${games.length} ${games.length === 1 ? "game" : "games"} to explore`);
+  // The "Random game" card isn't a game: count only real ones.
+  const gameCount = games.filter(game => !isRandomGame(game)).length;
+  $("library-count").textContent = I18n.t("ui.games.count", { count: gameCount }, `${gameCount} ${gameCount === 1 ? "game" : "games"} to explore`);
   $("library-empty").hidden = games.length > 0;
   $("game-library").className = `game-library-grid ${state.libraryView === "list" ? "is-list" : ""}`;
   $("game-library").replaceChildren(...games.map(game => {
