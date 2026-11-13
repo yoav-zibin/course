@@ -250,6 +250,7 @@
   };
 
   function skinOptionLabel(key) {
+    if (key === "riso-club") return "Riso";
     return key
       .split("-")
       .map((word) => (word ? word[0].toUpperCase() + word.slice(1) : word))
