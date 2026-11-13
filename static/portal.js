@@ -10,7 +10,7 @@
 
 const $ = (id) => document.getElementById(id);
 const POLL_MS = 2000;
-const MATCH_POLL_MS = 1000;
+const MATCH_POLL_MS = 300;
 async function portalFetch(method, path, { body, user, requestId } = {}) {
   const controller = new AbortController(),
     timer = setTimeout(() => controller.abort(), 20000);
@@ -2098,6 +2098,9 @@ async function onMakeMove(move) {
     state.moveInFlight = false;
     state.lastSent = null;
     await refresh();
+    // Poll the match right away instead of waiting for the next interval
+    // tick, so the server's answer (and any computer moves) shows at once.
+    void pollActiveMatch();
   }
 }
 
