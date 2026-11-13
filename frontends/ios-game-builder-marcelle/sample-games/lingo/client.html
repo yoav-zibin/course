@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#0b1c3a; --panel:#13294f; --ink:#f4f6ff; --muted:#9fb0d6; --red:#e2353b; --yellow:#f6c945; --cell:#1d3a6e; --gold:#ffd66b; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: linear-gradient(#10264d, var(--bg)); color: var(--ink); font: 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; min-height: 100vh; }
+  header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; padding: 8px 14px; }
+  h1 { margin: 0; font-size: 22px; letter-spacing: 3px; color: var(--gold); }
+  .meta { color: var(--muted); font-size: 13px; }
+  .teams { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 14px 8px; }
+  .team { background: var(--panel); border-radius: 10px; padding: 6px 12px; border: 2px solid transparent; font-size: 14px; }
+  .team.on { border-color: var(--gold); }
+  .team b { font-size: 18px; }
+  main { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; padding: 0 10px 12px; }
+  .board { display: grid; gap: 5px; align-content: start; }
+  .row { display: grid; grid-template-columns: repeat(5, 52px); gap: 5px; position: relative; }
+  .cell { width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; font: 800 26px ui-monospace, Menlo, monospace; text-transform: uppercase; background: var(--cell); border-radius: 6px; }
+  .cell.m2 { background: var(--red); }
+  .cell.m1 { background: var(--cell); }
+  .cell.m1 span { display: flex; width: 44px; height: 44px; border-radius: 50%; background: var(--yellow); color: #2a1d00; align-items: center; justify-content: center; }
+  .cell.bad { background: #3b3f52; color: #aab; }
+  .cell.reveal { background: #234887; outline: 2px dashed #6f8fd0; }
+  .rowtag { position: absolute; inset-inline-start: calc(100% + 6px); top: 16px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .side { display: flex; flex-direction: column; gap: 10px; min-width: 260px; }
+  .panel { background: var(--panel); border-radius: 10px; padding: 8px 10px; }
+  .status { font-weight: 700; min-height: 1.4em; }
+  .status.win { color: var(--gold); font-size: 18px; }
+  .hint { color: var(--muted); font-size: 13px; min-height: 1em; }
+  .entry { display: flex; gap: 6px; margin-top: 8px; }
+  .entry input { flex: 1; min-height: 44px; border-radius: 8px; border: 2px solid var(--gold); background: #081530; color: var(--ink); font: 700 22px ui-monospace, Menlo, monospace; text-transform: uppercase; letter-spacing: 4px; padding: 0 10px; min-width: 0; }
+  .entry button, .drawbtn { min-height: 44px; padding: 0 16px; border-radius: 8px; border: 0; background: var(--gold); color: #2a1d00; font: 700 15px system-ui, sans-serif; cursor: pointer; }
+  .cards { display: flex; gap: 10px; flex-wrap: wrap; }
+  .card h3 { margin: 0 0 4px; font-size: 13px; color: var(--muted); }
+  .grid { display: grid; grid-template-columns: repeat(5, 30px); gap: 3px; }
+  .num { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #e8ecff; color: #0b1c3a; font: 700 12px system-ui, sans-serif; }
+  .num.cov { background: var(--gold); box-shadow: inset 0 0 0 3px #b2851a; }
+  .log { font-size: 13px; color: var(--muted); }
+  @media (max-width: 420px) { .row { grid-template-columns: repeat(5, 46px); } .cell { width: 46px; height: 46px; font-size: 22px; } .cell.m1 span { width: 38px; height: 38px; } .rowtag { display: none; } }
+</style>
+</head>
+<body>
+<header><h1 id="title"></h1><span class="meta" id="meta"></span></header>
+<div class="teams" id="teams"></div>
+<main>
+  <div class="board" id="board" role="grid"></div>
+  <div class="side">
+    <div class="panel">
+      <div class="status" id="status" role="status" aria-live="polite"></div>
+      <div class="hint" id="hint"></div>
+      <div id="controls"></div>
+    </div>
+    <div class="panel"><div class="cards" id="cards"></div><div class="log" id="log"></div></div>
+  </div>
+</main>
+<script type="application/json" id="i18n-strings">
+{
+  "title": "LINGO",
+  "meta": "Round {round} of 2 · word {word} of {total}",
+  "team_points": "{names}: {points} points",
+  "team_pair": "{a} and {b}",
+  "card_of": "Card of {names}",
+  "row_of": "{name}",
+  "invalid": "not a word",
+  "your_guess": "Your turn: guess the five-letter word ({tries} of 5 tries used).",
+  "your_steal": "Your team's chance: one guess, with one more letter shown.",
+  "your_draw": "Your team found the word! Draw a ball for your Lingo card.",
+  "draws_left": "Balls left to draw: {count}",
+  "red_hint": "Red square: right letter, right place. Yellow circle: in the word, another place.",
+  "waiting": "Waiting for {name}.",
+  "watching": "You are watching this match.",
+  "guess": "Guess",
+  "guess_label": "Your five-letter guess",
+  "draw": "Draw a ball",
+  "ball_number": "{name} drew {ball}.",
+  "ball_stopper": "{name} drew a red stopper.",
+  "ball_question": "{name} drew a question mark.",
+  "lingo_made": "Lingo!",
+  "last_word": "The last word was {word}.",
+  "discarded": "Nobody found {word}: it is discarded.",
+  "you_win": "Your team wins with the most points!",
+  "they_win": "{names} win with the most points.",
+  "tie": "It is a tie: both teams share the win.",
+  "server_the_game_is_over": "the game is over",
+  "server_it_is_not_your_turn": "it is not your turn",
+  "server_draw_a_ball": "draw a ball",
+  "server_guess_the_word": "guess the word",
+  "server_send_a_guess_or_draw_a_ball": "send a guess or draw a ball"
+}
+</script>
+<script>
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings) strings = { ...SOURCE_STRINGS, ...message.strings };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+
+const $ = (id) => document.getElementById(id);
+let sent = false;
+
+function send(move) {
+  if (sent) return;
+  sent = true;
+  parent.postMessage({ type: "make_move", move }, "*");
+}
+
+function teamNames(players, view, team) {
+  return view.seats === 2 ? players[team].name : t("team_pair", { a: players[team].name, b: players[team + 2].name });
+}
+
+function cell(letter, mark, extra) {
+  const c = document.createElement("div");
+  c.className = "cell" + (extra || "");
+  c.setAttribute("role", "gridcell");
+  if (mark !== null && mark !== undefined) {
+    c.classList.add("m" + mark);
+    c.dataset.mark = String(mark);
+  }
+  const s = document.createElement("span");
+  s.textContent = letter || "";
+  c.append(s);
+  return c;
+}
+
+function ballLine(entry, players) {
+  const name = players[entry.seat].name;
+  switch (entry.ball) {
+    case "R": return t("ball_stopper", { name });
+    case "?": return t("ball_question", { name });
+    default: return t("ball_number", { name, ball: entry.ball });
+  }
+}
+
+function render(message) {
+  const view = message.view || message.state;
+  if (!view) return;
+  const players = message.players;
+  const over = view.phase === "over";
+  const me = view.my_seat;
+  const myTeam = me === null ? null : me % 2;
+  const mine = !over && message.status === "ongoing" && !message.replay && me !== null && me === view.to_move;
+  const total = view.words_per_round * 2;
+  $("title").textContent = t("title");
+  const wordShown = Math.min(view.word_no + 1, total);
+  $("meta").textContent = t("meta", { round: view.round, word: wordShown, total });
+
+  $("teams").replaceChildren(...[0, 1].map((team) => {
+    const box = document.createElement("div");
+    const on = !over && view.control === team;
+    box.className = "team" + (on ? " on" : "");
+    const b = document.createElement("b");
+    b.textContent = t("team_points", { names: teamNames(players, view, team), points: view.scores[team] });
+    box.append(b);
+    return box;
+  }));
+
+  // Board: one row per guess, then the row being guessed with the letters known so far.
+  const board = $("board");
+  const rows = view.guesses.map((g) => {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.dataset.row = g.word;
+    const valid = g.marks !== null;
+    [...g.word.padEnd(5).slice(0, 5)].forEach((ch, i) => row.append(cell(ch.trim(), valid ? g.marks[i] : null, valid ? "" : " bad")));
+    const tag = document.createElement("span");
+    tag.className = "rowtag";
+    tag.textContent = valid ? t("row_of", { name: players[g.seat].name }) : t("invalid");
+    row.append(tag);
+    return row;
+  });
+  if (view.phase !== "draw" && !over) {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.dataset.reveal = view.letters.map((l) => l || ".").join("");
+    view.letters.forEach((l) => row.append(cell(l, null, " reveal")));
+    rows.push(row);
+  }
+  board.replaceChildren(...rows);
+
+  // Status and controls.
+  const status = $("status"), hint = $("hint");
+  status.className = "status";
+  hint.textContent = "";
+  const controls = [];
+  if (over) {
+    status.className = "status win";
+    const tie = view.winners.length > 1;
+    const weWon = myTeam !== null && view.winners.includes(myTeam);
+    if (tie) status.textContent = t("tie");
+    else status.textContent = weWon ? t("you_win") : t("they_win", { names: teamNames(players, view, view.winners[0]) });
+  } else if (mine && view.phase === "draw") {
+    status.textContent = t("your_draw");
+    hint.textContent = t("draws_left", { count: view.draws_left });
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "drawbtn";
+    b.textContent = t("draw");
+    b.dataset.auto = "1";
+    b.addEventListener("click", () => send({ draw: true }));
+    controls.push(b);
+  } else if (mine) {
+    const steal = view.phase === "steal";
+    status.textContent = steal ? t("your_steal") : t("your_guess", { tries: view.tries });
+    hint.textContent = t("red_hint");
+    const entry = document.createElement("div");
+    entry.className = "entry";
+    const input = document.createElement("input");
+    input.id = "guess-input";
+    input.maxLength = 5;
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.setAttribute("aria-label", t("guess_label"));
+    const go = document.createElement("button");
+    go.type = "button";
+    go.id = "guess-send";
+    go.textContent = t("guess");
+    const submit = () => { const w = input.value.trim(); if (/^[a-zA-Z]{1,12}$/.test(w)) send({ guess: w.toLowerCase() }); };
+    go.addEventListener("click", submit);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
+    entry.append(input, go);
+    controls.push(entry);
+    setTimeout(() => input.focus(), 0);
+  } else if (me === null) {
+    status.textContent = t("watching");
+  } else {
+    status.textContent = t("waiting", { name: players[view.to_move].name });
+  }
+  $("controls").replaceChildren(...controls);
+
+  // Lingo cards.
+  $("cards").replaceChildren(...view.cards.map((card, team) => {
+    const box = document.createElement("div");
+    box.className = "card";
+    const h = document.createElement("h3");
+    h.textContent = t("card_of", { names: teamNames(players, view, team) });
+    const grid = document.createElement("div");
+    grid.className = "grid";
+    card.numbers.forEach((n, i) => {
+      const e = document.createElement("span");
+      e.className = "num" + (card.covered[i] ? " cov" : "");
+      e.textContent = String(n);
+      grid.append(e);
+    });
+    box.append(h, grid);
+    return box;
+  }));
+
+  const lines = view.draw_log.flatMap((d) => (d.lingo ? [ballLine(d, players), t("lingo_made")] : [ballLine(d, players)]));
+  if (view.last_word) lines.push(view.discarded ? t("discarded", { word: view.last_word.toUpperCase() }) : t("last_word", { word: view.last_word.toUpperCase() }));
+  $("log").replaceChildren(...lines.map((l) => { const d = document.createElement("div"); d.textContent = l; return d; }));
+}
+
+window.addEventListener("message", (event) => {
+  const message = event.data;
+  if (!message || message.type !== "state_changed") return;
+  applyLocale(message);
+  sent = false;
+  render(message);
+});
+parent.postMessage({ type: "game_ready" }, "*");
+</script>
+</body>
+</html>
