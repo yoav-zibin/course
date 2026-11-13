@@ -193,7 +193,10 @@ belongs to a different account, the two are merged (see below) and the response'
 as replaced, and its old credentials keep working as an alias of the survivor).
 
 Codes are 6 digits, expire after 10 minutes, die after 5 wrong guesses, and can be
-re-requested at most 5 times an hour per phone number or address. Sending needs a
+re-requested at most 5 times an hour per phone number or address. One client (IP
+address) may request at most 10 codes an hour in all, and the server sends at most
+1000 an hour, so a script can't loop over numbers to run up a texting bill
+(over a limit: 409 `too many codes requested; try again later`). Sending needs a
 provider: Twilio for texts, any SMTP server for email, configured under `auth` in the
 config file. With the default `log` provider the code is only written to the server log,
 which is fine for development and useless for real users.

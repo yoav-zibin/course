@@ -312,6 +312,12 @@ def _new_referral_code() -> str:
 VERIFICATION_TTL_SECONDS: Final = 600
 VERIFICATION_MAX_ATTEMPTS: Final = 5
 VERIFICATION_MAX_STARTS_PER_HOUR: Final = 5
+# Every code sent costs money (an SMS) or reputation (an email), so one client (IP
+# address) may only ask for this many codes an hour, whatever the destinations, and
+# the whole server sends at most this many: a script looping over phone numbers
+# can't run up a bill.
+VERIFICATION_MAX_STARTS_PER_CLIENT_PER_HOUR: Final = 10
+VERIFICATION_MAX_STARTS_PER_HOUR_TOTAL: Final = 1000
 
 # Survivor precedence when two accounts merge: the user with the strongest
 # login method survives, so a Google account is never merged away into a guest
@@ -532,6 +538,7 @@ class GamePlatform:
         self._chain_timeout_retries: dict[str, int] = {}
         self._verifications: dict[str, _Verification] = {}
         self._verification_starts: dict[str, list[dt.datetime]] = {}
+        self._verification_client_starts: dict[str, list[dt.datetime]] = {}
         # Each public method is a read-modify-write on the store; the server handles
         # requests on a thread pool, so serialize them. Reentrant, because verifying a
         # code and merging accounts compose smaller locked operations.
@@ -1369,20 +1376,24 @@ class GamePlatform:
         return False
 
     def start_verification(
-        self, *, kind: LinkedAccountKind, identifier: str
+        self, *, kind: LinkedAccountKind, identifier: str, client: str | None = None
     ) -> tuple[str, str, str]:
         """Starts a login-code check for a phone number or email address. Returns
         (verification_id, code, normalized_identifier); the API layer sends the code
-        through the configured sender."""
+        through the configured sender. [client] identifies the requester (its IP
+        address) for the per-client limit."""
         with self._lock:
             normalized = _normalize_identifier(kind=kind, identifier=identifier)
             now = self._clock()
-            starts = [
-                when
-                for when in self._verification_starts.get(normalized, [])
-                if (now - when).total_seconds() < 3600
-            ]
-            if len(starts) >= VERIFICATION_MAX_STARTS_PER_HOUR:
+            self._prune_verifications(now)
+            starts = self._verification_starts.get(normalized, [])
+            client_starts = self._verification_client_starts.get(client or "", [])
+            if (
+                sum(map(len, self._verification_starts.values()))
+                >= VERIFICATION_MAX_STARTS_PER_HOUR_TOTAL
+                or (client and len(client_starts) >= VERIFICATION_MAX_STARTS_PER_CLIENT_PER_HOUR)
+                or len(starts) >= VERIFICATION_MAX_STARTS_PER_HOUR
+            ):
                 raise ConflictError("too many codes requested; try again later")
             for verification_id, verification in list(self._verifications.items()):
                 if verification.identifier == normalized:
@@ -1397,7 +1408,24 @@ class GamePlatform:
                 created_at=now,
             )
             self._verification_starts[normalized] = [*starts, now]
+            if client:
+                self._verification_client_starts[client] = [*client_starts, now]
             return verification_id, code, normalized
+
+    def _prune_verifications(self, now: dt.datetime) -> None:
+        """Forgets code requests older than the one-hour window and expired codes, so
+        the tables only hold the last hour (at most the global limit's worth). The
+        caller holds the lock."""
+        for table in (self._verification_starts, self._verification_client_starts):
+            for key, times in list(table.items()):
+                recent = [when for when in times if (now - when).total_seconds() < 3600]
+                if recent:
+                    table[key] = recent
+                else:
+                    del table[key]
+        for verification_id, verification in list(self._verifications.items()):
+            if (now - verification.created_at).total_seconds() > VERIFICATION_TTL_SECONDS:
+                del self._verifications[verification_id]
 
     def _external_phone_pending(self, verification_id: str) -> _Verification:
         entry = self._verifications.get(verification_id)

@@ -19,6 +19,8 @@ from game_platform.service import (
     NotFoundError,
     _normalize_identifier,
     VERIFICATION_MAX_STARTS_PER_HOUR,
+    VERIFICATION_MAX_STARTS_PER_CLIENT_PER_HOUR,
+    VERIFICATION_MAX_STARTS_PER_HOUR_TOTAL,
     VERIFICATION_MAX_ATTEMPTS,
     VERIFICATION_TTL_SECONDS,
     FEEDBACK_ADMIN_LIMIT,
@@ -748,10 +750,20 @@ class ScalablePlatform(GamePlatform):
             )
             return result
 
-    def start_verification(self, *, kind, identifier):
+    def start_verification(self, *, kind, identifier, client=None):
         normalized = _normalize_identifier(kind=kind, identifier=identifier)
         now = self._clock()
         ref = self._store.ref("verification_limits", json.dumps([kind, normalized]))
+        # Per-client sliding window, and a server-wide count per clock hour (one small
+        # document per hour; see VERIFICATION_MAX_STARTS_PER_HOUR_TOTAL).
+        client_ref = (
+            self._store.ref("verification_limits", json.dumps(["client", client]))
+            if client
+            else None
+        )
+        global_ref = self._store.ref(
+            "verification_limits", json.dumps(["global", now.strftime("%Y-%m-%dT%H")])
+        )
         with self._store.atomic():
             previous = self._store.raw_get(ref) or {}
             starts = [
@@ -759,8 +771,27 @@ class ScalablePlatform(GamePlatform):
                 for t in previous.get("starts", [])
                 if (now - t).total_seconds() < 3600
             ]
-            if len(starts) >= VERIFICATION_MAX_STARTS_PER_HOUR:
+            client_starts = [
+                t
+                for t in ((self._store.raw_get(client_ref) or {}) if client_ref else {}).get("starts", [])
+                if (now - t).total_seconds() < 3600
+            ]
+            sent_this_hour = (self._store.raw_get(global_ref) or {}).get("count", 0)
+            if (
+                sent_this_hour >= VERIFICATION_MAX_STARTS_PER_HOUR_TOTAL
+                or len(client_starts) >= VERIFICATION_MAX_STARTS_PER_CLIENT_PER_HOUR
+                or len(starts) >= VERIFICATION_MAX_STARTS_PER_HOUR
+            ):
                 raise ConflictError("too many codes requested; try again later")
+            if client_ref is not None:
+                self._store.raw_put(
+                    client_ref,
+                    {"starts": [*client_starts, now], "expires_at": now + dt.timedelta(hours=1)},
+                )
+            self._store.raw_put(
+                global_ref,
+                {"count": sent_this_hour + 1, "expires_at": now + dt.timedelta(hours=2)},
+            )
             if previous.get("active_id"):
                 self._store.raw_put(
                     self._store.ref("verifications", previous["active_id"]), None

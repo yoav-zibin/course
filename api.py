@@ -649,6 +649,13 @@ def auth_google(
     )
 
 
+def _client_address(request: Request) -> str | None:
+    """The requester's IP address, for per-client rate limits. uvicorn already
+    replaced it with the X-Forwarded-For client when a local reverse proxy sent the
+    request (and ignores that header from anyone else, so clients can't forge it)."""
+    return request.client.host if request.client else None
+
+
 @auth_router.post("/phone/start")
 def phone_start(
     platform: Platform, request: Request, body: PhoneStart
@@ -664,7 +671,7 @@ def phone_start(
         )
 
     verification_id, local_code, number = platform.start_verification(
-        kind="phone", identifier=body.phone_number
+        kind="phone", identifier=body.phone_number, client=_client_address(request)
     )
     try:
         if config.provider == "verify":
@@ -742,7 +749,7 @@ def email_start(
             HTTPStatus.NOT_IMPLEMENTED, "email login is not configured"
         )
     verification_id, code, normalized = platform.start_verification(
-        kind="email", identifier=body.email
+        kind="email", identifier=body.email, client=_client_address(request)
     )
     try:
         request.app.state.email_sender.send_login_code(normalized, code)
