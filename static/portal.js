@@ -2008,9 +2008,11 @@ async function syncGame() {
   if (state.loaded !== key) {
     const code = await gameCode(match);
     if (!stillCurrent()) return;
+    const themedCode = await withPortalSkinAdapter(match.game_id, code);
+    if (!stillCurrent()) return;
     if (state.loaded !== key) {
       const fullGame = state.gameCache.get(`${match.game_id}@${match.game_version}`);
-      frame.load(withPortalSkinAdapter(match.game_id, code), fullGame?.declarative_ui, {animate: match.localMode !== "pass"});
+      frame.load(themedCode, fullGame?.declarative_ui, {animate: match.localMode !== "pass"});
       state.loaded = key;
       state.lastSent = null;
     }
@@ -2087,48 +2089,30 @@ function portalGameSkinPalette() {
   };
 }
 
-function withPortalSkinAdapter(gameId, code) {
+let portalGameSkinCssPromise = null;
+
+function loadPortalGameSkinCss() {
+  if (!portalGameSkinCssPromise) {
+    portalGameSkinCssPromise = fetch("/static/portal-game-skin.css?v=1", {cache: "force-cache"})
+      .then(response => {
+        if (!response.ok) throw new Error(String(response.status));
+        return response.text();
+      });
+  }
+  return portalGameSkinCssPromise;
+}
+
+async function withPortalSkinAdapter(gameId, code) {
   if (!PORTAL_SKINNED_GAME_IDS.has(gameId)) return code;
-  const adapter = function installPortalSkinAdapter() {
+  let cssText;
+  try {
+    cssText = await loadPortalGameSkinCss();
+  } catch {
+    return code;
+  }
+  const adapter = function installPortalSkinAdapter(cssText) {
     const style = document.createElement("style");
-    style.textContent = `
-      :root { color-scheme: var(--portal-skin-scheme, dark) !important; }
-      body, main { background: var(--portal-skin-background) !important; color: var(--portal-skin-text) !important; }
-      #status, .arena, #boardWrap, .instructions, details, section {
-        background: var(--portal-skin-panel) !important; color: var(--portal-skin-text) !important;
-        border-color: var(--portal-skin-border) !important;
-      }
-      #scores span, .tile, .symbol, .player, .record {
-        background-color: var(--portal-skin-raised) !important; color: var(--portal-skin-text) !important;
-        border-color: var(--portal-skin-border) !important;
-      }
-      #status { background: var(--portal-skin-raised) !important; }
-      p, h2, .tag, #meta, #round, #hint, summary { color: var(--portal-skin-muted) !important; }
-      h1, h3, label { color: var(--portal-skin-text) !important; }
-      button:not(.cell), #actions button {
-        background: var(--portal-skin-accent) !important; border-color: var(--portal-skin-accent) !important;
-        color: var(--portal-skin-background) !important;
-      }
-      button:not(.cell):hover:not(:disabled), #actions button:hover:not(:disabled) {
-        background: var(--portal-skin-accent-hover) !important; border-color: var(--portal-skin-accent-hover) !important;
-      }
-      input, select { background: var(--portal-skin-panel) !important; color: var(--portal-skin-text) !important; border-color: var(--portal-skin-border) !important; }
-      button:focus-visible, input:focus-visible, select:focus-visible { outline-color: var(--portal-skin-focus) !important; }
-      .cell { border-color: var(--portal-skin-border) !important; }
-      /* Occupied cells encode player ownership with their own red/blue colors. */
-      .cell:not([data-owner="1"]):not([data-owner="2"]) { background: var(--portal-skin-raised) !important; color: var(--portal-skin-text) !important; }
-      .cell .number { color: inherit !important; }
-      .cell.selected { outline-color: var(--portal-skin-focus) !important; }
-      .cell:not([data-owner="1"]):not([data-owner="2"]):hover:not(:disabled) { background: var(--portal-skin-hover) !important; }
-      .player.current { background: var(--portal-skin-accent) !important; color: var(--portal-skin-background) !important; }
-      #board svg line { stroke: var(--portal-skin-border) !important; }
-      #board svg circle { fill: var(--portal-skin-accent) !important; }
-      #beetles svg [fill]:not([fill="none"]) { fill: var(--portal-skin-accent) !important; }
-      #beetles svg [stroke] { stroke: var(--portal-skin-focus) !important; }
-      #boardWrap, .arena, #status, .instructions, details, section, .tile, .symbol, button, input, select {
-        transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
-      }
-    `;
+    style.textContent = cssText;
     document.head.append(style);
     const vars = {
       scheme: "--portal-skin-scheme", background: "--portal-skin-background",
@@ -2149,7 +2133,8 @@ function withPortalSkinAdapter(gameId, code) {
       }
     });
   };
-  const script = "<scr" + "ipt>(" + adapter.toString() + ")()" + "</scr" + "ipt>";
+  const cssArgument = JSON.stringify(cssText).replace(/</g, "\\u003c");
+  const script = "<scr" + "ipt>(" + adapter.toString() + ")(" + cssArgument + ")" + "</scr" + "ipt>";
   const bodyEnd = code.toLowerCase().lastIndexOf("</body>");
   return bodyEnd < 0 ? `${code}${script}` : code.slice(0, bodyEnd) + script + code.slice(bodyEnd);
 }
@@ -2581,7 +2566,7 @@ async function main() {
     // match param still forces the matches view and skips the selected-id
     // clearing in syncPortalScreen.
     syncPortalScreen();
-    syncGame().catch((error) => console.warn("Couldn't update the game skin:", error));
+    syncGame().catch(console.warn);
   });
   document.addEventListener("portal-layout-change", syncPortalRoutes);
   document.querySelector(".back-to-games")?.addEventListener("click", leaveGamePage);

@@ -1,0 +1,133 @@
+:root {
+  color-scheme: var(--portal-skin-scheme, dark) !important;
+}
+
+body,
+main {
+  background: var(--portal-skin-background) !important;
+  color: var(--portal-skin-text) !important;
+}
+
+#status,
+.arena,
+#boardWrap,
+.instructions,
+details,
+section {
+  background: var(--portal-skin-panel) !important;
+  color: var(--portal-skin-text) !important;
+  border-color: var(--portal-skin-border) !important;
+}
+
+#scores span,
+.tile,
+.symbol,
+.player,
+.record {
+  background-color: var(--portal-skin-raised) !important;
+  color: var(--portal-skin-text) !important;
+  border-color: var(--portal-skin-border) !important;
+}
+
+#status {
+  background: var(--portal-skin-raised) !important;
+}
+
+p,
+h2,
+.tag,
+#meta,
+#round,
+#hint,
+summary {
+  color: var(--portal-skin-muted) !important;
+}
+
+h1,
+h3,
+label {
+  color: var(--portal-skin-text) !important;
+}
+
+button:not(.cell),
+#actions button {
+  background: var(--portal-skin-accent) !important;
+  border-color: var(--portal-skin-accent) !important;
+  color: var(--portal-skin-background) !important;
+}
+
+button:not(.cell):hover:not(:disabled),
+#actions button:hover:not(:disabled) {
+  background: var(--portal-skin-accent-hover) !important;
+  border-color: var(--portal-skin-accent-hover) !important;
+}
+
+input,
+select {
+  background: var(--portal-skin-panel) !important;
+  color: var(--portal-skin-text) !important;
+  border-color: var(--portal-skin-border) !important;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline-color: var(--portal-skin-focus) !important;
+}
+
+.cell {
+  border-color: var(--portal-skin-border) !important;
+}
+
+/* Keep the board's red and blue pieces distinct while theming empty cells. */
+.cell:not([data-owner="1"]):not([data-owner="2"]) {
+  background: var(--portal-skin-raised) !important;
+  color: var(--portal-skin-text) !important;
+}
+
+.cell .number {
+  color: inherit !important;
+}
+
+.cell.selected {
+  outline-color: var(--portal-skin-focus) !important;
+}
+
+.cell:not([data-owner="1"]):not([data-owner="2"]):hover:not(:disabled) {
+  background: var(--portal-skin-hover) !important;
+}
+
+.player.current {
+  background: var(--portal-skin-accent) !important;
+  color: var(--portal-skin-background) !important;
+}
+
+#board svg line {
+  stroke: var(--portal-skin-border) !important;
+}
+
+#board svg circle {
+  fill: var(--portal-skin-accent) !important;
+}
+
+#beetles svg [fill]:not([fill="none"]) {
+  fill: var(--portal-skin-accent) !important;
+}
+
+#beetles svg [stroke] {
+  stroke: var(--portal-skin-focus) !important;
+}
+
+#boardWrap,
+.arena,
+#status,
+.instructions,
+details,
+section,
+.tile,
+.symbol,
+button,
+input,
+select {
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+}
