@@ -2815,3 +2815,668 @@
 :root[data-skin="isaac-bright-artsy"] .topbar .token-wallet-label { color:#7d5a6d; }
 :root[data-skin="isaac-bright-artsy"] .topbar .token-wallet-number { color:#715563; }
 :root[data-skin="isaac-bright-artsy"] .topbar .token-wallet-number strong { color:#453040; }
+
+/* ------------------------------------------------------------------ */
+/* Archetype skins (cd3464): Focus, Showcase, Lobby, Library.          */
+/* Each skin is a UX archetype, not just a palette: it changes which    */
+/* page the portal opens on, what it promotes, and how dense it is.    */
+/* New rules only — no existing skin's rules are touched below.         */
+/* ------------------------------------------------------------------ */
+
+/* Focus: dark, calm, low-chrome; the match is the page. */
+:root[data-skin="focus"] {
+  color-scheme: dark;
+  --builder-accent-ink: #0e1216;
+  --color-bg-0: #0e1216;
+  --color-bg-1: #151c23;
+  --color-bg-2: #1c2631;
+  --color-bg-3: #253444;
+  --color-bg-4: #31465c;
+  --color-text-primary: #eef3f6;
+  --color-text-secondary: #c2d1da;
+  --color-text-tertiary: #8ea6b4;
+  --color-text-quaternary: #63798a;
+  --color-border-1: #1c2936;
+  --color-border-2: #2a3d4e;
+  --color-border-3: #3a5469;
+  --color-border-4: #55708c;
+  --color-accent: #58c4a8;
+  --color-accent-hover: #7fd8c0;
+  --color-focus-ring: #7fd8c0;
+  --color-ok: #6fd598;
+  --color-warn: #f2c14e;
+  --color-error: #ff8a9a;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --font-sans: "Trebuchet MS", sans-serif;
+}
+:root[data-skin="focus"] .portal-shell {
+  --color-bg-0: #0e1216;
+  --color-bg-1: #151c23;
+  --color-bg-2: #1c2631;
+  --color-bg-3: #253444;
+  --color-bg-4: #31465c;
+  --color-text-primary: #eef3f6;
+  --color-text-secondary: #c2d1da;
+  --color-text-tertiary: #8ea6b4;
+  --color-border-2: #2a3d4e;
+  --color-border-3: #3a5469;
+  --color-accent: #58c4a8;
+  --color-accent-hover: #7fd8c0;
+  --color-focus-ring: #7fd8c0;
+  background: var(--color-bg-0);
+  color: var(--color-text-primary);
+}
+:root[data-skin="focus"] .builder-shell {
+  --color-bg-0:#0e1216;--color-bg-1:#151c23;--color-bg-2:#1c2631;--color-bg-3:#253444;--color-bg-4:#31465c;
+  --color-text-primary:#eef3f6;--color-text-secondary:#c2d1da;--color-text-tertiary:#8ea6b4;--color-text-quaternary:#63798a;
+  --color-border-1:#1c2936;--color-border-2:#2a3d4e;--color-border-3:#3a5469;--color-border-4:#55708c;
+  --color-accent:#58c4a8;--color-accent-hover:#7fd8c0;--color-focus-ring:#7fd8c0;--builder-accent-ink:#0e1216;
+}
+:root[data-skin="focus"] .portal-sidebar,
+:root[data-skin="focus"] .match-creator,
+:root[data-skin="focus"] .game-detail-page,
+:root[data-skin="focus"] .match-stage,
+:root[data-skin="focus"] .portal-shell .game-search-popup,
+:root[data-skin="focus"] .portal-shell .match-tools {
+  background: #151c23;
+  border-color: #2a3d4e;
+  color: #eef3f6;
+}
+:root[data-skin="focus"] .popular-games-section,
+:root[data-skin="focus"] .play-option,
+:root[data-skin="focus"] .portal-shell .library-card,
+:root[data-skin="focus"] .selected-game-card {
+  background: #1c2631;
+  border-color: #2a3d4e;
+  color: #eef3f6;
+}
+:root[data-skin="focus"] .portal-shell input,
+:root[data-skin="focus"] .portal-shell select {
+  background: #0e1216;
+  border-color: #3a5469;
+  color: #eef3f6;
+}
+:root[data-skin="focus"] .portal-shell button.primary,
+:root[data-skin="focus"] .portal-shell .library-toolbar button[aria-pressed="true"] {
+  background: #58c4a8;
+  border-color: #58c4a8;
+  color: #0e1216;
+}
+:root[data-skin="focus"] .portal-shell button.primary:hover:not(:disabled) { background:#7fd8c0; border-color:#7fd8c0; }
+:root[data-skin="focus"] .portal-shell button:focus-visible,
+:root[data-skin="focus"] .portal-shell summary:focus-visible,
+:root[data-skin="focus"] .portal-shell .popular-game-card:focus-visible {
+  outline-color: #7fd8c0;
+}
+:root[data-skin="focus"] .creator-title,
+:root[data-skin="focus"] .popular-games-heading h2,
+:root[data-skin="focus"] .play-option-heading h3,
+:root[data-skin="focus"] .selected-game-card h2 {
+  color: #eef3f6;
+}
+:root[data-skin="focus"] .creator-description,
+:root[data-skin="focus"] .popular-period,
+:root[data-skin="focus"] .play-option-heading p,
+:root[data-skin="focus"] .play-option .play-option-note,
+:root[data-skin="focus"] .library-description {
+  color: #8ea6b4;
+}
+:root[data-skin="focus"] .topbar .token-wallet {
+  background: linear-gradient(135deg, #1c2631, #151c23);
+  border-color: #3a5469;
+  color: #eef3f6;
+}
+:root[data-skin="focus"] .topbar .token-wallet-coin {
+  background: #253444;
+  border-color: #55708c;
+  color: #7fd8c0;
+}
+:root[data-skin="focus"] .topbar .token-wallet-label { color: #8ea6b4; }
+:root[data-skin="focus"] .topbar .token-wallet-number { color: #c2d1da; }
+:root[data-skin="focus"] .topbar .token-wallet-number strong { color: #eef3f6; }
+/* Focus home is the matches list: no hero, no discovery carousels. */
+:root[data-skin="focus"] .arcade-hero,
+:root[data-skin="focus"] .popular-games-section {
+  display: none !important;
+}
+/* Focus match view: the catalog is not the page while matches are open. */
+:root[data-skin="focus"] body[data-portal-view="matches"] .match-creator,
+:root[data-skin="focus"] body[data-portal-view="matches"] #game-detail-page,
+:root[data-skin="focus"] body[data-portal-view="matches"] #placeholder {
+  display: none !important;
+}
+:root[data-skin="focus"] body[data-portal-view="matches"] #matches-screen:not([hidden]) { display: block; }
+:root[data-skin="focus"] body[data-portal-view="leaderboards"] .match-creator,
+:root[data-skin="focus"] body[data-portal-view="leaderboards"] #matches-screen,
+:root[data-skin="focus"] body[data-portal-view="leaderboards"] #game-detail-page,
+:root[data-skin="focus"] body[data-portal-view="leaderboards"] #placeholder {
+  display: none !important;
+}
+:root[data-skin="focus"] body[data-portal-view="leaderboards"] #leaderboards-screen:not([hidden]) { display: block; }
+/* Focus match focus: the game takes the whole screen (topbar and sidebar
+   are already hidden for every skin by portal-match-layout.css). */
+:root[data-skin="focus"] body.match-focus #community-chat { display: none !important; }
+
+/* Showcase: warm, high-energy storefront. (The Arcade archetype's skin key
+   is "showcase": "arcade" already belongs to another student's skin.) */
+:root[data-skin="showcase"] {
+  color-scheme: dark;
+  --builder-accent-ink: #1d1403;
+  --color-bg-0: #171006;
+  --color-bg-1: #251b09;
+  --color-bg-2: #33270d;
+  --color-bg-3: #483616;
+  --color-bg-4: #5f4a20;
+  --color-text-primary: #fff6e6;
+  --color-text-secondary: #f0dcb4;
+  --color-text-tertiary: #c9ab72;
+  --color-text-quaternary: #97804f;
+  --color-border-1: #2e2410;
+  --color-border-2: #453719;
+  --color-border-3: #5f4d24;
+  --color-border-4: #7d6532;
+  --color-accent: #ffb020;
+  --color-accent-hover: #ffc95c;
+  --color-focus-ring: #ffc95c;
+  --color-ok: #7ddba0;
+  --color-warn: #ffd23d;
+  --color-error: #ff8a7a;
+  --radius-sm: 10px;
+  --radius-md: 18px;
+  --font-sans: "Trebuchet MS", sans-serif;
+}
+:root[data-skin="showcase"] .portal-shell {
+  --color-bg-0: #171006;
+  --color-bg-1: #251b09;
+  --color-bg-2: #33270d;
+  --color-bg-3: #483616;
+  --color-bg-4: #5f4a20;
+  --color-text-primary: #fff6e6;
+  --color-text-secondary: #f0dcb4;
+  --color-text-tertiary: #c9ab72;
+  --color-border-2: #453719;
+  --color-border-3: #5f4d24;
+  --color-accent: #ffb020;
+  --color-accent-hover: #ffc95c;
+  --color-focus-ring: #ffc95c;
+  background: var(--color-bg-0);
+  color: var(--color-text-primary);
+}
+:root[data-skin="showcase"] .builder-shell {
+  --color-bg-0:#171006;--color-bg-1:#251b09;--color-bg-2:#33270d;--color-bg-3:#483616;--color-bg-4:#5f4a20;
+  --color-text-primary:#fff6e6;--color-text-secondary:#f0dcb4;--color-text-tertiary:#c9ab72;--color-text-quaternary:#97804f;
+  --color-border-1:#2e2410;--color-border-2:#453719;--color-border-3:#5f4d24;--color-border-4:#7d6532;
+  --color-accent:#ffb020;--color-accent-hover:#ffc95c;--color-focus-ring:#ffc95c;--builder-accent-ink:#1d1403;
+}
+:root[data-skin="showcase"] .portal-sidebar,
+:root[data-skin="showcase"] .match-creator,
+:root[data-skin="showcase"] .game-detail-page,
+:root[data-skin="showcase"] .match-stage,
+:root[data-skin="showcase"] .portal-shell .game-search-popup,
+:root[data-skin="showcase"] .portal-shell .match-tools {
+  background: #251b09;
+  border-color: #453719;
+  color: #fff6e6;
+}
+:root[data-skin="showcase"] .popular-games-section,
+:root[data-skin="showcase"] .play-option,
+:root[data-skin="showcase"] .portal-shell .library-card,
+:root[data-skin="showcase"] .selected-game-card {
+  background: #33270d;
+  border-color: #453719;
+  color: #fff6e6;
+}
+:root[data-skin="showcase"] .portal-shell input,
+:root[data-skin="showcase"] .portal-shell select {
+  background: #171006;
+  border-color: #5f4d24;
+  color: #fff6e6;
+}
+:root[data-skin="showcase"] .portal-shell button.primary,
+:root[data-skin="showcase"] .portal-shell .library-toolbar button[aria-pressed="true"] {
+  background: #ffb020;
+  border-color: #ffb020;
+  color: #1d1403;
+}
+:root[data-skin="showcase"] .portal-shell button.primary:hover:not(:disabled) { background:#ffc95c; border-color:#ffc95c; }
+:root[data-skin="showcase"] .portal-shell button:focus-visible,
+:root[data-skin="showcase"] .portal-shell summary:focus-visible,
+:root[data-skin="showcase"] .portal-shell .popular-game-card:focus-visible {
+  outline-color: #ffc95c;
+}
+:root[data-skin="showcase"] .creator-title,
+:root[data-skin="showcase"] .popular-games-heading h2,
+:root[data-skin="showcase"] .play-option-heading h3,
+:root[data-skin="showcase"] .selected-game-card h2 {
+  color: #fff6e6;
+}
+:root[data-skin="showcase"] .creator-description,
+:root[data-skin="showcase"] .popular-period,
+:root[data-skin="showcase"] .play-option-heading p,
+:root[data-skin="showcase"] .play-option .play-option-note,
+:root[data-skin="showcase"] .library-description {
+  color: #c9ab72;
+}
+:root[data-skin="showcase"] .topbar .token-wallet {
+  background: linear-gradient(135deg, #33270d, #251b09);
+  border-color: #5f4d24;
+  color: #fff6e6;
+}
+:root[data-skin="showcase"] .topbar .token-wallet-coin {
+  background: #483616;
+  border-color: #7d6532;
+  color: #ffc95c;
+}
+:root[data-skin="showcase"] .topbar .token-wallet-label { color: #c9ab72; }
+:root[data-skin="showcase"] .topbar .token-wallet-number { color: #f0dcb4; }
+:root[data-skin="showcase"] .topbar .token-wallet-number strong { color: #fff6e6; }
+/* Showcase home is the storefront: hero and carousels lead. */
+:root[data-skin="showcase"] .portal-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: clamp(12px, 2vw, 32px);
+}
+:root[data-skin="showcase"] .portal-nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 13px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #f0dcb4;
+  background: transparent;
+  text-decoration: none;
+  font-weight: 700;
+  white-space: nowrap;
+}
+:root[data-skin="showcase"] .portal-nav-link:hover,
+:root[data-skin="showcase"] .portal-nav-link.is-active {
+  color: #fff6e6;
+  background: #33270d;
+  border-color: #5f4d24;
+}
+:root[data-skin="showcase"] .arcade-hero {
+  border: 1px solid #5f4d24;
+  border-radius: var(--radius-md);
+  background: linear-gradient(125deg, #33270d, #251b09);
+}
+:root[data-skin="showcase"] .matches-screen-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 18px;
+}
+:root[data-skin="showcase"] .matches-board-group {
+  min-width: 0;
+  padding: 18px 21px;
+  border: 1px solid #453719;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #251b09, #1d1507);
+}
+:root[data-skin="showcase"] .matches-board-group > h3 { margin: 0 0 8px; color: #fff6e6; font-size: 15px; }
+:root[data-skin="showcase"] .leaderboard-podium {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 14px;
+  padding: 24px 0 22px;
+}
+:root[data-skin="showcase"] .podium-first {
+  --podium-bg: #33270d;
+  --podium-glow: #ffb02055;
+  --podium-border: #b48719;
+  --podium-accent: #ffd234;
+  min-height: 250px;
+  background: var(--podium-bg);
+  border-color: var(--podium-border);
+  box-shadow: 0 15px 40px #e2aa1d21, 0 0 26px #f6c33119;
+}
+:root[data-skin="showcase"] body[data-portal-view="matches"] .match-creator,
+:root[data-skin="showcase"] body[data-portal-view="matches"] #game-detail-page,
+:root[data-skin="showcase"] body[data-portal-view="matches"] #placeholder {
+  display: none !important;
+}
+:root[data-skin="showcase"] body[data-portal-view="matches"] #matches-screen:not([hidden]) { display: block; }
+:root[data-skin="showcase"] body[data-portal-view="matches"] #match:not([hidden]) { display: flex; }
+:root[data-skin="showcase"] body[data-portal-view="leaderboards"] .match-creator,
+:root[data-skin="showcase"] body[data-portal-view="leaderboards"] #matches-screen,
+:root[data-skin="showcase"] body[data-portal-view="leaderboards"] #game-detail-page,
+:root[data-skin="showcase"] body[data-portal-view="leaderboards"] #placeholder {
+  display: none !important;
+}
+:root[data-skin="showcase"] body[data-portal-view="leaderboards"] #leaderboards-screen:not([hidden]) { display: block; }
+:root[data-skin="showcase"] body[data-portal-view="home"] #game-catalog > :not(.arcade-hero):not(.game-proposal):not(#popular-games-section):not(#recent-games-section) { display: none !important; }
+:root[data-skin="showcase"] body[data-portal-view="games"] .arcade-hero,
+:root[data-skin="showcase"] body[data-portal-view="games"] .popular-games-section,
+:root[data-skin="showcase"] body[data-portal-view="games"] .game-proposal { display: none !important; }
+@media(max-width:860px) {
+  :root[data-skin="showcase"] .matches-screen-groups { grid-template-columns: minmax(0, 1fr); }
+  :root[data-skin="showcase"] .leaderboard-podium { gap: 7px; padding-top: 18px; }
+  :root[data-skin="showcase"] .podium-first { min-height: 218px; }
+}
+
+/* Lobby: warm, social; open seats first. */
+:root[data-skin="lobby"] {
+  color-scheme: light;
+  --builder-accent-ink: #fff7f0;
+  --color-bg-0: #fff7f0;
+  --color-bg-1: #ffeede;
+  --color-bg-2: #ffe2cd;
+  --color-bg-3: #ffd2b0;
+  --color-bg-4: #ffc193;
+  --color-text-primary: #3a2318;
+  --color-text-secondary: #633f2c;
+  --color-text-tertiary: #8a6350;
+  --color-text-quaternary: #a37f6c;
+  --color-border-1: #f0d3bf;
+  --color-border-2: #e6bfa4;
+  --color-border-3: #d29e7e;
+  --color-border-4: #bd7f5c;
+  --color-accent: #c2451f;
+  --color-accent-hover: #9c3517;
+  --color-focus-ring: #9c3517;
+  --color-ok: #2e7d46;
+  --color-warn: #8a6100;
+  --color-error: #b3261e;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --font-sans: "Trebuchet MS", sans-serif;
+}
+:root[data-skin="lobby"] .portal-shell {
+  --color-bg-0: #fff7f0;
+  --color-bg-1: #ffeede;
+  --color-bg-2: #ffe2cd;
+  --color-bg-3: #ffd2b0;
+  --color-bg-4: #ffc193;
+  --color-text-primary: #3a2318;
+  --color-text-secondary: #633f2c;
+  --color-text-tertiary: #8a6350;
+  --color-border-2: #e6bfa4;
+  --color-border-3: #d29e7e;
+  --color-accent: #c2451f;
+  --color-accent-hover: #9c3517;
+  --color-focus-ring: #9c3517;
+  background: var(--color-bg-0);
+  color: var(--color-text-primary);
+}
+:root[data-skin="lobby"] .builder-shell {
+  --color-bg-0:#fff7f0;--color-bg-1:#ffeede;--color-bg-2:#ffe2cd;--color-bg-3:#ffd2b0;--color-bg-4:#ffc193;
+  --color-text-primary:#3a2318;--color-text-secondary:#633f2c;--color-text-tertiary:#8a6350;--color-text-quaternary:#a37f6c;
+  --color-border-1:#f0d3bf;--color-border-2:#e6bfa4;--color-border-3:#d29e7e;--color-border-4:#bd7f5c;
+  --color-accent:#c2451f;--color-accent-hover:#9c3517;--color-focus-ring:#9c3517;--builder-accent-ink:#fff7f0;
+}
+:root[data-skin="lobby"] .portal-sidebar,
+:root[data-skin="lobby"] .match-creator,
+:root[data-skin="lobby"] .game-detail-page,
+:root[data-skin="lobby"] .match-stage,
+:root[data-skin="lobby"] .portal-shell .game-search-popup,
+:root[data-skin="lobby"] .portal-shell .match-tools {
+  background: #ffeede;
+  border-color: #e6bfa4;
+  color: #3a2318;
+}
+:root[data-skin="lobby"] .popular-games-section,
+:root[data-skin="lobby"] .play-option,
+:root[data-skin="lobby"] .portal-shell .library-card,
+:root[data-skin="lobby"] .selected-game-card {
+  background: #ffe2cd;
+  border-color: #e6bfa4;
+  color: #3a2318;
+}
+:root[data-skin="lobby"] .portal-shell input,
+:root[data-skin="lobby"] .portal-shell select {
+  background: #fffaf6;
+  border-color: #d29e7e;
+  color: #3a2318;
+}
+:root[data-skin="lobby"] .portal-shell button.primary,
+:root[data-skin="lobby"] .portal-shell .library-toolbar button[aria-pressed="true"] {
+  background: #c2451f;
+  border-color: #c2451f;
+  color: #fff7f0;
+}
+:root[data-skin="lobby"] .portal-shell button.primary:hover:not(:disabled) { background:#9c3517; border-color:#9c3517; }
+:root[data-skin="lobby"] .portal-shell button:focus-visible,
+:root[data-skin="lobby"] .portal-shell summary:focus-visible,
+:root[data-skin="lobby"] .portal-shell .popular-game-card:focus-visible {
+  outline-color: #9c3517;
+}
+:root[data-skin="lobby"] .creator-title,
+:root[data-skin="lobby"] .popular-games-heading h2,
+:root[data-skin="lobby"] .play-option-heading h3,
+:root[data-skin="lobby"] .selected-game-card h2 {
+  color: #3a2318;
+}
+:root[data-skin="lobby"] .creator-description,
+:root[data-skin="lobby"] .popular-period,
+:root[data-skin="lobby"] .play-option-heading p,
+:root[data-skin="lobby"] .play-option .play-option-note,
+:root[data-skin="lobby"] .library-description {
+  color: #8a6350;
+}
+:root[data-skin="lobby"] .topbar .token-wallet {
+  background: linear-gradient(135deg, #ffeede, #ffe2cd);
+  border-color: #d29e7e;
+  color: #3a2318;
+}
+:root[data-skin="lobby"] .topbar .token-wallet-coin {
+  background: #c2451f;
+  border-color: #9c3517;
+  color: #fff7f0;
+}
+:root[data-skin="lobby"] .topbar .token-wallet-label { color: #8a6350; }
+:root[data-skin="lobby"] .topbar .token-wallet-number { color: #633f2c; }
+:root[data-skin="lobby"] .topbar .token-wallet-number strong { color: #3a2318; }
+/* Lobby puts Matches first: in the top nav, and open lobbies first on the
+   Matches screen (the board is a flex column, so order promotes it). */
+:root[data-skin="lobby"] .portal-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: clamp(12px, 2vw, 32px);
+}
+:root[data-skin="lobby"] .portal-nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 13px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #633f2c;
+  background: transparent;
+  text-decoration: none;
+  font-weight: 700;
+  white-space: nowrap;
+}
+:root[data-skin="lobby"] .portal-nav-link:hover,
+:root[data-skin="lobby"] .portal-nav-link.is-active {
+  color: #3a2318;
+  background: #ffe2cd;
+  border-color: #d29e7e;
+}
+:root[data-skin="lobby"] .portal-nav-link[data-portal-nav="matches"] { order: -1; }
+:root[data-skin="lobby"] .matches-screen-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+:root[data-skin="lobby"] .matches-board-group {
+  min-width: 0;
+  padding: 18px 21px;
+  border: 1px solid #e6bfa4;
+  border-radius: 16px;
+  background: #ffeede;
+}
+:root[data-skin="lobby"] .matches-board-group > h3 { margin: 0 0 8px; color: #3a2318; font-size: 15px; }
+:root[data-skin="lobby"] .matches-screen-groups .open-matches-board {
+  order: -1;
+  border: 2px solid #c2451f;
+  background: #ffe2cd;
+}
+:root[data-skin="lobby"] .open-matches-board .match-group > summary {
+  min-height: 48px;
+  font-size: 16px;
+  font-weight: 800;
+}
+:root[data-skin="lobby"] body[data-portal-view="matches"] .match-creator,
+:root[data-skin="lobby"] body[data-portal-view="matches"] #game-detail-page,
+:root[data-skin="lobby"] body[data-portal-view="matches"] #placeholder {
+  display: none !important;
+}
+:root[data-skin="lobby"] body[data-portal-view="matches"] #matches-screen:not([hidden]) { display: block; }
+:root[data-skin="lobby"] body[data-portal-view="matches"] #match:not([hidden]) { display: flex; }
+:root[data-skin="lobby"] body[data-portal-view="leaderboards"] .match-creator,
+:root[data-skin="lobby"] body[data-portal-view="leaderboards"] #matches-screen,
+:root[data-skin="lobby"] body[data-portal-view="leaderboards"] #game-detail-page,
+:root[data-skin="lobby"] body[data-portal-view="leaderboards"] #placeholder {
+  display: none !important;
+}
+:root[data-skin="lobby"] body[data-portal-view="leaderboards"] #leaderboards-screen:not([hidden]) { display: block; }
+
+/* Library: light, calm, dense; search first. */
+:root[data-skin="library"] {
+  color-scheme: light;
+  --builder-accent-ink: #f7f8f5;
+  --color-bg-0: #f7f8f5;
+  --color-bg-1: #eef1ea;
+  --color-bg-2: #e3e9de;
+  --color-bg-3: #d3ddca;
+  --color-bg-4: #bccbb2;
+  --color-text-primary: #1f2a2e;
+  --color-text-secondary: #3f4f45;
+  --color-text-tertiary: #5f7268;
+  --color-text-quaternary: #7d8f79;
+  --color-border-1: #dde4d6;
+  --color-border-2: #c8d4bf;
+  --color-border-3: #a9bda0;
+  --color-border-4: #87a07e;
+  --color-accent: #2e5a6b;
+  --color-accent-hover: #234657;
+  --color-focus-ring: #234657;
+  --color-ok: #2e7d46;
+  --color-warn: #8a6100;
+  --color-error: #b3261e;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --font-sans: Georgia, serif;
+}
+:root[data-skin="library"] .portal-shell {
+  --color-bg-0: #f7f8f5;
+  --color-bg-1: #eef1ea;
+  --color-bg-2: #e3e9de;
+  --color-bg-3: #d3ddca;
+  --color-bg-4: #bccbb2;
+  --color-text-primary: #1f2a2e;
+  --color-text-secondary: #3f4f45;
+  --color-text-tertiary: #5f7268;
+  --color-border-2: #c8d4bf;
+  --color-border-3: #a9bda0;
+  --color-accent: #2e5a6b;
+  --color-accent-hover: #234657;
+  --color-focus-ring: #234657;
+  background: var(--color-bg-0);
+  color: var(--color-text-primary);
+}
+:root[data-skin="library"] .builder-shell {
+  --color-bg-0:#f7f8f5;--color-bg-1:#eef1ea;--color-bg-2:#e3e9de;--color-bg-3:#d3ddca;--color-bg-4:#bccbb2;
+  --color-text-primary:#1f2a2e;--color-text-secondary:#3f4f45;--color-text-tertiary:#5f7268;--color-text-quaternary:#7d8f79;
+  --color-border-1:#dde4d6;--color-border-2:#c8d4bf;--color-border-3:#a9bda0;--color-border-4:#87a07e;
+  --color-accent:#2e5a6b;--color-accent-hover:#234657;--color-focus-ring:#234657;--builder-accent-ink:#f7f8f5;
+}
+:root[data-skin="library"] .portal-sidebar,
+:root[data-skin="library"] .match-creator,
+:root[data-skin="library"] .game-detail-page,
+:root[data-skin="library"] .match-stage,
+:root[data-skin="library"] .portal-shell .game-search-popup,
+:root[data-skin="library"] .portal-shell .match-tools {
+  background: #eef1ea;
+  border-color: #c8d4bf;
+  color: #1f2a2e;
+}
+:root[data-skin="library"] .popular-games-section,
+:root[data-skin="library"] .play-option,
+:root[data-skin="library"] .portal-shell .library-card,
+:root[data-skin="library"] .selected-game-card {
+  background: #e3e9de;
+  border-color: #c8d4bf;
+  color: #1f2a2e;
+}
+:root[data-skin="library"] .portal-shell input,
+:root[data-skin="library"] .portal-shell select {
+  background: #f7f8f5;
+  border-color: #a9bda0;
+  color: #1f2a2e;
+}
+:root[data-skin="library"] .portal-shell button.primary,
+:root[data-skin="library"] .portal-shell .library-toolbar button[aria-pressed="true"] {
+  background: #2e5a6b;
+  border-color: #2e5a6b;
+  color: #f7f8f5;
+}
+:root[data-skin="library"] .portal-shell button.primary:hover:not(:disabled) { background:#234657; border-color:#234657; }
+:root[data-skin="library"] .portal-shell button:focus-visible,
+:root[data-skin="library"] .portal-shell summary:focus-visible,
+:root[data-skin="library"] .portal-shell .popular-game-card:focus-visible {
+  outline-color: #234657;
+}
+:root[data-skin="library"] .creator-title,
+:root[data-skin="library"] .popular-games-heading h2,
+:root[data-skin="library"] .play-option-heading h3,
+:root[data-skin="library"] .selected-game-card h2 {
+  color: #1f2a2e;
+}
+:root[data-skin="library"] .creator-description,
+:root[data-skin="library"] .popular-period,
+:root[data-skin="library"] .play-option-heading p,
+:root[data-skin="library"] .play-option .play-option-note,
+:root[data-skin="library"] .library-description {
+  color: #5f7268;
+}
+:root[data-skin="library"] .topbar .token-wallet {
+  background: linear-gradient(135deg, #eef1ea, #e3e9de);
+  border-color: #a9bda0;
+  color: #1f2a2e;
+}
+:root[data-skin="library"] .topbar .token-wallet-coin {
+  background: #2e5a6b;
+  border-color: #234657;
+  color: #f7f8f5;
+}
+:root[data-skin="library"] .topbar .token-wallet-label { color: #5f7268; }
+:root[data-skin="library"] .topbar .token-wallet-number { color: #3f4f45; }
+:root[data-skin="library"] .topbar .token-wallet-number strong { color: #1f2a2e; }
+/* Library home is the catalogue: no hero, no carousels, search on top. */
+:root[data-skin="library"] .arcade-hero,
+:root[data-skin="library"] .popular-games-section {
+  display: none !important;
+}
+:root[data-skin="library"] #game-search {
+  min-height: 48px;
+  font-size: 16px;
+}
+/* Library catalogue is dense compact rows, not cover cards. */
+:root[data-skin="library"] .game-library-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+:root[data-skin="library"] .portal-shell .library-card {
+  flex-direction: row;
+  align-items: stretch;
+}
+:root[data-skin="library"] .library-art {
+  width: 120px;
+  flex-shrink: 0;
+  aspect-ratio: auto;
+  min-height: 96px;
+}
+:root[data-skin="library"] .library-monogram { font-size: 32px; }
+:root[data-skin="library"] .library-copy { padding: 12px 14px; gap: 6px; }
+:root[data-skin="library"] .library-title { font-size: 16px; }
+:root[data-skin="library"] .library-description { -webkit-line-clamp: 1; }
+:root[data-skin="library"] .library-select { padding-top: 2px; }
+@media(max-width:500px) {
+  :root[data-skin="library"] .library-art { width: 84px; min-height: 84px; }
+  :root[data-skin="library"] .library-monogram { font-size: 26px; }
+}

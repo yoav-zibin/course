@@ -9,9 +9,16 @@
   const PORTAL_SKIN_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
   const SKIN_KEY_PATTERN = /^[a-z0-9][a-z0-9-]{0,49}$/;
   // Arcade and Neon own the top-level Games / Matches / Leaderboards navigation.
-  const MODERN_PORTAL_SKINS = new Set(["arcade", "neon"]);
-  const GEM_PORTAL_SKINS = new Set(["arcade", "neon"]);
-  const PORTAL_SKINS = new Set(["classic", "aurora", "sunset", "immersive", "meadow", ...MODERN_PORTAL_SKINS]);
+  const MODERN_PORTAL_SKINS = new Set(["arcade", "neon", "focus", "showcase", "lobby"]);
+  const GEM_PORTAL_SKINS = new Set(["arcade", "neon", "showcase"]);
+  // Focus and lobby join the modern navigation (top Games/Matches/Leaderboards
+  // nav with the match groups moved into the Matches screen) so their
+  // default-to-Matches home and Matches-first ordering have a real screen to
+  // land on: in legacy mode the top nav is hidden and the Matches screen's
+  // groups are display:none. They keep the token currency: only showcase
+  // joins the gem set. Library stays legacy (sidebar + catalog).
+  const PORTAL_SKINS = new Set(["classic", "aurora", "sunset", "immersive", "meadow", "focus", "showcase", "lobby", "library", ...MODERN_PORTAL_SKINS]);
+  const PORTAL_ARCHETYPES = {focus: "focus", showcase: "showcase", lobby: "lobby", library: "library"};
   const PORTAL_LAYOUTS = new Set(["left", "hamburger", "top"]);
   let assignedSkin = "classic";
   let previewSkin = portalSkinFromUrl();
@@ -116,6 +123,12 @@
     const modernPortal = MODERN_PORTAL_SKINS.has(current);
     document.documentElement.dataset.portalNavigation = modernPortal ? "modern" : "legacy";
     document.documentElement.dataset.portalCurrency = GEM_PORTAL_SKINS.has(current) ? "gems" : "tokens";
+    // Archetype flag for the portal: portal.js reads it for the default
+    // screen, portal-match-layout.js for focus match auto-focus. Set here
+    // so a cached skin keeps its archetype, not only a picker choice.
+    const archetype = PORTAL_ARCHETYPES[current] || "";
+    if (archetype) document.documentElement.dataset.portalArchetype = archetype;
+    else delete document.documentElement.dataset.portalArchetype;
     syncPortalMatchNavigation(modernPortal);
     const wallet = document.getElementById("token-wallet");
     if (wallet) {

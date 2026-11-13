@@ -453,8 +453,16 @@ function syncPortalScreen() {
     }
     render();
   }
+  // Focus and lobby open on the Matches screen when no screen was asked
+  // for: their home is the your-turn list, not the catalog. An explicit
+  // hash (#home, #games, ...) still wins, so the catalog stays reachable.
+  // (No hash rewrite here: rewriting to #matches would make location.hash
+  // non-empty and break shouldRestoreSavedMatch()'s in-progress restore.)
+  const archetype = document.documentElement.dataset.portalArchetype;
+  const defaultMatches = !requested && (archetype === "focus" || archetype === "lobby");
   const view = params.has("match") ? "matches"
-    : ["games", "matches", "leaderboards"].includes(requested) ? requested : "home";
+    : ["games", "matches", "leaderboards"].includes(requested) ? requested
+    : defaultMatches ? "matches" : "home";
   document.body.dataset.portalView = view;
   document.body.classList.toggle("portal-match-active", params.has("match"));
   document.querySelectorAll("[data-portal-nav]").forEach(link => {
@@ -2438,6 +2446,11 @@ async function main() {
     renderPortalAccountMenu();
     syncPortalRoutes();
     syncPortalCurrencyLabels();
+    // A switch to focus/lobby applies their Matches-first home at once;
+    // a switch away restores the catalog home. Safe during a match: the
+    // match param still forces the matches view and skips the selected-id
+    // clearing in syncPortalScreen.
+    syncPortalScreen();
   });
   document.addEventListener("portal-layout-change", syncPortalRoutes);
   document.querySelector(".back-to-games")?.addEventListener("click", leaveGamePage);

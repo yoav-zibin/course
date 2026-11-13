@@ -17,7 +17,11 @@ window.PortalMatchLayout = (() => {
     const active = Boolean(match);
     const waiting = match?.status === "waiting_for_players";
     const immersive = document.documentElement?.dataset?.skin === "immersive";
-    const focused = active && !waiting && (manualFocus ?? (landscape.matches || immersive));
+    // Focus is match-first too: auto-focus a live match on any screen, like
+    // immersive. (The generic body.match-focus CSS already hides the topbar
+    // and sidebar for every skin; no rule moves here.)
+    const focusArchetype = document.documentElement?.dataset?.portalArchetype === "focus";
+    const focused = active && !waiting && (manualFocus ?? (landscape.matches || immersive || focusArchetype));
     const focusChanged = active && document.body.classList.contains("match-page") &&
       document.body.classList.contains("match-focus") !== focused;
     document.body.classList.toggle("match-page", active);
