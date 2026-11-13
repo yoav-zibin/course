@@ -215,6 +215,7 @@ const state = {
   nameCache: new Map(), // user id -> display name
   myMatches: [],
   openMatches: [],
+  matchListActions: new Map(), // pending deletes/errors survive polling redraws
   selectedId: null,
   pendingInvite: null, // a match invite token from #invite=, until it is accepted or dismissed
   match: null, // the selected match, from GET /matches/{id}
@@ -970,13 +971,18 @@ function matchItem(match) {
       el("span", {class:"match-card-players", textContent:match.players.map(playerName).join(" · ")}),
       el("span", {class:"match-card-moves", textContent:I18n.t("ui.match.moves_count", { count: match.move_count }, `${match.move_count} moves`)})),
   );
-  // Quick delete: the same DELETE the match view's "Delete match" runs, one
-  // click from the list, without opening the match first. Only the match's
-  // owner and seated players get it (an open match is not theirs to delete);
-  // local practices get it too, like their "Remove practice from list".
-  const canDelete = Boolean(user && (match.localMode || match.owner_user_id === user.id || seatOf(match, user.id)));
+  // One-click removal uses the match view's DELETE permissions: active
+  // participants can delete live matches; past participants can hide completed
+  // ones. Creating a match grants no separate rights. Local practices archive.
+  const canDelete = Boolean(user && (match.localMode || match.players.some(player =>
+    player.user_id === user.id && (match.status === "over" || player.active !== false))));
   if (!canDelete) return card;
-  const deleteLabel = I18n.t("ui.match.delete_match", {}, "Delete match");
+  const deleteLabel = match.localMode
+    ? I18n.t("ui.match.remove_practice", {}, "Remove practice from list")
+    : match.status === "over"
+      ? I18n.t("ui.match.hide_from_list", {}, "Hide from my list")
+      : I18n.t("ui.match.delete_match", {}, "Delete match");
+  const action = state.matchListActions.get(match.id);
   return el(
     "div",
     { class: "match-list-row" },
@@ -987,17 +993,22 @@ function matchItem(match) {
       textContent: "\u2715",
       title: deleteLabel,
       "aria-label": deleteLabel,
+      disabled: Boolean(action?.busy),
       onclick: async (event) => {
         event.stopPropagation();
-        const button = event.currentTarget;
-        button.disabled = true;
+        if (me()?.id !== user.id || state.matchListActions.get(match.id)?.busy) return;
+        state.matchListActions.set(match.id, {busy:true, error:""});
+        renderLists();
         try {
           await portalRequest("DELETE", `/matches/${match.id}`, { user });
         } catch (error) {
-          button.disabled = false;
-          showMessage(error.message, "error");
+          if (me()?.id !== user.id) return;
+          state.matchListActions.set(match.id, {busy:false, error:error.message});
+          renderLists();
           return;
         }
+        if (me()?.id !== user.id) return;
+        state.matchListActions.delete(match.id);
         state.myMatches = state.myMatches.filter((item) => item.id !== match.id);
         state.openMatches = state.openMatches.filter((item) => item.id !== match.id);
         if (state.selectedId === match.id) selectMatch(null);
@@ -1007,6 +1018,8 @@ function matchItem(match) {
         }
       },
     }),
+    el("div", {class:"match-delete-error message error", role:"alert",
+      hidden:!action?.error, textContent:action?.error || ""}),
   );
 }
 
@@ -1438,7 +1451,8 @@ function renderMatchList(node, matches) {
   // move keyboard focus, or replace unchanged buttons while someone is clicking.
   // The language is part of the key: the rows' badges, names and "N moves" are text built here.
   const key = JSON.stringify([matches, state.selectedId, [...state.nameCache],
-    matches.map((m) => gameMetaOf(m.game_id, m.game_version)?.name), I18n.revision()]);
+    matches.map((m) => gameMetaOf(m.game_id, m.game_version)?.name),
+    matches.map((m) => state.matchListActions.get(m.id)), I18n.revision()]);
   if (node.dataset.key === key) return;
   node.dataset.key = key;
   node.replaceChildren(...(matches.length ? matches.map(matchItem)
@@ -2618,6 +2632,7 @@ async function main() {
     state.selectedId = me() && invitedMatch ? invitedMatch : null;
     state.match = null;
     state.myMatches = [];
+    state.matchListActions.clear();
     state.gameCache.clear();
     state.nameCache.clear();
     state.pictureCache.clear();

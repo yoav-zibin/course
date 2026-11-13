@@ -637,6 +637,37 @@ test('match rows give their owner a one-click delete; open matches get none',asy
  assert.equal(run('matchItem(state.openMatches[0]).class'),'list-item match-list-card');
 });
 
+test('quick delete follows participation rights and names hide/archive actions',()=>{
+ const {run}=setup();
+ const match={id:'m',game_id:'game',game_version:2,owner_user_id:'owner',status:'ongoing',
+   players:[{player_index:0,kind:'human',user_id:'owner',active:false}],move_count:0};
+ const row=value=>run(`matchItem(${JSON.stringify(value)})`);
+ assert.equal(row(match).class,'list-item match-list-card','departed creators cannot delete a live match');
+ assert.equal(row({...match,players:[{player_index:0,kind:'human',user_id:'other'}]}).class,
+   'list-item match-list-card','creation alone grants no delete rights');
+ const ended={...match,owner_user_id:'other',status:'over'};
+ assert.equal(row(ended).children[1]['aria-label'],'Hide from my list','departed participants can hide completed matches');
+ assert.equal(row({...match,localMode:'pass'}).children[1]['aria-label'],'Remove practice from list');
+ assert.equal(row({...match,owner_user_id:'other',players:[{player_index:0,kind:'human',user_id:'owner'}]})
+   .children[1]['aria-label'],'Delete match','active participants can delete');
+});
+
+test('polling cannot re-enable an in-flight list deletion or send it twice',async()=>{
+ let finish;
+ let calls=0;
+ const {run}=setup(()=>{calls++;return new Promise(resolve=>{finish=resolve;});});
+ run('state.myMatches=[{id:"m",game_id:"game",game_version:2,status:"waiting_for_players",players:[{kind:"human",user_id:"owner"}],move_count:0}]');
+ const stale=run('matchItem(state.myMatches[0])').children[1];
+ const event={stopPropagation(){}};
+ const pending=stale.onclick(event);
+ assert.equal(run('matchItem(state.myMatches[0])').children[1].disabled,true);
+ await stale.onclick(event);
+ assert.equal(calls,1);
+ finish({});
+ await pending;
+ assert.equal(run('state.myMatches.length'),0);
+});
+
 test('a translated declarative name is searchable without dropping the renderer marker',()=>{
  const {run,node}=setup();
  run('state.games[0].renderer_type="declarative";I18n={...I18n,gameName:(id,fallback)=>id==="game"?"משחק":fallback};state.gameSearchQuery="משחק";renderGameSearch()');
