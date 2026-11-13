@@ -14,10 +14,11 @@ function setup(request=async()=>{}, hash='', search='', storage) {
   };
   const navigations=[];
   const pageErrors=[];
+  const ctxLocation={hash,search,assign(url){navigations.push(url);}};
   const ctx=vm.createContext({StoragePages:{enabled:async()=>false,list:(request,path,options)=>request("GET",path,options),controls(){},search(){return false;}},console,Map,Set,URLSearchParams,
     navigator:{onLine:true},localStorage:storage || {},PortalOffline:class {api(...args){return request(...args);}read(){return {};}write(){} writeCache(data){this.write(data);} async practice(game,mode,count){practiceCalls.push({game,mode,count});return {id:'local-practice',game_id:game.id,game_version:game.version,players:[{player_index:0,kind:'human',user_id:'owner'}],status:'ongoing',move_count:0};} async submitMove(match,body){const result=this.enqueue(match,body);await this.sync({force:true});return result;}} ,
-    document:{getElementById:node,body:{classList:{toggle(){}}}},window:{addEventListener(){}},
-    location:{hash,search,assign(url){navigations.push(url);}},history:{replaceState(){}},
+    document:{getElementById:node,querySelector:()=>null,querySelectorAll:()=>[],documentElement:{dataset:{}},body:{dataset:{},classList:{toggle(){}}}},window:{addEventListener(){}},
+    location:ctxLocation,history:{replaceState(_state,_title,url){this.pushState(_state,_title,url);},pushState(_state,_title,url){const next=new URL(url,'https://example.test/static/portal.html'+ctxLocation.search+ctxLocation.hash);ctxLocation.search=next.search;ctxLocation.hash=next.hash;}},
     Auth:{current:()=>({id:'owner'})},I18n:require('./i18n-stub.cjs'),GameFrame:class{load(){}unload(){}send(){}},
     apiRequest:request,formatTime:()=>'',shortId:x=>x,showPageError:text=>pageErrors.push(text),el:(tag,attrs={},...children)=>({...attrs,children})});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../../static/portal.js'),'utf8').replace(/main\(\);\s*$/,''),ctx);
