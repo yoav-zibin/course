@@ -14,6 +14,23 @@ test('skin assignment is consistent across the portal and admin', async ({ page,
   await expect(root).toHaveAttribute('data-skin', skin!);
 });
 
+test('Party skin preview respects reduced motion', async ({ page, request }, testInfo) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await loginAs(page, await createUser(request, uniqueName('Party motion')));
+  await page.goto('/static/portal.html?skin=party');
+  await expect(page.locator('html')).toHaveAttribute('data-skin', 'party');
+  const wallet = page.locator('#token-wallet');
+  await expect(wallet).toBeVisible();
+  await wallet.screenshot({ path: testInfo.outputPath('party-wallet.png') });
+  const animations = () => page.evaluate(() => [
+    getComputedStyle(document.body).animationName,
+    getComputedStyle(document.querySelector('.portal-shell')!).animationName,
+  ]);
+  await expect.poll(animations).toEqual(['none', 'none']);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await expect.poll(animations).toEqual(['party-lights', 'party-lights']);
+});
+
 test('campaign link redirects to the portal and remembers its code', async ({ page }) => {
   await page.goto('/c/students-a');
   // A logged-out visitor detours through the login page first; the

@@ -68,7 +68,8 @@ and hover/focus states; do not rely on color alone to communicate status.
 
 ## Create and preview locally
 
-1. Create a branch from the current project branch.
+1. Update your local checkout from `main` before editing. The platform requires
+   changes to land directly on `main`, without contribution branches.
 2. Add the theme rule to `static/experiments.css`. Pick a unique key and keep it
    lowercase with hyphens if needed.
 3. Run the app using the local setup described in the repository
@@ -82,12 +83,14 @@ and hover/focus states; do not rely on color alone to communicate status.
    mobile widths. Check dialogs, navigation, disabled states, errors, focus
    indicators, and any color combinations affected by your palette.
 
-On the Portal, visitors can use the top-bar **Skin** menu to preview Classic,
-Aurora, Sunset, or Immersive. A preview stays in the `skin` URL parameter while
+On the Portal, visitors can use the top-bar **Skin** menu to preview every skin
+defined in the deployed stylesheet, including Party and Midnight. The menu
+discovers these keys automatically; no JavaScript registration is needed.
+A preview stays in the `skin` URL parameter while
 moving between Portal screens. Choosing **Assigned** removes the preview and
 restores the server-assigned experiment skin. Previewing does not change or
-persist the account's Firestore assignment. Immersive remains a preview until
-an administrator registers it as an experiment variant.
+persist the account's Firestore assignment. A deployed skin becomes eligible
+for server assignment only after an administrator registers its variant.
 
 The preview command is only for local visual checking. Do not persist a forced
 skin in browser storage or change the assignment endpoint; assignment is
@@ -97,11 +100,12 @@ controlled by the experiment service.
 
 There is no direct UI upload. The theme CSS is the deliverable:
 
-1. Commit the `static/experiments.css` change on your branch.
-2. Open a pull request and include the proposed display name and exact skin key
-   in its description. Include screenshots if practical.
-3. Once the CSS is merged and deployed, an administrator opens **Admin →
-   Statistics** and uses **Add a UI skin variant**. Enter the display name and
+1. Commit the tested `static/experiments.css` change directly to `main`, following
+   [the platform requirements](../REQUIREMENTS.md). Green CI deploys it normally.
+2. Include the proposed display name and exact skin key in the commit message
+   or review notes. Include screenshots if practical.
+3. Once the CSS is deployed, an administrator opens **Statistics** at `/stats`
+   and uses **Add a UI skin variant**. Enter the display name and
    the exact key from the CSS selector.
 4. Confirm the new variant appears in the UI-skin experiment and that an account
    assigned to it sees the new theme.
@@ -111,8 +115,8 @@ eligible for new assignments immediately, so users must not be assigned to a
 key that has no deployed CSS rule. Registering a key does not upload or deploy
 CSS.
 
-When editing `static/experiments.css`, increment its cache-busting version (currently
-`v=8`) in each HTML page that loads it and in `static/portal-sw.js`. Keep those
+When editing `static/experiments.css`, increment its current cache-busting version
+in each HTML page that loads it and in `static/portal-sw.js`. Keep those
 references in sync so browsers and the portal service worker receive the new
 theme. Also increment the `CACHE` version in `static/portal-sw.js` so an updated
 portal shell replaces the previous cached shell. The pages currently linking
@@ -125,7 +129,7 @@ the stylesheet are `admin.html`, `browse.html`, `console.html`, `feedback.html`,
   from `GET /users/me/experiments/skin` and applies its `key` as the root
   `data-skin` attribute. The assignment is persisted server-side, so it remains
   stable across visits and deployments. Anonymous visitors use the base theme.
-- **As an administrator:** open **Admin → Statistics** to compare variants and
+- **As an administrator:** open **Statistics** at `/stats` to compare variants and
   see assignments, signups, match starts, and return activity. The dashboard
   requires the master password.
 - **In the API:** `GET /users/me/experiments/skin` requires the normal user
@@ -149,5 +153,5 @@ administrator.
       accessible.
 - [ ] The portal has been previewed at desktop and mobile sizes.
 - [ ] Any cache-busting references are updated consistently.
-- [ ] The pull request description includes the display name, key, and preview
+- [ ] The commit message or review notes include the display name, key, and preview
       screenshots or testing notes.

@@ -643,11 +643,6 @@
   background-size: 350% 350%;
   animation: party-lights 60s ease-in-out infinite;
 }
-@media (prefers-reduced-motion: reduce) {
-  :root[data-skin="party"] body,
-  :root[data-skin="party"] .portal-shell { animation: none; }
-}
-
 :root[data-skin="party"] .portal-shell {
   --color-bg-0: #1d004d;
   --color-bg-1: #2b0066;
@@ -669,6 +664,15 @@
   color: var(--color-text-primary);
   font-family: var(--font-sans);
 }
+@media (prefers-reduced-motion: reduce) {
+  :root[data-skin="party"] body,
+  :root[data-skin="party"] .portal-shell { animation: none; }
+}
+
+:root[data-skin="party"] button.primary {
+  color: #2a0045;
+}
+
 :root[data-skin="party"] .portal-sidebar,
 :root[data-skin="party"] .match-creator,
 :root[data-skin="party"] .game-detail-page,
@@ -730,7 +734,7 @@
 }
 
 :root[data-skin="party"] .topbar .token-wallet {
-  background: linear-gradient(135deg, #ff2ea6, #7b00ff);
+  background: linear-gradient(135deg, #8a1455, #3d0085);
   border: 2px solid #ffe93d;
   color: #ffffff;
   box-shadow: 0 4px 18px rgb(255 46 166 / 45%);
