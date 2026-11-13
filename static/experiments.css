@@ -1471,6 +1471,10 @@
 }
 
 
+/* The Community Chat panel and the arcade banner are only laid out by the Arcade
+   skin; every other skin hides them, or they render unstyled over the portal. */
+.community-chat, .arcade-hero { display: none; }
+
 /* Neon Grid: a dark glowing grid, cyan light lines, and orange highlights. */
 :root[data-skin="neon"] {
   color-scheme: dark;
@@ -1689,4 +1693,480 @@
 :root[data-skin="neon"] .practice-option .play-option-icon {
   background: #2a1600;
   color: #ffb86b;
+}
+
+/* Neon Grid layout: like Arcade, the lobby gets a hero banner and a Community Chat
+   column, here as a glowing "comms" panel and a perspective light-grid floor. */
+:root[data-skin="neon"] .portal-shell { grid-template-columns: minmax(0, 1fr) 320px; }
+:root[data-skin="neon"] .creator-description { display: none; }
+
+/* Hero banner: glowing title over a grid floor that runs to a bright horizon. */
+:root[data-skin="neon"] .arcade-hero {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  isolation: isolate;
+  margin: 0 0 28px;
+  padding: clamp(26px, 4.5vw, 56px);
+  min-height: 300px;
+  border: 1px solid #1f6f94;
+  border-radius: 4px;
+  background: radial-gradient(ellipse at 50% 100%, #00e5ff33, transparent 60%), linear-gradient(180deg, #04070f, #071425);
+  box-shadow: 0 0 0 1px #00e5ff22, 0 0 40px #00e5ff1f, inset 0 1px #ffffff10;
+}
+:root[data-skin="neon"] .arcade-hero::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: -50%;
+  right: -50%;
+  bottom: -40%;
+  height: 80%;
+  background:
+    linear-gradient(#00e5ff55 1px, transparent 1px) 0 0 / 60px 40px,
+    linear-gradient(90deg, #00e5ff55 1px, transparent 1px) 0 0 / 60px 40px;
+  transform: perspective(320px) rotateX(62deg);
+  transform-origin: 50% 0;
+  mask-image: linear-gradient(to bottom, transparent, #000 35%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 35%);
+  pointer-events: none;
+}
+:root[data-skin="neon"] .arcade-hero::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 0;
+  right: 0;
+  bottom: 45%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #00e5ff, #ff9e3d, #00e5ff, transparent);
+  box-shadow: 0 0 18px #00e5ff, 0 0 40px #00e5ff88;
+  opacity: .55;
+  pointer-events: none;
+}
+:root[data-skin="neon"] .arcade-hero-art { display: none; }
+:root[data-skin="neon"] .arcade-hero-copy { position: relative; max-width: 620px; }
+:root[data-skin="neon"] .arcade-kicker {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 18px;
+  color: #7af3ff;
+  font: 700 11px/1 Consolas, "Cascadia Mono", monospace;
+  letter-spacing: 3px;
+}
+:root[data-skin="neon"] .arcade-live-dot,
+:root[data-skin="neon"] .chat-live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3dffb0;
+  box-shadow: 0 0 0 4px #3dffb022, 0 0 14px #3dffb0;
+  animation: neon-blink 2.4s ease-in-out infinite;
+}
+@keyframes neon-blink { 50% { opacity: .35; } }
+:root[data-skin="neon"] .arcade-hero h2 {
+  margin: 0;
+  color: #e8fbff;
+  font-size: clamp(32px, 5vw, 62px);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  text-shadow: 0 0 18px #00e5ff99, 0 0 2px #fff;
+}
+:root[data-skin="neon"] .arcade-hero h2 em {
+  color: #ff9e3d;
+  font-style: normal;
+  text-shadow: 0 0 18px #ff9e3daa, 0 0 2px #fff;
+}
+:root[data-skin="neon"] .arcade-hero-description {
+  max-width: 440px;
+  margin: 18px 0 22px;
+  color: #b5e9f5;
+  font-size: 14px;
+  line-height: 1.7;
+}
+:root[data-skin="neon"] .arcade-hero-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 24px;
+  min-height: 46px;
+  padding: 0 18px;
+  border: 1px solid #00e5ff;
+  border-radius: 2px;
+  background: #00e5ff;
+  color: #00121a;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-decoration: none;
+  text-transform: uppercase;
+  box-shadow: 0 0 18px #00e5ff88;
+}
+:root[data-skin="neon"] .arcade-hero-cta:hover { background: #7af3ff; box-shadow: 0 0 26px #00e5ffcc; }
+:root[data-skin="neon"] .arcade-hero-cta:focus-visible { outline: 2px solid #ff9e3d; outline-offset: 3px; }
+:root[data-skin="neon"] .arcade-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 22px;
+  color: #7cc3d6;
+  font: 700 10px/1.4 Consolas, "Cascadia Mono", monospace;
+  letter-spacing: 1.5px;
+}
+:root[data-skin="neon"] .arcade-hero-meta strong { color: #00e5ff; }
+:root[data-skin="neon"] .arcade-hero-meta i { width: 14px; height: 1px; background: #1f6f94; }
+
+/* Community Chat: a "comms" column with a cyan edge and monospace names. */
+:root[data-skin="neon"] .community-chat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid #00e5ff55;
+  background: linear-gradient(180deg, #071425, #04070f);
+  box-shadow: -8px 0 30px #00e5ff14;
+}
+:root[data-skin="neon"] .chat-panel-heading {
+  display: flex;
+  align-items: center;
+  padding: 20px 16px 14px;
+  border-bottom: 1px solid #16466a;
+}
+:root[data-skin="neon"] .chat-panel-heading h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  color: #e8fbff;
+  font: 700 13px/1 Consolas, "Cascadia Mono", monospace;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px #00e5ff88;
+}
+:root[data-skin="neon"] .chat-preview-log {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 14px;
+  scrollbar-color: #1f6f94 transparent;
+  scrollbar-width: thin;
+}
+:root[data-skin="neon"] .chat-day-divider {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #5a93a6;
+  font: 700 9px/1 Consolas, "Cascadia Mono", monospace;
+  letter-spacing: 1.5px;
+}
+:root[data-skin="neon"] .chat-day-divider::before,
+:root[data-skin="neon"] .chat-day-divider::after { content: ""; flex: 1; height: 1px; background: #16466a; }
+:root[data-skin="neon"] .chat-preview-message { display: flex; align-items: flex-start; gap: 10px; }
+:root[data-skin="neon"] .chat-avatar-photo,
+:root[data-skin="neon"] .chat-preview-message img {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border: 1px solid #00e5ff;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #0d1a2e;
+  box-shadow: 0 0 10px #00e5ff55;
+}
+:root[data-skin="neon"] .chat-message-meta { display: flex; align-items: baseline; gap: 8px; margin: 1px 0 4px; }
+:root[data-skin="neon"] .chat-message-meta strong { color: #00e5ff; font: 700 11px/1.2 Consolas, "Cascadia Mono", monospace; }
+:root[data-skin="neon"] .chat-message-meta time { color: #5a93a6; font-size: 9px; }
+:root[data-skin="neon"] .chat-preview-message p { margin: 0; color: #b5e9f5; font-size: 12px; line-height: 1.55; }
+:root[data-skin="neon"] .chat-preview-form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #16466a; }
+:root[data-skin="neon"] .chat-preview-form input {
+  flex: 1;
+  min-height: 40px;
+  border: 1px solid #1f6f94;
+  border-radius: 2px;
+  background: #04070f;
+  color: #e8fbff;
+  font-size: 12px;
+}
+:root[data-skin="neon"] .chat-preview-form input:focus { border-color: #00e5ff; box-shadow: 0 0 0 1px #00e5ff, 0 0 12px #00e5ff55; outline: none; }
+:root[data-skin="neon"] .chat-preview-form button {
+  width: 40px;
+  min-height: 40px;
+  padding: 0;
+  border: 1px solid #00e5ff;
+  border-radius: 2px;
+  background: #00e5ff;
+  color: #00121a;
+  font-size: 16px;
+  box-shadow: 0 0 12px #00e5ff88;
+}
+:root[data-skin="neon"] .chat-preview-form button:focus-visible { outline: 2px solid #ff9e3d; outline-offset: 3px; }
+:root[data-skin="neon"] .chat-preview-footer {
+  margin: 0;
+  padding: 0 14px 14px;
+  color: #5a93a6;
+  font: 700 9px/1.4 Consolas, "Cascadia Mono", monospace;
+  letter-spacing: 1px;
+}
+
+/* Narrow screens: the chat moves under the lobby, like Arcade. */
+@media (max-width: 860px) {
+  :root[data-skin="neon"] .portal-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 420px; }
+  :root[data-skin="neon"] .community-chat { border-left: 0; border-top: 1px solid #00e5ff55; }
+}
+@media (max-width: 600px) {
+  :root[data-skin="neon"] .arcade-hero { min-height: 0; padding: 26px 20px 30px; }
+  :root[data-skin="neon"] .arcade-hero-meta { display: none; }
+  :root[data-skin="neon"] .portal-shell { grid-template-rows: minmax(0, 1fr) 260px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-skin="neon"] .arcade-live-dot,
+  :root[data-skin="neon"] .chat-live-dot { animation: none; }
+}
+
+/* Neon Grid animations. Each one stops for people who ask their system for
+   less motion (see the prefers-reduced-motion block at the end). */
+
+/* The banner's grid floor scrolls toward you, like driving across it. */
+@keyframes neon-grid-run { to { background-position: 0 40px, 0 0; } }
+:root[data-skin="neon"] .arcade-hero::before { animation: neon-grid-run 1.6s linear infinite; }
+
+/* A light sweeps along the horizon line. */
+@keyframes neon-horizon-sweep {
+  from { background-position: -60% 0; }
+  to { background-position: 160% 0; }
+}
+:root[data-skin="neon"] .arcade-hero::after {
+  background:
+    linear-gradient(90deg, transparent, #ffffff 50%, transparent) -60% 0 / 30% 100% no-repeat,
+    linear-gradient(90deg, transparent, #00e5ff, #ff9e3d, #00e5ff, transparent);
+  animation: neon-horizon-sweep 4s ease-in-out infinite;
+}
+
+/* The banner title flickers on like a neon sign when the page loads, then holds. */
+@keyframes neon-power-on {
+  0%, 18%, 22%, 26%, 54%, 58% { opacity: .15; text-shadow: none; }
+  20%, 24%, 56%, 100% { opacity: 1; }
+}
+:root[data-skin="neon"] .arcade-hero h2 { animation: neon-power-on 1.4s steps(1, end) .2s both; }
+
+/* Section titles breathe a soft glow. */
+@keyframes neon-glow-breathe {
+  50% { text-shadow: 0 0 18px #00e5ffaa, 0 0 2px #fff; }
+}
+:root[data-skin="neon"] .popular-games-heading h2,
+:root[data-skin="neon"] .creator-title { animation: neon-glow-breathe 3.5s ease-in-out infinite; }
+
+/* Game cards lift and light up when you point at them. */
+:root[data-skin="neon"] .portal-shell .library-card,
+:root[data-skin="neon"] .portal-shell .popular-game-card {
+  transition: transform .18s ease-out, border-color .18s, box-shadow .18s;
+}
+:root[data-skin="neon"] .portal-shell .library-card:hover,
+:root[data-skin="neon"] .portal-shell .popular-game-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 0 0 1px #00e5ff, 0 8px 26px #00e5ff40;
+}
+
+/* A streak of light crosses the main buttons on hover. */
+:root[data-skin="neon"] .portal-shell button.primary,
+:root[data-skin="neon"] .arcade-hero-cta,
+:root[data-skin="neon"] .chat-preview-form button {
+  position: relative;
+  overflow: hidden;
+}
+:root[data-skin="neon"] .portal-shell button.primary::after,
+:root[data-skin="neon"] .arcade-hero-cta::after,
+:root[data-skin="neon"] .chat-preview-form button::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -60%;
+  width: 40%;
+  background: linear-gradient(100deg, transparent, #ffffffaa, transparent);
+  transform: skewX(-20deg);
+  pointer-events: none;
+}
+@keyframes neon-button-sweep { to { left: 130%; } }
+:root[data-skin="neon"] .portal-shell button.primary:hover::after,
+:root[data-skin="neon"] .arcade-hero-cta:hover::after,
+:root[data-skin="neon"] .chat-preview-form button:hover::after {
+  animation: neon-button-sweep .6s ease-out;
+}
+
+/* New chat messages slide in from the right with a brief glow. */
+@keyframes neon-message-in {
+  from { opacity: 0; transform: translateX(14px); filter: drop-shadow(0 0 8px #00e5ff); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+:root[data-skin="neon"] .chat-preview-message { animation: neon-message-in .35s ease-out both; }
+
+/* A light runs along the bottom edge of the top bar. */
+@keyframes neon-topbar-scan {
+  from { background-position: -30% 0; }
+  to { background-position: 130% 0; }
+}
+:root[data-skin="neon"] .topbar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #7af3ff, transparent) -30% 0 / 25% 100% no-repeat;
+  animation: neon-topbar-scan 6s linear infinite;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-skin="neon"] .arcade-hero::before,
+  :root[data-skin="neon"] .arcade-hero::after,
+  :root[data-skin="neon"] .arcade-hero h2,
+  :root[data-skin="neon"] .popular-games-heading h2,
+  :root[data-skin="neon"] .creator-title,
+  :root[data-skin="neon"] .chat-preview-message,
+  :root[data-skin="neon"] .topbar::after,
+  :root[data-skin="neon"] .portal-shell button.primary:hover::after,
+  :root[data-skin="neon"] .arcade-hero-cta:hover::after,
+  :root[data-skin="neon"] .chat-preview-form button:hover::after { animation: none; }
+  :root[data-skin="neon"] .portal-shell .library-card:hover,
+  :root[data-skin="neon"] .portal-shell .popular-game-card:hover { transform: none; }
+  :root[data-skin="neon"] .portal-shell .library-card,
+  :root[data-skin="neon"] .portal-shell .popular-game-card { transition: none; }
+}
+
+/* Neon Grid color cycle: the glow color fades cyan -> orange -> violet and back,
+   and every light on the page follows it. Registering --neon-glow as a color lets
+   the browser blend smoothly between the three. Text stays white, so it is always
+   readable; all three colors keep at least 7:1 contrast behind dark button text. */
+@property --neon-glow {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #00e5ff;
+}
+@keyframes neon-color-cycle {
+  0%, 100% { --neon-glow: #00e5ff; }
+  33% { --neon-glow: #ff9e3d; }
+  66% { --neon-glow: #c084ff; }
+}
+:root[data-skin="neon"] body { animation: neon-color-cycle 18s ease-in-out infinite; }
+
+/* Page grid, top bar and panels. */
+:root[data-skin="neon"] .portal-shell {
+  background:
+    linear-gradient(color-mix(in srgb, var(--neon-glow) 6%, transparent) 1px, transparent 1px) 0 0 / 48px 48px,
+    linear-gradient(90deg, color-mix(in srgb, var(--neon-glow) 6%, transparent) 1px, transparent 1px) 0 0 / 48px 48px,
+    radial-gradient(ellipse at 50% 120%, color-mix(in srgb, var(--neon-glow) 14%, transparent), transparent 60%),
+    #04070f;
+  background-attachment: fixed;
+}
+:root[data-skin="neon"] .topbar {
+  border-bottom-color: color-mix(in srgb, var(--neon-glow) 40%, transparent);
+  box-shadow: 0 1px 16px color-mix(in srgb, var(--neon-glow) 18%, transparent);
+}
+:root[data-skin="neon"] .portal-sidebar,
+:root[data-skin="neon"] .match-creator,
+:root[data-skin="neon"] .game-detail-page,
+:root[data-skin="neon"] .match-stage,
+:root[data-skin="neon"] .portal-shell .game-search-popup,
+:root[data-skin="neon"] .portal-shell .match-tools {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--neon-glow) 14%, transparent), 0 0 18px color-mix(in srgb, var(--neon-glow) 10%, transparent);
+}
+:root[data-skin="neon"] .match-creator { border-top-color: var(--neon-glow); }
+
+/* Headings glow in the current color. */
+:root[data-skin="neon"] .creator-title,
+:root[data-skin="neon"] .popular-games-heading h2,
+:root[data-skin="neon"] .play-option-heading h3,
+:root[data-skin="neon"] .selected-game-card h2 {
+  text-shadow: 0 0 12px color-mix(in srgb, var(--neon-glow) 55%, transparent);
+}
+
+/* Buttons, badges and links. */
+:root[data-skin="neon"] .portal-shell button.primary,
+:root[data-skin="neon"] .portal-shell .library-toolbar button[aria-pressed="true"],
+:root[data-skin="neon"] .arcade-hero-cta,
+:root[data-skin="neon"] .chat-preview-form button {
+  background: var(--neon-glow);
+  border-color: var(--neon-glow);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--neon-glow) 55%, transparent);
+}
+:root[data-skin="neon"] .portal-shell button.primary:hover:not(:disabled),
+:root[data-skin="neon"] .arcade-hero-cta:hover {
+  background: color-mix(in srgb, var(--neon-glow) 70%, white);
+  border-color: color-mix(in srgb, var(--neon-glow) 70%, white);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--neon-glow) 80%, transparent);
+}
+:root[data-skin="neon"] .popular-game-rank {
+  background: var(--neon-glow);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--neon-glow) 60%, transparent);
+}
+:root[data-skin="neon"] .popular-game-open,
+:root[data-skin="neon"] .library-select,
+:root[data-skin="neon"] .creator-toggle,
+:root[data-skin="neon"] .arcade-hero-meta strong,
+:root[data-skin="neon"] .chat-message-meta strong {
+  color: var(--neon-glow);
+}
+
+/* Cards light up in the current color. */
+:root[data-skin="neon"] .portal-shell .library-card:hover,
+:root[data-skin="neon"] .portal-shell .popular-game-card:hover,
+:root[data-skin="neon"] .play-option:hover {
+  border-color: var(--neon-glow);
+  box-shadow: 0 0 0 1px var(--neon-glow), 0 8px 26px color-mix(in srgb, var(--neon-glow) 25%, transparent);
+}
+:root[data-skin="neon"] .portal-shell .library-card[aria-pressed=true] {
+  border-color: var(--neon-glow);
+  box-shadow: 0 0 0 1px var(--neon-glow), 0 0 16px color-mix(in srgb, var(--neon-glow) 35%, transparent);
+}
+:root[data-skin="neon"] .portal-shell input:focus,
+:root[data-skin="neon"] .portal-shell select:focus,
+:root[data-skin="neon"] .chat-preview-form input:focus {
+  border-color: var(--neon-glow);
+  box-shadow: 0 0 0 1px var(--neon-glow), 0 0 12px color-mix(in srgb, var(--neon-glow) 35%, transparent);
+}
+
+/* Hero banner: frame, grid floor, title glow and horizon. */
+:root[data-skin="neon"] .arcade-hero {
+  border-color: color-mix(in srgb, var(--neon-glow) 45%, #04070f);
+  background: radial-gradient(ellipse at 50% 100%, color-mix(in srgb, var(--neon-glow) 20%, transparent), transparent 60%), linear-gradient(180deg, #04070f, #071425);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--neon-glow) 14%, transparent), 0 0 40px color-mix(in srgb, var(--neon-glow) 12%, transparent), inset 0 1px #ffffff10;
+}
+:root[data-skin="neon"] .arcade-hero::before {
+  background:
+    linear-gradient(color-mix(in srgb, var(--neon-glow) 33%, transparent) 1px, transparent 1px) 0 0 / 60px 40px,
+    linear-gradient(90deg, color-mix(in srgb, var(--neon-glow) 33%, transparent) 1px, transparent 1px) 0 0 / 60px 40px;
+}
+:root[data-skin="neon"] .arcade-hero::after {
+  background:
+    linear-gradient(90deg, transparent, #ffffff 50%, transparent) -60% 0 / 30% 100% no-repeat,
+    linear-gradient(90deg, transparent, var(--neon-glow), transparent);
+  box-shadow: 0 0 18px var(--neon-glow), 0 0 40px color-mix(in srgb, var(--neon-glow) 55%, transparent);
+}
+:root[data-skin="neon"] .arcade-hero h2 { text-shadow: 0 0 18px color-mix(in srgb, var(--neon-glow) 60%, transparent), 0 0 2px #fff; }
+:root[data-skin="neon"] .arcade-kicker { color: color-mix(in srgb, var(--neon-glow) 55%, white); }
+
+/* Chat column edge and avatar rings. */
+:root[data-skin="neon"] .community-chat {
+  border-left-color: color-mix(in srgb, var(--neon-glow) 35%, transparent);
+  box-shadow: -8px 0 30px color-mix(in srgb, var(--neon-glow) 8%, transparent);
+}
+:root[data-skin="neon"] .chat-panel-heading h2 { text-shadow: 0 0 10px color-mix(in srgb, var(--neon-glow) 55%, transparent); }
+:root[data-skin="neon"] .chat-avatar-photo,
+:root[data-skin="neon"] .chat-preview-message img {
+  border-color: var(--neon-glow);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--neon-glow) 35%, transparent);
+}
+
+/* Less motion: hold steady on cyan. */
+@media (prefers-reduced-motion: reduce) {
+  :root[data-skin="neon"] body { animation: none; }
 }
