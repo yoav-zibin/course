@@ -46,7 +46,7 @@ test('experiments.js registers the four keys and the archetype flag', () => {
 
 test('cache-busting versions bumped for the changed assets', () => {
   for (const [file, minimum] of [['experiments.css', 54], ['experiments.js', 16],
-    ['portal.js', 114], ['portal-match-layout.js', 9]]) {
+    ['portal.js', 117], ['portal-match-layout.js', 9]]) {
     const escaped = file.replaceAll('.', '\\.');
     const asset = portalHtml.match(new RegExp(`/static/${escaped}\\?v=(\\d+)`));
     assert.ok(asset && Number(asset[1]) >= minimum, `${file} version must include the archetype changes`);

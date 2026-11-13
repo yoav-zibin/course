@@ -507,6 +507,44 @@ def test_quickjs_computer_turn_survives_restart_and_duplicate_job(store):
     assert len(store.get_match(match["id"]).moves) == 2
 
 
+@pytest.mark.parametrize("finish_at", [5, 10])
+def test_one_durable_job_advances_consecutive_computers_and_stops_at_a_human_or_game_over(store, finish_at):
+    import datetime as dt
+
+    from game_platform.tests.test_server_matches import COUNTER_GAME
+
+    api = api_for(store)
+    owner = api.new_user("local chain owner")
+    game = api.create_game({
+        "name": "Local computer chain", "code": "<div>counter</div>",
+        "server_code": COUNTER_GAME.replace("count >= 10", f"count >= {finish_at}")
+            .replace("{[playerId]: ctx.pot}", "{[ctx.players[0].id]: ctx.pot}"),
+        "allowed_player_counts": [4],
+    }, owner)
+    match = api.ok("POST", "/matches", as_user=owner,
+                   json={"game_id": game["id"], "num_computer_opponents": 3})
+    api.ok("POST", f"/matches/{match['id']}/start", as_user=owner, json={})
+    api.ok("POST", f"/matches/{match['id']}/moves", as_user=owner,
+           json={"move": {"add": 3}, "expected_move_count": 0})
+    job_ref = store.ref("jobs", match["id"])
+    job = store.raw_get(job_ref)
+    store.raw_put(job_ref, {**job, "due_at": dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=1)})
+    platform = api.client.app.state.platform
+    with patch.object(platform, "_run_computer_moves", wraps=platform._run_computer_moves) as run:
+        platform.run_due_jobs()
+    run.assert_called_once_with(match["id"])
+    fresh = QueryStore(store.client, namespace=store.namespace)
+    saved = fresh.get_match(match["id"])
+    terminal = finish_at == 5
+    assert saved.state["count"] == (5 if terminal else 6)
+    assert len(saved.moves) == (3 if terminal else 4)
+    assert saved.status == ("over" if terminal else "ongoing")
+    assert saved.turn_of_player_indices == (None if terminal else frozenset({0}))
+    assert fresh.raw_get(job_ref) is None
+    platform.run_due_jobs()
+    assert len(fresh.get_match(match["id"]).moves) == len(saved.moves)
+
+
 def test_speed_match_deadline_job_ends_the_match_without_a_read(store):
     """A speed match's turn deadline is a durable job: when it comes due, the
     worker ends the match on its own — no read or move has to happen — and

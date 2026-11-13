@@ -83,6 +83,9 @@ test('after login the visitor returns to the ?next= page; external targets are i
   // An external or protocol-relative target is never honored: the visitor
   // (now logged in, so the welcome page forwards at once) lands on the
   // games page instead.
-  await page.goto('/?next=%2F%2Fexample.com', { waitUntil: 'commit' });
-  await expect(page).toHaveURL(/\/(?:static\/portal\.html|portal)$/);
+  await page.route('**://example.com/**', route => route.fulfill({body: 'External target'}));
+  for (const target of ['//example.com', '/\\example.com']) {
+    await page.goto('/?next=' + encodeURIComponent(target), {waitUntil: 'commit'});
+    await expect(page).toHaveURL(/\/(?:static\/portal\.html|portal)$/);
+  }
 });

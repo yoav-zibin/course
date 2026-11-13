@@ -11,7 +11,7 @@
     option.dataset.i18n = "ui.quickplay.standard";
     option.textContent = I18n.t("ui.quickplay.standard", {}, "Use standard login");
     const script = document.createElement("script");
-    script.src = "/static/quick-play-login.js?v=2";
+    script.src = "/static/quick-play-login.js?v=3";
     script.onerror = () => location.replace(option.href);
     I18n.ready.then(() => document.head.appendChild(script));
     return;
@@ -30,9 +30,14 @@
     // portal) names where to return to in ?next=; only same-site paths are
     // honored, anything else falls back to the games page.
     const next = new URLSearchParams(location.search).get("next");
-    location.replace(
-      next && next.startsWith("/") && !next.startsWith("//") ? next : "/portal",
-    );
+    let destination = "/portal";
+    if (next?.startsWith("/") && !next.startsWith("//")) {
+      try {
+        const url = new URL(next, location.origin);
+        if (url.origin === location.origin) destination = url.pathname + url.search + url.hash;
+      } catch {}
+    }
+    location.replace(destination);
   }
 
   if (Auth.current()) {

@@ -3,6 +3,7 @@ import {createUser,loginAs,uniqueName} from './helpers';
 test('admin previews Dolphin Cove and Arcade independently',async({page,request})=>{
   await loginAs(page,await createUser(request,uniqueName('Preview')));
   await page.goto('/static/admin.html');
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
   await page.locator('#admin-skin-preview').selectOption('dolphin-cove');
   const preview=page.waitForEvent('popup');
   await page.locator('#admin-open-preview').click();
