@@ -165,3 +165,33 @@ physics, drawing, audio or real-time interaction.
 
 See [the authoring guide](declarative-games.md) for native host behavior and
 [the coverage review](declarative-game-coverage.md) for format boundaries.
+
+## Backgammon, catalog, camera and movement release — 2026-11-13
+
+The eleven packages now include Backgammon, using byte-identical rules source
+from regular Backgammon version 4 (SHA-256
+`0206fffd96b1447a457f63431d013c6de5d5337dfc40285157304a95204b3c4e`).
+Its six examples include captures, bar entry and bearing off. Tests compare
+complete declarative playthroughs against the ordinary rules and check the
+normal import/catalog/pinned-version/move APIs, including rejected forged
+dice/state/payouts and out-of-turn/illegal moves without state advancement.
+
+`e2e/declarative.spec.ts` completes all original ten games through normal
+two-player portal matches on desktop and phone viewports, including local
+offline practice and replay. `e2e/declarative-backgammon.spec.ts` adds full
+Backgammon portal matches, pass-and-play and online computer opponents.
+`e2e/declarative-zoom.spec.ts` exercises actual Chrome two-touch input on phone
+and tablet, legal drops after zoom, gesture cancellation, pan/reset, replay
+camera preservation, opponent movement at 125% zoom, captures, bar re-entry,
+bearing off, and reduced motion. All 30 checker identities are preserved.
+These are Chromium checks, with the native/iOS limitations described above.
+
+The release publisher uses real server and QuickJS presentation playthroughs
+followed by authoritative replay in the ordinary production authoring APIs.
+It completes all five recorded stages for each exact payload and private
+secret before the regular import creates a persistent catalog game. This
+publication is distinct from the earlier disposable demo evidence: no startup
+catalog fallback or validation bypass is used. Browser verification of the
+deployed catalog and device-only practice uses real published packages and
+blocks production account/match writes; online match tests use the disposable
+local server.

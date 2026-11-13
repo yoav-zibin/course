@@ -886,5 +886,11 @@
   "ui.declarative.hints.grow_piece": "كبّر {piece}",
   "ui.declarative.hints.shrink_piece": "صغّر {piece}",
   "ui.declarative.hints.piece_actions": "{piece}: {actions}",
-  "ui.declarative.hints.selected_piece": "القطعة المحددة"
+  "ui.declarative.hints.selected_piece": "القطعة المحددة",
+  "ui.declarative.zoom.controls": "تكبير اللوحة",
+  "ui.declarative.zoom.in": "تكبير",
+  "ui.declarative.zoom.out": "تصغير",
+  "ui.declarative.zoom.reset": "ملاءمة اللوحة",
+  "ui.declarative.zoom.level": "التكبير: {percent}%",
+  "ui.declarative.zoom.hint": "استخدم إصبعين للتكبير والتصغير. اسحب اللوحة المكبرة لتحريكها."
 }

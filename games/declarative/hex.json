@@ -1,5 +1,5 @@
 {
-  "name": "Hex · Declarative",
+  "name": "Hex (Declarative)",
   "description": "On a 7 by 7 hex board, player one connects top to bottom; player two connects left to right. Adjacent stones join a path. The first connection wins.",
   "game_addition_request_id_and_secret": "example-only-declarative-hex-replace-before-publishing",
   "allowed_player_counts": [
@@ -2245,7 +2245,7 @@
   },
   "translations": {
     "es": {
-      "display_name": "Hex · Declarative",
+      "display_name": "Hex (Declarative)",
       "short_description": "En un tablero hexagonal de 7 por 7, el jugador uno conecta arriba y abajo; el dos, izquierda y derecha. Las piedras adyacentes forman caminos. La primera conexión gana.",
       "game_logic_rules": "En un tablero hexagonal de 7 por 7, el jugador uno conecta arriba y abajo; el dos, izquierda y derecha. Las piedras adyacentes forman caminos. La primera conexión gana.",
       "game_ui_rules": "Toca un destino legal resaltado o usa un botón. El tablero se adapta a la pantalla. Solo tu turno es interactivo.",
@@ -2266,7 +2266,7 @@
       }
     },
     "fr": {
-      "display_name": "Hex · Declarative",
+      "display_name": "Hex (Declarative)",
       "short_description": "Sur un plateau hexagonal de 7 sur 7, le premier relie le haut au bas, le second la gauche à la droite. Les pierres voisines forment un chemin. La première liaison gagne.",
       "game_logic_rules": "Sur un plateau hexagonal de 7 sur 7, le premier relie le haut au bas, le second la gauche à la droite. Les pierres voisines forment un chemin. La première liaison gagne.",
       "game_ui_rules": "Touchez une cible légale surlignée ou un bouton. Le plateau s’adapte à l’écran. Seul votre tour est interactif.",
@@ -2287,7 +2287,7 @@
       }
     },
     "de": {
-      "display_name": "Hex · Declarative",
+      "display_name": "Hex (Declarative)",
       "short_description": "Auf dem 7-mal-7-Hexbrett verbindet Spieler eins oben mit unten, Spieler zwei links mit rechts. Benachbarte Steine bilden Wege. Die erste Verbindung gewinnt.",
       "game_logic_rules": "Auf dem 7-mal-7-Hexbrett verbindet Spieler eins oben mit unten, Spieler zwei links mit rechts. Benachbarte Steine bilden Wege. Die erste Verbindung gewinnt.",
       "game_ui_rules": "Tippe auf ein markiertes legales Ziel oder eine Aktion. Das Brett passt sich dem Bildschirm an. Nur dein Zug ist interaktiv.",
@@ -2308,7 +2308,7 @@
       }
     },
     "pt": {
-      "display_name": "Hex · Declarative",
+      "display_name": "Hex (Declarative)",
       "short_description": "Num tabuleiro hexagonal 7 por 7, o primeiro liga cima a baixo e o segundo esquerda a direita. Pedras vizinhas formam caminhos. A primeira ligação vence.",
       "game_logic_rules": "Num tabuleiro hexagonal 7 por 7, o primeiro liga cima a baixo e o segundo esquerda a direita. Pedras vizinhas formam caminhos. A primeira ligação vence.",
       "game_ui_rules": "Toque num destino legal destacado ou use um botão. O tabuleiro se adapta à tela. Só a sua vez é interativa.",
@@ -2329,7 +2329,7 @@
       }
     },
     "zh": {
-      "display_name": "六角棋 · Declarative",
+      "display_name": "六角棋 (Declarative)",
       "short_description": "在7乘7六角棋盘上，玩家一连接上下边，玩家二连接左右边。相邻棋子组成路径。先连通者获胜。",
       "game_logic_rules": "在7乘7六角棋盘上，玩家一连接上下边，玩家二连接左右边。相邻棋子组成路径。先连通者获胜。",
       "game_ui_rules": "点击高亮合法目标或操作按钮。棋盘适应屏幕。仅在自己的回合可操作。",
@@ -2350,7 +2350,7 @@
       }
     },
     "hi": {
-      "display_name": "हेक्स · Declarative",
+      "display_name": "हेक्स (Declarative)",
       "short_description": "7 गुणा 7 षट्भुज बोर्ड पर पहला खिलाड़ी ऊपर से नीचे, दूसरा बाएँ से दाएँ जोड़ता है। पास की गोटियाँ रास्ता बनाती हैं। पहला जुड़ाव जीतता है।",
       "game_logic_rules": "7 गुणा 7 षट्भुज बोर्ड पर पहला खिलाड़ी ऊपर से नीचे, दूसरा बाएँ से दाएँ जोड़ता है। पास की गोटियाँ रास्ता बनाती हैं। पहला जुड़ाव जीतता है।",
       "game_ui_rules": "दिखाए वैध लक्ष्य या बटन दबाएँ। बोर्ड स्क्रीन के अनुसार ढलता है। केवल अपनी बारी में खेलें।",
@@ -2371,7 +2371,7 @@
       }
     },
     "ar": {
-      "display_name": "هكس · Declarative",
+      "display_name": "هكس (Declarative)",
       "short_description": "على لوحة سداسية 7 في 7، يصل الأول الأعلى بالأسفل، والثاني اليسار باليمين. الحجارة المتجاورة تكوّن مسارًا. أول اتصال يفوز.",
       "game_logic_rules": "على لوحة سداسية 7 في 7، يصل الأول الأعلى بالأسفل، والثاني اليسار باليمين. الحجارة المتجاورة تكوّن مسارًا. أول اتصال يفوز.",
       "game_ui_rules": "اضغط هدفًا قانونيًا مميزًا أو زر إجراء. تتكيف اللوحة مع الشاشة. التفاعل متاح في دورك فقط.",

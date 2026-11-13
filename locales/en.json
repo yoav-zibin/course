@@ -886,5 +886,11 @@
   "ui.declarative.hints.grow_piece": "Enlarge {piece}",
   "ui.declarative.hints.shrink_piece": "Shrink {piece}",
   "ui.declarative.hints.piece_actions": "{piece}: {actions}",
-  "ui.declarative.hints.selected_piece": "Selected piece"
+  "ui.declarative.hints.selected_piece": "Selected piece",
+  "ui.declarative.zoom.controls": "Board zoom",
+  "ui.declarative.zoom.in": "Zoom in",
+  "ui.declarative.zoom.out": "Zoom out",
+  "ui.declarative.zoom.reset": "Fit board",
+  "ui.declarative.zoom.level": "Zoom: {percent}%",
+  "ui.declarative.zoom.hint": "Pinch to zoom. Drag the board to pan when zoomed."
 }

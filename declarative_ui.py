@@ -26,7 +26,7 @@ MAX_MESSAGE_BYTES = 900_000
 MAX_RESULT_BYTES = 256_000
 TIME_LIMIT_SECONDS = 0.05
 MEMORY_LIMIT_BYTES = 16 * 1024 * 1024
-EXAMPLE_IDS = ("tictactoe", "connect4", "reversi", "nim", "mancala", "gomoku", "hex", "domineering", "memory", "pig")
+EXAMPLE_IDS = ("tictactoe", "connect4", "reversi", "nim", "mancala", "gomoku", "hex", "domineering", "memory", "pig", "backgammon")
 EXAMPLE_DIRECTORY = Path(__file__).with_name("games") / "declarative"
 _SPEC_VALIDATOR = Draft202012Validator(SCHEMA, registry=Registry())
 _RESPONSE_VALIDATOR = Draft202012Validator(
@@ -227,7 +227,7 @@ class DeclarativeLogic:
 
 def client_document(spec):
     """Platform-owned compatibility host for existing test/practice clients."""
-    return _client_document(spec, asset_query="?v=2")
+    return _client_document(spec, asset_query="?v=3")
 
 
 def _client_document(spec, *, asset_query):
@@ -254,10 +254,14 @@ def accepted_platform_host(spec, code):
     """Exact current/legacy trusted templates, preserving recorded payload hashes.
 
     New submissions without client_code use the current versioned asset URLs.
-    Stored submissions can keep the original unversioned host byte-for-byte so
-    their existing recorded publication evidence and pinned code remain valid.
+    Stored submissions keep their known v2 or original unversioned host
+    byte-for-byte so recorded publication evidence and pinned code remain valid.
     """
-    return code in (client_document(spec), _client_document(spec, asset_query=""))
+    return code in (
+        client_document(spec),
+        _client_document(spec, asset_query="?v=2"),
+        _client_document(spec, asset_query=""),
+    )
 
 
 def embedded_spec(code):

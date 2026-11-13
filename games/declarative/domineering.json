@@ -1,5 +1,5 @@
 {
-  "name": "Domineering · Declarative",
+  "name": "Domineering (Declarative)",
   "description": "On a 6 by 6 board, player one places vertical dominoes and player two horizontal dominoes. Each covers two empty cells. A player with no placement loses.",
   "game_addition_request_id_and_secret": "example-only-declarative-domineering-replace-before-publishing",
   "allowed_player_counts": [
@@ -1650,7 +1650,7 @@
   },
   "translations": {
     "es": {
-      "display_name": "Domineering · Declarative",
+      "display_name": "Domineering (Declarative)",
       "short_description": "En un tablero de 6 por 6, el primero coloca dominós verticales y el segundo horizontales. Cada uno cubre dos casillas vacías. Pierde quien no pueda colocar.",
       "game_logic_rules": "En un tablero de 6 por 6, el primero coloca dominós verticales y el segundo horizontales. Cada uno cubre dos casillas vacías. Pierde quien no pueda colocar.",
       "game_ui_rules": "Toca un destino legal resaltado o usa un botón. El tablero se adapta a la pantalla. Solo tu turno es interactivo.",
@@ -1671,7 +1671,7 @@
       }
     },
     "fr": {
-      "display_name": "Domineering · Declarative",
+      "display_name": "Domineering (Declarative)",
       "short_description": "Sur une grille de 6 sur 6, le premier place des dominos verticaux, le second horizontaux. Chacun couvre deux cases vides. Sans placement, on perd.",
       "game_logic_rules": "Sur une grille de 6 sur 6, le premier place des dominos verticaux, le second horizontaux. Chacun couvre deux cases vides. Sans placement, on perd.",
       "game_ui_rules": "Touchez une cible légale surlignée ou un bouton. Le plateau s’adapte à l’écran. Seul votre tour est interactif.",
@@ -1692,7 +1692,7 @@
       }
     },
     "de": {
-      "display_name": "Domineering · Declarative",
+      "display_name": "Domineering (Declarative)",
       "short_description": "Auf einem 6-mal-6-Brett legt Spieler eins senkrechte und Spieler zwei waagerechte Dominosteine. Jeder belegt zwei freie Felder. Wer nicht legen kann, verliert.",
       "game_logic_rules": "Auf einem 6-mal-6-Brett legt Spieler eins senkrechte und Spieler zwei waagerechte Dominosteine. Jeder belegt zwei freie Felder. Wer nicht legen kann, verliert.",
       "game_ui_rules": "Tippe auf ein markiertes legales Ziel oder eine Aktion. Das Brett passt sich dem Bildschirm an. Nur dein Zug ist interaktiv.",
@@ -1713,7 +1713,7 @@
       }
     },
     "pt": {
-      "display_name": "Domineering · Declarative",
+      "display_name": "Domineering (Declarative)",
       "short_description": "Num tabuleiro 6 por 6, o primeiro coloca dominós verticais e o segundo horizontais. Cada um cobre duas casas vazias. Quem não puder colocar perde.",
       "game_logic_rules": "Num tabuleiro 6 por 6, o primeiro coloca dominós verticais e o segundo horizontais. Cada um cobre duas casas vazias. Quem não puder colocar perde.",
       "game_ui_rules": "Toque num destino legal destacado ou use um botão. O tabuleiro se adapta à tela. Só a sua vez é interativa.",
@@ -1734,7 +1734,7 @@
       }
     },
     "zh": {
-      "display_name": "多米诺占地 · Declarative",
+      "display_name": "多米诺占地 (Declarative)",
       "short_description": "在6乘6棋盘上，玩家一竖放骨牌，玩家二横放。每块覆盖两个空格。无处可放者输。",
       "game_logic_rules": "在6乘6棋盘上，玩家一竖放骨牌，玩家二横放。每块覆盖两个空格。无处可放者输。",
       "game_ui_rules": "点击高亮合法目标或操作按钮。棋盘适应屏幕。仅在自己的回合可操作。",
@@ -1755,7 +1755,7 @@
       }
     },
     "hi": {
-      "display_name": "डॉमिनियरिंग · Declarative",
+      "display_name": "डॉमिनियरिंग (Declarative)",
       "short_description": "6 गुणा 6 बोर्ड पर पहला खिलाड़ी लंबवत और दूसरा क्षैतिज डोमिनो रखता है। हर टुकड़ा दो खाली खाने ढकता है। जगह न मिलने पर हारें।",
       "game_logic_rules": "6 गुणा 6 बोर्ड पर पहला खिलाड़ी लंबवत और दूसरा क्षैतिज डोमिनो रखता है। हर टुकड़ा दो खाली खाने ढकता है। जगह न मिलने पर हारें।",
       "game_ui_rules": "दिखाए वैध लक्ष्य या बटन दबाएँ। बोर्ड स्क्रीन के अनुसार ढलता है। केवल अपनी बारी में खेलें।",
@@ -1776,7 +1776,7 @@
       }
     },
     "ar": {
-      "display_name": "دومينيرينغ · Declarative",
+      "display_name": "دومينيرينغ (Declarative)",
       "short_description": "على لوحة 6 في 6، يضع الأول قطعًا عمودية والثاني أفقية. كل قطعة تغطي خانتين فارغتين. من يعجز عن الوضع يخسر.",
       "game_logic_rules": "على لوحة 6 في 6، يضع الأول قطعًا عمودية والثاني أفقية. كل قطعة تغطي خانتين فارغتين. من يعجز عن الوضع يخسر.",
       "game_ui_rules": "اضغط هدفًا قانونيًا مميزًا أو زر إجراء. تتكيف اللوحة مع الشاشة. التفاعل متاح في دورك فقط.",

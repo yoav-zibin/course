@@ -242,11 +242,90 @@
     const hintMessage=document.createElement("p");hintMessage.className="declarative-hint-message";hintMessage.setAttribute("role","status");hintMessage.setAttribute("aria-live","polite");hintMessage.hidden=true;
     const pieceTools=document.createElement("div");pieceTools.className="declarative-piece-actions";pieceTools.hidden=true;
     const controls = document.createElement("div"); controls.className = "declarative-controls";
+    const cameraTools=document.createElement("div");cameraTools.className="declarative-zoom-controls";cameraTools.setAttribute("role","group");cameraTools.setAttribute("aria-label",t("ui.declarative.zoom.controls", {}, "Board zoom"));
+    const zoomOut=document.createElement("button"),zoomIn=document.createElement("button"),zoomReset=document.createElement("button"),zoomLevel=document.createElement("output"),zoomHint=document.createElement("span");
+    for(const [button,action,label,text] of [[zoomOut,"out",t("ui.declarative.zoom.out", {}, "Zoom out"),"−"],[zoomIn,"in",t("ui.declarative.zoom.in", {}, "Zoom in"),"+"],[zoomReset,"reset",t("ui.declarative.zoom.reset", {}, "Fit board"),null]]){button.type="button";button.dataset.cameraAction=action;button.setAttribute("aria-label",label);button.title=label;button.textContent=text||label;}
+    zoomLevel.className="declarative-zoom-level";zoomHint.className="declarative-zoom-hint";zoomHint.textContent=t("ui.declarative.zoom.hint", {}, "Pinch to zoom. Drag the board to pan when zoomed.");
+    cameraTools.append(zoomOut,zoomLevel,zoomIn,zoomReset,zoomHint);
     const errorBox = document.createElement("p"); errorBox.className = "declarative-error"; errorBox.setAttribute("role", "alert"); errorBox.hidden = true;
-    container.append(hintMessage, stage, pieceTools, controls, errorBox);
+    container.append(hintMessage, cameraTools, stage, pieceTools, controls, errorBox);
     const engine = createEngine(container);
     let latest = null, localState = null, revision = 0, renderedRevision = -1, destroyed = false, moveSent = false, selected = null, dragging = null, nativeDragging = null, currentScene = null, suppressClick = false;
+    // The camera belongs to the host. It never reaches the reducer or make_move,
+    // and survives complete scene snapshots, including replay and turn changes.
+    const camera={x:0,y:0,zoom:1},touches=new Map();
+    let cameraGesture=null,cameraClickUntil=0;
+    const pieceAnimations=new Set();
+    function applyCamera() {
+      const width=spec.viewport.width/camera.zoom,height=spec.viewport.height/camera.zoom;
+      camera.x=Math.max(0,Math.min(spec.viewport.width-width,num(camera.x)));
+      camera.y=Math.max(0,Math.min(spec.viewport.height-height,num(camera.y)));
+      stage.setAttribute("viewBox",`${camera.x} ${camera.y} ${width} ${height}`);
+      stage.classList.toggle("zoomed",camera.zoom>1);
+      zoomOut.disabled=camera.zoom<=1;zoomIn.disabled=camera.zoom>=4;zoomReset.disabled=camera.zoom===1;
+      zoomLevel.textContent=t("ui.declarative.zoom.level", {percent:Math.round(camera.zoom*100)}, "Zoom: {percent}%");
+    }
+    function boardPoint(x,y) {
+      const point=stage.createSVGPoint();point.x=x;point.y=y;
+      const matrix=stage.getScreenCTM();
+      return matrix?point.matrixTransform(matrix.inverse()):{x:camera.x,y:camera.y};
+    }
+    function zoomAt(zoom,x,y,anchor=boardPoint(x,y)) {
+      if(!Number.isFinite(zoom))return;
+      const current=boardPoint(x,y),fx=(current.x-camera.x)/(spec.viewport.width/camera.zoom),fy=(current.y-camera.y)/(spec.viewport.height/camera.zoom);
+      camera.zoom=Math.max(1,Math.min(4,zoom));
+      camera.x=anchor.x-fx*spec.viewport.width/camera.zoom;camera.y=anchor.y-fy*spec.viewport.height/camera.zoom;applyCamera();
+    }
+    function zoomBy(factor) {const bounds=stage.getBoundingClientRect();zoomAt(camera.zoom*factor,bounds.x+bounds.width/2,bounds.y+bounds.height/2);}
+    zoomOut.addEventListener("click",()=>zoomBy(1/1.25));zoomIn.addEventListener("click",()=>zoomBy(1.25));
+    zoomReset.addEventListener("click",()=>{camera.x=0;camera.y=0;camera.zoom=1;applyCamera();});
+    function cameraClickBlocked(){return Boolean(cameraGesture)||Date.now()<cameraClickUntil;}
+    function beginPinch() {
+      const [a,b]=[...touches.entries()];if(!b)return;
+      const x=(a[1].x+b[1].x)/2,y=(a[1].y+b[1].y)/2;
+      cameraGesture={kind:"pinch",ids:[a[0],b[0]],distance:Math.max(1,Math.hypot(a[1].x-b[1].x,a[1].y-b[1].y)),zoom:camera.zoom,anchor:boardPoint(x,y)};
+      dragging=null;nativeDragging=null;selected=null;cameraClickUntil=Date.now()+450;updateHints();
+    }
+    function cameraPointerDown(event) {
+      const interactive=event.target.closest?.(".declarative-piece.actionable,.declarative-target[aria-disabled=false]");
+      if(event.pointerType!=="touch"&&(event.button!==0||camera.zoom<=1||interactive))return;
+      touches.set(event.pointerId,{x:event.clientX,y:event.clientY});
+      if(touches.size>=2){beginPinch();event.preventDefault();event.stopPropagation();}
+      else if(camera.zoom>1&&!interactive){
+        cameraGesture={kind:"pan",id:event.pointerId,point:boardPoint(event.clientX,event.clientY)};
+        stage.classList.add("camera-panning");event.preventDefault();event.stopPropagation();
+      }
+      // Capturing only camera fingers keeps ordinary piece/native dragging intact.
+      if(cameraGesture)try{stage.setPointerCapture(event.pointerId);}catch(_){}
+    }
+    function cameraPointerMove(event) {
+      if(!touches.has(event.pointerId))return;
+      touches.set(event.pointerId,{x:event.clientX,y:event.clientY});
+      if(!cameraGesture)return;
+      event.preventDefault();
+      if(cameraGesture.kind==="pinch"){
+        const [a,b]=cameraGesture.ids.map(id=>touches.get(id));if(!a||!b)return;
+        zoomAt(cameraGesture.zoom*Math.hypot(a.x-b.x,a.y-b.y)/cameraGesture.distance,(a.x+b.x)/2,(a.y+b.y)/2,cameraGesture.anchor);
+      }else if(cameraGesture.id===event.pointerId){
+        const point=boardPoint(event.clientX,event.clientY);camera.x+=cameraGesture.point.x-point.x;camera.y+=cameraGesture.point.y-point.y;applyCamera();
+      }
+    }
+    function cameraPointerEnd(event) {
+      if(!touches.has(event.pointerId))return false;
+      touches.delete(event.pointerId);if(!cameraGesture)return false;
+      event.preventDefault();dragging=null;nativeDragging=null;selected=null;cameraClickUntil=Date.now()+450;
+      stage.classList.remove("camera-panning");
+      if(touches.size>=2)beginPinch();
+      else if(touches.size===1){const [id,point]=[...touches.entries()][0];cameraGesture={kind:"pan",id,point:boardPoint(point.x,point.y)};stage.classList.add("camera-panning");}
+      else cameraGesture=null;
+      updateHints();return true;
+    }
+    applyCamera();
+    stage.addEventListener("pointerdown",cameraPointerDown,true);
+    stage.addEventListener("click",event=>{if(cameraClickBlocked()){event.preventDefault();event.stopPropagation();}},true);
+    global.addEventListener("pointermove",cameraPointerMove,{passive:false});
     function finishPointer(event) {
+      if(cameraPointerEnd(event))return;
       if(!dragging||nativeDragging||event.pointerId!==dragging.pointerId)return;
       const drag=dragging;dragging=null;
       if(Math.hypot(event.clientX-drag.x,event.clientY-drag.y)<5){updateHints();return;}
@@ -255,7 +334,7 @@
       if(target&&stage.contains(target)&&drag.targets.includes(target.dataset.uiId)&&canAct()){event.preventDefault();dispatch({type:"drop",id:drag.id,piece_id:drag.id,target_id:target.dataset.uiId});}
       selected=null;updateHints();
     }
-    function cancelPointer(event){if(!dragging||nativeDragging||event.pointerId!==dragging.pointerId)return;dragging=null;selected=null;updateHints();}
+    function cancelPointer(event){if(cameraPointerEnd(event))return;if(!dragging||nativeDragging||event.pointerId!==dragging.pointerId)return;dragging=null;selected=null;updateHints();}
     global.addEventListener("pointerup",finishPointer);
     global.addEventListener("pointercancel",cancelPointer);
     container.addEventListener("keydown",event=>{if(event.key==="Escape"){dragging=null;nativeDragging=null;selected=null;updateHints();}});
@@ -312,10 +391,19 @@
       node.setAttribute("role", "button"); node.setAttribute("tabindex", canAct() ? "0" : "-1");
       node.setAttribute("aria-label", String(label || id)); node.setAttribute("aria-disabled", String(!canAct()));
       node.dataset.uiId = id;
-      node.addEventListener("click", () => { if (!suppressClick&&enabled()) fn(); });
+      node.addEventListener("click", () => { if (!suppressClick&&!cameraClickBlocked()&&enabled()) fn(); });
       node.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); if (enabled()) fn(); } });
     }
-    function draw(scene) {
+    function draw(scene,animate=false) {
+      const previousPieces=new Map((currentScene?.pieces||[]).map(piece=>[piece.id,piece]));
+      const previousTransforms=new Map();
+      if(animate&&!global.matchMedia?.("(prefers-reduced-motion: reduce)").matches){
+        const stageMatrix=stage.getCTM();
+        if(stageMatrix)for(const node of stage.querySelectorAll(".declarative-piece")){
+          const matrix=node.getCTM();if(matrix){const relative=stageMatrix.inverse().multiply(matrix);previousTransforms.set(node.dataset.uiId,`matrix(${relative.a},${relative.b},${relative.c},${relative.d},${relative.e},${relative.f})`);}
+        }
+      }
+      for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();
       currentScene=scene;
       stage.setAttribute("aria-label", t("ui.declarative.board_aria", {}, "Game board"));
       const activeId = document.activeElement?.dataset?.uiId;
@@ -398,6 +486,14 @@
           node.setAttribute("draggable","true");node.addEventListener("dragstart",event=>{if(!canAct()){event.preventDefault();return;}selected=piece.id;nativeDragging=piece.id;updateHints();event.dataTransfer?.setData("text/plain",piece.id);});
           node.addEventListener("dragend",()=>{dragging=null;nativeDragging=null;selected=null;updateHints();});}
         stage.append(node);
+        const previous=previousPieces.get(piece.id),from=previousTransforms.get(piece.id);
+        if(previous&&from&&node.animate){
+          const before=position(spec,previous);
+          if(before.x!==point.x||before.y!==point.y||num(previous.rotation)!==num(piece.rotation)||num(previous.scale,1)!==num(piece.scale,1)){
+            const animation=node.animate([{transform:from},{transform:`translate(${point.x}px, ${point.y}px) rotate(${num(piece.rotation)}deg) scale(${num(piece.scale,1)})`}],{duration:360,easing:"ease-out"});
+            pieceAnimations.add(animation);animation.onfinish=()=>pieceAnimations.delete(animation);
+          }
+        }
       }
       stage.append(targetLayer);
       for(const label of scene.labels || [])stage.append(svg("text",{x:num(label.x),y:num(label.y),fill:label.color || "#e4edf4","font-size":num(label.font_size,18),"dominant-baseline":"hanging"},label.text));
@@ -438,7 +534,7 @@
       localState=result.local_state===undefined?null:clone(result.local_state);
       errorBox.hidden=true;
       if(result.make_move!==undefined && message.type==="ui_event" && canAct()) {moveSent=true;callbacks.onMove?.(clone(result.make_move));}
-      draw(scene);
+      draw(scene,message.type==="state_changed"&&callbacks.animate===true&&!latest?.replay);
       callbacks.onScene?.(clone(scene));
     }
     callbacks.onReady?.();
@@ -447,7 +543,7 @@
         latest=clone(message);revision++;moveSent=false;selected=null;dragging=null;nativeDragging=null;updateHints();const atRevision=revision;
         queue=queue.then(()=>reduce(latest,atRevision)).catch(error);return queue;
       },
-      destroy(){destroyed=true;revision++;global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game");},
+      destroy(){destroyed=true;revision++;touches.clear();cameraGesture=null;for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();global.removeEventListener("pointermove",cameraPointerMove);global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game");},
       dispatch,
     };
   }
@@ -455,10 +551,10 @@
     const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
     const data=value=>JSON.stringify(canonical(value)).replace(/</g,"\\u003c");
     return '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<link rel="stylesheet" href="/static/declarative-ui.css?v=2"><div id="declarative-game"></div>' +
+      '<link rel="stylesheet" href="/static/declarative-ui.css?v=3"><div id="declarative-game"></div>' +
       '<script type="application/json" id="i18n-strings">'+data(spec.strings || {})+'<'+'/script>' +
       '<script type="application/json" id="declarative-spec">'+data(spec)+'<'+'/script>' +
-      '<script src="/static/declarative-ui.js?v=2"><'+'/script><script>' +
+      '<script src="/static/declarative-ui.js?v=3"><'+'/script><script>' +
       'const host=DeclarativeUI.mount(document.getElementById("declarative-game"),' +
       'JSON.parse(document.getElementById("declarative-spec").textContent),' +
       '{onMove:move=>parent.postMessage({type:"make_move",move},"*"),' +

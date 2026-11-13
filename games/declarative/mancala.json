@@ -1,5 +1,5 @@
 {
-  "name": "Mancala (Kalah) · Declarative",
+  "name": "Mancala (Kalah) (Declarative)",
   "description": "Sow from your six pits counterclockwise, skipping the opponent’s store. Finish in your store for another turn. Capture from the opposite pit when ending in your empty pit. Sweep remaining seeds when one side empties. Most seeds wins; at 300 turns sweep and score.",
   "game_addition_request_id_and_secret": "example-only-declarative-mancala-replace-before-publishing",
   "allowed_player_counts": [
@@ -1234,7 +1234,7 @@
   },
   "translations": {
     "es": {
-      "display_name": "Mancala (Kalah) · Declarative",
+      "display_name": "Mancala (Kalah) (Declarative)",
       "short_description": "Siembra desde tus seis hoyos en sentido antihorario, saltando el almacén rival. Terminar en tu almacén da otro turno. Al terminar en un hoyo propio vacío, captura el opuesto. Si un lado queda vacío, recoge las semillas restantes. Gana la mayoría; a los 300 turnos se recoge y puntúa.",
       "game_logic_rules": "Siembra desde tus seis hoyos en sentido antihorario, saltando el almacén rival. Terminar en tu almacén da otro turno. Al terminar en un hoyo propio vacío, captura el opuesto. Si un lado queda vacío, recoge las semillas restantes. Gana la mayoría; a los 300 turnos se recoge y puntúa.",
       "game_ui_rules": "Toca un destino legal resaltado o usa un botón. El tablero se adapta a la pantalla. Solo tu turno es interactivo.",
@@ -1255,7 +1255,7 @@
       }
     },
     "fr": {
-      "display_name": "Mancala (Kalah) · Declarative",
+      "display_name": "Mancala (Kalah) (Declarative)",
       "short_description": "Semez depuis vos six trous dans le sens inverse des aiguilles, sans le grenier adverse. Finir dans votre grenier donne un tour. Finir dans un trou vide à vous capture le trou opposé. Videz les trous restants quand un côté est vide. La majorité gagne ; après 300 tours, ramassez et comptez.",
       "game_logic_rules": "Semez depuis vos six trous dans le sens inverse des aiguilles, sans le grenier adverse. Finir dans votre grenier donne un tour. Finir dans un trou vide à vous capture le trou opposé. Videz les trous restants quand un côté est vide. La majorité gagne ; après 300 tours, ramassez et comptez.",
       "game_ui_rules": "Touchez une cible légale surlignée ou un bouton. Le plateau s’adapte à l’écran. Seul votre tour est interactif.",
@@ -1276,7 +1276,7 @@
       }
     },
     "de": {
-      "display_name": "Mancala (Kalah) · Declarative",
+      "display_name": "Mancala (Kalah) (Declarative)",
       "short_description": "Verteile aus deinen sechs Mulden gegen den Uhrzeigersinn und überspringe den gegnerischen Speicher. Im eigenen Speicher erhältst du einen weiteren Zug. Ende in einer eigenen leeren Mulde: fange die gegenüberliegenden Steine. Ist eine Seite leer, sammle den Rest. Die Mehrheit gewinnt; nach 300 Zügen wird abgerechnet.",
       "game_logic_rules": "Verteile aus deinen sechs Mulden gegen den Uhrzeigersinn und überspringe den gegnerischen Speicher. Im eigenen Speicher erhältst du einen weiteren Zug. Ende in einer eigenen leeren Mulde: fange die gegenüberliegenden Steine. Ist eine Seite leer, sammle den Rest. Die Mehrheit gewinnt; nach 300 Zügen wird abgerechnet.",
       "game_ui_rules": "Tippe auf ein markiertes legales Ziel oder eine Aktion. Das Brett passt sich dem Bildschirm an. Nur dein Zug ist interaktiv.",
@@ -1297,7 +1297,7 @@
       }
     },
     "pt": {
-      "display_name": "Mancala (Kalah) · Declarative",
+      "display_name": "Mancala (Kalah) (Declarative)",
       "short_description": "Semeie dos seus seis buracos no sentido anti-horário, pulando o depósito rival. Terminar no seu depósito dá outra vez. Termine num buraco seu vazio para capturar o oposto. Recolha o resto quando um lado esvaziar. Mais sementes vence; após 300 turnos, recolha e conte.",
       "game_logic_rules": "Semeie dos seus seis buracos no sentido anti-horário, pulando o depósito rival. Terminar no seu depósito dá outra vez. Termine num buraco seu vazio para capturar o oposto. Recolha o resto quando um lado esvaziar. Mais sementes vence; após 300 turnos, recolha e conte.",
       "game_ui_rules": "Toque num destino legal destacado ou use um botão. O tabuleiro se adapta à tela. Só a sua vez é interativa.",
@@ -1318,7 +1318,7 @@
       }
     },
     "zh": {
-      "display_name": "卡拉棋 · Declarative",
+      "display_name": "卡拉棋 (Declarative)",
       "short_description": "从己方六坑逆时针撒子，跳过对方仓库。最后一子落入己仓可再走。落入己方空坑时吃掉对面棋子。一侧空后收取余子。多者获胜；300回合后收子计分。",
       "game_logic_rules": "从己方六坑逆时针撒子，跳过对方仓库。最后一子落入己仓可再走。落入己方空坑时吃掉对面棋子。一侧空后收取余子。多者获胜；300回合后收子计分。",
       "game_ui_rules": "点击高亮合法目标或操作按钮。棋盘适应屏幕。仅在自己的回合可操作。",
@@ -1339,7 +1339,7 @@
       }
     },
     "hi": {
-      "display_name": "मंकला · Declarative",
+      "display_name": "मंकला (Declarative)",
       "short_description": "अपने छह गड्ढों से वामावर्त बीज बाँटें, विरोधी भंडार छोड़ें। अपने भंडार में अंत पर फिर खेलें। अपने खाली गड्ढे में अंत पर सामने के बीज लें। एक ओर खाली होने पर शेष बीज समेटें। अधिक बीज जीतते हैं; 300 बारी पर समेटकर गिनें।",
       "game_logic_rules": "अपने छह गड्ढों से वामावर्त बीज बाँटें, विरोधी भंडार छोड़ें। अपने भंडार में अंत पर फिर खेलें। अपने खाली गड्ढे में अंत पर सामने के बीज लें। एक ओर खाली होने पर शेष बीज समेटें। अधिक बीज जीतते हैं; 300 बारी पर समेटकर गिनें।",
       "game_ui_rules": "दिखाए वैध लक्ष्य या बटन दबाएँ। बोर्ड स्क्रीन के अनुसार ढलता है। केवल अपनी बारी में खेलें।",
@@ -1360,7 +1360,7 @@
       }
     },
     "ar": {
-      "display_name": "منقلة · Declarative",
+      "display_name": "منقلة (Declarative)",
       "short_description": "وزّع من حفرك الست عكس الساعة متجاوزًا مخزن الخصم. النهاية في مخزنك تمنح دورًا آخر. النهاية في حفرة لك فارغة تأسر المقابلة. اجمع الباقي عند فراغ جانب. الأكثر بذورًا يفوز؛ بعد 300 دور تُجمع وتُحسب.",
       "game_logic_rules": "وزّع من حفرك الست عكس الساعة متجاوزًا مخزن الخصم. النهاية في مخزنك تمنح دورًا آخر. النهاية في حفرة لك فارغة تأسر المقابلة. اجمع الباقي عند فراغ جانب. الأكثر بذورًا يفوز؛ بعد 300 دور تُجمع وتُحسب.",
       "game_ui_rules": "اضغط هدفًا قانونيًا مميزًا أو زر إجراء. تتكيف اللوحة مع الشاشة. التفاعل متاح في دورك فقط.",

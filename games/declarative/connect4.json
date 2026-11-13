@@ -1,5 +1,5 @@
 {
-  "name": "Connect Four · Declarative",
+  "name": "Connect Four (Declarative)",
   "description": "Choose a column to drop a disc. Connect four horizontally, vertically or diagonally. A full board is a draw.",
   "game_addition_request_id_and_secret": "example-only-declarative-connect4-replace-before-publishing",
   "allowed_player_counts": [
@@ -1620,7 +1620,7 @@
   },
   "translations": {
     "es": {
-      "display_name": "Cuatro en línea · Declarative",
+      "display_name": "Cuatro en línea (Declarative)",
       "short_description": "Elige una columna para soltar una ficha. Conecta cuatro en horizontal, vertical o diagonal. Si se llena el tablero, hay empate.",
       "game_logic_rules": "Elige una columna para soltar una ficha. Conecta cuatro en horizontal, vertical o diagonal. Si se llena el tablero, hay empate.",
       "game_ui_rules": "Toca un destino legal resaltado o usa un botón. El tablero se adapta a la pantalla. Solo tu turno es interactivo.",
@@ -1641,7 +1641,7 @@
       }
     },
     "fr": {
-      "display_name": "Puissance quatre · Declarative",
+      "display_name": "Puissance quatre (Declarative)",
       "short_description": "Choisissez une colonne pour lâcher un jeton. Alignez quatre jetons horizontalement, verticalement ou en diagonale. Grille pleine : match nul.",
       "game_logic_rules": "Choisissez une colonne pour lâcher un jeton. Alignez quatre jetons horizontalement, verticalement ou en diagonale. Grille pleine : match nul.",
       "game_ui_rules": "Touchez une cible légale surlignée ou un bouton. Le plateau s’adapte à l’écran. Seul votre tour est interactif.",
@@ -1662,7 +1662,7 @@
       }
     },
     "de": {
-      "display_name": "Vier gewinnt · Declarative",
+      "display_name": "Vier gewinnt (Declarative)",
       "short_description": "Wähle eine Spalte zum Einwerfen. Verbinde vier waagerecht, senkrecht oder diagonal. Ein volles Brett bedeutet unentschieden.",
       "game_logic_rules": "Wähle eine Spalte zum Einwerfen. Verbinde vier waagerecht, senkrecht oder diagonal. Ein volles Brett bedeutet unentschieden.",
       "game_ui_rules": "Tippe auf ein markiertes legales Ziel oder eine Aktion. Das Brett passt sich dem Bildschirm an. Nur dein Zug ist interaktiv.",
@@ -1683,7 +1683,7 @@
       }
     },
     "pt": {
-      "display_name": "Quatro em linha · Declarative",
+      "display_name": "Quatro em linha (Declarative)",
       "short_description": "Escolha uma coluna para soltar uma ficha. Ligue quatro na horizontal, vertical ou diagonal. Tabuleiro cheio dá empate.",
       "game_logic_rules": "Escolha uma coluna para soltar uma ficha. Ligue quatro na horizontal, vertical ou diagonal. Tabuleiro cheio dá empate.",
       "game_ui_rules": "Toque num destino legal destacado ou use um botão. O tabuleiro se adapta à tela. Só a sua vez é interativa.",
@@ -1704,7 +1704,7 @@
       }
     },
     "zh": {
-      "display_name": "四子棋 · Declarative",
+      "display_name": "四子棋 (Declarative)",
       "short_description": "选择一列落子。横、竖或斜向连成四子获胜。满盘则平局。",
       "game_logic_rules": "选择一列落子。横、竖或斜向连成四子获胜。满盘则平局。",
       "game_ui_rules": "点击高亮合法目标或操作按钮。棋盘适应屏幕。仅在自己的回合可操作。",
@@ -1725,7 +1725,7 @@
       }
     },
     "hi": {
-      "display_name": "चार जोड़ें · Declarative",
+      "display_name": "चार जोड़ें (Declarative)",
       "short_description": "गोटी गिराने के लिए स्तंभ चुनें। चार गोटियाँ क्षैतिज, लंबवत या तिरछी जोड़ें। भरा बोर्ड बराबरी है।",
       "game_logic_rules": "गोटी गिराने के लिए स्तंभ चुनें। चार गोटियाँ क्षैतिज, लंबवत या तिरछी जोड़ें। भरा बोर्ड बराबरी है।",
       "game_ui_rules": "दिखाए वैध लक्ष्य या बटन दबाएँ। बोर्ड स्क्रीन के अनुसार ढलता है। केवल अपनी बारी में खेलें।",
@@ -1746,7 +1746,7 @@
       }
     },
     "ar": {
-      "display_name": "أربعة متصلة · Declarative",
+      "display_name": "أربعة متصلة (Declarative)",
       "short_description": "اختر عمودًا لإسقاط قرص. صِل أربعة أفقيًا أو عموديًا أو قطريًا. امتلاء اللوحة يعني التعادل.",
       "game_logic_rules": "اختر عمودًا لإسقاط قرص. صِل أربعة أفقيًا أو عموديًا أو قطريًا. امتلاء اللوحة يعني التعادل.",
       "game_ui_rules": "اضغط هدفًا قانونيًا مميزًا أو زر إجراء. تتكيف اللوحة مع الشاشة. التفاعل متاح في دورك فقط.",

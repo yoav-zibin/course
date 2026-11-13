@@ -886,5 +886,11 @@
   "ui.declarative.hints.grow_piece": "{piece} को बड़ा करें",
   "ui.declarative.hints.shrink_piece": "{piece} को छोटा करें",
   "ui.declarative.hints.piece_actions": "{piece}: {actions}",
-  "ui.declarative.hints.selected_piece": "चुना हुआ मोहरा"
+  "ui.declarative.hints.selected_piece": "चुना हुआ मोहरा",
+  "ui.declarative.zoom.controls": "बोर्ड ज़ूम",
+  "ui.declarative.zoom.in": "बड़ा करें",
+  "ui.declarative.zoom.out": "छोटा करें",
+  "ui.declarative.zoom.reset": "पूरा बोर्ड दिखाएँ",
+  "ui.declarative.zoom.level": "ज़ूम: {percent}%",
+  "ui.declarative.zoom.hint": "ज़ूम करने के लिए दो उँगलियों को पास या दूर करें। ज़ूम किए गए बोर्ड को खिसकाने के लिए खींचें।"
 }

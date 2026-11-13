@@ -886,5 +886,11 @@
   "ui.declarative.hints.grow_piece": "放大{piece}",
   "ui.declarative.hints.shrink_piece": "缩小{piece}",
   "ui.declarative.hints.piece_actions": "{piece}：{actions}",
-  "ui.declarative.hints.selected_piece": "已选棋子"
+  "ui.declarative.hints.selected_piece": "已选棋子",
+  "ui.declarative.zoom.controls": "棋盘缩放",
+  "ui.declarative.zoom.in": "放大",
+  "ui.declarative.zoom.out": "缩小",
+  "ui.declarative.zoom.reset": "适合棋盘",
+  "ui.declarative.zoom.level": "缩放：{percent}%",
+  "ui.declarative.zoom.hint": "双指捏合可缩放。放大后拖动棋盘可平移。"
 }

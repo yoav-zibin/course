@@ -1,5 +1,5 @@
 {
-  "name": "Pig (30 points) · Declarative",
+  "name": "Pig (30 points) (Declarative)",
   "description": "Roll or hold. A one loses the turn total. Other rolls add to it. Hold banks it and passes. First to 30 wins. After 300 actions, the higher banked score wins.",
   "game_addition_request_id_and_secret": "example-only-declarative-pig-replace-before-publishing",
   "allowed_player_counts": [
@@ -821,7 +821,7 @@
   },
   "translations": {
     "es": {
-      "display_name": "Pig (30 puntos) · Declarative",
+      "display_name": "Pig (30 puntos) (Declarative)",
       "short_description": "Lanza o planta. Un uno pierde lo acumulado del turno. Los demás resultados lo suman. Plantarse lo guarda y pasa. Primero en llegar a 30 gana. Tras 300 acciones gana la puntuación guardada mayor.",
       "game_logic_rules": "Lanza o planta. Un uno pierde lo acumulado del turno. Los demás resultados lo suman. Plantarse lo guarda y pasa. Primero en llegar a 30 gana. Tras 300 acciones gana la puntuación guardada mayor.",
       "game_ui_rules": "Toca un destino legal resaltado o usa un botón. El tablero se adapta a la pantalla. Solo tu turno es interactivo.",
@@ -842,7 +842,7 @@
       }
     },
     "fr": {
-      "display_name": "Pig (30 points) · Declarative",
+      "display_name": "Pig (30 points) (Declarative)",
       "short_description": "Lancez ou gardez. Un un perd le total du tour. Les autres dés s’y ajoutent. Garder encaisse et passe. Le premier à 30 gagne. Après 300 actions, le plus grand score encaissé gagne.",
       "game_logic_rules": "Lancez ou gardez. Un un perd le total du tour. Les autres dés s’y ajoutent. Garder encaisse et passe. Le premier à 30 gagne. Après 300 actions, le plus grand score encaissé gagne.",
       "game_ui_rules": "Touchez une cible légale surlignée ou un bouton. Le plateau s’adapte à l’écran. Seul votre tour est interactif.",
@@ -863,7 +863,7 @@
       }
     },
     "de": {
-      "display_name": "Pig (30 Punkte) · Declarative",
+      "display_name": "Pig (30 Punkte) (Declarative)",
       "short_description": "Würfle oder sichere. Eine Eins verliert die Zugpunkte. Andere Würfe werden addiert. Sichern speichert und gibt ab. Zuerst 30 gewinnt. Nach 300 Aktionen gewinnt der höhere gesicherte Punktestand.",
       "game_logic_rules": "Würfle oder sichere. Eine Eins verliert die Zugpunkte. Andere Würfe werden addiert. Sichern speichert und gibt ab. Zuerst 30 gewinnt. Nach 300 Aktionen gewinnt der höhere gesicherte Punktestand.",
       "game_ui_rules": "Tippe auf ein markiertes legales Ziel oder eine Aktion. Das Brett passt sich dem Bildschirm an. Nur dein Zug ist interaktiv.",
@@ -884,7 +884,7 @@
       }
     },
     "pt": {
-      "display_name": "Pig (30 pontos) · Declarative",
+      "display_name": "Pig (30 pontos) (Declarative)",
       "short_description": "Role ou guarde. Um perde o total do turno. Outros resultados somam. Guardar salva e passa. Primeiro a 30 vence. Após 300 ações, vence o maior total guardado.",
       "game_logic_rules": "Role ou guarde. Um perde o total do turno. Outros resultados somam. Guardar salva e passa. Primeiro a 30 vence. Após 300 ações, vence o maior total guardado.",
       "game_ui_rules": "Toque num destino legal destacado ou use um botão. O tabuleiro se adapta à tela. Só a sua vez é interativa.",
@@ -905,7 +905,7 @@
       }
     },
     "zh": {
-      "display_name": "掷骰子（30分） · Declarative",
+      "display_name": "掷骰子（30分） (Declarative)",
       "short_description": "选择掷骰或保留。掷出一失去本回合累计，其他点数累加。保留将累计入账并换人。先到30分获胜。300次行动后总分高者胜。",
       "game_logic_rules": "选择掷骰或保留。掷出一失去本回合累计，其他点数累加。保留将累计入账并换人。先到30分获胜。300次行动后总分高者胜。",
       "game_ui_rules": "点击高亮合法目标或操作按钮。棋盘适应屏幕。仅在自己的回合可操作。",
@@ -926,7 +926,7 @@
       }
     },
     "hi": {
-      "display_name": "पिग (30 अंक) · Declarative",
+      "display_name": "पिग (30 अंक) (Declarative)",
       "short_description": "पासा फेंकें या बचाएँ। एक आने पर बारी के अंक खोते हैं। अन्य अंक जुड़ते हैं। बचाने पर जमा होकर बारी बदलती है। पहले 30 जीतते हैं। 300 क्रियाओं के बाद अधिक जमा अंक जीतते हैं।",
       "game_logic_rules": "पासा फेंकें या बचाएँ। एक आने पर बारी के अंक खोते हैं। अन्य अंक जुड़ते हैं। बचाने पर जमा होकर बारी बदलती है। पहले 30 जीतते हैं। 300 क्रियाओं के बाद अधिक जमा अंक जीतते हैं।",
       "game_ui_rules": "दिखाए वैध लक्ष्य या बटन दबाएँ। बोर्ड स्क्रीन के अनुसार ढलता है। केवल अपनी बारी में खेलें।",
@@ -947,7 +947,7 @@
       }
     },
     "ar": {
-      "display_name": "بيغ (٣٠ نقطة) · Declarative",
+      "display_name": "بيغ (٣٠ نقطة) (Declarative)",
       "short_description": "ارمِ أو احتفظ. الواحد يخسر مجموع الدور. النتائج الأخرى تُضاف. الاحتفاظ يُودع المجموع وينقل الدور. أول من يبلغ 30 يفوز. بعد 300 حركة يفوز المجموع المودع الأعلى.",
       "game_logic_rules": "ارمِ أو احتفظ. الواحد يخسر مجموع الدور. النتائج الأخرى تُضاف. الاحتفاظ يُودع المجموع وينقل الدور. أول من يبلغ 30 يفوز. بعد 300 حركة يفوز المجموع المودع الأعلى.",
       "game_ui_rules": "اضغط هدفًا قانونيًا مميزًا أو زر إجراء. تتكيف اللوحة مع الشاشة. التفاعل متاح في دورك فقط.",

@@ -1,5 +1,5 @@
 {
-  "name": "Tic-tac-toe · Declarative",
+  "name": "Tic-tac-toe (Declarative)",
   "description": "Place X or O in an empty square. Make a line of three to win. A full board without a line is a draw.",
   "game_addition_request_id_and_secret": "example-only-declarative-tictactoe-replace-before-publishing",
   "allowed_player_counts": [
@@ -1027,7 +1027,7 @@
   },
   "translations": {
     "es": {
-      "display_name": "Tres en raya · Declarative",
+      "display_name": "Tres en raya (Declarative)",
       "short_description": "Coloca X u O en una casilla vacía. Forma una línea de tres para ganar. Un tablero lleno sin línea es empate.",
       "game_logic_rules": "Coloca X u O en una casilla vacía. Forma una línea de tres para ganar. Un tablero lleno sin línea es empate.",
       "game_ui_rules": "Toca un destino legal resaltado o usa un botón. El tablero se adapta a la pantalla. Solo tu turno es interactivo.",
@@ -1048,7 +1048,7 @@
       }
     },
     "fr": {
-      "display_name": "Morpion · Declarative",
+      "display_name": "Morpion (Declarative)",
       "short_description": "Placez X ou O dans une case vide. Alignez trois symboles pour gagner. Une grille pleine sans ligne est nulle.",
       "game_logic_rules": "Placez X ou O dans une case vide. Alignez trois symboles pour gagner. Une grille pleine sans ligne est nulle.",
       "game_ui_rules": "Touchez une cible légale surlignée ou un bouton. Le plateau s’adapte à l’écran. Seul votre tour est interactif.",
@@ -1069,7 +1069,7 @@
       }
     },
     "de": {
-      "display_name": "Drei gewinnt · Declarative",
+      "display_name": "Drei gewinnt (Declarative)",
       "short_description": "Setze X oder O auf ein freies Feld. Drei in einer Reihe gewinnen. Ein volles Brett ohne Reihe ist unentschieden.",
       "game_logic_rules": "Setze X oder O auf ein freies Feld. Drei in einer Reihe gewinnen. Ein volles Brett ohne Reihe ist unentschieden.",
       "game_ui_rules": "Tippe auf ein markiertes legales Ziel oder eine Aktion. Das Brett passt sich dem Bildschirm an. Nur dein Zug ist interaktiv.",
@@ -1090,7 +1090,7 @@
       }
     },
     "pt": {
-      "display_name": "Jogo da velha · Declarative",
+      "display_name": "Jogo da velha (Declarative)",
       "short_description": "Coloque X ou O numa casa vazia. Faça uma linha de três para vencer. Tabuleiro cheio sem linha é empate.",
       "game_logic_rules": "Coloque X ou O numa casa vazia. Faça uma linha de três para vencer. Tabuleiro cheio sem linha é empate.",
       "game_ui_rules": "Toque num destino legal destacado ou use um botão. O tabuleiro se adapta à tela. Só a sua vez é interativa.",
@@ -1111,7 +1111,7 @@
       }
     },
     "zh": {
-      "display_name": "井字棋 · Declarative",
+      "display_name": "井字棋 (Declarative)",
       "short_description": "轮流在空格放置X或O。连成三个获胜。棋盘填满且无人连线则平局。",
       "game_logic_rules": "轮流在空格放置X或O。连成三个获胜。棋盘填满且无人连线则平局。",
       "game_ui_rules": "点击高亮合法目标或操作按钮。棋盘适应屏幕。仅在自己的回合可操作。",
@@ -1132,7 +1132,7 @@
       }
     },
     "hi": {
-      "display_name": "टिक टैक टो · Declarative",
+      "display_name": "टिक टैक टो (Declarative)",
       "short_description": "खाली खाने में X या O रखें। तीन की पंक्ति बनाकर जीतें। भरा बोर्ड बिना पंक्ति के बराबरी है।",
       "game_logic_rules": "खाली खाने में X या O रखें। तीन की पंक्ति बनाकर जीतें। भरा बोर्ड बिना पंक्ति के बराबरी है।",
       "game_ui_rules": "दिखाए वैध लक्ष्य या बटन दबाएँ। बोर्ड स्क्रीन के अनुसार ढलता है। केवल अपनी बारी में खेलें।",
@@ -1153,7 +1153,7 @@
       }
     },
     "ar": {
-      "display_name": "إكس أو · Declarative",
+      "display_name": "إكس أو (Declarative)",
       "short_description": "ضع X أو O في خانة فارغة. تفوز بثلاثة على خط واحد. امتلاء اللوحة دون خط يعني التعادل.",
       "game_logic_rules": "ضع X أو O في خانة فارغة. تفوز بثلاثة على خط واحد. امتلاء اللوحة دون خط يعني التعادل.",
       "game_ui_rules": "اضغط هدفًا قانونيًا مميزًا أو زر إجراء. تتكيف اللوحة مع الشاشة. التفاعل متاح في دورك فقط.",

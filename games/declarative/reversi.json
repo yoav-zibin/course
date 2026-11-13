@@ -1,5 +1,5 @@
 {
-  "name": "Reversi · Declarative",
+  "name": "Reversi (Declarative)",
   "description": "Place a disc to bracket and flip opposing discs. Turns pass automatically when no move exists. When neither player can move, most discs wins.",
   "game_addition_request_id_and_secret": "example-only-declarative-reversi-replace-before-publishing",
   "allowed_player_counts": [
@@ -1986,7 +1986,7 @@
   },
   "translations": {
     "es": {
-      "display_name": "Reversi · Declarative",
+      "display_name": "Reversi (Declarative)",
       "short_description": "Coloca una ficha para encerrar y voltear fichas rivales. Sin jugadas se pasa automáticamente. Cuando nadie puede jugar, gana quien tenga más fichas.",
       "game_logic_rules": "Coloca una ficha para encerrar y voltear fichas rivales. Sin jugadas se pasa automáticamente. Cuando nadie puede jugar, gana quien tenga más fichas.",
       "game_ui_rules": "Toca un destino legal resaltado o usa un botón. El tablero se adapta a la pantalla. Solo tu turno es interactivo.",
@@ -2007,7 +2007,7 @@
       }
     },
     "fr": {
-      "display_name": "Reversi · Declarative",
+      "display_name": "Reversi (Declarative)",
       "short_description": "Posez un pion pour encadrer et retourner ceux de l’adversaire. Sans coup, le tour passe automatiquement. Quand personne ne peut jouer, le plus de pions gagne.",
       "game_logic_rules": "Posez un pion pour encadrer et retourner ceux de l’adversaire. Sans coup, le tour passe automatiquement. Quand personne ne peut jouer, le plus de pions gagne.",
       "game_ui_rules": "Touchez une cible légale surlignée ou un bouton. Le plateau s’adapte à l’écran. Seul votre tour est interactif.",
@@ -2028,7 +2028,7 @@
       }
     },
     "de": {
-      "display_name": "Reversi · Declarative",
+      "display_name": "Reversi (Declarative)",
       "short_description": "Setze einen Stein, um gegnerische Steine einzuschließen und umzudrehen. Ohne Zug wird automatisch gepasst. Kann niemand ziehen, gewinnt die Mehrheit.",
       "game_logic_rules": "Setze einen Stein, um gegnerische Steine einzuschließen und umzudrehen. Ohne Zug wird automatisch gepasst. Kann niemand ziehen, gewinnt die Mehrheit.",
       "game_ui_rules": "Tippe auf ein markiertes legales Ziel oder eine Aktion. Das Brett passt sich dem Bildschirm an. Nur dein Zug ist interaktiv.",
@@ -2049,7 +2049,7 @@
       }
     },
     "pt": {
-      "display_name": "Reversi · Declarative",
+      "display_name": "Reversi (Declarative)",
       "short_description": "Coloque uma peça para cercar e virar peças adversárias. Sem jogada, passa automaticamente. Quando ninguém puder jogar, vence quem tiver mais peças.",
       "game_logic_rules": "Coloque uma peça para cercar e virar peças adversárias. Sem jogada, passa automaticamente. Quando ninguém puder jogar, vence quem tiver mais peças.",
       "game_ui_rules": "Toque num destino legal destacado ou use um botão. O tabuleiro se adapta à tela. Só a sua vez é interativa.",
@@ -2070,7 +2070,7 @@
       }
     },
     "zh": {
-      "display_name": "黑白棋 · Declarative",
+      "display_name": "黑白棋 (Declarative)",
       "short_description": "落子夹住并翻转对方棋子。无合法着法时自动跳过。双方均无法落子时，棋子多者获胜。",
       "game_logic_rules": "落子夹住并翻转对方棋子。无合法着法时自动跳过。双方均无法落子时，棋子多者获胜。",
       "game_ui_rules": "点击高亮合法目标或操作按钮。棋盘适应屏幕。仅在自己的回合可操作。",
@@ -2091,7 +2091,7 @@
       }
     },
     "hi": {
-      "display_name": "रिवर्सी · Declarative",
+      "display_name": "रिवर्सी (Declarative)",
       "short_description": "विरोधी गोटियों को घेरकर पलटने के लिए गोटी रखें। चाल न होने पर बारी स्वतः छूटती है। दोनों रुकें तो अधिक गोटियों वाला जीतता है।",
       "game_logic_rules": "विरोधी गोटियों को घेरकर पलटने के लिए गोटी रखें। चाल न होने पर बारी स्वतः छूटती है। दोनों रुकें तो अधिक गोटियों वाला जीतता है।",
       "game_ui_rules": "दिखाए वैध लक्ष्य या बटन दबाएँ। बोर्ड स्क्रीन के अनुसार ढलता है। केवल अपनी बारी में खेलें।",
@@ -2112,7 +2112,7 @@
       }
     },
     "ar": {
-      "display_name": "ريفيرسي · Declarative",
+      "display_name": "ريفيرسي (Declarative)",
       "short_description": "ضع قرصًا لحصر أقراص الخصم وقلبها. يُتجاوز الدور تلقائيًا عند غياب الحركات. عند عجز الطرفين يفوز صاحب الأقراص الأكثر.",
       "game_logic_rules": "ضع قرصًا لحصر أقراص الخصم وقلبها. يُتجاوز الدور تلقائيًا عند غياب الحركات. عند عجز الطرفين يفوز صاحب الأقراص الأكثر.",
       "game_ui_rules": "اضغط هدفًا قانونيًا مميزًا أو زر إجراء. تتكيف اللوحة مع الشاشة. التفاعل متاح في دورك فقط.",

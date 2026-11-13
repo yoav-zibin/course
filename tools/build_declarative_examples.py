@@ -148,14 +148,14 @@ def package(kind):
         if 'payouts' in result:case['expected_payouts']=result['payouts']
         cases.append(case)
     source=strings(kind)
-    return {'name':TITLES[kind][0]+' · Declarative','description':RULES[kind][0],
+    return {'name':TITLES[kind][0]+' (Declarative)','description':RULES[kind][0],
             'game_addition_request_id_and_secret':'example-only-declarative-'+kind+'-replace-before-publishing',
             'allowed_player_counts':[2],'server_code':code,'declarative_ui':specification(kind),
             'rules':RULES[kind][0],'ui_instructions':UI_RULES[0],
             'tutorial':{'text':RULES[kind][0],'html':'<meta name="viewport" content="width=device-width,initial-scale=1"><p>'+html.escape(RULES[kind][0])+'</p>'},
             'images':[{'caption':'Cover','svg':'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90"><rect width="160" height="90" fill="#102039"/><circle cx="55" cy="45" r="25" fill="#a7f070"/><circle cx="105" cy="45" r="25" fill="#ff9dca"/></svg>'},*cases[0]['images'][:3]],
             'unit_tests':{**{k+'_schema':v for k,v in game_schemas.items()},'cases':cases},
-            'translations':{locale:{'display_name':TITLES[kind][i]+' · Declarative','short_description':RULES[kind][i], 'game_logic_rules':RULES[kind][i],'game_ui_rules':UI_RULES[i], 'tutorial_strings':{RULES[kind][0]:RULES[kind][i]},'client_strings':strings(kind,i)}for i,locale in enumerate(LOCALES)if i}}
+            'translations':{locale:{'display_name':TITLES[kind][i]+' (Declarative)','short_description':RULES[kind][i], 'game_logic_rules':RULES[kind][i],'game_ui_rules':UI_RULES[i], 'tutorial_strings':{RULES[kind][0]:RULES[kind][i]},'client_strings':strings(kind,i)}for i,locale in enumerate(LOCALES)if i}}
 
 
 def main():

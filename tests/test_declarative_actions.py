@@ -116,17 +116,18 @@ def test_protocol_schema_and_probe_expose_rotation_scaling_without_publishing(ap
     assert response.status_code == 200, response.text
     assert response.json()["local_state"] == {"rotation": 180, "scale": 1.5}
     assert api.client.get("/games").json() == []
-    assert "/static/declarative-ui.js?v=2" in client_document(spec())
-    assert "/static/declarative-ui.css?v=2" in client_document(spec())
+    assert "/static/declarative-ui.js?v=3" in client_document(spec())
+    assert "/static/declarative-ui.css?v=3" in client_document(spec())
 
 
-def legacy_client_document(ui):
-    return client_document(ui).replace('href="/static/declarative-ui.css?v=2"',
-                                      'href="/static/declarative-ui.css"').replace(
-        'src="/static/declarative-ui.js?v=2"', 'src="/static/declarative-ui.js"')
+def legacy_client_document(ui, asset_query=""):
+    return client_document(ui).replace('href="/static/declarative-ui.css?v=3"',
+                                      f'href="/static/declarative-ui.css{asset_query}"').replace(
+        'src="/static/declarative-ui.js?v=3"', f'src="/static/declarative-ui.js{asset_query}"')
 
 
-def test_exact_legacy_platform_host_keeps_recorded_body_and_hash_unchanged():
+@pytest.mark.parametrize("asset_query", ["", "?v=2"])
+def test_exact_legacy_platform_host_keeps_recorded_body_and_hash_unchanged(asset_query):
     from game_platform.agent_import import GameImport
     from game_platform import game_traces as traces
     from game_platform.tests.fake_firestore import FakeClient, query_store
@@ -134,7 +135,7 @@ def test_exact_legacy_platform_host_keeps_recorded_body_and_hash_unchanged():
 
     request = declarative_payload()
     request["game_addition_request_id_and_secret"] = SECRET
-    request["client_code"] = legacy_client_document(request["declarative_ui"])
+    request["client_code"] = legacy_client_document(request["declarative_ui"], asset_query)
     body = GameImport.model_validate(request)
     assert body.client_code == request["client_code"]
     assert accepted_platform_host(body.declarative_ui, body.client_code)

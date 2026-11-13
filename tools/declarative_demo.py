@@ -1,4 +1,4 @@
-"""Serve the ordinary portal with ten examples in a disposable local store.
+"""Serve the ordinary portal with eleven games in a disposable local store.
 
 Every game is added through the normal HTTP submission endpoint, including all
 validation. This takes about two minutes. No existing data file, production
@@ -20,6 +20,7 @@ from game_platform.service import GamePlatform
 from game_platform.store import InMemoryStore
 
 KINDS = ('tictactoe','connect4','reversi','nim','mancala','gomoku','hex','domineering','memory','pig')
+DEMO_KINDS = (*KINDS, 'backgammon')
 
 
 def make_demo_app(*, report_path: Path | None = None):
@@ -27,7 +28,7 @@ def make_demo_app(*, report_path: Path | None = None):
     app = create_app(platform, debug_tools=True, master_password=secrets.token_urlsafe(32))
     report = {'environment':'disposable loopback in-memory store', 'submission_endpoint':'POST /games/declarative', 'games':[]}
     with TestClient(app) as client:
-        for kind in KINDS:
+        for kind in DEMO_KINDS:
             package=json.loads((Path(__file__).resolve().parents[1]/'games'/'declarative'/(kind+'.json')).read_text())
             source={key:value for key,value in package.items() if key!='game_addition_request_id_and_secret'}
             source_hash=hashlib.sha256(json.dumps(source,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()

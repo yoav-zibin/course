@@ -886,5 +886,11 @@
   "ui.declarative.hints.grow_piece": "{piece} vergrößern",
   "ui.declarative.hints.shrink_piece": "{piece} verkleinern",
   "ui.declarative.hints.piece_actions": "{piece}: {actions}",
-  "ui.declarative.hints.selected_piece": "Ausgewählte Spielfigur"
+  "ui.declarative.hints.selected_piece": "Ausgewählte Spielfigur",
+  "ui.declarative.zoom.controls": "Spielbrett-Zoom",
+  "ui.declarative.zoom.in": "Vergrößern",
+  "ui.declarative.zoom.out": "Verkleinern",
+  "ui.declarative.zoom.reset": "Spielbrett einpassen",
+  "ui.declarative.zoom.level": "Zoom: {percent}%",
+  "ui.declarative.zoom.hint": "Mit zwei Fingern zoomen. Das vergrößerte Spielbrett zum Verschieben ziehen."
 }

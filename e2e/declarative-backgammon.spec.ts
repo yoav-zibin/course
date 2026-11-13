@@ -1,0 +1,134 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {test,expect,type APIRequestContext,type Page} from '@playwright/test';
+import {createUser,loginAs,uniqueName} from './helpers';
+
+const auth=(user:any)=>({'X-User-Id':user.id,'X-User-Password':user.password});
+
+async function backgammon(request:APIRequestContext){
+  const catalog=await(await request.get('/games')).json();
+  const known=(Array.isArray(catalog)?catalog:catalog.items||[]).find((game:any)=>game.name==='Backgammon (Declarative)');
+  if(known)return known;
+  const payload=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../games/declarative/backgammon.json'),'utf8'));
+  payload.game_addition_request_id_and_secret=uniqueName('backgammon-test-secret');
+  let response=await request.post('/games',{data:payload,timeout:210000});
+  for(let i=0;response.status()===429&&i<30;i++){
+    await new Promise(resolve=>setTimeout(resolve,1000));
+    response=await request.post('/games',{data:payload,timeout:210000});
+  }
+  expect(response.ok(),await response.text()).toBeTruthy();return response.json();
+}
+
+async function nextAction(page:Page){
+  const stage=page.locator('#game-box .declarative-stage');
+  await expect(stage).toBeVisible();
+  await expect(page.locator('#game-box .declarative-error:visible')).toHaveCount(0);
+  const signature=()=>stage.evaluate(node=>JSON.stringify([
+    Array.from(node.querySelectorAll('.declarative-piece')).map(piece=>[piece.getAttribute('data-ui-id'),piece.getAttribute('transform'),piece.textContent]),
+    Array.from(node.querySelectorAll(':scope > text')).map(label=>label.textContent),
+  ]));
+  const before=await signature();
+  await expect.poll(async()=>await page.locator('#game-box .declarative-control.actionable button:enabled').count()+await page.locator('#game-box .declarative-piece.actionable').count(),{timeout:20000}).toBeGreaterThan(0);
+  const button=page.locator('#game-box .declarative-control.actionable button:enabled').first();
+  if(await button.count())await button.click();
+  else{
+    const checker=page.locator('#game-box .declarative-piece.actionable').first();
+    await expect(checker).toHaveAttribute('data-actions','move');
+    await checker.click();
+    await expect(stage).toHaveClass(/show-drop-hints/);
+    const target=page.locator('#game-box .declarative-target[data-drop-state="allowed"]').first();
+    await expect(target).toBeVisible();await target.click();
+  }
+  // Local QuickJS moves do not have an HTTP response to await. Wait for the
+  // actual new scene before choosing the next action from its DOM.
+  await expect.poll(signature,{timeout:20000}).not.toBe(before);
+}
+
+async function countAnimations(page:Page){
+  await page.addInitScript(()=>{
+    const original=Element.prototype.animate;
+    (window as any).backgammonAnimations=[];
+    Element.prototype.animate=function(...args:any[]){
+      if(this.classList?.contains('declarative-piece'))(window as any).backgammonAnimations.push(this.getAttribute('data-ui-id'));
+      return original.apply(this,args as any);
+    };
+  });
+}
+
+test('Backgammon appears in the ordinary catalog and finishes a two-player portal match',async({browser,request},testInfo)=>{
+  test.setTimeout(720000);
+  const game=await backgammon(request);
+  const alice=await createUser(request,uniqueName('Backgammon Alice'));
+  const bob=await createUser(request,uniqueName('Backgammon Bob'));
+  const contexts=[],pages:Page[]=[],errors:string[]=[];
+  try{
+    for(const user of [alice,bob]){
+      const context=await browser.newContext({viewport:testInfo.project.name==='mobile'?{width:390,height:844}:{width:1280,height:900}});
+      contexts.push(context);const page=await context.newPage();pages.push(page);await countAnimations(page);
+      page.on('pageerror',error=>errors.push(error.message));await loginAs(page,user);
+    }
+    await pages[0].goto('/static/portal.html');
+    await pages[0].getByRole('combobox',{name:'Search games'}).fill('Backgammon');
+    const choice=pages[0].getByRole('option',{name:/Backgammon \(Declarative\)/}).first();
+    await expect(choice).toBeVisible();await choice.click();
+    await expect(pages[0].locator('#practice')).toBeEnabled();
+    await expect(pages[0].locator('#play-computers')).toBeEnabled();
+    const create=await request.post('/matches',{headers:auth(alice),data:{game_id:game.id,num_computer_opponents:0}});
+    expect(create.ok(),await create.text()).toBeTruthy();const created=await create.json();
+    expect((await request.post(`/matches/${created.id}/join`,{headers:auth(bob)})).ok()).toBeTruthy();
+    expect((await request.post(`/matches/${created.id}/start`,{headers:auth(alice),data:{}})).ok()).toBeTruthy();
+    for(const page of pages){
+      await page.goto(`/static/portal.html#match=${created.id}`);
+      await expect(page.locator('#game-box .declarative-stage')).toBeVisible();
+      await expect(page.locator('#game-box > iframe:visible')).toHaveCount(0);
+      await expect(page.locator('#game-box .declarative-piece[data-ui-id^="checker_"]')).toHaveCount(30);
+    }
+    let current=await(await request.get(`/matches/${created.id}`,{headers:auth(alice)})).json();
+    let moves=0;
+    while(current.status==='ongoing'&&moves<305){
+      const seat=current.turn_of_player_indices[0],page=pages[seat];
+      const response=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`/matches/${created.id}/moves`);
+      await nextAction(page);const result=await response;expect(result.ok(),await result.text()).toBeTruthy();
+      current=await result.json();moves++;
+      if(moves===2)await testInfo.attach('backgammon-legal-move',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
+    }
+    expect(current.status).toBe('over');expect(moves).toBeGreaterThan(2);
+    for(const [seat,page] of pages.entries())await expect.poll(()=>page.evaluate(otherSeat=>(window as any).backgammonAnimations.some((id:string)=>id.startsWith('checker_'+otherSeat+'_')),1-seat)).toBe(true);
+    await expect(pages[0].locator('#game-box .actionable')).toHaveCount(0);
+    await testInfo.attach('backgammon-finished',{body:await pages[0].screenshot({fullPage:true}),contentType:'image/png'});
+    await testInfo.attach('backgammon-match-evidence',{body:JSON.stringify({game:game.id,version:game.version,match:created.id,moves,status:current.status,errors}),contentType:'application/json'});
+    expect(errors).toEqual([]);
+  }finally{for(const context of contexts)await context.close();}
+});
+
+test('Backgammon pass-and-play is immediate and computer play uses the ordinary server match',async({page,request},testInfo)=>{
+  test.setTimeout(120000);
+  const game=await backgammon(request),user=await createUser(request,uniqueName('Backgammon modes'));
+  await countAnimations(page);await loginAs(page,user);await page.goto(`/static/portal.html#game=${game.id}`);
+  const writes:string[]=[];
+  page.on('request',request=>{if(request.method()!=='GET'&&new URL(request.url()).pathname.startsWith('/matches'))writes.push(request.url());});
+  await page.locator('#practice').click();
+  await expect(page.locator('#game-box .declarative-stage')).toBeVisible();
+  for(let i=0;i<5;i++)await nextAction(page);
+  expect(writes).toEqual([]);
+  expect(await page.evaluate(()=>(window as any).backgammonAnimations.length)).toBe(0);
+  await page.locator('#match-controls-toggle').click();await page.locator('#history-back').click();
+  await expect(page.locator('#game-box .actionable')).toHaveCount(0);
+  await page.locator('#history-live').click();
+  await expect(page.locator('#game-box .declarative-hint-message')).toBeVisible();
+  await page.goto(`/static/portal.html#game=${game.id}`);
+  const created=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname==='/matches');
+  await page.locator('#play-computers').click();const response=await created;expect(response.ok(),await response.text()).toBeTruthy();
+  const match=await response.json();
+  await expect(page.locator('#game-box .declarative-stage')).toBeVisible();
+  for(let i=0;i<8;i++){
+    const moving=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`/matches/${match.id}/moves`);
+    await nextAction(page);expect((await moving).ok()).toBeTruthy();
+  }
+  const current=await(await request.get(`/matches/${match.id}`,{headers:auth(user)})).json();
+  expect(current.players.filter((player:any)=>player.kind==='computer')).toHaveLength(1);
+  expect(current.move_count).toBeGreaterThanOrEqual(8);
+  await expect.poll(()=>page.evaluate(()=>(window as any).backgammonAnimations.length)).toBeGreaterThan(0);
+  await expect(page.locator('#game-box .declarative-error:visible')).toHaveCount(0);
+  await testInfo.attach('backgammon-computer',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
+});

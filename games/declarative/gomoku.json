@@ -1,5 +1,5 @@
 {
-  "name": "Gomoku · Declarative",
+  "name": "Gomoku (Declarative)",
   "description": "Take turns placing stones on a 9 by 9 board. The first line of five or more wins. A full board is a draw.",
   "game_addition_request_id_and_secret": "example-only-declarative-gomoku-replace-before-publishing",
   "allowed_player_counts": [
@@ -2820,7 +2820,7 @@
   },
   "translations": {
     "es": {
-      "display_name": "Gomoku · Declarative",
+      "display_name": "Gomoku (Declarative)",
       "short_description": "Coloca piedras por turnos en un tablero de 9 por 9. La primera línea de cinco o más gana. Si se llena, hay empate.",
       "game_logic_rules": "Coloca piedras por turnos en un tablero de 9 por 9. La primera línea de cinco o más gana. Si se llena, hay empate.",
       "game_ui_rules": "Toca un destino legal resaltado o usa un botón. El tablero se adapta a la pantalla. Solo tu turno es interactivo.",
@@ -2841,7 +2841,7 @@
       }
     },
     "fr": {
-      "display_name": "Gomoku · Declarative",
+      "display_name": "Gomoku (Declarative)",
       "short_description": "Posez des pierres à tour de rôle sur une grille de 9 sur 9. Une ligne de cinq ou plus gagne. Une grille pleine est nulle.",
       "game_logic_rules": "Posez des pierres à tour de rôle sur une grille de 9 sur 9. Une ligne de cinq ou plus gagne. Une grille pleine est nulle.",
       "game_ui_rules": "Touchez une cible légale surlignée ou un bouton. Le plateau s’adapte à l’écran. Seul votre tour est interactif.",
@@ -2862,7 +2862,7 @@
       }
     },
     "de": {
-      "display_name": "Gomoku · Declarative",
+      "display_name": "Gomoku (Declarative)",
       "short_description": "Setzt abwechselnd Steine auf ein 9-mal-9-Brett. Die erste Reihe aus mindestens fünf gewinnt. Ein volles Brett ist unentschieden.",
       "game_logic_rules": "Setzt abwechselnd Steine auf ein 9-mal-9-Brett. Die erste Reihe aus mindestens fünf gewinnt. Ein volles Brett ist unentschieden.",
       "game_ui_rules": "Tippe auf ein markiertes legales Ziel oder eine Aktion. Das Brett passt sich dem Bildschirm an. Nur dein Zug ist interaktiv.",
@@ -2883,7 +2883,7 @@
       }
     },
     "pt": {
-      "display_name": "Gomoku · Declarative",
+      "display_name": "Gomoku (Declarative)",
       "short_description": "Coloque pedras alternadamente num tabuleiro 9 por 9. A primeira linha de cinco ou mais vence. Tabuleiro cheio dá empate.",
       "game_logic_rules": "Coloque pedras alternadamente num tabuleiro 9 por 9. A primeira linha de cinco ou mais vence. Tabuleiro cheio dá empate.",
       "game_ui_rules": "Toque num destino legal destacado ou use um botão. O tabuleiro se adapta à tela. Só a sua vez é interativa.",
@@ -2904,7 +2904,7 @@
       }
     },
     "zh": {
-      "display_name": "五子棋 · Declarative",
+      "display_name": "五子棋 (Declarative)",
       "short_description": "在9乘9棋盘轮流落子。先连成五子或更多者获胜。满盘则平局。",
       "game_logic_rules": "在9乘9棋盘轮流落子。先连成五子或更多者获胜。满盘则平局。",
       "game_ui_rules": "点击高亮合法目标或操作按钮。棋盘适应屏幕。仅在自己的回合可操作。",
@@ -2925,7 +2925,7 @@
       }
     },
     "hi": {
-      "display_name": "गोमोकू · Declarative",
+      "display_name": "गोमोकू (Declarative)",
       "short_description": "9 गुणा 9 बोर्ड पर बारी से गोटियाँ रखें। पहले पाँच या अधिक की पंक्ति जीतती है। भरा बोर्ड बराबरी है।",
       "game_logic_rules": "9 गुणा 9 बोर्ड पर बारी से गोटियाँ रखें। पहले पाँच या अधिक की पंक्ति जीतती है। भरा बोर्ड बराबरी है।",
       "game_ui_rules": "दिखाए वैध लक्ष्य या बटन दबाएँ। बोर्ड स्क्रीन के अनुसार ढलता है। केवल अपनी बारी में खेलें।",
@@ -2946,7 +2946,7 @@
       }
     },
     "ar": {
-      "display_name": "غوموكو · Declarative",
+      "display_name": "غوموكو (Declarative)",
       "short_description": "تناوبوا وضع الحجارة على لوحة 9 في 9. أول خط من خمسة أو أكثر يفوز. اللوحة الممتلئة تعادل.",
       "game_logic_rules": "تناوبوا وضع الحجارة على لوحة 9 في 9. أول خط من خمسة أو أكثر يفوز. اللوحة الممتلئة تعادل.",
       "game_ui_rules": "اضغط هدفًا قانونيًا مميزًا أو زر إجراء. تتكيف اللوحة مع الشاشة. التفاعل متاح في دورك فقط.",

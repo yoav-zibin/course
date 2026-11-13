@@ -1,5 +1,5 @@
 {
-  "name": "Memory pairs · Declarative",
+  "name": "Memory pairs (Declarative)",
   "description": "Reveal two cards. A matching pair scores one and grants another turn. A mismatch passes the turn; the next reveal hides it. Most of eight pairs wins.",
   "game_addition_request_id_and_secret": "example-only-declarative-memory-replace-before-publishing",
   "allowed_player_counts": [
@@ -1364,7 +1364,7 @@
   },
   "translations": {
     "es": {
-      "display_name": "Parejas de memoria · Declarative",
+      "display_name": "Parejas de memoria (Declarative)",
       "short_description": "Descubre dos cartas. Una pareja suma uno y permite repetir. Un fallo pasa el turno; la siguiente carta oculta el fallo. Gana quien tenga más de las ocho parejas.",
       "game_logic_rules": "Descubre dos cartas. Una pareja suma uno y permite repetir. Un fallo pasa el turno; la siguiente carta oculta el fallo. Gana quien tenga más de las ocho parejas.",
       "game_ui_rules": "Toca un destino legal resaltado o usa un botón. El tablero se adapta a la pantalla. Solo tu turno es interactivo.",
@@ -1385,7 +1385,7 @@
       }
     },
     "fr": {
-      "display_name": "Jeu de mémoire · Declarative",
+      "display_name": "Jeu de mémoire (Declarative)",
       "short_description": "Retournez deux cartes. Une paire marque un point et permet de rejouer. Sinon le tour passe ; la prochaine carte masque les précédentes. Le plus de paires sur huit gagne.",
       "game_logic_rules": "Retournez deux cartes. Une paire marque un point et permet de rejouer. Sinon le tour passe ; la prochaine carte masque les précédentes. Le plus de paires sur huit gagne.",
       "game_ui_rules": "Touchez une cible légale surlignée ou un bouton. Le plateau s’adapte à l’écran. Seul votre tour est interactif.",
@@ -1406,7 +1406,7 @@
       }
     },
     "de": {
-      "display_name": "Paare finden · Declarative",
+      "display_name": "Paare finden (Declarative)",
       "short_description": "Decke zwei Karten auf. Ein Paar zählt einen Punkt und erlaubt einen weiteren Zug. Sonst wechselt der Zug; beim nächsten Aufdecken werden sie verdeckt. Die meisten der acht Paare gewinnen.",
       "game_logic_rules": "Decke zwei Karten auf. Ein Paar zählt einen Punkt und erlaubt einen weiteren Zug. Sonst wechselt der Zug; beim nächsten Aufdecken werden sie verdeckt. Die meisten der acht Paare gewinnen.",
       "game_ui_rules": "Tippe auf ein markiertes legales Ziel oder eine Aktion. Das Brett passt sich dem Bildschirm an. Nur dein Zug ist interaktiv.",
@@ -1427,7 +1427,7 @@
       }
     },
     "pt": {
-      "display_name": "Jogo da memória · Declarative",
+      "display_name": "Jogo da memória (Declarative)",
       "short_description": "Revele duas cartas. Um par vale um ponto e outra vez. Um erro passa a vez; a próxima carta esconde o erro. Quem tiver mais dos oito pares vence.",
       "game_logic_rules": "Revele duas cartas. Um par vale um ponto e outra vez. Um erro passa a vez; a próxima carta esconde o erro. Quem tiver mais dos oito pares vence.",
       "game_ui_rules": "Toque num destino legal destacado ou use um botão. O tabuleiro se adapta à tela. Só a sua vez é interativa.",
@@ -1448,7 +1448,7 @@
       }
     },
     "zh": {
-      "display_name": "记忆配对 · Declarative",
+      "display_name": "记忆配对 (Declarative)",
       "short_description": "翻开两张牌。配对得一分并继续，否则换人，下次翻牌时盖住。八对牌中配对最多者获胜。",
       "game_logic_rules": "翻开两张牌。配对得一分并继续，否则换人，下次翻牌时盖住。八对牌中配对最多者获胜。",
       "game_ui_rules": "点击高亮合法目标或操作按钮。棋盘适应屏幕。仅在自己的回合可操作。",
@@ -1469,7 +1469,7 @@
       }
     },
     "hi": {
-      "display_name": "याददाश्त के जोड़े · Declarative",
+      "display_name": "याददाश्त के जोड़े (Declarative)",
       "short_description": "दो पत्ते खोलें। जोड़ा मिले तो एक अंक और फिर बारी। न मिले तो बारी बदले; अगला पत्ता पिछला छिपाए। आठ में अधिक जोड़े जीतते हैं।",
       "game_logic_rules": "दो पत्ते खोलें। जोड़ा मिले तो एक अंक और फिर बारी। न मिले तो बारी बदले; अगला पत्ता पिछला छिपाए। आठ में अधिक जोड़े जीतते हैं।",
       "game_ui_rules": "दिखाए वैध लक्ष्य या बटन दबाएँ। बोर्ड स्क्रीन के अनुसार ढलता है। केवल अपनी बारी में खेलें।",
@@ -1490,7 +1490,7 @@
       }
     },
     "ar": {
-      "display_name": "أزواج الذاكرة · Declarative",
+      "display_name": "أزواج الذاكرة (Declarative)",
       "short_description": "اكشف بطاقتين. الزوج المتطابق يمنح نقطة ودورًا آخر. عند الاختلاف ينتقل الدور ويُخفى الزوج عند الكشف التالي. الأكثر من الأزواج الثمانية يفوز.",
       "game_logic_rules": "اكشف بطاقتين. الزوج المتطابق يمنح نقطة ودورًا آخر. عند الاختلاف ينتقل الدور ويُخفى الزوج عند الكشف التالي. الأكثر من الأزواج الثمانية يفوز.",
       "game_ui_rules": "اضغط هدفًا قانونيًا مميزًا أو زر إجراء. تتكيف اللوحة مع الشاشة. التفاعل متاح في دورك فقط.",

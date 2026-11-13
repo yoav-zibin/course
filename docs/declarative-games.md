@@ -31,6 +31,21 @@ optional join/leave handlers. It validates moves, produces state, filters each
 viewer's information, decides whose turn it is, and settles the game. Its
 schemas, tests and deterministic execution requirements still apply.
 
+Declarative games are ordinary published `Game` records. They appear in the
+same `/games` catalog, paginated lists, search, invitations and version-pinned
+matches as HTML games. `renderer_type: "declarative"` selects the presentation
+host, and the portal appends **(Declarative)** to the localized name. They use
+the same create/join/start/move/history/computer-opponent endpoints and server
+validation. Sending a forged scene, local state, dice or illegal move cannot
+replace server state. Offline practice runs locally, just like HTML practice;
+multiplayer and online computer matches remain server authoritative.
+
+The Backgammon package uses the exact rules JavaScript of the regular audited
+Backgammon game. Its strict move schema describes roll, pass and moves from a
+point or bar to a point or off tray. Only the server rolls dice and computes
+`view.legalMoves`, including forced bar entry, maximum dice use and bearing off.
+The presentation only displays those legal choices and sends the selected move.
+
 `declarative_ui.ui_code` defines a separate global object:
 
 ```js
@@ -106,6 +121,23 @@ locate its top-left corner in the viewport. Piece and target positions are
 relative to their board and specify their center. Labels use viewport x/y at
 their top-left; paths use viewport coordinates. Rotation is clockwise degrees
 around the piece center. Uniform `scale` multiplies its dimensions.
+
+Keep the same piece ID when that physical piece moves. For multiplayer and
+computer matches, the portal animates changed piece positions and transforms
+over 360 ms between authoritative scenes. Initial rendering, replay,
+pass-and-play and reduced-motion preferences use immediate updates. A scene is
+still a complete snapshot; no animation commands or delays belong in game
+logic. For games whose server stores counts rather than individual pieces,
+presentation `local_state` can reconcile identities, as Backgammon does for
+moves, captures, bar entry and bearing off.
+
+The portal camera supports two-finger pinch/spread zoom from 1× to 4× and
+panning the enlarged board by dragging its background. Zoom buttons and Fit
+board provide keyboard alternatives. Camera state survives scene changes and
+replay, and resets when the host opens a new match. Camera gestures stay in
+the host and never emit `make_move`; two fingers cancel an unfinished piece
+gesture. Native renderers can provide equivalent camera controls independently
+of the game spec.
 
 A grid supplies `rows` and `columns`. Its implicit cell IDs are row-major
 decimal strings, starting at `"0"`; an 8-by-8 grid ends at `"63"`. Pieces and
@@ -443,10 +475,11 @@ With the checkout importable as `game_platform` and dependencies installed:
 
 ```sh
 python -m game_platform.tools.build_declarative_examples
+python -m game_platform.tools.build_declarative_backgammon
 python -m game_platform.tools.declarative_demo --port 8134
 ```
 
-Open `http://127.0.0.1:8134/portal` to play the ten examples in an isolated,
+Open `http://127.0.0.1:8134/portal` to play all eleven games in an isolated,
 ephemeral local platform. This runner uses no production data. Its fixtures
 support local development and do not substitute for the publication gate.
 The scene playground can load the same examples from
@@ -456,6 +489,21 @@ The scene playground can load the same examples from
 The checked-in examples contain **public example submission secrets**. Replace
 the secret with a new private value before beginning a real publication test
 flow, then keep that value for resubmissions of the same game.
+
+For reviewed packages, `tools/publish_declarative_games.py` runs the ordinary
+authoring APIs, server checks and verified rules/UI protocol playthroughs,
+then submits through `POST /games/declarative`. It does not bypass the five-step
+gate or create player accounts/matches. Its private state file must be outside
+the checkout; keep it to update the same records instead of creating duplicates.
+Protocol playthroughs complement browser tests; they do not verify pixel layout
+or touch gestures. Run `e2e/declarative*.spec.ts` as well.
+
+```sh
+python -m game_platform.tools.publish_declarative_games \
+  --base-url https://your-platform.example \
+  --state-file /private/declarative-publication.json \
+  --report /private/declarative-publication-report.json
+```
 
 See [the validation record](declarative-validation.md) for the portal playthrough
 and test environment's limits.

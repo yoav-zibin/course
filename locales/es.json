@@ -886,5 +886,11 @@
   "ui.declarative.hints.grow_piece": "Agrandar {piece}",
   "ui.declarative.hints.shrink_piece": "Reducir {piece}",
   "ui.declarative.hints.piece_actions": "{piece}: {actions}",
-  "ui.declarative.hints.selected_piece": "Pieza seleccionada"
+  "ui.declarative.hints.selected_piece": "Pieza seleccionada",
+  "ui.declarative.zoom.controls": "Zoom del tablero",
+  "ui.declarative.zoom.in": "Acercar",
+  "ui.declarative.zoom.out": "Alejar",
+  "ui.declarative.zoom.reset": "Ajustar tablero",
+  "ui.declarative.zoom.level": "Zoom: {percent}%",
+  "ui.declarative.zoom.hint": "Pellizca para cambiar el zoom. Arrastra el tablero para desplazarlo cuando esté ampliado."
 }

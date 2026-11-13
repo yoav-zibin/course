@@ -14,7 +14,7 @@ An in-memory REST backend for a multiplayer turn-based games platform, built wit
 **Native-ready declarative games:** [authoring guide](docs/declarative-games.md),
 [JSON schema](schemas/declarative-ui.schema.json),
 [spreadsheet coverage review](docs/declarative-game-coverage.md), and
-[ten complete examples](games/declarative). Submit a `declarative_ui` package
+[eleven complete games, including Backgammon](games/declarative). Submit a `declarative_ui` package
 instead of game HTML; pure QuickJS presentation turns state messages into JSON
 boards, pieces, images and controls, then requests moves through the existing
 API. The portal includes its renderer; native apps implement the same scene
@@ -24,6 +24,10 @@ The renderer keeps action hints visible: games declare each piece's available
 `actions` and `move_targets`, and selecting or dragging a piece highlights its
 legal destinations. The [authoring guide](docs/declarative-games.md#always-show-available-actions)
 also describes click, rotation and resize hints for browser and native hosts.
+Declarative games use the regular catalog and match APIs and are labeled
+**(Declarative)** in the portal. Their board supports pinch zoom and panning;
+multiplayer and computer matches animate pieces between server updates.
+Backgammon shares the regular game's authoritative rules JavaScript.
 
 - **Game**: a playable rules package with authoritative QuickJS `server_code`
   and either a declarative UI package or sandboxed HTML client.

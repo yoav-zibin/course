@@ -886,5 +886,11 @@
   "ui.declarative.hints.grow_piece": "Agrandir {piece}",
   "ui.declarative.hints.shrink_piece": "Réduire {piece}",
   "ui.declarative.hints.piece_actions": "{piece} : {actions}",
-  "ui.declarative.hints.selected_piece": "Pièce sélectionnée"
+  "ui.declarative.hints.selected_piece": "Pièce sélectionnée",
+  "ui.declarative.zoom.controls": "Zoom du plateau",
+  "ui.declarative.zoom.in": "Agrandir",
+  "ui.declarative.zoom.out": "Réduire",
+  "ui.declarative.zoom.reset": "Ajuster le plateau",
+  "ui.declarative.zoom.level": "Zoom : {percent}%",
+  "ui.declarative.zoom.hint": "Pincez pour zoomer. Faites glisser le plateau agrandi pour le déplacer."
 }

@@ -442,6 +442,59 @@ test('late game-code responses cannot populate a newly selected match',async()=>
   assert.equal(t.run('state.badLoad'),undefined);assert.equal(t.run('state.loaded'),null);
 });
 
+function gameSyncSetup() {
+  const t=setup();
+  t.run('globalThis.loads=[];globalThis.sent=[];frame.load=(...args)=>loads.push(args);frame.send=message=>sent.push(message);gameCode=async()=>"host";globalThis.stateChangedMessage=options=>({type:"state_changed",...options});state.match={id:"match",game_id:"game",game_version:2,status:"ongoing",move_count:0,state:{n:0},turn_of_player_indices:[0],players:[{player_index:0,user_id:"owner",kind:"human"}]}');
+  return t;
+}
+
+for(const [change,mutation] of [
+ ['selected match','state.match={...state.match,id:"new-match",game_id:"other",game_version:7}'],
+ ['game version','state.match={...state.match,game_version:3}'],
+ ['newer move','state.match={...state.match,move_count:1,state:{n:1}}'],
+ ['replay','state.replay={id:"match",index:0,move:{new_state:{n:-1},next_turn_player_indices:[0]}}'],
+ ['account','Auth.current=()=>({id:"other"})'],
+ ['language','I18n={...I18n,locale:()=>"he"}'],
+]) {
+ test(`a delayed game download cannot replace a changed ${change} context`,async()=>{
+  const t=gameSyncSetup();
+  t.run('gameCode=()=>new Promise(resolve=>{globalThis.releaseCode=resolve})');
+  const pending=t.run('syncGame()');
+  t.run(mutation);
+  t.run('releaseCode("old host")');
+  await pending;
+  assert.equal(t.run('loads.length'),0);
+  assert.equal(t.run('sent.length'),0);
+ });
+
+ test(`delayed game translations cannot send a stale ${change} context`,async()=>{
+  const t=gameSyncSetup();
+  t.run('I18n={...I18n,gameText:()=>new Promise(resolve=>{globalThis.releaseText=resolve})}');
+  const pending=t.run('syncGame()');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(t.run('typeof releaseText'),'function');
+  t.run(mutation);
+  t.run('releaseText({locale:"en",direction:"ltr"})');
+  await pending;
+  assert.equal(t.run('sent.length'),0);
+  t.run('I18n={...I18n,gameText:async()=>({locale:I18n.locale(),direction:"ltr"})}');
+  await t.run('syncGame()');
+  assert.equal(t.run('sent.length'),1);
+ });
+}
+
+test('identical polls share a downloaded game without remounting its camera',async()=>{
+ const t=gameSyncSetup();
+ t.run('globalThis.codeWaiters=[];gameCode=()=>new Promise(resolve=>codeWaiters.push(resolve))');
+ const first=t.run('syncGame()');
+ t.run('state.match=JSON.parse(JSON.stringify(state.match))');
+ const second=t.run('syncGame()');
+ t.run('codeWaiters.forEach(resolve=>resolve("host"))');
+ await Promise.all([first,second]);
+ assert.equal(t.run('loads.length'),1);
+ assert.equal(t.run('sent.length'),1);
+});
+
 test('current account avatar wins over stale match profile cache',()=>{
   const {run}=setup();
   run('Auth.current=()=>({id:"owner",picture_url:"/saved-deer.png"});state.pictureCache.set("owner","/old-puppy.png")');
@@ -532,6 +585,55 @@ test('duplicate names have stable distinct labels across search and catalog filt
  assert.equal(t.run('catalogGameLabel(state.games[2])'),'Chess');
  t.run('state.games[1].id="abcdefgh-two"');
  assert.match(t.run('catalogGameLabel(state.games[0])'),/abcdefgh-one/);
+});
+
+test('declarative names stay marked across translations and normalize older suffixes',()=>{
+ const {run}=setup();
+ run('I18n={...I18n,gameName:()=>"שש בש"}');
+ assert.equal(run('displayGameName({id:"native",name:"Backgammon",renderer_type:"declarative"})'),'שש בש (Declarative)');
+ assert.equal(run('displayGameName({id:"native",name:"Backgammon · Declarative"})'),'שש בש (Declarative)');
+ assert.equal(run('displayGameName({id:"native",name:"Backgammon (Declarative)"})'),'שש בש (Declarative)');
+ assert.equal(run('displayGameName({id:"html",name:"Backgammon",renderer_type:"html"})'),'שש בש');
+ run('I18n={...I18n,gameName:()=>"Backgammon (Declarative)"}');
+ assert.equal(run('displayGameName({id:"native",name:"Backgammon",renderer_type:"declarative"})'),'Backgammon (Declarative)');
+});
+
+test('declarative games use the ordinary catalog, search, detail and match labels',()=>{
+ const {run,node}=setup();
+ run('state.games=[{id:"normal",name:"Backgammon",version:4,allowed_player_counts:[2],renderer_type:"html"},{id:"native",name:"Backgammon",version:1,allowed_player_counts:[2],renderer_type:"declarative"}]');
+ assert.equal(run('catalogGameLabel(state.games[0])'),'Backgammon');
+ assert.equal(run('catalogGameLabel(state.games[1])'),'Backgammon (Declarative)');
+ run('state.gameSearchQuery="declarative";state.gameSearchOpen=true;renderGameSearch()');
+ assert.equal(run('state.filteredGames.length'),1);
+ assert.equal(run('state.filteredGames[0].id'),'native');
+ assert.equal(node('game-results').children[0].children[0].children[0].textContent,'Backgammon (Declarative)');
+ node('new-game').value='native';
+ run('state.gameSearchOpen=false;renderGameSearch();updateMatchSetup()');
+ assert.equal(node('game-search').value,'Backgammon (Declarative)');
+ assert.equal(node('selected-game-name').textContent,'Backgammon (Declarative)');
+ run('state.gameCache.set("native@1",state.games[1]);state.match={id:"m",game_id:"native",game_version:1,owner_user_id:"owner",status:"waiting_for_players",players:[{player_index:0,kind:"human",user_id:"owner"}],move_count:0};renderMatch()');
+ assert.equal(node('match-title').textContent,'Backgammon (Declarative) (version 1)');
+ assert.equal(run('matchItem(state.match).children[1].children[0].children[0].textContent'),'Backgammon (Declarative)');
+});
+
+test('a translated declarative name is searchable without dropping the renderer marker',()=>{
+ const {run,node}=setup();
+ run('state.games[0].renderer_type="declarative";I18n={...I18n,gameName:(id,fallback)=>id==="game"?"משחק":fallback};state.gameSearchQuery="משחק";renderGameSearch()');
+ assert.equal(run('state.filteredGames.length'),1);
+ node('new-game').value='game';
+ run('state.gameSearchQuery="declarative";renderGameSearch()');
+ assert.equal(run('state.filteredGames.length'),1);
+ assert.equal(run('state.filteredGames[0].id'),'game');
+});
+
+test('ordinary and computer declarative games enable movement animation while pass-and-play stays immediate',async()=>{
+ for(const mode of [null,'computer','pass']) {
+  const {run}=setup();
+  run('globalThis.mounts=[];globalThis.DeclarativeUI={mount(_box,_spec,callbacks){mounts.push(callbacks);return {send(){},destroy(){}}}};globalThis.stateChangedMessage=options=>({type:"state_changed",...options});gameCode=async()=>"host";state.gameCache.set("game@2",{...state.games[0],declarative_ui:{version:1}});state.match={id:"m",game_id:"game",game_version:2,status:"ongoing",players:[],turn_of_player_indices:[],move_count:0,state:{}}');
+  run(`state.match.localMode=${JSON.stringify(mode)}`);
+  await run('syncGame()');
+  assert.equal(run('mounts[0].animate'),mode!=='pass');
+ }
 });
 
 

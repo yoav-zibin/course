@@ -257,10 +257,11 @@ const htmlFrame = new GameFrame(
 // replay and device practice. Declarative UI never receives platform credentials.
 const frame = {
   declarative: null,
-  load(code, spec) {
+  load(code, spec, options = {}) {
     this.unload();
     if (spec) {
       this.declarative = DeclarativeUI.mount($("game-box"), spec, {
+        animate: options.animate === true,
         onMove: move => onMakeMove({move}),
         onError: error => console.error(I18n.t("ui.declarative.error_prefix", {}, "Declarative game UI:"), error),
       });
@@ -940,7 +941,7 @@ function matchItem(match) {
   const outcome = matchOutcome(match, user?.id);
   if (outcome) badges.push(el("span", {class:`badge result-${outcome.kind}`, textContent:outcome.label}));
   if (yourTurn) badges.unshift(el("span", { class: "badge turn", textContent: I18n.t("ui.match.your_turn", {}, "your turn") }));
-  const gameName = game ? I18n.gameName(game.id, game.name) : "?";
+  const gameName = game ? displayGameName(game) : "?";
   const hue = Array.from(match.game_id || "arcade").reduce((value, letter) => value + letter.charCodeAt(0), 0) % 360;
   const initials = gameName.trim().split(/\s+/).slice(0, 2).map(word => Array.from(word)[0] || "").join("");
   const art = el("div", {class:"match-card-art", style:`--art-hue:${hue}`, "aria-hidden":"true"},
@@ -1107,7 +1108,7 @@ function gameCountLabel(game) {
 function libraryGames() {
   const query = state.gameSearchQuery.trim().toLocaleLowerCase();
   const matches = game =>
-    `${game.name} ${game.description || ""}`.toLocaleLowerCase().includes(query) &&
+    gameMatchesQuery(game, query) &&
     (state.libraryFilter === "all" || (state.libraryFilter === "solo"
       ? game.allowed_player_counts.includes(1)
       : game.allowed_player_counts.some(count => count > 1)));
@@ -1117,13 +1118,27 @@ function libraryGames() {
   ];
 }
 
+// Keep the renderer visible even when the translated name omits its suffix.
+// The legacy suffix also recognizes saved games and invite views from older APIs.
+function displayGameName(game) {
+  const suffix = /\s*(?:\(Declarative\)|·\s*Declarative)\s*$/i;
+  const shown = I18n.gameName(game.id, game.name);
+  const declarative = game.renderer_type === "declarative" || game.declarative_ui || suffix.test(game.name);
+  return declarative ? `${shown.replace(suffix, "").trim()} (Declarative)` : shown;
+}
+
+function gameMatchesQuery(game, query) {
+  return `${game.name} ${displayGameName(game)} ${game.description || ""} ${I18n.gameDescription(game.id, game.description) || ""}`
+    .toLocaleLowerCase().includes(query);
+}
+
 // Distinguish games that share a name, even when filtering hides one of them.
 function catalogGameLabel(game) {
-  const name = game.name.trim().toLocaleLowerCase();
-  const duplicate = state.games.some(other => other.id !== game.id && other.name.trim().toLocaleLowerCase() === name);
+  const shown = displayGameName(game);
+  const name = shown.trim().toLocaleLowerCase();
+  const duplicate = state.games.some(other => other.id !== game.id && displayGameName(other).trim().toLocaleLowerCase() === name);
   const short = game.id.slice(0, 8);
   const id = state.games.some(other => other.id !== game.id && other.id.slice(0, 8) === short) ? game.id : short;
-  const shown = I18n.gameName(game.id, game.name);
   return duplicate ? `${shown} · v${game.version} · ${id}` : shown;
 }
 
@@ -1288,12 +1303,11 @@ function renderGameSearch() {
   renderLibrary();
   const input = $("game-search");
   const selected = state.games.find((game) => game.id === $("new-game").value);
-  if (!state.gameSearchOpen) input.value = selected?.name ?? state.gameSearchQuery;
+  if (!state.gameSearchOpen) input.value = selected ? displayGameName(selected) : state.gameSearchQuery;
   input.setAttribute("aria-expanded", String(state.gameSearchOpen));
   $("game-search-popup").hidden = !state.gameSearchOpen;
   const query = state.gameSearchQuery.trim().toLocaleLowerCase();
-  const results = [RANDOM_GAME, ...state.games].filter((game) =>
-    `${game.name} ${game.description || ""}`.toLocaleLowerCase().includes(query));
+  const results = [RANDOM_GAME, ...state.games].filter((game) => gameMatchesQuery(game, query));
   state.filteredGames = results;
   state.gameSearchActive = Math.min(state.gameSearchActive, Math.max(0, state.filteredGames.length - 1));
   const key = JSON.stringify([state.gameSearchOpen, state.gameSearchQuery, state.gameSearchActive,
@@ -1432,8 +1446,8 @@ function updateMatchSetup() {
   $("selected-game-card").hidden = !game;
   const canGiveFeedback = Boolean(game && me() && game.owner_user_id && game.owner_user_id !== me().id && !isRandomGame(game));
   $("feedback-game").hidden = !canGiveFeedback;
-  $("feedback-game").onclick = canGiveFeedback ? () => openFeedback({type: "game", id: game.id, name: I18n.gameName(game.id, game.name)}) : null;
-  $("selected-game-name").textContent = (game && I18n.gameName(game.id, game.name)) || I18n.t("ui.games.choose", {}, "Choose a game");
+  $("feedback-game").onclick = canGiveFeedback ? () => openFeedback({type: "game", id: game.id, name: displayGameName(game)}) : null;
+  $("selected-game-name").textContent = (game && displayGameName(game)) || I18n.t("ui.games.choose", {}, "Choose a game");
   $("selected-game-description").textContent = (game && I18n.gameDescription(game.id, game.description)) || "";
   $("selected-game-mode").textContent = solo ? I18n.t("ui.games.solo_label", {}, "1 player · solo") : game ? I18n.t("ui.portal.mode_players", {counts: game.allowed_player_counts.join(", ")}, `${game.allowed_player_counts.join(", ")} players`) : "";
   $("create-hint").textContent = solo ? I18n.t("ui.portal.hint_solo", {}, "Starts immediately. No opponent needed.") : game ? I18n.t("ui.portal.hint_invite_friends", {}, "Create a match, then invite friends to join.") : state.games.length ? I18n.t("ui.portal.hint_choose", {}, "Choose a game from the search results to continue.") : I18n.t("ui.portal.hint_choose", {}, "Choose a game from the search results to continue.");
@@ -1548,7 +1562,7 @@ function renderMatch() {
   const counts = game ? game.allowed_player_counts : [];
   const ownerName = nameOf(match.owner_user_id);
   $("match-title").textContent =
-    I18n.t("ui.match.title", {name: game ? I18n.gameName(game.id, game.name) : "?", version: match.game_version}, `${game ? I18n.gameName(game.id, game.name) : "?"} (version ${match.game_version})`);
+    I18n.t("ui.match.title", {name: game ? displayGameName(game) : "?", version: match.game_version}, `${game ? displayGameName(game) : "?"} (version ${match.game_version})`);
   const outcome = matchOutcome(match, user?.id);
   $("match-result").hidden = !outcome;
   $("match-result").textContent = outcome?.label || "";
@@ -1793,7 +1807,7 @@ function renderMatch() {
       }),
     );
   if (user && !match.localMode) {
-    const gameName = game ? I18n.gameName(game.id, game.name) : I18n.t("ui.feedback.a_game", {}, "a game");
+    const gameName = game ? displayGameName(game) : I18n.t("ui.feedback.a_game", {}, "a game");
     secondaryActions.push(el("button", {type: "button", class: "feedback-action", textContent: I18n.t("ui.feedback.match", {}, "Send feedback about this match"),
       onclick: () => openFeedback({type: "match", id: match.id, name: gameName})}));
     if (game && game.owner_user_id !== user.id)
@@ -1965,14 +1979,26 @@ async function syncGame() {
     return;
   }
   const key = `${match.id}@${match.game_id}@${match.game_version}`;
+  // Downloads and translations may finish after a newer poll, replay choice or
+  // account switch. Identical polls can share the result; changed contexts must
+  // never load a stale game or send its view into the current renderer.
+  const contextSnapshot = () => JSON.stringify([
+    state.match,
+    state.replay?.id === state.match?.id ? state.replay : null,
+    me()?.id ?? null,
+    I18n.locale(),
+  ]);
+  const context = contextSnapshot();
+  const stillCurrent = () => contextSnapshot() === context;
   if (state.loaded !== key) {
-    const userId = me()?.id;
     const code = await gameCode(match);
-    if (state.match?.id !== match.id || me()?.id !== userId) return;
-    const fullGame = state.gameCache.get(`${match.game_id}@${match.game_version}`);
-    frame.load(code, fullGame?.declarative_ui);
-    state.loaded = key;
-    state.lastSent = null;
+    if (!stillCurrent()) return;
+    if (state.loaded !== key) {
+      const fullGame = state.gameCache.get(`${match.game_id}@${match.game_version}`);
+      frame.load(code, fullGame?.declarative_ui, {animate: match.localMode !== "pass"});
+      state.loaded = key;
+      state.lastSent = null;
+    }
   }
   const user = me();
   const mySeat =
@@ -2007,7 +2033,9 @@ async function syncGame() {
   // Let game UIs distinguish a historical snapshot from a live opponent turn.
   message.replay = replay ? { index: replay.index, total: match.move_count } : null;
   // The viewer's language and, for a game with a string table, its texts in that language.
-  Object.assign(message, await I18n.gameText(match.game_id, match.game_version));
+  const texts = await I18n.gameText(match.game_id, match.game_version);
+  if (!stillCurrent() || state.loaded !== key) return;
+  Object.assign(message, texts);
   const json = JSON.stringify(message);
   if (json !== state.lastSent) {
     state.lastSent = json;
@@ -2314,7 +2342,9 @@ async function openInviteFromHash() {
     return;
   }
   closeInviteDialog();
-  const gameName = I18n.gameName(match.game_id, view.game_name);
+  const gameName = displayGameName({
+    ...gameMetaOf(match.game_id, match.game_version), id: match.game_id, name: view.game_name,
+  });
   const message = el("div", {class: "message", role: "status"});
   const box = el("div", {class: "auth-dialog", role: "dialog", "aria-modal": "true"},
     el("h2", {textContent: I18n.t("ui.invite.invited_you", {name: view.created_by_display_name, game: gameName},

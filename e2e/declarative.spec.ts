@@ -116,7 +116,7 @@ test('declarative browser engine isolates secrets, rejects loops and keeps text 
 test('declarative authoring page plays the compatibility host and filters hidden state',async({page})=>{
   test.setTimeout(60000);
   await page.goto('/game-test');
-  await expect(page.locator('#declarative-example option')).toHaveCount(11);
+  await expect(page.locator('#declarative-example option')).toHaveCount(12);
   await page.locator('#declarative-example').selectOption('/games/declarative/examples/tictactoe');
   await page.locator('#load-declarative-example').click();
   await expect(page.locator('#declarative-spec')).toHaveValue(/buildplay-ui/);
@@ -128,7 +128,7 @@ test('declarative authoring page plays the compatibility host and filters hidden
   await expect.poll(async()=>JSON.parse(await page.locator('#state-out').inputValue()).board[0]).toBe(0);
   await page.locator('#declarative-example').selectOption('/games/declarative/examples/memory');
   await page.locator('#load-declarative-example').click();
-  await expect(page.locator('#game-name')).toHaveValue('Memory pairs · Declarative');
+  await expect(page.locator('#game-name')).toHaveValue('Memory pairs (Declarative)');
   const spec=JSON.parse(await page.locator('#declarative-spec').inputValue());
   spec.ui_code='const gameUI={reduce(message){const m=message.type==="ui_event"?message.state_changed:message;return {scene:{labels:[{id:"privacy",text:JSON.stringify(m.state.board),x:20,y:20}]}}}};';
   await page.locator('#declarative-spec').fill(JSON.stringify(spec));
@@ -141,7 +141,7 @@ test('declarative local practice survives reload, replay and an offline move',as
   test.setTimeout(60000);
   const user=await createUser(request,uniqueName('Declarative practice'));
   const games=await (await request.get('/games')).json();
-  let game=games.find((item:any)=>item.name==='Tic-tac-toe · Declarative');
+  let game=games.find((item:any)=>item.name==='Tic-tac-toe (Declarative)');
   const finalPackage=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../games/declarative/tictactoe.json'),'utf8'));
   const current=game?await (await request.get(`/games/${game.id}`)).json():null;
   // A retained local demo may predate an asset/palette edit. Exercise the final

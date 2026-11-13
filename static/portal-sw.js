@@ -1,9 +1,9 @@
 "use strict";
 // Scope deliberately stays /static/: no backend route or Service-Worker-Allowed change.
-const CACHE = "playroom-portal-shell-v189";
+const CACHE = "playroom-portal-shell-v190";
 const SHELL = [
-  "/static/declarative-ui.js?v=2",
-  "/static/declarative-ui.css?v=2",
+  "/static/declarative-ui.js?v=3",
+  "/static/declarative-ui.css?v=3",
   "/static/storage-pages.js?v=4",
   "/static/portal-feedback.js?v=4",
   "/static/portal.html",
@@ -16,7 +16,7 @@ const SHELL = [
   "/static/experiments.css?v=52",
   "/static/push-notifications.js?v=3",
   "/static/tutorial-frame.js?v=1",
-  "/static/portal.js?v=112",
+  "/static/portal.js?v=113",
   "/static/portal-chat-preview.js?v=7",
   "/static/images/arcade-bot.png",
   "/static/portal-match-layout.js?v=8",
