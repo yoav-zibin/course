@@ -30,7 +30,8 @@
   }
 
   function portalSkinFromUrl() {
-    const key = new URLSearchParams(location.search).get("skin");
+    const requested = new URLSearchParams(location.search).get("skin");
+    const key = requested === "matinee" ? "dolphin-cove" : requested;
     return PORTAL_SKINS.has(key) ? key : null;
   }
 
