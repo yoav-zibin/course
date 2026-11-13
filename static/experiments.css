@@ -481,7 +481,11 @@
 }
 :root[data-portal-layout="top"] .topbar[data-app-page="portal"] nav { display:flex; }
 
-/* Midnight Gold (sc5386): deep navy surfaces with a warm gold accent. */
+/* Midnight Gold (sc5386): deep navy surfaces with a warm gold accent.
+   v2 polish — palette unchanged: a faint gold wash over the shell, soft
+   shadows and hover lift on cards, a gradient gold primary button with a
+   warm glow, glowing input focus, and the hover/selected/result states
+   the other skins cover. */
 :root[data-skin="midnight"] {
   color-scheme: dark;
   --color-bg-0: #0a0d18;
@@ -500,9 +504,16 @@
   --color-accent: #e3a82b;
   --color-accent-hover: #f2c14e;
   --color-focus-ring: #f2c14e;
+  --color-ok: #8fce62;
+  --color-warn: #f2c14e;
+  --color-error: #e58aa5;
   --radius-sm: 8px;
   --radius-md: 14px;
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.35), 0 4px 14px rgb(0 0 0 / 0.22);
+  --shadow-3: 0 2px 4px rgb(0 0 0 / 0.4), 0 14px 34px rgb(0 0 0 / 0.38), 0 0 22px rgb(227 168 43 / 0.14);
   --font-sans: "Gill Sans MT", "Gill Sans", "Trebuchet MS", sans-serif;
+  scrollbar-width: thin;
+  scrollbar-color: #414f78 #0a0d18;
 }
 
 :root[data-skin="midnight"] .portal-shell {
@@ -519,66 +530,167 @@
   --color-accent: #e3a82b;
   --color-accent-hover: #f2c14e;
   --color-focus-ring: #f2c14e;
-  background: var(--color-bg-0);
+  background:
+    radial-gradient(ellipse 90% 480px at 50% -120px, rgb(227 168 43 / 0.10), transparent 70%),
+    radial-gradient(circle at 100% 100%, rgb(227 168 43 / 0.05), transparent 42%),
+    var(--color-bg-0);
+  background-attachment: fixed;
   color: var(--color-text-primary);
 }
+
+/* Gold hairline under the top bar, with a soft warm glow. */
+:root[data-skin="midnight"] .topbar {
+  border-bottom: 1px solid #414f78;
+  box-shadow: 0 1px 0 rgb(227 168 43 / 0.28), 0 10px 28px rgb(0 0 0 / 0.45);
+  backdrop-filter: blur(10px);
+}
+
 :root[data-skin="midnight"] .portal-sidebar,
 :root[data-skin="midnight"] .match-creator,
 :root[data-skin="midnight"] .game-detail-page,
 :root[data-skin="midnight"] .match-stage,
 :root[data-skin="midnight"] .portal-shell .game-search-popup,
 :root[data-skin="midnight"] .portal-shell .match-tools {
-  background: #12172b;
+  background: linear-gradient(180deg, #161c31, #12172b);
   border-color: #2b3554;
   color: #f7f2e2;
+  box-shadow: var(--shadow-1);
+}
+:root[data-skin="midnight"] .match-creator {
+  border-top: 2px solid rgb(227 168 43 / 0.55);
 }
 :root[data-skin="midnight"] .popular-games-section,
 :root[data-skin="midnight"] .play-option,
 :root[data-skin="midnight"] .portal-shell .library-card,
 :root[data-skin="midnight"] .selected-game-card {
+  background: linear-gradient(180deg, #1e2742, #1a2138);
+  border-color: #2b3554;
+  color: #f7f2e2;
+  box-shadow: var(--shadow-1);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+:root[data-skin="midnight"] .portal-shell .popular-game-card {
   background: #1a2138;
   border-color: #2b3554;
   color: #f7f2e2;
+  box-shadow: var(--shadow-1);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
+
+/* Cards lift and warm up under the pointer. */
+:root[data-skin="midnight"] .portal-shell .library-card:hover,
+:root[data-skin="midnight"] .portal-shell .popular-game-card:hover,
+:root[data-skin="midnight"] .play-option:hover {
+  transform: translateY(-3px);
+  border-color: #8a6a1f;
+  box-shadow: var(--shadow-3);
+}
+:root[data-skin="midnight"] .portal-shell .library-card[aria-pressed="true"] {
+  border-color: #e3a82b;
+  box-shadow: 0 0 0 1px #e3a82b, 0 0 16px rgb(227 168 43 / 0.35);
+}
+
+/* Sidebar rows and search results get real hover/selected states. */
+:root[data-skin="midnight"] .portal-sidebar .list-item:hover,
+:root[data-skin="midnight"] .portal-sidebar .list-item[aria-selected="true"] { background:#242e4f; }
+:root[data-skin="midnight"] .portal-shell .game-option:hover,
+:root[data-skin="midnight"] .portal-shell .game-option[aria-selected="true"] {
+  background: #242e4f;
+  color: #f7f2e2;
+}
+
 :root[data-skin="midnight"] .portal-shell input,
 :root[data-skin="midnight"] .portal-shell select {
   background: #0a0d18;
   border-color: #414f78;
   color: #f7f2e2;
 }
+:root[data-skin="midnight"] .portal-shell input:focus,
+:root[data-skin="midnight"] .portal-shell select:focus {
+  border-color: #e3a82b;
+  box-shadow: 0 0 0 1px #e3a82b, 0 0 12px rgb(227 168 43 / 0.30);
+  outline: none;
+}
+
+/* The primary action: a gold gradient with a lit top edge and a warm glow. */
 :root[data-skin="midnight"] .portal-shell button.primary,
 :root[data-skin="midnight"] .portal-shell .library-toolbar button[aria-pressed="true"] {
-  background: #e3a82b;
-  border-color: #e3a82b;
+  background: linear-gradient(180deg, #f2c14e, #e3a82b);
+  border-color: #8a6a1f;
   color: #241a02;
+  box-shadow: 0 2px 10px rgb(227 168 43 / 0.35), inset 0 1px 0 rgb(255 255 255 / 0.35);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
 }
 :root[data-skin="midnight"] .portal-shell button.primary:hover:not(:disabled) {
-  background:#f2c14e; border-color:#f2c14e;
+  background: linear-gradient(180deg, #f7cd68, #f2c14e);
+  border-color: #c49a35;
+  box-shadow: 0 4px 18px rgb(242 193 78 / 0.45), inset 0 1px 0 rgb(255 255 255 / 0.40);
 }
+:root[data-skin="midnight"] .portal-shell button:active:not(:disabled) { transform: scale(0.97); }
 :root[data-skin="midnight"] .portal-shell button:focus-visible,
 :root[data-skin="midnight"] .portal-shell summary:focus-visible,
 :root[data-skin="midnight"] .portal-shell .popular-game-card:focus-visible {
   outline-color: #f2c14e;
 }
+
+/* Headings pick up a faint gold halo; the eyebrow goes full gold. */
 :root[data-skin="midnight"] .creator-title,
 :root[data-skin="midnight"] .popular-games-heading h2,
 :root[data-skin="midnight"] .play-option-heading h3,
 :root[data-skin="midnight"] .selected-game-card h2 {
   color: #f7f2e2;
+  text-shadow: 0 0 14px rgb(227 168 43 / 0.18);
+}
+:root[data-skin="midnight"] .popular-eyebrow {
+  color: #e3a82b;
+  letter-spacing: 0.08em;
 }
 :root[data-skin="midnight"] .creator-description,
+:root[data-skin="midnight"] .game-label,
 :root[data-skin="midnight"] .popular-period,
 :root[data-skin="midnight"] .play-option-heading p,
 :root[data-skin="midnight"] .play-option .play-option-note,
-:root[data-skin="midnight"] .library-description {
+:root[data-skin="midnight"] .library-description,
+:root[data-skin="midnight"] .library-count,
+:root[data-skin="midnight"] .library-empty,
+:root[data-skin="midnight"] .search-note,
+:root[data-skin="midnight"] .stake-help,
+:root[data-skin="midnight"] .offline-controls,
+:root[data-skin="midnight"] .selected-game-card p {
   color: #a49a7d;
+}
+:root[data-skin="midnight"] .creator-toggle { color:#e3a82b; }
+:root[data-skin="midnight"] .portal-shell .library-toolbar button { color:#d9d2ba; }
+:root[data-skin="midnight"] .popular-game-title { color: #f7f2e2; }
+:root[data-skin="midnight"] .popular-game-rank {
+  background: linear-gradient(180deg, #f2c14e, #e3a82b);
+  color: #241a02;
+  box-shadow: 0 0 10px rgb(227 168 43 / 0.45);
+}
+:root[data-skin="midnight"] .popular-game-players { color: #a49a7d; }
+:root[data-skin="midnight"] .popular-game-open,
+:root[data-skin="midnight"] .library-mode,
+:root[data-skin="midnight"] .library-select,
+:root[data-skin="midnight"] .back-to-games { color: #f2c14e; }
+:root[data-skin="midnight"] .mode-label { color:#d9d2ba; background:#12172b; border-color:#414f78; }
+
+/* Result pills, tinted to sit on midnight navy. */
+:root[data-skin="midnight"] .portal-shell .result-win { color:#a8d97c; background:#1d2b12; border-color:#4a6b23; }
+:root[data-skin="midnight"] .portal-shell .result-loss { color:#e58aa5; background:#2e1420; border-color:#7a3450; }
+:root[data-skin="midnight"] .portal-shell .result-draw { color:#93b8e8; background:#14263e; border-color:#3a5a86; }
+:root[data-skin="midnight"] .portal-shell .result-neutral { color:#d9d2ba; background:#1a2138; border-color:#414f78; }
+:root[data-skin="midnight"] .portal-shell .badge.turn,
+:root[data-skin="midnight"] .portal-shell .seat-chip.turn {
+  color: #f2c14e;
+  background: #2b2108;
+  border-color: #8a6a1f;
 }
 
 :root[data-skin="midnight"] .topbar .token-wallet {
   background:linear-gradient(135deg,#4a3608,#232c4d);
   border-color:#8a6a1f;
   color:#fdf6dd;
-  box-shadow:0 4px 18px #00000055;
+  box-shadow:0 4px 18px #00000055, 0 0 14px rgb(227 168 43 / 0.18);
 }
 :root[data-skin="midnight"] .topbar .token-wallet-coin {
   background:#6e5510;
@@ -594,6 +706,15 @@
 :root[data-skin="midnight"] .topbar .token-wallet-number strong {
   color:#f7f2e2;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-skin="midnight"] * { transition: none !important; }
+  :root[data-skin="midnight"] .portal-shell .library-card:hover,
+  :root[data-skin="midnight"] .portal-shell .popular-game-card:hover,
+  :root[data-skin="midnight"] .play-option:hover { transform: none; }
+}
+
+
 /* Party: a disco theme with a slow-moving rainbow gradient, neon borders,
    and a rounded party font. The gradient drifts over a full minute instead
    of flashing, and it stops entirely for reduced-motion users. */
