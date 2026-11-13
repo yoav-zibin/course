@@ -267,11 +267,15 @@ function updateStakePreview() {
   if (!amount || solo) {
     preview.replaceChildren(el("span", {class:"stake-preview-text", textContent: solo ? I18n.t("ui.stakes.preview_solo", {}, "Solo game · No wager") : I18n.t("ui.stakes.preview_free", {}, "Free game · No tokens at risk")}));
   } else {
-    const params = {amount, pot: amount * 2, balance: walletBalance};
+    // The smallest pot the match can have: its game's smallest multiplayer count
+    // (the final count is only known at the start).
+    const multiplayer = (game?.allowed_player_counts || []).filter(count => count > 1);
+    const players = multiplayer.length ? Math.min(...multiplayer) : 2;
+    const params = {amount, pot: amount * players, players, balance: walletBalance};
     preview.replaceChildren(
       el("span", {class:"stake-preview-text", textContent: walletBalance === null
-        ? I18n.t("ui.stakes.preview", params, `${amount} tokens per person · ${amount * 2} tokens in a 2-player pot`)
-        : I18n.t("ui.stakes.preview_wallet", params, `${amount} tokens per person · ${amount * 2} tokens in a 2-player pot · Wallet: ${walletBalance} tokens`)}));
+        ? I18n.t("ui.stakes.preview", params, `${amount} tokens per person · ${amount * players} tokens in a ${players}-player pot`)
+        : I18n.t("ui.stakes.preview_wallet", params, `${amount} tokens per person · ${amount * players} tokens in a ${players}-player pot · Wallet: ${walletBalance} tokens`)}));
   }
 }
 

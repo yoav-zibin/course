@@ -711,3 +711,18 @@ test('the catalog count leaves out the Random game card',()=>{
   run('state.games=[];state.libraryKey=null;renderLibrary()');
   assert.equal(node('library-count').textContent,'0 games to explore');
 });
+
+
+test('the stake preview sizes the pot by the smallest multiplayer count',()=>{
+  // Regression (bug 16): a 3-4 player game read "20 tokens in a 2-player pot".
+  const {node,run}=setup();
+  const preview=()=>node('stake-preview').children[0].textContent;
+  run('state.games=[{id:"trio",version:1,name:"Trio",allowed_player_counts:[3,4]},{id:"duo",version:1,name:"Duo",allowed_player_counts:[1,2,4]}];walletBalance=null');
+  node('match-stake').value='10';
+  node('new-game').value='trio';
+  run('updateStakePreview()');
+  assert.equal(preview(),'10 tokens per person · 30 tokens in a 3-player pot');
+  node('new-game').value='duo';
+  run('walletBalance=25;updateStakePreview()');
+  assert.equal(preview(),'10 tokens per person · 20 tokens in a 2-player pot · Wallet: 25 tokens');
+});
