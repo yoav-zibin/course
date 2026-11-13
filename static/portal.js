@@ -2114,9 +2114,12 @@ function withPortalSkinAdapter(gameId, code) {
       }
       input, select { background: var(--portal-skin-panel) !important; color: var(--portal-skin-text) !important; border-color: var(--portal-skin-border) !important; }
       button:focus-visible, input:focus-visible, select:focus-visible { outline-color: var(--portal-skin-focus) !important; }
-      .cell { background: var(--portal-skin-raised) !important; color: var(--portal-skin-text) !important; border-color: var(--portal-skin-border) !important; }
+      .cell { border-color: var(--portal-skin-border) !important; }
+      /* Occupied cells encode player ownership with their own red/blue colors. */
+      .cell:not([data-owner="1"]):not([data-owner="2"]) { background: var(--portal-skin-raised) !important; color: var(--portal-skin-text) !important; }
+      .cell .number { color: inherit !important; }
       .cell.selected { outline-color: var(--portal-skin-focus) !important; }
-      .cell:hover:not(:disabled) { background: var(--portal-skin-hover) !important; }
+      .cell:not([data-owner="1"]):not([data-owner="2"]):hover:not(:disabled) { background: var(--portal-skin-hover) !important; }
       .player.current { background: var(--portal-skin-accent) !important; color: var(--portal-skin-background) !important; }
       #board svg line { stroke: var(--portal-skin-border) !important; }
       #board svg circle { fill: var(--portal-skin-accent) !important; }
