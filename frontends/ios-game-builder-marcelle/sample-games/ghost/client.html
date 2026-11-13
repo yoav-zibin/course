@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#14121f; --panel:#221f33; --ink:#efeaff; --muted:#a59fc4; --glow:#b9f3ff; --red:#ff7a8a; --key:#2f2b47; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: radial-gradient(circle at 50% 0%, #2c2547, var(--bg) 70%); color: var(--ink); font: 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; min-height: 100vh; }
+  header { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 14px; }
+  h1 { margin: 0; font-size: 20px; letter-spacing: 1px; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .players { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 14px; }
+  .player { background: var(--panel); border-radius: 10px; padding: 4px 10px; display: flex; gap: 8px; align-items: center; border: 2px solid transparent; }
+  .player.turn { border-color: var(--glow); }
+  .player.out { opacity: .45; text-decoration: line-through; }
+  .ghost { font: 700 14px/1 ui-monospace, Menlo, monospace; letter-spacing: 2px; }
+  .ghost .on { color: var(--red); }
+  .ghost .off { color: #4b4668; }
+  .fragment { text-align: center; margin: 22px 10px 8px; min-height: 64px; font: 700 48px/1.2 ui-monospace, Menlo, monospace; letter-spacing: 8px; color: var(--glow); text-shadow: 0 0 18px rgba(185,243,255,.45); text-transform: uppercase; overflow-wrap: anywhere; }
+  .fragment.empty { color: #4b4668; text-shadow: none; }
+  .status { text-align: center; font-weight: 600; min-height: 1.4em; padding: 0 12px; }
+  .status.win { color: var(--glow); font-size: 19px; }
+  .last { text-align: center; color: var(--muted); font-size: 14px; min-height: 1.3em; padding: 0 12px; margin-top: 4px; }
+  .keys { display: grid; grid-template-columns: repeat(9, minmax(32px, 46px)); gap: 6px; justify-content: center; margin: 14px 10px; }
+  .keys button { min-height: 44px; border-radius: 8px; border: 0; background: var(--key); color: var(--ink); font: 700 18px ui-monospace, Menlo, monospace; text-transform: uppercase; cursor: pointer; }
+  .keys button:disabled { opacity: .35; cursor: default; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 6px 10px 18px; align-items: center; }
+  .actions button { min-height: 44px; padding: 0 16px; border-radius: 8px; border: 0; font: 700 15px system-ui, sans-serif; cursor: pointer; }
+  .challenge { background: var(--red); color: #2a0610; }
+  .answer { background: var(--glow); color: #06232b; }
+  .giveup { background: #4b4668; color: var(--ink); }
+  input.word { min-height: 44px; border-radius: 8px; border: 2px solid var(--glow); background: #0f0d18; color: var(--ink); padding: 0 12px; font: 600 18px ui-monospace, Menlo, monospace; text-transform: lowercase; width: min(260px, 70vw); }
+  @media (max-width: 420px) { .keys { grid-template-columns: repeat(7, minmax(32px, 1fr)); } .fragment { font-size: 38px; letter-spacing: 5px; } }
+</style>
+</head>
+<body>
+<header><h1 id="title"></h1><span class="meta" id="meta"></span></header>
+<div class="players" id="players"></div>
+<div class="fragment" id="fragment" aria-live="polite"></div>
+<div class="status" id="status" role="status" aria-live="polite"></div>
+<div class="last" id="last"></div>
+<div class="keys" id="keys" role="group"></div>
+<div class="actions" id="actions"></div>
+<script type="application/json" id="i18n-strings">
+{
+  "title": "Ghost",
+  "meta": "Round {round} · words of 4+ letters count",
+  "fragment_label": "Letters so far: {letters}",
+  "empty_fragment": "No letters yet",
+  "keyboard": "Letters",
+  "your_turn_first": "Your turn: start the round with any letter.",
+  "your_turn": "Your turn: add a letter that keeps this the start of a word, or challenge.",
+  "challenged": "{name} challenges you: type a word that starts with these letters.",
+  "waiting": "Waiting for {name}.",
+  "waiting_answer": "{name} must name a word that starts with these letters.",
+  "watching": "You are watching this match.",
+  "challenge": "Challenge",
+  "answer": "Answer",
+  "give_up": "Give up",
+  "word_placeholder": "your word",
+  "last_completed": "{name} completed “{word}” and takes a letter.",
+  "last_challenge_failed": "{name} challenged, but “{word}” is a word: {name} takes a letter.",
+  "last_bad_word": "“{word}” does not count, so {name} takes a letter.",
+  "last_gave_up": "{name} could not name a word and takes a letter.",
+  "you_win": "You are the last player left: you win!",
+  "player_wins": "{name} is the last player left and wins.",
+  "server_the_game_is_over": "the game is over",
+  "server_it_is_not_your_turn": "it is not your turn",
+  "server_answer_the_challenge_with_a_word_or_give_up": "answer the challenge with a word, or give up",
+  "server_there_is_nothing_to_challenge_yet": "there is nothing to challenge yet",
+  "server_add_a_letter_or_challenge": "add a letter or challenge",
+  "server_send_a_letter_a_challenge_a_word_or_give_up": "send a letter, a challenge, a word or give up"
+}
+</script>
+<script>
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings) strings = { ...SOURCE_STRINGS, ...message.strings };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+
+const GHOST = "GHOST";
+const $ = (id) => document.getElementById(id);
+let sent = false;
+
+function send(move) {
+  if (sent) return;
+  sent = true;
+  parent.postMessage({ type: "make_move", move }, "*");
+}
+
+function lastLine(last, name) {
+  if (!last) return "";
+  const who = name(last.loser);
+  switch (last.reason) {
+    case "completed": return t("last_completed", { name: who, word: last.word });
+    case "challenge_failed": return t("last_challenge_failed", { name: who, word: last.word });
+    case "bad_word": return t("last_bad_word", { name: who, word: last.word });
+    default: return t("last_gave_up", { name: who });
+  }
+}
+
+function render(message) {
+  const view = message.view || message.state;
+  if (!view) return;
+  const players = message.players;
+  const name = (s) => players[s].name;
+  const over = view.winner !== null;
+  // Move only for the seat the platform says this screen acts for (null while a computer or someone else is to move).
+  const mine = !over && message.status === "ongoing" && !message.replay && view.my_seat !== null && view.my_seat === view.to_move &&
+    message.acting_for_player_index === view.my_seat;
+  $("title").textContent = t("title");
+  $("meta").textContent = t("meta", { round: view.round });
+
+  $("players").replaceChildren(...players.map((p, s) => {
+    const chip = document.createElement("div");
+    const isOut = view.letters[s] >= GHOST.length;
+    const turn = !over && s === view.to_move;
+    chip.className = "player" + (turn ? " turn" : "") + (isOut ? " out" : "");
+    const label = document.createElement("span");
+    label.textContent = p.name;
+    const ghost = document.createElement("span");
+    ghost.className = "ghost";
+    ghost.setAttribute("aria-label", GHOST.slice(0, view.letters[s]) || "-");
+    [...GHOST].forEach((ch, i) => {
+      const e = document.createElement("span");
+      e.className = i < view.letters[s] ? "on" : "off";
+      e.textContent = ch;
+      ghost.append(e);
+    });
+    chip.append(label, ghost);
+    return chip;
+  }));
+
+  const frag = $("fragment");
+  const empty = !view.fragment;
+  frag.className = "fragment" + (empty ? " empty" : "");
+  frag.textContent = empty ? "·" : view.fragment;
+  frag.setAttribute("aria-label", empty ? t("empty_fragment") : t("fragment_label", { letters: view.fragment.toUpperCase() }));
+
+  const status = $("status");
+  status.className = "status";
+  const challenged = view.challenge !== null;
+  const iWon = over && view.winner === view.my_seat;
+  if (over) {
+    status.className = "status win";
+    status.textContent = iWon ? t("you_win") : t("player_wins", { name: name(view.winner) });
+  } else if (mine && challenged) {
+    status.textContent = t("challenged", { name: name(view.challenge.by) });
+  } else if (mine) {
+    status.textContent = empty ? t("your_turn_first") : t("your_turn");
+  } else if (view.my_seat === null) {
+    status.textContent = t("watching");
+  } else if (challenged) {
+    status.textContent = t("waiting_answer", { name: name(view.to_move) });
+  } else {
+    status.textContent = t("waiting", { name: name(view.to_move) });
+  }
+  $("last").textContent = lastLine(view.last, name);
+
+  // Keyboard: letters while it is your turn and nobody is challenging.
+  const canAdd = mine && !challenged;
+  const keys = $("keys");
+  keys.setAttribute("aria-label", t("keyboard"));
+  // Automated test players: only short fragments get letters, then they challenge, so rounds end.
+  const autoLetters = canAdd && view.fragment.length < 3;
+  keys.replaceChildren(...[..."abcdefghijklmnopqrstuvwxyz"].map((c) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = c;
+    b.disabled = !canAdd;
+    if (autoLetters) b.dataset.auto = "1";
+    b.addEventListener("click", () => send({ letter: c }));
+    return b;
+  }));
+
+  const actions = [];
+  if (canAdd && !empty) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "challenge";
+    b.textContent = t("challenge");
+    b.dataset.auto = "1";
+    b.addEventListener("click", () => send({ challenge: true }));
+    actions.push(b);
+  }
+  if (mine && challenged) {
+    const input = document.createElement("input");
+    input.className = "word";
+    input.type = "text";
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.placeholder = t("word_placeholder");
+    input.setAttribute("aria-label", t("word_placeholder"));
+    input.value = view.fragment;
+    const answer = document.createElement("button");
+    answer.type = "button";
+    answer.className = "answer";
+    answer.textContent = t("answer");
+    const submit = () => { const w = input.value.trim(); if (/^[a-zA-Z]+$/.test(w)) send({ word: w }); };
+    answer.addEventListener("click", submit);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
+    const give = document.createElement("button");
+    give.type = "button";
+    give.className = "giveup";
+    give.textContent = t("give_up");
+    give.dataset.auto = "1";
+    give.addEventListener("click", () => send({ give_up: true }));
+    actions.push(input, answer, give);
+  }
+  $("actions").replaceChildren(...actions);
+}
+
+window.addEventListener("message", (event) => {
+  const message = event.data;
+  if (!message || message.type !== "state_changed") return;
+  applyLocale(message);
+  sent = false;
+  render(message);
+});
+parent.postMessage({ type: "game_ready" }, "*");
+</script>
+</body>
+</html>
