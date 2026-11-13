@@ -1,0 +1,6 @@
+.quick-play-login {max-width:36rem}
+.quick-play-login .quick-play-actions,.quick-play-login form,.quick-play-login label {display:grid;gap:.75rem}
+.quick-play-login button,.quick-play-login input {min-height:44px;width:100%;box-sizing:border-box}
+.quick-play-login input {padding:.65rem;font:inherit}
+.quick-play-login small {color:var(--color-text-secondary)}
+.quick-play-login #quick-play-option {display:inline-block;margin-top:1.5rem}

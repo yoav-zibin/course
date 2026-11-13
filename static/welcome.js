@@ -1,6 +1,20 @@
 "use strict";
 
 (() => {
+  const loginUrl = new URL(location.href);
+  const quickPlay = loginUrl.searchParams.get("login") === "quick-play";
+  const option = document.getElementById("quick-play-option");
+  if (quickPlay) loginUrl.searchParams.delete("login");
+  else loginUrl.searchParams.set("login", "quick-play");
+  option.href = loginUrl.pathname + loginUrl.search + loginUrl.hash;
+  if (quickPlay) {
+    option.textContent = "Use standard login";
+    const script = document.createElement("script");
+    script.src = "/static/quick-play-login.js?v=1";
+    script.onerror = () => location.replace(option.href);
+    document.head.appendChild(script);
+    return;
+  }
   const loginButton = document.getElementById("welcome-login");
   const guestForm = document.getElementById("welcome-guest-form");
   const guestInput = document.getElementById("welcome-guest-name");
