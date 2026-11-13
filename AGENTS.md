@@ -1,3 +1,9 @@
+# Git workflow
+
+Push completed, tested changes directly to `main`; the user does not want pull
+requests. Fetch and integrate current upstream changes and resolve any conflicts
+before pushing. Use the existing CI and deployment workflow.
+
 # Scaling coordination
 
 Before changing storage, Portal or admin pages, read
