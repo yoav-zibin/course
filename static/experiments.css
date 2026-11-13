@@ -2744,7 +2744,7 @@
 :root[data-skin="isaac-bright-artsy"] .portal-shell .library-toolbar button[aria-pressed="true"] {
   background: #d6336c;
   border-color: #d6336c;
-  color: #fffbfd;
+  color: #ffffff;
 }
 :root[data-skin="isaac-bright-artsy"] .portal-shell button.primary:hover:not(:disabled) { background:#b8235a; border-color:#b8235a; }
 :root[data-skin="isaac-bright-artsy"] .portal-shell button:focus-visible,
@@ -3634,3 +3634,31 @@
   color: var(--color-text-secondary);
   text-shadow: 0 1px 4px color-mix(in srgb, var(--color-bg-0) 70%, transparent);
 }
+
+/* These light skins must also replace Portal's hard-coded dark-theme inks. */
+:root:is([data-skin="isaac-bright-artsy"], [data-skin="lobby"], [data-skin="library"], [data-skin="white"]) .portal-shell #browse-games {
+  color: var(--color-accent-hover);
+  border-color: var(--color-accent);
+}
+:root:is([data-skin="lobby"], [data-skin="library"], [data-skin="white"]) .portal-shell .library-toolbar button[aria-pressed="false"] {
+  color: var(--color-text-secondary);
+}
+:root:is([data-skin="lobby"], [data-skin="library"], [data-skin="white"]) :is(.game-label, .library-count, .library-empty, .search-note, .popular-eyebrow) {
+  color: var(--color-text-secondary);
+}
+:root:is([data-skin="lobby"], [data-skin="library"], [data-skin="white"]) .portal-shell .game-option {
+  color: var(--color-text-primary);
+}
+:root:is([data-skin="lobby"], [data-skin="library"], [data-skin="white"]) .portal-shell .game-option:hover,
+:root:is([data-skin="lobby"], [data-skin="library"], [data-skin="white"]) .portal-shell .game-option[aria-selected="true"] {
+  background: var(--color-bg-2);
+  color: var(--color-text-primary);
+}
+:root:is([data-skin="lobby"], [data-skin="library"], [data-skin="white"]) :is(.game-option small, .game-option-description) {
+  color: var(--color-text-secondary);
+}
+:root[data-skin="white"] .portal-shell .popular-game-card {
+  background: var(--color-bg-1);
+  border-color: var(--color-border-2);
+}
+:root[data-skin="white"] .popular-game-open { color: var(--color-accent-hover); }

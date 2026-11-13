@@ -97,7 +97,7 @@ function apply(state, move, rng) {
   if (state.winner !== null) throw new InvalidMove("the game is over");
   const seat = state.to_move;
   if (move.kind === "end") {
-    if (state.actions === 0 && legalMoves(state).length > 1) throw new InvalidMove("make at least one move before ending your turn");
+    if (state.actions === 0 && legalMoves(state).some(action => action.kind !== "end")) throw new InvalidMove("make at least one move before ending your turn");
     if (state.actions === 0) {
       // A pass: nothing else was possible, so the player draws 1 card.
       const got = draw(state, 1, rng);

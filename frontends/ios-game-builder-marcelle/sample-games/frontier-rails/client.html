@@ -372,6 +372,7 @@ function render(message) {
 }
 
 window.addEventListener("message", (event) => {
+  if (event.source !== parent) return;
   const message = event.data;
   if (!message || message.type !== "state_changed") return;
   applyLocale(message);

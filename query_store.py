@@ -499,9 +499,14 @@ class QueryStore:
         if replaced_doc and replaced_doc != doc:
             old = self.collection("feedback").document(replaced_doc)
             uow["writes"][old.path] = (old, None)
+            uow["after"].append(lambda path=old.path: self._cache_committed(path, None))
         ref = self.collection("feedback").document(doc)
         # A fresh, unique name: nothing to read first.
-        uow["writes"][ref.path] = (ref, self._feedback_data(feedback))
+        data = self._feedback_data(feedback)
+        uow["writes"][ref.path] = (ref, data)
+        # Staging directly avoids extra reads, but still needs the usual
+        # post-commit cache update and query invalidation (including repeats).
+        uow["after"].append(lambda path=ref.path, data=data: self._cache_committed(path, data))
         self.raw_put(
             self.ref("feedback_limits", feedback.reporter_user_id),
             {"entries": [{**entry, "doc": entry.get("doc") or doc} for entry in entries]},

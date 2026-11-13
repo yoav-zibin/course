@@ -442,3 +442,34 @@ def test_query_mode_status_filter_and_listing_order() -> None:
     most_reported_calls.clear()
     listing(status="open")
     assert client.queries + len(client.read_paths) + len(most_reported_calls) <= 2
+
+
+@pytest.mark.parametrize("later", [False, True])
+def test_query_mode_repeat_immediately_reopens_cached_reviewed_feedback(later) -> None:
+    from game_platform.scaling_service import ScalablePlatform
+    from game_platform.tests.fake_firestore import FakeClient, query_store
+
+    clock = ManualClock()
+    store = query_store("reopened", FakeClient())
+    store.most_reported = lambda **kwargs: []
+    platform = ScalablePlatform(store=store, clock=clock, computer_move_delay_seconds=0)
+    ann = platform.create_user(display_name="ann").id
+    sent, _ = platform.send_feedback(caller_id=ann, kind="bug", target_type="platform",
+                                     target_id="", text="The menu is slow")
+    platform.admin_set_feedback_status(feedback_id=sent.id, status="reviewed", changed_by="admin")
+    assert platform.admin_feedback(status="reviewed")["count"] == 1
+    assert platform.admin_feedback(status="open")["count"] == 0
+    old_ref = store.collection("feedback").document(store._feedback_doc(sent))
+    assert store.raw_get(old_ref)["status"] == "reviewed"
+    if later:
+        clock.advance(minutes=1)
+    again, created = platform.send_feedback(caller_id=ann, kind="bug", target_type="platform",
+                                            target_id="", text="It still happens")
+    assert not created and again.id == sent.id and again.status == "open"
+    assert platform.admin_feedback(status="reviewed")["count"] == 0
+    assert [row["text"] for row in platform.admin_feedback(status="open")["feedback"]] == ["It still happens"]
+    assert sum(path.startswith("reopened_feedback/") for path in store.client.docs) == 1
+    if later:
+        assert store.raw_get(old_ref) is None
+    else:
+        assert store.raw_get(old_ref)["status"] == "open"

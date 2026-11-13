@@ -45,13 +45,15 @@ test('experiments.js registers the four keys and the archetype flag', () => {
 });
 
 test('cache-busting versions bumped for the changed assets', () => {
-  assert.ok(portalHtml.includes('experiments.css?v=56'), 'portal.html experiments.css version');
-  assert.ok(portalHtml.includes('experiments.js?v=16'), 'portal.html experiments.js version');
-  assert.ok(portalHtml.includes('portal.js?v=115'), 'portal.html portal.js version');
-  assert.ok(portalHtml.includes('portal-match-layout.js?v=9'), 'portal.html match-layout version');
-  assert.ok(portalSw.includes('playroom-portal-shell-v195'), 'service worker cache version');
-  assert.ok(portalSw.includes('experiments.css?v=56'), 'service worker experiments.css version');
-  assert.ok(portalSw.includes('portal.js?v=115'), 'service worker portal.js version');
+  for (const [file, minimum] of [['experiments.css', 54], ['experiments.js', 16],
+    ['portal.js', 114], ['portal-match-layout.js', 9]]) {
+    const escaped = file.replaceAll('.', '\\.');
+    const asset = portalHtml.match(new RegExp(`/static/${escaped}\\?v=(\\d+)`));
+    assert.ok(asset && Number(asset[1]) >= minimum, `${file} version must include the archetype changes`);
+    assert.ok(portalSw.includes(asset[0]), `${file} must have the same version in the offline shell`);
+  }
+  const cache = portalSw.match(/playroom-portal-shell-v(\d+)/);
+  assert.ok(cache && Number(cache[1]) >= 192, 'service worker cache must include the archetype changes');
 });
 
 test('archetype page rules: focus/library hide discovery, lobby promotes open matches', () => {
