@@ -8,11 +8,12 @@
   else loginUrl.searchParams.set("login", "quick-play");
   option.href = loginUrl.pathname + loginUrl.search + loginUrl.hash;
   if (quickPlay) {
-    option.textContent = "Use standard login";
+    option.dataset.i18n = "ui.quickplay.standard";
+    option.textContent = I18n.t("ui.quickplay.standard", {}, "Use standard login");
     const script = document.createElement("script");
-    script.src = "/static/quick-play-login.js?v=1";
+    script.src = "/static/quick-play-login.js?v=2";
     script.onerror = () => location.replace(option.href);
-    document.head.appendChild(script);
+    I18n.ready.then(() => document.head.appendChild(script));
     return;
   }
   const loginButton = document.getElementById("welcome-login");
