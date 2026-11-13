@@ -101,3 +101,16 @@ test('logins save the referral code, and older accounts learn it later',()=>{
   Auth.setReferralCode('cy','31337');
   assert.equal(Auth.inviteLink(Auth.current()),'https://buildplay.fun/r/31337');
 });
+
+test('a guest created from a match invite link (#invite=<token>) carries the token',async()=>{
+  let sent;
+  const ctx=vm.createContext({console,URLSearchParams,CustomEvent:class{constructor(type){this.type=type;}},
+    localStorage:{getItem:()=>null,setItem(){},removeItem(){}},
+    location:{hash:'#invite=tok123',search:'',origin:'https://buildplay.fun'},
+    window:{addEventListener(){}},document:{dispatchEvent(){}},el:()=>({}),I18n:{t:(key,params,fallback)=>fallback},
+    apiRequest:async(method,pathname,{body})=>{sent={method,pathname,body};return {id:'u',display_name:'Bob',password:'pw'};}});
+  vm.runInContext(AUTH_JS+'\nthis.Auth=Auth;',ctx);
+  await ctx.Auth.createGuest('Bob');
+  assert.equal(sent.pathname,'/users');
+  assert.deepEqual({...sent.body},{display_name:'Bob',invite_token:'tok123'});
+});

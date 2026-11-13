@@ -206,7 +206,11 @@ freed yet; a deleted account's code becomes free again.) The code appears as
 
 Every invite link names the person who shared it: `/r/<code>` (for example
 `https://buildplay.fun/r/48213`), or `/r/<code>#match=<id>` from a match's Invite
-friends button. "Copy my invite link" in the account menu copies your own. `/r/<code>`
+friends button (in a private match the button copies a match invite link instead,
+`/portal#invite=<token>` from `POST /matches/{id}/invites`, since only those seat
+new players; the portal opens it as a dialog with the inviter and game, has visitors
+log in or continue as a guest, sends the token with a new guest so the referral
+counts, and then takes the seat). "Copy my invite link" in the account menu copies your own. `/r/<code>`
 redirects to `/portal?ref=<code>`; the code goes in the query so the browser keeps the
 link's `#match=` part. Older links name the user id instead (`/portal#ref=<userId>`,
 `/portal#match=<id>&ref=<userId>`) and still work, and so does the long form for an

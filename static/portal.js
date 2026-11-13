@@ -132,6 +132,7 @@ const state = {
   myMatches: [],
   openMatches: [],
   selectedId: null,
+  pendingInvite: null, // a match invite token from #invite=, until it is accepted or dismissed
   match: null, // the selected match, from GET /matches/{id}
   armed: null, // an action waiting for a confirming second click
   loaded: null, // "match_id@game_id@version" loaded in the iframe
@@ -1560,16 +1561,22 @@ function renderMatch() {
       el("button", {
         type: "button",
         textContent: I18n.t("ui.match.invite_friends", {}, "Invite friends"),
-        onclick: () =>
-          navigator.clipboard
-            // With the sender's id as "ref", whoever signs up through the link
-            // counts as invited by them.
-            .writeText(
-              Auth.current() && Auth.inviteLink
+        onclick: async () => {
+          let link;
+          try {
+            // A private match only seats people through an invite token; elsewhere a
+            // link with the sender's id as "ref" counts whoever signs up as invited by them.
+            link = match.private && mySeat
+              ? (await portalRequest("POST", `/matches/${match.id}/invites`, {})).url
+              : Auth.current() && Auth.inviteLink
                 ? Auth.inviteLink(Auth.current(), `match=${match.id}`)
-                : `${location.origin}/portal#match=${match.id}`,
-            )
-            .then(() => toast(I18n.t("ui.match.invite_copied", {}, "✓ Invite link copied"))),
+                : `${location.origin}/portal#match=${match.id}`;
+            await navigator.clipboard.writeText(link);
+            toast(I18n.t("ui.match.invite_copied", {}, "✓ Invite link copied"));
+          } catch (error) {
+            showMessage(link || error.message, link ? "" : "error");
+          }
+        },
       }),
     );
   if (user && !match.localMode) {
@@ -2005,6 +2012,100 @@ async function playWithAllComputers() {
 function selectFromHash() {
   const id = new URLSearchParams(location.hash.slice(1)).get("match");
   if (id && id !== state.selectedId) selectMatch(id);
+  openInviteFromHash();
+}
+
+// Match invite links (POST /matches/{id}/invites): /portal#invite=<token> shows who
+// sent it and the match, and accepting takes the seat, even in a private match. People
+// without an account log in or continue as a guest first (a guest created from the
+// link credits its sender; see auth.js), then get the dialog again.
+let inviteDialog = null;
+
+function closeInviteDialog() {
+  inviteDialog?.remove();
+  inviteDialog = null;
+}
+
+function finishInvite(matchId) {
+  state.pendingInvite = null;
+  closeInviteDialog();
+  if (new URLSearchParams(location.hash.slice(1)).has("invite"))
+    history.replaceState(null, "", state.detailGameId ? `#game=${encodeURIComponent(state.detailGameId)}` : "#");
+  if (matchId) selectMatch(matchId);
+}
+
+async function openInviteFromHash() {
+  const fromHash = new URLSearchParams(location.hash.slice(1)).get("invite");
+  if (fromHash) state.pendingInvite = fromHash;
+  const token = state.pendingInvite;
+  if (!token) return;
+  let view;
+  try {
+    view = await apiRequest("GET", `/invites/${encodeURIComponent(token)}`, {user: me()});
+  } catch (error) {
+    if (state.pendingInvite !== token) return;
+    finishInvite(null);
+    showPageError(I18n.t("ui.invite.load_failed", {message: error.message}, `Couldn't open the invite: ${error.message}`));
+    return;
+  }
+  if (state.pendingInvite !== token) return;
+  const user = me();
+  const match = view.match;
+  if (user && match.players.some((player) => player.user_id === user.id)) {
+    finishInvite(match.id);
+    return;
+  }
+  closeInviteDialog();
+  const gameName = I18n.gameName(match.game_id, view.game_name);
+  const message = el("div", {class: "message", role: "status"});
+  const box = el("div", {class: "auth-dialog", role: "dialog", "aria-modal": "true"},
+    el("h2", {textContent: I18n.t("ui.invite.invited_you", {name: view.created_by_display_name, game: gameName},
+      `${view.created_by_display_name} invited you to play ${gameName}`)}),
+    message);
+  const notNow = el("button", {type: "button", textContent: I18n.t("ui.invite.not_now", {}, "Not now"),
+    onclick: () => finishInvite(null)});
+  if (!view.usable) {
+    message.textContent = view.unusable_reason;
+    message.className = "message error";
+    box.append(el("div", {style: "display:flex;gap:var(--space-sm);flex-wrap:wrap"}, notNow));
+  } else {
+    if (match.bet_per_player > 0)
+      box.append(el("p", {class: "muted", textContent: I18n.t("ui.invite.stake", {tokens: match.bet_per_player},
+        `This match stakes ${match.bet_per_player} tokens per player.`)}));
+    let primary;
+    if (!user) {
+      box.append(el("p", {class: "muted", textContent: I18n.t("ui.invite.log_in_first", {}, "Log in or continue as a guest to take your seat.")}));
+      primary = el("button", {type: "button", class: "primary", textContent: I18n.t("ui.invite.log_in", {}, "Log in to join"),
+        onclick: () => {
+          closeInviteDialog();
+          Auth.openDialog();
+        }});
+    } else {
+      primary = el("button", {type: "button", class: "primary", textContent: I18n.t("ui.invite.accept", {}, "Join match"),
+        onclick: async () => {
+          primary.disabled = true;
+          try {
+            const joined = await apiRequest("POST", `/invites/${encodeURIComponent(token)}/accept`, {user});
+            if (joined?.status === "ongoing") {
+              invalidatePopularGames();
+              invalidateRecentGames();
+              invalidateGamePopularity(joined.game_id);
+            }
+            finishInvite(joined.id);
+          } catch (error) {
+            message.textContent = error.message;
+            message.className = "message error";
+            primary.disabled = false;
+          }
+        }});
+    }
+    box.append(el("div", {style: "display:flex;gap:var(--space-sm);flex-wrap:wrap"}, primary, notNow));
+  }
+  inviteDialog = el("div", {class: "auth-dialog-backdrop"}, box);
+  inviteDialog.onclick = (event) => {
+    if (event.target === inviteDialog) finishInvite(null);
+  };
+  document.body.append(inviteDialog);
 }
 
 function shouldRestoreSavedMatch() {
@@ -2052,6 +2153,7 @@ async function main() {
     showMessage("");
     refresh();
     setupNotifications();
+    openInviteFromHash();
   });
   $("practice").addEventListener("click", practice);
   $("play-computers").addEventListener("click", playWithAllComputers);
@@ -2189,6 +2291,7 @@ async function main() {
   if (state.match && !state.match.localMode)
     state.match = offline.decorate(state.match);
   render();
+  openInviteFromHash();
   try {
     await syncGame();
   } catch (error) {

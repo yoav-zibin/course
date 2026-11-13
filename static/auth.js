@@ -441,8 +441,11 @@ const Auth = (() => {
 
   async function createGuest(displayName = "") {
     const name = displayName.trim() || I18n.t("ui.auth.guest_default_name", { number: accounts().length + 1 }, `Guest ${accounts().length + 1}`);
+    // Signing up from a match invite link (/portal#invite=<token>) credits its
+    // creator with the referral.
+    const inviteToken = new URLSearchParams(location.hash.slice(1)).get("invite");
     const user = await apiRequest("POST", "/users", {
-      body: newAccountBody({ display_name: name }),
+      body: newAccountBody(inviteToken ? { display_name: name, invite_token: inviteToken } : { display_name: name }),
     });
     return {
       user_id: user.id,

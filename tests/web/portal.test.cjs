@@ -541,3 +541,74 @@ test('the portal boots when storage methods deny access',()=>{
   assert.equal(run('typeof portalStorage'),'function');
   assert.equal(run('portalStorage()===localStorage'),true);
 });
+
+// Match invite links: /portal#invite=<token> (bug 9: nothing handled them).
+function inviteSetup({user={id:'bob'},view={}}={}) {
+  const calls=[];
+  let current=user;
+  const invite={token:'tok',game_name:'Tic-Tac-Toe',created_by_display_name:'Alice',usable:true,
+    match:{id:'m1',game_id:'ttt',bet_per_player:0,players:[{kind:'human',user_id:'alice'}]},...view};
+  const {run}=setup(async(method,pathname,opts)=>{
+    calls.push([method,pathname,opts?.user?.id??null]);
+    if(method==='GET'&&pathname==='/invites/tok') return invite;
+    if(method==='POST'&&pathname==='/invites/tok/accept') return {...invite.match,status:'waiting_for_players'};
+    return {};
+  },'#invite=tok');
+  run('Auth.current=()=>globalThis.currentUser;Auth.openDialog=()=>{globalThis.loginOpened=true;};'+
+    'globalThis.shown=null;document.body.append=n=>{globalThis.shown=n;};'+
+    'el=(tag,attrs={},...children)=>({tag,...attrs,children:children.flat(),append(...more){this.children.push(...more);},remove(){if(globalThis.shown===this)globalThis.shown=null;}});');
+  const setUser=u=>{current=u;run(`globalThis.currentUser=${JSON.stringify(u)}`);};
+  setUser(current);
+  const texts=()=>run('JSON.stringify((function walk(n){return n&&typeof n==="object"?[n.textContent||"",...(n.children||[]).flatMap(walk)]:[String(n)];})(shown).filter(Boolean))');
+  const button=label=>run(`(function find(n){if(!n||typeof n!=="object")return null;if(n.tag==="button"&&n.textContent===${JSON.stringify(label)})return n;for(const c of n.children||[]){const f=find(c);if(f)return f;}return null;})(shown)`);
+  return {run,calls,setUser,texts:()=>JSON.parse(texts()),button};
+}
+
+test('an invite link shows who sent it and joins the match through the invite',async()=>{
+  const {run,calls,texts,button}=inviteSetup();
+  await run('openInviteFromHash()');
+  assert.ok(texts().includes('Alice invited you to play Tic-Tac-Toe'));
+  await button('Join match').onclick();
+  assert.deepEqual(calls.filter(c=>c[0]==='POST'),[['POST','/invites/tok/accept','bob']]);
+  assert.equal(run('state.selectedId'),'m1');
+  assert.equal(run('state.pendingInvite'),null);
+  assert.equal(run('shown'),null);
+});
+
+test('without an account the invite asks to log in, then offers the seat',async()=>{
+  const {run,calls,setUser,button}=inviteSetup({user:null});
+  await run('openInviteFromHash()');
+  assert.equal(button('Join match'),null);
+  button('Log in to join').onclick();
+  assert.equal(run('loginOpened'),true);
+  assert.equal(run('state.pendingInvite'),'tok');
+  setUser({id:'bob'});
+  run('location.hash="#"');  // auth-changed resets the hash; the invite is kept in state
+  await run('openInviteFromHash()');
+  await button('Join match').onclick();
+  assert.deepEqual(calls.filter(c=>c[0]==='POST'),[['POST','/invites/tok/accept','bob']]);
+});
+
+test('an invite to a match you are already in just opens it',async()=>{
+  const {run,calls}=inviteSetup({user:{id:'alice'}});
+  await run('openInviteFromHash()');
+  assert.equal(run('shown'),null);
+  assert.equal(run('state.selectedId'),'m1');
+  assert.equal(calls.filter(c=>c[0]==='POST').length,0);
+});
+
+test('an unusable invite says why and offers no seat',async()=>{
+  const {run,texts,button}=inviteSetup({view:{usable:false,unusable_reason:'this invite has expired'}});
+  await run('openInviteFromHash()');
+  assert.ok(texts().includes('this invite has expired'));
+  assert.equal(button('Join match'),null);
+  button('Not now').onclick();
+  assert.equal(run('shown'),null);
+  assert.equal(run('state.pendingInvite'),null);
+});
+
+test('a staked match says what joining costs',async()=>{
+  const {run,texts}=inviteSetup({view:{match:{id:'m1',game_id:'ttt',bet_per_player:5,players:[]}}});
+  await run('openInviteFromHash()');
+  assert.ok(texts().includes('This match stakes 5 tokens per player.'));
+});
