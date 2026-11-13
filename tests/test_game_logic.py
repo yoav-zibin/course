@@ -182,18 +182,18 @@ def test_a_call_can_raise_the_time_limit_for_itself():
     # succeeds with an override, and the usual limit is back afterwards.
     slow = GameLogic(
         "const game = { viewFor(state, playerId, ctx) {"
-        "  let s = 0; for (let i = 0; i < 5000000; i++) s += i % 7;"
-        "  return {s: s}; } };",
+        "  if (state.hang) while (true) {}"
+        "  return {s: 42}; } };",
         time_limit_seconds=0.1,
     )
     with pytest.raises(GameLogicTimeout):
-        slow.call("viewFor", {}, "u1", ctx=_ctx(), seed=1)
+        slow.call("viewFor", {"hang": True}, "u1", ctx=_ctx(), seed=1)
     result = slow.call(
-        "viewFor", {}, "u1", ctx=_ctx(), seed=1, time_limit_seconds=2.0
+        "viewFor", {"hang": False}, "u1", ctx=_ctx(), seed=1, time_limit_seconds=2.0
     )
-    assert result == {"s": 14999995}
+    assert result == {"s": 42}
     with pytest.raises(GameLogicTimeout):
-        slow.call("viewFor", {}, "u1", ctx=_ctx(), seed=1)
+        slow.call("viewFor", {"hang": True}, "u1", ctx=_ctx(), seed=1)
 
 
 # A rigged race for the estimateWinChance tests: every step goes to the

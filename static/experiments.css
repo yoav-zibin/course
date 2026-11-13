@@ -898,6 +898,47 @@
 }
 
 /* The Arcade skin keeps discovery and match access in the top bar. */
+:root:not([data-portal-navigation="modern"]) .topbar[data-app-page="portal"] .portal-nav { display:none!important; }
+:root[data-portal-navigation="modern"] .topbar[data-app-page="portal"] .sidebar-toggle { display:none!important; }
+:root[data-portal-navigation="modern"] .portal-shell > .portal-sidebar { display:none!important; }
+:root[data-portal-navigation="legacy"] .portal-shell > .portal-sidebar .app-brand { display:flex; align-items:center; gap:10px; min-height:44px; margin-bottom:8px; color:var(--color-text-primary); font-size:18px; font-weight:850; text-decoration:none; }
+:root[data-portal-navigation="legacy"] .portal-shell > .portal-sidebar .app-brand-mark { display:grid; place-items:center; width:38px; height:38px; border-radius:12px; background:var(--color-bg-3); color:var(--color-accent); font-size:22px; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation { display:flex; flex:1; flex-direction:column; gap:14px; min-height:0; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .matches-board-group { display:block; margin:0; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation #my-matches > h3 { margin:0 0 4px; color:var(--color-text-primary); font-size:17px; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-group > summary { min-height:47px; font-size:13px; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-group > div { max-height:32dvh; overflow:auto; overscroll-behavior:contain; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-list-card {
+  display:grid; grid-template-columns:38px minmax(0,1fr); align-items:center; gap:9px;
+  box-sizing:border-box; width:100%; max-width:100%; min-width:0; padding:8px;
+  overflow:hidden; text-align:left;
+}
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-card-art {
+  display:grid; width:38px; height:38px; aspect-ratio:1; place-items:center;
+  overflow:hidden; border-radius:9px; background:var(--color-bg-3);
+}
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-card-art img { display:block; width:100%; height:100%; object-fit:cover; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-card-monogram { font-size:16px; font-weight:850; line-height:1; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-card-copy { display:grid; grid-template-columns:minmax(0,1fr); gap:4px; min-width:0; overflow:hidden; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-card-title-row { display:flex; align-items:center; flex-wrap:wrap; gap:4px; min-width:0; overflow:hidden; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-card-title { flex:0 1 auto; min-width:0; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-card-title-row .badge { max-width:100%; font-size:9px; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-card-players { display:block; min-width:0; overflow:hidden; color:var(--color-text-tertiary); font-size:10px; line-height:1.3; text-overflow:ellipsis; white-space:nowrap; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-card-moves { color:var(--color-text-tertiary); font-size:9px; line-height:1.25; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .open-matches-board { padding-top:8px; border-top:2px solid var(--color-border-3); }
+:root[data-portal-navigation="legacy"] .matches-screen-groups.matches-unified-board { display:none!important; }
+:root .token-wallet-coin .token-gem-icon { display:none; }
+:root .token-token-icon { display:inline; }
+:root .currency-gem { display:none; }
+:root .currency-gem-icon { display:none; }
+:root[data-portal-currency="gems"] .token-wallet-coin .token-gem-icon { display:block; }
+:root[data-portal-currency="gems"] .token-token-icon { display:none; }
+:root[data-portal-currency="gems"] .currency-token { display:none; }
+:root[data-portal-currency="gems"] .currency-gem { display:inline; }
+:root[data-portal-currency="gems"] .currency-token-icon { display:none; }
+:root[data-portal-currency="gems"] .currency-gem-icon { display:inline; }
+:root[data-portal-currency="tokens"] .token-stake-panel .currency-token { display:inline; }
+:root[data-portal-currency="tokens"] .token-stake-panel .currency-gem { display:none; }
 :root[data-skin="arcade"] .topbar[data-app-page="portal"] { overflow:visible; z-index:20; }
 :root[data-skin="arcade"] .topbar[data-app-page="portal"] .app-home-link { min-width:max-content; color:#f5f7ff; }
 :root[data-skin="arcade"] .topbar[data-app-page="portal"] h1 { font-size:18px; font-weight:900; letter-spacing:-.5px; }
@@ -1011,6 +1052,8 @@
 :root[data-skin="arcade"] #account-menu .auth-menu-panel a { color:#d5e1f7; }
 :root[data-skin="arcade"] #account-menu .auth-menu-panel button:hover,
 :root[data-skin="arcade"] #account-menu .auth-menu-panel a:hover { background:#1a2943; color:#fff; }
+:root[data-skin="arcade"] #account-menu .portal-admin-link { display:flex; align-items:center; min-height:36px; margin:0 0 8px; padding:0 10px; border:1px solid #2c4265; border-radius:9px; background:#152138; color:#d5e1f7; font-size:12px; font-weight:800; text-decoration:none; }
+:root[data-skin="arcade"] #account-menu .portal-admin-link:hover { border-color:#7898e8; background:#1a2943; color:#fff; }
 :root[data-skin="arcade"] .portal-profile-options { margin-top:9px; padding-top:11px; border-top:1px solid #2a3d5d; }
 :root[data-skin="arcade"] .portal-profile-options > h3 { margin:0 0 8px 7px; color:#85a8ff; font-size:9px; font-weight:900; letter-spacing:1.7px; text-transform:uppercase; }
 :root[data-skin="arcade"] #portal-more-options { display:flex; flex-direction:column; gap:7px; }
@@ -1039,7 +1082,7 @@
 :root[data-skin="arcade"] .leaderboard-table[hidden] { display:none!important; }
 :root[data-skin="arcade"] .leaderboard-table-heading { display:flex; justify-content:space-between; padding:14px 18px; color:#88a5e5; background:#151f31; font-size:9px; font-weight:900; letter-spacing:1.5px; }
 :root[data-skin="arcade"] .leaderboard-empty { margin:0; padding:46px 20px; color:#a0b0cc; text-align:center; }
-:root[data-skin="arcade"] body[data-portal-view="home"] #game-catalog > :not(.arcade-hero):not(.game-proposal):not(#popular-games-section) { display:none!important; }
+:root[data-skin="arcade"] body[data-portal-view="home"] #game-catalog > :not(.arcade-hero):not(.game-proposal):not(#popular-games-section):not(#recent-games-section) { display:none!important; }
 :root[data-skin="arcade"] body[data-portal-view="games"] .arcade-hero,
 :root[data-skin="arcade"] body[data-portal-view="games"] .popular-games-section,
 :root[data-skin="arcade"] body[data-portal-view="games"] .game-proposal { display:none!important; }
@@ -1113,8 +1156,7 @@
 :root[data-skin="arcade"] .portal-profile-preferences .language-picker select { width:176px; max-width:58%; min-height:36px; background:#0b1320; border-color:#344968; color:#eff3ff; }
 :root[data-skin="arcade"] .portal-profile-preferences .language-picker > span { color:#91acda; }
 :root[data-skin="arcade"] #portal-language-slot { display:flex; flex-direction:column; }
-:root[data-skin="arcade"] body[data-portal-view="home"] #game-catalog > :not(.arcade-hero):not(.game-proposal):not(#popular-games-section) { display:none!important; }
-:root[data-skin="arcade"] body[data-portal-view="home"] #game-catalog > #recent-games-section { display:none!important; }
+:root[data-skin="arcade"] body[data-portal-view="home"] #game-catalog > :not(.arcade-hero):not(.game-proposal):not(#popular-games-section):not(#recent-games-section) { display:none!important; }
 :root[data-skin="arcade"] body[data-portal-view="home"] #game-catalog > .game-proposal { display:block!important; width:100%; max-width:none; box-sizing:border-box; margin:34px 0 8px; padding:24px; border-color:#33486d; background:linear-gradient(145deg,#111c2e,#0c1421); box-shadow:0 14px 34px #02071377; }
 :root[data-skin="arcade"] body[data-portal-view="home"] #game-catalog > .game-proposal h3 { color:#f2f5ff; font-size:21px; }
 :root[data-skin="arcade"] body[data-portal-view="home"] #game-catalog > .game-proposal form { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); column-gap:16px; }
@@ -1406,7 +1448,7 @@
 :root[data-skin="arcade"] .chat-preview-footer { justify-content:flex-start; }
 :root[data-skin="arcade"] .game-detail-page .play-option-icon svg { display:block; width:24px; height:24px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 :root[data-skin="arcade"] .game-detail-page .computer-match-illustration { overflow:hidden; }
-:root[data-skin="arcade"] .game-detail-page .computer-match-illustration img { display:block; width:56px; height:56px; object-fit:contain; filter:drop-shadow(0 4px 12px #31cfff55); }
+:root[data-skin="arcade"] .game-detail-page .computer-match-illustration img { display:block; width:40px; height:40px; object-fit:contain; filter:drop-shadow(0 4px 12px #31cfff55); }
 :root[data-skin="arcade"] .game-detail-page .token-stake-icon { font-size:23px; line-height:1; filter:drop-shadow(0 0 9px #b48cff66); }
 :root[data-skin="arcade"] .game-detail-page .token-stake-heading strong { color:#e3d8ff; }
 :root[data-skin="arcade"] .matches-board-group .match-group > div { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,220px),1fr)); align-content:start; gap:12px; max-height:44dvh; padding:3px 2px 8px; overflow:auto; }

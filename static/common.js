@@ -630,6 +630,7 @@ function setUpSidebarDrawer() {
   });
   wide.addEventListener('change',()=>{render();if(opened && !wide.matches)close.focus();});
   document.addEventListener('portal-layout-change',render);
+  document.addEventListener('portal-skin-change',render);
   setOpen(false);
 }
 if (document.readyState==='complete'||document.readyState==='interactive') setUpSidebarDrawer();

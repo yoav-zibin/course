@@ -761,5 +761,6 @@
   "ui.chat.send": "أرسل الرسالة",
   "ui.chat.players_here": "لاعب واحد هنا",
   "ui.portal.skin_arcade": "أركيد",
-  "ui.portal.skin_meadow": "مرج"
+  "ui.portal.skin_meadow": "مرج",
+  "ui.portal.skin_neon": "Neon"
 }

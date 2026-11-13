@@ -761,5 +761,6 @@
   "ui.chat.send": "Envoyer le message",
   "ui.chat.players_here": "1 joueur ici",
   "ui.portal.skin_arcade": "Arcade",
-  "ui.portal.skin_meadow": "Prairie"
+  "ui.portal.skin_meadow": "Prairie",
+  "ui.portal.skin_neon": "Neon"
 }

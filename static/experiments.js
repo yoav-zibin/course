@@ -8,7 +8,10 @@
   const PORTAL_SKIN_STORAGE_KEY = "game-platform.portal-skin-preference.v1";
   const PORTAL_SKIN_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
   const SKIN_KEY_PATTERN = /^[a-z0-9][a-z0-9-]{0,49}$/;
-  const PORTAL_SKINS = new Set(["classic", "aurora", "sunset", "immersive"]);
+  // Arcade and Neon own the top-level Games / Matches / Leaderboards navigation.
+  const MODERN_PORTAL_SKINS = new Set(["arcade", "neon"]);
+  const GEM_PORTAL_SKINS = new Set(["arcade", "neon"]);
+  const PORTAL_SKINS = new Set(["classic", "aurora", "sunset", "immersive", "meadow", ...MODERN_PORTAL_SKINS]);
   const PORTAL_LAYOUTS = new Set(["left", "hamburger", "top"]);
   let assignedSkin = "classic";
   let previewSkin = portalSkinFromUrl();
@@ -110,9 +113,31 @@
       document.documentElement.dataset.skin = key;
     else delete document.documentElement.dataset.skin;
     const current = document.documentElement.dataset.skin || "";
+    const modernPortal = MODERN_PORTAL_SKINS.has(current);
+    document.documentElement.dataset.portalNavigation = modernPortal ? "modern" : "legacy";
+    document.documentElement.dataset.portalCurrency = GEM_PORTAL_SKINS.has(current) ? "gems" : "tokens";
+    syncPortalMatchNavigation(modernPortal);
+    const wallet = document.getElementById("token-wallet");
+    if (wallet) {
+      wallet.setAttribute("data-i18n-title", modernPortal ? "ui.portal.wallet_gems_title" : "ui.portal.wallet_title");
+      I18n.apply(wallet.parentElement || wallet);
+    }
     if (previous !== current)
       document.dispatchEvent(new CustomEvent("portal-skin-change", { detail: { key: current || null } }));
     return previous !== current;
+  }
+
+  function syncPortalMatchNavigation(modernPortal) {
+    const sidebar = document.getElementById("legacy-match-navigation");
+    const matches = document.getElementById("matches-groups-home");
+    if (!sidebar || !matches) return;
+    const groups = ["portal-login-note", "my-matches", "group-open"]
+      .map((id) => document.getElementById(id))
+      .filter(Boolean)
+      .map((node) => node.id === "group-open" ? node.closest(".open-matches-board") : node)
+      .filter((node, index, all) => node && all.indexOf(node) === index);
+    const target = modernPortal ? matches : sidebar;
+    for (const group of groups) target.append(group);
   }
 
   function activeSkin() {

@@ -255,6 +255,34 @@ const frame = new GameFrame(
 
 // TOKEN_UI_POLISH_V1: backend-owned balances; never award or settle tokens in the browser.
 let walletBalance = null;
+function portalCurrencyName() {
+  return document.documentElement?.dataset?.portalCurrency === "gems" ? "gems" : "tokens";
+}
+function portalCurrencyAmount(amount) {
+  const name = portalCurrencyName();
+  if (name === "gems") return `${I18n.number(amount)} gems`;
+  return I18n.t("ui.stakes.tokens", {count:amount}, `${I18n.number(amount)} tokens`);
+}
+function portalCurrencyText(text) {
+  return portalCurrencyName() === "gems" ? text.replace(/\btokens?\b/gi, "gems") : text;
+}
+function syncPortalCurrencyLabels() {
+  const name = portalCurrencyName();
+  const stake = $("match-stake");
+  if (stake) {
+    for (const option of stake.options) {
+      option._portalOriginalLabel ??= option.textContent;
+      const word = Number(option.value) === 1 ? name.slice(0, -1) : name;
+      option.textContent = option._portalOriginalLabel.replace(/tokens?/i, word);
+    }
+  }
+  const help = $("stake-help");
+  if (help) {
+    help._portalOriginalText ??= help.textContent;
+    help.textContent = help._portalOriginalText.replace(/tokens?/gi, name);
+  }
+  updateStakePreview();
+}
 function updateStakePreview() {
   const select = $("match-stake"), preview = $("stake-preview"), panel = $("token-stake-panel");
   if (!select || !preview || !panel) return;
@@ -265,17 +293,19 @@ function updateStakePreview() {
   if (solo && select.value !== "0") select.value = "0";
   const amount = Number(select.value);
   if (!amount || solo) {
-    preview.replaceChildren(el("span", {class:"stake-preview-text", textContent: solo ? I18n.t("ui.stakes.preview_solo", {}, "Solo game · No wager") : I18n.t("ui.stakes.preview_free", {}, "Free game · No tokens at risk")}));
+    preview.replaceChildren(el("span", {class:"stake-preview-text", textContent: solo ? I18n.t("ui.stakes.preview_solo", {}, "Solo game · No wager") : portalCurrencyText(I18n.t("ui.stakes.preview_free", {}, "Free game · No tokens at risk"))}));
   } else {
     // The smallest pot the match can have: its game's smallest multiplayer count
     // (the final count is only known at the start).
     const multiplayer = (game?.allowed_player_counts || []).filter(count => count > 1);
     const players = multiplayer.length ? Math.min(...multiplayer) : 2;
     const params = {amount, pot: amount * players, players, balance: walletBalance};
-    preview.replaceChildren(
-      el("span", {class:"stake-preview-text", textContent: walletBalance === null
-        ? I18n.t("ui.stakes.preview", params, `${amount} tokens per person · ${amount * players} tokens in a ${players}-player pot`)
-        : I18n.t("ui.stakes.preview_wallet", params, `${amount} tokens per person · ${amount * players} tokens in a ${players}-player pot · Wallet: ${walletBalance} tokens`)}));
+    const previewText = I18n.t(walletBalance === null ? "ui.stakes.preview" : "ui.stakes.preview_wallet", {
+        amount:I18n.number(amount), pot:I18n.number(amount * players), players, balance:I18n.number(walletBalance ?? 0),
+      }, walletBalance === null
+        ? "{amount} tokens per person · {pot} tokens in a {players}-player pot"
+        : "{amount} tokens per person · {pot} tokens in a {players}-player pot · Wallet: {balance} tokens");
+    preview.replaceChildren(el("span", {class:"stake-preview-text", textContent:portalCurrencyText(previewText)}));
   }
 }
 
@@ -300,7 +330,7 @@ async function updateTokenWallet(user, record) {
     walletBalance = record.token_balance;
     const balance = String(walletBalance);
     if ($("token-balance").textContent !== balance) $("token-balance").textContent = balance;
-    wallet.title = I18n.t("ui.portal.wallet_hint", {balance}, `${balance} virtual tokens · +10 daily allowance on your first paid match entry`);
+    wallet.title = portalCurrencyText(I18n.t("ui.portal.wallet_hint", {balance}, "{balance} virtual tokens · +10 daily allowance on your first paid match entry"));
     wallet.hidden = false;
     // No optimistic balance adjustments: the server may grant today's +10 at start.
     updateStakePreview();
@@ -318,11 +348,11 @@ function updateMatchCurrency(match, user) {
   const paid = stake > 0;
   box.className = `match-currency token-summary${paid ? " is-paid" : ""}`;
   const title = el("div", {class:"token-summary-title"},
-    el("span", {class:"token-summary-icon", "aria-hidden":"true", textContent:"✦"}),
+    el("span", {class:"token-summary-icon", "aria-hidden":"true", textContent:portalCurrencyName() === "gems" ? "💎" : "✦"}),
     el("strong", {textContent: paid ? I18n.t("ui.stakes.paid", {}, "Match stakes") : I18n.t("ui.stakes.free", {}, "Free match")}));
   const values = el("div", {class:"token-summary-values"},
-    el("div", {}, el("span", {textContent:I18n.t("ui.stakes.per_player", {}, "Per player")}), el("strong", {textContent:I18n.t("ui.stakes.tokens", {count: stake}, `${stake} tokens`)})),
-    el("div", {}, el("span", {textContent:I18n.t("ui.stakes.pot", {}, "Pot")}), el("strong", {textContent:I18n.t("ui.stakes.tokens", {count: pot}, `${pot} tokens`)})));
+    el("div", {}, el("span", {textContent:I18n.t("ui.stakes.per_player", {}, "Per player")}), el("strong", {textContent:portalCurrencyAmount(stake)})),
+    el("div", {}, el("span", {textContent:I18n.t("ui.stakes.pot", {}, "Pot")}), el("strong", {textContent:portalCurrencyAmount(pot)})));
   const notes = [];
   if (paid && match.status === "waiting_for_players")
     notes.push(el("p", {class:"token-summary-note", textContent:I18n.t("ui.stakes.pot_note", {}, "Pot is collected when the match starts. Paid matches need human players.")}));
@@ -331,14 +361,15 @@ function updateMatchCurrency(match, user) {
     if (seat) {
       const payout = match.token_payouts[String(seat.player_index)] ?? 0;
       const net = payout - stake;
+      const netAmount = `${net > 0 ? "+" : net < 0 ? "−" : ""}${I18n.number(Math.abs(net))}`;
       notes.push(el("div", {class:"token-summary-payout"},
         el("span", {textContent:I18n.t("ui.stakes.your_payout", {}, "Your payout")}),
-        el("strong", {textContent:I18n.t("ui.stakes.tokens", {count: payout}, `${payout} tokens`)}),
-        el("small", {textContent:I18n.t("ui.stakes.net", {amount: `${net > 0 ? "+" : ""}${net}`}, `Net ${net > 0 ? "+" : ""}${net} tokens`)})));
+        el("strong", {textContent:portalCurrencyAmount(payout)}),
+        el("small", {textContent:portalCurrencyText(I18n.t("ui.stakes.net", {amount:netAmount}, `Net ${netAmount} tokens`))})));
     } else notes.push(el("p", {class:"token-summary-note", textContent:I18n.t("ui.stakes.settled", {}, "Payouts settled for all players.")}));
   }
   if (!paid && match.status === "over")
-    notes.push(el("p", {class:"token-summary-note", textContent:I18n.t("ui.stakes.none_wagered", {}, "No tokens were wagered in this game.")}));
+    notes.push(el("p", {class:"token-summary-note", textContent:portalCurrencyText(I18n.t("ui.stakes.none_wagered", {}, "No tokens were wagered in this game."))}));
   box.replaceChildren(title, values, ...notes);
   box.hidden = false;
 }
@@ -368,8 +399,9 @@ function renderPortalAccountMenu() {
     const languageSlot = $("portal-language-slot");
     if (languagePicker && languageSlot && !languageSlot.contains(languagePicker))
       languageSlot.append(languagePicker);
+    const adminLink = el("a", { class:"portal-admin-link", href:"/admin", "data-i18n":"ui.nav.admin", textContent:I18n.t("ui.nav.admin", {}, "Admin") });
     panel.append(el("section", { class:"portal-profile-options", "aria-label":I18n.t("ui.portal.more_options", {}, "More options") },
-      el("h3", { textContent:I18n.t("ui.portal.more_options", {}, "More options") }), options));
+      el("h3", { textContent:I18n.t("ui.portal.more_options", {}, "More options") }), adminLink, options));
   }
 }
 
@@ -2335,6 +2367,7 @@ function shouldRestoreSavedMatch() {
 
 async function main() {
   setupPopularGamesCarousel();
+  syncPortalCurrencyLabels();
   window.PortalMatchLayout?.init(() => {
     selectMatch(null);
     render();
@@ -2351,6 +2384,7 @@ async function main() {
   document.addEventListener("portal-skin-change", () => {
     renderPortalAccountMenu();
     syncPortalRoutes();
+    syncPortalCurrencyLabels();
   });
   document.addEventListener("portal-layout-change", syncPortalRoutes);
   document.querySelector(".back-to-games")?.addEventListener("click", leaveGamePage);

@@ -29,13 +29,22 @@ test.describe('Layout at different screen sizes', () => {
     test(`portal: the main navigation is usable on ${size.name}`, async ({ page, request }) => {
       await loginAs(page, await createUser(request, uniqueName('Nav')));
       await page.setViewportSize({ width: size.width, height: size.height });
-      await page.goto('/static/portal.html');
+      await page.goto('/static/portal.html?skin=arcade');
       const nav = page.getByRole('navigation', { name: 'Main navigation' });
       await expect(nav.getByRole('link', { name: 'Games' })).toBeVisible();
       await expect(nav.getByRole('link', { name: /Matches/ })).toBeVisible();
       await expect(nav.getByRole('link', { name: 'Leaderboards' })).toBeVisible();
     });
   }
+
+  test('Admin is available in profile controls on every portal skin', async ({ page, request }) => {
+    await loginAs(page, await createUser(request, uniqueName('Admin link')));
+    for (const skin of ['classic', 'arcade', 'neon']) {
+      await page.goto(`/static/portal.html?skin=${skin}`);
+      await page.locator('#account-menu .auth-menu-button').click();
+      await expect(page.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/admin');
+    }
+  });
 
   test('match page: the game frame stays usable when the screen is rotated', async ({ page, request }) => {
     const owner = await createUser(request, uniqueName('Rotate'));

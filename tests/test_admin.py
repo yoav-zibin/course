@@ -63,8 +63,10 @@ def test_stats_of_an_empty_platform(api: Api) -> None:
 def test_the_stats_page_is_served_and_needs_the_master_password() -> None:
     client = TestClient(create_app(master_password="s3cret"))
     assert client.get("/stats").status_code == 401
+    assert client.get("/admin").status_code == 401
     assert client.get("/admin/stats").status_code == 401
     assert client.get("/stats", auth=("", "s3cret")).status_code == 200
+    assert client.get("/admin", auth=("", "s3cret")).status_code == 200
     assert client.get("/admin/stats", auth=("", "s3cret")).status_code == 200
     assert client.delete("/admin/users/x").status_code == 401
 

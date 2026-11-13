@@ -761,5 +761,6 @@
   "ui.chat.send": "संदेश भेजें",
   "ui.chat.players_here": "यहाँ 1 खिलाड़ी",
   "ui.portal.skin_arcade": "आर्केड",
-  "ui.portal.skin_meadow": "घास का मैदान"
+  "ui.portal.skin_meadow": "घास का मैदान",
+  "ui.portal.skin_neon": "Neon"
 }

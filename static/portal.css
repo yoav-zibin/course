@@ -183,6 +183,9 @@
 .play-option { display:flex; flex-direction:column; padding:22px; border:1px solid #343e55; border-radius:12px; background:#131a28; min-width:0; }
 .play-option-heading { display:flex; align-items:flex-start; gap:12px; margin-bottom:24px; }
 .play-option-icon { display:grid; place-items:center; flex:none; width:36px; height:36px; border-radius:10px; background:#29371c; color:#c6f432; font-size:22px; }
+.play-option-icon svg { display:block; width:24px; height:24px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.computer-match-illustration { overflow:hidden; }
+.computer-match-illustration img { display:block; width:100%; height:100%; max-width:100%; object-fit:contain; }
 .practice-option .play-option-icon { background:#302744; color:#c8b1ff; }
 .computer-match-option .play-option-icon { background:#203342; color:#5fd4ff; }
 .play-option-heading h3 { margin:0 0 5px; color:#eef0f5; font-size:17px; }
@@ -257,6 +260,8 @@
 /* Avatars stay secondary to readable player names. */
 .player-avatar { width:44px; height:44px; border-radius:50%; object-fit:cover; flex-shrink:0; }
 .seat-chip { display:inline-flex; align-items:center; gap:.4rem; }
+.portal-profile-options > .portal-admin-link { display:flex; align-items:center; min-height:36px; margin:0 0 8px; padding:0 10px; border:1px solid var(--color-border-3); border-radius:var(--radius-sm); background:var(--color-bg-2); color:var(--color-text-primary); font-size:var(--font-size-sm); font-weight:700; text-decoration:none; }
+.portal-profile-options > .portal-admin-link:hover { border-color:var(--color-border-4); background:var(--color-bg-3); color:var(--color-text-primary); }
 @media (prefers-reduced-motion: no-preference) {
   button { transition: background-color 140ms, box-shadow 140ms; }
   button:active:not(:disabled) { transform:translateY(1px); }

@@ -761,5 +761,6 @@
   "ui.chat.send": "发送消息",
   "ui.chat.players_here": "这里有 1 位玩家",
   "ui.portal.skin_arcade": "街机",
-  "ui.portal.skin_meadow": "草地"
+  "ui.portal.skin_meadow": "草地",
+  "ui.portal.skin_neon": "Neon"
 }
