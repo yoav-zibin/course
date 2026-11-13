@@ -250,9 +250,10 @@
   };
 
   function skinOptionLabel(key) {
-    if (key === "riso-club") return "Riso";
-    return key
-      .split("-")
+    const words = key.split("-");
+    // The Riso brand uses only the first word of its stable skin key.
+    if (key === "riso-club") words.length = 1;
+    return words
       .map((word) => (word ? word[0].toUpperCase() + word.slice(1) : word))
       .join(" ");
   }
