@@ -2010,7 +2010,7 @@ async function syncGame() {
     if (!stillCurrent()) return;
     if (state.loaded !== key) {
       const fullGame = state.gameCache.get(`${match.game_id}@${match.game_version}`);
-      frame.load(code, fullGame?.declarative_ui, {animate: match.localMode !== "pass"});
+      frame.load(withPortalSkinAdapter(match.game_id, code), fullGame?.declarative_ui, {animate: match.localMode !== "pass"});
       state.loaded = key;
       state.lastSent = null;
     }
@@ -2045,6 +2045,7 @@ async function syncGame() {
     mySeat: mySeat ? mySeat.player_index : null,
   });
   message.token_pot = view.token_pot ?? 0;
+  if (PORTAL_SKINNED_GAME_IDS.has(match.game_id)) message.skin_palette = portalGameSkinPalette();
   // Let game UIs distinguish a historical snapshot from a live opponent turn.
   message.replay = replay ? { index: replay.index, total: match.move_count } : null;
   // The viewer's language and, for a game with a string table, its texts in that language.
@@ -2056,6 +2057,98 @@ async function syncGame() {
     state.lastSent = json;
     frame.send(message);
   }
+}
+
+// These five standalone games cannot read the portal stylesheet from their
+// sandboxed iframe. Send the active palette through the existing game channel.
+const PORTAL_SKINNED_GAME_IDS = new Set([
+  "c9bc5420-b2da-4ab0-a10d-9491ccd0f2fe", // Rock Paper Scissors
+  "d7f3d174-0ce3-4ec8-bdbd-5c0e7e08dae6", // Pass the Pigs
+  "41b88e29-3402-4a1c-920d-8429c7b880e5", // Tsoro Yematatu
+  "dad2260d-cc40-47e0-be43-e51539df694f", // Teeko
+  "7a5bb515-d3b3-4330-bdad-45e652a6be9b", // Bầu cua cá cọp
+]);
+
+function portalGameSkinPalette() {
+  const root = getComputedStyle(document.documentElement);
+  const value = (name, fallback) => root.getPropertyValue(name).trim() || fallback;
+  return {
+    scheme: root.colorScheme === "light" ? "light" : "dark",
+    background: value("--color-bg-0", "#10141f"),
+    panel: value("--color-bg-1", "#171c2a"),
+    raised: value("--color-bg-2", "#1c2233"),
+    hover: value("--color-bg-3", "#26304a"),
+    text: value("--color-text-primary", "#eef0f5"),
+    muted: value("--color-text-tertiary", "#9aa3b8"),
+    border: value("--color-border-2", "#343e55"),
+    accent: value("--color-accent", "#c6f432"),
+    accentHover: value("--color-accent-hover", "#d4f75c"),
+    focus: value("--color-focus-ring", "#c6f432"),
+  };
+}
+
+function withPortalSkinAdapter(gameId, code) {
+  if (!PORTAL_SKINNED_GAME_IDS.has(gameId)) return code;
+  const adapter = function installPortalSkinAdapter() {
+    const style = document.createElement("style");
+    style.textContent = `
+      :root { color-scheme: var(--portal-skin-scheme, dark) !important; }
+      body, main { background: var(--portal-skin-background) !important; color: var(--portal-skin-text) !important; }
+      #status, .arena, #boardWrap, .instructions, details, section {
+        background: var(--portal-skin-panel) !important; color: var(--portal-skin-text) !important;
+        border-color: var(--portal-skin-border) !important;
+      }
+      #scores span, .tile, .symbol, .player, .record {
+        background-color: var(--portal-skin-raised) !important; color: var(--portal-skin-text) !important;
+        border-color: var(--portal-skin-border) !important;
+      }
+      #status { background: var(--portal-skin-raised) !important; }
+      p, h2, .tag, #meta, #round, #hint, summary { color: var(--portal-skin-muted) !important; }
+      h1, h3, label { color: var(--portal-skin-text) !important; }
+      button:not(.cell), #actions button {
+        background: var(--portal-skin-accent) !important; border-color: var(--portal-skin-accent) !important;
+        color: var(--portal-skin-background) !important;
+      }
+      button:not(.cell):hover:not(:disabled), #actions button:hover:not(:disabled) {
+        background: var(--portal-skin-accent-hover) !important; border-color: var(--portal-skin-accent-hover) !important;
+      }
+      input, select { background: var(--portal-skin-panel) !important; color: var(--portal-skin-text) !important; border-color: var(--portal-skin-border) !important; }
+      button:focus-visible, input:focus-visible, select:focus-visible { outline-color: var(--portal-skin-focus) !important; }
+      .cell { background: var(--portal-skin-raised) !important; color: var(--portal-skin-text) !important; border-color: var(--portal-skin-border) !important; }
+      .cell.selected { outline-color: var(--portal-skin-focus) !important; }
+      .cell:hover:not(:disabled) { background: var(--portal-skin-hover) !important; }
+      .player.current { background: var(--portal-skin-accent) !important; color: var(--portal-skin-background) !important; }
+      #board svg line { stroke: var(--portal-skin-border) !important; }
+      #board svg circle { fill: var(--portal-skin-accent) !important; }
+      #beetles svg [fill]:not([fill="none"]) { fill: var(--portal-skin-accent) !important; }
+      #beetles svg [stroke] { stroke: var(--portal-skin-focus) !important; }
+      #boardWrap, .arena, #status, .instructions, details, section, .tile, .symbol, button, input, select {
+        transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+      }
+    `;
+    document.head.append(style);
+    const vars = {
+      scheme: "--portal-skin-scheme", background: "--portal-skin-background",
+      panel: "--portal-skin-panel", raised: "--portal-skin-raised", hover: "--portal-skin-hover",
+      text: "--portal-skin-text", muted: "--portal-skin-muted", border: "--portal-skin-border",
+      accent: "--portal-skin-accent", accentHover: "--portal-skin-accent-hover", focus: "--portal-skin-focus",
+    };
+    window.addEventListener("message", event => {
+      if (event.source !== parent || event.data?.type !== "state_changed" || !event.data.skin_palette) return;
+      const palette = event.data.skin_palette;
+      for (const [key, property] of Object.entries(vars)) {
+        const color = palette[key];
+        if (key === "scheme") {
+          document.documentElement.style.setProperty(property, color === "light" ? "light" : "dark");
+        } else if (typeof color === "string" && color.length <= 64 && CSS.supports("color", color)) {
+          document.documentElement.style.setProperty(property, color);
+        }
+      }
+    });
+  };
+  const script = "<scr" + "ipt>(" + adapter.toString() + ")()" + "</scr" + "ipt>";
+  const bodyEnd = code.toLowerCase().lastIndexOf("</body>");
+  return bodyEnd < 0 ? `${code}${script}` : code.slice(0, bodyEnd) + script + code.slice(bodyEnd);
 }
 
 async function onMakeMove(move) {
@@ -2485,6 +2578,7 @@ async function main() {
     // match param still forces the matches view and skips the selected-id
     // clearing in syncPortalScreen.
     syncPortalScreen();
+    syncGame().catch((error) => console.warn("Couldn't update the game skin:", error));
   });
   document.addEventListener("portal-layout-change", syncPortalRoutes);
   document.querySelector(".back-to-games")?.addEventListener("click", leaveGamePage);
