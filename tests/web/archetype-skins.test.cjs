@@ -45,12 +45,12 @@ test('experiments.js registers the four keys and the archetype flag', () => {
 });
 
 test('cache-busting versions bumped for the changed assets', () => {
-  assert.ok(portalHtml.includes('experiments.css?v=54'), 'portal.html experiments.css version');
+  assert.ok(portalHtml.includes('experiments.css?v=55'), 'portal.html experiments.css version');
   assert.ok(portalHtml.includes('experiments.js?v=16'), 'portal.html experiments.js version');
   assert.ok(portalHtml.includes('portal.js?v=114'), 'portal.html portal.js version');
   assert.ok(portalHtml.includes('portal-match-layout.js?v=9'), 'portal.html match-layout version');
-  assert.ok(portalSw.includes('playroom-portal-shell-v192'), 'service worker cache version');
-  assert.ok(portalSw.includes('experiments.css?v=54'), 'service worker experiments.css version');
+  assert.ok(portalSw.includes('playroom-portal-shell-v193'), 'service worker cache version');
+  assert.ok(portalSw.includes('experiments.css?v=55'), 'service worker experiments.css version');
   assert.ok(portalSw.includes('portal.js?v=114'), 'service worker portal.js version');
 });
 
