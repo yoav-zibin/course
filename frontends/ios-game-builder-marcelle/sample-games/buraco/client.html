@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --felt:#1e5b3f; --felt2:#174a33; --ink:#f5f1e6; --muted:#bcd3c4; --gold:#f2c94c; --card:#fffdf7; --red:#c0392b; --black:#1d1d1d; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: radial-gradient(circle at 50% 30%, #23704d, var(--felt2)); color: var(--ink); font: 15px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif; min-height: 100vh; }
+  header { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; align-items: baseline; padding: 8px 12px; background: rgba(0,0,0,.25); }
+  h1 { margin: 0; font-size: 20px; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .scores { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 12px; }
+  .team { background: rgba(0,0,0,.22); border-radius: 8px; padding: 4px 10px; font-size: 13px; }
+  .team.mine { outline: 2px solid var(--gold); }
+  .seats { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 6px; font-size: 13px; }
+  .seat { background: rgba(0,0,0,.18); border-radius: 999px; padding: 2px 10px; }
+  .seat.turn { outline: 2px solid var(--gold); }
+  .melds { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 12px; }
+  @media (max-width: 560px) { .melds { grid-template-columns: 1fr; } }
+  .meldbox { background: rgba(0,0,0,.18); border-radius: 10px; padding: 6px; min-height: 60px; display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start; }
+  .meldbox h2 { margin: 0 0 2px; font-size: 13px; font-weight: 600; color: var(--muted); flex-basis: 100%; }
+  .meldbox .hint { flex-basis: 100%; }
+  .meld { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 1px; padding: 3px; border-radius: 8px; border: 2px solid transparent; background: rgba(255,255,255,.06); }
+  .meld .c { width: 24px; height: 36px; font-size: 12px; }
+  button.meld { cursor: pointer; color: inherit; font: inherit; }
+  .meld.target { border-color: var(--gold); }
+  .meld .tag { font-size: 11px; margin-inline-start: 6px; color: var(--gold); }
+  .table { display: flex; gap: 12px; justify-content: center; align-items: center; padding: 10px 12px; flex-wrap: wrap; }
+  .pile { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+  .back { width: 52px; height: 74px; border-radius: 7px; background: repeating-linear-gradient(45deg, #7a1f2b 0 6px, #942634 6px 12px); border: 2px solid var(--card); }
+  .pilebtn { border: 0; background: none; padding: 0; cursor: pointer; color: inherit; font: inherit; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .pilebtn:disabled { cursor: default; opacity: .75; }
+  .discards { display: flex; flex-wrap: wrap; gap: 1px; max-width: 260px; justify-content: center; }
+  .c { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: 30px; height: 42px; border-radius: 5px; background: var(--card); color: var(--black); font: 700 13px/1 system-ui, sans-serif; border: 1px solid #c9c2b0; }
+  .c.red { color: var(--red); }
+  .c.big { width: 52px; height: 74px; font-size: 18px; }
+  .c .s { font-size: 13px; }
+  .c.big .s { font-size: 20px; }
+  footer { position: sticky; bottom: 0; background: rgba(8,30,20,.94); padding: 8px 10px 10px; }
+  .status { text-align: center; font-weight: 700; min-height: 1.4em; }
+  .status.win { color: var(--gold); font-size: 17px; }
+  .hint { text-align: center; color: var(--muted); font-size: 12px; min-height: 1em; }
+  .hand { display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; margin-top: 6px; }
+  button.c { cursor: pointer; padding: 0; }
+  button.c.sel { transform: translateY(-6px); outline: 3px solid var(--gold); }
+  .staged { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 6px; }
+  .stagebox { display: flex; gap: 2px; padding: 3px; border: 1px dashed var(--gold); border-radius: 6px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 8px; }
+  .actions button { min-height: 44px; padding: 0 12px; border-radius: 8px; border: 0; font: 600 14px system-ui, sans-serif; cursor: pointer; background: #dfe9e2; color: #10261b; }
+  .actions button.primary { background: var(--gold); color: #2a2000; }
+  .actions button:disabled { opacity: .45; cursor: default; }
+  .result { margin: 8px 12px; background: rgba(0,0,0,.25); border-radius: 8px; padding: 6px 10px; font-size: 13px; }
+</style>
+</head>
+<body>
+<header><h1 id="title"></h1><span class="meta" id="meta"></span></header>
+<div class="scores" id="scores"></div>
+<div class="seats" id="seats"></div>
+<div class="result" id="result" hidden></div>
+<div class="melds" id="melds"></div>
+<div class="table" id="table"></div>
+<footer>
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+  <div class="hint" id="hint"></div>
+  <div class="staged" id="staged"></div>
+  <div class="hand" id="hand" role="group"></div>
+  <div class="actions" id="actions"></div>
+</footer>
+<script type="application/json" id="i18n-strings">
+{
+  "title": "Buraco",
+  "meta": "Deal {deal} of {max} · first team to {target} points wins",
+  "team_us": "Your team: {points} points",
+  "team_them": "Opponents: {points} points",
+  "team_a": "{a} and {b}: {points} points",
+  "seat_line": "{name}: {cards} cards",
+  "seat_pot": "{name}: {cards} cards · pot taken",
+  "our_melds": "Your team's melds",
+  "their_melds": "Opponents' melds",
+  "melds_of": "Melds of {a} and {b}",
+  "no_melds": "No melds yet.",
+  "clean": "clean",
+  "dirty": "dirty",
+  "stock": "Stock: {count}",
+  "pots_left": "Pots left: {count}",
+  "discard_pile": "Discard pile: {count}",
+  "draw_stock": "Draw from the stock",
+  "take_pile": "Take the discard pile",
+  "your_draw": "Your turn: draw from the stock or take the whole discard pile.",
+  "your_play": "Lay melds if you like, then discard one card.",
+  "opening": "Your team's first melds must be worth at least {points} points in one go.",
+  "go_out_ready": "Your team may go out.",
+  "go_out_not_yet": "Your team cannot go out yet: it needs its pot and a clean meld of seven.",
+  "waiting": "Waiting for {name}.",
+  "watching": "You are watching this match.",
+  "new_meld": "New meld",
+  "lay_down": "Lay down",
+  "clear": "Clear",
+  "discard": "Discard",
+  "select_hint": "Tap cards to select them. Tap a meld of your team to add the selected cards to it.",
+  "staged_label": "To lay down:",
+  "pair": "{a} and {b}",
+  "deal_result": "Deal {deal}: {a} scored {pa}, {b} scored {pb}.",
+  "deal_out": "{name}'s team went out.",
+  "deal_no_out": "The stock ran out.",
+  "you_win": "Your team wins the match!",
+  "they_win": "The opponents win the match.",
+  "team_wins": "{a} and {b} win the match.",
+  "tie": "The match is a tie.",
+  "joker": "Joker",
+  "card_label": "{rank} of {suit}",
+  "suit_c": "clubs",
+  "suit_d": "diamonds",
+  "suit_h": "hearts",
+  "suit_s": "spades",
+  "server_the_game_is_over": "the game is over",
+  "server_it_is_not_your_turn": "it is not your turn",
+  "server_you_have_already_drawn_this_turn": "you have already drawn this turn",
+  "server_the_stock_is_empty": "the stock is empty",
+  "server_the_discard_pile_is_empty": "the discard pile is empty",
+  "server_draw_a_card_first": "draw a card first",
+  "server_you_do_not_have_that_card": "you do not have that card",
+  "server_your_team_cannot_go_out_yet": "your team cannot go out yet",
+  "server_that_meld_does_not_exist": "that meld does not exist",
+  "server_you_do_not_have_those_cards": "you do not have those cards",
+  "server_those_cards_do_not_fit_that_meld": "those cards do not fit that meld",
+  "server_that_is_not_a_valid_meld": "that is not a valid meld",
+  "server_your_opening_melds_are_worth_less_than_the_minimum": "your opening melds are worth less than the minimum",
+  "server_keep_two_cards_your_team_cannot_go_out_yet": "keep two cards: your team cannot go out yet",
+  "server_send_a_draw_a_discard_or_melds_to_lay": "send a draw, a discard or melds to lay"
+}
+</script>
+<script>
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings) strings = { ...SOURCE_STRINGS, ...message.strings };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+
+const SUIT_SYMBOL = { c: "♣", d: "♦", h: "♥", s: "♠" };
+const $ = (id) => document.getElementById(id);
+const split = (s) => (s ? s.match(/../g) : []);
+let current = null, sent = false;
+let selected = [];          // indexes into the visible (not staged) hand
+let staged = { new: [], add: [] };
+
+function suitName(s) {
+  switch (s) {
+    case "c": return t("suit_c"); case "d": return t("suit_d"); case "h": return t("suit_h"); default: return t("suit_s");
+  }
+}
+const rankText = (r) => (r === "T" ? "10" : r);
+
+function cardEl(card, tag, big) {
+  const e = document.createElement(tag || "span");
+  const joker = card === "JK";
+  const red = !joker && (card[1] === "h" || card[1] === "d");
+  e.className = "c" + (red ? " red" : "") + (big ? " big" : "");
+  const r = document.createElement("span");
+  r.textContent = joker ? "★" : rankText(card[0]);
+  const s = document.createElement("span");
+  s.className = "s";
+  s.textContent = joker ? "" : SUIT_SYMBOL[card[1]];
+  e.append(r, s);
+  e.setAttribute("aria-label", joker ? t("joker") : t("card_label", { rank: rankText(card[0]), suit: suitName(card[1]) }));
+  return e;
+}
+
+function send(move) {
+  if (sent) return;
+  sent = true;
+  parent.postMessage({ type: "make_move", move }, "*");
+}
+
+function resetLocal() { selected = []; staged = { new: [], add: [] }; }
+
+/** The hand minus staged cards, as [card, originalIndex]. */
+function visibleHand(view) {
+  const hand = split(view.hand);
+  const used = [...staged.new.flat(), ...staged.add.flatMap((a) => a[1])];
+  const out = [];
+  for (const c of hand) {
+    const i = used.indexOf(c);
+    if (i >= 0) used.splice(i, 1); else out.push(c);
+  }
+  return out;
+}
+
+function render(message) {
+  const view = message.view || message.state;
+  if (!view) return;
+  const players = message.players;
+  const name = (s) => players[s].name;
+  const me = view.my_seat;
+  const myTeam = me === null ? 0 : me % 2;
+  const over = view.phase === "over";
+  const mine = view.my_turn && message.status === "ongoing" && !message.replay;
+  $("title").textContent = t("title");
+  $("meta").textContent = t("meta", { deal: view.deal_no, max: view.max_deals, target: view.target });
+
+  // Scores.
+  $("scores").replaceChildren(...[0, 1].map((team) => {
+    const box = document.createElement("span");
+    const isMine = me !== null && team === myTeam;
+    box.className = "team" + (isMine ? " mine" : "");
+    if (me === null) box.textContent = t("team_a", { a: name(team), b: name(team + 2), points: view.scores[team] });
+    else box.textContent = isMine ? t("team_us", { points: view.scores[team] }) : t("team_them", { points: view.scores[team] });
+    return box;
+  }));
+  $("seats").replaceChildren(...players.map((p, s) => {
+    const chip = document.createElement("span");
+    const turn = !over && s === view.to_move;
+    chip.className = "seat" + (turn ? " turn" : "");
+    const potTaken = view.took_pot[s % 2];
+    chip.textContent = potTaken ? t("seat_pot", { name: p.name, cards: view.hand_counts[s] }) : t("seat_line", { name: p.name, cards: view.hand_counts[s] });
+    return chip;
+  }));
+
+  // Last deal / final result.
+  const result = $("result");
+  result.hidden = !view.last_deal;
+  if (view.last_deal) {
+    const ld = view.last_deal;
+    const line = t("deal_result", { deal: ld.deal, a: t("pair", { a: name(0), b: name(2) }), pa: ld.points[0],
+                                     b: t("pair", { a: name(1), b: name(3) }), pb: ld.points[1] });
+    const out = ld.went_out === null ? t("deal_no_out") : t("deal_out", { name: name(ld.went_out) });
+    result.replaceChildren(document.createTextNode(line), document.createElement("br"), document.createTextNode(out));
+  }
+
+  // Melds (my team first).
+  const canPlay = mine && view.phase === "play";
+  const order = me === null ? [0, 1] : [myTeam, 1 - myTeam];
+  $("melds").replaceChildren(...order.map((team) => {
+    const box = document.createElement("div");
+    box.className = "meldbox";
+    const h = document.createElement("h2");
+    if (me === null) h.textContent = t("melds_of", { a: name(team), b: name(team + 2) });
+    else h.textContent = team === myTeam ? t("our_melds") : t("their_melds");
+    box.append(h);
+    if (!view.melds[team].length) {
+      const p = document.createElement("div");
+      p.className = "hint";
+      p.textContent = t("no_melds");
+      box.append(p);
+    }
+    view.melds[team].forEach((m, index) => {
+      const addable = canPlay && team === myTeam;
+      const row = document.createElement(addable ? "button" : "div");
+      row.className = "meld";
+      const stagedHere = staged.add.find((a) => a[0] === index);
+      if (stagedHere) row.classList.add("target");
+      for (const c of [...split(m.cards), ...(stagedHere ? stagedHere[1] : [])]) row.append(cardEl(c));
+      if (m.canasta) {
+        const tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = m.clean ? t("clean") : t("dirty");
+        row.append(tag);
+      }
+      if (addable) {
+        row.type = "button";
+        row.addEventListener("click", () => {
+          if (!selected.length) return;
+          const hand = visibleHand(view);
+          const cards = selected.map((i) => hand[i]);
+          const entry = staged.add.find((a) => a[0] === index);
+          if (entry) entry[1].push(...cards); else staged.add.push([index, cards]);
+          selected = [];
+          render(current);
+        });
+      }
+      box.append(row);
+    });
+    return box;
+  }));
+
+  // Stock, pots and discard pile.
+  const table = $("table");
+  const stockBtn = document.createElement("button");
+  stockBtn.className = "pilebtn";
+  stockBtn.type = "button";
+  const back = document.createElement("span");
+  back.className = "back";
+  const stockLabel = document.createElement("span");
+  stockLabel.textContent = t("stock", { count: view.stock_count });
+  stockBtn.append(back, stockLabel);
+  const canDraw = mine && view.phase === "draw";
+  stockBtn.disabled = !(canDraw && view.stock_count > 0);
+  stockBtn.setAttribute("aria-label", t("draw_stock"));
+  if (!stockBtn.disabled) {
+    stockBtn.dataset.auto = "1";
+    stockBtn.addEventListener("click", () => send({ draw: "stock" }));
+  }
+  const pots = document.createElement("span");
+  pots.className = "pile";
+  pots.textContent = t("pots_left", { count: view.pots_left });
+  const discards = split(view.discard);
+  const pileBtn = document.createElement("button");
+  pileBtn.className = "pilebtn";
+  pileBtn.type = "button";
+  const row = document.createElement("span");
+  row.className = "discards";
+  discards.forEach((c, i) => row.append(cardEl(c, "span", i === discards.length - 1)));
+  const pileLabel = document.createElement("span");
+  pileLabel.textContent = t("discard_pile", { count: discards.length });
+  pileBtn.append(row, pileLabel);
+  pileBtn.disabled = !(canDraw && discards.length > 0);
+  pileBtn.setAttribute("aria-label", t("take_pile"));
+  if (!pileBtn.disabled) pileBtn.addEventListener("click", () => send({ draw: "discard" }));
+  table.replaceChildren(stockBtn, pots, pileBtn);
+
+  // Staged melds.
+  const stagedBox = $("staged");
+  if (staged.new.length) {
+    const label = document.createElement("span");
+    label.className = "hint";
+    label.textContent = t("staged_label");
+    stagedBox.replaceChildren(label, ...staged.new.map((cards) => {
+      const b = document.createElement("span");
+      b.className = "stagebox";
+      cards.forEach((c) => b.append(cardEl(c)));
+      return b;
+    }));
+  } else stagedBox.replaceChildren();
+
+  // Hand.
+  const hand = visibleHand(view);
+  const nothingStaged = !staged.new.length && !staged.add.length;
+  $("hand").setAttribute("aria-label", t("title"));
+  $("hand").replaceChildren(...hand.map((c, i) => {
+    const b = cardEl(c, "button", true);
+    b.type = "button";
+    const isSel = selected.includes(i);
+    if (isSel) b.classList.add("sel");
+    b.setAttribute("aria-pressed", String(isSel));
+    b.disabled = !canPlay;
+    // Automated test players: pick one card, then discard it.
+    if (canPlay && nothingStaged && selected.length === 0) b.dataset.auto = "1";
+    b.addEventListener("click", () => {
+      selected = isSel ? selected.filter((x) => x !== i) : [...selected, i];
+      render(current);
+    });
+    return b;
+  }));
+
+  // Actions.
+  const actions = [];
+  const button = (label, onClick, enabled, primary, auto) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    b.disabled = !enabled;
+    if (primary) b.className = "primary";
+    if (enabled && auto) b.dataset.auto = "1";
+    b.addEventListener("click", onClick);
+    actions.push(b);
+  };
+  if (canPlay) {
+    button(t("new_meld"), () => {
+      staged.new.push(selected.map((i) => hand[i]));
+      selected = [];
+      render(current);
+    }, selected.length >= 3, false, false);
+    button(t("lay_down"), () => {
+      const lay = {};
+      if (staged.new.length) lay.new = staged.new;
+      if (staged.add.length) lay.add = staged.add;
+      send({ lay });
+    }, !nothingStaged, true, false);
+    button(t("clear"), () => { resetLocal(); render(current); }, !nothingStaged || selected.length > 0, false, false);
+    const oneCard = selected.length === 1 && nothingStaged;
+    button(t("discard"), () => send({ discard: hand[selected[0]] }), oneCard, true, true);
+  }
+  $("actions").replaceChildren(...actions);
+
+  // Status.
+  const status = $("status"), hint = $("hint");
+  status.className = "status";
+  hint.textContent = "";
+  if (over) {
+    status.className = "status win";
+    const tie = view.winners.length > 1;
+    const weWon = me !== null && view.winners.includes(myTeam);
+    if (tie) status.textContent = t("tie");
+    else if (me === null) status.textContent = t("team_wins", { a: name(view.winners[0]), b: name(view.winners[0] + 2) });
+    else status.textContent = weWon ? t("you_win") : t("they_win");
+  } else if (canDraw) {
+    status.textContent = t("your_draw");
+  } else if (canPlay) {
+    status.textContent = t("your_play");
+    const opened = view.opened[myTeam];
+    if (!opened) hint.textContent = t("opening", { points: view.minimum[myTeam] });
+    else hint.textContent = view.may_go_out ? t("go_out_ready") : t("go_out_not_yet");
+  } else if (me === null) {
+    status.textContent = t("watching");
+  } else {
+    status.textContent = t("waiting", { name: name(view.to_move) });
+  }
+  if (canPlay && !hint.textContent) hint.textContent = t("select_hint");
+}
+
+window.addEventListener("message", (event) => {
+  const message = event.data;
+  if (!message || message.type !== "state_changed") return;
+  applyLocale(message);
+  current = message;
+  sent = false;
+  resetLocal();
+  render(message);
+});
+parent.postMessage({ type: "game_ready" }, "*");
+</script>
+</body>
+</html>
