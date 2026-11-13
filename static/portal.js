@@ -429,7 +429,7 @@ function leaveGamePage(event) {
   state.detailGameId = null;
   state.detailCreatorInitialized = false;
   state.requestedGameHandled = true;
-  $("match-creator").open = false;
+  $("match-creator").open = true;
   syncPortalScreen();
   updateMatchSetup();
   render();
@@ -2104,19 +2104,20 @@ async function practice() {
 async function createMatch() {
   if (state.creating) return;
   const user = me();
+  const gameId = state.detailGameId || $("new-game").value;
   if (!user) {
     $("create-message").textContent = I18n.t("ui.portal.log_in_first", {}, "Log in first.");
     $("create-message").className = "message error";
     return;
   }
-  if (!state.games.some((game) => game.id === $("new-game").value)) {
+  if (!state.games.some((game) => game.id === gameId)) {
     $("create-message").textContent = I18n.t("ui.portal.choose_game_search_first", {}, "Choose a game from the search results first.");
     return;
   }
   let match;
   state.creating = true;
   $("create").disabled = true;
-  const game = state.games.find((item) => item.id === $("new-game").value);
+  const game = state.games.find((item) => item.id === gameId);
   try {
     const bet = Number($("match-stake").value);
     if (!Number.isSafeInteger(bet) || bet < 0) throw new Error(I18n.t("ui.portal.invalid_stake", {}, "Invalid token stake"));
@@ -2124,7 +2125,7 @@ async function createMatch() {
     match = await portalRequest("POST", "/matches", {
       user,
       body: {
-        game_id: $("new-game").value,
+        game_id: gameId,
         num_computer_opponents: 0,
         bet_per_player: Number($("match-stake").value),
         ...(window.PortalSpeed?.createFields($("match-speed").value) ?? {}),
