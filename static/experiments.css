@@ -747,3 +747,223 @@
 :root[data-skin="party"] .topbar .token-wallet-label { color: #ffe3f6; }
 :root[data-skin="party"] .topbar .token-wallet-number { color: #ffe3f6; }
 :root[data-skin="party"] .topbar .token-wallet-number strong { color: #ffffff; }
+
+/* Neon Grid: a dark glowing grid, cyan light lines, and orange highlights. */
+:root[data-skin="neon"] {
+  color-scheme: dark;
+  --color-bg-0: #04070f;
+  --color-bg-1: #08101f;
+  --color-bg-2: #0d1a2e;
+  --color-bg-3: #13243f;
+  --color-bg-4: #1b3354;
+  --color-text-primary: #e8fbff;
+  --color-text-secondary: #b5e9f5;
+  --color-text-tertiary: #7cc3d6;
+  --color-text-quaternary: #5a93a6;
+  --color-border-1: #0f2238;
+  --color-border-2: #16466a;
+  --color-border-3: #1f6f94;
+  --color-border-4: #2fb4d6;
+  --color-accent: #00e5ff;
+  --color-accent-hover: #7af3ff;
+  --color-focus-ring: #ff9e3d;
+  --color-ok: #3dffb0;
+  --color-warn: #ffc23d;
+  --color-error: #ff5577;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --font-sans: "Bahnschrift", "DIN Alternate", "Eurostile", "Segoe UI", sans-serif;
+  --shadow-1: 0 0 0 1px #00e5ff22, 0 0 12px #00e5ff1a;
+  --shadow-3: 0 0 0 1px #00e5ff33, 0 0 28px #00e5ff26;
+}
+
+/* The portal sets its own colors, so repeat them here, and draw the grid floor. */
+:root[data-skin="neon"] .portal-shell {
+  --color-bg-0: #04070f;
+  --color-bg-1: #08101f;
+  --color-bg-2: #0d1a2e;
+  --color-bg-3: #13243f;
+  --color-bg-4: #1b3354;
+  --color-text-primary: #e8fbff;
+  --color-text-secondary: #b5e9f5;
+  --color-text-tertiary: #7cc3d6;
+  --color-border-2: #16466a;
+  --color-border-3: #1f6f94;
+  --color-accent: #00e5ff;
+  --color-accent-hover: #7af3ff;
+  --color-focus-ring: #ff9e3d;
+  background:
+    linear-gradient(#00e5ff0d 1px, transparent 1px) 0 0 / 48px 48px,
+    linear-gradient(90deg, #00e5ff0d 1px, transparent 1px) 0 0 / 48px 48px,
+    radial-gradient(ellipse at 50% 120%, #00e5ff1f, transparent 60%),
+    #04070f;
+  background-attachment: fixed;
+  color: #e8fbff;
+}
+
+/* Glowing top bar edge. */
+:root[data-skin="neon"] .topbar {
+  border-bottom: 1px solid #00e5ff55;
+  box-shadow: 0 1px 16px #00e5ff26;
+}
+
+/* Panels: dark glass with a thin cyan glow. */
+:root[data-skin="neon"] .portal-sidebar,
+:root[data-skin="neon"] .match-creator,
+:root[data-skin="neon"] .game-detail-page,
+:root[data-skin="neon"] .match-stage,
+:root[data-skin="neon"] .portal-shell .game-search-popup,
+:root[data-skin="neon"] .portal-shell .match-tools {
+  background: #08101fee;
+  border-color: #16466a;
+  color: #e8fbff;
+  box-shadow: 0 0 0 1px #00e5ff1f, 0 0 18px #00e5ff14;
+}
+
+/* Cards light up when you point at them. */
+:root[data-skin="neon"] .popular-games-section,
+:root[data-skin="neon"] .play-option,
+:root[data-skin="neon"] .portal-shell .library-card,
+:root[data-skin="neon"] .selected-game-card {
+  background: #0d1a2e;
+  border-color: #1f6f94;
+  color: #e8fbff;
+  transition: border-color .15s, box-shadow .15s;
+}
+:root[data-skin="neon"] .portal-shell .library-card:hover,
+:root[data-skin="neon"] .play-option:hover {
+  border-color: #00e5ff;
+  box-shadow: 0 0 16px #00e5ff40;
+}
+
+/* Text boxes and dropdowns glow cyan while you type. */
+:root[data-skin="neon"] .portal-shell input,
+:root[data-skin="neon"] .portal-shell select {
+  background: #04070f;
+  border-color: #1f6f94;
+  color: #e8fbff;
+}
+:root[data-skin="neon"] .portal-shell input:focus,
+:root[data-skin="neon"] .portal-shell select:focus {
+  border-color: #00e5ff;
+  box-shadow: 0 0 0 1px #00e5ff, 0 0 12px #00e5ff55;
+}
+
+/* Main buttons: solid cyan light. */
+:root[data-skin="neon"] .portal-shell button.primary,
+:root[data-skin="neon"] .portal-shell .library-toolbar button[aria-pressed="true"] {
+  background: #00e5ff;
+  border-color: #00e5ff;
+  color: #00121a;
+  box-shadow: 0 0 14px #00e5ff80;
+}
+:root[data-skin="neon"] .portal-shell button.primary:hover:not(:disabled) {
+  background: #7af3ff;
+  border-color: #7af3ff;
+  box-shadow: 0 0 22px #00e5ffb3;
+}
+
+/* Keyboard focus is orange, so it stands out from the cyan. */
+:root[data-skin="neon"] .portal-shell button:focus-visible,
+:root[data-skin="neon"] .portal-shell summary:focus-visible,
+:root[data-skin="neon"] .portal-shell .popular-game-card:focus-visible {
+  outline-color: #ff9e3d;
+}
+
+/* Headings glow; section titles are wide-spaced capitals. */
+:root[data-skin="neon"] .creator-title,
+:root[data-skin="neon"] .popular-games-heading h2,
+:root[data-skin="neon"] .play-option-heading h3,
+:root[data-skin="neon"] .selected-game-card h2 {
+  color: #e8fbff;
+  text-shadow: 0 0 10px #00e5ff66;
+}
+:root[data-skin="neon"] .popular-games-heading h2,
+:root[data-skin="neon"] .play-option-heading h3 {
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+:root[data-skin="neon"] .creator-description,
+:root[data-skin="neon"] .popular-period,
+:root[data-skin="neon"] .play-option-heading p,
+:root[data-skin="neon"] .play-option .play-option-note,
+:root[data-skin="neon"] .library-description {
+  color: #7cc3d6;
+}
+
+/* Token wallet: an orange light to contrast with the cyan. */
+:root[data-skin="neon"] .topbar .token-wallet {
+  background: linear-gradient(135deg, #061826, #0d1a2e);
+  border-color: #ff9e3d;
+  color: #ffe7cc;
+  box-shadow: 0 0 14px #ff9e3d55;
+}
+:root[data-skin="neon"] .topbar .token-wallet-coin {
+  background: #2a1600;
+  border-color: #ff9e3d;
+  color: #ffb86b;
+}
+:root[data-skin="neon"] .topbar .token-wallet-label,
+:root[data-skin="neon"] .topbar .token-wallet-number {
+  color: #b5e9f5;
+}
+:root[data-skin="neon"] .topbar .token-wallet-number strong {
+  color: #ffe7cc;
+}
+
+/* Neon Grid: replace the portal's default lime and purple details. */
+:root[data-skin="neon"] .popular-game-rank {
+  background: #00e5ff;
+  color: #00121a;
+  box-shadow: 0 0 10px #00e5ff99;
+}
+:root[data-skin="neon"] .popular-game-open,
+:root[data-skin="neon"] .library-select,
+:root[data-skin="neon"] .creator-toggle,
+:root[data-skin="neon"] .builder-link {
+  color: #00e5ff;
+}
+:root[data-skin="neon"] .popular-game-players,
+:root[data-skin="neon"] .library-mode,
+:root[data-skin="neon"] .popular-eyebrow {
+  color: #ffb86b;
+}
+:root[data-skin="neon"] .match-creator {
+  border-top-color: #00e5ff;
+}
+:root[data-skin="neon"] .portal-shell .popular-game-card:hover,
+:root[data-skin="neon"] .portal-shell .popular-games-scroll-button:hover:not(:disabled) {
+  border-color: #00e5ff;
+  box-shadow: 0 0 16px #00e5ff40;
+}
+:root[data-skin="neon"] .portal-shell .library-card:hover {
+  background: #10223a;
+}
+:root[data-skin="neon"] .portal-shell .library-card[aria-pressed=true] {
+  border-color: #00e5ff;
+  box-shadow: 0 0 0 1px #00e5ff, 0 0 16px #00e5ff55;
+}
+:root[data-skin="neon"] .waiting-note {
+  border-color: #1f6f94;
+  background: #061a26;
+  color: #b5e9f5;
+}
+:root[data-skin="neon"] .portal-shell .badge.turn,
+:root[data-skin="neon"] .portal-shell .seat-chip.turn,
+:root[data-skin="neon"] .portal-shell .result-win {
+  color: #3dffb0;
+  background: #062a20;
+  border-color: #1f8f6a;
+}
+:root[data-skin="neon"] #group-turn > summary,
+:root[data-skin="neon"] #group-turn .group-count {
+  color: #3dffb0;
+}
+:root[data-skin="neon"] .play-option-icon {
+  background: #06283a;
+  color: #00e5ff;
+}
+:root[data-skin="neon"] .practice-option .play-option-icon {
+  background: #2a1600;
+  color: #ffb86b;
+}
