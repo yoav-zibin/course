@@ -465,11 +465,23 @@ const Auth = (() => {
     );
   }
 
+  /** The match invite token in this page's #invite=, or, on the login page a
+   * logged-out visitor is sent to (/?next=/static/portal.html#invite=<token>),
+   * in the page they will return to. */
+  function inviteTokenInUrl() {
+    const fromHash = (hash) => new URLSearchParams(hash.replace(/^#/, "")).get("invite");
+    const direct = fromHash(location.hash || "");
+    if (direct) return direct;
+    const next = new URLSearchParams(location.search || "").get("next") || "";
+    const at = next.indexOf("#");
+    return at >= 0 ? fromHash(next.slice(at)) : null;
+  }
+
   async function createGuest(displayName = "") {
     const name = displayName.trim() || I18n.t("ui.auth.guest_default_name", { number: accounts().length + 1 }, `Guest ${accounts().length + 1}`);
     // Signing up from a match invite link (/portal#invite=<token>) credits its
     // creator with the referral.
-    const inviteToken = new URLSearchParams(location.hash.slice(1)).get("invite");
+    const inviteToken = inviteTokenInUrl();
     const user = await apiRequest("POST", "/users", {
       body: newAccountBody(inviteToken ? { display_name: name, invite_token: inviteToken } : { display_name: name }),
     });
