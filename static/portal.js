@@ -956,7 +956,7 @@ function matchItem(match) {
     game?.cover_url
       ? el("img", {src:game.cover_url, alt:"", loading:"lazy"})
       : el("span", {class:"match-card-monogram", textContent:initials}));
-  return el(
+  const card = el(
     "button",
     {
       type: "button",
@@ -969,6 +969,44 @@ function matchItem(match) {
       el("span", {class:"match-card-title-row"}, el("strong", {class:"match-card-title", textContent:gameName}), ...badges),
       el("span", {class:"match-card-players", textContent:match.players.map(playerName).join(" · ")}),
       el("span", {class:"match-card-moves", textContent:I18n.t("ui.match.moves_count", { count: match.move_count }, `${match.move_count} moves`)})),
+  );
+  // Quick delete: the same DELETE the match view's "Delete match" runs, one
+  // click from the list, without opening the match first. Only the match's
+  // owner and seated players get it (an open match is not theirs to delete);
+  // local practices get it too, like their "Remove practice from list".
+  const canDelete = Boolean(user && (match.localMode || match.owner_user_id === user.id || seatOf(match, user.id)));
+  if (!canDelete) return card;
+  const deleteLabel = I18n.t("ui.match.delete_match", {}, "Delete match");
+  return el(
+    "div",
+    { class: "match-list-row" },
+    card,
+    el("button", {
+      type: "button",
+      class: "match-quick-delete",
+      textContent: "\u2715",
+      title: deleteLabel,
+      "aria-label": deleteLabel,
+      onclick: async (event) => {
+        event.stopPropagation();
+        const button = event.currentTarget;
+        button.disabled = true;
+        try {
+          await portalRequest("DELETE", `/matches/${match.id}`, { user });
+        } catch (error) {
+          button.disabled = false;
+          showMessage(error.message, "error");
+          return;
+        }
+        state.myMatches = state.myMatches.filter((item) => item.id !== match.id);
+        state.openMatches = state.openMatches.filter((item) => item.id !== match.id);
+        if (state.selectedId === match.id) selectMatch(null);
+        else {
+          renderLists();
+          refresh();
+        }
+      },
+    }),
   );
 }
 

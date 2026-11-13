@@ -614,7 +614,27 @@ test('declarative games use the ordinary catalog, search, detail and match label
  assert.equal(node('selected-game-name').textContent,'Backgammon (Declarative)');
  run('state.gameCache.set("native@1",state.games[1]);state.match={id:"m",game_id:"native",game_version:1,owner_user_id:"owner",status:"waiting_for_players",players:[{player_index:0,kind:"human",user_id:"owner"}],move_count:0};renderMatch()');
  assert.equal(node('match-title').textContent,'Backgammon (Declarative) (version 1)');
- assert.equal(run('matchItem(state.match).children[1].children[0].children[0].textContent'),'Backgammon (Declarative)');
+ assert.equal(run('matchItem(state.match).children[0].children[1].children[0].children[0].textContent'),'Backgammon (Declarative)');
+});
+
+test('match rows give their owner a one-click delete; open matches get none',async()=>{
+ const calls=[];
+ const {run}=setup(async(method,path)=>{calls.push([method,path]);return {};});
+ run('state.myMatches=[{id:"m",game_id:"game",game_version:2,owner_user_id:"owner",status:"waiting_for_players",players:[{player_index:0,kind:"human",user_id:"owner"}],move_count:0}]');
+ const row=run('matchItem(state.myMatches[0])');
+ assert.equal(row.class,'match-list-row');
+ assert.equal(row.children[0].class,'list-item match-list-card');
+ const quick=row.children[1];
+ assert.equal(quick.class,'match-quick-delete');
+ assert.equal(quick['aria-label'],'Delete match');
+ let stopped=false;
+ await quick.onclick({stopPropagation(){stopped=true;},currentTarget:{disabled:false}});
+ assert.equal(stopped,true);
+ assert.deepEqual(calls,[['DELETE','/matches/m']]);
+ assert.equal(run('state.myMatches.length'),0);
+ assert.equal(run('state.selectedId'),null);
+ run('state.openMatches=[{id:"o",game_id:"game",game_version:2,owner_user_id:"other",status:"waiting_for_players",players:[{player_index:0,kind:"human",user_id:"other"}],move_count:0}]');
+ assert.equal(run('matchItem(state.openMatches[0]).class'),'list-item match-list-card');
 });
 
 test('a translated declarative name is searchable without dropping the renderer marker',()=>{
