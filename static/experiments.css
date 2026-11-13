@@ -2381,3 +2381,160 @@
   :root[data-skin="meadow"] .portal-shell .popular-game-card:hover,
   :root[data-skin="meadow"] .play-option:hover { transform: none; }
 }
+
+/* Riso Club: cream stock and two spot inks, cobalt and vermilion. */
+:root[data-skin="riso-club"] {
+  color-scheme: light;
+  --riso-paper: #faf1d9;
+  --riso-panel: #fff8e7;
+  --riso-ink: #19295f;
+  --riso-cobalt: #2545ad;
+  --riso-red: #a72d30;
+  --color-bg-0: var(--riso-paper);
+  --color-bg-1: var(--riso-panel);
+  --color-bg-2: #f4e6c5;
+  --color-bg-3: #ecd9ad;
+  --color-bg-4: #e4cc9c;
+  --color-text-primary: var(--riso-ink);
+  --color-text-secondary: #3f4770;
+  --color-text-tertiary: #514860;
+  --color-text-quaternary: #5b4a4f;
+  --color-border-1: #d1bf9e;
+  --color-border-2: #b7a583;
+  --color-border-3: #8b775a;
+  --color-border-4: #6e5c46;
+  --color-accent: var(--riso-cobalt);
+  --color-accent-hover: #183583;
+  --color-focus-ring: var(--riso-red);
+  --color-ok: #285a42;
+  --color-warn: #795012;
+  --color-error: var(--riso-red);
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --font-sans: "Archivo", system-ui, sans-serif;
+  --shadow-1: 0 1px 0 #5e441a22;
+  --shadow-3: 3px 4px 0 #2545ad24;
+}
+
+:root[data-skin="riso-club"] :is(button.primary, .topbar button.primary) {
+  color: var(--riso-panel);
+}
+
+:root[data-skin="riso-club"] .topbar {
+  background: var(--riso-panel);
+  border-bottom: 3px solid var(--riso-cobalt);
+}
+
+:root[data-skin="riso-club"] .portal-shell {
+  --color-bg-0: var(--riso-paper);
+  --color-bg-1: var(--riso-panel);
+  --color-text-primary: var(--riso-ink);
+  --color-accent: var(--riso-cobalt);
+  --color-ok: #285a42;
+  background: var(--riso-paper);
+  color: var(--riso-ink);
+}
+
+:root[data-skin="riso-club"] .portal-shell :is(
+  .portal-sidebar, .match-creator, .game-detail-page, .match-stage,
+  .game-search-popup, .match-tools, .selected-game-card, .play-option,
+  .library-card, .popular-game-card, .popular-games-section
+) {
+  background: var(--riso-panel);
+  color: var(--riso-ink);
+  border-color: #b7a583;
+  border-radius: 4px;
+}
+
+:root[data-skin="riso-club"] .portal-shell :is(.match-creator, .game-detail-page, .match-stage) {
+  border-top: 5px solid var(--riso-red);
+  box-shadow: var(--shadow-3);
+}
+
+:root[data-skin="riso-club"] .match-creator > summary {
+  background-image: radial-gradient(circle, #a72d3060 1px, transparent 1.4px);
+  background-size: 6px 6px;
+  background-repeat: repeat;
+  background-color: var(--riso-panel);
+}
+
+:root[data-skin="riso-club"] .creator-title {
+  background: var(--riso-panel);
+  box-shadow: 7px 0 var(--riso-panel), -7px 0 var(--riso-panel);
+  color: var(--riso-ink);
+  font-weight: 900;
+  letter-spacing: -.045em;
+}
+
+:root[data-skin="riso-club"] .portal-shell :is(
+  .creator-description, .game-label, .search-note, .game-option,
+  .game-option small, .game-option-description, .selected-game-card p,
+  .computer-setting, .offline-controls, .popular-period, .library-description,
+  .library-count, .library-meta, .popular-game-players, .match-group > summary,
+  .group-count, .seat-chip
+) {
+  color: #3f4770;
+}
+
+:root[data-skin="riso-club"] .portal-shell :is(
+  .popular-games-heading h2, .popular-game-title, .library-title
+) {
+  color: var(--riso-ink);
+  font-weight: 800;
+}
+
+:root[data-skin="riso-club"] .portal-shell :is(
+  .popular-eyebrow, .creator-toggle, .back-to-games, .library-select,
+  .popular-game-open, #browse-games
+) {
+  color: var(--riso-cobalt);
+}
+
+:root[data-skin="riso-club"] .portal-shell :is(input, select) {
+  background: var(--riso-panel);
+  color: var(--riso-ink);
+  border-color: #8b775a;
+}
+
+:root[data-skin="riso-club"] .portal-shell :is(button.primary, .library-toolbar button[aria-pressed="true"]) {
+  background: var(--riso-cobalt);
+  color: var(--riso-panel);
+  border-color: var(--riso-cobalt);
+}
+
+:root[data-skin="riso-club"] .portal-shell button.primary:hover:not(:disabled) {
+  background: #183583;
+}
+
+:root[data-skin="riso-club"] .portal-shell :is(.game-option:hover, .game-option[aria-selected="true"], .library-card:hover) {
+  background: #f4e6c5;
+  color: var(--riso-ink);
+  border-color: var(--riso-cobalt);
+}
+
+:root[data-skin="riso-club"] .portal-shell .library-card[aria-pressed="true"] {
+  border-color: var(--riso-cobalt);
+  box-shadow: 0 0 0 1px var(--riso-cobalt);
+}
+
+:root[data-skin="riso-club"] .portal-shell :focus-visible {
+  outline: 2px solid var(--riso-red);
+  outline-offset: 2px;
+}
+
+:root[data-skin="riso-club"] .topbar .token-wallet,
+:root[data-skin="riso-club"] .portal-shell :is(.group-count, .popular-game-rank) {
+  background: #ecd9ad;
+  border-color: #b7a583;
+  color: var(--riso-ink);
+}
+
+:root[data-skin="riso-club"] .topbar :is(.token-wallet-label, .token-wallet-number, .token-wallet-number strong) {
+  color: var(--riso-ink);
+}
+
+:root[data-skin="riso-club"] .topbar .token-wallet-coin {
+  background: var(--riso-red);
+  border-color: var(--riso-red);
+  color: var(--riso-panel);
+}
