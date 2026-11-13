@@ -46,3 +46,23 @@ def test_preview_reports_unreachable_backend():
         assert client.get('/auth/config').status_code == 502
 
 
+def test_preview_forwards_every_api_area_the_pages_call():
+    # Regression (bug 13): languages, push, invites and matchmaking answered 404.
+    seen = []
+    def backend(request):
+        seen.append(request.url.path)
+        return httpx.Response(200, json={})
+    with TestClient(preview.create_preview('https://buildplay.fun', transport=httpx.MockTransport(backend))) as client:
+        for path in ['/games', '/i18n/locales', '/i18n/catalogs/es', '/push/config', '/invites/x',
+                     '/matchmaking/quick-match', '/storage/capabilities', '/v2/games']:
+            method = client.post if path.startswith('/matchmaking') else client.get
+            assert method(path).status_code == 200, path
+        assert client.get('/admin/stats').status_code == 404
+    assert '/push/config' in seen and '/invites/x' in seen
+
+
+def test_preview_short_invite_links_open_the_local_portal():
+    with TestClient(preview.create_preview('https://buildplay.fun', transport=httpx.MockTransport(lambda request: httpx.Response(500)))) as client:
+        response = client.get('/r/48213', follow_redirects=False)
+        assert response.status_code == 302
+        assert response.headers['location'] == '/portal?ref=48213'
