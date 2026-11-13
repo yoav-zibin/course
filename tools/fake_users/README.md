@@ -69,7 +69,7 @@ All of these can change on the control page while running (the starting values a
 | `max_moves_per_match` | A fake user leaves after this many of their own moves |
 | `another_match_probability` | Chance of playing another match after one ends |
 | `move_tries` | Random clicks on one turn before counting "couldn't move" and leaving |
-| `lobby_wait_seconds` | How long a lobby owner waits for people before adding a computer |
+| `lobby_wait_seconds` | How long a lobby owner waits for people before trying to start or deleting an unfilled lobby |
 | `skip_games` | Game names never chosen (the debug game accepts any typed move) |
 
 Against computers, a fake user picks a player count on the game's page and presses **Play

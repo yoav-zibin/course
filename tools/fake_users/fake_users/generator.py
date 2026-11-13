@@ -141,7 +141,7 @@ class Generator:
                 self._spawn(invite_link=link)
 
     def _spawn(self, *, invite_link: str | None = None, for_match: bool = False) -> bool:
-        # Invited friends count too: when the limit is full, the host adds a computer instead.
+        # Invited friends count toward the same active-user limit.
         if self.state != "running" or self.active >= self.allowed:
             return False
         task = asyncio.create_task(self._visit(invite_link=invite_link, for_match=for_match))
