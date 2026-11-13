@@ -95,3 +95,15 @@ def test_private_and_hand_made_matches_are_never_matchmade(api: Api) -> None:
     api.ok("POST", "/matches", as_user=alice, json={"game_id": game_id, "private": True})
     match = _quick_match(api, game_id, as_user=bob)
     assert api.summary(match)["players"] == ["bob"]
+
+
+def test_a_quick_match_records_its_starting_position_for_replay(api: Api) -> None:
+    # Regression (bug 12): the quick-match auto-start skipped the snapshot that
+    # start_match records, so history replay couldn't show the first position.
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game_id = api.new_game(owner=alice, allowed_player_counts=[2])
+    match = _quick_match(api, game_id, as_user=alice)
+    assert _quick_match(api, game_id, as_user=bob)["status"] == "ongoing"
+    history = api.ok("GET", f"/matches/{match['id']}/history", as_user=alice)
+    assert history["initial_turn_player_indices"] == [0]
+    assert history["initial_state"] is not None
