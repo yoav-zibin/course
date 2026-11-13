@@ -1120,6 +1120,41 @@ class QueryStore:
     def get_game_version(self, game_id, version):
         return self._game_version(game_id, version, detail=True)
 
+    def prefetch_game_versions(self, versions):
+        """Prime read caches for a bounded match page without per-row round trips.
+
+        Full spectator views still run through the usual permission/projection
+        path. Only the same immutable code and visibility reads are batched.
+        """
+        if getattr(self._local, "uow", None) is not None:
+            return  # Transactional readers must retain their own snapshot.
+        versions = set(versions)
+        refs = [self.ref("game_versions", f"{game_id}@{version}")
+                for game_id, version in versions]
+        metadata = self._prefetch_refs(refs + [self.ref("games", game_id)
+                                             for game_id, _ in versions])
+        bodies = [ref.collection("body").document(f"{chunk:06}")
+                  for ref in refs
+                  for chunk in range((metadata.get(("doc", ref.path)) or {}).get("body_chunks", 0))]
+        self._prefetch_refs(bodies)
+
+    def _prefetch_refs(self, refs):
+        refs_by_key = {("doc", ref.path): ref for ref in refs}
+        if not refs_by_key:
+            return {}
+
+        def fetch(keys):
+            found = {}
+            for offset in range(0, len(keys), 100):
+                with timed_external("firestore"):
+                    for snapshot in self.client.get_all(
+                        [refs_by_key[key] for key in keys[offset:offset + 100]]
+                    ):
+                        found[("doc", snapshot.reference.path)] = snapshot.to_dict()
+            return {key: found.get(key) for key in keys}
+
+        return self._cache.get_or_fetch_many(refs_by_key, fetch)
+
     def get_game_version_without_code(self, game_id, version):
         """Cover metadata, with current visibility, without any code-chunk reads."""
         return self._game_version(game_id, version, detail=False)

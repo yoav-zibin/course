@@ -26,6 +26,21 @@ def api_for(store):
     return api
 
 
+def test_admin_match_browse_primes_code_in_batches_and_keeps_spectator_projection(store):
+    api = api_for(store)
+    alice, bob = api.new_user('alice'), api.new_user('bob')
+    game_id = api.new_game(owner=alice)
+    match_id = api.new_match(owner=alice, game_id=game_id, joiners=[bob], start=True)
+    store.clear_cache()
+    with patch.object(store, 'prefetch_game_versions', wraps=store.prefetch_game_versions) as prefetch:
+        with patch.object(api.platform, 'view_state', wraps=api.platform.view_state) as view:
+            page = api.ok('GET', '/v2/admin/matches')
+    assert [row['id'] for row in page['items']] == [match_id]
+    prefetch.assert_called_once()
+    assert view.call_count == 1
+    assert view.call_args.args[1] is None  # Admin rows retain the ordinary spectator view.
+
+
 @pytest.fixture
 def store():
     assert os.environ["FIRESTORE_EMULATOR_HOST"].startswith(

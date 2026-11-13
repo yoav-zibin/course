@@ -351,6 +351,9 @@ def install(app, *, debug_tools):
                 # needs to act as the user).
                 items = [UserWithPasswordOut.of_user(x) for x in result.items]
             elif kind == "matches":
+                prefetch = getattr(store_of(platform), "prefetch_game_versions", None)
+                if prefetch is not None:
+                    prefetch((x.game_id, x.game_version) for x in result.items if x.state is not None)
                 items = [_match_out(platform, x) for x in result.items]
             elif kind in ("games", "game_versions"):
                 items = [GameSummaryOut.of(x) for x in result.items]

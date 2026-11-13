@@ -3577,8 +3577,10 @@ class GamePlatform:
         every game must define for exactly this purpose. The full state
         itself is never shown to anyone. A failing viewFor is recorded
         and shows no state rather than leaking the full one."""
+        if match.state is None:
+            return None
         game = self._store.get_game_version(match.game_id, match.game_version)
-        if game is None or match.state is None:
+        if game is None:
             # No game record (or no state yet): show nothing. Never fall
             # back to the full state.
             return None
