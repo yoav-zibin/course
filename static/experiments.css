@@ -2662,3 +2662,156 @@
 :root[data-skin="meadow"] .portal-shell input[type="search"],
 :root[data-skin="meadow"] .portal-shell input[type="text"] { border-radius: 16px; }
 :root[data-skin="meadow"] .portal-shell button { border-width: 2px; }
+
+/* Isaac's: a light, airy skin — warm blush-cream surfaces, a raspberry
+   accent, a violet focus ring, big rounded corners, and soft pink-tinted
+   shadows. Clean first, cute second: one accent colour, no gradients on
+   surfaces except the token wallet, and the base theme's spacing/type scale
+   inherited unchanged. */
+:root[data-skin="isaac-bright-artsy"] {
+  color-scheme: light;
+  --color-bg-0: #fffbfd;
+  --color-bg-1: #fff5f8;
+  --color-bg-2: #ffeef4;
+  --color-bg-3: #ffdfeb;
+  --color-bg-4: #ffc7da;
+  --color-text-primary: #453040;
+  --color-text-secondary: #715563;
+  --color-text-tertiary: #8f6d80;
+  --color-text-quaternary: #b294a5;
+  --color-border-1: #f7e4ec;
+  --color-border-2: #f0d3e0;
+  --color-border-3: #e3aec6;
+  --color-border-4: #cf83a6;
+  --color-accent: #d6336c;
+  --color-accent-hover: #b8235a;
+  --color-focus-ring: #6c4fd8;
+  --color-ok: #27793f;
+  --color-warn: #a35400;
+  --color-error: #c92a42;
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --shadow-1: 0 1px 2px rgb(214 51 108 / 0.08);
+  --shadow-3:
+    0 1px 2px rgb(214 51 108 / 0.05), 0 4px 8px rgb(214 51 108 / 0.05),
+    0 12px 24px rgb(214 51 108 / 0.07);
+  --font-sans: "Quicksand", "Baloo 2", "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+/* The Portal has a richer component palette than the shared app shell. */
+:root[data-skin="isaac-bright-artsy"] .portal-shell {
+  --color-bg-0: #fffbfd;
+  --color-bg-1: #fff5f8;
+  --color-bg-2: #ffeef4;
+  --color-bg-3: #ffdfeb;
+  --color-bg-4: #ffc7da;
+  --color-text-primary: #453040;
+  --color-text-secondary: #715563;
+  --color-text-tertiary: #8f6d80;
+  --color-border-2: #f0d3e0;
+  --color-border-3: #e3aec6;
+  --color-accent: #d6336c;
+  --color-accent-hover: #b8235a;
+  --color-focus-ring: #6c4fd8;
+  background: var(--color-bg-0);
+  color: var(--color-text-primary);
+}
+:root[data-skin="isaac-bright-artsy"] .portal-sidebar,
+:root[data-skin="isaac-bright-artsy"] .match-creator,
+:root[data-skin="isaac-bright-artsy"] .game-detail-page,
+:root[data-skin="isaac-bright-artsy"] .match-stage,
+:root[data-skin="isaac-bright-artsy"] .portal-shell .game-search-popup,
+:root[data-skin="isaac-bright-artsy"] .portal-shell .match-tools {
+  background: #fff5f8;
+  border-color: #f0d3e0;
+  color: #453040;
+}
+:root[data-skin="isaac-bright-artsy"] .popular-games-section,
+:root[data-skin="isaac-bright-artsy"] .play-option,
+:root[data-skin="isaac-bright-artsy"] .portal-shell .library-card,
+:root[data-skin="isaac-bright-artsy"] .selected-game-card {
+  background: #ffeef4;
+  border-color: #f0d3e0;
+  color: #453040;
+}
+:root[data-skin="isaac-bright-artsy"] .portal-shell input,
+:root[data-skin="isaac-bright-artsy"] .portal-shell select {
+  background: #fffefd;
+  border-color: #e3aec6;
+  color: #453040;
+}
+:root[data-skin="isaac-bright-artsy"] .portal-shell button.primary,
+:root[data-skin="isaac-bright-artsy"] .portal-shell .library-toolbar button[aria-pressed="true"] {
+  background: #d6336c;
+  border-color: #d6336c;
+  color: #fffbfd;
+}
+:root[data-skin="isaac-bright-artsy"] .portal-shell button.primary:hover:not(:disabled) { background:#b8235a; border-color:#b8235a; }
+:root[data-skin="isaac-bright-artsy"] .portal-shell button:focus-visible,
+:root[data-skin="isaac-bright-artsy"] .portal-shell summary:focus-visible,
+:root[data-skin="isaac-bright-artsy"] .portal-shell .popular-game-card:focus-visible {
+  outline-color: #6c4fd8;
+}
+:root[data-skin="isaac-bright-artsy"] .creator-title,
+:root[data-skin="isaac-bright-artsy"] .popular-games-heading h2,
+:root[data-skin="isaac-bright-artsy"] .play-option-heading h3,
+:root[data-skin="isaac-bright-artsy"] .selected-game-card h2,
+:root[data-skin="isaac-bright-artsy"] .portal-shell .game-option {
+  color: #453040;
+}
+:root[data-skin="isaac-bright-artsy"] .creator-description,
+:root[data-skin="isaac-bright-artsy"] .game-label,
+:root[data-skin="isaac-bright-artsy"] .popular-period,
+:root[data-skin="isaac-bright-artsy"] .popular-eyebrow,
+:root[data-skin="isaac-bright-artsy"] .play-option-heading p,
+:root[data-skin="isaac-bright-artsy"] .play-option .play-option-note,
+:root[data-skin="isaac-bright-artsy"] .library-description,
+:root[data-skin="isaac-bright-artsy"] .library-count,
+:root[data-skin="isaac-bright-artsy"] .library-empty,
+:root[data-skin="isaac-bright-artsy"] .search-note,
+:root[data-skin="isaac-bright-artsy"] .stake-help,
+:root[data-skin="isaac-bright-artsy"] .offline-controls,
+:root[data-skin="isaac-bright-artsy"] .selected-game-card p {
+  color: #7d5a6d;
+}
+:root[data-skin="isaac-bright-artsy"] .creator-toggle { color:#b8235a; }
+:root[data-skin="isaac-bright-artsy"] .portal-shell .library-toolbar button { color:#7d5a6d; }
+:root[data-skin="isaac-bright-artsy"] .portal-sidebar .list-item:hover,
+:root[data-skin="isaac-bright-artsy"] .portal-sidebar .list-item[aria-selected="true"] { background:#ffdfeb; }
+:root[data-skin="isaac-bright-artsy"] .portal-shell .game-option:hover,
+:root[data-skin="isaac-bright-artsy"] .portal-shell .game-option[aria-selected="true"] {
+  background: #ffdfeb;
+  color: #453040;
+}
+:root[data-skin="isaac-bright-artsy"] .portal-shell .popular-game-card {
+  background: #ffeef4;
+  border-color: #f0d3e0;
+  color: #453040;
+}
+:root[data-skin="isaac-bright-artsy"] .popular-game-title { color: #453040; }
+:root[data-skin="isaac-bright-artsy"] .popular-game-players,
+:root[data-skin="isaac-bright-artsy"] .popular-game-open,
+:root[data-skin="isaac-bright-artsy"] .library-mode,
+:root[data-skin="isaac-bright-artsy"] .library-select,
+:root[data-skin="isaac-bright-artsy"] .back-to-games { color: #b8235a; }
+:root[data-skin="isaac-bright-artsy"] .mode-label { color:#7d5a6d; background:#fff5f8; border-color:#e3aec6; }
+:root[data-skin="isaac-bright-artsy"] .portal-shell .result-win { color:#256b3a; background:#e2f4e4; border-color:#9fd3a8; }
+:root[data-skin="isaac-bright-artsy"] .portal-shell .result-loss { color:#a12a48; background:#fbe3ea; border-color:#e5a3b8; }
+:root[data-skin="isaac-bright-artsy"] .portal-shell .result-draw { color:#2b5f8a; background:#e0eefb; border-color:#a5c8e8; }
+:root[data-skin="isaac-bright-artsy"] .portal-shell .result-neutral { color:#715563; background:#fdf0e6; border-color:#e8cdb4; }
+
+/* Keep the wallet aligned with the active portal skin. */
+:root[data-skin="isaac-bright-artsy"] .topbar .token-wallet {
+  background:linear-gradient(135deg,#fff5f8,#ffe3ec);
+  border-color:#e3aec6;
+  color:#715563;
+  box-shadow:0 4px 18px rgb(214 51 108 / 0.10);
+}
+:root[data-skin="isaac-bright-artsy"] .topbar .token-wallet-coin {
+  background:#d6336c;
+  border-color:#b8235a;
+  color:#fffbfd;
+}
+:root[data-skin="isaac-bright-artsy"] .topbar .token-wallet-label { color:#7d5a6d; }
+:root[data-skin="isaac-bright-artsy"] .topbar .token-wallet-number { color:#715563; }
+:root[data-skin="isaac-bright-artsy"] .topbar .token-wallet-number strong { color:#453040; }
