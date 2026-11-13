@@ -163,3 +163,55 @@ test('focus auto-focuses a live match in portrait; other skins do not', () => {
   classic.layout.update(ongoing);
   assert.equal(classic.body.classList.contains('match-focus'), false, 'classic does not auto-focus in portrait');
 });
+
+// Regression: discovered skins must get a picker <option> even when their
+// key is already in PORTAL_SKINS. The old extendPortalSkins skipped those
+// keys, so Focus/Showcase/Lobby/Library were usable via ?skin= but never
+// appeared in the menu, while discovery-only skins (Isaac, White) did.
+function setupDiscovery() {
+  const extract = (name) => {
+    const start = experimentsJs.indexOf(`function ${name}(`);
+    assert.ok(start >= 0, `${name} missing`);
+    let depth = 0;
+    let i = experimentsJs.indexOf('{', start);
+    for (; i < experimentsJs.length; i++) {
+      if (experimentsJs[i] === '{') depth++;
+      else if (experimentsJs[i] === '}') { depth--; if (!depth) break; }
+    }
+    return experimentsJs.slice(start, i + 1);
+  };
+  const options = ['', 'classic', 'aurora', 'sunset', 'immersive', 'arcade', 'neon', 'meadow']
+    .map((value) => ({value, textContent: value}));
+  const picker = {options, appendChild(option) { this.options.push(option); }};
+  const context = {
+    console, Map, Set,
+    SKIN_KEY_PATTERN: /^[a-z0-9][a-z0-9-]{0,49}$/,
+    PORTAL_SKINS: new Set(['classic', 'aurora', 'sunset', 'immersive', 'meadow',
+      'focus', 'showcase', 'lobby', 'library', 'arcade', 'neon']),
+    document: {getElementById: (id) => (id === 'portal-skin-picker' ? picker : null),
+      createElement: () => ({})},
+    previewSkin: false, savedSkin: null,
+    portalSkinFromUrl: () => null, savePortalSkinPreference: () => {},
+    readSavedPortalSkin: () => null, applySkin: () => {}, syncSkinPicker: () => {},
+    activeSkin: () => 'classic',
+  };
+  vm.createContext(context);
+  vm.runInContext(`${extract('skinOptionLabel')}\n${extract('extendPortalSkins')}`, context);
+  return {picker, run: (code) => vm.runInContext(code, context)};
+}
+
+test('skin discovery adds picker options for built-in archetype keys', () => {
+  const {picker, run} = setupDiscovery();
+  run(`extendPortalSkins(['midnight', 'party', 'riso-club', 'isaac-bright-artsy', 'white',
+    'focus', 'showcase', 'lobby', 'library', 'BAD KEY', ''])`);
+  const values = picker.options.map((option) => option.value);
+  for (const key of NEW_SKINS) assert.ok(values.includes(key), `${key} missing from picker`);
+  assert.equal(picker.options.find((o) => o.value === 'focus').textContent, 'Focus');
+  assert.equal(picker.options.find((o) => o.value === 'showcase').textContent, 'Showcase');
+  assert.equal(picker.options.find((o) => o.value === 'isaac-bright-artsy').textContent, 'Isaac Bright Artsy');
+  assert.ok(!values.includes('BAD KEY'), 'invalid keys must be skipped');
+  assert.equal(values.filter((value) => value === '').length, 1, 'no empty option may be appended');
+  const before = picker.options.length;
+  run(`extendPortalSkins(['focus', 'midnight'])`);
+  assert.equal(picker.options.length, before, 'discovery must not duplicate options');
+});

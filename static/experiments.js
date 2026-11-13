@@ -303,8 +303,14 @@
   function extendPortalSkins(keys) {
     const picker = document.getElementById("portal-skin-picker");
     for (const key of keys) {
-      if (!SKIN_KEY_PATTERN.test(key) || PORTAL_SKINS.has(key)) continue;
+      if (!SKIN_KEY_PATTERN.test(key)) continue;
       PORTAL_SKINS.add(key);
+      // Append an option for every discovered key, including keys already
+      // in PORTAL_SKINS: the set is the registry, not the picker, and
+      // portal.html only hardcodes a few <option>s. Skipping built-in keys
+      // here left Focus/Showcase/Lobby/Library selectable via ?skin= but
+      // invisible in the menu, while discovery-only skins (Isaac, White)
+      // showed up fine.
       if (picker && ![...picker.options].some((option) => option.value === key)) {
         const option = document.createElement("option");
         option.value = key;
