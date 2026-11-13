@@ -283,8 +283,8 @@ def test_paid_match_pays_the_pot_to_the_winner(api: Api):
     assert match["status"] == "over"
     assert match["token_payouts"] == {"0": 20}
     # Alice staked 10 (of her daily grant) and won the 20 pot; Bob lost his 10.
-    assert api.ok("GET", f"/users/{alice}")["token_balance"] == 20
-    assert api.ok("GET", f"/users/{bob}")["token_balance"] == 0
+    assert api.ok("GET", f"/users/{alice}", as_user=alice)["token_balance"] == 20
+    assert api.ok("GET", f"/users/{bob}", as_user=bob)["token_balance"] == 0
 
 
 def test_v2_start_ignores_the_clients_initial_state(api: Api):

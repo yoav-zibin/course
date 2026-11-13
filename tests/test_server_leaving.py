@@ -105,7 +105,7 @@ def _move(api: Api, match_id: str, *, as_user: str, add: int):
 
 
 def _balance(api: Api, user_id: str) -> int:
-    return api.ok("GET", f"/users/{user_id}")["token_balance"]
+    return api.ok("GET", f"/users/{user_id}", as_user=user_id)["token_balance"]
 
 
 def test_stakes_are_taken_at_join_and_refunded_in_the_waiting_room(api: Api):

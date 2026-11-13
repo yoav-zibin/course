@@ -269,12 +269,12 @@ def test_poker_player_left_pays_their_chip_share(api: Api):
     preview = api.ok("POST", f"/matches/{match['id']}/maybeLeave", as_user=owner)
     assert preview["pending_leave_player_id"] == owner
     assert preview["pending_leave_payout"] == 10
-    balance_before = api.ok("GET", f"/users/{owner}")["token_balance"]
+    balance_before = api.ok("GET", f"/users/{owner}", as_user=owner)["token_balance"]
     after = api.ok("POST", f"/matches/{match['id']}/playerLeft", as_user=owner)
     assert after["players"][0]["kind"] == "human"
     assert after["players"][0]["active"] is False
     assert after["status"] == "over"
     assert after["token_pot"] == 0
     assert sum(after["token_payouts"].values()) == 30
-    balance_after = api.ok("GET", f"/users/{owner}")["token_balance"]
+    balance_after = api.ok("GET", f"/users/{owner}", as_user=owner)["token_balance"]
     assert balance_after == balance_before + 10

@@ -32,11 +32,15 @@ def test_create_and_get_a_guest_user(api: Api) -> None:
     assert len(user["password"]) >= 20
     assert user["referral_code"].isdigit() and 10000 <= int(user["referral_code"]) <= 99999
     # The password is only ever returned on creation (linked logins only to the
-    # owner, through /auth/*), and the referral code only to the user themself.
+    # owner, through /auth/*), and the referral code and token wallet only to the
+    # user themself.
     user_without_password = {
         key: user[key] for key in user if key not in ("password", "linked_accounts")
     }
-    assert api.ok("GET", f"/users/{user['id']}") == {**user_without_password, "referral_code": None}
+    assert api.ok("GET", f"/users/{user['id']}") == {
+        **user_without_password, "referral_code": None,
+        "token_balance": None, "last_token_grant_day": None,
+    }
 
 
 def test_every_user_gets_a_different_password(api: Api) -> None:

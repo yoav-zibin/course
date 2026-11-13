@@ -163,7 +163,9 @@ class UserOut(BaseModel):
     replaced_user_ids: list[str] = []
     created_at: dt.datetime
     updated_at: dt.datetime
-    token_balance: int = 0
+    # The user's token wallet and the day of its last daily grant. Private: only in
+    # responses about the caller's own account; None for other users.
+    token_balance: int | None = None
     last_token_grant_day: str | None = None
     # The user's own short invite code (links look like /r/<code>). Only in responses
     # about the caller's own account; None for other users.
@@ -177,8 +179,8 @@ class UserOut(BaseModel):
             display_name=user.display_name,
             picture_url=user.picture_url,
             locale=user.locale,
-            token_balance=user.token_balance,
-            last_token_grant_day=user.last_token_grant_day,
+            token_balance=user.token_balance if own else None,
+            last_token_grant_day=user.last_token_grant_day if own else None,
             replaced_by_user_id=user.replaced_by_user_id,
             replaced_user_ids=list(user.replaced_user_ids),
             created_at=user.created_at,
