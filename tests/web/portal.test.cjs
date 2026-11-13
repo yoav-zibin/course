@@ -504,6 +504,41 @@ test('current account avatar wins over stale match profile cache',()=>{
   assert.equal(run('playerPicture({kind:"human",user_id:"other"})'),'/other-cat.png');
 });
 
+test('computer play appears with pass-and-play before the focused game code downloads',async()=>{
+ let release;
+ const downloading=new Promise(resolve=>{release=resolve;});
+ const t=setup(async(method,path)=>path==='/games/game/versions/2' ? downloading : undefined);
+ t.run('state.games[0].allowed_player_counts=[2,3,4];state.detailGameId="game";updateMatchSetup()');
+ const details=t.run('ensureDetails()');
+ try {
+  assert.equal(t.run('gameOf("game",2)'),null);
+  assert.equal(t.node('practice').disabled,false);
+  assert.equal(t.node('computer-match-option').hidden,false);
+  assert.equal(t.node('play-computers').disabled,false);
+  assert.deepEqual(t.node('computer-player-count').children.map(option=>option.value),['2','3','4']);
+ } finally {
+  release({id:'game',version:2,code:'client rules',server_code:'server rules'});
+  await details;
+ }
+ t.run('updateMatchSetup()');
+ assert.equal(t.node('computer-match-option').hidden,false);
+});
+
+test('computer play stays hidden without opponent seats and disabled while offline or starting',()=>{
+ const t=setup();
+ t.run('updateMatchSetup()');
+ assert.equal(t.node('computer-match-option').hidden,true);
+ t.run('state.games[0].allowed_player_counts=[1,2];navigator.onLine=false;updateMatchSetup()');
+ assert.equal(t.node('computer-match-option').hidden,false);
+ assert.equal(t.node('play-computers').disabled,true);
+ t.run('navigator.onLine=true;state.creating=true;updateMatchSetup()');
+ assert.equal(t.node('computer-match-option').hidden,false);
+ assert.equal(t.node('play-computers').disabled,true);
+ t.node('new-game').value='';
+ t.run('state.creating=false;updateMatchSetup()');
+ assert.equal(t.node('computer-match-option').hidden,true);
+});
+
 test('games offer pass-and-play and offline instructions, with a player-count choice when the game has one',()=>{
  const t=setup();t.run('state.games[0].supports_local_practice=false;updateMatchSetup()');
  assert.equal(t.node('practice').disabled,false);

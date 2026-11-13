@@ -1499,8 +1499,9 @@ function updateMatchSetup() {
   fillPlayerCounts($("practice-player-count"), $("practice-count-choice"), game?.allowed_player_counts ?? [], Math.min);
   fillPlayerCounts($("computer-player-count"), $("computer-count-choice"), game?.allowed_player_counts.filter((count) => count > 1) ?? [], Math.max);
   $("practice-offline-note").hidden = false;
-  const gameVersion=game && gameOf(game.id,game.version);
-  const supportsComputerMatch=Boolean(gameVersion?.server_code && game.allowed_player_counts.some(count=>count>1));
+  // Every published game has server-side rules. Seat counts already arrive in
+  // the catalog, so the play options need not wait for the full code download.
+  const supportsComputerMatch=canQuickStart(game);
   $("computer-match-option").hidden=!supportsComputerMatch;
   $("play-computers").disabled=!game || state.creating || !navigator.onLine;
   $("quick-play").hidden = !canQuickStart(game);

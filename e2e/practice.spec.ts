@@ -1,6 +1,45 @@
 import { test, expect } from '@playwright/test';
 import { createGame, createUser, loginAs, uniqueName } from './helpers';
 
+test('computer play and pass-and-play appear together while the game source is downloading',async({page,request})=>{
+  const owner=await createUser(request,uniqueName('Play option owner'));
+  const name=uniqueName('Slow game download');
+  const game=await createGame(request,owner,name);
+  await loginAs(page,owner);
+  const versionPath=`/games/${game}/versions/1`;
+  const requestsVersion=(address:string)=>{
+    const url=new URL(address);
+    if(url.pathname===versionPath) return true;
+    if(url.pathname!=='/batch') return false;
+    return JSON.parse(url.searchParams.get('requests') || '[]')
+      .some((item:{path:string})=>item.path===versionPath);
+  };
+  let releaseDownload!:()=>void;
+  const downloadGate=new Promise<void>(resolve=>{releaseDownload=resolve;});
+  await page.route('**/batch?*',async route=>{
+    if(requestsVersion(route.request().url())) await downloadGate;
+    await route.continue();
+  });
+  try {
+    await page.goto('/static/portal.html#games');
+    await page.getByRole('combobox',{name:'Search games'}).fill(name);
+    await Promise.all([
+      page.waitForRequest(req=>requestsVersion(req.url())),
+      page.getByRole('option',{name:new RegExp(name)}).click(),
+    ]);
+    await expect(page.locator('#practice')).toBeVisible();
+    await expect(page.locator('#computer-match-option')).toBeVisible();
+    await expect(page.locator('#play-computers')).toBeEnabled();
+    const downloaded=page.waitForResponse(response=>requestsVersion(response.url()));
+    releaseDownload();
+    await downloaded;
+    await expect(page.locator('#computer-match-option')).toBeVisible();
+  } finally {
+    releaseDownload();
+    if(!page.isClosed()) await page.unrouteAll({behavior:'wait'});
+  }
+});
+
 test('local pass-and-play practice works after disconnect and reload, with no match writes', async ({page,request,context})=>{
   const owner=await createUser(request,uniqueName('Offline owner'));
   const name=uniqueName('Offline noughts');
