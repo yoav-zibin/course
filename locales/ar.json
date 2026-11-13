@@ -860,5 +860,16 @@
   "ui.declarative.test_invalid_json": "مواصفات الواجهة التصريحية ليست JSON صالحًا: {message}",
   "ui.declarative.error_prefix": "واجهة اللعبة التصريحية:",
   "error.declarative_complete_package": "حدّث شفرة اللعبة التصريحية أو قواعدها أو مخططاتها عبر POST /games/declarative باستخدام الحزمة الكاملة التي اختُبرت",
-  "ui.declarative.sample_title": "إكس أو · مثال على العرض"
+  "ui.declarative.sample_title": "إكس أو · مثال على العرض",
+  "ui.declarative.hints.legend": "توضح العناصر المميزة ما يمكنك فعله بعد ذلك.",
+  "ui.declarative.hints.tap": "انقر",
+  "ui.declarative.hints.move": "حرّك",
+  "ui.declarative.hints.rotate": "أدر",
+  "ui.declarative.hints.scale": "غيّر الحجم",
+  "ui.declarative.hints.choose_destination": "اختر وجهة مميزة",
+  "ui.declarative.hints.rotate_piece": "أدر {piece}",
+  "ui.declarative.hints.grow_piece": "كبّر {piece}",
+  "ui.declarative.hints.shrink_piece": "صغّر {piece}",
+  "ui.declarative.hints.piece_actions": "{piece}: {actions}",
+  "ui.declarative.hints.selected_piece": "القطعة المحددة"
 }

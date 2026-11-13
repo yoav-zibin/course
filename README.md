@@ -20,6 +20,11 @@ boards, pieces, images and controls, then requests moves through the existing
 API. The portal includes its renderer; native apps implement the same scene
 contract without a game WebView.
 
+The renderer keeps action hints visible: games declare each piece's available
+`actions` and `move_targets`, and selecting or dragging a piece highlights its
+legal destinations. The [authoring guide](docs/declarative-games.md#always-show-available-actions)
+also describes click, rotation and resize hints for browser and native hosts.
+
 - **Game**: a playable rules package with authoritative QuickJS `server_code`
   and either a declarative UI package or sandboxed HTML client.
 - **Match**: playing a game with a set of players (humans and computer opponents).

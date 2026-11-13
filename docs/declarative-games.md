@@ -135,6 +135,7 @@ omitted arrays are empty. All element IDs must be unique across the scene.
 | Rotate, resize, fade or reorder | Change `rotation`, positive `scale`, `opacity` or `z`. Larger z values render later. |
 | Select or turn over | Set `selected`, or `face` to `front`/`back`. |
 | Offer movement | Emit destination `targets`, then reference their IDs in that piece's `move_targets`. |
+| Offer a click, rotation or resize | Set the piece's `actions` to the currently available operations; the host supplies persistent hints and action controls. |
 | Change a die, score or card text | Change the piece's `text` or the relevant label. A `dice` appearance does not generate random results. |
 | Group a polyomino or composite token | Compute positions/rotations for several stable pieces in the reducer. V1 has no implicit group transform. |
 
@@ -146,18 +147,73 @@ front text and front-derived accessibility labels. Destinations require `id`, `b
 `position`, and can have a visible label. `move_targets` is a UI affordance,
 not server permission; `applyMove` must independently reject illegal moves.
 
+### Always show available actions
+
+Hosts must keep the next available actions visible. An active piece is
+highlighted and its action indicators identify whether it can be tapped,
+moved, rotated or scaled; enabled scene controls and placement targets remain
+visibly actionable. A cursor that changes only on hover is insufficient for
+touch devices. Selection or the start of a drag adds a stronger source hint
+and highlights that piece's legal destination IDs. Unrelated destinations
+must not appear as legal drop locations for the selected piece. Clear these
+gesture hints after a drop, cancellation, a new state message or a turn change.
+
+Declare these capabilities on each piece:
+
+```json
+{
+  "id": "tile-4",
+  "type": "tile",
+  "board": "rack",
+  "position": {"x": 80, "y": 120},
+  "actions": ["tap", "move", "rotate", "scale"],
+  "move_targets": ["square-7", "square-8"]
+}
+```
+
+`actions` is a unique subset of `tap`, `move`, `rotate` and `scale`. Declaring
+`move` requires at least one `move_targets` destination, and every referenced
+destination must exist in the scene. Nonempty `move_targets` always implies
+movement, even when the action list does not explicitly name `move`.
+`actions:[]` disables tap/rotate/scale; combine it with no movement targets for
+a fully passive piece. Omitted `actions` preserves the original renderer's
+legacy tap behavior. New games should declare the field explicitly, including
+`[]` on decorative pieces, so hints cannot suggest a click that does nothing.
+
+Static `rotation`, `scale`, shape, artwork or `draggable` fields do not grant
+rotation or scaling actions. Emit those capabilities only when the current
+view and phase permit them. Hosts show the affordances only while the viewer
+can act, and suppress them for spectators, replay, ended matches and a pending
+move. Hidden pieces stay hidden, including their action indicators. The hint
+metadata is part of the viewer-specific scene and must not reveal another
+player's secret pieces or available private decisions.
+
 The renderer sends these JSON events:
 
 ```json
 {"type":"tap","id":"piece-or-target-or-button-id"}
 {"type":"drop","id":"piece-id","piece_id":"piece-id","target_id":"destination-id"}
 {"type":"change","id":"control-id","value":"new value"}
+{"type":"rotate","id":"piece-id","delta":90}
+{"type":"scale","id":"piece-id","factor":1.1}
 ```
 
 Movement supports drag/drop and tap-a-piece, then tap a destination. Handle
 `drop` to translate the selected piece and destination into the game's move
 shape. Handle `tap` for placements, selection and buttons. Targets are explicit
 so touch and keyboard clients can offer equivalent actions.
+
+For `rotate`, `delta` requests a relative clockwise angle in degrees; it must
+be nonzero and between -360 and 360. The standard rotate control requests 90
+degrees. For `scale`, `factor` is a relative multiplier greater than zero and
+at most 100; standard grow/shrink controls request `1.1` and `1/1.1`.
+These parameters belong only to their corresponding event types. A rotation
+or scale control sends a request to the reducer, and never edits match state
+or the rendered piece optimistically. The reducer can keep a preview in
+`local_state`, emit a new scene, or submit the game's own move shape. Server
+rules remain authoritative when the operation affects gameplay. A game that
+does not support an operation must omit its action rather than show an inert
+control.
 
 Controls have `id`, `label`, `kind` and optional `disabled`/`value`. Kinds are
 `button`, `number`, `choice` and `text`. Numbers can set `min`, `max`, `step`;
@@ -338,6 +394,10 @@ remain supported.
    Render the server's next view after success or rejection.
 6. Clear pending gestures when the match/revision changes; block spectator and
    replay moves; honor locale/direction, accessible labels and touch targets.
+7. Keep available action hints visible and expose the same operations for
+   touch, pointer and keyboard users. During movement, emphasize only the
+   selected piece's declared legal destinations; do not infer permissions from
+   the piece's displayed rotation or scale.
 
 Use the server probe and the checked-in examples as cross-renderer fixtures.
 Native rendering should preserve cell positions, piece centers, rotation,
@@ -365,6 +425,15 @@ clock and view-filtering semantics.
 
 Their rules document the particular variant, size and any finite-play limits;
 they are examples rather than a claim to implement every published edition.
+Each example declares only actions its current rules and phase support. Memory
+marks legal card taps, Mancala marks playable pits, Domineering marks its movable
+preview, and placement targets or enabled buttons guide the other games. Their
+pieces that merely display state explicitly use `actions:[]`. Domineering's
+orientation is fixed by the player's role, so it does not advertise an illegal
+rotation. Rotation/resize controls are exercised separately by the shared
+[protocol tests](../tests/test_declarative_actions.py) and browser fixtures;
+games should not enable them as decorative gestures when their rules do not
+support them.
 `engine.js` and `presentation.js` are readable sources; the build tool embeds
 them into each request together with deterministic test cases, source strings,
 translations and schematic SVG illustrations. Those illustrations are not

@@ -53,3 +53,14 @@ test('dynamic scenes reject unknown fields, malformed positions and invalid tran
   assert.throws(()=>api.validateScene(spec,{custom:[]}));
   assert.throws(()=>api.validateScene(spec,{controls:[{id:'select',kind:'choice',label:'Choose',options:[]}]}));
 });
+
+test('piece actions distinguish legal interaction from decorative transforms',()=>{
+  assert.deepEqual(api.pieceActions({actions:[],rotation:90,scale:2}),[]);
+  assert.deepEqual(api.pieceActions({}),['tap']);
+  assert.deepEqual(api.pieceActions({actions:['rotate','tap','scale'],move_targets:['home']}),['tap','move','rotate','scale']);
+  assert.deepEqual(api.pieceActions({actions:[],move_targets:['home']}),['move']);
+  assert.deepEqual(api.pieceActions({actions:['tap'],hidden:true}),[]);
+  const spec=sample(),piece={id:'one',type:'token',board:'main',position:{cell:'0'}};
+  for(const actions of [null,'tap',['spin'],['tap','tap'],['move']])assert.throws(()=>api.validateScene(spec,{pieces:[{...piece,actions}]}));
+  assert.doesNotThrow(()=>api.validateScene(spec,{pieces:[{...piece,actions:['move','rotate','scale'],move_targets:['home']}],targets:[{id:'home',board:'main',position:{cell:'1'}}]}));
+});

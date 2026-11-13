@@ -63,7 +63,18 @@ for(const [index,kind] of kinds.entries())test(`declarative ${kind}: submit and 
       const target=page.locator(`#game-box [data-ui-id="${id}"]`);
       await expect(target).toBeVisible();
       await expect(target).not.toHaveAttribute('aria-disabled','true');
-      if(count===0)await testInfo.attach(`${kind}-start`,{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
+      if(count===0){
+        await expect(page.locator('#game-box .declarative-hint-message')).toBeVisible();
+        const actionablePieces=kind==='memory'||kind==='mancala'?options.length:kind==='domineering'?1:0;
+        await expect(page.locator('#game-box .declarative-piece.actionable')).toHaveCount(actionablePieces);
+        await expect(page.locator('#game-box .declarative-control.actionable')).toHaveCount(kind==='nim'||kind==='pig'?options.length:0);
+        await expect(pages[1-seat].locator('#game-box .actionable')).toHaveCount(0);
+        await testInfo.attach(`${kind}-start`,{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
+        if(process.env.DECLARATIVE_EVIDENCE_DIR){
+          const output=path.resolve(process.env.DECLARATIVE_EVIDENCE_DIR);fs.mkdirSync(output,{recursive:true});
+          await page.screenshot({path:path.join(output,`hints-${kind}.png`),fullPage:true});
+        }
+      }
       const response=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`/matches/${match.id}/moves`);
       await target.click();
       const result=await response;expect(result.ok(),await result.text()).toBeTruthy();
@@ -193,7 +204,7 @@ test('declarative covered image pieces render only a declared back asset and ine
     return {generic,renderedBack:box.querySelector('image')?.getAttribute('href'),expectedBack:back};
   });
   expect(result.generic.images).toBe(0);expect(result.generic.hidden).toBe(false);
-  expect(result.generic.visible).not.toContain('Ace');expect(result.generic.aria).toBe('Covered piece');
+  expect(result.generic.visible).not.toContain('Ace');expect(result.generic.aria).toBe('Covered piece: Click');
   expect(result.renderedBack).toBe(result.expectedBack);
   if(process.env.DECLARATIVE_EVIDENCE_DIR){const output=path.resolve(process.env.DECLARATIVE_EVIDENCE_DIR);fs.mkdirSync(output,{recursive:true});await page.screenshot({path:path.join(output,'declarative-covered-card.png'),fullPage:true});}
 });

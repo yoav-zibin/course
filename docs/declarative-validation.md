@@ -1,5 +1,29 @@
 # Declarative games validation
 
+## Persistent action hints
+
+The November 13 action-hint update was verified separately in
+[declarative-hints-validation.json](../reports/declarative-hints-validation.json).
+All ten updated packages passed the normal submission validator and completed
+two-player portal matches again. Tests check the first turn's actual actionable
+piece/control counts and absence of hints on the other player's screen.
+
+The focused run passed 162 backend/example tests, all 381 JavaScript tests,
+53 localization/audit tests, 15 portal/play regressions and two dedicated
+desktop/touch hint tests. The latter check always-visible action outlines and
+badges, only the selected piece's legal destinations, rotation/resize requests,
+and immediate cleanup on cancellation, state changes, replay or a pending move.
+They also cover off-canvas drops, native drag, multiple pointers and keyboard
+selection. Existing recorded submissions retain their exact trusted legacy host.
+
+Captured screens show [legal drop hints](images/declarative-drop-hints.png) and
+[Memory's actionable cards](images/declarative-memory-hints.png). The ten games
+declare only actions their rules support; fixed Domineering orientations do not
+advertise rotation. Rotation and resize controls are exercised by the shared
+cross-renderer fixture instead.
+
+## Initial release
+
 Validated the declarative UI implementation locally on November 13, 2026.
 Ten complete game packages were accepted through `POST /games/declarative`,
 then played to completion through the actual portal's rendered controls in

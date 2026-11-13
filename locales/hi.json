@@ -860,5 +860,16 @@
   "ui.declarative.test_invalid_json": "घोषणात्मक इंटरफ़ेस का विनिर्देश मान्य JSON नहीं है: {message}",
   "ui.declarative.error_prefix": "घोषणात्मक गेम इंटरफ़ेस:",
   "error.declarative_complete_package": "घोषणात्मक गेम का कोड, नियम या स्कीमा अपडेट करने के लिए पूरा परीक्षण किया हुआ पैकेज POST /games/declarative के माध्यम से भेजें",
-  "ui.declarative.sample_title": "टिक-टैक-टो · प्रस्तुति का उदाहरण"
+  "ui.declarative.sample_title": "टिक-टैक-टो · प्रस्तुति का उदाहरण",
+  "ui.declarative.hints.legend": "हाइलाइट बताते हैं कि आप आगे क्या कर सकते हैं।",
+  "ui.declarative.hints.tap": "क्लिक करें",
+  "ui.declarative.hints.move": "चलाएँ",
+  "ui.declarative.hints.rotate": "घुमाएँ",
+  "ui.declarative.hints.scale": "आकार बदलें",
+  "ui.declarative.hints.choose_destination": "उजागर गंतव्य चुनें",
+  "ui.declarative.hints.rotate_piece": "{piece} को घुमाएँ",
+  "ui.declarative.hints.grow_piece": "{piece} को बड़ा करें",
+  "ui.declarative.hints.shrink_piece": "{piece} को छोटा करें",
+  "ui.declarative.hints.piece_actions": "{piece}: {actions}",
+  "ui.declarative.hints.selected_piece": "चुना हुआ मोहरा"
 }

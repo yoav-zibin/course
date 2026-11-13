@@ -860,5 +860,16 @@
   "ui.declarative.test_invalid_json": "La spécification d’interface déclarative n’est pas du JSON valide : {message}",
   "ui.declarative.error_prefix": "Interface de jeu déclarative :",
   "error.declarative_complete_package": "Mettez à jour le code, les règles ou les schémas du jeu déclaratif via POST /games/declarative avec le paquet complet testé",
-  "ui.declarative.sample_title": "Morpion · exemple de présentation"
+  "ui.declarative.sample_title": "Morpion · exemple de présentation",
+  "ui.declarative.hints.legend": "Les éléments en surbrillance indiquent les actions possibles.",
+  "ui.declarative.hints.tap": "Cliquer",
+  "ui.declarative.hints.move": "Déplacer",
+  "ui.declarative.hints.rotate": "Tourner",
+  "ui.declarative.hints.scale": "Redimensionner",
+  "ui.declarative.hints.choose_destination": "Choisissez une destination en surbrillance",
+  "ui.declarative.hints.rotate_piece": "Tourner {piece}",
+  "ui.declarative.hints.grow_piece": "Agrandir {piece}",
+  "ui.declarative.hints.shrink_piece": "Réduire {piece}",
+  "ui.declarative.hints.piece_actions": "{piece} : {actions}",
+  "ui.declarative.hints.selected_piece": "Pièce sélectionnée"
 }

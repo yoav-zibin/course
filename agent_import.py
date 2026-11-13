@@ -106,12 +106,15 @@ class GameImport(BaseModel):
             if self.client_code is None:
                 raise ValueError('client_code is required for HTML games')
             return self
-        from game_platform.declarative_ui import validate_spec, client_document
+        from game_platform.declarative_ui import (
+            validate_spec, client_document, accepted_platform_host,
+        )
         validate_spec(self.declarative_ui)
         generated = client_document(self.declarative_ui)
-        if self.client_code is not None and self.client_code != generated:
+        if self.client_code is not None and not accepted_platform_host(self.declarative_ui, self.client_code):
             raise ValueError('declarative games must omit client_code; the platform generates it')
-        self.client_code = generated
+        if self.client_code is None:
+            self.client_code = generated
         return self
 
     def game_schemas(self):

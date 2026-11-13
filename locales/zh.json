@@ -860,5 +860,16 @@
   "ui.declarative.test_invalid_json": "声明式界面规范不是有效的 JSON：{message}",
   "ui.declarative.error_prefix": "声明式游戏界面：",
   "error.declarative_complete_package": "请通过 POST /games/declarative 提交完整且已测试的游戏包，以更新声明式游戏的代码、规则或架构",
-  "ui.declarative.sample_title": "井字棋 · 呈现示例"
+  "ui.declarative.sample_title": "井字棋 · 呈现示例",
+  "ui.declarative.hints.legend": "高亮显示下一步可进行的操作。",
+  "ui.declarative.hints.tap": "点击",
+  "ui.declarative.hints.move": "移动",
+  "ui.declarative.hints.rotate": "旋转",
+  "ui.declarative.hints.scale": "调整大小",
+  "ui.declarative.hints.choose_destination": "选择一个高亮目标位置",
+  "ui.declarative.hints.rotate_piece": "旋转{piece}",
+  "ui.declarative.hints.grow_piece": "放大{piece}",
+  "ui.declarative.hints.shrink_piece": "缩小{piece}",
+  "ui.declarative.hints.piece_actions": "{piece}：{actions}",
+  "ui.declarative.hints.selected_piece": "已选棋子"
 }

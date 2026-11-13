@@ -511,6 +511,20 @@
           "maxItems": 2048,
           "uniqueItems": true
         },
+        "actions": {
+          "type": "array",
+          "description": "Available piece operations, used by hosts to show persistent action hints. Nonempty move_targets always implies move. Omit for legacy tap behavior; use [] and no move_targets for a passive piece. Rotation/scale presentation values alone do not grant actions.",
+          "items": {
+            "enum": [
+              "tap",
+              "move",
+              "rotate",
+              "scale"
+            ]
+          },
+          "maxItems": 4,
+          "uniqueItems": true
+        },
         "selected": {
           "type": "boolean"
         },
@@ -527,7 +541,23 @@
         "board",
         "position"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": ["actions"],
+            "properties": {
+              "actions": {"contains": {"const": "move"}}
+            }
+          },
+          "then": {
+            "required": ["move_targets"],
+            "properties": {
+              "move_targets": {"minItems": 1}
+            }
+          }
+        }
+      ]
     },
     "target": {
       "type": "object",
@@ -780,7 +810,9 @@
           "enum": [
             "tap",
             "drop",
-            "change"
+            "change",
+            "rotate",
+            "scale"
           ]
         },
         "id": {
@@ -809,6 +841,19 @@
             "null"
           ],
           "maxLength": 4000
+        },
+        "delta": {
+          "type": "number",
+          "description": "Requested relative clockwise rotation in degrees. The reducer applies or rejects it; the host never changes authoritative state.",
+          "minimum": -360,
+          "maximum": 360,
+          "not": {"const": 0}
+        },
+        "factor": {
+          "type": "number",
+          "description": "Requested positive relative scale multiplier. The reducer owns the resulting scene or move.",
+          "exclusiveMinimum": 0,
+          "maximum": 100
         }
       },
       "required": [
@@ -831,6 +876,16 @@
               "target_id"
             ]
           }
+        },
+        {
+          "if": {"properties": {"type": {"const": "rotate"}}},
+          "then": {"required": ["delta"]},
+          "else": {"not": {"required": ["delta"]}}
+        },
+        {
+          "if": {"properties": {"type": {"const": "scale"}}},
+          "then": {"required": ["factor"]},
+          "else": {"not": {"required": ["factor"]}}
         }
       ]
     },

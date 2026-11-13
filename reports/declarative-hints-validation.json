@@ -1,0 +1,126 @@
+{
+  "environment": "disposable loopback in-memory store",
+  "submission_endpoint": "POST /games/declarative",
+  "games": [
+    {
+      "kind": "tictactoe",
+      "id": "bb5277b9-fbb2-48ce-be60-89531aa0d150",
+      "version": 1,
+      "submission_status": 201,
+      "package_sha256_without_secret": "b49cd900e4e7fcba19d3f1b142c29d85285ab3003c63588062f804b2e9bc3192",
+      "portal_result": "passed",
+      "terminal_status": "over"
+    },
+    {
+      "kind": "connect4",
+      "id": "f4590f65-dbc0-4566-bd75-af82d2003608",
+      "version": 1,
+      "submission_status": 201,
+      "package_sha256_without_secret": "1133f1c2cd1a43ba7be0b92d69b2b2eb01eb038493319898ce61f8443eee4d4f",
+      "portal_result": "passed",
+      "terminal_status": "over"
+    },
+    {
+      "kind": "reversi",
+      "id": "d747b790-0f5a-4ff3-8236-2bb190c2052a",
+      "version": 1,
+      "submission_status": 201,
+      "package_sha256_without_secret": "609f2baf0512feafceef203139ba0e2c1acf4417cab672b967f3f3d3f30ddad0",
+      "portal_result": "passed",
+      "terminal_status": "over"
+    },
+    {
+      "kind": "nim",
+      "id": "3df8d3c0-61ee-4d5b-8558-ae349ee0e1f9",
+      "version": 1,
+      "submission_status": 201,
+      "package_sha256_without_secret": "455abdabf4dca0dcbca3a5f3fd87a6dbb8ce779af33c025ba1cdd53a60c96819",
+      "portal_result": "passed",
+      "terminal_status": "over"
+    },
+    {
+      "kind": "mancala",
+      "id": "813a2556-2e79-4550-b814-c380b911af02",
+      "version": 1,
+      "submission_status": 201,
+      "package_sha256_without_secret": "d46d5434d5b8ca47ed54f65ac94bcea4b3f21cc973b93dcc80fd628c58dbb3a4",
+      "portal_result": "passed",
+      "terminal_status": "over"
+    },
+    {
+      "kind": "gomoku",
+      "id": "cff5cba6-914e-4411-a2e6-4d380bb51bf5",
+      "version": 1,
+      "submission_status": 201,
+      "package_sha256_without_secret": "7973b207f17e4ca6c48ea8dcff3c533fc958a795067ff83dbbcb563ea5a72dbc",
+      "portal_result": "passed",
+      "terminal_status": "over"
+    },
+    {
+      "kind": "hex",
+      "id": "1c9fbd8d-17fe-4003-a030-711843d74fc6",
+      "version": 1,
+      "submission_status": 201,
+      "package_sha256_without_secret": "e182d332786071760222286031d8002920224f5e3db48cdb7490ca89804e5486",
+      "portal_result": "passed",
+      "terminal_status": "over"
+    },
+    {
+      "kind": "domineering",
+      "id": "41d4793a-e606-481b-9b14-f03829d39f41",
+      "version": 1,
+      "submission_status": 201,
+      "package_sha256_without_secret": "42918355939394909e2573219cf5442f9f4955aee951716e17c77c4e4e3232af",
+      "portal_result": "passed",
+      "terminal_status": "over"
+    },
+    {
+      "kind": "memory",
+      "id": "9e546089-faa8-4774-aa90-26f2bc66c36b",
+      "version": 1,
+      "submission_status": 201,
+      "package_sha256_without_secret": "05f727965bd294b7157bc3687916dae787d25ff92185e9cc43c3532d6befacb6",
+      "portal_result": "passed",
+      "terminal_status": "over"
+    },
+    {
+      "kind": "pig",
+      "id": "768cda6b-bd14-48a0-832b-bcee66dab47c",
+      "version": 1,
+      "submission_status": 201,
+      "package_sha256_without_secret": "a563de4dc028b63b1297f0c98533de822189d0ed1968eb4d4107d7acf57c7656",
+      "portal_result": "passed",
+      "terminal_status": "over"
+    }
+  ],
+  "executed_at_utc": "2026-11-13T13:48:48.305351+00:00",
+  "feature": "Persistent action affordances and selected/dragged piece legal destination hints",
+  "source_examples": "All ten games regenerated from games/declarative/presentation.js; explicit actions describe only legal interactions",
+  "checks": {
+    "backend_and_example_tests": {
+      "passed": 162,
+      "command": "python -m pytest game_platform/tests/test_declarative_ui.py game_platform/tests/test_declarative_actions.py game_platform/tests/test_declarative_examples.py game_platform/tests/test_declarative_example_hints.py game_platform/tests/test_declarative_updates.py game_platform/tests/test_game_traces.py -q"
+    },
+    "all_javascript_tests": {
+      "passed": 381,
+      "command": "node --test tests/web/*.test.cjs"
+    },
+    "localization_and_audit": {
+      "passed": 53
+    },
+    "portal_play_and_regressions": {
+      "passed": 15,
+      "command": "E2E_PORT=8145 npx playwright test e2e/declarative.spec.ts --project=chromium --workers=1",
+      "scope": "All ten real two-player matches reached over; first turn checked legal piece/control hints and inactive viewer hints. Five authoring/privacy/offline/movement checks passed."
+    },
+    "desktop_and_touch_hint_behavior": {
+      "passed": 2,
+      "command": "E2E_PORT=8141 npx playwright test e2e/declarative-hints.spec.ts --workers=1",
+      "scope": "Persistent click/move/rotate/scale affordances, legal-only drops, rotation/resize JSON events, Escape/cancel/off-canvas/native drag/multitouch cleanup, stale state/turn/spectator/replay/pending move gating."
+    }
+  },
+  "screenshots": [
+    "../docs/images/declarative-drop-hints.png",
+    "../docs/images/declarative-memory-hints.png"
+  ]
+}

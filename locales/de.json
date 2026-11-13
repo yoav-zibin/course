@@ -860,5 +860,16 @@
   "ui.declarative.test_invalid_json": "Die deklarative Oberflächenspezifikation ist kein gültiges JSON: {message}",
   "ui.declarative.error_prefix": "Deklarative Spieloberfläche:",
   "error.declarative_complete_package": "Aktualisiere den Code, die Regeln oder die Schemas des deklarativen Spiels über POST /games/declarative mit dem vollständig getesteten Paket",
-  "ui.declarative.sample_title": "Tic-Tac-Toe · Darstellungsbeispiel"
+  "ui.declarative.sample_title": "Tic-Tac-Toe · Darstellungsbeispiel",
+  "ui.declarative.hints.legend": "Hervorhebungen zeigen, was du als Nächstes tun kannst.",
+  "ui.declarative.hints.tap": "Klicken",
+  "ui.declarative.hints.move": "Bewegen",
+  "ui.declarative.hints.rotate": "Drehen",
+  "ui.declarative.hints.scale": "Größe ändern",
+  "ui.declarative.hints.choose_destination": "Wähle ein hervorgehobenes Ziel",
+  "ui.declarative.hints.rotate_piece": "{piece} drehen",
+  "ui.declarative.hints.grow_piece": "{piece} vergrößern",
+  "ui.declarative.hints.shrink_piece": "{piece} verkleinern",
+  "ui.declarative.hints.piece_actions": "{piece}: {actions}",
+  "ui.declarative.hints.selected_piece": "Ausgewählte Spielfigur"
 }

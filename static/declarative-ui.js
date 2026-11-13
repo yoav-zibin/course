@@ -165,7 +165,7 @@
     if([point.x,point.y].some(value=>typeof value!=="number"||Math.abs(value)>100000))throw new Error(t("ui.declarative.error.invalid_point_geometry", {}, "Invalid point geometry"));
   }
   function checkElement(kind,item) {
-    const fields={pieces:["id","type","board","position","text","asset","rotation","scale","opacity","z","face","move_targets","selected","hidden","draggable"],targets:["id","board","position","label","color"],labels:["id","text","x","y","color","font_size"],controls:["id","label","kind","value","min","max","step","options","disabled"],paths:["id","points","color","width"]};
+    const fields={pieces:["id","type","board","position","text","asset","rotation","scale","opacity","z","face","move_targets","selected","hidden","draggable","actions"],targets:["id","board","position","label","color"],labels:["id","text","x","y","color","font_size"],controls:["id","label","kind","value","min","max","step","options","disabled"],paths:["id","points","color","width"]};
     const required={pieces:["id","type","board","position"],targets:["id","board","position"],labels:["id","text","x","y"],controls:["id","label","kind"],paths:["id","points"]};
     knownObject(item,fields[kind],required[kind]);
     for(const key of ["id","type","board","asset"])if(key in item&&!isId(item[key]))throw new Error(t("ui.declarative.error.invalid_ui_identifier", {}, "Invalid UI identifier"));
@@ -182,6 +182,7 @@
       else checkPoint(at);
     }
     if("move_targets" in item&&(!Array.isArray(item.move_targets)||item.move_targets.length>2048||item.move_targets.some(value=>!isId(value))||new Set(item.move_targets).size!==item.move_targets.length))throw new Error(t("ui.declarative.error.invalid_move_targets", {}, "Invalid move targets"));
+    if("actions" in item&&(!Array.isArray(item.actions)||item.actions.some(action=>!["tap","move","rotate","scale"].includes(action))||new Set(item.actions).size!==item.actions.length||item.actions.includes("move")&&!item.move_targets?.length))throw new Error(t("ui.declarative.error.invalid_move_targets", {}, "Invalid move targets"));
     if(kind==="paths"){
       if(!Array.isArray(item.points)||item.points.length<2||item.points.length>4096)throw new Error(t("ui.declarative.error.invalid_path_points", {}, "Invalid path points"));
       item.points.forEach(checkPoint);
@@ -220,42 +221,105 @@
     for (const piece of scene.pieces || []) for (const target of piece.move_targets || []) if (!targets.has(target)) throw new Error(t("ui.declarative.error.unknown_move_target", {}, "Unknown move target"));
     return scene;
   }
+  // Older v1 packages treated every piece as tappable. An explicit empty list
+  // lets new packages mark decoration precisely; destinations also declare move.
+  function pieceActions(piece) {
+    if(piece.hidden)return [];
+    const actions=piece.actions===undefined?["tap"]:piece.actions;
+    return ["tap","move","rotate","scale"].filter(action=>actions.includes(action)||action==="move"&&piece.move_targets?.length);
+  }
+  function actionLabel(action) {
+    if(action==="tap")return t("ui.declarative.hints.tap", {}, "Click");
+    if(action==="move")return t("ui.declarative.hints.move", {}, "Move");
+    if(action==="rotate")return t("ui.declarative.hints.rotate", {}, "Rotate");
+    return t("ui.declarative.hints.scale", {}, "Resize");
+  }
   function mount(container, rawSpec, callbacks = {}) {
     const spec = validateSpec(clone(rawSpec));
     container.replaceChildren();
     container.classList.add("declarative-game");
     const stage = svg("svg", {viewBox: `0 0 ${spec.viewport.width} ${spec.viewport.height}`, role: "group", "aria-label": t("ui.declarative.board_aria", {}, "Game board"), class: "declarative-stage"});
+    const hintMessage=document.createElement("p");hintMessage.className="declarative-hint-message";hintMessage.setAttribute("role","status");hintMessage.setAttribute("aria-live","polite");hintMessage.hidden=true;
+    const pieceTools=document.createElement("div");pieceTools.className="declarative-piece-actions";pieceTools.hidden=true;
     const controls = document.createElement("div"); controls.className = "declarative-controls";
     const errorBox = document.createElement("p"); errorBox.className = "declarative-error"; errorBox.setAttribute("role", "alert"); errorBox.hidden = true;
-    container.append(stage, controls, errorBox);
+    container.append(hintMessage, stage, pieceTools, controls, errorBox);
     const engine = createEngine(container);
-    let latest = null, localState = null, revision = 0, destroyed = false, moveSent = false, selected = null, dragging = null;
-    stage.addEventListener("pointerup", event => {
-      if(!dragging)return;
+    let latest = null, localState = null, revision = 0, renderedRevision = -1, destroyed = false, moveSent = false, selected = null, dragging = null, nativeDragging = null, currentScene = null, suppressClick = false;
+    function finishPointer(event) {
+      if(!dragging||nativeDragging||event.pointerId!==dragging.pointerId)return;
       const drag=dragging;dragging=null;
-      if(Math.hypot(event.clientX-drag.x,event.clientY-drag.y)<5)return;
+      if(Math.hypot(event.clientX-drag.x,event.clientY-drag.y)<5){updateHints();return;}
+      suppressClick=true;setTimeout(()=>{suppressClick=false;},0);
       const target=document.elementFromPoint(event.clientX,event.clientY)?.closest(".declarative-target");
-      if(target&&drag.targets.includes(target.dataset.uiId)){event.preventDefault();dispatch({type:"drop",id:drag.id,piece_id:drag.id,target_id:target.dataset.uiId});selected=null;}
-    });
-    stage.addEventListener("pointercancel",()=>{dragging=null;});
+      if(target&&stage.contains(target)&&drag.targets.includes(target.dataset.uiId)&&canAct()){event.preventDefault();dispatch({type:"drop",id:drag.id,piece_id:drag.id,target_id:target.dataset.uiId});}
+      selected=null;updateHints();
+    }
+    function cancelPointer(event){if(!dragging||nativeDragging||event.pointerId!==dragging.pointerId)return;dragging=null;selected=null;updateHints();}
+    global.addEventListener("pointerup",finishPointer);
+    global.addEventListener("pointercancel",cancelPointer);
+    container.addEventListener("keydown",event=>{if(event.key==="Escape"){dragging=null;nativeDragging=null;selected=null;updateHints();}});
     let queue = Promise.resolve();
     function error(error) { if (destroyed) return; errorBox.textContent = error.message; errorBox.hidden = false; callbacks.onError?.(error); }
-    function canAct() { return latest && latest.status === "ongoing" && latest.acting_for_player_index !== null && latest.acting_for_player_index !== undefined && !latest.replay && !moveSent; }
+    function canAct() { return latest && renderedRevision===revision && latest.status === "ongoing" && latest.acting_for_player_index !== null && latest.acting_for_player_index !== undefined && !latest.replay && !moveSent; }
+    function selectedPiece(){return currentScene?.pieces?.find(piece=>piece.id===selected&&!piece.hidden&&pieceActions(piece).length);}
+    function pieceName(piece){return piece.face==="back"?t("ui.declarative.covered_piece", {}, "Covered piece"):piece.text||piece.id;}
+    function updateHints() {
+      const active=canAct(),piece=selectedPiece();
+      if(!piece)selected=null;
+      const destinations=active&&pieceActions(piece||{actions:[]}).includes("move")?new Set(piece.move_targets):null;
+      stage.classList.toggle("show-action-hints",Boolean(active));
+      stage.classList.toggle("show-drop-hints",Boolean(destinations));
+      for(const node of stage.querySelectorAll(".declarative-piece")){
+        const enabled=active&&Boolean(node.dataset.actions);
+        node.classList.toggle("actionable",Boolean(enabled));
+        node.classList.toggle("hint-selected",Boolean(active&&node.dataset.uiId===selected));
+        if(node.getAttribute("role")==="button"){node.setAttribute("aria-disabled",String(!enabled));node.setAttribute("tabindex",enabled?"0":"-1");}
+      }
+      for(const node of stage.querySelectorAll(".declarative-target")){
+        const allowed=active&&(!destinations||destinations.has(node.dataset.uiId));
+        node.dataset.dropState=!active?"inactive":destinations?(allowed?"allowed":"unavailable"):"placement";
+        node.setAttribute("aria-disabled",String(!allowed));node.setAttribute("tabindex",allowed?"0":"-1");
+      }
+      const hasAction=active&&Boolean(currentScene?.pieces?.some(piece=>pieceActions(piece).length)||currentScene?.targets?.length||currentScene?.controls?.some(control=>!control.disabled));
+      hintMessage.hidden=!hasAction;
+      hintMessage.textContent=destinations?t("ui.declarative.hints.choose_destination", {}, "Choose a highlighted destination"):t("ui.declarative.hints.legend", {}, "Highlights show what you can do next.");
+      for(const wrapper of controls.querySelectorAll(".declarative-control")){
+        const node=wrapper.querySelector("button,input,select");
+        const control=currentScene?.controls?.find(item=>item.id===node?.dataset.uiId);
+        if(node)node.disabled=!active||Boolean(control?.disabled);
+        wrapper.classList.toggle("actionable",Boolean(node&&!node.disabled));
+      }
+      pieceTools.replaceChildren();
+      const actions=active&&piece?pieceActions(piece):[];
+      pieceTools.hidden=!actions.some(action=>action==="rotate"||action==="scale");
+      if(!pieceTools.hidden){
+        const caption=document.createElement("span");caption.textContent=t("ui.declarative.hints.selected_piece", {}, "Selected piece")+": "+pieceName(piece);pieceTools.append(caption);
+        const addTool=(action,label,event)=>{const button=document.createElement("button");button.type="button";button.dataset.pieceAction=action;button.dataset.pieceId=piece.id;button.textContent=label;button.addEventListener("click",()=>{if(canAct()&&selectedPiece()?.id===piece.id)dispatch(event);});pieceTools.append(button);};
+        if(actions.includes("rotate"))addTool("rotate",t("ui.declarative.hints.rotate_piece", {piece:pieceName(piece)}, "Rotate {piece}"),{type:"rotate",id:piece.id,delta:90});
+        if(actions.includes("scale")){
+          addTool("grow",t("ui.declarative.hints.grow_piece", {piece:pieceName(piece)}, "Enlarge {piece}"),{type:"scale",id:piece.id,factor:1.1});
+          addTool("shrink",t("ui.declarative.hints.shrink_piece", {piece:pieceName(piece)}, "Shrink {piece}"),{type:"scale",id:piece.id,factor:1/1.1});
+        }
+      }
+    }
     function dispatch(event) {
       if (!canAct()) return;
       const atRevision = revision;
       queue = queue.then(() => reduce({type: "ui_event", event, state_changed: latest}, atRevision)).catch(error);
     }
-    function activate(node, id, label, fn) {
+    function activate(node, id, label, fn, enabled=canAct) {
       node.setAttribute("role", "button"); node.setAttribute("tabindex", canAct() ? "0" : "-1");
       node.setAttribute("aria-label", String(label || id)); node.setAttribute("aria-disabled", String(!canAct()));
       node.dataset.uiId = id;
-      node.addEventListener("click", () => { if (canAct()) fn(); });
-      node.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); if (canAct()) fn(); } });
+      node.addEventListener("click", () => { if (!suppressClick&&enabled()) fn(); });
+      node.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); if (enabled()) fn(); } });
     }
     function draw(scene) {
+      currentScene=scene;
       stage.setAttribute("aria-label", t("ui.declarative.board_aria", {}, "Game board"));
       const activeId = document.activeElement?.dataset?.uiId;
+      const activePieceAction = document.activeElement?.dataset?.pieceAction;
       stage.replaceChildren(); controls.replaceChildren();
       stage.setAttribute("aria-busy", String(moveSent));
       for (const board of spec.boards) {
@@ -288,34 +352,51 @@
         const width = board.kind === "grid" ? board.width/board.columns : 44;
         const height = board.kind === "grid" ? board.height/board.rows : 44;
         const node = svg("g",{class:"declarative-target",transform:`translate(${point.x} ${point.y})`});
-        node.append(svg("rect",{x:-width/2,y:-height/2,width,height,rx:5,fill:target.color || "#b8ef5b",opacity:.13,stroke:"#c9ff63","stroke-width":2}));
+        node.append(svg("rect",{class:"declarative-target-area",x:-width/2,y:-height/2,width,height,rx:5,fill:target.color || "#b8ef5b",stroke:"#c9ff63","stroke-width":2}));
         if (target.label) node.append(svg("text",{"text-anchor":"middle","dominant-baseline":"central",fill:"#d7f6ab","font-size":14},target.label));
         activate(node,target.id,target.label,()=> {
-          const piece = (scene.pieces || []).find(item=>item.id===selected);
-          if (piece?.move_targets?.includes(target.id)) { dispatch({type:"drop",id:piece.id,piece_id:piece.id,target_id:target.id}); selected=null; }
-          else dispatch({type:"tap",id:target.id});
-        });
-        node.addEventListener("dragover",event=>{const piece=(scene.pieces || []).find(item=>item.id===selected);if(piece?.move_targets?.includes(target.id))event.preventDefault();});
-        node.addEventListener("drop",event=>{event.preventDefault();const piece=(scene.pieces || []).find(item=>item.id===selected);if(piece?.move_targets?.includes(target.id))dispatch({type:"drop",id:piece.id,piece_id:piece.id,target_id:target.id});selected=null;});
+          const piece = selectedPiece();
+          if(pieceActions(piece||{actions:[]}).includes("move")){
+            if(piece.move_targets.includes(target.id)){dispatch({type:"drop",id:piece.id,piece_id:piece.id,target_id:target.id});selected=null;updateHints();}
+          }else dispatch({type:"tap",id:target.id});
+        },()=>canAct()&&node.dataset.dropState!=="unavailable");
+        node.addEventListener("dragover",event=>{const piece=selectedPiece();if(canAct()&&piece?.move_targets?.includes(target.id))event.preventDefault();});
+        node.addEventListener("drop",event=>{event.preventDefault();const piece=selectedPiece();if(canAct()&&nativeDragging===piece?.id&&piece?.move_targets?.includes(target.id))dispatch({type:"drop",id:piece.id,piece_id:piece.id,target_id:target.id});selected=null;dragging=null;nativeDragging=null;updateHints();});
         targetLayer.append(node);
       }
       for (const piece of [...(scene.pieces || [])].sort((a,b)=>num(a.z)-num(b.z))) {
         if (piece.hidden) continue;
         const type=spec.piece_types[piece.type], point=position(spec,piece),board=point.board;
         const width=num(type.width,board.kind==="grid" ? board.width/board.columns*.76 : 42),height=num(type.height,board.kind==="grid" ? board.height/board.rows*.76 : width);
-        const node=svg("g",{class:"declarative-piece"+(piece.selected?" selected":""),transform:`translate(${point.x} ${point.y}) rotate(${num(piece.rotation)}) scale(${num(piece.scale,1)})`,opacity:num(piece.opacity,1)});
-        if (type.shape==="circle") node.append(svg("ellipse",{rx:width/2,ry:height/2,fill:piece.color || type.color || "#d2ff5a",stroke:type.border_color || "#0d202c","stroke-width":2}));
-        else if((type.shape!=="text"&&type.shape!=="image")||piece.face==="back")node.append(svg("rect",{x:-width/2,y:-height/2,width,height,rx:type.shape==="card"?7:4,fill:piece.face==="back"?"#324a88":piece.color || type.color || "#e4eced",stroke:type.border_color || "#1d3544","stroke-width":2}));
+        const actions=pieceActions(piece);
+        const node=svg("g",{class:"declarative-piece"+(piece.selected?" selected":""),transform:`translate(${point.x} ${point.y}) rotate(${num(piece.rotation)}) scale(${num(piece.scale,1)})`});
+        node.dataset.uiId=piece.id;node.dataset.actions=actions.join(" ");
+        const body=svg("g",{opacity:num(piece.opacity,1)});node.append(body);
+        if (type.shape==="circle") body.append(svg("ellipse",{rx:width/2,ry:height/2,fill:piece.color || type.color || "#d2ff5a",stroke:type.border_color || "#0d202c","stroke-width":2}));
+        else if((type.shape!=="text"&&type.shape!=="image")||piece.face==="back")body.append(svg("rect",{x:-width/2,y:-height/2,width,height,rx:type.shape==="card"?7:4,fill:piece.face==="back"?"#324a88":piece.color || type.color || "#e4eced",stroke:type.border_color || "#1d3544","stroke-width":2}));
         const uri=assetURI(spec.assets?.[piece.face==="back" ? type.back_asset : piece.asset || type.asset]);
-        if(uri)node.append(svg("image",{href:uri,x:-width/2,y:-height/2,width,height,preserveAspectRatio:"xMidYMid meet"}));
+        if(uri)body.append(svg("image",{href:uri,x:-width/2,y:-height/2,width,height,preserveAspectRatio:"xMidYMid meet"}));
         const text=piece.face==="back"?"◆":piece.text;
-        if(text!==undefined)node.append(svg("text",{"text-anchor":"middle","dominant-baseline":"central",fill:type.text_color || (type.shape==="text"?"#ecf4fa":"#122735"),"font-size":Math.min(width*.5,height*.6,40),"font-weight":700},text));
+        if(text!==undefined)body.append(svg("text",{"text-anchor":"middle","dominant-baseline":"central",fill:type.text_color || (type.shape==="text"?"#ecf4fa":"#122735"),"font-size":Math.min(width*.5,height*.6,40),"font-weight":700},text));
         if(piece.selected)node.append(svg("rect",{x:-width/2-3,y:-height/2-3,width:width+6,height:height+6,rx:5,fill:"none",stroke:"#fff","stroke-width":3}));
-        activate(node,piece.id,piece.face==="back" ? t("ui.declarative.covered_piece", {}, "Covered piece") : piece.label || piece.text || piece.id,()=>{selected=piece.id;dispatch({type:"tap",id:piece.id});});
-        if(piece.draggable || piece.move_targets?.length){
+        if(actions.length){
+          const summary=t("ui.declarative.hints.piece_actions", {piece:pieceName(piece),actions:actions.map(actionLabel).join(", ")}, "{piece}: {actions}");
+          node.append(svg("title",{},summary));
+          node.append(svg("rect",{class:"declarative-piece-action-outline",x:-width/2-4,y:-height/2-4,width:width+8,height:height+8,rx:8,fill:"none","vector-effect":"non-scaling-stroke"}));
+          const badges=svg("g",{class:"declarative-action-badges",transform:`translate(${-width/2} ${-height/2-13})`,"aria-hidden":"true"});
+          actions.forEach((action,index)=>{
+            const badge=svg("g",{transform:`translate(${index*22} 0)`,"data-action-hint":action});
+            badge.append(svg("rect",{x:0,y:-8,width:20,height:18,rx:5}));
+            badge.append(svg("text",{x:10,y:1,"text-anchor":"middle","dominant-baseline":"central","font-size":14},({tap:"↖",move:"↔",rotate:"↻",scale:"↗"})[action]));
+            badges.append(badge);
+          });node.append(badges);
+          activate(node,piece.id,summary,()=>{selected=piece.id;updateHints();if(actions.includes("tap"))dispatch({type:"tap",id:piece.id});});
+        }else{node.setAttribute("role","img");node.setAttribute("aria-label",pieceName(piece));}
+        if(actions.includes("move")){
           node.style.touchAction="none";
-          node.addEventListener("pointerdown",event=>{if(canAct()){selected=piece.id;dragging={id:piece.id,x:event.clientX,y:event.clientY,targets:piece.move_targets || []};}});
-          node.setAttribute("draggable","true");node.addEventListener("dragstart",event=>{selected=piece.id;event.dataTransfer?.setData("text/plain",piece.id);});}
+          node.addEventListener("pointerdown",event=>{if(canAct()){suppressClick=false;selected=piece.id;dragging={id:piece.id,pointerId:event.pointerId,x:event.clientX,y:event.clientY,targets:piece.move_targets || []};updateHints();}});
+          node.setAttribute("draggable","true");node.addEventListener("dragstart",event=>{if(!canAct()){event.preventDefault();return;}selected=piece.id;nativeDragging=piece.id;updateHints();event.dataTransfer?.setData("text/plain",piece.id);});
+          node.addEventListener("dragend",()=>{dragging=null;nativeDragging=null;selected=null;updateHints();});}
         stage.append(node);
       }
       stage.append(targetLayer);
@@ -339,9 +420,11 @@
             dispatch({type:"change",id:control.id,value});
           });
         }
-        node.dataset.uiId=control.id;node.disabled=Boolean(control.disabled)||!canAct();wrapper.append(node);controls.append(wrapper);
+        node.dataset.uiId=control.id;node.disabled=Boolean(control.disabled)||!canAct();wrapper.classList.toggle("actionable",!node.disabled);wrapper.append(node);controls.append(wrapper);
       }
+      updateHints();
       if(activeId)for(const node of container.querySelectorAll("[data-ui-id]"))if(node.dataset.uiId===activeId){node.focus({preventScroll:true});break;}
+      if(activePieceAction)for(const node of pieceTools.querySelectorAll("[data-piece-action]"))if(node.dataset.pieceAction===activePieceAction){node.focus({preventScroll:true});break;}
     }
     async function reduce(message, atRevision) {
       if(destroyed || atRevision!==revision || message.type==="ui_event"&&!canAct())return;
@@ -351,6 +434,7 @@
       finiteJSON(result);
       if(result.make_move!==undefined && (message.type!=="ui_event" || !canAct()))throw new Error(t("ui.declarative.error.only_a_current_player_ui_event_may_emit_make_move", {}, "Only a current player UI event may emit make_move"));
       const scene=validateScene(spec,result.scene);
+      renderedRevision=atRevision;
       localState=result.local_state===undefined?null:clone(result.local_state);
       errorBox.hidden=true;
       if(result.make_move!==undefined && message.type==="ui_event" && canAct()) {moveSent=true;callbacks.onMove?.(clone(result.make_move));}
@@ -360,10 +444,10 @@
     callbacks.onReady?.();
     return {
       send(message) {
-        latest=clone(message);revision++;moveSent=false;selected=null;const atRevision=revision;
+        latest=clone(message);revision++;moveSent=false;selected=null;dragging=null;nativeDragging=null;updateHints();const atRevision=revision;
         queue=queue.then(()=>reduce(latest,atRevision)).catch(error);return queue;
       },
-      destroy(){destroyed=true;revision++;engine.destroy();container.replaceChildren();container.classList.remove("declarative-game");},
+      destroy(){destroyed=true;revision++;global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game");},
       dispatch,
     };
   }
@@ -371,10 +455,10 @@
     const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
     const data=value=>JSON.stringify(canonical(value)).replace(/</g,"\\u003c");
     return '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<link rel="stylesheet" href="/static/declarative-ui.css"><div id="declarative-game"></div>' +
+      '<link rel="stylesheet" href="/static/declarative-ui.css?v=2"><div id="declarative-game"></div>' +
       '<script type="application/json" id="i18n-strings">'+data(spec.strings || {})+'<'+'/script>' +
       '<script type="application/json" id="declarative-spec">'+data(spec)+'<'+'/script>' +
-      '<script src="/static/declarative-ui.js"><'+'/script><script>' +
+      '<script src="/static/declarative-ui.js?v=2"><'+'/script><script>' +
       'const host=DeclarativeUI.mount(document.getElementById("declarative-game"),' +
       'JSON.parse(document.getElementById("declarative-spec").textContent),' +
       '{onMove:move=>parent.postMessage({type:"make_move",move},"*"),' +
@@ -383,7 +467,7 @@
       '<'+'/script>';
   }
 
-  const api={mount,clientDocument,position,boardCell,validateScene,validateSpec,assetURI};
+  const api={mount,clientDocument,position,boardCell,validateScene,validateSpec,assetURI,pieceActions};
   global.DeclarativeUI=api;
   if(typeof module!=="undefined"&&module.exports)module.exports=api;
 })(typeof window!=="undefined"?window:globalThis);

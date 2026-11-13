@@ -226,16 +226,20 @@ class DeclarativeLogic:
 
 def client_document(spec):
     """Platform-owned compatibility host for existing test/practice clients."""
+    return _client_document(spec, asset_query="?v=2")
+
+
+def _client_document(spec, *, asset_query):
     def data(value):
         # Recorded test payloads canonicalize object-key order. Keep the generated
         # host byte-identical after a stored submission is loaded again.
         return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True).replace("<", "\\u003c")
     return (
         '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">'
-        '<link rel="stylesheet" href="/static/declarative-ui.css"><div id="declarative-game"></div>'
+        '<link rel="stylesheet" href="/static/declarative-ui.css' + asset_query + '"><div id="declarative-game"></div>'
         '<script type="application/json" id="i18n-strings">' + data(spec.get("strings", {})) + '</script>'
         '<script type="application/json" id="declarative-spec">' + data(spec) + '</script>'
-        '<script src="/static/declarative-ui.js"></script><script>'
+        '<script src="/static/declarative-ui.js' + asset_query + '"></script><script>'
         'const host=DeclarativeUI.mount(document.getElementById("declarative-game"),'
         'JSON.parse(document.getElementById("declarative-spec").textContent),'
         '{onMove:move=>parent.postMessage({type:"make_move",move},"*"),'
@@ -245,6 +249,16 @@ def client_document(spec):
     )
 
 
+def accepted_platform_host(spec, code):
+    """Exact current/legacy trusted templates, preserving recorded payload hashes.
+
+    New submissions without client_code use the current versioned asset URLs.
+    Stored submissions can keep the original unversioned host byte-for-byte so
+    their existing recorded publication evidence and pinned code remain valid.
+    """
+    return code in (client_document(spec), _client_document(spec, asset_query=""))
+
+
 def embedded_spec(code):
     """Recognize only an exact generated host, never arbitrary HTML with a marker."""
     import re
@@ -252,7 +266,7 @@ def embedded_spec(code):
     if match:
         try:
             spec = json.loads(match.group(1))
-            if client_document(spec) == code:
+            if accepted_platform_host(spec, code):
                 return spec
         except (ValueError, TypeError, AttributeError):
             pass

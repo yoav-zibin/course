@@ -860,5 +860,16 @@
   "ui.declarative.test_invalid_json": "The declarative UI spec is not valid JSON: {message}",
   "ui.declarative.error_prefix": "Declarative game UI:",
   "error.declarative_complete_package": "Update declarative game code, rules or schemas through POST /games/declarative with the complete tested package",
-  "ui.declarative.sample_title": "Tic-tac-toe · presentation example"
+  "ui.declarative.sample_title": "Tic-tac-toe · presentation example",
+  "ui.declarative.hints.legend": "Highlights show what you can do next.",
+  "ui.declarative.hints.tap": "Click",
+  "ui.declarative.hints.move": "Move",
+  "ui.declarative.hints.rotate": "Rotate",
+  "ui.declarative.hints.scale": "Resize",
+  "ui.declarative.hints.choose_destination": "Choose a highlighted destination",
+  "ui.declarative.hints.rotate_piece": "Rotate {piece}",
+  "ui.declarative.hints.grow_piece": "Enlarge {piece}",
+  "ui.declarative.hints.shrink_piece": "Shrink {piece}",
+  "ui.declarative.hints.piece_actions": "{piece}: {actions}",
+  "ui.declarative.hints.selected_piece": "Selected piece"
 }

@@ -860,5 +860,16 @@
   "ui.declarative.test_invalid_json": "La especificación de interfaz declarativa no es JSON válido: {message}",
   "ui.declarative.error_prefix": "Interfaz de juego declarativa:",
   "error.declarative_complete_package": "Actualiza el código, las reglas o los esquemas de un juego declarativo mediante POST /games/declarative con el paquete completo ya probado",
-  "ui.declarative.sample_title": "Tres en raya · ejemplo de presentación"
+  "ui.declarative.sample_title": "Tres en raya · ejemplo de presentación",
+  "ui.declarative.hints.legend": "El resaltado muestra qué puedes hacer a continuación.",
+  "ui.declarative.hints.tap": "Clic",
+  "ui.declarative.hints.move": "Mover",
+  "ui.declarative.hints.rotate": "Girar",
+  "ui.declarative.hints.scale": "Cambiar tamaño",
+  "ui.declarative.hints.choose_destination": "Elige un destino resaltado",
+  "ui.declarative.hints.rotate_piece": "Girar {piece}",
+  "ui.declarative.hints.grow_piece": "Agrandar {piece}",
+  "ui.declarative.hints.shrink_piece": "Reducir {piece}",
+  "ui.declarative.hints.piece_actions": "{piece}: {actions}",
+  "ui.declarative.hints.selected_piece": "Pieza seleccionada"
 }

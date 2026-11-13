@@ -2,3 +2,28 @@
 /* Match-shell themes use more specific frame backgrounds. Keep the scene's
    declared palette readable while leaving HTML game frames untouched. */
 #game-box.declarative-game{background:#102330;color:#e4edf4;padding:12px}
+/* Action affordances belong to the host, so every game and input method gets
+   the same persistent hints rather than relying on hover or game artwork. */
+.declarative-hint-message{margin:0;padding:8px 12px;border-left:3px solid #d2ff5a;background:#1a3440;border-radius:5px;font-size:14px;line-height:1.4}
+.declarative-hint-message[hidden],.declarative-piece-actions[hidden]{display:none}
+.declarative-piece{cursor:default}
+.declarative-piece.actionable{cursor:pointer}
+.declarative-piece.actionable[data-actions~=move]{cursor:grab}
+.declarative-piece.actionable.hint-selected[data-actions~=move]{cursor:grabbing}
+.declarative-piece-action-outline,.declarative-action-badges{visibility:hidden;pointer-events:none}
+.declarative-piece.actionable .declarative-piece-action-outline,.declarative-piece.actionable .declarative-action-badges{visibility:visible}
+.declarative-piece-action-outline{stroke:#d2ff5a;stroke-width:2;stroke-dasharray:4 3;filter:drop-shadow(0 0 3px #a7f07099)}
+.declarative-piece.hint-selected .declarative-piece-action-outline{stroke:#ffffff;stroke-width:3;stroke-dasharray:none}
+.declarative-action-badges rect{fill:#d2ff5a;stroke:#102330;stroke-width:1}
+.declarative-action-badges text{fill:#102330;font-weight:700}
+.declarative-target-area{opacity:.13;transition:opacity .12s,stroke-width .12s}
+.declarative-target[data-drop-state=placement] .declarative-target-area{opacity:.24;stroke-width:2}
+.declarative-target[data-drop-state=allowed] .declarative-target-area{opacity:.62;stroke:#ffffff;stroke-width:4;stroke-dasharray:6 3;filter:drop-shadow(0 0 5px #b8ef5b99)}
+.declarative-target[data-drop-state=unavailable]{opacity:.12;cursor:default}
+.declarative-target[data-drop-state=unavailable] .declarative-target-area,.declarative-target[data-drop-state=inactive] .declarative-target-area{stroke:none;opacity:0}
+.declarative-target[data-drop-state=inactive] text{opacity:.45}
+.declarative-piece-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px;border:1px solid #6d8c55;border-radius:8px;background:#18313e}
+.declarative-piece-actions>span{font-size:14px;margin-inline-end:8px}
+.declarative-piece-actions button{min-height:44px;padding:8px 12px;border:2px solid #d2ff5a;border-radius:8px;background:#1b3846;color:#e4edf4;font:inherit;cursor:pointer}
+.declarative-control.actionable :is(input,select){outline:2px solid #d2ff5a;outline-offset:2px}
+@media(prefers-reduced-motion:reduce){.declarative-target-area{transition:none}}
