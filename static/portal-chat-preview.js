@@ -41,7 +41,7 @@
       avatar.replaceChildren(makeAvatar(player.avatar, "fruit-avatar"));
       card.querySelector(".podium-name").textContent = player.name;
       card.querySelector(".podium-score").textContent = player[metric].toLocaleString("en-US");
-      card.querySelector(".podium-metric").textContent = metric === "tokens" ? "gems" : metric;
+      card.querySelector(".podium-metric").textContent = metric === "tokens" ? I18n.t("ui.leaderboard.gems", {}, "Gems") : I18n.t("ui.leaderboard.wins", {}, "Wins");
     }
     const list = panel.querySelector(".leaderboard-list");
     const empty = list.querySelector(".leaderboard-empty");
@@ -122,7 +122,7 @@
     const meta = document.createElement("div");
     meta.className = "chat-message-meta";
     const name = document.createElement("strong");
-    name.textContent = "You";
+    name.textContent = I18n.t("ui.match.seat_you", {}, "You");
     const stamp = document.createElement("time");
     stamp.textContent = time;
     const message = document.createElement("p");

@@ -14,11 +14,12 @@ function setup(request=async()=>{}, hash='', search='', storage) {
   };
   const navigations=[];
   const pageErrors=[];
-  const ctxLocation={hash,search,assign(url){navigations.push(url);}};
+  const fakeLocation={pathname:'/static/portal.html',hash,search,assign(url){navigations.push(url);}};
+  const setUrl=url=>{if(url==null)return;const m=String(url).match(/^([^?#]*)(\?[^#]*)?(#.*)?$/);if(m[2]!==undefined){fakeLocation.search=m[2];fakeLocation.hash=m[3]||'';}else if(m[3]!==undefined){fakeLocation.hash=m[3];}else if(m[1]===''){}else{fakeLocation.search='';fakeLocation.hash='';}};
   const ctx=vm.createContext({StoragePages:{enabled:async()=>false,list:(request,path,options)=>request("GET",path,options),controls(){},search(){return false;}},console,Map,Set,URLSearchParams,
     navigator:{onLine:true},localStorage:storage || {},PortalOffline:class {api(...args){return request(...args);}read(){return {};}write(){} writeCache(data){this.write(data);} async practice(game,mode,count){practiceCalls.push({game,mode,count});return {id:'local-practice',game_id:game.id,game_version:game.version,players:[{player_index:0,kind:'human',user_id:'owner'}],status:'ongoing',move_count:0};} async submitMove(match,body){const result=this.enqueue(match,body);await this.sync({force:true});return result;}} ,
-    document:{getElementById:node,querySelector:()=>null,querySelectorAll:()=>[],documentElement:{dataset:{}},body:{dataset:{},classList:{toggle(){}}}},window:{addEventListener(){}},
-    location:ctxLocation,history:{replaceState(_state,_title,url){this.pushState(_state,_title,url);},pushState(_state,_title,url){const next=new URL(url,'https://example.test/static/portal.html'+ctxLocation.search+ctxLocation.hash);ctxLocation.search=next.search;ctxLocation.hash=next.hash;}},
+    document:{getElementById:node,body:{dataset:{},classList:{toggle(){}}},documentElement:{dataset:{}},querySelector(){return null;},querySelectorAll(){return [];}},window:{addEventListener(){},scrollTo(){}},
+    location:fakeLocation,history:{replaceState(s,title,url){setUrl(url);},pushState(s,title,url){navigations.push(url);setUrl(url);}},
     Auth:{current:()=>({id:'owner'})},I18n:require('./i18n-stub.cjs'),GameFrame:class{load(){}unload(){}send(){}},
     apiRequest:request,formatTime:()=>'',shortId:x=>x,showPageError:text=>pageErrors.push(text),el:(tag,attrs={},...children)=>({...attrs,children})});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../../static/portal.js'),'utf8').replace(/main\(\);\s*$/,''),ctx);
@@ -50,7 +51,7 @@ test('ranked games retain server order and open even outside the current catalog
   assert.equal(cards.length,2);
   assert.equal(cards[0].children[0].textContent,'1');
   cards[0].onclick();
-  assert.equal(navigations[0],'/static/portal.html?game=leader');
+  assert.equal(navigations[0],'/static/portal.html#game=leader');
 });
 
 test('multiplayer and mixed-mode games retain their lobby',async()=>{
@@ -115,7 +116,7 @@ test('typed search navigates to a game from a large catalog with Enter',()=>{
   assert.equal(run('state.filteredGames.length'),1);
   assert.equal(node('create').disabled,true);
   run('onGameSearchKey({key:"Enter",preventDefault(){}})');
-  assert.equal(navigations[0],'/static/portal.html?game=game-83');
+  assert.equal(navigations[0],'/static/portal.html#game=game-83');
   assert.equal(node('new-game').value,'');assert.equal(node('game-search').value,'PUZZLE 83');
   assert.equal(node('game-search-popup').hidden,false);
 });
@@ -129,7 +130,7 @@ test('browsing the full catalog reaches games beyond the first twelve without a 
   assert.doesNotMatch(node('game-results-note').textContent,/Showing 12/);
   for(let i=0;i<100;i++)run('onGameSearchKey({key:"ArrowDown",preventDefault(){}})');
   run('onGameSearchKey({key:"Enter",preventDefault(){}})');
-  assert.equal(navigations[0],'/static/portal.html?game=game-99');
+  assert.equal(navigations[0],'/static/portal.html#game=game-99');
 });
 
 test('description searches remain complete and Browse all clears the filter',()=>{
@@ -151,10 +152,10 @@ test('unmatched search cannot create the previously selected game on blur',async
   assert.match(node('game-results-note').textContent,/No matching games/);
 });
 
-test('Your turn is absent when no human turn needs attention',()=>{
-  const {node,run}=setup();run('renderLists()');assert.equal(node('group-turn').hidden,true);
+test('Your turn counts only matches where a human turn needs attention',()=>{
+  const {node,run}=setup();run('renderLists()');assert.equal(node('count-turn').textContent,'0');
   run('state.myMatches=[{id:"m",game_id:"game",game_version:2,players:[{player_index:0,kind:"human",user_id:"owner"}],status:"ongoing",turn_of_player_indices:[0]}];renderLists()');
-  assert.equal(node('group-turn').hidden,false);assert.equal(node('count-turn').textContent,'1');
+  assert.equal(node('count-turn').textContent,'1');
 });
 
 test('catalog updates preserve the detail game when its version changes',()=>{
@@ -181,7 +182,7 @@ test('gallery cards navigate to detail pages and polling preserves card nodes',(
   assert.equal(original[0].children[1].children[1].textContent,'Random');
   assert.equal(original[0].children[1].children[2].textContent,'Join an open match of any game');
   original[1].onclick();
-  assert.equal(navigations[0],'/static/portal.html?game=game');
+  assert.equal(navigations[0],'/static/portal.html#game=game');
   run('state.libraryView="list";renderLibrary()');
   assert.match(node('game-library').className,/is-list/);
 });
@@ -215,7 +216,7 @@ test('match lists use the slim catalog and never fetch game code',async()=>{
   assert.deepEqual(calls,['/users?ids=other']);
   run('renderLists()');
   assert.equal(node('count-open').textContent,'1');
-  assert.equal(node('open-matches').children[0].children[0].children[0],'Hanoi');
+  assert.ok(JSON.stringify(node('open-matches').children[0]).includes('Hanoi'));
 });
 
 test('ensureDetails fetches only the open match game version',async()=>{

@@ -16,21 +16,21 @@
     <link rel="apple-touch-icon" href="/static/portal-icon-180.png" />
     <meta name="apple-mobile-web-app-title" content="Playroom" />
     <link rel="manifest" href="/static/portal.webmanifest" />
-    <title>BuildPlay.fun · Games</title>
+    <title data-i18n="ui.page.portal">BuildPlay.fun · Games</title>
     <link rel="stylesheet" href="/static/common.css?v=17" />
-    <link rel="stylesheet" href="/static/portal.css?v=35" />
+    <link rel="stylesheet" href="/static/portal.css?v=37" />
     <link rel="stylesheet" href="/static/portal-match-layout.css?v=1" />
     <link rel="stylesheet" href="/static/portal-speed.css?v=2" />
     <link rel="stylesheet" href="/static/feedback-dialog.css?v=1" />
-    <link rel="stylesheet" href="/static/experiments.css?v=43" />
+    <link rel="stylesheet" href="/static/experiments.css?v=44" />
   </head>
   <body>
     <header class="topbar" data-app-page="portal" data-app-brand="BuildPlay.fun" data-app-home-href="#home">
       <h1>BuildPlay.fun</h1>
-      <nav class="portal-nav" aria-label="Main navigation">
-        <a class="portal-nav-link is-active" data-portal-nav="games" href="#games">Games</a>
-        <a class="portal-nav-link" data-portal-nav="matches" href="#matches">Matches <span id="nav-match-count" class="nav-count">0</span></a>
-        <a class="portal-nav-link" data-portal-nav="leaderboards" href="#leaderboards">Leaderboards</a>
+      <nav class="portal-nav" aria-label="Main navigation" data-i18n-aria-label="ui.portal.nav_label">
+        <a class="portal-nav-link is-active" data-portal-nav="games" href="#games" data-i18n="ui.portal.nav_games">Games</a>
+        <a class="portal-nav-link" data-portal-nav="matches" href="#matches"><span data-i18n="ui.portal.nav_matches">Matches</span> <span id="nav-match-count" class="nav-count">0</span></a>
+        <a class="portal-nav-link" data-portal-nav="leaderboards" href="#leaderboards" data-i18n="ui.portal.nav_leaderboards">Leaderboards</a>
       </nav>
       <span class="spacer"></span>
       <span id="token-wallet" class="token-wallet" role="status" aria-live="polite" title="Your virtual gems" data-i18n-title="ui.portal.wallet_gems_title" hidden><span class="token-wallet-coin" aria-hidden="true"><svg class="token-gem-icon" viewBox="0 0 52 52"><path class="gem-outline" d="M14 4H38L49 16 26 48 3 16 14 4Z"/><path class="gem-top" d="M14 4 9 16h17L21 4h-7Z M21 4 26 16h17L38 4H21Z"/><path class="gem-left" d="M3 16h23v32L3 16Z"/><path class="gem-right" d="M26 16h23L26 48V16Z"/><path class="gem-facet" d="M14 4 9 16h17L14 4Zm24 0 5 12H26L38 4Z"/></svg></span><span class="token-wallet-copy"><span class="token-wallet-label" data-i18n="ui.portal.wallet_label">MY WALLET</span><span class="token-wallet-number"><strong id="token-balance">0</strong> <span data-i18n="ui.portal.wallet_gems">gems</span></span></span></span>
@@ -39,7 +39,7 @@
     <div id="portal-more-options" class="portal-more-options" hidden>
       <section class="portal-profile-preferences" aria-label="Preferences" data-i18n-aria-label="ui.portal.preferences">
         <h4 data-i18n="ui.portal.preferences">Preferences</h4>
-        <label class="portal-skin-picker" for="portal-skin-picker"><span data-i18n="ui.portal.skin">Skin</span><select id="portal-skin-picker" data-i18n-aria-label="ui.portal.skin" aria-label="Portal skin"><option value="" data-i18n="ui.portal.skin_assigned">Assigned</option><option value="classic" data-i18n="ui.portal.skin_classic">Classic</option><option value="aurora" data-i18n="ui.portal.skin_aurora">Aurora</option><option value="sunset" data-i18n="ui.portal.skin_sunset">Sunset</option><option value="immersive" data-i18n="ui.portal.skin_immersive">Immersive</option><option value="arcade">Arcade</option></select></label>
+        <label class="portal-skin-picker" for="portal-skin-picker"><span data-i18n="ui.portal.skin">Skin</span><select id="portal-skin-picker" data-i18n-aria-label="ui.portal.skin" aria-label="Portal skin"><option value="" data-i18n="ui.portal.skin_assigned">Assigned</option><option value="classic" data-i18n="ui.portal.skin_classic">Classic</option><option value="aurora" data-i18n="ui.portal.skin_aurora">Aurora</option><option value="sunset" data-i18n="ui.portal.skin_sunset">Sunset</option><option value="immersive" data-i18n="ui.portal.skin_immersive">Immersive</option><option value="arcade" data-i18n="ui.portal.skin_arcade">Arcade</option><option value="meadow" data-i18n="ui.portal.skin_meadow">Meadow</option></select></label>
         <label class="portal-layout-picker" for="portal-layout-picker"><span data-i18n="ui.portal.layout">Layout</span><select id="portal-layout-picker" data-i18n-aria-label="ui.portal.layout" aria-label="Portal layout"><option value="" data-i18n="ui.portal.layout_default">Skin default</option><option value="left" data-i18n="ui.portal.layout_left">Left sidebar</option><option value="hamburger" data-i18n="ui.portal.layout_hamburger">Hamburger</option><option value="top" data-i18n="ui.portal.layout_top">Top bar</option></select></label>
         <div id="portal-language-slot"><span class="portal-language-label" data-i18n="ui.language">Language</span></div>
       </section>
@@ -56,18 +56,18 @@
             <div id="game-catalog">
               <section class="arcade-hero" aria-labelledby="arcade-hero-title">
                 <div class="arcade-hero-copy">
-                  <p class="arcade-kicker"><span class="arcade-live-dot" aria-hidden="true"></span>BUILDPLAY ARCADE IS OPEN</p>
-                  <h2 id="arcade-hero-title">PICK YOUR<br /><em>NEXT OBSESSION.</em></h2>
-                  <p class="arcade-hero-description">Quick rounds, clever friends, and games worth running back. Your next match is right here.</p>
-                  <a class="arcade-hero-cta" href="#games"><span>Explore the games</span><span aria-hidden="true">↘</span></a>
-                  <div class="arcade-hero-meta"><span><strong>01</strong> PICK A GAME</span><i aria-hidden="true"></i><span><strong>02</strong> CALL YOUR CREW</span><i aria-hidden="true"></i><span><strong>03</strong> PLAY AGAIN</span></div>
+                  <p class="arcade-kicker"><span class="arcade-live-dot" aria-hidden="true"></span><span data-i18n="ui.arcade.kicker">BUILDPLAY ARCADE IS OPEN</span></p>
+                  <h2 id="arcade-hero-title"><span data-i18n="ui.arcade.title_1">PICK YOUR</span><br /><em data-i18n="ui.arcade.title_2">NEXT OBSESSION.</em></h2>
+                  <p class="arcade-hero-description" data-i18n="ui.arcade.description">Quick rounds, clever friends, and games worth running back. Your next match is right here.</p>
+                  <a class="arcade-hero-cta" href="#games"><span data-i18n="ui.arcade.cta">Explore the games</span><span aria-hidden="true">↘</span></a>
+                  <div class="arcade-hero-meta"><span><strong>01</strong> <span data-i18n="ui.arcade.step_1">PICK A GAME</span></span><i aria-hidden="true"></i><span><strong>02</strong> <span data-i18n="ui.arcade.step_2">CALL YOUR CREW</span></span><i aria-hidden="true"></i><span><strong>03</strong> <span data-i18n="ui.arcade.step_3">PLAY AGAIN</span></span></div>
                 </div>
                 <div class="arcade-hero-art" aria-hidden="true">
                   <span class="arcade-spark arcade-spark-one">✦</span><span class="arcade-spark arcade-spark-two">✧</span>
                   <div class="arcade-orbit arcade-orbit-one"></div><div class="arcade-orbit arcade-orbit-two"></div>
-                  <div class="arcade-cabinet"><div class="arcade-cabinet-screen"><span>PLAY</span><b>▶</b></div><div class="arcade-cabinet-controls"><span></span><i></i><i></i></div></div>
+                  <div class="arcade-cabinet"><div class="arcade-cabinet-screen"><span data-i18n="ui.arcade.cabinet_play">PLAY</span><b>▶</b></div><div class="arcade-cabinet-controls"><span></span><i></i><i></i></div></div>
                   <span class="arcade-float arcade-float-one">✶</span><span class="arcade-float arcade-float-two">●</span><span class="arcade-float arcade-float-three">▲</span>
-                  <div class="arcade-art-caption"><span>INSERT</span><strong>GOOD TIMES</strong><span>PRESS START ↗</span></div>
+                  <div class="arcade-art-caption"><span data-i18n="ui.arcade.caption_insert">INSERT</span><strong data-i18n="ui.arcade.caption_good_times">GOOD TIMES</strong><span data-i18n="ui.arcade.caption_press_start">PRESS START ↗</span></div>
                 </div>
               </section>
               <p class="creator-description" data-i18n="ui.portal.creator_description">A quick round or a new rivalry. Pick a game and make it yours.</p>
@@ -130,10 +130,10 @@
           </div>
         </details>
         <section id="matches-screen" class="portal-screen matches-screen" aria-labelledby="matches-screen-title" hidden>
-          <header class="portal-screen-heading matches-page-heading"><div><h2 id="matches-screen-title">Matches</h2><p>Jump back into a game or find a new lobby.</p></div></header>
+          <header class="portal-screen-heading matches-page-heading"><div><h2 id="matches-screen-title" data-i18n="ui.portal.nav_matches">Matches</h2><p data-i18n="ui.matches.subtitle">Jump back into a game or find a new lobby.</p></div></header>
           <div class="matches-screen-groups matches-unified-board">
             <div id="portal-login-note" class="muted" data-i18n="ui.portal.login_note" hidden>Log in to see your matches.</div>
-            <section id="my-matches" class="matches-board-group"><h3>My matches</h3>
+            <section id="my-matches" class="matches-board-group"><h3 data-i18n="ui.matches.mine">My matches</h3>
               <details id="group-turn" name="my-match-groups" class="match-group"><summary title="Matches where it is your turn to play" data-i18n-title="ui.portal.turn_title"><span data-i18n="ui.match.your_turn">Your turn</span> <span id="count-turn" class="group-count">0</span></summary><div id="list-turn"></div></details>
               <details id="group-ongoing" name="my-match-groups" class="match-group"><summary><span data-i18n="ui.section.ongoing">Ongoing</span> <span id="count-ongoing" class="group-count">0</span></summary><div id="list-ongoing"></div></details>
               <details id="group-waiting" name="my-match-groups" class="match-group"><summary><span data-i18n="ui.section.waiting_for_players">Waiting for players</span> <span id="count-waiting" class="group-count">0</span></summary><div id="list-waiting"></div></details>
@@ -144,22 +144,22 @@
         </section>
         <section id="leaderboards-screen" class="portal-screen leaderboards-screen" aria-labelledby="leaderboards-title" hidden>
           <header class="leaderboard-header"><div><h2 id="leaderboards-title" data-i18n="ui.leaderboard.title">Leaderboard</h2></div></header>
-          <div class="leaderboard-controls"><div class="leaderboard-tabs" role="tablist" aria-label="Leaderboard category"><button id="leaderboard-tokens-tab" type="button" role="tab" aria-selected="true" aria-controls="leaderboard-tokens"><svg class="gem-token-icon" viewBox="0 0 52 52" aria-hidden="true"><path class="gem-outline" d="M14 4H38L49 16 26 48 3 16 14 4Z"/><path class="gem-top" d="M14 4 9 16h17L21 4h-7Z M21 4 26 16h17L38 4H21Z"/><path class="gem-left" d="M3 16h23v32L3 16Z"/><path class="gem-right" d="M26 16h23L26 48V16Z"/><path class="gem-facet" d="M14 4 9 16h17L14 4Zm24 0 5 12H26L38 4Z"/></svg><span data-i18n="ui.leaderboard.gems">Gems</span></button><button id="leaderboard-wins-tab" type="button" role="tab" aria-selected="false" aria-controls="leaderboard-wins"><span class="leaderboard-wins-icon" aria-hidden="true">👑</span> <span data-i18n="ui.leaderboard.wins">Wins</span></button></div></div>
+          <div class="leaderboard-controls"><div class="leaderboard-tabs" role="tablist" aria-label="Leaderboard category" data-i18n-aria-label="ui.leaderboard.category_aria"><button id="leaderboard-tokens-tab" type="button" role="tab" aria-selected="true" aria-controls="leaderboard-tokens"><svg class="gem-token-icon" viewBox="0 0 52 52" aria-hidden="true"><path class="gem-outline" d="M14 4H38L49 16 26 48 3 16 14 4Z"/><path class="gem-top" d="M14 4 9 16h17L21 4h-7Z M21 4 26 16h17L38 4H21Z"/><path class="gem-left" d="M3 16h23v32L3 16Z"/><path class="gem-right" d="M26 16h23L26 48V16Z"/><path class="gem-facet" d="M14 4 9 16h17L14 4Zm24 0 5 12H26L38 4Z"/></svg><span data-i18n="ui.leaderboard.gems">Gems</span></button><button id="leaderboard-wins-tab" type="button" role="tab" aria-selected="false" aria-controls="leaderboard-wins"><span class="leaderboard-wins-icon" aria-hidden="true">👑</span> <span data-i18n="ui.leaderboard.wins">Wins</span></button></div></div>
           <section id="leaderboard-tokens" class="leaderboard-content" role="tabpanel" aria-labelledby="leaderboard-tokens-tab">
-            <div class="leaderboard-podium" aria-label="Top three players">
-              <article class="podium-place podium-second"><span class="podium-rank">2</span><div class="podium-avatar" aria-hidden="true">Ⅱ</div><p class="podium-name" data-i18n="ui.leaderboard.challenger">Waiting for a challenger</p><strong class="podium-score">—</strong><span class="podium-metric" data-i18n="ui.leaderboard.gems">gems</span></article>
-              <article class="podium-place podium-first"><span class="podium-crown" aria-hidden="true">♛</span><span class="podium-rank">1</span><div class="podium-avatar" aria-hidden="true">Ⅰ</div><p class="podium-name" data-i18n="ui.leaderboard.top_open">The top spot is open</p><strong class="podium-score">—</strong><span class="podium-metric" data-i18n="ui.leaderboard.gems">gems</span></article>
-              <article class="podium-place podium-third"><span class="podium-rank">3</span><div class="podium-avatar" aria-hidden="true">Ⅲ</div><p class="podium-name" data-i18n="ui.leaderboard.challenger">Waiting for a challenger</p><strong class="podium-score">—</strong><span class="podium-metric" data-i18n="ui.leaderboard.gems">gems</span></article>
+            <div class="leaderboard-podium" aria-label="Top three players" data-i18n-aria-label="ui.leaderboard.top_three_aria">
+              <article class="podium-place podium-second"><span class="podium-rank">2</span><div class="podium-avatar" aria-hidden="true">Ⅱ</div><p class="podium-name" data-i18n="ui.leaderboard.challenger">Waiting for a challenger</p><strong class="podium-score">—</strong><span class="podium-metric" data-i18n="ui.leaderboard.gems">Gems</span></article>
+              <article class="podium-place podium-first"><span class="podium-crown" aria-hidden="true">♛</span><span class="podium-rank">1</span><div class="podium-avatar" aria-hidden="true">Ⅰ</div><p class="podium-name" data-i18n="ui.leaderboard.top_open">The top spot is open</p><strong class="podium-score">—</strong><span class="podium-metric" data-i18n="ui.leaderboard.gems">Gems</span></article>
+              <article class="podium-place podium-third"><span class="podium-rank">3</span><div class="podium-avatar" aria-hidden="true">Ⅲ</div><p class="podium-name" data-i18n="ui.leaderboard.challenger">Waiting for a challenger</p><strong class="podium-score">—</strong><span class="podium-metric" data-i18n="ui.leaderboard.gems">Gems</span></article>
             </div>
-            <section class="leaderboard-list" aria-label="Other ranked players"><header><span data-i18n="ui.leaderboard.rank">RANK</span><span data-i18n="ui.leaderboard.player">PLAYER</span><span data-i18n="ui.leaderboard.gems">GEMS</span></header><p class="leaderboard-empty" data-i18n="ui.leaderboard.empty">Player rankings will appear here when they are available.</p></section>
+            <section class="leaderboard-list" aria-label="Other ranked players" data-i18n-aria-label="ui.leaderboard.others_aria"><header><span data-i18n="ui.leaderboard.rank">RANK</span><span data-i18n="ui.leaderboard.player">PLAYER</span><span data-i18n="ui.leaderboard.gems">Gems</span></header><p class="leaderboard-empty" data-i18n="ui.leaderboard.empty">Player rankings will appear here when they are available.</p></section>
           </section>
           <section id="leaderboard-wins" class="leaderboard-content" role="tabpanel" aria-labelledby="leaderboard-wins-tab" hidden>
-            <div class="leaderboard-podium" aria-label="Top three players">
-              <article class="podium-place podium-second"><span class="podium-rank">2</span><div class="podium-avatar" aria-hidden="true">Ⅱ</div><p class="podium-name" data-i18n="ui.leaderboard.challenger">Waiting for a challenger</p><strong class="podium-score">—</strong><span class="podium-metric" data-i18n="ui.leaderboard.wins">wins</span></article>
-              <article class="podium-place podium-first"><span class="podium-crown" aria-hidden="true">♛</span><span class="podium-rank">1</span><div class="podium-avatar" aria-hidden="true">Ⅰ</div><p class="podium-name" data-i18n="ui.leaderboard.top_open">The top spot is open</p><strong class="podium-score">—</strong><span class="podium-metric" data-i18n="ui.leaderboard.wins">wins</span></article>
-              <article class="podium-place podium-third"><span class="podium-rank">3</span><div class="podium-avatar" aria-hidden="true">Ⅲ</div><p class="podium-name" data-i18n="ui.leaderboard.challenger">Waiting for a challenger</p><strong class="podium-score">—</strong><span class="podium-metric" data-i18n="ui.leaderboard.wins">wins</span></article>
+            <div class="leaderboard-podium" aria-label="Top three players" data-i18n-aria-label="ui.leaderboard.top_three_aria">
+              <article class="podium-place podium-second"><span class="podium-rank">2</span><div class="podium-avatar" aria-hidden="true">Ⅱ</div><p class="podium-name" data-i18n="ui.leaderboard.challenger">Waiting for a challenger</p><strong class="podium-score">—</strong><span class="podium-metric" data-i18n="ui.leaderboard.wins">Wins</span></article>
+              <article class="podium-place podium-first"><span class="podium-crown" aria-hidden="true">♛</span><span class="podium-rank">1</span><div class="podium-avatar" aria-hidden="true">Ⅰ</div><p class="podium-name" data-i18n="ui.leaderboard.top_open">The top spot is open</p><strong class="podium-score">—</strong><span class="podium-metric" data-i18n="ui.leaderboard.wins">Wins</span></article>
+              <article class="podium-place podium-third"><span class="podium-rank">3</span><div class="podium-avatar" aria-hidden="true">Ⅲ</div><p class="podium-name" data-i18n="ui.leaderboard.challenger">Waiting for a challenger</p><strong class="podium-score">—</strong><span class="podium-metric" data-i18n="ui.leaderboard.wins">Wins</span></article>
             </div>
-            <section class="leaderboard-list" aria-label="Other ranked players"><header><span data-i18n="ui.leaderboard.rank">RANK</span><span data-i18n="ui.leaderboard.player">PLAYER</span><span data-i18n="ui.leaderboard.wins">WINS</span></header><p class="leaderboard-empty" data-i18n="ui.leaderboard.empty">Player rankings will appear here when they are available.</p></section>
+            <section class="leaderboard-list" aria-label="Other ranked players" data-i18n-aria-label="ui.leaderboard.others_aria"><header><span data-i18n="ui.leaderboard.rank">RANK</span><span data-i18n="ui.leaderboard.player">PLAYER</span><span data-i18n="ui.leaderboard.wins">Wins</span></header><p class="leaderboard-empty" data-i18n="ui.leaderboard.empty">Player rankings will appear here when they are available.</p></section>
           </section>
         </section>
         <section id="game-detail-page" class="game-detail-page" hidden>
@@ -233,21 +233,21 @@
         </section>
       </main>
       <aside id="community-chat" class="community-chat" aria-labelledby="community-chat-title">
-        <div class="chat-panel-heading"><h2 id="community-chat-title"><span class="chat-live-dot" aria-hidden="true"></span>Community Chat</h2></div>
+        <div class="chat-panel-heading"><h2 id="community-chat-title"><span class="chat-live-dot" aria-hidden="true"></span><span data-i18n="ui.chat.title">Community Chat</span></h2></div>
         <div id="chat-preview-log" class="chat-preview-log" role="log" aria-live="polite" aria-relevant="additions">
-          <div class="chat-day-divider"><span>WELCOME TO BUILDPLAY</span></div>
+          <div class="chat-day-divider"><span data-i18n="ui.chat.welcome">WELCOME TO BUILDPLAY</span></div>
         </div>
         <form id="chat-preview-form" class="chat-preview-form">
-          <label class="sr-only" for="chat-preview-input">Write a chat message</label>
-          <input id="chat-preview-input" type="text" maxlength="240" autocomplete="off" placeholder="Say something friendly…" />
-          <button type="submit" aria-label="Send message">➤</button>
+          <label class="sr-only" for="chat-preview-input" data-i18n="ui.chat.write_label">Write a chat message</label>
+          <input id="chat-preview-input" type="text" maxlength="240" autocomplete="off" placeholder="Say something friendly…" data-i18n-placeholder="ui.chat.placeholder" />
+          <button type="submit" aria-label="Send message" data-i18n-aria-label="ui.chat.send">➤</button>
         </form>
-        <p class="chat-preview-footer">1 player here</p>
+        <p class="chat-preview-footer" data-i18n="ui.chat.players_here">1 player here</p>
       </aside>
     </div>
     <script src="/static/common.js?v=32"></script>
     <script src="/static/i18n.js?v=5"></script>
-    <script src="/static/auth.js?v=17"></script>
+    <script src="/static/auth.js?v=18"></script>
 <script src="/static/portal-practice.js?v=5"></script>
     <script src="/static/portal-offline.js?v=18"></script>
     <script src="/static/experiments.js?v=9"></script>
@@ -257,7 +257,7 @@
     <script src="/static/push-notifications.js?v=3"></script>
     <script src="/static/storage-pages.js?v=4"></script>
     <script src="/static/tutorial-frame.js?v=1"></script>
-    <script src="/static/portal.js?v=106"></script>
-    <script src="/static/portal-chat-preview.js?v=6"></script>
+    <script src="/static/portal.js?v=107"></script>
+    <script src="/static/portal-chat-preview.js?v=7"></script>
   </body>
 </html>

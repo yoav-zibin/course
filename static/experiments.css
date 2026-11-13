@@ -2170,3 +2170,214 @@
 @media (prefers-reduced-motion: reduce) {
   :root[data-skin="neon"] body { animation: none; }
 }
+
+/* Meadow: a light, leafy portal skin (key: "meadow", display name: "Meadow").
+   Appended to static/experiments.css. Palette and radii only change CSS tokens and the same selectors the Sunset skin
+   restyles, so every portal behaviour stays exactly as it is. */
+:root[data-skin="meadow"] {
+  color-scheme: light;
+  --color-bg-0: #f2fef6;
+  --color-bg-1: #e2fdea;
+  --color-bg-2: #d4fcdf;
+  --color-bg-3: #bdfacc;
+  --color-bg-4: #a3f8b8;
+  --color-text-primary: #213623;
+  --color-text-secondary: #3d5e41;
+  --color-text-tertiary: #3f6b45;
+  --color-text-quaternary: #4a7050;
+  --color-border-1: #caedd3;
+  --color-border-2: #b1e4bd;
+  --color-border-3: #4f9a5f;
+  --color-border-4: #3a7d4b;
+  --color-accent: #1f7a3a;
+  --color-accent-hover: #175f2c;
+  --color-focus-ring: #175f2c;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --font-sans: "Segoe UI", "Trebuchet MS", system-ui, sans-serif;
+}
+
+:root[data-skin="meadow"] .portal-shell {
+  --color-bg-0: #f2fef6;
+  --color-bg-1: #e2fdea;
+  --color-bg-2: #d4fcdf;
+  --color-bg-3: #bdfacc;
+  --color-bg-4: #a3f8b8;
+  --color-text-primary: #213623;
+  --color-text-secondary: #3d5e41;
+  --color-text-tertiary: #3f6b45;
+  --color-border-2: #b1e4bd;
+  --color-border-3: #4f9a5f;
+  --color-accent: #1f7a3a;
+  --color-accent-hover: #175f2c;
+  --color-focus-ring: #175f2c;
+  background: var(--color-bg-0);
+  color: var(--color-text-primary);
+}
+
+:root[data-skin="meadow"] .portal-sidebar,
+:root[data-skin="meadow"] .match-creator,
+:root[data-skin="meadow"] .game-detail-page,
+:root[data-skin="meadow"] .match-stage,
+:root[data-skin="meadow"] .portal-shell .game-search-popup,
+:root[data-skin="meadow"] .portal-shell .match-tools {
+  background: #e2fdea;
+  border-color: #b1e4bd;
+  color: #213623;
+}
+
+:root[data-skin="meadow"] .popular-games-section,
+:root[data-skin="meadow"] .play-option,
+:root[data-skin="meadow"] .portal-shell .library-card,
+:root[data-skin="meadow"] .selected-game-card {
+  background: #d4fcdf;
+  border-color: #b1e4bd;
+  color: #213623;
+}
+
+:root[data-skin="meadow"] .portal-shell input,
+:root[data-skin="meadow"] .portal-shell select {
+  background: #f7fef9;
+  border-color: #4f9a5f;
+  color: #213623;
+}
+
+:root[data-skin="meadow"] .portal-shell button.primary,
+:root[data-skin="meadow"] .portal-shell .library-toolbar button[aria-pressed="true"] {
+  background: #1f7a3a;
+  border-color: #1f7a3a;
+  color: #f7fef9;
+}
+
+:root[data-skin="meadow"] .portal-shell button.primary:hover:not(:disabled) { background:#175f2c; border-color:#175f2c; }
+
+:root[data-skin="meadow"] .portal-shell button:focus-visible,
+:root[data-skin="meadow"] .portal-shell summary:focus-visible,
+:root[data-skin="meadow"] .portal-shell .popular-game-card:focus-visible {
+  outline-color: #175f2c;
+}
+
+:root[data-skin="meadow"] .creator-title,
+:root[data-skin="meadow"] .popular-games-heading h2,
+:root[data-skin="meadow"] .play-option-heading h3,
+:root[data-skin="meadow"] .selected-game-card h2,
+:root[data-skin="meadow"] .portal-shell .game-option {
+  color: #213623;
+}
+
+:root[data-skin="meadow"] .creator-description,
+:root[data-skin="meadow"] .game-label,
+:root[data-skin="meadow"] .popular-period,
+:root[data-skin="meadow"] .popular-eyebrow,
+:root[data-skin="meadow"] .play-option-heading p,
+:root[data-skin="meadow"] .play-option .play-option-note,
+:root[data-skin="meadow"] .library-description,
+:root[data-skin="meadow"] .library-count,
+:root[data-skin="meadow"] .library-empty,
+:root[data-skin="meadow"] .search-note,
+:root[data-skin="meadow"] .stake-help,
+:root[data-skin="meadow"] .offline-controls,
+:root[data-skin="meadow"] .selected-game-card p {
+  color: #4a7250;
+}
+
+:root[data-skin="meadow"] .creator-toggle { color:#328038; }
+
+:root[data-skin="meadow"] .portal-shell .library-toolbar button { color:#4a7250; }
+
+:root[data-skin="meadow"] .portal-sidebar .list-item:hover,
+:root[data-skin="meadow"] .portal-sidebar .list-item[aria-selected="true"] { background:#bdfacc; }
+
+:root[data-skin="meadow"] #group-turn > summary { color:#203a4c; }
+
+:root[data-skin="meadow"] .open-group > summary { color:#631a58; }
+
+:root[data-skin="meadow"] .portal-shell .game-option:hover,
+:root[data-skin="meadow"] .portal-shell .game-option[aria-selected="true"] {
+  background: #bdfacc;
+  color: #306c36;
+}
+
+:root[data-skin="meadow"] .portal-shell .popular-game-card {
+  background: #d4fcdf;
+  border-color: #b1e4bd;
+  color: #213623;
+}
+
+:root[data-skin="meadow"] .popular-game-title { color: #213623; }
+
+:root[data-skin="meadow"] .popular-game-players,
+:root[data-skin="meadow"] .popular-game-open,
+:root[data-skin="meadow"] .library-mode,
+:root[data-skin="meadow"] .library-select,
+:root[data-skin="meadow"] .back-to-games { color: #328038; }
+
+:root[data-skin="meadow"] .mode-label { color:#306c36; background:#e2fdea; border-color:#4f9a5f; }
+
+:root[data-skin="meadow"] .portal-shell .result-win { color:#203a4c; background:#d3e9ee; border-color:#6fa1ae; }
+
+:root[data-skin="meadow"] .portal-shell .result-loss { color:#537b35; background:#e8f3de; border-color:#b6d19e; }
+
+:root[data-skin="meadow"] .portal-shell .result-draw { color:#631a58; background:#f5dbf1; border-color:#cb8fc1; }
+
+:root[data-skin="meadow"] .portal-shell .result-neutral { color:#405145; background:#daece0; border-color:#abc8b3; }
+
+:root[data-skin="meadow"] .topbar .token-wallet {
+  background:linear-gradient(135deg,#eafdf0,#c7f4d2);
+  border-color:#4f9a5f;
+  color:#3d5e41;
+  box-shadow:0 4px 18px #6d38251f;
+}
+
+:root[data-skin="meadow"] .topbar .token-wallet-coin {
+  background:#1f7a3a;
+  border-color:#175f2c;
+  color:#eafdf0;
+}
+
+:root[data-skin="meadow"] .topbar .token-wallet-label { color:#4a7250; }
+
+:root[data-skin="meadow"] .topbar .token-wallet-number { color:#3d5e41; }
+
+:root[data-skin="meadow"] .topbar .token-wallet-number strong { color:#306c36; }
+
+/* ---- Meadow: feel (motion and softness), on top of the palette above ---- */
+:root[data-skin="meadow"] {
+  --shadow-1: 0 1px 2px rgba(40, 80, 50, 0.18);
+  --shadow-3: 0 6px 18px rgba(40, 80, 50, 0.16), 0 2px 4px rgba(40, 80, 50, 0.12);
+}
+:root[data-skin="meadow"] .portal-shell {
+  background-image: radial-gradient(circle at 12% 0%, rgba(160, 220, 170, 0.35), transparent 38%),
+    radial-gradient(circle at 100% 100%, rgba(255, 236, 170, 0.35), transparent 40%);
+  background-attachment: fixed;
+}
+:root[data-skin="meadow"] .portal-shell .library-card,
+:root[data-skin="meadow"] .portal-shell .popular-game-card,
+:root[data-skin="meadow"] .play-option,
+:root[data-skin="meadow"] .selected-game-card {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+:root[data-skin="meadow"] .portal-shell .library-card:hover,
+:root[data-skin="meadow"] .portal-shell .popular-game-card:hover,
+:root[data-skin="meadow"] .play-option:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-3);
+}
+:root[data-skin="meadow"] .portal-shell button {
+  border-radius: 999px;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+:root[data-skin="meadow"] .portal-shell button:active:not(:disabled) { transform: scale(0.97); }
+:root[data-skin="meadow"] .portal-shell input,
+:root[data-skin="meadow"] .portal-shell select { border-radius: var(--radius-sm); }
+/* Primary buttons use a dark green, so their text must be light on every page (not only inside the portal shell). */
+:root[data-skin="meadow"] button.primary,
+:root[data-skin="meadow"] button.primary:hover:not(:disabled) { color: #ffffff; }
+@media (prefers-reduced-motion: reduce) {
+  :root[data-skin="meadow"] * { transition: none !important; }
+  :root[data-skin="meadow"] .portal-shell .library-card:hover,
+  :root[data-skin="meadow"] .portal-shell .popular-game-card:hover,
+  :root[data-skin="meadow"] .play-option:hover { transform: none; }
+}

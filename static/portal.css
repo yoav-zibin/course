@@ -305,3 +305,7 @@
 }
 
 #account-menu .auth-avatar { width:36px; height:36px; flex-shrink:0; }
+
+/* Leaderboard column labels keep their catalog casing in the HTML; show them in capitals / lower case here. */
+.leaderboard-list header span { text-transform: uppercase; }
+.podium-metric { text-transform: lowercase; }
