@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#f3ead7; --paper:#fffaf0; --ink:#2b2118; --muted:#6f6253; --line:#d8c8a8; --accent:#2f7d4f; --hi:#e0a800; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.35 Georgia, "Times New Roman", serif; min-height: 100vh; }
+  header { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; justify-content: space-between; padding: 8px 12px; background: #3b2a1c; color: #fbefd5; }
+  h1 { margin: 0; font-size: 20px; letter-spacing: .5px; }
+  .meta { font-size: 13px; color: #e8d6b4; }
+  .players { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 12px; }
+  .player { display: flex; gap: 6px; align-items: center; background: var(--paper); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: 13px; }
+  .player.turn { border: 2px solid var(--hi); }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  main { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 8px 8px; align-items: flex-start; }
+  .mapbox { flex: 1 1 520px; min-width: 0; background: #e9dcc0; border: 1px solid var(--line); border-radius: 8px; }
+  svg.map { display: block; width: 100%; height: auto; max-height: calc(100vh - 120px); }
+  .side { flex: 1 1 240px; display: flex; flex-direction: column; gap: 8px; }
+  .panel { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .status { font-weight: 700; min-height: 1.4em; }
+  .status.win { color: var(--accent); font-size: 17px; }
+  .cities { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .city { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 8px; font-size: 13px; color: #1d150e; border: 2px solid transparent; }
+  .city.done { border-color: var(--accent); }
+  .city .tick { font-weight: 700; color: var(--accent); }
+  button.end { min-height: 44px; padding: 0 16px; border-radius: 8px; border: 0; background: var(--accent); color: #fff; font: 700 15px Georgia, serif; cursor: pointer; margin-top: 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  td, th { padding: 3px 4px; border-bottom: 1px solid var(--line); text-align: start; }
+  .hint { color: var(--muted); font-size: 13px; }
+  .e-hit { fill: transparent; cursor: pointer; }
+  .n-hit { fill: transparent; cursor: pointer; }
+  /* Short landscape screens: map and side panel next to each other. */
+  @media (orientation: landscape) and (max-height: 600px) {
+    header { padding: 4px 12px; } h1 { font-size: 17px; }
+    .players { padding: 4px 8px; } .player { font-size: 12px; }
+    main { flex-wrap: nowrap; }
+    .mapbox { flex: 1 1 auto; }
+    .side { flex: 0 0 36%; }
+    svg.map { max-height: calc(100vh - 80px); }
+    .panel { padding: 6px 8px; font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<header><h1 id="title"></h1><span class="meta" id="meta"></span></header>
+<div class="players" id="players"></div>
+<main>
+  <div class="mapbox"><svg class="map" id="map" viewBox="0 0 640 410" role="img"></svg></div>
+  <div class="side">
+    <div class="panel">
+      <div class="status" id="status" role="status" aria-live="polite"></div>
+      <div class="hint" id="hint"></div>
+      <div class="hint" id="mark"></div>
+      <div class="cities" id="cities"></div>
+      <div id="actions"></div>
+    </div>
+    <div class="panel" id="result" hidden></div>
+  </div>
+</main>
+<script type="application/json" id="i18n-strings">
+{
+  "title": "Frontier Rails",
+  "map_label": "Map of the frontier with junctions, cities, mountains, rivers and track",
+  "meta": "Round {round} · track left: {left}",
+  "player_chip": "{name}: {score} points",
+  "region_Y": "Yellow",
+  "region_R": "Red",
+  "region_O": "Orange",
+  "region_B": "Blue",
+  "region_G": "Green",
+  "city_name": "{region} {number}",
+  "your_cities": "Your cities this round:",
+  "place_start": "Your turn: tap any junction to place your start marker.",
+  "build": "Your turn: build track. Points left: {points}.",
+  "build_hint": "Tap a highlighted line next to your network. Plains cost 1, mountains and rivers cost 2.",
+  "start_hint": "Your network grows from this marker. Starting on one of your cities is a good idea.",
+  "waiting_start": "{name} is placing a start marker.",
+  "waiting_build": "{name} is building track.",
+  "end_turn": "End turn",
+  "watching": "You are watching this match.",
+  "round_result": "Round {round} result",
+  "col_player": "Player",
+  "col_cities": "Cities",
+  "col_lost": "Lost",
+  "col_score": "Points",
+  "game_over_line": "Game end: a player reached {mark} points or fewer.",
+  "you_win": "You win with the most points left!",
+  "you_share": "You share the win with the most points left!",
+  "player_wins": "{name} wins with the most points left.",
+  "players_win": "Winners: {names}.",
+  "lowered_mark": "The game now ends at {mark} points.",
+  "server_the_game_is_over": "the game is over",
+  "server_it_is_not_your_turn": "it is not your turn",
+  "server_place_your_start_marker_first": "place your start marker first",
+  "server_that_is_not_a_junction_on_the_map": "that is not a junction on the map",
+  "server_start_markers_are_already_placed": "start markers are already placed",
+  "server_build_at_least_one_track_before_ending_your_turn": "build at least one track before ending your turn",
+  "server_that_track_is_already_built": "that track is already built",
+  "server_you_do_not_have_enough_points_left_for_that_track": "you do not have enough points left for that track",
+  "server_track_must_join_your_network": "track must join your network",
+  "server_send_a_start_junction_a_track_to_build_or_end_your_turn": "send a start junction, a track to build or end your turn"
+}
+</script>
+<script>
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings) strings = { ...SOURCE_STRINGS, ...message.strings };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+
+// The same map as server.js.
+const ROWS = [
+  "  ....^^....   ",
+  " .....^^.~.... ",
+  "......^^..~....",
+  "......^...~....",
+  ".....^^...~....",
+  ".....^^..~.....",
+  "......^..~.....",
+  " .....^..~.... ",
+  " ....^^...~... ",
+  "  ...^....~..  ",
+  "   ......~.    ",
+];
+const REGIONS = ["Y", "R", "O", "B", "G"];
+const REGION_COLOR = { Y: "#f2c94c", R: "#e5574f", O: "#f08a24", B: "#4a90d9", G: "#3fae5b" };
+const CITY_SPOTS = [
+  [[0, 2, 1], [0, 4, 0], [1, 1, 0], [2, 0, 1], [2, 3, 0], [3, 5, 0], [4, 1, 0]],
+  [[6, 0, 1], [6, 3, 0], [7, 1, 1], [8, 3, 0], [9, 2, 0], [10, 4, 0], [7, 5, 0]],
+  [[1, 8, 1], [3, 8, 0], [4, 7, 0], [5, 8, 0], [7, 8, 0], [9, 7, 0], [10, 6, 1]],
+  [[0, 9, 0], [0, 11, 0], [1, 13, 1], [2, 12, 0], [3, 14, 1], [4, 11, 0], [4, 13, 0]],
+  [[5, 12, 0], [6, 14, 1], [7, 11, 0], [8, 13, 1], [9, 11, 0], [10, 10, 0], [6, 10, 0]],
+];
+const COLS = 15;
+const SEAT_COLORS = ["#1f3a93", "#b8322a", "#2f7d4f", "#7b3fa0", "#111111", "#c76b00"];
+const IS_NODE = (r, c) => r >= 0 && r < ROWS.length && c >= 0 && c < COLS && ROWS[r][c] !== " ";
+const ROUGH = (r, c) => ROWS[r][c] === "^" || ROWS[r][c] === "~";
+const EDGES = [];
+for (let r = 0; r < ROWS.length; r++) {
+  for (let c = 0; c < COLS; c++) {
+    if (!IS_NODE(r, c)) continue;
+    const below = r % 2 === 0 ? [[r + 1, c - 1], [r + 1, c]] : [[r + 1, c], [r + 1, c + 1]];
+    for (const [r2, c2] of [[r, c + 1], ...below]) {
+      if (IS_NODE(r2, c2)) EDGES.push([r * COLS + c, r2 * COLS + c2, ROUGH(r, c) || ROUGH(r2, c2) ? 2 : 1]);
+    }
+  }
+}
+const CITY_NODE = CITY_SPOTS.flatMap((list) => list.map(([r, c]) => r * COLS + c));
+const CITY_FAR = CITY_SPOTS.flatMap((list) => list.map((s) => s[2] === 1));
+const pos = (node) => {
+  const r = Math.floor(node / COLS), c = node % COLS;
+  return [30 + (c + (r % 2) * 0.5) * 40, 30 + r * 34.6];
+};
+const NS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs) => {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
+  return e;
+};
+const $ = (id) => document.getElementById(id);
+let sent = false;
+
+function regionName(code) {
+  switch (code) {
+    case "Y": return t("region_Y"); case "R": return t("region_R"); case "O": return t("region_O");
+    case "B": return t("region_B"); default: return t("region_G");
+  }
+}
+const cityRegion = (id) => REGIONS[Math.floor(id / 7)];
+const cityName = (id) => t("city_name", { region: regionName(cityRegion(id)), number: (id % 7) + 1 });
+
+function send(move) {
+  if (sent) return;
+  sent = true;
+  parent.postMessage({ type: "make_move", move }, "*");
+}
+
+function drawMap(view, mine, nPlayers) {
+  const svg = $("map");
+  svg.setAttribute("aria-label", t("map_label"));
+  const parts = [];
+  // Land and terrain.
+  for (let r = 0; r < ROWS.length; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (!IS_NODE(r, c)) continue;
+      const [x, y] = pos(r * COLS + c);
+      if (ROWS[r][c] === "^") parts.push(el("path", { d: `M${x - 13} ${y + 9} L${x} ${y - 12} L${x + 13} ${y + 9}Z`, fill: "#a58a6a" }));
+      if (ROWS[r][c] === "~") parts.push(el("circle", { cx: x, cy: y, r: 13, fill: "#8cc3e8" }));
+    }
+  }
+  const builtOwner = new Map(view.track.map(([id, seat]) => [id, seat]));
+  const legal = new Set(view.legal);
+  EDGES.forEach(([a, b, cost], id) => {
+    const [x1, y1] = pos(a), [x2, y2] = pos(b);
+    if (builtOwner.has(id)) {
+      parts.push(el("line", { x1, y1, x2, y2, stroke: SEAT_COLORS[builtOwner.get(id)], "stroke-width": cost === 2 ? 6 : 4, "stroke-linecap": "round" }));
+      if (cost === 2) parts.push(el("line", { x1, y1, x2, y2, stroke: "#fffaf0", "stroke-width": 1.5 }));
+    } else if (legal.has(id)) {
+      parts.push(el("line", { x1, y1, x2, y2, stroke: "#e0a800", "stroke-width": 4, "stroke-dasharray": cost === 2 ? "3 3" : "" }));
+      // A transparent strip along the line, easy to tap.
+      const len = Math.hypot(x2 - x1, y2 - y1), nx = (-(y2 - y1) / len) * 8, ny = ((x2 - x1) / len) * 8;
+      const points = `${x1 + nx},${y1 + ny} ${x2 + nx},${y2 + ny} ${x2 - nx},${y2 - ny} ${x1 - nx},${y1 - ny}`;
+      const hit = el("polygon", { points, class: "e-hit", "data-auto": "1" });
+      hit.addEventListener("click", () => send({ edge: id }));
+      parts.push(hit);
+    } else {
+      parts.push(el("line", { x1, y1, x2, y2, stroke: cost === 2 ? "#9b8b74" : "#cdbb98", "stroke-width": cost === 2 ? 1.6 : 1, "stroke-dasharray": cost === 2 ? "2 2" : "" }));
+    }
+  });
+  // Junctions and cities.
+  const myCities = new Set(view.my_cities.map((id) => CITY_NODE[id]));
+  for (let r = 0; r < ROWS.length; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (IS_NODE(r, c)) { const [x, y] = pos(r * COLS + c); parts.push(el("circle", { cx: x, cy: y, r: 2.2, fill: "#6f6253" })); }
+    }
+  }
+  CITY_NODE.forEach((node, id) => {
+    if (CITY_FAR[id] && nPlayers <= 3) return;
+    const [x, y] = pos(node);
+    const ring = myCities.has(node);
+    parts.push(el("circle", { cx: x, cy: y, r: ring ? 12 : 10, fill: REGION_COLOR[cityRegion(id)], stroke: ring ? "#2b2118" : "#fffaf0",
+                              "stroke-width": ring ? 3 : 1.5, "stroke-dasharray": CITY_FAR[id] ? "3 2" : "" }));
+    const label = el("text", { x, y: y + 4, "text-anchor": "middle", "font-size": 11, "font-weight": 700, fill: "#1d150e" });
+    label.textContent = String((id % 7) + 1);
+    parts.push(label);
+  });
+  view.starts.forEach((node, seat) => {
+    if (node === null) return;
+    const [x, y] = pos(node);
+    parts.push(el("rect", { x: x - 6 + seat * 2, y: y - 6 - seat * 2, width: 12, height: 12, fill: SEAT_COLORS[seat], stroke: "#fffaf0", "stroke-width": 2 }));
+  });
+  if (mine && view.phase === "start") {
+    for (let r = 0; r < ROWS.length; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (!IS_NODE(r, c)) continue;
+        const node = r * COLS + c;
+        const [x, y] = pos(node);
+        const hit = el("circle", { cx: x, cy: y, r: 14, class: "n-hit" });
+        // Automated test players start on their own cities.
+        if (myCities.has(node)) hit.setAttribute("data-auto", "1");
+        hit.addEventListener("click", () => send({ start: node }));
+        parts.push(hit);
+      }
+    }
+  }
+  svg.replaceChildren(...parts);
+}
+
+function render(message) {
+  const view = message.view || message.state;
+  if (!view) return;
+  const players = message.players;
+  const over = view.phase === "over";
+  const mine = !over && message.status === "ongoing" && !message.replay && view.my_seat !== null && view.my_seat === view.to_move;
+  $("title").textContent = t("title");
+  $("meta").textContent = t("meta", { round: view.round, left: view.track_left });
+
+  $("players").replaceChildren(...players.map((p, seat) => {
+    const chip = document.createElement("span");
+    const isTurn = !over && seat === view.to_move;
+    chip.className = "player" + (isTurn ? " turn" : "");
+    const sw = document.createElement("span");
+    sw.className = "swatch";
+    sw.style.background = SEAT_COLORS[seat];
+    const label = document.createElement("span");
+    label.textContent = t("player_chip", { name: p.name, score: view.scores[seat] });
+    chip.append(sw, label);
+    return chip;
+  }));
+
+  drawMap(view, mine, players.length);
+
+  const status = $("status"), hint = $("hint");
+  status.className = "status";
+  hint.textContent = "";
+  const iWon = over && view.my_seat !== null && view.winners.includes(view.my_seat);
+  const shared = over && view.winners.length > 1;
+  if (over) {
+    status.className = "status win";
+    if (iWon) status.textContent = shared ? t("you_share") : t("you_win");
+    else if (shared) status.textContent = t("players_win", { names: view.winners.map((s) => players[s].name).join(", ") });
+    else status.textContent = t("player_wins", { name: players[view.winners[0]].name });
+    hint.textContent = t("game_over_line", { mark: view.threshold });
+  } else if (mine && view.phase === "start") {
+    status.textContent = t("place_start");
+    hint.textContent = t("start_hint");
+  } else if (mine) {
+    status.textContent = t("build", { points: view.points_left });
+    hint.textContent = t("build_hint");
+  } else if (view.my_seat === null) {
+    status.textContent = t("watching");
+  } else {
+    const isStart = view.phase === "start";
+    status.textContent = isStart ? t("waiting_start", { name: players[view.to_move].name }) : t("waiting_build", { name: players[view.to_move].name });
+  }
+  const lowered = !over && view.threshold > 0;
+  $("mark").textContent = lowered ? t("lowered_mark", { mark: view.threshold }) : "";
+
+  const cities = $("cities");
+  const connected = new Set(view.connected);
+  const cityChips = view.my_cities.map((id) => {
+    const chip = document.createElement("span");
+    chip.className = "city" + (connected.has(id) ? " done" : "");
+    chip.style.background = REGION_COLOR[cityRegion(id)];
+    chip.textContent = cityName(id);
+    if (connected.has(id)) {
+      const tick = document.createElement("span");
+      tick.className = "tick";
+      tick.textContent = "✓";
+      tick.ariaHidden = true;
+      chip.append(tick);
+    }
+    return chip;
+  });
+  if (cityChips.length) {
+    const label = document.createElement("span");
+    label.className = "hint";
+    label.textContent = t("your_cities");
+    cities.replaceChildren(label, ...cityChips);
+  } else cities.replaceChildren();
+
+  const actions = [];
+  if (mine && view.phase === "build" && view.built > 0) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "end";
+    b.textContent = t("end_turn");
+    if (view.legal.length === 0) b.dataset.auto = "1";
+    b.addEventListener("click", () => send({ end: true }));
+    actions.push(b);
+  }
+  $("actions").replaceChildren(...actions);
+
+  const result = $("result");
+  const lr = view.last_round;
+  const showResult = lr !== null && (over || (view.phase === "start"));
+  result.hidden = !showResult;
+  if (showResult) {
+    const h = document.createElement("strong");
+    h.textContent = t("round_result", { round: lr.round });
+    const table = document.createElement("table");
+    const head = document.createElement("tr");
+    for (const text of [t("col_player"), t("col_cities"), t("col_lost"), t("col_score")]) {
+      const th = document.createElement("th");
+      th.textContent = text;
+      head.append(th);
+    }
+    table.append(head);
+    players.forEach((p, seat) => {
+      const tr = document.createElement("tr");
+      const cells = [p.name, lr.cities[seat].map(cityName).join(", "), "−" + lr.lost[seat], String(lr.scores[seat])];
+      for (const text of cells) { const td = document.createElement("td"); td.textContent = text; tr.append(td); }
+      table.append(tr);
+    });
+    result.replaceChildren(h, table);
+  }
+}
+
+window.addEventListener("message", (event) => {
+  const message = event.data;
+  if (!message || message.type !== "state_changed") return;
+  applyLocale(message);
+  sent = false;
+  render(message);
+});
+parent.postMessage({ type: "game_ready" }, "*");
+</script>
+</body>
+</html>
