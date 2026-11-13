@@ -15,6 +15,10 @@ async function continueAsGuest(page: Page, name: string) {
 }
 
 test.describe('Guest login (real server)', () => {
+  test.afterEach(async ({page}) => {
+    if (!page.isClosed()) await page.unrouteAll({behavior: 'wait'});
+  });
+
   test('an open account menu keeps keyboard focus across portal polling', async ({page}) => {
     let refreshPicture = false;
     await page.route('**/batch?*', async route => {
