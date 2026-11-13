@@ -49,8 +49,9 @@ test('ranked games retain server order and open even outside the current catalog
   run('state.popularGames=[{id:"leader",name:"Most popular",version:1,allowed_player_counts:[2]}, {id:"runner-up",name:"Next game",version:1,allowed_player_counts:[2]}];renderPopularGames()');
   const cards=node('popular-games').children;
   assert.equal(cards.length,2);
-  assert.equal(cards[0].children[0].textContent,'1');
-  cards[0].onclick();
+  const firstCard = cards[0].children[0];
+  assert.equal(firstCard.children[0].textContent,'1');
+  firstCard.onclick();
   assert.equal(navigations[0],'/static/portal.html#game=leader');
 });
 
