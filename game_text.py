@@ -21,6 +21,8 @@ import re
 from pathlib import Path
 from typing import Final
 
+from game_platform import game_messages, game_server_texts
+
 MAX_KEYS: Final = 400
 MAX_TEXT_LENGTH: Final = 1000
 _KEY: Final = re.compile(r"^[A-Za-z0-9_.\-]{1,64}$")
@@ -58,9 +60,12 @@ word order differs between languages, so NEVER build a sentence from pieces \
 ("your_turn", "their_turn") and pick between whole texts.
 - Keys use only letters, digits, _ . - ; texts are plain text, no HTML. Do not make plurals: \
 write "Moves: {count}", not "{count} move(s)".
+- Every place text can hide must go through t() (the platform's checker rejects the game otherwise, for the attributes, dialogs and canvas text): `aria-label`, `title`, `alt` and `placeholder` attributes (write them as empty or leave them out in the HTML and set them in the script: el.setAttribute("aria-label", t("key"))), words written between tags in the HTML (leave such elements empty and fill them with `.textContent = t("key")`), `alert`/`confirm`/`prompt`, and canvas text (`ctx.fillText(t("key", {n: 3}), x, y)`, never `ctx.fillText("Score: " + n, x, y)`).
+- Use literal keys only, t("your_turn"), never t(someVariable) or t("prefix_" + x): the checker must be able to see every key. Every key in the block must be used by a t() call, and every t() key must be in the block. Symbols and numbers alone (X, O, 3, arrows) need no key.
 - Player names come from `players` and are not translated. Do not put display text in the \
 match state or in `make_move`: store codes ("X", "draw") and turn them into text with t() \
 when drawing, because players in one match may use different languages.
+- TEXTS THE SERVER WRITES. The reason of every `throw new InvalidMove(...)` in the server code (the player sees it when a move is refused) and any display text the server puts in the match state (a log line, a label) must be listed in the SAME block as a template, under a key that starts with `server_`: `"server_not_your_turn": "not your turn"`, `"server_need_cards": "need {count} more cards"`. Write the reason in the server code as a plain string literal, a template literal or a concatenation of literals and values (`throw new InvalidMove("need " + n + " more cards")`), never taken from a variable, and make it match its template exactly: each {name} stands for the value written there, so `"need 3 more cards"` fits `"need {count} more cards"`. Show a server text in the client with tx(text) (it finds the template and returns the translation, or the text itself if there is none): `log.textContent = tx(state.log)`. `server_` keys are not used by t() calls, so the "every key is used" rule does not apply to them. The checker rejects a game whose server code writes a text that has no template.
 - Let the layout survive longer text and right-to-left languages: no fixed widths for \
 text, allow wrapping, and use CSS logical properties (margin-inline-start, text-align: \
 start, inset-inline-end) with flex or grid instead of left/right.
@@ -104,11 +109,36 @@ _ASSIGNMENT: Final = re.compile(
 )
 _LITERAL_WITH_WORDS: Final = re.compile(r"""(["'`])((?:\\.|(?!\1).)*?[A-Za-z]{3,}(?:\\.|(?!\1).)*?)\1""")
 _PLACEHOLDER: Final = re.compile(r"\{(\w+)\}")
+_JS_ESCAPE: Final = re.compile(r"\\u\{([0-9A-Fa-f]+)\}|\\u([0-9A-Fa-f]{4})|\\x([0-9A-Fa-f]{2})")
 
 
-def lint(code: str) -> list[str]:
+def _displayed(literal: str) -> str:
+    """The text a string literal actually shows, with JavaScript escapes
+    resolved — an emoji written as \\uD83D\\uDC36 reads as the emoji."""
+    def resolve(match: re.Match[str]) -> str:
+        digits = next(group for group in match.groups() if group is not None)
+        try:
+            return chr(int(digits, 16))
+        except (ValueError, OverflowError):
+            return match.group(0)
+    return _JS_ESCAPE.sub(resolve, literal)
+
+
+def _only_symbols(literal: str) -> bool:
+    """True when a literal's displayed text has no letters at all: an emoji,
+    a symbol, digits. Such text is identical in every language, so it needs
+    no translation and does not belong in the strings block — flagging it
+    only costs a repair round-trip (a piece drawn as 🐶 is a picture the
+    author chose, not a sentence). A word written with escapes still has
+    letters once displayed, so escapes open no loophole."""
+    return not any(character.isalpha() for character in _displayed(literal))
+
+
+def lint(code: str, server_code: str | None = None) -> list[str]:
     """Problems that stop a game from being translated well, in plain words. Empty when the
-    game looks fine. The checks are heuristics: they find the common mistakes."""
+    game looks fine. The checks are heuristics: they find the common mistakes. With
+    [server_code], every text the server writes (the reason of an `InvalidMove`, a log line or
+    a label in the match state) must also match a `server_` template of the table."""
     try:
         table = extract_strings(code)
     except StringsError as error:
@@ -123,8 +153,7 @@ def lint(code: str) -> list[str]:
     used = set(_USED.findall(code))
     for key in sorted(used - table.keys()):
         warnings.append(f"the code uses t({key!r}) but the strings block has no {key!r}")
-    for key in sorted(table.keys() - used):
-        warnings.append(f"the strings block has {key!r}, which the code never shows")
+    warnings.extend(_unshown_warnings(table, used))
     hard_coded, joined = [], []
     for assignment in _ASSIGNMENT.finditer(_without_block(code)):
         value = assignment.group(1)
@@ -133,7 +162,8 @@ def lint(code: str) -> list[str]:
         # A conditional may choose between complete translated messages. Mask
         # literal lookup keys before searching for untranslated display text.
         display_value = _USED.sub("t(KEY", value)
-        literals = [m.group(2) for m in _LITERAL_WITH_WORDS.finditer(display_value)]
+        literals = [m.group(2) for m in _LITERAL_WITH_WORDS.finditer(display_value)
+                    if not _only_symbols(m.group(2))]
         if (literals or _USED.search(value)) and re.search(r"""["'`]\s*\+|\+\s*["'`]""", value):
             joined.append(value.strip()[:70])
         elif literals and not value.lstrip().startswith("t("):
@@ -148,13 +178,149 @@ def lint(code: str) -> list[str]:
             "word order differs between languages, so use one string with {placeholders}"
         )
     for key, text in table.items():
-        if re.search(r"[<>]|&\w+;", text):
+        # A server text is what the game wrote (it may say "a -> b"): only tags and entities count.
+        pattern = r"<[A-Za-z/!]|&\w+;" if key.startswith(game_messages.KEY_PREFIX) else r"[<>]|&\w+;"
+        if re.search(pattern, text):
             warnings.append(f"the text of {key!r} contains markup; strings are plain text")
             break
-    if re.search(r"fillText|strokeText", code):
-        warnings.append("the game draws text on a canvas: make sure it comes from t(), "
-                        "and leave room for longer words")
+    body = _without_block(code)
+    canvas = []
+    for call in _CANVAS_TEXT.finditer(body):
+        value = call.group(1)
+        if re.match(r"\s*t\(", value) and not _JOIN.search(value):
+            continue
+        if any(not _only_symbols(m.group(2))
+               for m in _LITERAL_WITH_WORDS.finditer(_USED.sub("t(KEY", value))):
+            canvas.append(value.strip()[:50])
+    if canvas:
+        warnings.append(
+            "the game draws text on a canvas without t() (e.g. " + repr(canvas[0]) + "): "
+            "draw only t(...) results, one whole string each, and leave room for longer words"
+        )
+    attributes = [
+        next(g for g in m.groups() if g is not None)
+        for m in _ATTRIBUTE.finditer(body)
+        if re.search(r"[A-Za-z]{3,}", next((g for g in m.groups() if g is not None), ""))
+        and not _only_symbols(next(g for g in m.groups() if g is not None))
+    ]
+    if attributes:
+        shown = ", ".join(repr(text[:40]) for text in attributes[:3])
+        warnings.append(
+            f"text written in an aria-label, placeholder, title or alt attribute: {shown}"
+            f"{f' (and {len(attributes) - 3} more)' if len(attributes) > 3 else ''}: "
+            "set these from t() in the code (el.setAttribute('aria-label', t('key')))"
+        )
+    shown_texts = [
+        m.group(1).strip()[:50]
+        for m in _DIALOG.finditer(body)
+        if any(not _only_symbols(found.group(2))
+               for found in _LITERAL_WITH_WORDS.finditer(_USED.sub("t(KEY", m.group(1))))
+    ]
+    if shown_texts:
+        warnings.append(
+            f"text written in alert/confirm/prompt/createTextNode instead of the strings block: {shown_texts[0]!r}"
+        )
+    if server_code:
+        warnings.extend(server_text_problems(table, server_code))
     return warnings
+
+
+def _unshown_warnings(table: dict[str, str], used: set[str]) -> list[str]:
+    # Server templates are matched against texts the server writes, never
+    # shown by key, so they are exempt from the every-key-is-shown rule.
+    return [
+        f"the strings block has {key!r}, which the code never shows"
+        for key in sorted(table.keys() - used)
+        if not key.startswith(game_messages.KEY_PREFIX)
+    ]
+
+
+def prune_unshown_strings(code: str) -> tuple[str, list[str]]:
+    """Remove string-table entries the code provably never shows.
+
+    A key is provably dead when no literal t("key") call shows it and the key
+    is mentioned nowhere in the document outside the strings block. A key the
+    code mentions anywhere else — even one it reaches dynamically — is kept:
+    only a regeneration can decide how showing it should work. Server
+    templates (server_…) are kept too: they are matched against texts the
+    server writes, never shown by key. Removing a provably dead key cannot
+    change anything a player sees, so a generated document should never fail
+    a check over one. Returns the possibly updated code and the removed keys.
+    """
+    try:
+        table = extract_strings(code)
+    except StringsError:
+        return code, []
+    if not table:
+        return code, []
+    used = set(_USED.findall(code))
+    outside = _without_block(code)
+    dead = {
+        key
+        for key in table
+        if key not in used
+        and not key.startswith(game_messages.KEY_PREFIX)
+        and key not in outside
+    }
+    if not dead:
+        return code, []
+    match = _BLOCK.search(code)
+    if match is None:  # extract_strings found a block, so this cannot happen
+        return code, []
+    kept = {key: text for key, text in table.items() if key not in dead}
+    start, end = match.span(1)
+    pruned = code[:start] + json.dumps(kept, ensure_ascii=False) + code[end:]
+    return pruned, sorted(dead)
+
+
+def absorb_unshown_strings(code: str) -> tuple[str, list[str]]:
+    """Drop provably dead strings when they are the document's only problem.
+
+    When anything else is also wrong, an unshown string may be a symptom of
+    the real defect — a hard-coded sentence where a t() call belongs leaves
+    its string unshown — so the document is returned untouched and the
+    precise lint diagnosis reaches the repair unchanged.
+    """
+    problems = lint(code)
+    if not problems:
+        return code, []
+    try:
+        table = extract_strings(code)
+    except StringsError:
+        return code, []
+    if not table:
+        return code, []
+    unshown = _unshown_warnings(table, set(_USED.findall(code)))
+    if not unshown or set(problems) != set(unshown):
+        return code, []
+    return prune_unshown_strings(code)
+
+
+def server_text_problems(table: dict[str, str], server_code: str) -> list[str]:
+    """The texts the server code writes that no `server_` template of [table] matches."""
+    templates = game_messages.compile_templates(table)
+    missing: list[str] = []
+    for found in game_server_texts.extract(server_code).found:
+        if game_messages.match(templates, found.template) is None and found.template not in missing:
+            missing.append(found.template)
+    if not missing:
+        return []
+    shown = ", ".join(repr(text[:50]) for text in missing[:3])
+    more = f" (and {len(missing) - 3} more)" if len(missing) > 3 else ""
+    return [
+        f"the server writes texts that the strings block has no template for: {shown}{more}: "
+        'add each as a "server_..." text (with {placeholders} for the parts that vary, e.g. '
+        '"server_not_your_turn": "not your turn") so it can be translated'
+    ]
+
+
+_JOIN: Final = re.compile(r"""["'`]\s*\+|\+\s*["'`]""")
+_CANVAS_TEXT: Final = re.compile(r"\b(?:fillText|strokeText)\s*\(([^;\n]*)")
+_ATTRIBUTE: Final = re.compile(
+    r"""\b(?:aria-label|aria-description|aria-placeholder|placeholder|title|alt)\b\s*=\s*\\?(?:"([^"\\]*)"|'([^'\\]*)')"""
+    r"""|setAttribute\(\s*["'](?:aria-[a-z]+|placeholder|title|alt)["']\s*,\s*(?:"([^"\\]*)"|'([^'\\]*)')\s*\)"""
+)
+_DIALOG: Final = re.compile(r"\b(?:alert|confirm|prompt|createTextNode)\s*\(([^;\n]*)")
 
 
 def _without_block(code: str) -> str:

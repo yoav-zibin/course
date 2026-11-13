@@ -1,4 +1,4 @@
-// Web push notifications, shared by the portal and the builder: the toggle
+// Web push notifications for the portal: the toggle
 // subscribes this browser (Push API) and registers the subscription with the
 // server, which then pushes turn and match events (see push.py). Arriving pushes
 // are shown by portal-sw.js. Everything is opt-in: nothing here runs unless the
@@ -18,8 +18,8 @@ const PushNotifications = (() => {
   }
 
   // The portal's service worker owns push; its scope is /static/. Registering it
-  // from any page returns that same registration (a page outside the scope, like
-  // /builder, isn't controlled by it, but push doesn't need that).
+  // from any page returns that same registration (a page outside the scope
+  // isn't controlled by it, but push doesn't need that).
   // navigator.serviceWorker.ready would hang on such a page, so wait for
   // activation explicitly.
   async function registrationForPush() {
@@ -77,13 +77,13 @@ const PushNotifications = (() => {
     }
     button.hidden = false;
     if (Notification.permission === "denied") {
-      button.textContent = "Notifications blocked by the browser";
+      button.textContent = I18n.t("ui.notify.denied", {}, "Notifications blocked by the browser");
       button.disabled = true;
       return;
     }
     button.disabled = false;
     const subscribed = Boolean(await currentSubscription());
-    button.textContent = subscribed ? "Notifications on" : "Enable notifications";
+    button.textContent = subscribed ? I18n.t("ui.notify.enabled", {}, "Notifications on") : I18n.t("ui.notify.enable", {}, "Enable notifications");
     button.setAttribute("aria-pressed", String(subscribed));
   }
 
@@ -110,7 +110,7 @@ const PushNotifications = (() => {
         }
       }
     } catch (error) {
-      showPageError(`Notifications: ${error.message}`);
+      showPageError(I18n.t("ui.notify.error", {message: error.message}, `Notifications: ${error.message}`));
     } finally {
       button.disabled = false;
       await updateToggle(button);
@@ -135,6 +135,11 @@ const PushNotifications = (() => {
       // Offline: the next load retries.
     }
     await updateToggle(button);
+    // The button's words follow the page language.
+    if (!button._i18nListener) {
+      button._i18nListener = () => updateToggle(button);
+      document.addEventListener("i18n-changed", button._i18nListener);
+    }
   }
 
   return { supported, currentSubscription, setup, toggle, updateToggle };

@@ -289,9 +289,12 @@ const chipHTML = (kind, extra = "") =>
   `<use href="#chip"/><use href="#${kind === "fox" ? "fox-face" : "goose"}"/></svg></div>`;
 
 function actingSeat() {
-  if (!latest || latest.status !== "ongoing") return null;
-  const seat = latest.acting_for_player_index;
-  return seat === 0 || seat === 1 ? seat : null;
+  if (!latest || latest.status !== "ongoing" || !latest.turn_of_player_indices?.length) return null;
+  const turn = latest.turn_of_player_indices[0];
+  if (turn === latest.my_player_index) return turn === 0 || turn === 1 ? turn : null;
+  const humans = latest.players.filter((p) => p.kind === "human");
+  if (latest.my_player_index !== null && humans.length === 1 && latest.players[turn]?.kind === "computer") return turn === 0 || turn === 1 ? turn : null;
+  return null;
 }
 
 function makeMove(newState, nextTurn) {

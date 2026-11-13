@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><style>body{font-family:sans-serif;padding:16px;max-width:560px;margin:auto}table{border-collapse:collapse;width:100%;margin:8px 0}td,th{border:1px solid #ccc;padding:4px 8px;text-align:center}input{font-size:18px;width:120px;letter-spacing:2px;text-align:center}button{font-size:15px;padding:6px 12px;margin:4px}small{color:#555}.mine{background:#f0f7ff}</style></head>
+<body>
+<h2>🐂 Bulls and Cows</h2>
+<p id="status">Waiting…</p>
+<div id="setupDiv" style="display:none">
+<p>Choose your secret 4-digit number:<br><small>4 distinct digits, first digit ≠ 0</small></p>
+<input id="secretInput" maxlength="4" inputmode="numeric" placeholder="1234">
+<button id="secretBtn">Set secret</button>
+<p id="setupErr" style="color:red"></p>
+</div>
+<div id="waitDiv" style="display:none"><p><i>Your secret is saved — waiting for opponent…</i></p></div>
+<div id="playDiv" style="display:none">
+<p>Your number: <b id="mySecret"></b> &nbsp;|&nbsp; Opponent number: <b id="oppSecret">****</b></p>
+<div id="guessRow">
+<input id="guessInput" maxlength="4" inputmode="numeric" placeholder="guess">
+<button id="guessBtn">Guess</button>
+<span id="guessErr" style="color:red"></span>
+</div>
+<h3>My guesses (their number)</h3>
+<table id="myTable"></table>
+<h3>Opponent guesses (my number)</h3>
+<table id="oppTable"></table>
+</div>
+<script>
+let L=null;
+function valid(s){return /^[1-9][0-9]{3}$/.test(s)&&new Set(s).size===4;}
+function sendMove(m){parent.postMessage({type:'make_move',move:m},'*');}
+addEventListener('message',ev=>{
+if(ev.source!==parent||!ev.data||ev.data.type!=='state_changed')return;
+L=ev.data;
+const v=L.view||{};
+const me=L.my_player_index;
+const acting=L.status==='ongoing'?L.acting_for_player_index:null;
+const status=document.getElementById('status');
+const setupDiv=document.getElementById('setupDiv'),playDiv=document.getElementById('playDiv'),waitDiv=document.getElementById('waitDiv');
+if(L.status==='over'&&v.winner!==null&&v.winner!==undefined){
+ status.textContent = v.winner===me ? '🏆 You guessed the number first — you win!' : '🏆 '+L.players[v.winner].name+' guessed the number first and wins!';
+}else if(!v.phase||v.phase==='setup'){
+ const who=(L.turn_of_player_indices&&L.turn_of_player_indices.length)?L.turn_of_player_indices.map(i=>L.players[i].name).join(', '):'—';
+ status.textContent='Choosing secret numbers… waiting for '+who+'.';
+}else{
+ const an=acting!==null?L.players[acting].name:'—';
+ status.textContent=(acting===me?'Your turn ('+an+') — guess!':an+"'s turn to guess.");
+}
+if(v.phase==='setup'||!v.phase){
+ playDiv.style.display='none';
+ const needSet = v.mySecret?false:true;
+ const canAct = acting===me;
+ setupDiv.style.display=(canAct&&needSet)?'block':'none';
+ waitDiv.style.display=(needSet&&!canAct)||(!needSet)?'block':'none';
+ if(!needSet) setupDiv.style.display='none';
+ if(me===null){setupDiv.style.display='none';waitDiv.style.display='none';}
+}else{
+ setupDiv.style.display='none';waitDiv.style.display='none';playDiv.style.display='block';
+ document.getElementById('mySecret').textContent=v.mySecret||'****';
+ document.getElementById('oppSecret').textContent=v.oppSecret||'****';
+ const mt=document.getElementById('myTable'),ot=document.getElementById('oppTable');
+ mt.innerHTML='<tr><th>#</th><th>Guess</th><th>🐂</th><th>🐄</th></tr>';
+ ot.innerHTML='<tr><th>#</th><th>Guess</th><th>🐂</th><th>🐄</th></tr>';
+ (v.myGuesses||[]).forEach((g,i)=>{mt.innerHTML+=`<tr class="mine"><td>${i+1}</td><td>${g}</td><td>${v.myFeedback[i].b}</td><td>${v.myFeedback[i].c}</td></tr>`;});
+ (v.oppGuesses||[]).forEach((g,i)=>{ot.innerHTML+=`<tr><td>${i+1}</td><td>${g}</td><td>${v.oppFeedback[i].b}</td><td>${v.oppFeedback[i].c}</td></tr>`;});
+ const canAct=acting===me&&L.status==='ongoing';
+ document.getElementById('guessInput').disabled=!canAct;
+ document.getElementById('guessBtn').disabled=!canAct;
+}
+});
+document.getElementById('secretBtn').onclick=()=>{const v=document.getElementById('secretInput').value.trim();if(!valid(v)){document.getElementById('setupErr').textContent='Need 4 distinct digits, first ≠ 0.';return;}document.getElementById('setupErr').textContent='';sendMove({kind:'set_secret',secret:v});};
+document.getElementById('guessBtn').onclick=()=>{const v=document.getElementById('guessInput').value.trim();if(!valid(v)){document.getElementById('guessErr').textContent='Invalid.';return;}document.getElementById('guessErr').textContent='';document.getElementById('guessInput').value='';sendMove({kind:'guess',guess:v});};
+</script>
+</body>
+</html>

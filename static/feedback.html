@@ -11,9 +11,9 @@
       gtag('config', 'G-6CCXZQYVE7');
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Game platform · Feedback</title>
-    <link rel="stylesheet" href="/static/common.css?v=16" />
-    <link rel="stylesheet" href="/static/experiments.css?v=6" />
+    <title data-i18n="ui.page.feedback_admin">Game platform · Feedback</title>
+    <link rel="stylesheet" href="/static/common.css?v=17" />
+    <link rel="stylesheet" href="/static/experiments.css?v=11" />
     <script>
       // Framed mode for the /admin tabs: hide this page's own top bar.
       if (new URLSearchParams(location.search).has("frame")) {
@@ -45,30 +45,26 @@
   </head>
   <body>
     <header class="topbar">
-      <h1>Game platform</h1>
-      <nav>
-        <a href="/portal">Portal</a>
-        <a href="/builder">Builder</a>
-        <a href="/admin">Admin</a>
-      </nav>
+      <h1 data-i18n="ui.app_name">Game platform</h1>
     </header>
     <main>
       <div class="toolbar">
-        <button id="refresh" type="button">Refresh</button>
-        <label>Kind <select id="filter-kind"><option value="">All</option><option value="bug">Bugs</option><option value="suggestion">Suggestions</option><option value="problem">Problems</option></select></label>
-        <label>About <select id="filter-type"><option value="">All</option><option value="user">Users</option><option value="game">Games</option><option value="match">Matches</option><option value="platform">The platform</option></select></label>
-        <label>Status <select id="filter-status"><option value="">All</option><option value="open">Open</option><option value="reviewed">Reviewed</option><option value="dismissed">Dismissed</option></select></label>
+        <button id="refresh" type="button" data-i18n="ui.action.refresh">Refresh</button>
+        <label><span data-i18n="ui.admin.kind">Kind</span> <select id="filter-kind"><option value="" data-i18n="ui.admin.all">All</option><option value="bug" data-i18n="ui.admin.bugs">Bugs</option><option value="suggestion" data-i18n="ui.admin.suggestions">Suggestions</option><option value="problem" data-i18n="ui.admin.problems">Problems</option></select></label>
+        <label><span data-i18n="ui.admin.about">About</span> <select id="filter-type"><option value="" data-i18n="ui.admin.all">All</option><option value="user" data-i18n="ui.admin.users">Users</option><option value="game" data-i18n="ui.admin.games">Games</option><option value="match" data-i18n="ui.admin.matches">Matches</option><option value="platform" data-i18n="ui.admin.the_platform">The platform</option></select></label>
+        <label><span data-i18n="ui.admin.status">Status</span> <select id="filter-status"><option value="" data-i18n="ui.admin.all">All</option><option value="open" data-i18n="ui.admin.open">Open</option><option value="reviewed" data-i18n="ui.admin.reviewed">Reviewed</option><option value="dismissed" data-i18n="ui.admin.dismissed">Dismissed</option></select></label>
         <span id="target-filter"></span>
         <span id="freshness" class="muted"></span>
         <span id="error"></span>
       </div>
-      <h2>Most reported <span class="muted">(problems only)</span></h2>
+      <h2><span data-i18n="ui.admin.most_reported">Most reported</span> <span class="muted" data-i18n="ui.admin.problems_only">(problems only)</span></h2>
       <div class="panel"><div id="most"></div></div>
-      <h2>Feedback <span id="count" class="muted"></span></h2>
+      <h2><span data-i18n="ui.admin.feedback">Feedback</span> <span id="count" class="muted"></span></h2>
       <div class="panel"><div id="feedback"></div></div>
     </main>
-    <script src="/static/common.js?v=20"></script>
-    <script src="/static/experiments.js?v=7"></script>
-    <script src="/static/feedback.js?v=1"></script>
+    <script src="/static/common.js?v=29"></script>
+    <script src="/static/i18n.js?v=5"></script>
+    <script src="/static/experiments.js?v=9"></script>
+    <script src="/static/feedback.js?v=2"></script>
   </body>
 </html>

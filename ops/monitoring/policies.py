@@ -30,10 +30,12 @@ RATE_LIMIT_SECONDS = {"minor": 600, "major": 300}
 
 # The server's own checks (thresholds are in config.json under "monitoring"):
 # minor: signup_surge, server_busy, memory_high, latency_high, error_rate_high,
+#        event_loop_blocked, store_slow, client_error_spike,
 #        request_very_slow, request_stuck, http_5xx, unexpected_exception,
 #        game_function_timeout/memory/error, computer_illegal_move, illegal_move_spike,
 #        ai_generation_timeout, data_save_failed (first two failures)
 # major: signup_flood, server_overloaded, memory_critical, latency_critical,
+#        event_loop_blocked (5 s or more),
 #        error_rate_critical, data_save_failed (three in a row)
 
 

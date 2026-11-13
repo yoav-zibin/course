@@ -52,7 +52,7 @@ Limits: 10,000 users, 10,000 game versions, 1,000 matches, 10 seats per match, 1
 
 `valid` means no violations among the checks that could be performed; inspect warnings too. Old histories without `initial_turn_player_indices` produce `initial_turn_unavailable` and skip first-move authorization. Server games with join/leave callbacks can change turns outside move history: set `server_code` to a nonempty string (a marker suffices; source code need not be transmitted) and supply the rule flags. These get `membership_history_unavailable`; cross-move turn authorization/current-turn agreement is skipped. Server-generated computer moves may have an empty `made_by_user_id`.
 
-The checker does not compare historical authors to current seat owners, since joining, leaving, timeouts, and merges can change ownership. Game-facing `logic_player_id` and historical `player_id` may intentionally retain old identities. It does not execute opaque game rules, prove outcomes/payouts, check all other resource types (drafts/invites/experiments), or provide a transactionally consistent live-database snapshot. Those are separate extensions.
+The checker does not compare historical authors to current seat owners, since joining, leaving, timeouts, and merges can change ownership. Game-facing `logic_player_id` and historical `player_id` may intentionally retain old identities. It does not execute opaque game rules, prove outcomes/payouts, check all other resource types (invites/experiments), or provide a transactionally consistent live-database snapshot. Those are separate extensions.
 
 ## Confirmed defects and fixes
 

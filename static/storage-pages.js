@@ -2,19 +2,29 @@
 // One page per query is retained. Polling refreshes that page, never the catalog.
 window.StoragePages = (() => {
   let capabilities;
+  // The in-flight capabilities fetch, so concurrent first calls (the three
+  // catalog lists in one refresh) share one request instead of each firing
+  // their own. Cleared on failure so a later call retries.
+  let capabilitiesPromise;
   const entries = new Map();
-  const supported = new Set(["/games", "/builder/games", "/game-drafts", "/matches", "/matches/open"]);
+  const supported = new Set(["/games", "/matches", "/matches/open"]);
   async function enabled() {
-    if (capabilities === undefined) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 4000);
-      try {
-        const response = await fetch("/storage/capabilities", {cache:"no-store",signal:controller.signal});
-        capabilities = response.ok && (await response.json()).pagination === true;
-      } catch { return false; }
-      finally { clearTimeout(timer); }
+    if (capabilities !== undefined) return capabilities;
+    if (!capabilitiesPromise) {
+      capabilitiesPromise = (async () => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 4000);
+        try {
+          const response = await fetch("/storage/capabilities", {cache:"no-store",signal:controller.signal});
+          capabilities = response.ok && (await response.json()).pagination === true;
+        } catch {
+          capabilitiesPromise = null;
+          return false;
+        } finally { clearTimeout(timer); }
+        return capabilities;
+      })();
     }
-    return capabilities;
+    return capabilitiesPromise;
   }
   function entry(path, user) {
     const key = path + "\n" + (user?.id || "");
@@ -43,7 +53,7 @@ window.StoragePages = (() => {
     if (!bar?.classList.contains("storage-pagination")) {
       bar = document.createElement("nav");
       bar.className = "storage-pagination";
-      bar.setAttribute("aria-label", "Result pages");
+      bar.setAttribute("aria-label", I18n.t("ui.storage.result_pages", {}, "Result pages"));
       bar.tabIndex = -1;
       container.after(bar);
     }
@@ -53,10 +63,13 @@ window.StoragePages = (() => {
       bar.replaceChildren(back,label,next);
     }
     const [back,next,label]=bar._pageControls;
+    // A single page needs no pager at all: keep the bar out of the way until
+    // there is somewhere to go (an earlier page or a next cursor).
+    bar.hidden = !page.previous.length && !page.next;
     back.type = next.type = "button";
-    back.textContent = "Previous page"; next.textContent = "Next page";
+    back.textContent = I18n.t("ui.storage.previous_page", {}, "Previous page"); next.textContent = I18n.t("ui.storage.next_page", {}, "Next page");
     back.disabled = !page.previous.length; next.disabled = !page.next;
-    label.textContent = " Page " + (page.previous.length + 1) + " · up to 50 results ";
+    label.textContent = " " + I18n.t("ui.storage.page_info", {page: page.previous.length + 1}, "Page " + (page.previous.length + 1) + " · up to 50 results") + " ";
     async function change(direction) {
       // Keep focus inside dropdowns while their buttons are disabled/refreshed.
       bar.focus({preventScroll:true});

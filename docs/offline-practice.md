@@ -1,8 +1,8 @@
-# Offline practice for v2 games
+# Offline practice
 
 The portal runs a saved game's `server_code` locally for device practice. Games
-keep the v2 contract and their existing server/client code; they do not need a
-separate v1 rules implementation or a new game version for this feature.
+keep the server-side contract and their existing server/client code; they do not
+need a separate rules implementation or a new game version for this feature.
 
 Open the game and start practice online once to save its pinned version and
 rules on the device. Practice can then continue after disconnecting and
@@ -25,7 +25,7 @@ to the signed-in account; clearing browser storage removes local progress.
   local result cannot be promoted into a token match.
 
 Validation includes computer play, pass-and-play completion, poker's private
-view, illegal moves, persisted history, v1 compatibility, offline page reload,
+view, illegal moves, persisted history, offline page reload,
 no match writes, sandbox isolation/timeout, and existing online computer play.
 
 The optional single-player state-saving REST API is not needed for offline

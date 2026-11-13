@@ -57,33 +57,33 @@ def test_display_name_is_required(api: Api) -> None:
 def test_endpoints_that_need_identity_check_the_user_and_password(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     bob_password = api.passwords_by_user_id[bob]
-    body = {"name": "Poker", "allowed_player_counts": [2], "code": ""}
+    body = {"display_name": "Alice"}
 
-    def create_game(*, as_user: str | None = None, password: str | None = None) -> int:
+    def rename(*, as_user: str | None = None, password: str | None = None) -> int:
         response = api.request(
-            "POST", "/games", json=body, as_user=as_user, password=password
+            "PATCH", f"/users/{alice}", json=body, as_user=as_user, password=password
         )
         return response.status_code
 
     # The same 401 for every kind of bad credentials, so ids can't be probed.
     assert {
-        "no headers": create_game(),
-        "unknown user": create_game(as_user="nobody", password=bob_password),
-        "no password": api.client.post(
-            "/games", json=body, headers={"X-User-Id": alice}
+        "no headers": rename(),
+        "unknown user": rename(as_user="nobody", password=bob_password),
+        "no password": api.client.patch(
+            f"/users/{alice}", json=body, headers={"X-User-Id": alice}
         ).status_code,
-        "wrong password": create_game(as_user=alice, password="guess"),
-        "another user's password": create_game(as_user=alice, password=bob_password),
-        "right password": create_game(as_user=alice),
+        "wrong password": rename(as_user=alice, password="guess"),
+        "another user's password": rename(as_user=alice, password=bob_password),
+        "right password": rename(as_user=alice),
     } == {
         "no headers": 401,
         "unknown user": 401,
         "no password": 401,
         "wrong password": 401,
         "another user's password": 401,
-        "right password": 201,
+        "right password": 200,
     }
-    assert error(api.request("POST", "/games", json=body)) == UNAUTHORIZED
+    assert error(api.request("PATCH", f"/users/{alice}", json=body)) == UNAUTHORIZED
 
 
 def test_users_can_change_their_own_display_name(api: Api) -> None:
@@ -123,12 +123,12 @@ def test_passwords_are_saved_and_only_shown_by_the_debug_tools(
     api = Api(store=store)
     alice = api.new_user("alice")
     password = api.passwords_by_user_id[alice]
-    all_data = api.request("GET", "/debug/all-data").text
+    all_data = api.client.app.state.platform.all_data()
     store.close()
 
     (saved_user,) = json.loads(path.read_text())["data"]["users"]
     assert saved_user["password"] == password
-    assert json.loads(all_data)["users"][0]["password"] == password
+    assert all_data.users[0].password == password
     assert "password" not in api.ok("GET", f"/users/{alice}")
 
     # After a restart, the saved password still works.

@@ -1,4 +1,6 @@
-"""Existing production configs must never opt into the isolated scaling demo."""
+"""Firestore storage selection: enabling Firestore requires an explicit
+project and namespace (there is no other Firestore mode), and the data-file
+server must not grow the isolated scaling demo's routes."""
 
 import json
 from unittest.mock import patch
@@ -7,45 +9,44 @@ import pytest
 from fastapi.testclient import TestClient
 
 from game_platform import main
-from game_platform.firestore_store import FirestoreStore
 from game_platform.json_file_store import JsonFileStore
-from game_platform.query_store import QueryStore
 
 
-def test_existing_firestore_config_keeps_production_storage_and_has_no_demo_routes(
-    tmp_path,
-):
+def test_enabled_firestore_config_requires_project_and_namespace(tmp_path):
     config = tmp_path / "production.json"
     config.write_text(json.dumps({"firestore": {"enabled": True}}))
-    store = JsonFileStore(tmp_path / "isolated-test-data.json")
+    with (
+        patch("sys.argv", ["game_platform.main", "--config", str(config)]),
+        pytest.raises(ValueError, match="namespace"),
+    ):
+        main.main()
+
+
+def test_data_file_server_has_no_demo_routes(tmp_path):
+    config = tmp_path / "local.json"
+    config.write_text(
+        json.dumps({"data_file": {"path": str(tmp_path / "data.json")}})
+    )
     apps = []
     with (
         patch("sys.argv", ["game_platform.main", "--config", str(config)]),
-        patch.object(FirestoreStore, "connect", return_value=store) as connect,
-        patch.object(
-            QueryStore,
-            "__init__",
-            side_effect=AssertionError("query mode must be explicit"),
-        ),
         patch.object(
             main.uvicorn, "run", side_effect=lambda app, **kwargs: apps.append(app)
         ),
     ):
         main.main()
 
-    assert connect.call_args.kwargs["database"] == "(default)"
-    assert connect.call_args.kwargs["collection_prefix"] == ""
-    assert not store.list_users()
     with TestClient(apps[0]) as client:
         assert client.get("/storage/capabilities").json()["pagination"] is False
-        assert client.get("/", follow_redirects=False).headers["location"] == "/portal"
+        root = client.get("/", follow_redirects=False)
+        assert root.status_code == 200
+        assert "Game platform · Welcome" in root.text
         for path in ("/demo", "/demo/accounts", "/demo/budget", "/admin/demo-fixtures"):
             assert client.get(path).status_code == 404
-    assert not store.list_users()
 
 
 @pytest.mark.parametrize("allow_production", [False, True])
-def test_query_mode_in_default_database_needs_deliberate_opt_in(
+def test_firestore_in_default_database_needs_deliberate_opt_in(
     tmp_path, monkeypatch, allow_production
 ):
     monkeypatch.delenv("FIRESTORE_EMULATOR_HOST", raising=False)
@@ -55,7 +56,6 @@ def test_query_mode_in_default_database_needs_deliberate_opt_in(
             {
                 "firestore": {
                     "enabled": True,
-                    "mode": "query",
                     "project_id": "production-project",
                     "namespace": "production_v1",
                     "allow_default_database_query": allow_production,

@@ -319,7 +319,7 @@ def test_errors_carry_the_values_they_mention(api: Api) -> None:
             "X-User-Password": api.passwords_by_user_id[alice],
             "Accept-Language": "fr",
         },
-        json={"new_state": 1, "next_turn_player_indices": [1], "expected_move_count": 7},
+        json={"move": {"state": 1, "turn_indices": [1]}, "expected_move_count": 7},
     )
     assert response.status_code == 409
     assert response.json() == {
@@ -411,7 +411,14 @@ def test_every_key_the_web_pages_use_is_in_the_catalog() -> None:
         for key in re.findall(r'data-i18n(?:-[a-z-]+)?="([^"]+)"', page.read_text(encoding="utf-8")):
             used.setdefault(key, set()).add(page.name)
     for script in sorted(STATIC_DIR.glob("*.js")):
-        for key in re.findall(r'I18n\.t\(\s*"([^"]+)"', script.read_text(encoding="utf-8")):
+        source = script.read_text(encoding="utf-8")
+        # I18n.t("key", ...), I18n.plural("key", ...) (its forms are key_one / key_many) and
+        # the local alias t("ui.key", ...)
+        keys = re.findall(r'I18n\.t\(\s*"([^"]+)"', source)
+        keys += re.findall(r'(?<![\w.$])t\(\s*"((?:ui|error|status|seat|end_reason|notify)\.[^"]+)"', source)
+        for base in re.findall(r'I18n\.plural\(\s*"([^"]+)"', source):
+            keys += [base + "_one", base + "_many"]
+        for key in keys:
             used.setdefault(key, set()).add(script.name)
     assert len(used) > 100  # the scan found the keys
     missing = {key: sorted(files) for key, files in used.items() if key not in english}
@@ -438,4 +445,36 @@ def test_pages_with_translated_text_load_the_language_script() -> None:
         if "data-i18n" in text:
             assert "/static/i18n.js" in text, f"{page.name} has data-i18n but no i18n.js"
             # i18n.js must come before the scripts that call I18n.t
-            assert text.index("/static/i18n.js") < text.index("/static/auth.js"), page.name
+            for later in ("/static/auth.js", "/static/portal.js"):
+                if later in text:
+                    assert text.index("/static/i18n.js") < text.index(later), page.name
+
+
+# The branded error page (api.py) speaks the viewer's language
+
+BROWSER = {"Accept": "text/html,application/xhtml+xml"}
+
+
+def test_the_error_page_is_written_in_the_viewers_language(api: Api) -> None:
+    english = api.client.get("/nowhere", headers=BROWSER)
+    assert english.status_code == 404
+    assert 'lang="en"' in english.text and "We couldn&#x27;t find that page" in english.text
+
+    spanish = api.client.get("/nowhere", headers={**BROWSER, "Accept-Language": "es-MX,es;q=0.9"})
+    assert 'lang="es"' in spanish.text and 'dir="ltr"' in spanish.text
+    assert "No encontramos esa página" in spanish.text and "Volver a los juegos" in spanish.text
+    assert spanish.headers["Content-Language"] == "es"
+
+    arabic = api.client.get("/nowhere?lang=ar", headers=BROWSER)
+    assert 'lang="ar"' in arabic.text and 'dir="rtl"' in arabic.text
+    assert "لم نعثر على هذه الصفحة" in arabic.text
+
+
+def test_every_error_page_text_exists_in_every_language() -> None:
+    from game_platform.api import _error_page_content
+
+    for code in i18n.LOCALE_CODES:
+        for status in (404, 403, 503, 500):
+            page = _error_page_content(status, code)
+            assert str(status) in page
+            assert "ui.error_page" not in page, f"{code} {status}: a key is missing"

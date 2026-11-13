@@ -17,6 +17,9 @@ import json
 import logging
 import queue
 import threading
+from urllib.parse import urlsplit
+
+import requests
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
@@ -74,6 +77,33 @@ class LogPushNotifier:
 
     def deliver(self, message: PushMessage) -> None:
         self.enqueue([message])
+
+
+def validate_push_endpoint(endpoint: str) -> None:
+    """Real delivery only contacts browser push services, never arbitrary URLs."""
+    try:
+        url = urlsplit(endpoint)
+        host = (url.hostname or "").lower()
+        allowed = host in {
+            "fcm.googleapis.com", "android.googleapis.com",
+            "updates.push.services.mozilla.com",
+        } or any(host.endswith("." + suffix) for suffix in (
+            "push.apple.com", "notify.windows.com",
+        ))
+        if (url.scheme != "https" or not allowed or url.port not in (None, 443)
+                or url.username or url.password or url.fragment):
+            raise ValueError("endpoint must be an HTTPS browser push-service URL")
+    except ValueError:
+        raise ValueError("endpoint must be an HTTPS browser push-service URL") from None
+
+
+class _PushSession(requests.Session):
+    def post(self, url, **kwargs):
+        validate_push_endpoint(url)
+        # Even a trusted service's redirect must not turn into a request to
+        # an internal host. pywebpush handles a 3xx as a delivery failure.
+        kwargs["allow_redirects"] = False
+        return super().post(url, **kwargs)
 
 
 class WebPushNotifier:
@@ -139,41 +169,48 @@ class WebPushNotifier:
     def _send(self, message: PushMessage, *, retry_errors: bool = False) -> None:
         subscription = message.subscription
         try:
-            webpush(
-                subscription_info={
-                    "endpoint": subscription.endpoint,
-                    "keys": {
-                        "p256dh": subscription.p256dh,
-                        "auth": subscription.auth,
-                    },
-                },
-                data=json.dumps(
-                    {
-                        "title": message.title,
-                        "body": message.body,
-                        "url": message.url,
-                        "tag": message.tag,
-                    }
-                ),
-                vapid_private_key=self._private_key,
-                vapid_claims={"sub": self._subject},
-                ttl=self._ttl,
-                headers={"Urgency": "high"},
-            )
+            validate_push_endpoint(subscription.endpoint)
+        except ValueError:
+            logger.warning("skipping subscription with an unsupported push-service endpoint")
+            return
+        try:
+            with _PushSession() as session:
+                self._send_to_service(message, session)
         except WebPushException as error:
             response = getattr(error, "response", None)
             status = response.status_code if response is not None else None
             if status in (404, 410):
-                logger.info(
-                    "push endpoint %s is gone (%s); dropping the subscription",
-                    subscription.endpoint,
-                    status,
-                )
                 self._store.delete_push_subscription_by_endpoint(subscription.endpoint)
+            elif retry_errors:
+                raise
             else:
-                if retry_errors:
-                    raise
-                logger.warning("push to %s failed: %s", subscription.endpoint, error)
+                logger.warning("push delivery failed (%s)", status)
+
+    def _send_to_service(self, message: PushMessage, session: requests.Session) -> None:
+        subscription = message.subscription
+        webpush(
+            subscription_info={
+                "endpoint": subscription.endpoint,
+                "keys": {
+                    "p256dh": subscription.p256dh,
+                    "auth": subscription.auth,
+                },
+            },
+            data=json.dumps(
+                {
+                    "title": message.title,
+                    "body": message.body,
+                    "url": message.url,
+                    "tag": message.tag,
+                }
+            ),
+            vapid_private_key=self._private_key,
+            vapid_claims={"sub": self._subject},
+            ttl=self._ttl,
+            headers={"Urgency": "high"},
+            timeout=30,
+            requests_session=session,
+        )
 
 
 def make_push_notifier(config: PushConfig, store: Store) -> PushNotifier:

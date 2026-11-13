@@ -1,9 +1,12 @@
-# Needed to run the server. Lower bounds are the versions it is tested with.
+# Runtime dependency ranges. CI resolves current compatible releases.
 fastapi>=0.115,<1
 pydantic>=2.9,<3
+jsonschema>=4.23,<5
+referencing>=0.36,<1
 uvicorn>=0.34,<1
-# Needed for the optional Meta Model API client (model_api.py).
-openai>=1.0,<2
+# Needed by oauth.py for the Google tokeninfo call (it used to arrive
+# transitively with the deleted Model API client's dependency).
+httpx>=0.28,<1
 # Needed for web push notifications (push.py): RFC 8030 delivery signed with VAPID,
 # and the EC key handling behind it.
 pywebpush>=1.9,<3
@@ -13,11 +16,11 @@ cryptography>=42
 quickjs>=1.19,<2
 # Draws invite links as QR codes (api.py). Pure Python, no dependencies.
 segno>=1.6,<2
-# Saves the data in Firestore when firestore.enabled is set (firestore_store.py).
+# Query-backed Firestore persistence when firestore.enabled is set (query_store.py).
 google-cloud-firestore>=2.34,<3
 
-# Guided builder game contracts.
-jsonschema>=4.23,<5
+# Push HTTP transport (directly used to reject redirects).
+requests>=2.32.5,<3
 # Reports API call counts to Google Cloud Monitoring when
 # monitoring.cloud_metrics_enabled is set (metrics.py).
 google-cloud-monitoring>=2.0,<3

@@ -1,0 +1,246 @@
+'use strict';
+// Messages used to compare each community game with its original (see community-games.test.cjs).
+// Each game has a list of scenarios; a scenario is a list of steps {msg, then(page)} sent in order to
+// a fresh page. `names` are player names, which are never translated.
+const PLAYERS = [{ name: 'Ana', player_index: 0, id: 'p0' }, { name: 'Ben', player_index: 1, id: 'p1' }];
+const UNNAMED = [{ player_index: 0, id: 'p0' }, { player_index: 1, id: 'p1' }];
+// The acting seat under the old protocol, for the pristine original games:
+// the viewer's own seat when it is their turn, or a computer's seat when the
+// viewer is the only human. The converted games compute the same seat from
+// my_player_index + turn_of_player_indices; the originals read this field.
+// The value must match what the converted game computes, or the golden test
+// (original vs converted) sees different behaviour.
+function actingFor(m) {
+  if (m.status !== 'ongoing' || !m.turn_of_player_indices?.length) return null;
+  const turn = m.turn_of_player_indices[0];
+  if (turn === m.my_player_index) return turn;
+  if (m.my_player_index === null) return null;
+  const humans = (m.players || []).filter((p) => p.kind === 'human');
+  if (humans.length === 1 && m.players?.[turn]?.kind === 'computer') return turn;
+  return null;
+}
+function msg(over = {}) {
+  const m = { type: 'state_changed', status: 'ongoing', move_count: 3, players: PLAYERS, my_player_index: 0, turn_of_player_indices: [0], ...over };
+  m.acting_for_player_index = actingFor(m);
+  return m;
+}
+const mine = (view, over) => msg({ view, ...over });
+const theirs = (view, over) => msg({ view, turn_of_player_indices: [1], ...over });
+const over = (view, extra) => msg({ view, status: 'over', turn_of_player_indices: [], ...extra });
+const spectator = (view, extra) => msg({ view, my_player_index: null, turn_of_player_indices: [1], ...extra });
+const click = (id) => (page) => page.$(id).click();
+
+const S = {};
+S['8b87f4a0'] = { names: ['Ana', 'Ben'], scenarios: [
+  [{ msg: msg() }, { msg: mine({ total: 4, winner: null }) }, { msg: mine({ total: 4, winner: null }), then: click('add1') }],
+  [{ msg: theirs({ total: 7, winner: null }) }, { msg: theirs({ total: 7, winner: null }, { turn_of_player_indices: [], players: UNNAMED }) }],
+  [{ msg: mine({ total: 7, winner: null }, { players: UNNAMED }) }, { msg: theirs({ total: 7, winner: null }, { players: UNNAMED, turn_of_player_indices: [0, 1] }) }],
+  [{ msg: over({ total: 10, winner: 1 }) }, { msg: over({ total: 10, winner: null }) }, { msg: over({ total: 3, winner: 0 }, { status: 'ongoing' }) }],
+] };
+const gomoku = (board, extra = {}) => ({ board, winner: null, winLine: [], last: null, ...extra });
+const empty225 = () => Array(225).fill(0);
+const placed = (cells) => { const b = empty225(); for (const [i, v] of cells) b[i] = v; return b; };
+S['b59b79d7'] = { names: ['Ana', 'Ben'], scenarios: [
+  [{ msg: msg() }, { msg: mine(gomoku(placed([[112, 1], [113, 2]]), { last: 113 })) }, { msg: mine(gomoku(placed([[112, 1]]))), then: (p) => p.$('board').children[0].click() }],
+  [{ msg: theirs(gomoku(placed([[0, 1]]))) }, { msg: theirs(gomoku(placed([[0, 1]])), { players: UNNAMED, turn_of_player_indices: [] }) }],
+  [{ msg: over(gomoku(placed([[0, 1], [1, 1], [2, 1], [3, 1], [4, 1]]), { winner: 0, winLine: [0, 1, 2, 3, 4] })) }, { msg: over(gomoku(placed([[0, 1]]), { winner: -1 })) }, { msg: over(gomoku(placed([[0, 1]]), { winner: 'x' })) }, { msg: over(gomoku(empty225()), {}) }],
+  [{ msg: over(gomoku(placed([[0, 1]]), { winner: 1 }), { players: UNNAMED }) }, { msg: mine(gomoku(empty225()), { players: UNNAMED }) }],
+] };
+const ttt = (board, extra = {}) => ({ board, winner: null, winningLine: [], lastMove: null, ...extra });
+S['4d15d9d7'] = { names: ['Ana', 'Ben'], scenarios: [
+  [{ msg: msg() }, { msg: mine(ttt([0, null, 1, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null], { lastMove: 2 })) }, { msg: mine(ttt(Array(20).fill(null))), then: (p) => p.$('board').children[3].click() }],
+  [{ msg: theirs(ttt(Array(20).fill(null))) }, { msg: theirs(ttt(Array(20).fill(null)), { players: UNNAMED, turn_of_player_indices: [] }) }],
+  [{ msg: over(ttt([0, 0, 0, 0, ...Array(16).fill(null)], { winner: 0, winningLine: [0, 1, 2, 3] })) }, { msg: over(ttt(Array(20).fill(1), { winner: 'draw' })) }, { msg: over(ttt(Array(20).fill(null), { winner: 'other' })) }],
+  [{ msg: over(ttt(Array(20).fill(null), { winner: 1 }), { players: UNNAMED }) }, { msg: mine(ttt(Array(20).fill(null)), { players: UNNAMED }) }],
+] };
+const stars = (n, w) => ({ stars: n, winnerId: w === undefined ? null : w });
+S['788b39a9'] = { names: ['Ana', 'Ben'], scenarios: [
+  [{ msg: msg() }, { msg: mine(stars(9)) }, { msg: mine(stars(1)) }, { msg: mine(stars(5)), then: click('take2') }],
+  [{ msg: theirs(stars(6)) }, { msg: theirs(stars(6), { turn_of_player_indices: [], players: UNNAMED }) }],
+  [{ msg: over(stars(0, 'p1')) }, { msg: over(stars(0, 'zz')) }],
+  [{ msg: mine(stars(5), { players: UNNAMED }) }],
+] };
+
+// --- Last Floe
+const ROWL = [7, 8, 7, 8, 7, 8, 7, 8];
+function floe(over2 = {}) {
+  const tiles = []; let id = 0;
+  ROWL.forEach((n, r) => { for (let k = 0; k < n; k += 1) { tiles.push({ id, row: r, fish: (id % 3) + 1, penguin: id === 4 ? 0 : id === 5 ? 1 : -1, removed: id === 9 }); id += 1; } });
+  return { tiles, scores: [2, 3], phase: 'placement', finished: false, legal: { placements: [1, 2], moves: {} }, ...over2 };
+}
+const tile = (p, r, k) => p.$('board').children[r].children[k];
+S['4f49cbdc'] = { names: ['Ana', 'Ben'], scenarios: [
+  [{ msg: msg() }, { msg: mine(floe()) }, { msg: mine(floe()), then: (p) => tile(p, 0, 1).click() }],
+  [{ msg: theirs(floe()) }, { msg: theirs(floe(), { turn_of_player_indices: [], players: UNNAMED }) }, { msg: theirs(floe({ phase: 'movement' }), { turn_of_player_indices: [1] }) }],
+  [{ msg: mine(floe({ phase: 'movement', legal: { placements: [], moves: { 4: [6, 7] } } })) }, { msg: mine(floe({ phase: 'movement', legal: { placements: [], moves: { 4: [6, 7] } } })), then: (p) => { tile(p, 0, 4).click(); } }],
+  [{ msg: mine(floe({ phase: 'movement', legal: { placements: [], moves: {} } })) }, { msg: mine(floe({ phase: 'movement', legal: { placements: [], moves: {} } })), then: click('actions') }, { msg: mine(floe({ phase: 'movement', legal: { placements: [], moves: {} } })), then: (p) => p.$('actions').children[0].click() }],
+  [{ msg: over(floe({ scores: [5, 3], finished: true })) }, { msg: over(floe({ scores: [4, 4], finished: true })) }, { msg: mine(floe({ scores: [1, 0], finished: true })) }, { msg: over(floe({ scores: [9, 3], finished: true }), { players: UNNAMED }) }],
+] };
+
+// --- SOS
+const sosBoard = (cells) => { const b = Array(36).fill(''); for (const [i, v] of cells) b[i] = v; return b; };
+const sos = (cells, extra = {}) => ({ board: sosBoard(cells), scores: [1, 2], lines: [], lastMove: -1, winner: null, ...extra });
+const withComputer = [{ name: 'Ana', player_index: 0, id: 'p0', kind: 'human' }, { name: 'Robo', player_index: 1, id: 'p1', kind: 'computer' }];
+S['a1ca4c85'] = { names: ['Ana', 'Ben', 'Robo'], skipCoverage: ['rules'], data: ['S', 'O', 'SOS', ' horizontally, vertically or diagonally. Each new SOS = 1 point + you go again. Most points when full wins.'], scenarios: [
+  [{ msg: msg() }, { msg: mine(sos([[0, 'S'], [1, 'O'], [2, 'S']], { lines: [[0, 1, 2]], lastMove: 2 })) }, { msg: mine(sos([])), then: (p) => { p.$('btnO').click(); p.$('board').children[7].click(); } }],
+  [{ msg: theirs(sos([])) }, { msg: theirs(sos([])) }, { msg: theirs(sos([]), { turn_of_player_indices: [] }) }, { msg: spectator(sos([])) }],
+  [{ msg: theirs(sos([]), { players: withComputer }) }, { msg: mine(sos([]), { players: withComputer }) }],
+  [{ msg: over(sos([], { winner: 0 })) }, { msg: over(sos([], { winner: -1 })) }, { msg: over(sos([], { winner: null })) }, { msg: over(sos([], { winner: 5 })) }, { msg: mine(sos([]), { players: UNNAMED, my_player_index: 1 }) }],
+] };
+
+// --- Connect Four
+const grid = (cells = []) => { const b = Array.from({ length: 6 }, () => Array(7).fill(0)); for (const [r, c, v] of cells) b[r][c] = v; return b; };
+const c4 = (extra = {}, cells = []) => ({ status: 'IN_PROGRESS', toMove: 1, board: grid(cells), winningCells: [], ...extra });
+const fullCol = [[0, 0, 1], [1, 0, 2], [2, 0, 1], [3, 0, 2], [4, 0, 1], [5, 0, 2]];
+S['7bed6e20'] = { names: ['Ana', 'Ben'], skipCoverage: ['waiting_platform'], scenarios: [
+  [{ msg: null }, { msg: mine(c4()) }, { msg: mine(c4()), then: (p) => p.$('dropRow').children[3].click() }, { msg: mine(c4({}, fullCol), { move_count: 9 }), then: (p) => p.$('board').children[0].children[0].click() }, { msg: mine(c4({ toMove: 2 }, [[5, 3, 1]]), { move_count: 10 }) }],
+  [{ msg: theirs(c4({ toMove: 2 })) }, { msg: theirs(c4({ toMove: 1 }), { turn_of_player_indices: [] }) }, { msg: theirs(c4({ toMove: 2 })) }, { msg: theirs(c4({ toMove: 1 })) }, { msg: spectator(c4({ toMove: 2 })) }, { msg: theirs(c4({ toMove: 2 }), { turn_of_player_indices: [1], players: UNNAMED }) }],
+  [{ msg: over(c4({ status: 'WINNER_P1', winningCells: [[5, 0], [5, 1], [5, 2], [5, 3]] }, [[5, 0, 1], [5, 1, 1], [5, 2, 1], [5, 3, 1]])) }, { msg: over(c4({ status: 'WINNER_P2' })) }, { msg: over(c4({ status: 'DRAW' }), { players: UNNAMED }) }, { msg: over(c4(), { end_reason: 'player_left' }) }, { msg: over(c4({ status: 'WINNER_P2' }), { players: UNNAMED }) }],
+  [{ msg: msg({ view: null }) }, { msg: msg({ view: null, status: 'over' }) }, { msg: mine(c4({ toMove: 7 })) }, { msg: mine(c4({ toMove: 1 }), { status: 'over' }) }],
+] };
+
+// --- Chutes & Ladders
+const chutes = (extra = {}) => ({ phase: 'play', positions: [1, 16], pieces: { 0: '\u{1F451}', 1: '\u{1F3A9}' }, winner: null, lastSpin: null, log: [], ...extra });
+S['cbd19f63'] = { names: ['Ana', 'Ben'], data: ['Ana rolled 3\nBen fell down a chute'], scenarios: [
+  [{ msg: msg() }, { msg: mine(chutes({ phase: 'rolloff', lastSpin: 3 })) }, { msg: mine(chutes({ phase: 'rolloff' })) }, { msg: mine(chutes({ phase: 'select', pieces: {} })), then: (p) => p.$('actions').children[2].click() }],
+  [{ msg: theirs(chutes({ phase: 'rolloff', lastSpin: 4 })) }, { msg: theirs(chutes({ phase: 'select' })) }, { msg: theirs(chutes({ lastSpin: 6 })) }, { msg: theirs(chutes(), { turn_of_player_indices: [] }) }, { msg: theirs(chutes({ phase: 'rolloff' }), { players: UNNAMED }) }],
+  [{ msg: mine(chutes({ lastSpin: 2, log: ['Ana rolled 3', 'Ben fell down a chute'] })) }, { msg: mine(chutes({ positions: [0, 0] })), then: (p) => p.$('actions').children[0].click() }, { msg: mine(chutes({ positions: [0, 5] }), { players: UNNAMED }) }, { msg: mine(chutes({ positions: [9, 98], pieces: {} })) }],
+  [{ msg: over(chutes({ winner: 1 })) }, { msg: over(chutes({ winner: 0 }), { players: UNNAMED }) }, { msg: msg({ view: null }) }],
+] };
+
+// --- Nim
+const nim = (piles, winnerIndex = null) => ({ piles, winnerIndex });
+const robo = [{ name: 'Ana', player_index: 0, id: 'p0', kind: 'human' }, { name: 'Robo', player_index: 1, id: 'p1', kind: 'computer' }];
+S['571c1cc4'] = { names: ['Ana', 'Ben', 'Robo'], scenarios: [
+  [{ msg: msg() }, { msg: mine(nim([3, 5, 7])) }, { msg: mine(nim([3, 5, 7])), then: (p) => p.$('board').children[0].children[1].children[1].click() }, { msg: mine(nim([3, 5, 7])), then: (p) => { p.$('board').children[1].children[1].children[0].click(); p.$('board').children[1].children[2].click(); } }, { msg: mine(nim([0, 2, 1])) }],
+  [{ msg: theirs(nim([3, 5, 7])) }, { msg: theirs(nim([3, 5, 7]), { turn_of_player_indices: [] }) }, { msg: theirs(nim([3, 5, 7]), { players: robo, turn_of_player_indices: [1] }) }, { msg: mine(nim([3, 5, 7]), { players: UNNAMED }) }, { msg: theirs(nim([1, 1, 1]), { players: UNNAMED }) }],
+  [{ msg: over(nim([0, 0, 0], 1)) }, { msg: over(nim([0, 0, 0], null)) }, { msg: over(nim([0, 0, 0], 1), { players: robo }) }, { msg: msg({ view: null }) }],
+] };
+
+// --- Stack Duel
+const stackBoard = (cells = []) => { const b = Array.from({ length: 10 }, () => Array(8).fill(-1)); for (const [r, c, v] of cells) b[r][c] = v; return b; };
+const stack = (extra = {}) => ({ current: 'T', next: 'I', board: stackBoard([[9, 0, 0], [9, 1, 1], [8, 0, 2]]), scores: [1, 0], lines: 1, winners: null, ...extra });
+S['36e5f0d8'] = { names: ['Ana', 'Ben'], scenarios: [
+  [{ msg: msg() }, { msg: mine(stack()) }, { msg: mine(stack()), then: (p) => { p.$('rotate').click(); p.$('cols').children[2].onmouseenter(); p.$('cols').children[2].click(); } }, { msg: mine(stack({ current: 'O' })), then: (p) => p.$('cols').children[0].onmouseenter() }],
+  [{ msg: theirs(stack()) }, { msg: theirs(stack(), { turn_of_player_indices: [], players: UNNAMED }) }, { msg: mine(stack({ scores: [] }), { players: UNNAMED }) }],
+  [{ msg: over(stack({ winners: [0] })) }, { msg: over(stack({ winners: [0, 1] })) }, { msg: over(stack({ winners: [1] }), { players: UNNAMED }) }, { msg: msg({ view: null }) }],
+  [{ msg: over(stack({ winners: null })) }, { msg: over(stack({ winners: null }), { end_reason: 'player_left' }) }, { msg: msg({ status: 'ongoing', view: stack({ winners: undefined }) }) }],
+] };
+
+// --- Fox and Geese
+const fox = (extra = {}) => ({ fox: [3, 3], geese: [[5, 2], [5, 3], [6, 3]], toMove: 0, captured: 2, moves: [], winner: null, draw: false, ...extra });
+const foxMoves = [{ from: [3, 3], to: [3, 4] }, { from: [3, 3], to: [4, 3] }];
+S['c8039b20'] = { names: ['Ana', 'Ben'], scenarios: [
+  [{ msg: msg() }, { msg: mine(fox({ moves: foxMoves })) }, { msg: mine(fox({ moves: foxMoves })), then: (p) => { p.$('board').children[3 * 7 + 3].click(); p.$('board').children[3 * 7 + 4].click(); } }, { msg: mine(fox({ moves: [{ from: [3, 3], to: [3, 5] }, { stop: true }] })), then: (p) => p.$('extra').children[0].click() }, { msg: mine(fox({ toMove: 1, moves: [{ from: [5, 2], to: [6, 2] }] }), { move_count: 8 }) }],
+  [{ msg: theirs(fox({ toMove: 1 })) }, { msg: theirs(fox({ toMove: 0 }), { players: UNNAMED }) }],
+  [{ msg: over(fox({ winner: 0 })) }, { msg: over(fox({ winner: 1 })) }, { msg: over(fox({ draw: true })) }, { msg: over(fox({ winner: 1 }), { players: UNNAMED }) }, { msg: msg({ view: null }) }],
+] };
+
+// --- Gomoku (second version)
+const gb = (cells = []) => { const b = Array.from({ length: 15 }, () => Array(15).fill(0)); for (const [r, c, v] of cells) b[r][c] = v; return b; };
+const gm = (extra = {}, cells = [[7, 7, 1], [7, 8, 2]]) => ({ board: gb(cells), last: { r: 7, c: 8 }, winner: null, winLine: null, draw: false, ...extra });
+S['39a5e1f5'] = { names: ['Ana', 'Ben'], skipCoverage: ['waiting_platform'], scenarios: [
+  [{ msg: null }, { msg: mine(gm()) }, { msg: mine(gm()), then: (p) => { const cell = p.$('board').children[0]; cell.dispatchEvent({ type: 'mouseenter' }); cell.click(); } }, { msg: mine(gm({}, []), { my_player_index: 1, turn_of_player_indices: [1] }) }],
+  [{ msg: theirs(gm()) }, { msg: theirs(gm(), { turn_of_player_indices: [] }) }, { msg: theirs(gm(), { turn_of_player_indices: [0] }) }, { msg: theirs(gm(), { turn_of_player_indices: [5] }) }, { msg: spectator(gm(), { players: [], turn_of_player_indices: [] }) }, { msg: spectator(gm()) }],
+  [{ msg: over(gm({ winner: 0, winLine: [{ r: 7, c: 7 }, { r: 7, c: 8 }] })) }, { msg: over(gm({ winner: 1 })) }, { msg: over(gm({ winner: 4 })) }, { msg: over(gm({ draw: true })) }, { msg: over(gm()) }, { msg: msg({ view: null }) }],
+] };
+
+// --- Solo Countdown
+S['569fac2e'] = { names: [], scenarios: [
+  [{ msg: msg() }, { msg: mine({ stars: 3 }) }, { msg: mine({ stars: 2 }) }, { msg: mine({ stars: 1 }) }, { msg: mine({ stars: 1 }), then: click('take') }],
+  [{ msg: over({ stars: 0, winner: 0 }) }, { msg: msg({ view: { stars: 0, winner: 0 }, status: 'ongoing' }) }],
+] };
+
+// --- Nine Stars (second version)
+const nineCells = (owners) => owners.map((o, i) => ({ o, v: (i % 3) + 1 }));
+const nine = (owners, extra = {}) => ({ cells: nineCells(owners), scores: [3, 2], lines: [0, 0], winner: null, ...extra });
+const noOwner = Array(9).fill(null);
+const robots = [{ name: 'Ana', player_index: 0, id: 'p0', kind: 'computer' }, { name: 'Robo', player_index: 1, id: 'p1', kind: 'computer' }];
+S['79830aee'] = { names: ['Ana', 'Ben', 'Robo'], skipCoverage: ['waiting_platform', 'legend_2'], data: ['each.'], scenarios: [
+  [{ msg: null }, { msg: msg({ view: null }) }, { msg: mine(nine(noOwner)) }, { msg: mine(nine([0, 1, null, null, null, null, null, null, null], { lines: [1, 0] })), then: (p) => p.$('board').children[3].click() }, { msg: mine(nine([0, 1, 0, 1, null, null, null, null, null], { lines: [0, 2] }), { move_count: 9 }) }],
+  [{ msg: theirs(nine(noOwner)) }, { msg: theirs(nine(noOwner), { turn_of_player_indices: [] }) }, { msg: theirs(nine(noOwner), { turn_of_player_indices: [1], players: robots }) }, { msg: theirs(nine(noOwner), { turn_of_player_indices: [5], players: [] }) }, { msg: spectator(nine(noOwner), { turn_of_player_indices: [0] }) }],
+  [{ msg: over(nine(Array(9).fill(0), { winner: -1, scores: [4, 4] })) }, { msg: over(nine(Array(9).fill(0), { winner: 0, scores: [6, 3] })) }, { msg: over(nine(Array(9).fill(1), { winner: 1, scores: [3, 6] })) }, { msg: over(nine(Array(9).fill(1), { winner: 5 })) }, { msg: over(nine(Array(9).fill(1)), { players: [] }) }],
+] };
+
+// --- War
+const card = (r, s) => ({ r, s });
+const war = (extra = {}) => ({ round: 3, potCount: 0, warDepth: 0, counts: [24, 28], revealed: [false, false], faceUp: [null, null], winner: null, log: 'Ana flipped K\u2660, Ben flipped 9\u2665', ...extra });
+S['42d06892'] = { names: ['Ana', 'Ben', 'Robo'], skipCoverage: ['waiting_platform', 'round', 'pot', 'war'], data: ['-', 'Ana flipped K\u2660, Ben flipped 9\u2665'], scenarios: [
+  [{ msg: msg() }, { msg: mine(war()) }, { msg: mine(war()), then: click('flipBtn') }, { msg: mine(war({ revealed: [true, false], faceUp: [card(13, '\u2660'), null] }), { move_count: 9 }) }, { msg: mine(war({ revealed: [true, true], faceUp: [card(13, '\u2660'), card(9, '\u2665')], potCount: 4 }), { move_count: 10 }) }],
+  [{ msg: theirs(war({ revealed: [true, false], faceUp: [card(14, '\u2666'), null] })) }, { msg: theirs(war({ revealed: [false, true], faceUp: [null, card(11, '\u2663')] }), { my_player_index: 0 }) }, { msg: theirs(war({ revealed: [false, false] }), { turn_of_player_indices: [] }) }, { msg: theirs(war({ revealed: [true, true] }), { players: [], status: 'ongoing' }) }],
+  [{ msg: mine(war({ warDepth: 2, potCount: 8, counts: [10, 0], faceUp: [card(5, '\u2660'), null] }), { move_count: 20 }) }, { msg: mine(war({ warDepth: 1, revealed: [true, false], counts: [0, 3], faceUp: [null, null] }), { move_count: 21 }) }, { msg: mine(war({ warDepth: 1, revealed: [false, false], counts: [5, 3] }), { move_count: 22 }) }, { msg: theirs(war({ warDepth: 3, revealed: [true, true], counts: [5, 3], faceUp: [card(12, '\u2665'), card(12, '\u2660')] })) }],
+  [{ msg: spectator(war()) }, { msg: spectator(war({ revealed: [true, true] })) }, { msg: mine(war({ revealed: [true, false], faceUp: [card(2, '\u2660'), null] }), { players: robots }) },
+   // The computer's turn with one human: the acting seat is the computer, so
+   // the "their move" text shows (it is otherwise unreachable, since the
+   // acting seat is never another human).
+   { msg: theirs(war(), { players: [{ name: 'Ana', player_index: 0, id: 'p0', kind: 'human' }, { name: 'Robo', player_index: 1, id: 'p1', kind: 'computer' }] }) }],
+  [{ msg: over(war({ winner: -1, counts: [0, 0] })) }, { msg: over(war({ winner: 0, counts: [52, 0], faceUp: [card(14, '\u2660'), card(2, '\u2665')], revealed: [true, true] })) }, { msg: over(war({ winner: 1 }), { players: [] }) }, { msg: over(war({ winner: 5 })) }, { msg: msg({ view: null }) }],
+] };
+
+// --- Star Count
+S['aac01cd8'] = { names: [], scenarios: [
+  [{ msg: msg() }, { msg: mine({ count: 0 }) }, { msg: mine({ count: 3 }) }, { msg: mine({ count: 3 }), then: click('add') }],
+  [{ msg: over({ count: 5 }) }, { msg: mine({ count: 5 }) }],
+] };
+
+// --- Tower of Hanoi
+const hanoi = (extra = {}) => ({ phase: 'play', pegs: [[3, 2, 1], [], []], disks: 3, moves: 0, solved: false, ...extra });
+S['ad578d02'] = { names: [], skipCoverage: ['moves_label', 'minimal_label'], scenarios: [
+  [{ msg: msg({ view: { phase: 'setup' } }) }, { msg: msg({ view: { phase: 'setup' } }), then: (p) => p.doc.querySelectorAll('#setup button')[1].click() }, { msg: theirs({ phase: 'setup' }) }],
+  [{ msg: mine(hanoi()) }, { msg: mine(hanoi({ moves: 2, pegs: [[3], [2], [1]] })), then: (p) => { p.$('pegs').children[0].click(); p.$('pegs').children[2].click(); } }, { msg: mine(hanoi({ disks: 4, pegs: [[4, 3], [2], [1]] })), then: (p) => { p.$('pegs').children[1].click(); p.$('pegs').children[1].click(); p.$('restart').click(); } }],
+  [{ msg: theirs(hanoi()) }, { msg: mine(hanoi({ solved: true, moves: 7, pegs: [[], [], [3, 2, 1]] })) }, { msg: over(hanoi({ moves: 9, disks: 4, pegs: [[], [], [4, 3, 2, 1]] })) }, { msg: msg({ view: null }) }],
+] };
+
+// --- Bulls and Cows (Bulgarian)
+const bulls = (extra = {}) => ({ phase: 'play', mySecret: '1234', oppSecret: null, myGuesses: ['5678', '1357'], myFeedback: [{ b: 0, c: 1 }, { b: 1, c: 2 }], oppGuesses: ['9876'], oppFeedback: [{ b: 2, c: 0 }], winner: null, ...extra });
+S['916ab616'] = { names: ['Ana', 'Ben'], skipCoverage: ['your_number', 'opponent_number'], scenarios: [
+  [{ msg: msg({ view: { phase: 'setup' } }) }, { msg: msg({ view: { phase: 'setup' } }), then: (p) => { p.$('secretBtn').click(); } }, { msg: msg({ view: { phase: 'setup' }, move_count: 4 }), then: (p) => { p.$('secretInput').value = '1234'; p.$('secretBtn').click(); } }, { msg: msg({ view: { phase: 'setup', mySecret: '4321' }, turn_of_player_indices: [1] }) }, { msg: spectator({ phase: 'setup' }, { turn_of_player_indices: [] }) }, { msg: msg({ view: {} , turn_of_player_indices: [0, 1] }) }],
+  [{ msg: mine(bulls()) }, { msg: mine(bulls()), then: (p) => { p.$('guessInput').value = '12'; p.$('guessBtn').click(); } }, { msg: mine(bulls(), { move_count: 5 }), then: (p) => { p.$('guessInput').value = '9876'; p.$('guessBtn').click(); } }, { msg: msg({ view: bulls({ myGuesses: [], oppGuesses: [], mySecret: null }), turn_of_player_indices: [1] }) }, { msg: msg({ view: bulls(), turn_of_player_indices: [] }) }],
+  [{ msg: over(bulls({ winner: 0 })) }, { msg: over(bulls({ winner: 1, oppSecret: '1234' })) }],
+] };
+
+// --- Spoons
+const spoons = (extra = {}) => ({ phase: 'pass', round: 2, deckCount: 20, spoonsLeft: 3, alive: [true, true, false], handCounts: [4, 4, 0], letters: ['S', '', 'SPOONS'], passed: [true, false, false], spoons: [1], dealer: 0, loser: null, hand: ['5\u2660', '9\u2665', 'K\u2663', 'K\u2666'], winner: null, ...extra });
+const three = [{ name: 'Ana', player_index: 0, id: 'p0' }, { name: 'Ben', player_index: 1, id: 'p1' }, { name: 'Cy', player_index: 2, id: 'p2' }];
+S['58bd6827'] = { names: ['Ana', 'Ben', 'Cy'], data: ['5\u2660', '9\u2665', 'K\u2663', 'K\u2666', 'S', 'SPOONS'], scenarios: [
+  [{ msg: msg({ players: three }) }, { msg: mine(spoons(), { players: three }) }, { msg: mine(spoons(), { players: three }), then: (p) => p.$('hand').children[0].click() }, { msg: mine(spoons({ hand: ['K\u2660', 'K\u2665', 'K\u2663', 'K\u2666'] }), { players: three, move_count: 8 }), then: (p) => p.$('actions').children[0].click() }, { msg: theirs(spoons(), { players: three }) }],
+  [{ msg: mine(spoons({ phase: 'grab', loser: 2 }), { players: three }) }, { msg: mine(spoons({ phase: 'roundEnd', loser: 1, dealer: 1 }), { players: three }), then: (p) => p.$('actions').children[1].click() }, { msg: theirs(spoons({ phase: 'roundEnd', spoons: [] }), { players: three }) }],
+  [{ msg: over(spoons({ phase: 'gameOver', winner: 0 }), { players: three }) }, { msg: over(spoons({ phase: 'gameOver', winner: 7 }), { players: three }) }, { msg: msg({ view: null }) }],
+] };
+
+// --- Tap to 10
+S['d00a8d7b'] = { names: [], data: [], scenarios: [
+  [{ msg: null }, { msg: msg({ view: null }) }, { msg: mine({ score: 4, target: 10 }) }, { msg: mine({ score: 4, target: 10 }), then: click('btn') }],
+  [{ msg: theirs({ score: 5, target: 10 }) }, { msg: over({ score: 10, target: 10 }) }, { msg: over({ score: 3, target: 10 }) }],
+] };
+
+// --- Chopsticks
+const chop = (hands, extra = {}) => ({ hands, turnIndex: 0, status: 'active', winnerIndex: null, ...extra });
+const hands = (p) => Array.from(p.doc.querySelectorAll('.hand'));
+const setInputs = (l, r) => (p) => { p.$('sl').value = l; p.$('sr').value = r; p.$('splitBtn').click(); };
+const botComputer = [{ name: 'Ana', player_index: 0, id: 'p0', kind: 'human' }, { name: 'Robo', player_index: 1, id: 'p1', kind: 'computer' }];
+const topComputer = [{ name: 'Robo', player_index: 0, id: 'p0', kind: 'computer' }, { name: 'Ben', player_index: 1, id: 'p1', kind: 'human' }];
+S['a5a16425'] = { names: ['Ana', 'Ben', 'Robo'], skipCoverage: ['loading'], data: [], scenarios: [
+  [{ msg: msg({ view: null }) }, { msg: msg({ view: null, status: 'over' }) }, { msg: msg({ view: chop([[1, 1], [1, 1]]), players: [{ player_index: 0 }, { player_index: 1 }] }) }],
+  [{ msg: mine(chop([[1, 1], [1, 1]])) }, { msg: mine(chop([[1, 1], [1, 1]])), then: (p) => hands(p)[0].click() }, { msg: mine(chop([[0, 1], [1, 1]])), then: (p) => hands(p)[2].click() },
+    { msg: mine(chop([[1, 1], [0, 1]])), then: (p) => { hands(p)[3].click(); hands(p)[0].click(); } }, { msg: mine(chop([[1, 1], [1, 1]])), then: (p) => { hands(p)[3].click(); hands(p)[1].click(); } }, { msg: mine(chop([[1, 1], [1, 1]])), then: (p) => { hands(p)[2].click(); p.$('cancelBtn').click(); } }],
+  [{ msg: mine(chop([[1, 1], [1, 1]])), then: setInputs('1.5', '0.5') }, { msg: mine(chop([[1, 1], [1, 1]])), then: setInputs('0', '5') }, { msg: mine(chop([[1, 1], [1, 1]])), then: setInputs('1', '2') }, { msg: mine(chop([[1, 1], [1, 1]])), then: setInputs('1', '1') },
+    { msg: mine(chop([[1, 3], [1, 1]])), then: setInputs('3', '1') }, { msg: mine(chop([[2, 2], [1, 1]])), then: setInputs('1', '3') }, { msg: mine(chop([[0, 3], [1, 1]])) }],
+  [{ msg: theirs(chop([[1, 1], [1, 1]], { turnIndex: 1 })) }, { msg: theirs(chop([[1, 1], [1, 1]], { turnIndex: 1 }), { turn_of_player_indices: [] }) }, { msg: spectator(chop([[1, 1], [2, 2]], { turnIndex: 1 })) }, { msg: spectator(chop([[1, 1], [2, 2]]), { players: [{ name: 'Ana', player_index: 0, id: 'p0' }] }) }],
+  [{ msg: over(chop([[0, 0], [1, 1]], { status: 'over', winnerIndex: 1 })) }, { msg: over(chop([[0, 0], [1, 1]], { status: 'over', winnerIndex: 5 })) }, { msg: over(chop([[0, 0], [1, 1]], { status: 'over' })) }],
+  // hits, kills, splits, collapsed moves and the fallback guess
+  [{ msg: mine(chop([[1, 1], [1, 1]])) }, { msg: theirs(chop([[1, 1], [1, 2]], { turnIndex: 1 })) }],
+  [{ msg: mine(chop([[4, 1], [4, 1]])) }, { msg: theirs(chop([[4, 1], [0, 1]], { turnIndex: 1 })) }],
+  [{ msg: mine(chop([[2, 2], [1, 1]])) }, { msg: theirs(chop([[1, 3], [1, 1]], { turnIndex: 1 })) }],
+  [{ msg: mine(chop([[2, 2], [1, 1]])) }, { msg: theirs(chop([[1, 3], [1, 3]], { turnIndex: 1 })) }],
+  [{ msg: mine(chop([[2, 2], [1, 1]])) }, { msg: theirs(chop([[2, 3], [1, 1]], { turnIndex: 1 })) }],
+  [{ msg: mine(chop([[1, 1], [1, 1]])) }, { msg: theirs(chop([[1, 1], [4, 1]], { turnIndex: 1 })) }],
+  [{ msg: mine(chop([[1, 1], [1, 1]])) }, { msg: theirs(chop([[1, 1], [1, 2]], { turnIndex: 1 }), { players: [{ player_index: 0 }] }) }],
+  [{ msg: mine(chop([[1, 1], [1, 1]]), { players: botComputer }) }, { msg: mine(chop([[1, 1], [1, 3]], { turnIndex: 1 }), { players: botComputer }), then: (p) => hands(p)[0].click() }],
+  [{ msg: mine(chop([[1, 1], [1, 1]], { turnIndex: 1 }), { players: botComputer }) }, { msg: mine(chop([[2, 1], [1, 1]]), { players: botComputer }), then: (p) => hands(p)[0].click() }],
+  [{ msg: mine(chop([[2, 2], [1, 1]], { turnIndex: 1 }), { players: botComputer }) }, { msg: mine(chop([[2, 3], [1, 1]]), { players: botComputer }) }],
+  [{ msg: mine(chop([[1, 1], [1, 1]]), { players: topComputer }) }, { msg: mine(chop([[1, 1], [1, 1]]), { players: topComputer }) }],
+  [{ msg: mine(chop([[4, 1], [1, 1]], { turnIndex: 1 }), { players: botComputer }) }, { msg: mine(chop([[0, 1], [1, 1]]), { players: botComputer }) }],
+] };
+
+module.exports = { S, msg, mine, theirs, over, spectator, PLAYERS, UNNAMED, click };

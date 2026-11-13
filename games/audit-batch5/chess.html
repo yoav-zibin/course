@@ -1,0 +1,272 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{box-sizing:border-box}body{font-family:system-ui,sans-serif;margin:0;padding:12px;background:#f0ede6;color:#222;display:flex;justify-content:center}
+#wrap{width:100%;max-width:560px}
+#status{background:#fff;border-radius:10px;padding:10px 12px;margin:8px 0;box-shadow:0 1px 4px rgba(0,0,0,.15);min-height:44px}
+#board{display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);width:100%;aspect-ratio:1/1;border:4px solid #5d4037;border-radius:6px;overflow:hidden;user-select:none;padding:0;gap:0;line-height:0;background:#5d4037}
+.sq{position:relative;display:flex;align-items:center;justify-content:center;cursor:pointer;line-height:1;min-width:0;min-height:0;width:100%;height:100%;overflow:hidden;font-size:clamp(24px,7vw,42px)}
+.sq .pc{line-height:1;display:block;font-family:"Segoe UI Symbol","Noto Sans Symbols 2","DejaVu Sans",system-ui,sans-serif}
+.light{background:#f0d9b5}.dark{background:#b58863}
+.light.last{background:#d7d46a !important}.dark.last{background:#aaa23f !important}
+.sq.sel{outline:3px solid #ffeb3b;outline-offset:-3px}
+.sq.check .pc{text-shadow:0 0 12px red}
+.sq .dot{position:absolute;width:28%;height:28%;border-radius:50%;background:rgba(0,0,0,.35);pointer-events:none}
+.sq .cap{position:absolute;inset:6%;border:3px solid rgba(255,0,0,.6);border-radius:50%;pointer-events:none}
+.coord{position:absolute;font-size:10px;opacity:.7;pointer-events:none;line-height:1}
+.fc{left:2px;top:2px}.rc{right:2px;bottom:2px}
+#meta{display:flex;gap:8px;margin:8px 0;flex-wrap:wrap}
+.card{flex:1;min-width:150px;background:#fff;border-radius:10px;padding:8px 10px;font-size:13px;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+#hist{max-height:110px;overflow:auto;font-size:13px}
+button{padding:8px 12px;border-radius:8px;border:1px solid #999;background:#fff;cursor:pointer}
+button:disabled{opacity:.4;cursor:default}
+#promo{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:10}
+#promoBox{background:#fff;padding:16px;border-radius:12px;text-align:center}
+#promoBox button{font-size:36px;margin:4px}
+</style>
+</head>
+<body>
+<div id="wrap">
+<h2 style="margin:4px 0" id="title"></h2>
+<div id="status" role="status" aria-live="polite"></div>
+<div id="board"></div>
+<div id="meta">
+<div class="card"><b id="capLabel"></b><div id="cap">-</div><div style="margin-top:6px"><button id="resign"></button> <button id="newview"></button></div></div>
+<div class="card"><b id="movesLabel"></b><div id="hist">-</div></div>
+</div>
+<div style="font-size:12px;opacity:.7" id="players"></div>
+</div>
+<div id="promo"><div id="promoBox"><div id="promoLabel"></div><div id="promoBtns"></div></div></div>
+<script type="application/json" id="i18n-strings">
+{
+"title": "♞ Chess",
+"captured": "Captured",
+"moves": "Moves",
+"resign": "Resign",
+"flip": "Flip",
+"promote_to": "Promote to:",
+"waiting_platform": "Waiting for platform…",
+"white": "White",
+"black": "Black",
+"players_line": "White: {white} • Black: {black}",
+"draw": "Draw — {reason}",
+"wins": "🏆 {name} wins",
+"wins_reason": "🏆 {name} wins ({reason})",
+"game_over": "Game over.",
+"to_move_white": "⚪ {name} to move",
+"to_move_black": "⚫ {name} to move",
+"to_move_white_check": "⚪ {name} to move — CHECK!",
+"to_move_black_check": "⚫ {name} to move — CHECK!",
+"status_waiting": "{text} (waiting…)",
+"status_thinking": "{text} (computer thinking…)",
+"captured_line": "White took: {white} | Black took: {black}",
+"server_game_over": "game over",
+"server_unknown_player": "unknown player",
+"server_not_your_turn": "not your turn",
+"server_not_your_piece": "not your piece",
+"server_illegal_move": "illegal move",
+"server_resignation_no_possible_mate": "Resignation — no possible mate",
+"server_resignation": "Resignation",
+"server_checkmate": "Checkmate",
+"server_stalemate": "Stalemate",
+"server_50_move_rule": "50-move rule",
+"server_insufficient_material": "Insufficient material",
+"server_move_limit": "Move limit",
+"server_threefold_repetition": "Threefold repetition"
+}
+</script>
+<script>
+
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// A text the game's SERVER wrote (a log line, a hand name in the match state): finds its template
+// among the `server_` texts of the table (the most specific that fits, each {name} standing for
+// any text) and shows it in the viewer's language with the same values; any other text is
+// returned as written.
+const SERVER_TEMPLATES = Object.keys(SOURCE_STRINGS)
+  .filter((key) => key.startsWith("server_") && SOURCE_STRINGS[key])
+  .map((key) => {
+    const names = [];
+    let literal = 0;
+    const source = SOURCE_STRINGS[key]
+      .split(/\{(\w+)\}/)
+      .map((piece, index) => {
+        if (index % 2) { names.push(piece); return "([\\s\\S]+?)"; }
+        literal += piece.length;
+        return piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      })
+      .join("");
+    return { key, names, literal, pattern: new RegExp("^" + source + "$") };
+  })
+  .sort((a, b) => b.literal - a.literal || a.names.length - b.names.length || (a.key > b.key ? 1 : a.key === b.key ? 0 : -1));
+
+function tx(text) {
+  if (typeof text !== "string") return text;
+  for (const template of SERVER_TEMPLATES) {
+    const found = template.pattern.exec(text);
+    if (found) {
+      const params = {};
+      template.names.forEach((name, index) => { if (!(name in params)) params[name] = found[index + 1]; });
+      return t(template.key, params);
+    }
+  }
+  return text;
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+
+
+let latest=null, sel=null, legalCache=[], flipped=null, sentFor=-1;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
+const FILES=['a','b','c','d','e','f','g','h'];
+function moveLine(i,hist){const parts=[String(i/2+1).concat('.'),hist[i]];if(hist[i+1])parts.push(hist[i+1]);return parts.join(' ');}
+function staticTexts(){document.getElementById('title').textContent=t('title');document.getElementById('capLabel').textContent=t('captured');document.getElementById('movesLabel').textContent=t('moves');document.getElementById('resign').textContent=t('resign');document.getElementById('newview').textContent=t('flip');document.getElementById('promoLabel').textContent=t('promote_to');}
+staticTexts();
+document.getElementById('status').textContent=t('waiting_platform');
+const SOLID={1:"♟",2:"♞",3:"♝",4:"♜",5:"♛",6:"♚"};
+const TYPE_LETTER=["","","N","B","R","Q","K"];
+const KNIGHT_OFFS=[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+const KING_OFFS=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+const DIAG_DIRS=[[-1,-1],[-1,1],[1,-1],[1,1]];
+const ORTHO_DIRS=[[-1,0],[1,0],[0,-1],[0,1]];
+// The view carries the authoritative position; the small engine below
+// only computes legal destinations for highlighting (the server
+// re-validates every move).
+function findKing(bd,white){const t=white?6:-6;for(let i=0;i<64;i++)if(bd[i]===t)return i;return -1;}
+function attacked(bd,sq,byWhite){
+  const r=sq>>3,c=sq&7;const pr=byWhite?r+1:r-1;
+  if(pr>=0&&pr<8)for(const dc of[-1,1]){const cc=c+dc;if(cc>=0&&cc<8&&bd[pr*8+cc]===(byWhite?1:-1))return true;}
+  const knight=byWhite?2:-2;
+  for(const[dr,dc]of KNIGHT_OFFS){const rr=r+dr,cc=c+dc;if(rr>=0&&rr<8&&cc>=0&&cc<8&&bd[rr*8+cc]===knight)return true;}
+  const king=byWhite?6:-6;
+  for(const[dr,dc]of KING_OFFS){const rr=r+dr,cc=c+dc;if(rr>=0&&rr<8&&cc>=0&&cc<8&&bd[rr*8+cc]===king)return true;}
+  const bishop=byWhite?3:-3,rook=byWhite?4:-4,queen=byWhite?5:-5;
+  for(const[dr,dc]of DIAG_DIRS){let rr=r+dr,cc=c+dc;while(rr>=0&&rr<8&&cc>=0&&cc<8){const p=bd[rr*8+cc];if(p){if(p===bishop||p===queen)return true;break;}rr+=dr;cc+=dc;}}
+  for(const[dr,dc]of ORTHO_DIRS){let rr=r+dr,cc=c+dc;while(rr>=0&&rr<8&&cc>=0&&cc<8){const p=bd[rr*8+cc];if(p){if(p===rook||p===queen)return true;break;}rr+=dr;cc+=dc;}}
+  return false;}
+function inCheck(bd,white){const k=findKing(bd,white);return k>=0&&attacked(bd,k,!white);}
+function pseudo(bd,r,c,cast,ep){
+  const p=bd[r*8+c];if(!p)return[];const white=p>0,ty=Math.abs(p);const M=[];
+  const add=(tr,tc,o)=>{if(tr>=0&&tr<8&&tc>=0&&tc<8){const m={fr:r,fc:c,tr,tc};if(o)for(const k in o)m[k]=o[k];M.push(m);}};
+  if(ty===1){const d=white?-1:1,start=white?6:1,last=white?0:7;
+    if(!bd[(r+d)*8+c]){if(r+d===last){for(const pr of[5,4,3,2])add(r+d,c,{promo:pr});}else{add(r+d,c);if(r===start&&!bd[(r+2*d)*8+c])add(r+2*d,c,{double:true});}}
+    for(const dc of[-1,1]){const tr=r+d,tc=c+dc;if(tr<0||tr>7||tc<0||tc>7)continue;const t=bd[tr*8+tc];
+      if(t&&(t>0)!==white){if(tr===last){for(const pr of[5,4,3,2])add(tr,tc,{promo:pr});}else add(tr,tc);}
+      if(ep!==null&&ep!==undefined&&ep===tr*8+tc)add(tr,tc,{enPassant:true});}}
+  else if(ty===2||ty===6){const off=ty===2?KNIGHT_OFFS:KING_OFFS;
+    for(const[dr,dc]of off){const tr=r+dr,tc=c+dc;if(tr<0||tr>7||tc<0||tc>7)continue;const t=bd[tr*8+tc];if(!t||(t>0)!==white)add(tr,tc);}
+    if(ty===6){
+      if(white&&r===7&&c===4){if(cast.K&&!bd[61]&&!bd[62]&&bd[63]===4&&!attacked(bd,60,false)&&!attacked(bd,61,false)&&!attacked(bd,62,false))add(7,6,{castle:"K"});
+        if(cast.Q&&!bd[59]&&!bd[58]&&!bd[57]&&bd[56]===4&&!attacked(bd,60,false)&&!attacked(bd,59,false)&&!attacked(bd,58,false))add(7,2,{castle:"Q"});}
+      if(!white&&r===0&&c===4){if(cast.k&&!bd[5]&&!bd[6]&&bd[7]===-4&&!attacked(bd,4,true)&&!attacked(bd,5,true)&&!attacked(bd,6,true))add(0,6,{castle:"K"});
+        if(cast.q&&!bd[3]&&!bd[2]&&!bd[1]&&bd[0]===-4&&!attacked(bd,4,true)&&!attacked(bd,3,true)&&!attacked(bd,2,true))add(0,2,{castle:"Q"});}}}
+  else{const dirs=ty===3?DIAG_DIRS:ty===4?ORTHO_DIRS:KING_OFFS;
+    for(const[dr,dc]of dirs){let tr=r+dr,tc=c+dc;while(tr>=0&&tr<8&&tc>=0&&tc<8){const t=bd[tr*8+tc];if(!t)add(tr,tc);else{if((t>0)!==white)add(tr,tc);break;}tr+=dr;tc+=dc;}}}
+  return M;}
+function legalAt(st,r,c){
+  const bd=st.bd,p=bd[r*8+c];if(!p)return[];const white=p>0;
+  const isKing=Math.abs(p)===6,kingSq=isKing?-1:findKing(bd,white);
+  const nb=bd.slice();const out=[];
+  for(const m of pseudo(bd,r,c,st.castling,st.ep)){
+    const from=m.fr*8+m.fc,to=m.tr*8+m.tc;const captured=nb[to];
+    const epSq=m.enPassant?m.fr*8+m.tc:-1;const epVal=epSq>=0?nb[epSq]:0;
+    let rookFrom=-1,rookTo=-1,rookVal=0;
+    nb[from]=0;if(epSq>=0)nb[epSq]=0;nb[to]=m.promo?(white?m.promo:-m.promo):p;
+    if(m.castle){if(m.tr===7){rookFrom=m.tc===6?63:56;rookTo=m.tc===6?61:59;}else{rookFrom=m.tc===6?7:0;rookTo=m.tc===6?5:3;}rookVal=nb[rookFrom];nb[rookTo]=rookVal;nb[rookFrom]=0;}
+    if(!attacked(nb,isKing?to:kingSq,!white))out.push(m);
+    nb[from]=p;nb[to]=captured;if(epSq>=0)nb[epSq]=epVal;
+    if(rookFrom>=0){nb[rookFrom]=rookVal;nb[rookTo]=0;}}
+  return out;}
+function view(){return latest?latest.view:null;}
+function st(){const v=view();return {bd:v.bd,turn:v.toMove,castling:v.castling,ep:v.ep,half:v.half,full:v.full,winner:v.winner,reason:v.reason,history:v.history,lastMove:v.lastMove};}
+function mySeat(){return latest?latest.my_player_index:null;}
+function canAct(){return actingSeat()!==null&&actingSeat()===mySeat();}
+function myColor(){const s=mySeat();return s===0?"w":s===1?"b":null;}
+function render(){
+  if(!latest||!view())return;staticTexts();const s=st();const boardEl=document.getElementById("board");boardEl.replaceChildren();
+  let flip=flipped;if(flip===null)flip=(mySeat()===1);
+  const order=[];for(let r=0;r<8;r++)for(let c=0;c<8;c++)order.push([flip?7-r:r,flip?7-c:c]);
+  const turnWhite=s.turn==="w";
+  const chkSq=(()=>{if(inCheck(s.bd,turnWhite))return findKing(s.bd,turnWhite);return -1;})();
+  const dests=new Map();for(const m of legalCache){const k=m.tr+","+m.tc;if(!dests.has(k))dests.set(k,[]);dests.get(k).push(m);}
+  for(let[r,c]of order){
+    const d=document.createElement("div");d.className="sq "+(((r+c)%2===0)?"light":"dark");
+    if(s.lastMove&&((s.lastMove.fr===r&&s.lastMove.fc===c)||(s.lastMove.tr===r&&s.lastMove.tc===c)))d.classList.add("last");
+    if(sel&&sel[0]===r&&sel[1]===c)d.classList.add("sel");
+    if(chkSq===r*8+c)d.classList.add("check");
+    const p=s.bd[r*8+c];
+    if(p){const sp=document.createElement("span");sp.className="pc";sp.textContent=SOLID[Math.abs(p)];if(p>0){sp.style.color="#ffffff";sp.style.textShadow="-1px -1px 0 #222,1px -1px 0 #222,-1px 1px 0 #222,1px 1px 0 #222,0 0 2px #222";}else{sp.style.color="#111111";sp.style.textShadow="0 0 2px rgba(255,255,255,.6)";}d.appendChild(sp);}
+    if(dests.has(r+","+c)){const isCap=!!s.bd[r*8+c]||dests.get(r+","+c).some(m=>m.enPassant);const dot=document.createElement("div");dot.className=isCap?"cap":"dot";d.appendChild(dot);}
+    if(c===0){const lab=document.createElement("span");lab.className="coord fc";lab.textContent=(8-r);lab.style.color=((r+c)%2===0)?"#b58863":"#f0d9b5";d.appendChild(lab);}
+    if(r===(flip?0:7)){const lab=document.createElement("span");lab.className="coord rc";lab.textContent=FILES[c];lab.style.color=((r+c)%2===0)?"#b58863":"#f0d9b5";d.appendChild(lab);}
+    d.onclick=()=>onSq(r,c);
+    boardEl.appendChild(d);}
+  const names=latest.players.map(p=>p.name);document.getElementById("players").textContent=t("players_line",{white:names[0]||t("white"),black:names[1]||t("black")});
+  let status="";
+  if(s.winner!==null&&s.winner!==undefined){if(s.winner===-1)status=t("draw",{reason:tx(s.reason||"")});else{const wq={name:latest.players[s.winner]?latest.players[s.winner].name:s.winner,reason:tx(s.reason)};status=s.reason?t("wins_reason",wq):t("wins",wq);}}
+  else if(latest.status==="over")status=t("game_over");
+  else{const seat=s.turn==="w"?0:1;const nq={name:latest.players[seat]?latest.players[seat].name:(s.turn==="w"?t("white"):t("black"))};const chk=inCheck(s.bd,turnWhite);
+    if(s.turn==="w")status=chk?t("to_move_white_check",nq):t("to_move_white",nq);else status=chk?t("to_move_black_check",nq):t("to_move_black",nq);
+    if(!canAct())status=t("status_waiting",{text:status});else if(latest.players[actingSeat()]&&latest.players[actingSeat()].kind==="computer")status=t("status_thinking",{text:status});}
+  document.getElementById("status").textContent=status;
+  const hist=s.history;const histEl=document.getElementById("hist");
+  if(hist&&hist.length){const rows=[];for(let i=0;i<hist.length;i+=2){const row=document.createElement("div");row.textContent=moveLine(i,hist);rows.push(row);}histEl.replaceChildren.apply(histEl,rows);}
+  else histEl.textContent="-";
+  const counts={};for(let i=0;i<64;i++){const p=s.bd[i];if(p)counts[p]=(counts[p]||0)+1;}
+  const start={1:8,2:2,3:2,4:2,5:1,"-1":8,"-2":2,"-3":2,"-4":2,"-5":1};let capW="",capB="";
+  for(const k in start){const missing=start[k]-(counts[k]||0);for(let i=0;i<missing;i++){const ch=SOLID[Math.abs(+k)];if(+k>0)capB+=ch+" ";else capW+=ch+" ";}}
+  const takenW=capW||"-",takenB=capB||"-";
+  document.getElementById("cap").textContent=(capW||capB)?t("captured_line",{white:takenW,black:takenB}):"-";
+  document.getElementById("resign").disabled=!canAct()||s.winner!==null;}
+function onSq(r,c){
+  if(!canAct())return;const s=st();if(s.winner!==null)return;
+  const col=myColor();if(col&&col!==s.turn)return;
+  const p=s.bd[r*8+c];
+  if(sel){
+    const opts=legalCache.filter(m=>m.tr===r&&m.tc===c);
+    if(opts.length){if(opts.length>1&&opts[0].promo)showPromo(opts);else sendMove(opts[0]);return;}}
+  if(p&&(p>0)===(s.turn==="w")){sel=[r,c];legalCache=legalAt(s,r,c);}
+  else{sel=null;legalCache=[];}
+  render();}
+function showPromo(opts){
+  const box=document.getElementById("promo");const btns=document.getElementById("promoBtns");btns.replaceChildren();
+  const col=st().turn;
+  for(const m of opts){const b=document.createElement("button");b.textContent=SOLID[m.promo];if(col==="w"){b.style.color="#fff";b.style.textShadow="-1px -1px 0 #222,1px -1px 0 #222,-1px 1px 0 #222,1px 1px 0 #222";}else{b.style.color="#111";}b.onclick=()=>{box.style.display="none";sendMove(m);};btns.appendChild(b);}
+  box.style.display="flex";}
+function sendMove(move){
+  if(sentFor===latest.move_count)return;
+  sentFor=latest.move_count;sel=null;legalCache=[];
+  const mv={fr:move.fr,fc:move.fc,tr:move.tr,tc:move.tc};
+  if(move.promo)mv.promo=TYPE_LETTER[move.promo];
+  parent.postMessage({type:"make_move",move:mv},"*");
+  render();}
+addEventListener("message",e=>{
+  if(e.source!==parent||!e.data||e.data.type!=="state_changed")return;
+  applyLocale(e.data);latest=e.data;sel=null;legalCache=[];
+  document.getElementById("promo").style.display="none";
+  render();});
+document.getElementById("resign").onclick=()=>{
+  if(!canAct())return;const s=st();if(s.winner!==null)return;
+  if(sentFor===latest.move_count)return;sentFor=latest.move_count;
+  parent.postMessage({type:"make_move",move:{resign:true}},"*");};
+document.getElementById("newview").onclick=()=>{flipped=flipped===null?!(mySeat()===1):!flipped;if(flipped===null)flipped=true;render();};
+</script>
+</body>
+</html>

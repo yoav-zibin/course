@@ -11,7 +11,7 @@ from game_platform.api import create_app
 from game_platform.json_file_store import JsonFileStore, read_snapshot
 from game_platform.models import GameRules
 from game_platform.service import GamePlatform, TooManyRequestsError
-from game_platform.tests.helpers import Api, error
+from game_platform.tests.helpers import Api, ECHO_SERVER_CODE, TEST_GAME_SCHEMAS, error
 
 START = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
 
@@ -41,6 +41,8 @@ def world(clock=None, store=None):
         caller_id=bob, name="Duel", description="",
         rules=GameRules(allowed_player_counts=(2,), allows_leave_mid_match=False, allows_join_mid_match=False),
         code="<div>duel</div>",
+        server_code=ECHO_SERVER_CODE,
+        game_schemas=TEST_GAME_SCHEMAS,
     ).id
     return platform, ann, bob, game
 
@@ -109,7 +111,7 @@ def test_the_service_checks_kinds_and_targets_too() -> None:
 
 def test_a_merged_away_account_is_still_yourself(api: Api) -> None:
     ann, ann_old, bob = api.new_user("ann"), api.new_user("ann (old)"), api.new_user("bob")
-    api.ok("POST", f"/users/{ann_old}/merge", json={"into_user_id": ann}, as_user=ann_old)
+    api.ok("POST", f"/users/{ann_old}/merge", json={"into_user_id": ann, "into_password": api.passwords_by_user_id[ann]}, as_user=ann_old)
     assert error(send(api, ann, "user", ann_old)) == (400, "you can't send feedback about yourself")
     # Feedback on someone's old account counts against the survivor.
     assert send(api, bob, "user", ann_old).json()["target_id"] == ann
@@ -262,7 +264,7 @@ def test_feedback_survives_saving_and_reloading(tmp_path) -> None:
     restarted.close()
 
 
-def test_old_data_files_load_without_feedback_and_feedback_without_a_kind_is_a_problem(tmp_path) -> None:
+def test_feedback_without_a_kind_is_a_problem(tmp_path) -> None:
     path = tmp_path / "data.json"
     store = JsonFileStore(path, min_write_interval_seconds=0)
     platform, ann, bob, game = world(store=store)
@@ -273,7 +275,3 @@ def test_old_data_files_load_without_feedback_and_feedback_without_a_kind_is_a_p
         del row["kind"]
     path.write_text(json.dumps(file))
     assert [f.kind for f in read_snapshot(path).feedback] == ["problem"]
-    file["format_version"] = 12
-    file["data"].pop("feedback")
-    path.write_text(json.dumps(file))
-    assert read_snapshot(path).feedback == ()

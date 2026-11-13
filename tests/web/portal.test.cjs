@@ -4,7 +4,8 @@ const vm=require('node:vm');
 const fs=require('node:fs');
 const path=require('node:path');
 
-function setup(request=async()=>{}, hash='', search='') {
+function setup(request=async()=>{}, hash='', search='', storage) {
+  const practiceCalls=[];
   const nodes=new Map();
   const node=id=>{
     if(!nodes.has(id)) nodes.set(id,{value:'',hidden:false,disabled:false,dataset:{},children:[],classList:{toggle(){}},
@@ -14,22 +15,22 @@ function setup(request=async()=>{}, hash='', search='') {
   const navigations=[];
   const pageErrors=[];
   const ctx=vm.createContext({StoragePages:{enabled:async()=>false,list:(request,path,options)=>request("GET",path,options),controls(){},search(){return false;}},console,Map,Set,URLSearchParams,
-    navigator:{onLine:true},localStorage:{},PortalOffline:class {api(...args){return request(...args);}read(){return {};}write(){}} ,
+    navigator:{onLine:true},localStorage:storage || {},PortalOffline:class {api(...args){return request(...args);}read(){return {};}write(){} writeCache(data){this.write(data);} async practice(game,mode,count){practiceCalls.push({game,mode,count});return {id:'local-practice',game_id:game.id,game_version:game.version,players:[{player_index:0,kind:'human',user_id:'owner'}],status:'ongoing',move_count:0};} async submitMove(match,body){const result=this.enqueue(match,body);await this.sync({force:true});return result;}} ,
     document:{getElementById:node,body:{classList:{toggle(){}}}},window:{addEventListener(){}},
     location:{hash,search,assign(url){navigations.push(url);}},history:{replaceState(){}},
-    Auth:{current:()=>({id:'owner'})},I18n:{t:(key,params,fallback)=>fallback??key,locale:()=>'en',revision:()=>0,gameName:(id,fallback)=>fallback,gameDescription:(id,fallback)=>fallback,gameText:async()=>({locale:'en',direction:'ltr'})},GameFrame:class{load(){}unload(){}send(){}},
+    Auth:{current:()=>({id:'owner'})},I18n:require('./i18n-stub.cjs'),GameFrame:class{load(){}unload(){}send(){}},
     apiRequest:request,formatTime:()=>'',shortId:x=>x,showPageError:text=>pageErrors.push(text),el:(tag,attrs={},...children)=>({...attrs,children})});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../../static/portal.js'),'utf8').replace(/main\(\);\s*$/,''),ctx);
   const run=code=>vm.runInContext(code,ctx);
   run('globalThis.originalRefresh=refresh;refresh=async()=>{};state.games=[{id:"game",version:2,name:"Hanoi",allowed_player_counts:[1]}]');
   node('new-game').value='game';
-  return {node,run,navigations,pageErrors};
+  return {node,run,navigations,pageErrors,practiceCalls};
 }
 
 test('creating a solo-only game starts one human immediately',async()=>{
   const calls=[];
   const {node,run}=setup(async(method,path,opts)=>{
-    calls.push([method,path,opts.body]);
+    if(method==='POST') calls.push([method,path,opts.body]);
     return {id:'match',game_version:2,players:[{kind:'human',user_id:'owner'}]};
   });
   await run('createMatch()');
@@ -41,9 +42,19 @@ test('creating a solo-only game starts one human immediately',async()=>{
   assert.equal(node('create').textContent,'Play solo ↗');
 });
 
+test('ranked games retain server order and open even outside the current catalog page',()=>{
+  const {node,run,navigations}=setup();
+  run('state.popularGames=[{id:"leader",name:"Most popular",version:1,allowed_player_counts:[2]}, {id:"runner-up",name:"Next game",version:1,allowed_player_counts:[2]}];renderPopularGames()');
+  const cards=node('popular-games').children;
+  assert.equal(cards.length,2);
+  assert.equal(cards[0].children[0].textContent,'1');
+  cards[0].onclick();
+  assert.equal(navigations[0],'/static/portal.html?game=leader');
+});
+
 test('multiplayer and mixed-mode games retain their lobby',async()=>{
   for(const counts of ['[2]','[1,2]']) {
-    const calls=[];const {run}=setup(async(method,path)=>{calls.push(path);return {id:'match',game_version:2,players:[{}]};});
+    const calls=[];const {run}=setup(async(method,path)=>{if(method==='POST') calls.push(path);return {id:'match',game_version:2,players:[{}]};});
     run(`state.games[0].allowed_player_counts=${counts}`);await run('createMatch()');
     assert.deepEqual(calls,['/matches']);
   }
@@ -76,10 +87,10 @@ test('multiplayer cannot join solo bots or reuse a departed identity',()=>{
   assert.equal(run('isJoinable(state.match,"new")'),true);
 });
 
-test('computer controls appear only in solo lobbies and offer legacy cleanup',()=>{
+test('online lobbies offer no computer stepper, even while the host waits alone',()=>{
   const {node,run}=setup();
   run('state.games[0].allowed_player_counts=[2,3,4];state.gameCache.set("game@2",state.games[0]);state.match={id:"match",game_id:"game",game_version:2,owner_user_id:"owner",status:"waiting_for_players",players:[{player_index:0,kind:"human",user_id:"owner"}],move_count:0};renderMatch()');
-  assert.ok(node('actions').children.some(child=>child.class==='computer-stepper'));
+  assert.ok(!node('actions').children.some(child=>child.class==='computer-stepper'));
   run('state.match.players.push({player_index:1,kind:"human",user_id:"other"});renderMatch()');
   assert.ok(!node('actions').children.some(child=>child.class==='computer-stepper'));
   run('state.match.players.push({player_index:2,kind:"computer"});renderMatch()');
@@ -400,10 +411,10 @@ test('history reaches a recorded custom initial state at move zero',async()=>{
   assert.equal(t.run('state.replay.move.new_state.score'),42);assert.equal(t.node('history-back').disabled,true);
 });
 
-test('invalid next seats are rejected before a move is durably queued',async()=>{
+test('a make_move with a client-computed state is ignored, never queued',async()=>{
   const t=setup();t.run('navigator.locks={request:async(name,run)=>run()};state.match={id:"m",game_id:"g",game_version:1,status:"ongoing",turn_of_player_indices:[0],players:[{player_index:0,user_id:"owner",kind:"human"}]};state.loaded="m@g@1";offline.enqueue=()=>{throw new Error("must not enqueue")};offline.sync=async()=>{}');
   await t.run('onMakeMove({new_state:{score:1},next_turn_player_indices:[1]})');
-  assert.match(t.node('match-message').textContent,/invalid next player/);
+  assert.ok(!t.node('match-message').textContent);
 });
 test('a second v2 move is not queued behind a pending one',async()=>{
   const t=setup();
@@ -437,11 +448,81 @@ test('current account avatar wins over stale match profile cache',()=>{
   assert.equal(run('playerPicture({kind:"human",user_id:"other"})'),'/other-cat.png');
 });
 
-test('v2 games offer local practice and offline instructions',()=>{
+test('games offer pass-and-play and offline instructions, with a player-count choice when the game has one',()=>{
  const t=setup();t.run('state.games[0].supports_local_practice=false;updateMatchSetup()');
  assert.equal(t.node('practice').disabled,false);
- assert.equal(t.node('practice-mode').disabled,false);
  assert.equal(t.node('practice-offline-note').hidden,false);
+ // The stub game allows a single count, so neither count choice is shown.
+ assert.equal(t.node('practice-count-choice').hidden,true);
+ assert.equal(t.node('computer-count-choice').hidden,true);
+ t.run('state.games[0].allowed_player_counts=[2,3,4];updateMatchSetup()');
+ assert.equal(t.node('practice-count-choice').hidden,false);
+ assert.deepEqual(t.node('practice-player-count').children.map(option=>option.value),['2','3','4']);
+ assert.equal(t.node('practice-player-count').value,'2'); // pass-and-play defaults to the smallest count
+ assert.equal(t.node('computer-count-choice').hidden,false);
+ assert.deepEqual(t.node('computer-player-count').children.map(option=>option.value),['2','3','4']);
+ assert.equal(t.node('computer-player-count').value,'4'); // computer matches default to the largest count
+ t.run("document.getElementById('practice-player-count').value='3';updateMatchSetup()");
+ assert.equal(t.node('practice-player-count').value,'3'); // a still-valid choice survives a refresh
+});
+test('practice starts for a deep-linked game that is not in the loaded catalog yet',async()=>{
+  const calls=[],downloading=[];
+  let t;
+  t=setup(async(method,path,options)=>{
+    calls.push([method,path,options]);
+    if(path==='/games/deep') return {id:'deep',version:3,name:'Deep game',allowed_player_counts:[2,3]};
+    if(path==='/games/deep/versions/3') { downloading.push(t.node('create-message').textContent); return {id:'deep',version:3,code:'<div></div>',server_code:'rules',allowed_player_counts:[2,3]}; }
+    if(method==='POST') return {};
+    throw new Error('unexpected '+method+' '+path);
+  },'#game=deep');
+  t.run('state.games=[]');t.node('new-game').value='';
+  await t.run('practice()');
+  assert.deepEqual(calls.filter(([m])=>m==='GET').map(([,p])=>p),['/games/deep','/games/deep/versions/3']);
+  assert.ok(calls.filter(([m])=>m==='GET').every(([, ,options])=>options.force===true));
+  assert.deepEqual(downloading,['Downloading the game…']);
+  assert.equal(t.practiceCalls.length,1);
+  assert.equal(t.practiceCalls[0].game.server_code,'rules');
+  assert.equal(t.practiceCalls[0].mode,'pass');
+  assert.equal(t.run('state.selectedId'),'local-practice');
+  assert.equal(t.node('create-message').textContent,'');
+});
+test('practice downloads the full game with a forced fetch when it is not saved on the device',async()=>{
+  const calls=[];
+  const {run,practiceCalls}=setup(async(method,path,options)=>{
+    calls.push([method,path,options]);
+    if(path==='/games/game/versions/2') return {id:'game',version:2,code:'<div></div>',server_code:'rules',allowed_player_counts:[1]};
+    if(method==='POST') return {};
+    throw new Error('unexpected '+method+' '+path);
+  });
+  await run('practice()');
+  const fetch=calls.find(([m,p])=>m==='GET'&&p==='/games/game/versions/2');
+  assert.ok(fetch);assert.equal(fetch[2].force,true);
+  assert.equal(practiceCalls.length,1);
+  assert.equal(practiceCalls[0].game.server_code,'rules');
+});
+test('practice reuses the full game already saved on the device without fetching it',async()=>{
+  const calls=[];
+  const {run,practiceCalls}=setup(async(method,path)=>{
+    calls.push([method,path]);
+    if(method==='POST') return {};
+    throw new Error('no download expected');
+  });
+  run('state.gameCache.set("game@2",{id:"game",version:2,code:"<div></div>",server_code:"rules",allowed_player_counts:[1]})');
+  await run('practice()');
+  assert.deepEqual(calls.filter(([m])=>m==='GET'),[]);
+  assert.equal(practiceCalls.length,1);
+});
+test('practice says the game needs one online download when it cannot be fetched or found saved',async()=>{
+  const {node,run,practiceCalls}=setup(async(method,path)=>{
+    if(path==='/games/game/versions/2') throw Object.assign(new Error("Couldn't reach the server, and this data isn't saved on this device yet. Please try again."),{notSaved:true});
+    if(method==='POST') return {};
+    throw new Error('unexpected '+method+' '+path);
+  });
+  await run('practice()');
+  assert.equal(practiceCalls.length,0);
+  assert.match(node('create-message').textContent,/isn't saved on this device yet/);
+  assert.match(node('create-message').textContent,/Connect to the internet/);
+  assert.match(node('create-message').className,/error/);
 });
 test('duplicate names have stable distinct labels across search and catalog filters',()=>{
  const t=setup();t.run('state.games=[{id:"abcdefgh-one",name:"Gomoku",version:2},{id:"ijklmnop-two",name:" gomoku ",version:2},{id:"unique",name:"Chess",version:1}]');
@@ -461,4 +542,90 @@ test('background polls coalesce before entering the shared move lock',async()=>{
  t.run('releaseRefresh()');await first;
  const third=t.run('originalRefresh()');assert.equal(t.run('lockCalls'),2);
  t.run('releaseRefresh()');await third;
+});
+test('a language change redraws the offline line and re-sends the open game its texts at once',async()=>{
+  const {run}=setup();
+  run('globalThis.calls=[];renderPortalAccountMenu=()=>calls.push("menu");render=()=>calls.push("render");renderLibrary=()=>calls.push("library");updateMatchSetup=()=>calls.push("setup");offlineStatus=()=>calls.push("offline");syncGame=async()=>{calls.push("game")}');
+  run('redrawAfterLanguageChange()');await Promise.resolve();
+  assert.deepEqual(Array.from(run('calls')),['menu','render','library','setup','offline','game']);
+});
+test('a failing redraw does not stop the others from being asked, and a failing game sync is only logged',async()=>{
+  const {run}=setup();
+  run('globalThis.calls=[];renderPortalAccountMenu=()=>calls.push("menu");render=()=>{throw new Error("boom")};console={warn:(...a)=>calls.push("warned")};syncGame=async()=>{throw new Error("late")}');
+  run('redrawAfterLanguageChange()');await Promise.resolve();
+  assert.deepEqual(Array.from(run('calls')),['menu','warned']);
+  run('calls.length=0;render=()=>{};renderLibrary=()=>{};updateMatchSetup=()=>{};offlineStatus=()=>{}');
+  run('redrawAfterLanguageChange()');await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(Array.from(run('calls')),['menu','warned']);
+});
+test('the match lists are redrawn when only the language changed',()=>{
+  const {run,node}=setup();
+  const list=node('list-test');
+  let drawn=0;
+  list.replaceChildren=function(...children){drawn++;this.children=children;};
+  list.dataset={};
+  run('globalThis.matches=[{id:"m",game_id:"game",game_version:2,status:"ongoing",move_count:3,players:[{kind:"human",user_id:"owner",player_index:0}],turn_of_player_indices:[0]}]');
+  try{
+    run('I18n.revision=()=>1;renderMatchList(globalThis.__list,matches)'.replace('globalThis.__list','document.getElementById("list-test")'));
+    run('renderMatchList(document.getElementById("list-test"),matches)');
+    assert.equal(drawn,1); // nothing changed: not redrawn
+    run('I18n.revision=()=>2;renderMatchList(document.getElementById("list-test"),matches)');
+    assert.equal(drawn,2); // the language (its revision) changed: redrawn
+  }finally{run('I18n.revision=()=>0');}
+});
+
+test('Random never joins a match that stakes tokens or runs a clock',async()=>{
+  const joins=[];
+  const game={id:"game",version:2,name:"Duel",allowed_player_counts:[2],published:true};
+  const open=[
+    {id:"paid",game_id:"game",game_version:2,status:"waiting_for_players",bet_per_player:5,turn_seconds:null,players:[{player_index:0,kind:"human",user_id:"host"}]},
+    {id:"speed",game_id:"game",game_version:2,status:"waiting_for_players",bet_per_player:0,turn_seconds:60,players:[{player_index:0,kind:"human",user_id:"host"}]},
+    {id:"free",game_id:"game",game_version:2,status:"waiting_for_players",bet_per_player:0,turn_seconds:null,players:[{player_index:0,kind:"human",user_id:"host"}]},
+  ];
+  const {run}=setup(async(method,path)=>{
+    if(method==="GET"&&path==="/matches/open")return open;
+    if(method==="GET"&&path==="/games")return [game];
+    if(method==="POST"&&path.endsWith("/join")){joins.push(path);return {id:path.split("/")[2],status:"waiting_for_players"};}
+    return {id:"x",game_version:2,players:[]};
+  });
+  run('state.gameCache.set("game@2",{id:"game",version:2,name:"Duel",allowed_player_counts:[2],published:true})');
+  for(let i=0;i<10;i++){joins.length=0;await run('state.randomJoining=false;joinRandomMatch()');assert.deepEqual(joins,["/matches/free/join"]);}
+});
+
+test('the owner of a waiting match gets a Remove button on other players only',()=>{
+  const {node,run}=setup();
+  const removeButtons=()=>node('seats').children.map(chip=>chip.children.filter(c=>c&&c.type==="button"&&c.class==="danger").length);
+  run('state.games[0].allowed_player_counts=[2,3];state.gameCache.set("game@2",state.games[0]);'+
+      'state.match={id:"match",game_id:"game",game_version:2,owner_user_id:"owner",status:"waiting_for_players",move_count:0,'+
+      'players:[{player_index:0,kind:"human",user_id:"owner"},{player_index:1,kind:"human",user_id:"guest"}]}');
+  run('renderMatch()');assert.deepEqual(removeButtons(),[0,1]);
+  run('state.match.matchmaking_player_count=2;renderMatch()');assert.deepEqual(removeButtons(),[0,0]);
+  run('state.match.matchmaking_player_count=null;state.match.status="ongoing";state.match.turn_of_player_indices=[0];renderMatch()');
+  assert.deepEqual(removeButtons(),[0,0]);
+  run('state.match.status="waiting_for_players";state.match.owner_user_id="guest";renderMatch()');assert.deepEqual(removeButtons(),[0,0]);
+});
+
+test('the portal boots when storage methods deny access',()=>{
+  const denied=()=>{const e=new Error('denied');e.name='SecurityError';throw e;};
+  const {run}=setup(async()=>{},'','',{getItem:denied,setItem:denied,removeItem:denied});
+  assert.equal(run('typeof offline'),'object');
+  assert.equal(run('typeof portalStorage'),'function');
+  assert.equal(run('portalStorage()===localStorage'),true);
+});
+
+test('leaving an ongoing server-coded match previews the payout, confirms, then leaves',async()=>{
+  const calls=[];
+  const {node,run}=setup(async(method,path)=>{
+    calls.push([method,path]);
+    if(path.endsWith('/maybeLeave')) return {pending_leave_payout:0,pending_leave_ends_match:true};
+    return {};
+  });
+  run('globalThis.confirm=()=>true;state.games[0].server_code="code";state.gameCache.set("game@2",state.games[0]);'+
+      'state.match={id:"match",game_id:"game",game_version:2,owner_user_id:"someone-else",status:"ongoing",move_count:2,'+
+      'players:[{player_index:0,kind:"human",user_id:"owner"},{player_index:1,kind:"computer",user_id:null}],turn_of_player_indices:[0]};'+
+      'state.selectedId="match";renderMatch()');
+  const leave=node('actions').children.find(child=>child.textContent==='Leave');
+  assert.ok(leave,'Leave button is rendered');
+  await leave.onclick();
+  assert.deepEqual(calls,[['POST','/matches/match/maybeLeave'],['POST','/matches/match/playerLeft']]);
 });

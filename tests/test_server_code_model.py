@@ -1,11 +1,11 @@
-"""Phase 2 of the v2 Game API: the data model carries server code.
+"""The data model carries server code.
 
-A game gains a second part — [server_code], the JavaScript the server will
-run in QuickJS (docs/server-side-game-api.md) — alongside its client code,
-which the v2 API also calls [client_code]. Matches gain the seed their
-randomness derives from and room for a pending leave preview; moves gain
-the game-defined move and the mover's player id. None of the new fields
-change v1 behavior, and data written before they existed must still load.
+A game has two parts — [server_code], the JavaScript the server runs in
+QuickJS (docs/server-side-game-api.md) — alongside its client code, also
+called [client_code]. Matches carry the seed their randomness derives
+from and room for a pending leave preview; moves carry the game-defined
+move and the mover's player id. Data written before these fields existed
+must still load.
 """
 
 import json
@@ -58,7 +58,7 @@ def _create_game(api: Api, owner: str, **changes):
         "server_code": SERVER_CODE,
     }
     body.update(changes)
-    return api.ok("POST", "/games", as_user=owner, json=body)
+    return api.create_game(body, owner)
 
 
 def test_create_game_with_client_and_server_code(api: Api):
@@ -68,26 +68,6 @@ def test_create_game_with_client_and_server_code(api: Api):
     assert game["client_code"] == CLIENT_CODE
     assert game["server_code"] == SERVER_CODE
     assert api.ok("GET", f"/games/{game['id']}") == game
-
-
-def test_v1_game_has_no_server_code(api: Api):
-    owner = api.new_user("owner")
-    game = api.ok(
-        "POST", "/games", as_user=owner,
-        json={"name": "V1 game", "allowed_player_counts": [2], "code": "<p>v1</p>"},
-    )
-    assert game["server_code"] is None
-    assert game["client_code"] == "<p>v1</p>"
-
-
-def test_a_game_still_needs_client_code(api: Api):
-    owner = api.new_user("owner")
-    response = api.request(
-        "POST", "/games", as_user=owner,
-        json={"name": "No code", "allowed_player_counts": [2],
-              "server_code": SERVER_CODE},
-    )
-    assert response.status_code == 422
 
 
 def test_patch_server_code_and_client_code(api: Api):
@@ -120,35 +100,7 @@ def test_patch_server_code_and_client_code(api: Api):
     assert new_client["server_code"] == SERVER_CODE_V2
 
 
-def test_draft_publish_carries_server_code(api: Api):
-    owner = api.new_user("owner")
-    draft = api.ok(
-        "POST", "/game-drafts", as_user=owner,
-        json={"name": "Drafted", "allowed_player_counts": [2],
-              "code": CLIENT_CODE, "server_code": SERVER_CODE},
-    )
-    assert draft["server_code"] == SERVER_CODE
-    game = api.ok(
-        "POST", f"/game-drafts/{draft['id']}/publish", as_user=owner,
-        json={"expected_revision": draft["revision"]},
-    )
-    assert game["server_code"] == SERVER_CODE
-
-    revised = api.ok(
-        "PUT", f"/game-drafts/{draft['id']}", as_user=owner,
-        json={"name": "Drafted", "allowed_player_counts": [2],
-              "code": CLIENT_CODE, "server_code": SERVER_CODE_V2,
-              "expected_revision": draft["revision"]},
-    )
-    republished = api.ok(
-        "POST", f"/game-drafts/{draft['id']}/publish", as_user=owner,
-        json={"expected_revision": revised["revision"]},
-    )
-    assert republished["version"] == 2
-    assert republished["server_code"] == SERVER_CODE_V2
-
-
-def test_match_max_loss_seed_and_player_ids(api: Api):
+def test_match_max_loss_and_player_ids(api: Api):
     owner = api.new_user("owner")
     game = _create_game(api, owner)
     # The stake is taken when the match is created (Phase 4), so it must
@@ -159,7 +111,9 @@ def test_match_max_loss_seed_and_player_ids(api: Api):
     )
     assert match["bet_per_player"] == 10
     assert match["max_loss"] == 10
-    assert match["seed"] != 0
+    # The match's seed keys every random draw in the match, so it is a
+    # server secret and never appears in a response.
+    assert "seed" not in match
     assert match["players"][0]["id"] == owner
     assert match["pending_leave_player_id"] is None
     assert match["pending_leave_payout"] is None
@@ -169,18 +123,7 @@ def test_match_max_loss_seed_and_player_ids(api: Api):
         json={"game_id": game["id"], "num_computer_opponents": 1},
     )
     assert [p["id"] for p in solo["players"]] == [owner, "computer-1"]
-    assert solo["seed"] != match["seed"]
-
-
-def test_v1_moves_have_no_v2_move_fields(api: Api):
-    owner = api.new_user("owner")
-    game_id = api.new_game(owner=owner, allowed_player_counts=(1,))
-    match_id = api.new_match(owner=owner, game_id=game_id, start=True)
-    response = api.move(match_id, as_user=owner, next_turn=None, state={"done": True})
-    assert response.status_code == 201
-    moves = api.ok("GET", f"/matches/{match_id}/moves")
-    assert moves[0]["move"] is None
-    assert moves[0]["player_id"] is None
+    assert "seed" not in solo
 
 
 def test_json_store_round_trips_the_new_fields(tmp_path: Path):

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#101827" />
+    <title data-i18n="ui.welcome.page_title">Game platform · Welcome</title>
+    <link rel="stylesheet" href="/static/common.css?v=17" />
+    <link rel="stylesheet" href="/static/experiments.css?v=11" />
+    <link rel="stylesheet" href="/static/welcome.css?v=1" />
+  </head>
+  <body>
+    <header class="topbar" data-app-page="welcome">
+      <a class="app-home-link" href="/" data-i18n-aria-label="ui.portal.home_aria" aria-label="Game platform home">
+        <span class="app-brand-mark" aria-hidden="true">✳</span>
+        <h1 data-i18n="ui.app_name">Game platform</h1>
+      </a>
+      <span class="spacer"></span>
+    </header>
+    <main class="welcome-main">
+      <section class="welcome-content" aria-labelledby="welcome-title">
+        <p class="welcome-eyebrow" data-i18n="ui.welcome.eyebrow">PLAY TOGETHER</p>
+        <h2 id="welcome-title" data-i18n="ui.welcome.title">Find your next game</h2>
+        <p class="welcome-intro" data-i18n="ui.welcome.intro">Log in to pick up where you left off, or continue as a guest and start playing.</p>
+        <div class="welcome-options">
+          <section class="welcome-option">
+            <span class="welcome-icon" aria-hidden="true">↗</span>
+            <h3 data-i18n="ui.welcome.login_title">Log in</h3>
+            <p data-i18n="ui.welcome.login_description">Access your games and matches from this account.</p>
+            <button id="welcome-login" class="primary" type="button" data-i18n="ui.auth.log_in">Log in</button>
+          </section>
+          <section class="welcome-option">
+            <span class="welcome-icon guest-icon" aria-hidden="true">✧</span>
+            <h3 data-i18n="ui.welcome.guest_title">Continue as guest</h3>
+            <p data-i18n="ui.welcome.guest_description">Choose a display name and head straight to the games.</p>
+            <form id="welcome-guest-form">
+              <label for="welcome-guest-name" data-i18n="ui.auth.guest">Guest</label>
+              <input id="welcome-guest-name" name="display_name" type="text" maxlength="80" autocomplete="nickname" data-i18n-placeholder="ui.auth.guest_name" placeholder="Guest name" />
+              <button id="welcome-guest" type="submit" data-i18n="ui.auth.continue_as_guest">Continue as guest</button>
+            </form>
+          </section>
+        </div>
+        <p id="welcome-message" class="welcome-message" role="status" aria-live="polite"></p>
+      </section>
+    </main>
+    <script src="/static/common.js?v=29"></script>
+    <script src="/static/i18n.js?v=5"></script>
+    <script src="/static/auth.js?v=14"></script>
+    <script src="/static/experiments.js?v=9"></script>
+    <script src="/static/welcome.js?v=3"></script>
+  </body>
+</html>

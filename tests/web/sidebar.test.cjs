@@ -11,7 +11,7 @@ function setup(mobile=true) {
   body.classList={toggle(k,v){v?classes.add(k):classes.delete(k);}};
   const media={matches:!mobile,addEventListener(k,fn){events.media=fn;}};
   const document={body,querySelector(selector){return selector.includes('> .sidebar')?sidebar:selector==='.work'?main:selector==='.topbar'?toolbar:selector==='.match-toolbar'?matchbar:{};},addEventListener(k,fn){events[k]=fn;}};
-  const ctx=vm.createContext({document,window:{matchMedia:()=>media},el(tag,attrs){const n=node();Object.assign(n,attrs);if(attrs.onclick)n.events.click=attrs.onclick;created.push(n);return n;}});
+  const ctx=vm.createContext({I18n:require('./i18n-stub.cjs'),document,window:{matchMedia:()=>media},el(tag,attrs){const n=node();Object.assign(n,attrs);if(attrs.onclick)n.events.click=attrs.onclick;created.push(n);return n;}});
   vm.runInContext(source.slice(source.indexOf('function setUpSidebarDrawer()'),source.indexOf("\nif (document.readyState")),ctx);
   vm.runInContext('setUpSidebarDrawer()',ctx);
   return {sidebar,main,toolbar,matchbar,created,events,media,classes,document};

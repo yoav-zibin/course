@@ -8,6 +8,9 @@ is their own view, computers move on the server, and the winner of a paid
 match is paid the pot by the game's own payouts.
 """
 
+import hashlib
+from dataclasses import replace
+
 from game_platform.service import GamePlatform
 from game_platform.store import InMemoryStore
 from game_platform.tests.helpers import Api, FakeClock
@@ -54,17 +57,13 @@ BUGGY_GAME = COUNTER_GAME.replace(
 
 
 def _create_game(api: Api, owner: str, server_code: str = COUNTER_GAME) -> str:
-    game = api.ok(
-        "POST", "/games", as_user=owner,
-        json={
-            "name": "Counter race",
-            "allowed_player_counts": [2],
-            "allows_leave_mid_match": True,
-            "code": "<div>counter</div>",
-            "server_code": server_code,
-        },
-    )
-    return game["id"]
+    return api.create_game({
+        "name": "Counter race",
+        "allowed_player_counts": [2],
+        "allows_leave_mid_match": True,
+        "code": "<div>counter</div>",
+        "server_code": server_code,
+    }, owner)["id"]
 
 
 def _start(api: Api, owner: str, game_id: str, joiner: str | None = None,
@@ -100,10 +99,59 @@ def test_start_runs_new_match_and_views_are_per_player(api: Api):
     bob_view = api.ok("GET", f"/matches/{match_id}", as_user=bob)
     assert bob_view["state"] == {"count": 0, "your_secret": f"secret-of-{bob}"}
 
-    # A spectator (and the public list) never receives any state of a v2 match.
+    # A spectator receives the game's spectator view (viewFor with no
+    # player): the public count, but nobody's secret — never the state.
     carol = api.new_user("carol")
     spectator_view = api.ok("GET", f"/matches/{match_id}", as_user=carol)
-    assert spectator_view["state"] is None
+    assert spectator_view["state"]["count"] == 0
+    assert not spectator_view["state"].get("your_secret")
+
+
+def test_spectator_sees_the_public_view_live_and_in_history(api: Api):
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game_id = _create_game(api, alice)
+    match_id = _start(api, alice, game_id, joiner=bob)
+    carol = api.new_user("carol")
+
+    response = _move(api, match_id, as_user=alice, add=2)
+    assert response.status_code == 201
+
+    live = api.ok("GET", f"/matches/{match_id}", as_user=carol)
+    assert live["state"]["count"] == 2
+    assert not live["state"].get("your_secret")
+
+    history = api.ok("GET", f"/matches/{match_id}/history", as_user=carol)
+    views = [history["initial_state"]] + [m["new_state"] for m in history["moves"]]
+    assert [v["count"] for v in views] == [0, 2]
+    assert all(not v.get("your_secret") for v in views)
+
+    moves = api.ok("GET", f"/matches/{match_id}/moves", as_user=carol)
+    assert moves[0]["new_state"]["count"] == 2
+    assert not moves[0]["new_state"].get("your_secret")
+
+    # A seated player's history still shows their own secret throughout.
+    alice_history = api.ok("GET", f"/matches/{match_id}/history", as_user=alice)
+    assert alice_history["initial_state"]["your_secret"] == f"secret-of-{alice}"
+    assert alice_history["moves"][0]["new_state"]["your_secret"] == f"secret-of-{alice}"
+
+
+def test_missing_game_record_never_exposes_the_full_state(api: Api):
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game_id = _create_game(api, alice)
+    match_id = _start(api, alice, game_id, joiner=bob)
+
+    # The game version record disappears while the match lives on. The
+    # store itself refuses this delete (the version is pinned by the
+    # match), so tombstone it directly to simulate the record being gone
+    # anyway. The API already 404s such a match; view_state is the last
+    # line of defense for any caller holding the match record, and it
+    # must show nothing — never fall back to the full state, which
+    # carries every player's secret.
+    api.platform._store._game_versions[game_id][0] = None
+    match = api.platform._store.get_match(match_id)
+    assert api.platform.view_state(match, alice) is None
+    initial_view, _ = api.platform.view_history(match, alice)
+    assert initial_view is None
 
 
 def test_moves_run_apply_move_and_are_recorded(api: Api):
@@ -117,14 +165,18 @@ def test_moves_run_apply_move_and_are_recorded(api: Api):
     assert after["state"]["count"] == 2
     assert after["turn_of_player_indices"] == [1]
 
-    moves = api.ok("GET", f"/matches/{match_id}/moves")
+    moves = api.ok("GET", f"/matches/{match_id}/moves", as_user=alice)
     assert len(moves) == 1
     assert moves[0]["move"] == {"add": 2}
     assert moves[0]["player_id"] == alice
     assert moves[0]["made_by_user_id"] == alice
-    # The history keeps the full state the server computed.
-    assert moves[0]["new_state"]["count"] == 2
-    assert moves[0]["new_state"]["secrets"][bob] == f"secret-of-{bob}"
+    # The history shows the requesting player their own view of the state
+    # after the move — never the full state (which holds bob's secret).
+    assert moves[0]["new_state"] == {"count": 2, "your_secret": f"secret-of-{alice}"}
+    # A caller without a seat gets the spectator view of the historical
+    # state: the public count, nobody's secret.
+    anonymous_moves = api.ok("GET", f"/matches/{match_id}/moves")
+    assert anonymous_moves[0]["new_state"] == {"count": 2}
 
 
 def test_wrong_turn_is_forbidden_and_illegal_move_is_a_400(api: Api):
@@ -152,9 +204,9 @@ def test_a_game_bug_is_a_500_and_is_recorded(api: Api):
     # The match is unchanged, and the failure is recorded on the game version.
     match = api.ok("GET", f"/matches/{match_id}", as_user=alice)
     assert match["move_count"] == 0
-    errors = api.ok("GET", "/debug/all-data")["game_version_errors"]
+    errors = api.client.app.state.platform.all_data().game_version_errors
     assert [
-        (e["game_id"], e["function"]) for e in errors
+        (e.game_id, e.function) for e in errors
     ] == [(game_id, "applyMove")]
 
 
@@ -172,7 +224,7 @@ def test_computer_moves_on_the_server(api: Api):
     assert after["turn_of_player_indices"] == [0]
     moves = api.ok("GET", f"/matches/{match_id}/moves")
     assert [m["player_id"] for m in moves] == [alice, "computer-1"]
-    assert moves[1]["move"] == {"add": 1}
+    assert moves[1]["move"] is None  # Computer choices are private too.
 
 
 def test_resume_computer_moves_picks_up_matches_stuck_on_a_computer():
@@ -247,3 +299,69 @@ def test_v2_start_ignores_the_clients_initial_state(api: Api):
     )
     assert started["state"]["count"] == 0
     assert started["turn_of_player_indices"] == [0]
+
+
+def _legacy_seed(match_id: str) -> int:
+    """The pre-fix seed: the first 4 bytes of the match id's sha256 — the
+    value anyone could compute (and that responses used to carry)."""
+    return int.from_bytes(hashlib.sha256(match_id.encode()).digest()[:4], "big")
+
+
+def test_match_seed_is_a_secret_and_never_in_responses(api: Api):
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game_id = _create_game(api, alice)
+
+    created = api.ok("POST", "/matches", as_user=alice, json={"game_id": game_id})
+    assert "seed" not in created
+    match_id = created["id"]
+    api.ok("POST", f"/matches/{match_id}/join", as_user=bob)
+    started = api.ok("POST", f"/matches/{match_id}/start", as_user=alice, json={})
+    assert "seed" not in started
+    fetched = api.ok("GET", f"/matches/{match_id}", as_user=alice)
+    assert "seed" not in fetched
+    assert "seed" not in api.match_summary(match_id)
+
+    stored = api.platform._store.get_match(match_id)
+    assert stored.seed_version == 3
+    assert stored.seed not in (0, _legacy_seed(match_id))
+
+    # Every match gets its own secret.
+    other = api.ok("POST", "/matches", as_user=alice, json={"game_id": game_id})
+    other_stored = api.platform._store.get_match(other["id"])
+    assert other_stored.seed != stored.seed
+
+
+def test_call_seed_depends_on_the_secret_and_the_move_number(api: Api):
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game_id = _create_game(api, alice)
+    match_id = _start(api, alice, game_id, joiner=bob)
+    platform = api.platform
+    stored = platform._store.get_match(match_id)
+
+    first = platform._call_seed(stored)
+    # Stable for the same match state, and not the value the old public
+    # scheme (seed from the match id, advanced by the move number) predicts.
+    assert first == platform._call_seed(stored)
+    assert first != (_legacy_seed(match_id) + len(stored.moves)) % 2**32
+    # A different secret or a later move number gives a different seed.
+    assert platform._call_seed(replace(stored, seed=stored.seed + 1)) != first
+    assert _move(api, match_id, as_user=alice, add=1).status_code == 201
+    moved = platform._store.get_match(match_id)
+    assert platform._call_seed(moved) != first
+
+
+def test_legacy_match_is_rekeyed_when_it_starts(api: Api):
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game_id = _create_game(api, alice)
+    match = api.ok("POST", "/matches", as_user=alice, json={"game_id": game_id})
+    match_id = match["id"]
+    api.ok("POST", f"/matches/{match_id}/join", as_user=bob)
+
+    store = api.platform._store
+    legacy = _legacy_seed(match_id)
+    store.put_match(replace(store.get_match(match_id), seed=legacy, seed_version=1))
+
+    api.ok("POST", f"/matches/{match_id}/start", as_user=alice, json={})
+    stored = store.get_match(match_id)
+    assert stored.seed_version == 3
+    assert stored.seed != legacy

@@ -1,37 +1,34 @@
-# Server-side Game API (v2) — contract
+# Server-side Game API — contract
 
-This is the in-repo reference for the new server-side Game API, adapted from the
-professor's spec ("Game Platform: server-side Game API (v2)"). **Other teams:
+This is the in-repo reference for the server-side Game API, adapted from the
+professor's spec ("Game Platform: server-side Game API"). **Other teams:
 code against this document.** November 6 changes: playerLeft shares the move
 result contract; bots are single-player only.
 
-Status: Phase 0/1 (contract + QuickJS runner) landed first; the REST changes
-below land phase by phase — each section says when.
+## How it works
 
-## How v2 differs from v1
+| Concern | The contract |
+|---|---|
+| Game code | `client_code` (HTML, iframe) + `server_code` (JavaScript, run in QuickJS) — every game has both |
+| Players | Id strings: a human's user id, `computer-1`, `computer-2`, … |
+| Initial state | The server calls `newMatch` at start |
+| A move | Client sends a small game-defined `move`; the server calls `applyMove` |
+| Validation | `applyMove` rejects illegal moves with `InvalidMove` (HTTP 400) |
+| Computer opponents | Played on the server by `computerMove`, with or without humans online |
+| What clients see | `viewFor(state, playerId)` — hidden information stays on the server |
+| Randomness | Seeded by the server per call (`ctx.random`), so reproducible |
+| Tokens | Each human stakes up to `max_loss`; server code pays out the pot |
+| Testing | Random walks + fuzzing whenever `server_code` changes; only passing versions publish |
 
-| Concern | v1 | v2 |
-|---|---|---|
-| Game code | One HTML page (`code`) | `client_code` (HTML, iframe) + `server_code` (JavaScript, run in QuickJS) |
-| Players | Seat indices | Id strings: a human's user id, `computer-1`, `computer-2`, … |
-| Initial state | Created by the game, or `initial_state` at start | The server calls `newMatch` at start |
-| A move | Client sends the full `new_state` + next turn | Client sends a small game-defined `move`; the server calls `applyMove` |
-| Validation | Turn and seat checks only | `applyMove` rejects illegal moves with `InvalidMove` (HTTP 400) |
-| Computer opponents | Played by human clients (`acting_for_player_index`) | Played on the server by `computerMove`, with or without humans online |
-| What clients see | The whole state | `viewFor(state, playerId)` — hidden information stays on the server |
-| Randomness | `Math.random` in whichever client moved | Seeded by the server per call (`ctx.random`), so reproducible |
-| Tokens | Pot split by seat on the final move | Each human stakes up to `max_loss`; server code pays out the pot |
-| Testing | Manual, in the builder | Random walks + fuzzing whenever `server_code` changes; only passing versions publish |
-
-Games with a `server_code` use the v2 flow. Games without one keep the v1
-flow until they are migrated.
+Every game has `server_code`: it is required when a game is created, and it
+cannot be removed by an update.
 
 ## Server code
 
 `server_code` is a plain JavaScript script (no modules, DOM, network or
 timers) that defines a global `game` object. All arguments and results are
 JSON. Given the same arguments and `ctx.random`, a function must return the
-same result: the server may call it again for replays, tests and the emulator,
+same result: the server may call it again for replays and tests,
 and tests verify this by calling each function twice and requiring identical
 results.
 
@@ -69,7 +66,7 @@ const game = {
 | `playerId` | A player's id string. In `viewFor`, `null` means a spectator |
 | `move` | Game-defined JSON from the client, e.g. `{"cell": 4}` |
 | `turn` | The ids of the players who may move next (any one of them), or `null` when the match is over. Never empty |
-| `payouts` | `{playerId: tokens}`: non-negative integers for active humans only. Terminal results distribute exactly `ctx.pot`; ongoing results may distribute at most `ctx.pot`. Applies to both `applyMove` and `playerLeft`. |
+| `payouts` | `{playerId: tokens}`: non-negative integers for active humans only. Terminal results distribute exactly `ctx.pot`; ongoing results may distribute at most `ctx.pot`. Applies to `newMatch`, `applyMove`, `playerJoined`, and `playerLeft`. |
 | `view` | Whatever the client needs for that player, including the result once the match is over |
 | `ctx.players` | `[{id, kind, display_name, picture_url, max_loss, active}]` in join order. In `playerJoined` it includes the joiner; in `playerLeft` it still includes the leaver |
 | `ctx.pot` | The tokens in the pot |
@@ -82,6 +79,9 @@ const game = {
 - The platform defines a global class `InvalidMove extends Error`.
   `applyMove` throws it for a move that breaks the rules or is malformed; the
   server answers 400 with its message.
+  The 400 body is `{"detail", "code": "game_message"}`; when the game's string table has a `server_`
+  template for the message it also has `message_key` and `params`, and `detail` is translated for the viewer
+  (see docs/game-translation.md, "Texts the server writes"). A new game lists every `InvalidMove` text there.
 - Any other exception, a timeout (100 ms per call), a memory error (64 MB per
   context), or an invalid result (empty/unknown turn, payouts that don't add
   up or pay a computer, non-JSON result, oversized state) is a **bug in the
@@ -113,13 +113,21 @@ const game = {
   amount goes to the leaver, and the rest goes to the other active humans. If
   the last human leaves, they receive the full pot. This applies to old pinned
   game versions as well; it does not rewrite stored code or history.
+- All three cases (native result, adapted scalar payout, and no leave handler)
+  commit through the same result application as `applyMove`. They record the
+  departure and mark the seat inactive consistently. No game-specific API path
+  or republication of existing games is needed.
 - `POST /matches/{id}/maybeLeave` stores the entire validated result. The response
   exposes `pending_leave_payout` and `pending_leave_ends_match`, never the private
   resulting state. `POST /matches/{id}/playerLeft` applies that exact result.
   A move, join, timeout, or another confirmed leave invalidates the preview.
-  Successful game-handled leaves appear in history as `{type: "player_left"}`.
+  Every successful v2 leave appears in history as `{type: "player_left"}`.
 - `playerLeft` calls get a 2-second time budget instead of the usual
   100 ms, because `ctx.estimateWinChance`'s walks take about a second.
+  The estimator also has a deterministic 2,000 simulated-move-attempt budget
+  across its maximum 100 walks. Long games use fewer walks instead of timing out;
+  estimates are divided by the walks actually attempted, including unfinished
+  walks as losses. The budget does not depend on machine speed or elapsed time.
 
 ## Client code (iframe protocol v2)
 
@@ -130,57 +138,113 @@ exchanging the same two messages, but it no longer computes states:
 // state_changed: platform to game
 {
   "type": "state_changed",
+  "state": { /* the viewer's view (portal matches) */ },
   "view": { /* viewFor output for this viewer; never null */ },
   "players": [
-    {"id": "u1", "kind": "human", "display_name": "user1",
-     "picture_url": "<96x96 image>", "max_loss": 100},
-    {"id": "computer-1", "kind": "computer", "display_name": "Computer 1",
-     "picture_url": "<96x96 image>", "max_loss": 0}
+    {"player_index": 0, "player_id": "u1", "kind": "human", "name": "user1",
+     "picture_url": "<96x96 image>"},
+    {"player_index": 1, "player_id": "computer-1", "kind": "computer",
+     "name": "Computer 1", "picture_url": "<96x96 image>"}
   ],
-  "turn": ["u1"],
+  "turn_of_player_indices": [0],
   "status": "ongoing",
   "end_reason": null,
   "move_count": 2,
-  "my_player_id": "u1"        // null for spectators
+  "my_player_index": 0,        // null for spectators
+  "acting_for_player_index": 0, // the seat this screen should move for, or null
+  "token_pot": 0,
+  "strings": { /* the viewer's translations of the game's string table */ },
+  "locale": "en",
+  "direction": "ltr"
 }
 
 // make_move: game to platform
 {"type": "make_move", "move": {"cell": 1}}
 ```
 
-Removed from v1 for v2 games: `acting_for_player_index`, seat indices,
-client-computed `new_state` / `next_turn_player_indices`, and
-`initial_state` / `first_turn_player_indices` on start.
+The protocol has no client-computed `new_state` /
+`next_turn_player_indices` and no `initial_state` / `first_turn_player_indices`
+on start, and no id-based turn reporting — the message reports the turn and the
+viewer's seat as seat indices (`turn_of_player_indices`, `my_player_index`,
+`acting_for_player_index`).
 
 ## REST API changes
 
-| Endpoint | v1 | v2 (phase) |
-|---|---|---|
-| `POST /games`, `PATCH /games/{id}`, drafts, publishing | `code` | Also `server_code` (as `client_code` + `server_code`). Draft publishing and `PATCH` updates that change the server code (or its rules) run the tests first and are refused if they fail |
-| `POST /games/test` | — | Runs the random-walk/fuzz tests on unsaved code, for the builder and the AI fix loop |
-| `POST /emulator/reset`, `POST /emulator/act` | — | Play unsaved server code the way a match would (the builder's test play): reset runs `newMatch`, act applies one human move; both advance computer players and return the full state, every player's view, and any game error verbatim |
-| `POST /matches` | `{game_id, num_computer_opponents, private?}` | Also `max_loss` (Phase 3) |
-| `POST /matches/{id}/join`, `POST /invites/{token}/accept` | Take a seat | Also deduct `max_loss` (409 if the balance is too low); mid-match the server calls `playerJoined` (Phase 3/4) |
-| `POST /matches/{id}/leave` | Ends legacy matches and settles outstanding tokens | Before the start, a refund; mid-match, `playerLeft` |
-| `POST /matches/{id}/maybeLeave`, `POST /matches/{id}/playerLeft` | — | Leave preview + confirm |
-| `POST /matches/{id}/start` | `{first_turn_player_indices, initial_state}` | `{}` — the server calls `newMatch` (Phase 3) |
-| `POST /matches/{id}/moves` | `{new_state, next_turn_player_indices, expected_move_count?}` | `{move, expected_move_count?}`, only from a human in `turn` (403 otherwise); 400 for `InvalidMove` (Phase 3) |
-| `GET /matches/{id}` | The whole state, to anyone | The caller's `view` and the pot; the full state only in the debug tools (Phase 3) |
-| `GET /matches/{id}/moves` | Every `new_state` | Each move's player id, move and time (Phase 3) |
-| `GET /auth/me` | Your profile | Also your token balance (already present) |
+| Endpoint | Behavior |
+|---|---|
+| `POST /games` | Creates and publishes a complete game in one call (the agent import): `client_code`, `server_code`, `game_schemas` (in `unit_tests`), translations and images are all supplied in the body; the server runs the tests first and inserts nothing if they fail. `PATCH /games/{id}` updates a game and re-tests any new server code (or its rules) first, refusing the update if the tests fail |
+| `POST /matches` | `{game_id, num_computer_opponents, private?, max_loss}` |
+| `POST /matches/{id}/join`, `POST /invites/{token}/accept` | Take a seat and deduct the stake (409 if the balance is too low); mid-match the server calls `playerJoined` |
+| `POST /matches/{id}/leave` | Before the start, a refund; mid-match, `playerLeft` |
+| `POST /matches/{id}/maybeLeave`, `POST /matches/{id}/playerLeft` | Leave preview + confirm |
+| `POST /matches/{id}/start` | `{}` — the server calls `newMatch` |
+| `POST /matches/{id}/moves` | `{move, expected_move_count?}`, only from a human in `turn` (403 otherwise); 400 for `InvalidMove` |
+| `GET /matches/{id}` | The caller's `view` and the pot — never the state; the full state only in the debug tools. A caller without a seat gets the spectator view (`viewFor` with a null player), in history and move reads too, so a shared match link shows the game's public view |
+| `GET /matches/{id}/moves` | Each move's player id, move and time, with the caller's view of the resulting state (the spectator view for a caller without a seat) |
+| `GET /auth/me` | Your profile, including your token balance |
 
 ## Computer opponents: single-player only
 
 Computer matches contain exactly one human. A second human cannot join a bot
 match through the API or an invite; remove all computers in the waiting room
 first. Multiplayer lobbies and random matchmaking cannot add bots. Bot matches
-are excluded from open-match listings. The emulator follows the same rule, and
-random walks cover either all humans or one human against computers.
+are excluded from open-match listings. Random walks cover either all humans or one human against computers.
 
-Timeouts end a match and refund its outstanding pot; they never create bots.
+Timeouts end a match — a server timer fires at the deadline, and reads and
+moves check too — and pay its outstanding pot to the players who did not hold
+the turn, split evenly (refunded evenly to everyone only when every player
+held the turn); they never create bots.
 Ongoing mixed rosters saved before this change end on their next read, move, or
 worker call with `end_reason: "solo_computers_only"`, refunding the remaining
 pot to active humans once. Waiting lobbies can remove their bots.
+
+## Game JSON Schemas
+
+Every published game version stores a `game_schemas` object with exactly
+three Draft 2020-12 JSON Schemas: `state`, `move`, and `view`. The schemas are
+supplied with the game when it is created (in the import's `unit_tests`) and
+are required: a game with `server_code` but no `game_schemas` is refused. The
+platform never infers schemas.
+
+The platform validates state arguments before calling game functions that
+receive state, and validates a human's `move` against the `move` schema before
+`applyMove` runs. `computerMove` and `randomMove` results use the same move
+schema; returned states and `viewFor` results use their respective schemas.
+An invalid human move is rejected with HTTP 400 without changing the match.
+Invalid game-generated values or results are game bugs: the call fails and
+the random-walk test report identifies the failing function and seed.
+
+Invalid game-defined inputs emit a warning log with the game id/version,
+function, input name, and validation message. Process-local counters are
+available at `GET /admin/game-input-metrics` (protected by the master
+password when configured); counters are grouped by game version, function,
+and input and reset when the process restarts. They are not aggregated across
+workers.
+
+Every persisted version — including historical versions — must have schemas.
+At startup, the server logs missing `game-id@version`
+entries and runs in degraded mode so non-game API functionality remains
+available. A game version without schemas is still blocked from executing:
+there is no permissive runtime fallback. Historical versions must carry the
+exact schemas for those entries before restarting a strict server deployment,
+because old matches may still rely on those versions. (The
+`backfill_game_schemas` utility described in earlier drafts of this contract
+was never built; schemas are supplied at import time, and the built-in games
+ship theirs in `games/<id>.schema.json`.)
+
+To gather exact code and rules for affected versions without exporting user
+records, run `export_game_schema_inventory.py` with the production config and
+the server's read-only Firestore credentials. By default, it finds every
+server-side version missing schemas and writes only each version's name, rules,
+server code, and existing schemas:
+
+```powershell
+python export_game_schema_inventory.py --config C:\path\to\config.json --output C:\path\to\game-schema-inventory.json
+```
+
+Use the optional `--refs` text file only when exporting a specific subset.
+
+## Computer opponents on the server (Phase 3)
 
 After every change (start, a move, a player joining or leaving), while
 `turn` includes a computer and no human, the server calls `computerMove`
@@ -208,12 +272,14 @@ on the game version.
 
 ## Testing before publishing (Phase 5 — `game_platform/game_testing.py`)
 
-Whenever `server_code` changes, the server tests it in QuickJS; only a
-passing version can be published (draft publishing and `PATCH /games/{id}`
-run the gate; `POST /games/test` runs the same tests on unsaved code).
-The tests take at most 1 second: up to
-1000 random walks of up to 1000 moves each, stopping at whichever limit
-comes first. Each walk uses a random player count, either all humans or one human plus
+Whenever a game is submitted or its `server_code` changes, the server tests it
+in QuickJS; only a passing version can be published (`POST /games` runs the
+gate before inserting anything; `PATCH /games/{id}` runs it on update).
+On import the checks run inside a 20-second validator
+subprocess, and the random walks inside it have a 3-second budget: up to
+1000 walks of up to 1000 moves each, stopping at whichever limit comes first.
+The `PATCH /games/{id}` update path runs the same tester with a 1-second
+walk budget. Each walk uses a random player count, either all humans or one human plus
 computers, random `max_loss` values and a random seed; moves come from
 `computerMove`/`randomMove`; `viewFor` is called for every player and a
 spectator after each move; joins/leaves happen occasionally if allowed
@@ -225,38 +291,29 @@ arguments and seed to verify determinism. If not even one walk finishes in
 the budget, the game is reported as too slow. A failure report records the
 error and stack, the function and its exact arguments, the walk's seed,
 player count and move number, and the last few moves; failed seeds are
-stored on the game and replayed first on the next run. The builder's AI
-fix loop consumes the same report
-(up to `ai_max_fix_attempts`, default 3).
+stored on the game and replayed first on the next run. The failure report is
+returned in the 422 response, so the submitting agent can fix the game and
+retry.
 
-## The builder, the emulator, and the client protocol (Phase 6)
+## The client protocol (Phase 6)
 
-The building agent writes both parts of a game: its reply JSON gains a
-`server_code` field next to `code`, and its prompt teaches the contract
-above. After a reply with server code, the server runs the random-walk
-tests on it; a failure report (function, error, exact arguments, seed) is
-fed back and the model regenerates, up to `ai_max_fix_attempts` times
-(default 3, in the server config). The response reports
-`server_test_passed`; code that still fails is returned with the failure
-noted, and publishing refuses it (Phase 5). Replies without `server_code`
-still parse, as client-only changes.
-
-The builder's test play runs v2 games through the emulator endpoints
-above: the client iframe receives `state_changed` with the viewer's
-`view`, and its moves go back as moves only — the same protocol the
-portal speaks for v2 matches:
+A game is submitted complete through `POST /games` (see
+[agent-game-import.md](agent-game-import.md)): the server runs the
+random-walk tests on the submitted code before publishing it. The client
+protocol for a published game is the same one the portal speaks:
 
 - `state_changed` (platform -> game) gains `view`: the viewer's `viewFor`
-  view (`null` for spectators). `players` entries gain `player_id`. A v2
+  view (`null` for spectators). `players` entries gain `player_id`. A
   client renders `view` and keeps no state of its own;
-  `acting_for_player_index` is only ever the viewer's own seat — the
-  server moves computers, never the client.
-- `make_move` (game -> platform) for a v2 game is `{"type": "make_move",
+  a player only ever acts for themselves: it is their turn when
+  `my_player_index` is in `turn_of_player_indices`. The server moves
+  computers, never the client.
+- `make_move` (game -> platform) is `{"type": "make_move",
   "move": ...}` — no `new_state`, no next turn; the server validates and
   applies it.
 
-Portal practice (local, offline play) is not offered for v2 games: their
-logic runs on the server. v1 games keep the old protocol unchanged.
+Portal practice (local, offline play) is not offered for online matches:
+game logic runs on the server.
 
 ## Updating the existing games (Phase 7 — landed)
 
@@ -266,13 +323,12 @@ debug); each game's pure `Logic` object became most of its server code,
 and the clients now only render their view and send moves. The example
 data's matches were re-scripted as real moves played by that server
 code. Two things the migration surfaced: the random-walk tester now
-models a leave the way the platform does (the seat stays, taken over by
-a computer, ids renumbered) — removing the seat broke seat-indexed
-games — and tic-tac-toe's minimax is memoized, because unmemoized it
-overruns the 100 ms per-call limit on an empty board. With the built-in
-games on v2, acting on behalf survives only in the v1 protocol path
-(pre-existing client-only games); nothing in the v2 API, the portal's
-v2 flow, or the migrated games uses it.
+models a leave the way the platform does (the seat stays at its
+original index, marked inactive, never taken over by a computer) — removing
+the seat broke seat-indexed games — and tic-tac-toe's minimax is memoized, because unmemoized it
+overruns the 100 ms per-call limit on an empty board. Acting on behalf
+does not exist anywhere in the API: a player only ever moves for their
+own seat, and the server moves the computers.
 
 - **Tic-tac-toe:** `newMatch` empty board; move `{cell}`; `computerMove`
   minimax (memoized, ties broken by `ctx.random`); payouts: pot to a human
@@ -297,41 +353,31 @@ arguments and seed and compare the JSON; per match,
 `tests/test_determinism.py` plays scripted matches (tic-tac-toe
 against a server computer, a poker hand) on a fresh platform with the
 same ids — hence the same match seed — and asserts every intermediate
-state is identical, and that the emulator answers identical requests
-identically; and failed test seeds stored for a game are replayed
-first on the next `POST /games/test`, so a fix is verified against the
+state is identical, and failed test seeds stored for a game are replayed
+first when the game is next submitted, so a fix is verified against the
 exact walk that found the bug. One platform fix landed with this
 phase: when a speed-match timeout hands a seat to a computer, the
 takeover now schedules the computer's moves like every other path —
-in v1 a human's browser submitted them, so the takeover path never
-did, and a v2 match stalled on the computer's turn (found by the
-Playwright speed test when the UI suite was migrated to v2 games).
+the takeover path originally never scheduled them (a human's browser
+used to submit computer moves), so a match stalled on the computer's
+turn (found by the Playwright speed test).
 
-## Refactoring all games (admin — landed 2026-10-27)
+### Privacy of history and randomness
 
-`POST /admin/refactor_all_games` (super admin: the master password, as
-HTTP Basic auth) starts a background job that applies one prompt to the
-published games: for each game it sends the prompt plus the game's data
-(name, description, rules, client code, server code) to the building
-agent — the same agent, system prompt, and test-fix loop as the builder —
-and saves the code it returns as a new version of the game. The save
-goes through `update_game`'s admin path, so the publish gate re-tests
-any new server code and a refusal leaves the game untouched; only the
-two code fields are taken from the reply, so a refactor never renames a
-game or changes who can play it. `game_ids` in the body restricts the
-run to those games; without it every published game is refactored. One
-job runs at a time (a second POST is a 409). `GET
-/admin/refactor_all_games/{job_id}` reports progress and the per-game
-outcome (`updated` / `unchanged` / `failed` with the reason — a failed
-game keeps its previous code, and the run continues). The agent exchange
-is recorded against each game, like a builder conversation. First use:
-converting the remaining client-only games to this API with a
-conversion prompt; the same endpoint serves later fleet-wide refactors
-(adding unit tests, checking hidden information, checking determinism).
+Every history state is projected through the caller's `viewFor`. Raw move
+payloads can contain private bids or card choices, so history only returns
+`move` to the authenticated human who submitted it; all other callers receive
+`null`. This applies to `/moves`, `/history`, and paginated v2 history, including
+finished matches. Public actions should be represented in the public game view.
+The player's own move remains available for offline acknowledgement matching.
 
-The hand-written counterpart is `PUT /admin/games/{game_id}/code`
-(same master-password auth): the body carries explicit `code` and/or
-`server_code` and the save goes through the same admin path and
-publish gate — for conversions a person writes by hand when the
-agent's attempts keep failing a game's tests (the last few complex
-games: chess, a second backgammon, Rummy 500, ERS, Guandan).
+The match seed stays server-only. `viewFor` uses a separate deterministic random
+stream for each viewer and move count, so visible random values cannot reveal
+the next gameplay call's random stream. Game-runtime failures return a generic
+error; private inputs and diagnostic details remain in server/admin records.
+
+New online matches use a 256-bit secret and ChaCha20 streams (seed version 3).
+Initialization, moves, lifecycle callbacks, and per-player views are separated.
+The runner retains the numeric-seed generator for historical unit-test vectors;
+online keys are passed without truncation. Older live matches upgrade on their
+next gameplay move or start; an already dealt legacy hand is not silently reshuffled.

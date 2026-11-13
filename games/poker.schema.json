@@ -1,0 +1,113 @@
+{
+  "state": {
+    "type": "object",
+    "required": [
+      "small_blind", "big_blind", "chips", "hand_number", "dealer", "deck",
+      "hole", "board", "street", "in_hand", "bets", "contributed",
+      "current_bet", "min_raise", "needs_action", "to_act", "winner",
+      "previous_hand", "log"
+    ],
+    "properties": {
+      "small_blind": {"type": "integer", "minimum": 1},
+      "big_blind": {"type": "integer", "minimum": 1},
+      "chips": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+      "hand_number": {"type": "integer", "minimum": 0},
+      "dealer": {"type": "integer", "minimum": -1},
+      "deck": {"type": "array", "items": {"$ref": "#/$defs/card"}},
+      "hole": {
+        "type": "array",
+        "items": {
+          "oneOf": [
+            {"type": "null"},
+            {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/card"}}
+          ]
+        }
+      },
+      "board": {"type": "array", "maxItems": 5, "items": {"$ref": "#/$defs/card"}},
+      "street": {"oneOf": [{"type": "null"}, {"enum": ["preflop", "flop", "turn", "river"]}]},
+      "in_hand": {"type": "array", "items": {"type": "boolean"}},
+      "bets": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+      "contributed": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+      "current_bet": {"type": "integer", "minimum": 0},
+      "min_raise": {"type": "integer", "minimum": 0},
+      "needs_action": {"type": "array", "items": {"type": "boolean"}},
+      "to_act": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0}]},
+      "winner": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0}]},
+      "previous_hand": {"oneOf": [{"type": "null"}, {"type": "object"}]},
+      "log": {"type": "array", "maxItems": 10, "items": {"type": "string"}}
+    },
+    "$defs": {
+      "card": {"type": "string", "pattern": "^[2-9TJQKA][shdc]$"}
+    },
+    "additionalProperties": true
+  },
+  "move": {
+    "oneOf": [
+      {"type": "object", "required": ["type"], "properties": {"type": {"const": "fold"}}, "additionalProperties": false},
+      {"type": "object", "required": ["type"], "properties": {"type": {"const": "check"}}, "additionalProperties": false},
+      {"type": "object", "required": ["type"], "properties": {"type": {"const": "call"}}, "additionalProperties": false},
+      {"type": "object", "required": ["type", "to"], "properties": {"type": {"const": "raise"}, "to": {"type": "integer", "minimum": 0}}, "additionalProperties": false}
+    ]
+  },
+  "view": {
+    "type": "object",
+    "required": [
+      "small_blind", "big_blind", "chips", "hand_number", "dealer", "deck",
+      "hole", "board", "street", "in_hand", "bets", "contributed",
+      "current_bet", "min_raise", "needs_action", "to_act", "winner",
+      "previous_hand", "log", "dealt_in", "your_seat", "legal"
+    ],
+    "properties": {
+      "small_blind": {"type": "integer", "minimum": 1},
+      "big_blind": {"type": "integer", "minimum": 1},
+      "chips": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+      "hand_number": {"type": "integer", "minimum": 0},
+      "dealer": {"type": "integer", "minimum": -1},
+      "deck": {"type": "array", "maxItems": 0},
+      "hole": {
+        "type": "array",
+        "items": {
+          "oneOf": [
+            {"type": "null"},
+            {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/card"}}
+          ]
+        }
+      },
+      "board": {"type": "array", "maxItems": 5, "items": {"$ref": "#/$defs/card"}},
+      "street": {"oneOf": [{"type": "null"}, {"enum": ["preflop", "flop", "turn", "river"]}]},
+      "in_hand": {"type": "array", "items": {"type": "boolean"}},
+      "bets": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+      "contributed": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+      "current_bet": {"type": "integer", "minimum": 0},
+      "min_raise": {"type": "integer", "minimum": 0},
+      "needs_action": {"type": "array", "items": {"type": "boolean"}},
+      "to_act": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0}]},
+      "winner": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0}]},
+      "previous_hand": {"oneOf": [{"type": "null"}, {"type": "object"}]},
+      "log": {"type": "array", "maxItems": 10, "items": {"type": "string"}},
+      "dealt_in": {"type": "array", "items": {"type": "boolean"}},
+      "your_seat": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": -1}]},
+      "legal": {
+        "oneOf": [
+          {"type": "null"},
+          {
+            "type": "object",
+            "required": ["canFold", "canCheck", "callAmount", "minRaiseTo", "maxRaiseTo"],
+            "properties": {
+              "canFold": {"type": "boolean"},
+              "canCheck": {"type": "boolean"},
+              "callAmount": {"type": "integer", "minimum": 0},
+              "minRaiseTo": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0}]},
+              "maxRaiseTo": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0}]}
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "$defs": {
+      "card": {"type": "string", "pattern": "^[2-9TJQKA][shdc]$"}
+    },
+    "additionalProperties": true
+  }
+}

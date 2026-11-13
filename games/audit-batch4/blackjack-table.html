@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Blackjack Table</title><style>body{margin:0;padding:16px;background:#101827;color:#edf2ff;font:16px system-ui}*{box-sizing:border-box}h1{font-size:23px;margin:0 0 8px}#status{font-weight:650;margin:12px 0;color:#8ee7cd}.seat{background:#1d2942;border-radius:10px;padding:10px;margin:8px 0}.seat.cur{outline:2px solid #fcd34d}.cards{display:flex;gap:5px;flex-wrap:wrap;margin:5px 0}.card{min-width:40px;padding:6px 4px;text-align:center;border-radius:6px;background:#f8fafc;color:#0f172a;font-weight:700;font-size:15px}.card.red{color:#dc2626}.card.hole{background:#475569;color:#e2e8f0}.meta{font-size:14px;color:#bec9dc}.row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}button{font:inherit;min-height:46px;padding:0 18px;border:1px solid #64748b;border-radius:8px;background:#25344e;color:white;cursor:pointer}button:disabled{opacity:.5;cursor:default}.rules{font-size:14px;color:#bec9dc;max-width:480px}</style></head><body><h1 id="title"></h1><p class="rules" id="rules"></p><div id="status" role="status" aria-live="polite"></div><div class="meta" id="fresh"></div><div id="table"></div><div class="row" id="actions"></div><script type="application/json" id="i18n-strings">
+{
+"title": "Blackjack Table",
+"rules": "Everyone starts with 1,000 chips and plays against the dealer for up to 10 rounds — most chips at the end wins. Blackjack pays 3:2. The dealer's hole card stays hidden until all hands are done.",
+"waiting_platform": "Waiting for the platform…",
+"waiting": "Waiting…",
+"player_n": "Player {n}",
+"round_deck": "Round {round} of 10 · deck: {count} cards",
+"winners": "🏆 {name} ends with the most chips!",
+"setup": "Set up the table, then start.",
+"place_bet": "Place your bet, {name}.",
+"waiting_bets": "Waiting for bets…",
+"your_hand": "{name}'s hand — hit, stand, double or split.",
+"playing": "Dealer and players are playing…",
+"round_settled": "Round {round} settled.",
+"round_settled_next": "Round {round} settled. Start the next round when ready.",
+"dealer": "Dealer",
+"hole_hidden": "(hole card hidden)",
+"dealer_total": "— {total}",
+"chips": "{count} chips",
+"bet_amount": "bet {amount}",
+"to_bet": "to bet",
+"done": "done",
+"playing_marker": "← playing",
+"no_hand": "no hand this round",
+"start_game": "Start the game",
+"shoe_six": "Shoe: 6 decks",
+"shoe_one": "Shoe: 1 deck",
+"bet_all_in": "Bet {amount} (all in)",
+"bet": "Bet {amount}",
+"hit": "Hit",
+"stand": "Stand",
+"double": "Double",
+"split": "Split",
+"next_round": "Next round",
+"server_unknown_player": "unknown player",
+"server_expect_start": "expect start",
+"server_expect_bet": "expect bet",
+"server_not_your_bet": "not your bet",
+"server_already_bet": "already bet",
+"server_bad_amount": "bad amount",
+"server_min_10": "min 10",
+"server_not_your_turn": "not your turn",
+"server_no_hand": "no hand",
+"server_no_double": "no double",
+"server_no_split": "no split",
+"server_bad_action": "bad action",
+"server_expect_next": "expect next",
+"server_game_over": "game over",
+"server_bust": "Bust(-{p1})",
+"server_blackjack": "BLACKJACK! +{p1}",
+"server_dealer_bj": "Dealer BJ (-{p1})",
+"server_push_bj": "Push BJ",
+"server_dealer_bust_win": "Dealer bust Win +{p1}",
+"server_win_v": "Win {p1}v{p2} +{p3}",
+"server_push": "Push {p1}",
+"server_lose_v": "Lose {p1}v{p2} (-{p3})"
+}
+</script>
+<script>
+"use strict";
+
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// A text the game's SERVER wrote (a log line, a hand name in the match state): finds its template
+// among the `server_` texts of the table (the most specific that fits, each {name} standing for
+// any text) and shows it in the viewer's language with the same values; any other text is
+// returned as written.
+const SERVER_TEMPLATES = Object.keys(SOURCE_STRINGS)
+  .filter((key) => key.startsWith("server_") && SOURCE_STRINGS[key])
+  .map((key) => {
+    const names = [];
+    let literal = 0;
+    const source = SOURCE_STRINGS[key]
+      .split(/\{(\w+)\}/)
+      .map((piece, index) => {
+        if (index % 2) { names.push(piece); return "([\\s\\S]+?)"; }
+        literal += piece.length;
+        return piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      })
+      .join("");
+    return { key, names, literal, pattern: new RegExp("^" + source + "$") };
+  })
+  .sort((a, b) => b.literal - a.literal || a.names.length - b.names.length || (a.key > b.key ? 1 : a.key === b.key ? 0 : -1));
+
+function tx(text) {
+  if (typeof text !== "string") return text;
+  for (const template of SERVER_TEMPLATES) {
+    const found = template.pattern.exec(text);
+    if (found) {
+      const params = {};
+      template.names.forEach((name, index) => { if (!(name in params)) params[name] = found[index + 1]; });
+      return t(template.key, params);
+    }
+  }
+  return text;
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+
+
+let latest=null,sentFor=-1,six=false;
+function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}
+const $=id=>document.getElementById(id);
+$("status").textContent=t("waiting_platform");
+function el(tag,text,cls,parent){const e=document.createElement(tag);if(text!==undefined&&text!==null)e.textContent=text;if(cls)e.className=cls;if(parent)parent.appendChild(e);return e;}
+function dotted(parent,items){items.forEach(text=>{el("span"," · ",null,parent);el("span",text,null,parent);});}
+const SUITS={C:"♣",D:"♦",H:"♥",S:"♠"};
+const RLBL={1:"A",11:"J",12:"Q",13:"K"};
+const lbl=c=>(RLBL[c.r]||String(c.r))+(SUITS[c.s]||c.s);
+const red=c=>c.s==="H"||c.s==="D";
+function val(cards){let t=0,a=0;for(const c of cards){t+=c.r===1?11:Math.min(c.r,10);if(c.r===1)a++;}while(t>21&&a>0){t-=10;a--;}return t;}
+function moveCount(){return latest?(latest.move_count??latest.moveCount??0):0;}
+function acting(){return actingSeat()!==null;}
+function mySeat(){return acting()?actingSeat():-1;}
+function send(move){if(!acting()||sentFor===moveCount())return;sentFor=moveCount();parent.postMessage({type:"make_move",move},"*");render();}
+function cardEl(c,hole){const d=document.createElement("span");d.className="card"+(hole?" hole":red(c)?" red":"");d.textContent=hole?"🂠":lbl(c);return d;}
+function render(){
+ $("title").textContent=t("title");$("rules").textContent=t("rules");
+ if(!latest)return;
+ const v=latest.view,status=$("status"),table=$("table"),actions=$("actions");
+ const name=i=>((v.customNames&&v.customNames[i])||(latest.players&&latest.players[i]&&latest.players[i].name)||t("player_n",{n:i+1}));
+ if(!v){status.textContent=t("waiting");return;}
+ const fresh=$("fresh");fresh.replaceChildren();
+ if(v.freshMsg)el("span",v.freshMsg,null,fresh);
+ if(v.phase!=="setup")el("span",t("round_deck",{round:v.round,count:v.deckCount}),null,fresh);
+ const over=latest.status==="over"||v.phase==="gameOver";
+ if(over)status.textContent=t("winners",{name:name(v.winners)});
+ else if(v.phase==="setup")status.textContent=t("setup");
+ else if(v.phase==="betting")status.textContent=acting()?t("place_bet",{name:name(v.curP)}):t("waiting_bets");
+ else if(v.phase==="play")status.textContent=acting()?t("your_hand",{name:name(v.curP)}):t("playing");
+ else if(v.phase==="roundOver")status.textContent=acting()?t("round_settled_next",{round:v.round}):t("round_settled",{round:v.round});
+ else status.textContent="…";
+ table.replaceChildren();
+ const ds=el("div",null,"seat");
+ el("b",t("dealer"),null,ds);
+ if(v.holeHidden)el("span"," "+t("hole_hidden"),null,ds);
+ else if(v.dealer&&v.dealer.length)el("span",t("dealer_total",{total:val(v.dealer)}),null,ds).style.marginInlineStart="6px";
+ const dc=el("div",null,"cards");
+ (v.dealer||[]).forEach(c=>dc.append(cardEl(c)));
+ if(v.holeHidden)dc.append(cardEl(null,true));
+ ds.append(dc);table.append(ds);
+ (v.hands||[]).forEach((hs,i)=>{
+   const s=el("div",null,"seat"+(v.phase==="play"&&v.curP===i?" cur":""));
+   const head=el("div",null,null,s);
+   el("b",name(i),null,head);
+   const parts=[t("chips",{count:v.chips[i]})];
+   const bet=v.pendingBets[i]||v.pendingBets[String(i)];
+   if(v.phase==="betting"&&bet)parts.push(t("bet_amount",{amount:bet}));
+   if(v.phase==="betting"&&v.needBet[i])parts.push(t("to_bet"));
+   if(v.results[i])parts.push(v.results[i].split(' | ').map(tx).join(' | '));
+   dotted(head,parts);
+   hs.forEach((h,hi)=>{
+     const row=el("div",null,"cards",s);
+     h.cards.forEach(c=>row.append(cardEl(c)));
+     const m=el("span",String(val(h.cards)),"meta",row);
+     const extra=[];
+     if(h.bet)extra.push(t("bet_amount",{amount:h.bet}));
+     if(h.done)extra.push(t("done"));
+     if(v.phase==="play"&&v.curP===i&&v.curH===hi)extra.push(t("playing_marker"));
+     dotted(row,extra);
+   });
+   if(!hs.length)el("div",t("no_hand"),"meta",s);
+   table.append(s);
+ });
+ actions.replaceChildren();
+ const can=acting()&&sentFor!==moveCount()&&!over;
+ const btn=(label,fn,dis)=>{const b=document.createElement("button");b.textContent=label;b.disabled=!!dis||!can;b.onclick=fn;actions.append(b);return b;};
+ if(v.phase==="setup"){
+   btn(t("start_game"),()=>send({kind:"start",names:[],six}));
+   const shoe=document.createElement("button");shoe.textContent=six?t("shoe_six"):t("shoe_one");shoe.disabled=!can;shoe.onclick=()=>{six=!six;render();};actions.append(shoe);
+ }else if(v.phase==="betting"&&acting()){
+   if(v.chips[mySeat()]>0&&v.chips[mySeat()]<10)btn(t("bet_all_in",{amount:v.chips[mySeat()]}),()=>send({kind:"bet",amount:v.chips[mySeat()]}));
+   for(const amt of [10,25,50,100])if(v.chips[mySeat()]>=amt)btn(t("bet",{amount:amt}),()=>send({kind:"bet",amount:amt}));
+ }else if(v.phase==="play"&&acting()){
+   const h=(v.hands[mySeat()]||[])[v.curH];
+   btn(t("hit"),()=>send({kind:"hit"}));
+   btn(t("stand"),()=>send({kind:"stand"}));
+   if(h&&h.cards.length===2&&v.chips[mySeat()]>=h.bet)btn(t("double"),()=>send({kind:"double"}));
+   if(h&&h.cards.length===2&&h.cards[0].r===h.cards[1].r&&v.chips[mySeat()]>=h.bet&&(v.hands[mySeat()]||[]).length<4)btn(t("split"),()=>send({kind:"split"}));
+ }else if(v.phase==="roundOver"&&acting()){
+   btn(t("next_round"),()=>send({kind:"next"}));
+ }
+}
+addEventListener("message",e=>{if(e.source!==parent||!e.data||e.data.type!=="state_changed")return;applyLocale(e.data);latest=e.data;sentFor=-1;render();});
+</script></body></html>

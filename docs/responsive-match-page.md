@@ -59,9 +59,6 @@ Escape, lobby Start, result/rematch visibility, and Back navigation.
 
 Known upstream issues observed separately:
 
-- Two existing builder unit tests fail in unchanged `static/builder.js` and
-  `tests/web/builder.test.cjs`: inferred AI settings and stopped-request prompt
-  restoration. These are outside this page change.
 - `games/tictactoe.html:139` calls `.includes()` on null turns when a match ends.
   The browser test reports that exact known game-frame error separately; all
   other page errors fail the test. Portal result/rematch controls still render.

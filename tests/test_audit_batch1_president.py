@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from game_platform.game_logic import GameLogic, InvalidMoveError
+from game_platform.tests.helpers import UnrestrictedGameLogic as GameLogic
+from game_platform.game_logic import InvalidMoveError
 
 SOURCE = Path(__file__).parent.parent / 'games' / 'audit-batch1' / 'president.server.js'
 
@@ -144,7 +145,7 @@ def test_last_card_equal_rank_skip_does_not_return_turn_to_finished_player():
 
 
 def test_platform_random_walk_regression_for_finished_skip_player():
-    from game_platform.game_testing import test_server_code as run_gate
+    from game_platform.tests.helpers import run_unrestricted_server_code as run_gate
     from game_platform.models import GameRules
 
     report = run_gate(

@@ -87,6 +87,18 @@ function setup({
       opts.body ? JSON.parse(opts.body) : undefined,
       opts.headers || {},
     ]);
+    if (url.startsWith("/batch?")) {
+      // portalTransport batches GETs: answer each sub-request in turn.
+      const requests = JSON.parse(
+        new URL(url, "http://test").searchParams.get("requests"),
+      );
+      const results = requests.map(({ path }) =>
+        path === "/push/config"
+          ? { status: 200, body: config }
+          : { status: 200, body: {} },
+      );
+      return { ok: true, text: async () => JSON.stringify(results) };
+    }
     if (url === "/push/config")
       return { ok: true, text: async () => JSON.stringify(config) };
     return { ok: true, text: async () => "{}" };
@@ -98,12 +110,13 @@ function setup({
     abort() {}
   }
   const ctx = vm.createContext({
-    console, Map, Set, URLSearchParams, Promise, JSON, Math, Date, Number, String,
+    I18n: require('./i18n-stub.cjs'), console, Map, Set, URLSearchParams, Promise, JSON, Math, Date, Number, String,
     Boolean, Array, Object, Uint8Array, atob, encodeURIComponent, setTimeout,
     clearTimeout, AbortController: AbortControllerStub, fetch,
     navigator: {
       onLine: true,
       serviceWorker: {
+        addEventListener() {},
         register: async () => registration,
         getRegistration: async () => registration,
       },
@@ -220,4 +233,3 @@ test("a denied browser permission shows the blocked state", async () => {
   );
   assert.equal(node("notify-toggle").disabled, true);
 });
-

@@ -68,7 +68,7 @@ if (typeof window !== "undefined" && window.document) {
   function logLine(direction, message) {
     const time = new Date().toLocaleTimeString();
     const summary = message.type === "state_changed"
-      ? `move_count=${message.move_count} turn=${JSON.stringify(message.turn_of_player_indices)} acting_for=${message.acting_for_player_index}`
+      ? `move_count=${message.move_count} turn=${JSON.stringify(message.turn_of_player_indices)} my_seat=${message.my_player_index}`
       : `next_turn=${JSON.stringify(message.move?.next_turn_player_indices)} new_state=${JSON.stringify(message.move?.new_state)}`;
     const line = document.createElement("div");
     line.textContent = `${time} ${direction} ${message.type}: ${summary}`;
@@ -86,7 +86,7 @@ if (typeof window !== "undefined" && window.document) {
     const m = latest;
     $("summary").textContent =
       `status=${m.status} · move_count=${m.move_count} · turn_of_player_indices=${JSON.stringify(m.turn_of_player_indices)}` +
-      ` · my_player_index=${m.my_player_index} · acting_for_player_index=${m.acting_for_player_index}`;
+      ` · my_player_index=${m.my_player_index} · my_turn=${m.my_player_index !== null && m.turn_of_player_indices?.includes(m.my_player_index)}`;
     $("message").textContent = JSON.stringify(m, null, 2);
     const header = document.createElement("tr");
     for (const title of ["#", "Name", "Kind", ""]) {
@@ -99,7 +99,7 @@ if (typeof window !== "undefined" && window.document) {
       const notes = [];
       if (m.turn_of_player_indices !== null && m.turn_of_player_indices.includes(player.player_index)) notes.push("turn");
       if (player.player_index === m.my_player_index) notes.push("you");
-      if (player.player_index === m.acting_for_player_index) notes.push("you act for");
+      if (player.player_index === m.my_player_index && m.turn_of_player_indices?.includes(m.my_player_index)) notes.push("your turn");
       for (const text of [player.player_index, player.name, player.kind, notes.join(", ")]) {
         const td = document.createElement("td");
         td.textContent = String(text);
@@ -107,13 +107,13 @@ if (typeof window !== "undefined" && window.document) {
       }
       return tr;
     }));
-    const acting = m.acting_for_player_index;
+    const myTurn = m.my_player_index !== null && m.turn_of_player_indices?.includes(m.my_player_index);
     if (m.status !== "ongoing") {
       $("acting").textContent = "The match is not ongoing; the platform will reject moves.";
-    } else if (acting === null) {
+    } else if (!myTurn) {
       $("acting").textContent = "It's not your turn; the platform will reject moves.";
     } else {
-      $("acting").textContent = `It's your turn (seat ${acting}).`;
+      $("acting").textContent = `It's your turn (seat ${m.my_player_index}).`;
     }
     resetForm();
   }

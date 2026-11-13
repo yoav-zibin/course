@@ -2,6 +2,15 @@
 
 An in-memory REST backend for a multiplayer turn-based games platform, built with FastAPI.
 
+> Historical note (Nov 7, 2026): the Builder was deleted — games are now created only
+> through `POST /games` (see `docs/agent-game-import.md`). The builder sections below
+> (game builder, `/builder`, builder tests, builder emulator) are stale and describe
+> removed code; they are kept for history until the README is rewritten.
+
+> Writing a game for the platform: see [GAME_DEVELOPMENT_GUIDE.md](GAME_DEVELOPMENT_GUIDE.md)
+> — the complete guide to the `POST /games` import API, the server and client
+> contracts, and the checks every game must pass.
+
 - **Game**: a game built in the game builder. Its `code` runs in a sandboxed iframe on the
   client; the server never executes it.
 - **Match**: playing a game with a set of players (humans and computer opponents).
@@ -12,10 +21,12 @@ All data lives in process memory behind the `Store` interface (`store.py`), so i
 be swapped for a database. The in-memory store maintains secondary indexes for
 user-linked login accounts, match participants, and match status, avoiding full user or
 match scans on common login, match-history, open-match, and quick-match candidate
-requests. These indexes are process-local and do not make snapshot-based persistence
-safe across multiple server processes. The server binary uses `JsonFileStore`
+requests. These indexes are process-local and do not make the file-backed
+persistence safe across multiple server processes. With no Firestore configured, the server binary uses `JsonFileStore`
 (`json_file_store.py`), which also saves everything to a JSON file; see
-[Data file](#data-file).
+[Data file](#data-file). The production deployment instead runs the Firestore
+query store (`query_store.py`), which keeps the data in Firestore and reads it
+in bounded, paginated queries.
 
 ## Layout
 
@@ -25,7 +36,10 @@ safe across multiple server processes. The server binary uses `JsonFileStore`
 | `store.py`   | `Store` protocol and `InMemoryStore`                            |
 | `saving_store.py` | `SavingStore`: an `InMemoryStore` saved in the background (base of the stores below) |
 | `json_file_store.py` | `JsonFileStore`: `InMemoryStore` saved to a JSON file   |
-| `firestore_store.py` | `FirestoreStore`: `InMemoryStore` saved to Firestore, and the `import` command |
+| `query_store.py` | `QueryStore`: on-demand Firestore storage — paginated reads, transactional writes |
+| `read_cache.py` | The stale-while-revalidate cache in front of `QueryStore`'s non-transactional reads |
+| `scaling_service.py`, `scaling_api.py` | The platform layer and `/v2` routes on top of `QueryStore` |
+| `scaling_tools.py` | Offline maintenance CLI for a query-store namespace (init, export, merges, reports) |
 | `config.py`  | Server config, read from a JSON file                            |
 | `config.example.json` | Example config with every field at its default         |
 | `requirements.txt` | pip packages needed to run the server                      |
@@ -34,14 +48,14 @@ safe across multiple server processes. The server binary uses `JsonFileStore`
 | `schemas.py` | Pydantic request/response bodies                                |
 | `api.py`     | FastAPI routes and `create_app`                                 |
 | `main.py`    | Server binary (`game_platform_server`)                          |
-| `static/`    | Web pages: portal, builder, API console and data browser        |
+| `static/`    | Web pages: portal, API console and data browser                 |
 | `docs/ab-experiments.md` | A/B experiment framework, student skin and campaign workflow |
 | `docs/ui-skin-guide.md` | Creating, previewing, contributing and accessing UI skins |
-| `games/`     | The example games' code: tic-tac-toe, poker and a debug game    |
+| `games/`     | The example games' code: tic-tac-toe, poker, take-away and a debug game, plus community game sources |
 | `data.example.json` | Example data: 8 users, the 3 games and 23 matches        |
 | `example_data.py`, `example_data/` | How `data.example.json` is generated     |
 | `tests/`    | Pytest suite, fixtures and shared helpers in `tests/helpers.py` |
-| `tests/web/` | JavaScript regression tests for Builder, Portal and games      |
+| `tests/web/` | JavaScript regression tests for Portal and games            |
 
 ## Architecture
 
@@ -122,9 +136,10 @@ different.
 
 In the product API, the password appears in exactly one place: the `POST /users`
 response. `GET /users/{id}` never returns it and it can't be reset, so clients must keep
-it; a lost password means a lost account. The debug tools (`/browse` and
-`/debug/all-data`, protected by the [master password](#master-password)) do show every
-user's password, so the API console can fill it in for whichever user you act as.
+it; a lost password means a lost account. The debug tools (`/browse` and the
+API console, protected by the [master password](#master-password)) do show every
+user's password — the console reads it from the paged admin user collection —
+so it can fill it in for whichever user you act as.
 
 #### How passwords are stored
 
@@ -154,19 +169,18 @@ authenticating, at the cost of no longer being able to read passwords back from 
 
 ### Third-party login
 
-Besides guest accounts, users can log in with Google, Facebook, a phone number (texted
+Besides guest accounts, users can log in with Google, a phone number (texted
 code) or an email address (emailed code). Each method links a verified credential to
-the account: a Google/Facebook subject id, an E.164 phone number, or a lowercased email
+the account: a Google subject id, an E.164 phone number, or a lowercased email
 address. The website's login dialog offers whichever methods are configured (see
 [config file](#config-file)); all of them return the same credential pair (`user_id` +
 `password`) as `POST /users`, so the rest of the API works unchanged.
 
 | Endpoint | Auth | Description |
 |----------|------|-------------|
-| `GET /auth/config` |  | Which login methods are enabled, and the Google/Facebook app ids |
+| `GET /auth/config` |  | Which login methods are enabled, and the Google app id |
 | `GET /auth/me` | yes | Your own profile, including linked logins |
 | `POST /auth/google` |  | Log in with a Google ID token `{id_token}` |
-| `POST /auth/facebook` |  | Log in with a Facebook Login token `{access_token}` |
 | `POST /auth/phone/start` |  | Text a login code to `{phone_number}` |
 | `POST /auth/phone/verify` |  | Log in with `{verification_id, code}` |
 | `POST /auth/email/start` |  | Email a login code to `{email}` |
@@ -175,7 +189,8 @@ address. The website's login dialog offers whichever methods are configured (see
 Passing your own `X-User-Id`/`X-User-Password` headers to a login endpoint *links* the
 credential to your current account instead of logging in. If that credential already
 belongs to a different account, the two are merged (see below) and the response's
-`merged_from_user_id` tells you which account disappeared.
+`merged_from_user_id` tells you which account was merged away (it is kept, marked
+as replaced, and its old credentials keep working as an alias of the survivor).
 
 Codes are 6 digits, expire after 10 minutes, die after 5 wrong guesses, and can be
 re-requested at most 5 times an hour per phone number or address. Sending needs a
@@ -185,11 +200,14 @@ which is fine for development and useless for real users.
 
 #### Merging accounts
 
-`POST /users/{id}/merge` `{into_user_id}` merges one account into another: every game
-(all versions), match (owner, seats, hidden flags, and move authors), and linked login
-of the URL's user moves to `into_user_id`, then the URL's user is deleted. Authenticate
-as the merged-away user, so nobody can absorb someone else's account; merging a user
-into itself is a 400. The website uses this when you link a login that belongs to
+`POST /users/{id}/merge` `{into_user_id, into_password}` merges one account into
+another: every game (all versions), match (owner, seats, hidden flags, and move authors),
+and linked login of the URL's user moves to `into_user_id`, then the URL's user is marked
+as replaced (its old credentials keep working as an alias of the survivor). The caller
+must control both accounts: authenticate as the merged-away user, and send the surviving
+account's password as `into_password` (a wrong one is a 403). Otherwise anyone could
+merge their own account into someone else's public user id and act as them. Merging a
+user into itself is a 400. The website uses this when you link a login that belongs to
 another of your accounts.
 
 #### Invite links (referrals)
@@ -274,9 +292,9 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `PATCH /users/{id}` | yes | Change your own `display_name` and/or `locale` (403 for other users) |
 | `GET /i18n/locales` |  | The supported languages (see [Languages](#languages)) |
 | `GET /i18n/{locale}` |  | Every text in one language: UI labels, status labels, error messages |
-| `POST /users/{id}/merge` | yes | Merge this account into `into_user_id` and delete it (authenticate as this user) |
+| `POST /users/{id}/merge` | yes | Merge this account into `into_user_id` (authenticate as this user and send `into_password`, the target's password) |
 | `GET /matches/open` |  | Matches anyone may join (waiting, or ongoing with mid-match joins) |
-| `POST /games` | yes | Create a game |
+| `POST /games` | optional | Import and publish a complete game (see GAME_DEVELOPMENT_GUIDE.md) |
 | `GET /games?owner_user_id=&q=` |  | List published games that aren't deleted, optionally by owner. `q` searches names and descriptions (every word must match, ignoring case). The list never includes code, which is most of each game; load one game in full from `GET /games/{id}` |
 | `GET /games/{id}` |  | Get the latest version of a game |
 | `GET /games/{id}/versions/{version}` |  | Get a specific version of a game |
@@ -288,9 +306,10 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `GET /matches/{id}` |  | Get a match; anyone can view it, so it can be shared by URL. Speed matches include `turn_deadline` and `server_time` |
 | `PATCH /matches/{id}` | yes | Set `num_computer_opponents` before the match starts (owner only) |
 | `POST /matches/{id}/join` | yes | Take a seat |
-| `POST /matches/{id}/start` | yes | Start `{first_turn_player_indices, initial_state}`, both optional (owner only) |
+| `POST /matches/{id}/start` | yes | Start the match (owner only); the server calls the game's `newMatch` |
 | `POST /matches/{id}/leave` | yes | Leave the match |
-| `POST /matches/{id}/moves` | yes | Make a move `{new_state, next_turn_player_indices, expected_move_count?}` |
+| `POST /matches/{id}/moves` | yes | Make a move `{move, expected_move_count?}`; the server runs the game's `applyMove` |
+| `DELETE /matches/{id}/players/{user_id}` | yes | Owner removes a player before the match starts (like them leaving; the stake is refunded); they can't join it again. Not for quick matches |
 | `GET /matches/{id}/moves` |  | Full move history |
 | `DELETE /matches/{id}` | yes | Owner: delete the match. Other players: hide an ended match from their list |
 | `GET /users/me/saved-games` | yes | The caller's saved games, most recently saved first |
@@ -312,7 +331,9 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `POST /push/test` | yes | Queue a test notification to the caller (404 when they have no subscription) |
 
 Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct, each in
-1..10), `allows_leave_mid_match`, `allows_join_mid_match`, `code`.
+1..10), `allows_leave_mid_match`, `allows_join_mid_match`, `code`, and `server_code`
+(required — the JavaScript the server runs for the game; see
+`docs/server-side-game-api.md`).
 
 ### Game versions and deletion
 
@@ -330,17 +351,33 @@ Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct
   `GET /games/{game_id}/versions/{game_version}`.
 - Before the start, humans sit in join order followed by the computers. Starting requires
   the total number of seats to be in the game's `allowed_player_counts`.
-- A move is accepted from any player whose turn it is: `next_turn_player_indices` names
-  the set of seats that may make the next move, and `null` ends the match
-  (`end_reason: "finished"`). When a computer seat has the turn, any human player in
-  the match computes and submits the computer's move.
+- A move is accepted from any player whose turn it is. The client sends the game's
+  own move object; the server runs `applyMove`, whose result names the set of seats
+  that may move next (`turn_of_player_indices`), and a `null` turn ends the match
+  (`end_reason: "finished"`). When a computer seat has the turn, the server computes
+  and submits the computer's move itself.
   `expected_move_count` optionally guards against two clients submitting the same move.
+- **Token stakes.** Every human's stake is taken when they join and held in the
+  match's pot. The server code decides the split: the move that ends the match
+  returns `payouts` totaling the pot, and the server pays them out at once. A match
+  that ends any other way — the last human leaving — refunds the stakes. A speed
+  match whose turn deadline passes is ended by a server timer, and its pot goes
+  to the players who did not hold the turn, split evenly (refunded evenly to
+  everyone only when every player held the turn).
 - Leaving a waiting match frees the seat (the owner must delete the match instead). Leaving
   an ongoing match replaces the leaver with a computer (which keeps the turn) if the game
   `allows_leave_mid_match`, and otherwise ends it (`end_reason: "player_left"`). The match
   also ends if its last human leaves.
 - Joining an ongoing match requires `allows_join_mid_match`; the joiner takes over the
   first computer seat, or adds a seat if the game's maximum player count allows it.
+  In a paid match the joiner stakes `bet_per_player` like everyone else (it is added to
+  `token_pot`); a joiner who can't afford it is turned away (409).
+- Joining a paid match that hasn't started checks that the joiner can afford the stake
+  (counting today's grant); it is taken when the match starts. The owner can remove a
+  waiting player (the portal shows a Remove button), who then can't rejoin that match.
+- A rematch (`POST /matches/{id}/rematch`) is private if the original was, holds a seat
+  for each original player until they come back (others get 409 while only held seats are
+  free), and starts with no stake.
 
 ### Feedback
 
@@ -439,7 +476,7 @@ is answered in the first of: the `lang` query parameter, the language saved on t
 named by `X-User-Id` (set with `locale` on `POST /users` or `PATCH /users/{id}`), the
 `Accept-Language` header, and English. Error messages are translated; `GET /i18n/{locale}`
 returns the catalog of UI labels and status labels (cacheable, with an `ETag`). The
-catalogs live in `locales/*.json`. The portal and builder have a language picker in the top
+catalogs live in `locales/*.json`. The portal has a language picker in the top
 bar (`static/i18n.js`) that remembers the choice in the browser and on the account. See
 [docs/i18n.md](docs/i18n.md) for how frontends use them and how to add a language or a text.
 
@@ -465,14 +502,15 @@ the ones they don't know:
 
 - **Python 3.10 or newer.** The code uses 3.10 features (`X | Y` type unions evaluated at
   runtime, `dataclass(kw_only=True)`), so 3.9 and older won't work. It is tested with
-  3.10.
+  3.12 and 3.14.
 - **The server packages** are listed in `requirements.txt`: `fastapi`, `pydantic`
-  (v2) and `uvicorn`, plus `openai` for the optional Model API client and
+  (v2) and `uvicorn`, plus
   `pywebpush` (with `cryptography`) for web push notifications. They pull in their
   own dependencies (such as `starlette`) automatically.
 - **Two more for the tests**, in `requirements-dev.txt`: `pytest`, and `httpx`, which
   FastAPI's `TestClient` needs.
-- Nothing else: no database (data is kept in a JSON file), no build step, and no
+- Nothing else: no database in the default configuration (data is kept in a JSON
+  file; Firestore is the production store), no build step, and no
   JavaScript toolchain (the web pages are plain HTML/JS files that the server serves).
 
 ### Install
@@ -539,16 +577,14 @@ stop the server at startup with an error naming the field.
 | `firestore.enabled`               | `false`                                  | Save the data in Firestore instead of the data file; see [Firestore](#firestore) |
 | `firestore.project_id`            | `""`                                     | Google Cloud project; empty uses the project of the server's credentials |
 | `firestore.database`              | `"(default)"`                            | Firestore database id |
-| `firestore.collection_prefix`     | `""`                                     | Prepended to every collection name, to keep several servers apart in one database |
-| `firestore.save_interval_seconds` | `1.0`                                    | After a change, Firestore is written at most once per this many seconds |
-| `debug_tools`                     | `true`                                   | Serve `/console`, `/browse` and `/debug/all-data` (see [Pages](#pages)) |
-| `master_password`                 | `""`                                     | Password for `/browse` and `/debug/all-data` (see [Master password](#master-password)). Empty means none, which is only allowed when `server.host` is a numeric IP address |
+| `firestore.namespace`             | `""`                                     | The query schema's namespace inside the database; required when Firestore is enabled |
+| `firestore.allow_default_database_query` | `false`                             | Explicit opt-in to run the query schema in the `(default)` database |
+| `debug_tools`                     | `true`                                   | Serve `/console` and `/browse` (see [Pages](#pages)) |
+| `master_password`                 | `""`                                     | Password for `/browse` and the other admin pages (see [Master password](#master-password)). Empty is for loopback development only; the server refuses a non-loopback bind with debug tools enabled and no password |
 | `log_level`                       | `"INFO"`                                 | `"DEBUG"`, `"INFO"`, `"WARNING"` or `"ERROR"` |
 | `translation.*`                   | `"provider": "off"`                      | Translate games' own texts with Google Translate, on first use (see [docs/game-translation.md](docs/game-translation.md)); `google_api_key`, `daily_character_limit` |
 | `monitoring.*`                    | see `config.example.json`                | JSON logs, a log file for the Ops Agent, and the thresholds for alerts (slow requests, sign-up floods, memory...); see [docs/monitoring.md](docs/monitoring.md) |
 | `auth.google.client_id`           | `""`                                     | Google OAuth client ID for the website (empty disables Google login). Create one in Google Cloud Console > APIs & Services > Credentials, type "Web application", with the site's origin as an authorized JavaScript origin |
-| `auth.facebook.app_id`            | `""`                                     | Facebook app ID (empty disables Facebook login). Create an app at developers.facebook.com with Facebook Login |
-| `auth.facebook.app_secret`        | `""`                                     | Facebook app secret |
 | `auth.sms.provider`               | `"log"`                                  | `"log"` writes codes to the server log; `"twilio"` texts them |
 | `auth.sms.twilio_account_sid`     | `""`                                     | Twilio account SID |
 | `auth.sms.twilio_auth_token`      | `""`                                     | Twilio auth token |
@@ -611,20 +647,21 @@ games and referrer. Its layout is
 Instead of the data file, the server can keep its data in
 [Firestore](https://cloud.google.com/firestore), Google Cloud's managed database:
 the data then doesn't depend on one machine's disk, and Firestore's scheduled backups
-replace the file backups. Like the data file, everything is loaded into memory at
-startup and changes are saved in the background, so it still serves one server
-process at a time (`firestore_store.py`).
+replace the file backups. The Firestore store is the query store (`query_store.py`):
+nothing is loaded wholesale at startup — every read is a bounded, paginated query
+and every change is written transactionally as it happens. Non-transactional reads
+are served from a stale-while-revalidate cache (`read_cache.py`): entries refresh
+in the background at most once a second, so data is never more than about a second
+stale across server processes, and the cache is LRU-evicted at half the machine's
+RAM.
 
-**Layout.** One document per record, named after the record: `users/<id>`,
-`game_versions/<game id>@<version>`, `matches/<id>`, `invites/<token>`, ... Each
-document holds the record as JSON. Large records that compress well are saved as
-level-1 zlib bytes; small and incompressible records stay as text to avoid spending
-CPU for little storage reduction. Readers accept both formats. A match's moves are
-one document each in `matches/<id>/moves`, and an agent conversation's entries in
-`agent_conversations/<game id>/entries`, so long matches never hit Firestore's 1 MiB
-document limit; text over ~900 KB is split into a `chunks` subcollection.
-`meta/format` holds the data format, so an older server refuses newer data. A save
-writes only the records that changed.
+**Layout.** One namespace per deployment keeps everything apart inside a shared
+database: collections are named `<namespace>_<kind>` (`production_v3_users`,
+`production_v3_matches`, ...), and `<namespace>_meta/schema` holds the schema
+version. Each document holds its record as JSON; an oversized game body is split
+into a `body` subcollection so no document nears Firestore's 1 MiB limit, and a
+match's moves are separate documents the server reads in bounded chunks, only
+when a history is actually viewed.
 
 **Setting it up on Google Cloud** (once):
 
@@ -636,32 +673,40 @@ writes only the records that changed.
    IAM). On a Compute Engine VM that's the VM's service account, and the VM's access
    scopes must also enable **Cloud Datastore** (changing scopes requires stopping the
    VM; make its external IP static first if it's ephemeral, or it changes).
-3. Copy the existing data in, with the server stopped:
+3. Initialize an empty namespace, with the server stopped:
 
    ```bash
-   python -m game_platform.firestore_store import /path/to/data.json
+   python -m game_platform.scaling_tools init --project <project> \
+       --database "(default)" --namespace <namespace>
    ```
 
-   It refuses a database that already has data. Then set `"firestore": {"enabled": true}`
-   in the config file and start the server.
+   Then set `"firestore": {"enabled": true, "namespace": "<namespace>",
+   "allow_default_database_query": true}` in the config file (the opt-in is
+   required for the `(default)` database) and start the server.
 
-To go back to a data file, write the database out (refuses to overwrite a file):
+To copy a namespace back out, use the maintenance CLI's streaming export, again
+with writers stopped:
 
 ```bash
-python -m game_platform.firestore_store export /path/to/new-data.json
+python -m game_platform.scaling_tools export --project <project> \
+    --database "(default)" --namespace <namespace> --output <directory>
 ```
 
-**Costs.** Startup reads every document once (a document per record and per move),
-and each change writes the changed documents. A class-sized deployment stays within
-Firestore's free tier (50,000 reads and 20,000 writes a day, 1 GiB stored); backups
-are billed for their storage.
+The same CLI carries the other offline jobs (counts, validation, account merges
+and deletions, library normalization, dashboard reports); see
+`python -m game_platform.scaling_tools --help`.
 
-**Tests.** `tests/test_firestore_store.py` runs against the Firestore emulator and is
+**Costs.** Reads and writes are per request: a page costs at most 100 document
+reads, and a change writes only the records it touched. A class-sized deployment
+stays within Firestore's free tier (50,000 reads and 20,000 writes a day, 1 GiB
+stored); backups are billed for their storage.
+
+**Tests.** `tests/test_query_store.py` runs against the Firestore emulator and is
 skipped without it. Start the emulator (Java and Node.js needed) and point the tests at it:
 
 ```bash
 npx firebase-tools emulators:start --only firestore --project demo-game-platform
-FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 python -m pytest game_platform/tests
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 python -m pytest game_platform/tests/test_query_store.py
 ```
 
 ### Staged HTTP benchmark
@@ -708,12 +753,12 @@ peak for that dataset and mix. `/health` alone measures health-check overhead, n
 application capacity. The runner is read-only by default; other methods require
 `--allow-write` and an isolated benchmark database.
 
-**Current limitation:** the existing snapshot-based Firestore store is single-process
-only, and several list routes are unpaginated. In-memory indexes reduce scans for
-login-account, per-user match-history, and open-match lookups, but do not change this
-consistency or memory limitation. Do not use two VMs or a target-sized dataset for a
-capacity claim until those backend paths have been changed. See the
-[backend scaling plan](docs/backend-scaling-plan.md).
+**Historical limitation (resolved Oct 30, 2026):** the original Firestore store
+loaded the whole dataset into memory and was single-process only, with several
+unpaginated list routes. Production runs the query store with paginated routes
+(see [docs/scaling-storage.md](docs/scaling-storage.md)), and the snapshot store
+was removed entirely on Nov 9, 2026; unconfigured local runs use the JSON data
+file instead.
 
 ### Synthetic target-scale traffic and resource data
 
@@ -732,7 +777,7 @@ includes authentication/profile, catalog, match history/details, matchmaking, ma
 creation/join, moves, invites, and health. CPU, memory, autoscaled instance count,
 latency, network, and Firestore document operations are model estimates, not measured
 benchmarks or GCE telemetry. The summary records the assumptions and warns that the
-current snapshot-based service cannot load the full target inventory into one VM.
+original snapshot-based service could not load the full target inventory into one VM.
 Generating the files makes no cloud calls; this model is not a capacity claim.
 
 Generate charts from the CSV with the standard-library-only renderer:
@@ -749,7 +794,7 @@ The images retain synthetic-data labels when viewed separately.
 Once the server is running, open these pages in a browser:
 
 - `/portal` (also `/`): play games with others. Log in at the top right — with Google,
-  Facebook, a texted or emailed code, or as a guest — and switch between accounts, log
+  a texted or emailed code, or as a guest — and switch between accounts, log
   out, or link more logins to your account from the account menu (see [Third-party
   login](#third-party-login)). The left side lists your matches (your move, ongoing,
   waiting for players, over), a form to create a match for any game with some computer
@@ -768,8 +813,8 @@ Once the server is running, open these pages in a browser:
 - `/console`: API console. Pick an operation, fill in its parameters and JSON
   body (prefilled with an example and the most recent ids), choose who to act as
   (`X-User-Id` and `X-User-Password`) at the top, and send (Ctrl+Enter). Picking a user
-  fills in their password (from `/debug/all-data`, or remembered in the browser's
-  localStorage for users created from the console). It shows the response, keeps a
+  fills in their password (from the paged admin user collection, or remembered in
+  the browser's localStorage for users created from the console). It shows the response, keeps a
   history you can click to restore, and can copy a request as curl. The operations come
   from `/openapi.json`, so new endpoints show up automatically.
 - `/browse`: every user (including their password), game (expand a row for all versions
@@ -789,10 +834,11 @@ Once the server is running, open these pages in a browser:
   in `/admin`.
 - `/docs`: FastAPI's generated OpenAPI docs.
 
-The `/console` and `/browse` pages read `/debug/all-data`, which returns everything,
-including every user's password. Set `"debug_tools": false` in the config to turn off
-the pages and that endpoint; the API itself keeps working. (The portal and builder no
-longer use it: they log in as real accounts.)
+The `/console` and `/browse` pages read the paged admin collections
+(`/v2/admin/users`, `/v2/admin/games`, `/v2/admin/matches`), one bounded page at a
+time; the user pages include every user's password. Set `"debug_tools": false` in
+the config to turn off the pages; the API itself keeps working. (The portal no
+longer uses them: it logs in as real accounts.)
 
 ### Administration
 
@@ -806,7 +852,7 @@ don't need a user's credentials:
 | `GET /admin/invites` | The invite tree behind `/invites`: a summary, and per user their inviter, direct and total (transitive) invites and depth, sorted by total |
 | `GET /admin/feedback?kind=&target_type=&target_id=&status=` | Users' [feedback](#feedback), newest first (up to 200), and the 20 targets with the most "problem" reports |
 | `DELETE /admin/users/{id}` | Delete a user and the matches they own; their games are marked deleted, and they leave the matches they're seated in |
-| `DELETE /admin/games/{id}` | Mark a game deleted (its versions are kept for existing matches) |
+| `DELETE /admin/games/{id}` | Delete a game and all of its matches (held pots are refunded, invites deleted); versions are kept |
 | `DELETE /admin/matches/{id}` | Delete a match |
 
 `/browse` has a Delete button on every row and one to delete every row matching the
@@ -837,7 +883,9 @@ A game lists every text it shows in one JSON block in its HTML; the server trans
 (and the game's name and description) into the player's language the first time it is asked for, with
 Google Translate, remembers each text, and the portal passes the translations to the game in its
 `state_changed` message (`strings`, `locale`, `direction`). `GET /games/{id}/versions/{v}/strings` and
-`GET /i18n/games/{locale}` return them. The game-building agent is told how to write such games.
+`GET /i18n/games/{locale}` return them, and `GET /i18n/bundle/{locale}` returns the catalog, the game
+names and every published game's strings in one cacheable response (the translations of a language are one
+Firestore document, kept in memory). The game-building agent is told how to write such games.
 Off until `translation.provider` is set. See [docs/game-translation.md](docs/game-translation.md).
 
 ### Monitoring and alerts
@@ -853,31 +901,32 @@ fake users in `tools/fake_users`) and investigate from the logs (`tools/log_dige
 
 ### Master password
 
-`master_password` in the config protects `/browse` and `/debug/all-data` with HTTP basic
-auth: the browser asks for a username and password once, and then sends them with every
-request, including the other pages' fetches of `/debug/all-data` (so opening the portal,
-builder or console asks for it too). The username is ignored; only the password is
-checked. The product API and `/docs` don't need it.
+`master_password` in the config protects `/browse` and the other admin pages with
+HTTP basic auth: the browser asks for a username and password once, and then sends
+them with every request, including the other pages' fetches of the paged admin
+collections (so opening the portal or console asks for it too). The username is
+ignored; only the password is checked. The product API and `/docs` don't need it.
 
-It defaults to empty, which means no password. That is only allowed when `server.host`
-is a numeric IP address (such as the default `127.0.0.1`, or `0.0.0.0`). If `server.host`
-is a hostname (such as `localhost` or `games.example.com`) while debug tools are on, the
-server refuses to start until `master_password` is set. Like users' passwords, it travels
-in plain text over HTTP.
+It defaults to empty for loopback development (`127.0.0.1` or `::1`). With debug
+tools enabled, a non-loopback bind requires a master password. A reverse proxy
+can expose even a loopback server: always configure a strong password before
+putting it behind a public proxy. Use HTTPS because Basic authentication sends
+the password with each request.
 
 ## Game API
 
 A game's `code` is a complete HTML document. The portal and the builder run it in an
 iframe with `sandbox="allow-scripts"`: its scripts run, but in an isolated origin, so a
-game can't read the platform's cookies or storage or call the API. The page and the game
+game cannot read the platform's cookies, storage, or API credentials. It can still
+make anonymous requests to public endpoints; the sandbox is not a network firewall.
+The page and the game
 talk only through `postMessage`, with two messages.
 
-A game may also have `server_code` (the v2 Game API, specified in
+Every game has `server_code` (the server-side Game API, specified in
 `docs/server-side-game-api.md`): plain JavaScript the server runs authoritatively —
 it holds the state and the rules, validates every move, and moves computer opponents
-itself. The client then only renders the view the server sends it. Games without
-server code keep the original (v1) protocol below, in which the server never runs
-game code; it only stores each move's state and checks whose turn it is.
+itself. The client then only renders the view the server sends it. A game cannot be
+created without server code.
 
 ### `state_changed`: platform to game
 
@@ -905,70 +954,70 @@ joining or leaving, the match ending), and again if a move the game sent was rej
 
 | Field | Meaning |
 |-------|---------|
-| `state` | The match state from the last move: any JSON the game chose. `null` before the first move, so the game must create its own initial state. For a v2 game this is the viewer's view (the full state never leaves the server) |
-| `view` | v2 games only: the viewer's view of the match, exactly what the server code's `viewFor` returned for them (`null` for spectators). A v2 client renders this and keeps no state of its own |
+| `state` | The viewer's view of the match state: what the server code's `viewFor` returned for them (`null` for spectators). The full state never leaves the server |
+| `view` | The same view as `state`, carried under its own name: a client renders this and keeps no state of its own |
 | `players` | Every seat, in order. `kind` is `"human"` or `"computer"`; `player_id` is the user's id for humans and `computer-1`, ... for computers. Seats can change kind when players leave or join, and seats can be added mid-match |
 | `turn_of_player_indices` | The seats that may move next; `null` once the match is over |
 | `status` | `"ongoing"` or `"over"` (games aren't loaded while a match waits for players) |
 | `end_reason` | When over: `"finished"` (a move ended it) or `"player_left"` |
 | `move_count` | How many moves were made |
-| `token_pot` | The match's token pot (v2 games stake tokens; see the v2 spec) |
+| `token_pot` | The match's token pot (see [Match rules](#match-rules)) |
 | `my_player_index` | The viewer's seat, to decide what to show (e.g. whose cards). `null` for spectators |
-| `acting_for_player_index` | The seat this game should make the next move for, or `null` if it must wait. For a v2 game it is only ever the viewer's own seat — the server moves computers. For a v1 game it can also be a computer's seat on a computer's turn if the viewer plays in the match |
+| `acting_for_player_index` | The seat this game should make the next move for, or `null` if it must wait. It is only ever the viewer's own seat — the server moves computers itself |
 
 ### `make_move`: game to platform
 
-Sent by the game to make the move for `acting_for_player_index`. A v2 game sends
+Sent by the game to make the move for `acting_for_player_index`. The game sends
 only the move itself — the server validates and applies it:
 
 ```json
 {"type": "make_move", "move": {"cell": 4}}
 ```
 
-A v1 game sends the full result:
+The portal submits it with `POST /matches/{id}/moves` (with `expected_move_count`,
+so a stale move is rejected) and then sends a fresh `state_changed`. Moves the
+server rejects (not your turn, an illegal move) are shown to the player and followed
+by `state_changed` with the unchanged match. Send at most one `make_move` per
+`state_changed`.
+
+### `game_ready`: game to platform
+
+Sent once by the game as soon as it has installed its `message` listener:
 
 ```json
-{"type": "make_move", "new_state": {"board": ["X", "X", "", "", "O", "", "", "", ""]}, "next_turn_player_indices": [1]}
+{"type": "game_ready"}
 ```
 
-`new_state` replaces the match's state. `next_turn_player_indices` lists the seats that
-may move next (more than one when several players move at once), or `null` to end the
-match. The portal submits it with
-`POST /matches/{id}/moves` (with `expected_move_count`, so a stale move is rejected) and
-then sends a fresh `state_changed`. Moves the server rejects (not your turn, a seat that
-doesn't exist) are shown to the player and followed by `state_changed` with the
-unchanged match. Send at most one `make_move` per `state_changed`.
+The platform holds the first `state_changed` until `game_ready` arrives, so a game
+cannot miss state posted before its listener was up. Games that never send it are
+sent their first `state_changed` after a 2-second timeout instead, so the handshake
+is recommended but not required. (Some older games send `{"type": "ready"}`; both
+spellings open the gate.)
 
-For compatibility, games written before turn sets may still send `next_turn_player_index`
-(a single seat); the portal wraps it into a one-element set. `state_changed` likewise
-still carries the legacy `turn_of_player_index` (the first seat in the turn), which new
-games should ignore.
+For compatibility, `state_changed` still carries the legacy `turn_of_player_index`
+(the first seat in the turn), which new games should ignore.
 
 ### Rules for games
 
-For a v2 game, the server code holds the rules: see `docs/server-side-game-api.md`
-for the contract (deterministic logic, `viewFor` views so secrets never leave the
-server, computers moved by the server, token payouts). The rules below are the
-v1 protocol's, kept for games without server code:
+The server code holds the rules: see `docs/server-side-game-api.md` for the
+contract (deterministic logic, `viewFor` views so secrets never leave the server,
+computers moved by the server, token payouts). In short:
 
-- **Computers are played by the game.** On a computer's turn, every human player's game
-  gets `acting_for_player_index` set to that seat and should compute and send the
-  computer's move (after a short delay, so people can follow). The first one to arrive
-  wins; the others are rejected as stale and ignored. With no human player online,
-  computers wait.
-- **Randomness happens in moves.** For example, poker's first move deals, and the move
-  that ends a hand deals the next one, so every player sees the same cards.
-- **The state is public.** Every player's game, and anyone with the debug tools, can
-  read the whole state, so hidden information (like poker hands) is hidden by the game's
-  UI only. That's fine for friendly games, not for real stakes.
-- **Handle seat changes.** A player leaving becomes a computer seat in games that allow
-  it, and players joining mid-match take over a computer seat or add one at the end.
+- **Computers are moved by the server.** The game's `computerMove` supplies their
+  moves, whether or not any human is online; no client ever moves for another seat.
+- **Randomness comes from `ctx.random`.** The server seeds it per call, so every
+  call is reproducible and a match replays exactly.
+- **The state is private.** Only `viewFor` views ever leave the server, so hidden
+  information (like poker hands) stays hidden.
+- **Handle seat changes.** Games that allow leaving or joining mid-match implement
+  `playerLeft` / `playerJoined`; a player who leaves an ongoing match is replaced
+  by a computer seat where the game allows it.
 
 ### Example games
 
 The `games/` directory holds the example data's games. Each is a pair of files: an
 HTML client that only renders its view and sends moves, and a `.server.js` with the
-game's logic, which the server runs (the v2 Game API):
+game's logic, which the server runs (the server-side Game API):
 
 - `tictactoe.html` + `tictactoe.server.js`: 2 players; the computer plays perfectly
   (minimax).
@@ -1022,46 +1071,36 @@ python -m pytest game_platform/tests
 The tests start the app in-process (no server or network needed) and use temporary
 directories for data files, so they don't touch your data.
 
-GitHub Actions runs these tests on every push and pull request
-(`.github/workflows/tests.yml`, Python 3.14). The web checks below aren't part of it yet.
+GitHub Actions runs these tests on pushes to `main` and on pull requests
+(`.github/workflows/ci.yml`, Python 3.14), together with JavaScript and
+Playwright checks and a production-only Python 3.12 import check. The separate
+`.github/workflows/scaling.yml` runs Firestore emulator tests. Its result does
+not gate the deployment job in `ci.yml`.
 
-### Web builder regression checks
+### Web regression checks
 
 All backend tests and their fixtures/helpers live in `tests/`; web checks live in
 `tests/web/`. Pytest defaults to `tests/` when run from this package directory.
 
-Run `node tests/web/builder.test.cjs` (Node.js 18+) from this package directory. These
-checks exercise editor preservation, asynchronous agent replies, publishing and
-local move validation with a small DOM stub; they do not call the model API.
+Run the complete web suite with `node --test tests/web/*.test.cjs` (CI uses Node.js 22) from this
+package directory. Each script can also run directly with
+`node tests/web/<name>.test.cjs`.
 
-Run the complete web suite with `node --test tests/web`. Each script
-can also run directly with `node tests/web/<name>.test.cjs`.
-
-The web builder uses the server's configured model API key. Students only need
-to log in; they do not need to supply a personal API key. After publishing,
-**Play this game** opens the portal with the saved game selected for a new match.
-
-### Preview local UI with the course server's Muse setup
+### Preview local UI against the live server
 
 Install `requirements-dev.txt`, then run `python preview.py` from this directory
-and open http://127.0.0.1:8001/builder. This serves your local HTML/CSS/JavaScript
-while forwarding product API calls to https://buildplay.fun, whose server owns
-the Muse Spark key. No personal model key is requested or stored locally.
+and open http://127.0.0.1:8001/portal. This serves your local HTML/CSS/JavaScript
+while forwarding product API calls to https://buildplay.fun.
 **This uses live course accounts and saves games/matches on buildplay.fun.**
 The separate port keeps preview accounts separate from an offline local server.
 Google sign-in requires the course OAuth app to allow the local origin; guest
-login remains available for generation checks. Use the deployed site for final
+login remains available. Use the deployed site for final
 Google-login verification. The preview binds only to loopback and does not proxy
 admin/debug endpoints. Run `python -m pytest tests/test_preview.py` for its routing check.
 The local preview disables the portal service worker and sends static assets with
 `Cache-Control: no-store`, so ordinary reloads show edited files without repeated
 hard refreshes. Restart `preview.py` after changing Python preview behavior; a page
 already controlled by an older worker is cleaned up when opened through `/portal`.
-
-The connected preview submits Muse generation as a background job and polls for
-the result. This avoids relying on one long browser HTTP request for large games.
-The preview process must stay running; jobs remain in its memory until completion.
-It returns the real backend response and does not retry paid generation requests
 automatically. The builder autosaves its working copy and restores the last workspace and conversation on this device after reload.
 
 The waiting panel distinguishes sending the request from waiting for an accepted
@@ -1123,8 +1162,8 @@ changes as the next version. Existing matches remain pinned to their original ve
 
 The existing working-copy, publication-state and legacy API routes remain compatible
 with other clients and stored data. This UI change does not publish, delete or
-rewrite previously stored records automatically. Persistence remains format 4;
-keep compatible backups when deploying backend changes.
+rewrite previously stored records automatically.
+Keep compatible backups when deploying backend changes.
 
 ### Navigation
 
@@ -1163,19 +1202,41 @@ updates received while browsing. Newly started matches retain their initial stat
 zero. Older matches without that snapshot start at the first recorded move. Local practice records
 moves on this device; older local sessions can only replay newly recorded moves.
 Online history is cached after opening it for later offline browsing.
-Starting snapshots persist in data file format 9 (formats 1–8 still load).
 
 The Builder supports Pause / Resume and Step (one accepted move, then pause),
 Undo / Redo, responsive/phone/tablet preview widths, and an expandable JSON state
 inspector. Undo pauses playback so computers cannot immediately overwrite it.
 Making a new move after undo clears the redo branch. Restart resets the session.
 
+### The game-test page
 
-Practice sessions have a visible **End practice** control and can be resumed without
-creating another match. **Remove practice from list** archives the local session.
-Deleting a match archives any pending offline work before removing its cached list
-entry, preventing deleted matches from reappearing. The action menu stays inside
-the viewport, and invalid next-player indices are rejected before queueing moves.
+`/game-test` is a static page for game authors (see GAME_DEVELOPMENT_GUIDE.md
+section 9). The author stores the full submission payload (name, secret,
+description, both code fields, the three JSON schemas, unit-test cases,
+rules/UI text, tutorial, images and translations) with a REST call
+(`POST /game-test/submissions`, which runs the full submission verification
+before storing) and follows a linear
+five-step flow: (1) the payload is stored on the server and the page loads
+it back by secret (`GET /game-test/submission`), (2) the server runs
+its server-code tests and records the run's metadata, (3) pass-and-play
+matches are played to the end — one per allowed player count — and each is
+verified by replaying its states and moves on the server, (4) matches
+against the computer are played from the seats that matter (the smallest
+player count from its first and last seat, plus the largest count from its
+last seat), and (5) the per-count set is played multiplayer, one frame per
+player, and verified the same way; screen sizes and orientations are
+covered once across steps 3–5 together, with step 5 adding matches for any
+the run has not shown yet. Every step leaves rows in the `game_test_traces` collection
+(`game_traces.py`), keyed by the submission secret's hash: a submission row,
+a server-check row, one move row per played move (creation time, an md5 of
+the state, view and move, and the UI configuration), and one row per verified
+match. POST /games checks those traces before accepting a game: the last
+step 1 payload must be identical to the submitted one and steps 2–5 must be
+complete. The page also keeps its local pre-checks (the same five import
+checks, run in the browser) and free play — pass-and-play, against computers,
+or multiplayer with a chosen seat or as a spectator — with back/forward
+stepping through the match history and a log of every `state_changed` /
+`make_move` exchange.
 
 ## UI tests and CI/CD
 
@@ -1215,13 +1276,11 @@ Every test runs twice: on desktop Chrome and on a phone profile (Pixel 7), excep
 | File | Checks |
 |------|--------|
 | `e2e/portal.spec.ts` | Title and "Game platform" heading; logged-out visitors see a "Log in" button; match groups (Your turn, Ongoing, Waiting, Finished) start at 0; the page survives a mocked 500 from `/games` with no JS errors; a mocked game appears under "Browse all games" |
-| `e2e/builder.spec.ts` | Title and "Game Builder" heading; "Sign in" button visible and workspace hidden when logged out |
-| `e2e/pages.spec.ts` | `portal`, `builder`, `browse`, `invites` and `stats` pages each return HTTP 200 and load without JS errors (one parameterized test) |
+| `e2e/pages.spec.ts` | `portal`, `browse`, `invites` and `stats` pages each return HTTP 200 and load without JS errors (one parameterized test) |
 | `e2e/login.spec.ts` | Real guest login through the dialog; the name appears in the menu; log out; login survives a reload; the dialog closes with ×; an error shows when account creation fails (mocked 500) |
 | `e2e/play.spec.ts` | Search for a game, open it and play a practice match against the computer (click a square, see X); create an online match |
 | `e2e/multiplayer.spec.ts` | Two players in two separate browsers join one match; a move by one appears for the other |
-| `e2e/builder-loggedin.spec.ts` | Logged-in builder: welcome button, "Create a game" workspace, typing a prompt, disabled "Use as starting point" with no games, and the page staying usable when the AI request fails (mocked) |
-| `e2e/responsive.spec.ts` | Desktop-Chrome only: no horizontal scrolling for portal, builder and browse at 360x640, 390x844, 844x390, 820x1180, 1366x768 and 1920x1080; the sidebar drawer opens/closes on phone and laptop; the game frame stays usable and keeps its state when the screen is rotated |
+| `e2e/responsive.spec.ts` | Desktop-Chrome only: no horizontal scrolling for portal and browse at 360x640, 390x844, 844x390, 820x1180, 1366x768 and 1920x1080; the sidebar drawer opens/closes on phone and laptop; the game frame stays usable and keeps its state when the screen is rotated |
 
 Shared helpers are in `e2e/helpers.ts`: `createUser` and `createGame` call the real API, and
 `loginAs` fakes a logged-in browser through `localStorage`. Tests share one server, so give
@@ -1248,8 +1307,8 @@ are grouped across sizes. The audit is in `audit/audit.spec.ts`; add checks to `
 
 ### CI/CD
 
-`.github/workflows/ci.yml` runs the pytest suite and the UI tests on every push and pull
-request. On a push to `main`, once both pass, it SSHes into the Google Cloud VM and runs a
+`.github/workflows/ci.yml` runs the pytest suite and the UI tests on pushes to `main` and pull
+requests. On a push to `main`, once those and the production-runtime check pass, it SSHes into the Google Cloud VM and runs a
 command. Configure these repository secrets (Settings > Secrets and variables > Actions):
 
 | Secret | Meaning |
@@ -1265,3 +1324,11 @@ out the pushed `main` on the VM (`git fetch` + `git reset --hard origin/main` un
 `/opt/game-platform/game_platform`), installs `requirements.txt` into the server venv, and
 restarts `game-platform.service`. So every push to `main` that passes the unit and UI tests
 now deploys to https://buildplay.fun automatically — no manual VM step needed.
+
+## Agent game imports
+
+Agents submit a complete game through `POST /games` (credentials optional).
+The import publishes the game; resubmitting with the same
+`game_addition_request_id_and_secret` updates it, creating a new version if
+anything changed. See [GAME_DEVELOPMENT_GUIDE.md](GAME_DEVELOPMENT_GUIDE.md) and
+[API usage and agent instructions](docs/agent-game-import.md).

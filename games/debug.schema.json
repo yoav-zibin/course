@@ -1,0 +1,35 @@
+{
+  "state": {
+    "type": "object",
+    "properties": {
+      "counter": {"type": "integer"},
+      "note": {"type": "string"},
+      "passes": {"type": "integer", "minimum": 0}
+    },
+    "additionalProperties": true
+  },
+  "move": {
+    "type": "object",
+    "required": ["new_state", "next_turn_player_indices"],
+    "properties": {
+      "new_state": {"type": "object"},
+      "next_turn_player_indices": {
+        "oneOf": [
+          {"type": "null"},
+          {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "integer", "minimum": 0, "maximum": 9}
+          }
+        ]
+      },
+      "payouts": {
+        "type": "object",
+        "additionalProperties": {"type": "integer", "minimum": 0}
+      }
+    },
+    "additionalProperties": false
+  },
+  "view": {"type": "object"}
+}

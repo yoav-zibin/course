@@ -45,7 +45,7 @@ def test_merging_accounts_keeps_referrals(api: Api) -> None:
     friend = api.ok(
         "POST", "/users", json={"display_name": "friend", "invite_token": token}
     )
-    api.ok("POST", f"/users/{alice}/merge", as_user=alice, json={"into_user_id": alice2})
+    api.ok("POST", f"/users/{alice}/merge", as_user=alice, json={"into_user_id": alice2, "into_password": api.passwords_by_user_id[alice2]})
 
     referrals = api.ok("GET", "/users/me/referrals", as_user=alice2)
     assert referrals["invites_created"] == 1

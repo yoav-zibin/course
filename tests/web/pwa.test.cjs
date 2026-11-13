@@ -33,16 +33,60 @@ test('worker serves saved shell offline and leaves APIs and other students pages
   let response;
   handlers.fetch({request:{method:'GET',url:'https://example.test/static/portal.html'},respondWith:p=>response=p});
   assert.equal(await response,saved);
-  for(const [method,url] of [['GET','/matches'],['GET','/static/builder.html'],['POST','/matches/m/moves']]) {
+  for(const [method,url] of [['GET','/matches'],['GET','/static/admin.html'],['POST','/matches/m/moves']]) {
     handlers.fetch({request:{method,url:'https://example.test'+url},respondWith(){assert.fail('request intercepted')}});
   }
+});
+test('worker returns successful network responses when cache writes or opening fail',async()=>{
+  const {context,handlers}=worker();
+  context.console={warn(){}};
+  const network={ok:true,clone(){return this;}};
+  context.fetch=async()=>network;
+  context.caches={open:async()=>({match:async()=>undefined,keys:async()=>[],put:async()=>{throw Error('quota');}})};
+  for(const url of ['/static/portal.html','/static/avatars/computers/example.png']) {
+    let response;
+    handlers.fetch({request:{method:'GET',url:'https://example.test'+url},respondWith:p=>response=p});
+    assert.equal(await response,network);
+  }
+  context.caches.open=async()=>{throw Error('unavailable')};
+  let response;
+  handlers.fetch({request:{method:'GET',url:'https://example.test/static/portal.html'},respondWith:p=>response=p});
+  assert.equal(await response,network);
+});
+test('worker activation signals portal reload without awaiting navigation',async()=>{
+  const {context,handlers}=worker();
+  const messages=[], deleted=[];
+  context.caches={keys:async()=>['playroom-portal-shell-v1'],delete:async key=>deleted.push(key)};
+  context.self.clients={claim:async()=>{},matchAll:async()=>[
+    {url:'https://example.test/static/portal.html',postMessage:message=>messages.push(message.type)},
+    {url:'https://example.test/static/admin.html',postMessage:()=>assert.fail('wrong page')}
+  ]};
+  let activation;
+  handlers.activate({waitUntil:promise=>activation=promise});
+  await activation;
+  assert.deepEqual(deleted,['playroom-portal-shell-v1']);
+  assert.deepEqual(messages,['portal-shell-updated']);
 });
 function install(standalone=false) {
   const events={},nodes={};
   for(const id of ['install-portal','install-help','install-message']) nodes[id]={hidden:id==='install-portal',addEventListener:(event,fn)=>events[id+event]=fn};
-  vm.runInNewContext(read('static/portal-install.js'),{document:{getElementById:id=>nodes[id]},navigator:{},window:{matchMedia:()=>({matches:standalone}),addEventListener:(event,fn)=>events[event]=fn}});
+  vm.runInNewContext(read('static/portal-install.js'),{I18n:require('./i18n-stub.cjs'),document:{getElementById:id=>nodes[id]},navigator:{},window:{matchMedia:()=>({matches:standalone}),addEventListener:(event,fn)=>events[event]=fn}});
   return {events,nodes};
 }
+test('worker install completes when one shell asset fails to cache', async () => {
+  const { context, handlers, shell } = worker();
+  const added = [];
+  let skipped = false;
+  context.caches = { open: async () => ({ add: async (url) => { if (url.includes('portal.js')) throw Error('flaky'); added.push(url); } }) };
+  context.self.skipWaiting = async () => { skipped = true; };
+  context.console = { warn() {} };
+  let installation;
+  handlers.install({ waitUntil: (promise) => { installation = promise; } });
+  await installation;
+  assert.equal(skipped, true);
+  assert.equal(added.length, shell.length - 1);
+  assert.ok(!added.some((url) => url.includes('portal.js')));
+});
 test('install prompt requires a click, handles dismissal, and accepts a later prompt',async()=>{
   const {events,nodes}=install();let calls=0,prevented=false;
   const prompt={preventDefault(){prevented=true},prompt:async()=>calls++,userChoice:Promise.resolve({outcome:'dismissed'})};
@@ -57,4 +101,13 @@ test('standalone apps hide installation help and prompt failure leaves manual in
   const {events,nodes}=install();
   events.beforeinstallprompt({preventDefault(){},prompt:async()=>{throw Error('unavailable')}});
   await events['install-portalclick']();assert.match(nodes['install-message'].textContent,/browser/);assert.equal(nodes['install-portal'].disabled,false);
+});
+test('the portal asks for worker updates itself, never from a cached worker script',()=>{
+  const portal=read('static/portal.js');
+  // A cached copy of the worker script must never answer an update check,
+  // and the page checks on load and on every return to the tab instead of
+  // waiting for the browser's own throttled schedule.
+  assert.match(portal,/register\("\/static\/portal-sw\.js", \{ updateViaCache: "none" \}\)/);
+  assert.match(portal,/registration\.update\(\)/);
+  assert.match(portal,/visibilitychange/);
 });

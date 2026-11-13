@@ -131,33 +131,90 @@
         font-size: 14px;
         color: #bec9dc;
       }
-    </style>
+    #scores{display:flex;flex-wrap:wrap;gap:4px 14px}</style>
   </head>
   <body>
-    <h1>Crazy Eights</h1>
-    <p class="rules">
-      Match suit or rank; eights are wild. Draw one card instead of playing,
-      ending your turn. Empty your hand to win. If everyone is blocked, lowest
-      card points wins (eight 50, face cards 10, ace 1).
-    </p>
-    <div id="status">Waiting for the platform…</div>
+    <h1 id="title"></h1>
+    <p class="rules" id="rules"></p>
+    <div id="status" role="status" aria-live="polite"></div>
     <div id="scores"></div>
     <div id="board"></div>
     <div id="suits"></div>
     
+<script type="application/json" id="i18n-strings">
+{
+"title": "Crazy Eights",
+"rules": "Match suit or rank; eights are wild. Draw one card instead of playing, ending your turn. Empty your hand to win. If everyone is blocked, lowest card points wins (eight 50, face cards 10, ace 1).",
+"waiting_platform": "Waiting for the platform…",
+"player_n": "Player {n}",
+"draw": "Draw!",
+"wins": "{name} wins!",
+"match_ended": "Match ended",
+"saving": "Saving move…",
+"your_turn": "{name} — your turn",
+"waiting_for": "Waiting for {name}",
+"not_your_turn": "Not your turn",
+"illegal_card": "Illegal card",
+"score_cards": "{name}: {count} cards",
+"dealing": "Dealing the shared deck…",
+"top_card": "Top card: {card} · Current suit: {suit}",
+"spectators_note": "Spectators see card counts only.",
+"draw_or_pass": "Draw one / pass"
+}
+</script>
 <script>
-/* Match-level virtual currency payout helper. In-game poker chips remain separate. */
-function platformTokenPayout(state, latest) {
-  const pot = latest?.token_pot || 0;
-  const humanSeats = (latest?.players || []).filter(p => p.kind === "human").map(p => p.player_index);
-  if (!pot || !humanSeats.length) return undefined;
-  const winner = state?.winner;
-  const winners = Number.isInteger(winner) && humanSeats.includes(winner)
-    ? [winner] : humanSeats; // draws split the pot equally
-  const payouts = Object.fromEntries(humanSeats.map(i => [i, 0]));
-  const base = Math.floor(pot / winners.length);
-  winners.forEach((i, index) => { payouts[i] = base + (index < pot % winners.length ? 1 : 0); });
-  return payouts;
+"use strict";
+
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// A text the game's SERVER wrote (a log line, a hand name in the match state): finds its template
+// among the `server_` texts of the table (the most specific that fits, each {name} standing for
+// any text) and shows it in the viewer's language with the same values; any other text is
+// returned as written.
+const SERVER_TEMPLATES = Object.keys(SOURCE_STRINGS)
+  .filter((key) => key.startsWith("server_") && SOURCE_STRINGS[key])
+  .map((key) => {
+    const names = [];
+    let literal = 0;
+    const source = SOURCE_STRINGS[key]
+      .split(/\{(\w+)\}/)
+      .map((piece, index) => {
+        if (index % 2) { names.push(piece); return "([\\s\\S]+?)"; }
+        literal += piece.length;
+        return piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      })
+      .join("");
+    return { key, names, literal, pattern: new RegExp("^" + source + "$") };
+  })
+  .sort((a, b) => b.literal - a.literal || a.names.length - b.names.length || (a.key > b.key ? 1 : a.key === b.key ? 0 : -1));
+
+function tx(text) {
+  if (typeof text !== "string") return text;
+  for (const template of SERVER_TEMPLATES) {
+    const found = template.pattern.exec(text);
+    if (found) {
+      const params = {};
+      template.names.forEach((name, index) => { if (!(name in params)) params[name] = found[index + 1]; });
+      return t(template.key, params);
+    }
+  }
+  return text;
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
 }
 </script>
 <script>
@@ -287,6 +344,9 @@ function platformTokenPayout(state, latest) {
           sent = false,
           initial = null;
         const $ = (id) => document.getElementById(id);
+        $("status").textContent = t("waiting_platform");
+        $("title").textContent = t("title");
+        $("rules").textContent = t("rules");
         function button(text, action, disabled = false) {
           const b = document.createElement("button");
           b.textContent = text;
@@ -294,25 +354,39 @@ function platformTokenPayout(state, latest) {
           b.onclick = action;
           return b;
         }
+        function errorText(message) { switch (message) { case "Not your turn": return t("not_your_turn"); case "Illegal card": return t("illegal_card"); default: return message; } }
+        // The seat this client moves for: my own seat when it is my turn, or
+        // the computer's seat when this client is the only human (this
+        // standalone page computes the game locally, so it also plays the
+        // computer's turns). Never another human's seat.
+        function actingSeat() {
+          if (!latest || latest.status !== "ongoing" || !latest.turn_of_player_indices?.length) return null;
+          const turn = latest.turn_of_player_indices[0];
+          if (turn === latest.my_player_index) return turn;
+          // Spectators never act, even on a computer's turn.
+          if (latest.my_player_index === null) return null;
+          const humans = (latest.players || []).filter((p) => p.kind === "human");
+          if (humans.length === 1 && latest.players?.[turn]?.kind === "computer") return turn;
+          return null;
+        }
         function submit(action) {
           if (
             sent ||
             !latest ||
             latest.status !== "ongoing" ||
-            latest.acting_for_player_index === null
+            actingSeat() === null
           )
             return;
           try {
             const result = Logic.play(
               current(),
-              latest.acting_for_player_index,
+              actingSeat(),
               action,
             );
             sent = true;
             parent.postMessage(
               {
                 type: "make_move",
-                ...(result.nextTurn === null ? {payout_player_indices: platformTokenPayout(result.state, latest)} : {}),
                 new_state: result.state,
                 next_turn_player_indices:
                   result.nextTurn === null ? null : [result.nextTurn],
@@ -321,18 +395,20 @@ function platformTokenPayout(state, latest) {
             );
             render();
           } catch (e) {
-            $("status").textContent = e.message;
+            $("status").textContent = errorText(e.message);
           }
         }
         function current() {
           return latest.state || initial;
         }
         function render() {
+          $("title").textContent = t("title");
+          $("rules").textContent = t("rules");
           if (latest.state === null && latest.status === "ongoing") {
             $("board").replaceChildren();
             $("scores").textContent = "";
-            $("status").textContent = "Dealing the shared deck…";
-            if (latest.acting_for_player_index === 0 && !sent) {
+            $("status").textContent = t("dealing");
+            if (actingSeat() === 0 && !sent) {
               sent = true;
               parent.postMessage(
                 {
@@ -346,88 +422,30 @@ function platformTokenPayout(state, latest) {
             return;
           }
           const s = current(),
-            seat = latest.acting_for_player_index;
+            seat = actingSeat();
           const human =
             seat !== null &&
             latest.status === "ongoing" &&
             latest.players[seat]?.kind === "human" &&
             !sent;
-          const name = (i) => latest.players[i]?.name || `Player ${i + 1}`;
-          $("status").textContent = s.done
-            ? s.winner === null
-              ? "Draw!"
-              : `${name(s.winner)} wins!`
-            : latest.status === "over"
-              ? "Match ended"
-              : sent
-                ? "Saving move…"
-                : human
-                  ? `${name(seat)} — your turn`
-                  : `Waiting for ${name(s.turn)}`;
-          $("scores").textContent = latest.players
-            .map(
-              (p, i) =>
-                `${p.name}: ${KIND === "dots-and-boxes" ? s.boxes.filter((x) => x === i).length + " boxes" : KIND === "reversi" ? s.board.filter((x) => x === i).length + " discs" : s.hands[i].length + " cards"}`,
-            )
-            .join(" · ");
+          const name = (i) => latest.players[i]?.name || t("player_n", { n: i + 1 });
+          const statusEl = $("status");
+          if (s.done) statusEl.textContent = s.winner === null ? t("draw") : t("wins", { name: name(s.winner) });
+          else if (latest.status === "over") statusEl.textContent = t("match_ended");
+          else if (sent) statusEl.textContent = t("saving");
+          else if (human) statusEl.textContent = t("your_turn", { name: name(seat) });
+          else statusEl.textContent = t("waiting_for", { name: name(s.turn) });
+          $("scores").replaceChildren(...latest.players.map((p, i) => {
+            const line = document.createElement("span");
+            line.textContent = t("score_cards", { name: p.name, count: s.hands[i].length });
+            return line;
+          }));
           const board = $("board");
           board.replaceChildren();
           board.className = KIND;
-          if (KIND === "dots-and-boxes") {
-            for (let r = 0; r < 7; r++)
-              for (let c = 0; c < 7; c++) {
-                if (r % 2 === 0 && c % 2 === 0) {
-                  const dot = document.createElement("span");
-                  dot.className = "dot";
-                  board.append(dot);
-                } else if (r % 2 && c % 2) {
-                  const owner =
-                    s.boxes[Math.floor(r / 2) * 3 + Math.floor(c / 2)];
-                  const box = document.createElement("span");
-                  box.className = "box p" + owner;
-                  box.textContent = owner === null ? "" : String(owner + 1);
-                  board.append(box);
-                } else {
-                  const edge =
-                    r % 2 === 0
-                      ? (r / 2) * 3 + Math.floor(c / 2)
-                      : 12 + Math.floor(r / 2) * 4 + c / 2;
-                  const b = button(
-                    "",
-                    () => submit(edge),
-                    !human || s.edges[edge] !== null,
-                  );
-                  b.className = "edge p" + s.edges[edge];
-                  b.setAttribute("aria-label", `Edge ${edge + 1}`);
-                  board.append(b);
-                }
-              }
-          }
-          if (KIND === "reversi") {
-            const options = Logic.actions(s, seat ?? s.turn);
-            s.board.forEach((owner, i) => {
-              const b = button(
-                owner === null
-                  ? options.includes(i)
-                    ? "·"
-                    : ""
-                  : owner === 0
-                    ? "●"
-                    : "○",
-                () => submit(i),
-                !human || !options.includes(i),
-              );
-              b.className = "square p" + owner;
-              b.setAttribute(
-                "aria-label",
-                `Row ${Math.floor(i / 8) + 1}, column ${(i % 8) + 1}`,
-              );
-              board.append(b);
-            });
-          }
           if (KIND === "crazy-eights") {
             const top = document.createElement("p");
-            top.textContent = `Top card: ${Logic.label(s.discard.at(-1))} · Current suit: ${Logic.suits[s.suit]}`;
+            top.textContent = t("top_card", { card: Logic.label(s.discard.at(-1)), suit: Logic.suits[s.suit] });
             board.append(top);
             const viewer = latest.my_player_index;
             const hand = document.createElement("div");
@@ -455,10 +473,10 @@ function platformTokenPayout(state, latest) {
                 );
                 hand.append(b);
               }
-            } else hand.textContent = "Spectators see card counts only.";
+            } else hand.textContent = t("spectators_note");
             board.append(
               hand,
-              button("Draw one / pass", () => submit("draw"), !human),
+              button(t("draw_or_pass"), () => submit("draw"), !human),
             );
           }
           if (
@@ -476,6 +494,7 @@ function platformTokenPayout(state, latest) {
         }
         addEventListener("message", (e) => {
           if (e.source !== parent || e.data?.type !== "state_changed") return;
+          applyLocale(e.data);
           latest = e.data;
           sent = false;
           if (!initial) initial = Logic.initialState(latest.players.length);

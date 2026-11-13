@@ -28,7 +28,7 @@ def test_strangers_are_matched_and_the_match_starts_by_itself(api: Api) -> None:
         "status": "ongoing",
         "players": ["alice", "bob"],
         "turn": [0],
-        "state": None,
+        "state": {"pot": 0},
     }
     assert api.move(started["id"], as_user=alice, next_turn=1).status_code == 201
 
@@ -47,7 +47,7 @@ def test_each_player_count_is_its_own_queue(api: Api) -> None:
         "status": "ongoing",
         "players": ["alice", "carol", "dave"],
         "turn": [0],
-        "state": None,
+        "state": {"pot": 0},
     }
 
 

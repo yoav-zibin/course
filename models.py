@@ -5,8 +5,9 @@ writes them back to the store, so a store never shares mutable state with its ca
 """
 
 import datetime as dt
+import hashlib
 from dataclasses import dataclass, field
-from typing import Final, Literal
+from typing import Any, Final, Literal
 
 from pydantic import JsonValue
 
@@ -24,6 +25,15 @@ ExperimentKind = Literal["skin", "campaign"]
 ExperimentEventKind = Literal[
     "click", "signup", "match_start", "returning_active"
 ]
+
+
+@dataclass(frozen=True, kw_only=True)
+class GamePopularity:
+    """All-time started-match totals; score sums the seats present at each start."""
+
+    game_id: str
+    matches_started: int
+    score: int
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -82,6 +92,9 @@ class User:
     # Games the user saved to their library, most recently saved last. Defaults to
     # empty so older data files load.
     saved_game_ids: tuple[str, ...] = ()
+    # Recently played games, most recent first, with each game appearing once.
+    # Defaults to empty so older account records load unchanged.
+    recent_game_ids: tuple[str, ...] = ()
     token_balance: int = 0
     last_token_grant_day: str | None = None
     created_at: dt.datetime
@@ -155,12 +168,19 @@ class Game:
     # The game's client code (the innerHTML of its sandboxed iframe). The server never
     # executes it.
     code: str
-    # The game's server code (v2 Game API, docs/server-side-game-api.md): plain
-    # JavaScript the server runs in QuickJS to decide states, moves and payouts.
-    # None means a v1 game: the client computes everything and the server only
-    # stores the state. Defaults to None so older data files load.
+    # The game's server code (docs/server-side-game-api.md): plain
+    # JavaScript the server runs in QuickJS to decide states, moves and
+    # payouts. Every game has it — the server runs every game's logic.
+    # The field stays optional so older data files load.
     server_code: str | None = None
-    builder_workflow: dict[str, JsonValue] | None = None
+    # The import package POST /games stored with the game (translations, the
+    # resubmission secret, rules/UI text, tutorial, images, unit tests). Games
+    # created before the Builder deletion carry the old builder workflow
+    # instead; it is converted to this shape on load (see below).
+    import_package: dict[str, JsonValue] | None = None
+    # Draft 2020-12 schemas for the server-owned state, move, and player view.
+    # None only on old records awaiting backfill.
+    game_schemas: dict[str, JsonValue] | None = None
     created_at: dt.datetime
     updated_at: dt.datetime
     # Applies to the whole game, so it is set on every version read back from the store
@@ -170,38 +190,81 @@ class Game:
     published: bool = True
 
 
-@dataclass(frozen=True, kw_only=True)
-class GameDraft:
-    """Owner-only working copy. Its id becomes the public game id on publication."""
-
-    id: str
-    owner_user_id: str
-    name: str
-    description: str
-    rules: GameRules
-    code: str
-    # The draft's server code (v2 Game API); see [Game.server_code].
-    server_code: str | None = None
-    builder_workflow: dict[str, JsonValue] | None = None
-    created_at: dt.datetime
-    updated_at: dt.datetime
-    base_version: int = 0
-    revision: int = 1
+# The import package keys for the resubmission secret. Packages written
+# before the hash-only change carry the secret itself under
+# SECRET_PACKAGE_KEY; everything written now carries only its SHA-256 hash
+# under SECRET_HASH_PACKAGE_KEY — a resubmission check only ever compares
+# the presented secret against the stored one, so the plaintext never
+# needs to persist.
+SECRET_PACKAGE_KEY: Final = "game_addition_request_id_and_secret"
+SECRET_HASH_PACKAGE_KEY: Final = "game_addition_request_secret_hash"
 
 
-AgentMessageRole = Literal["user", "assistant"]
+def package_secret_hash(package: dict[str, Any] | None) -> str | None:
+    """The SHA-256 hash of a package's resubmission secret, whichever form
+    the package stores, or None when it carries no secret."""
+    if not package:
+        return None
+    digest = package.get(SECRET_HASH_PACKAGE_KEY)
+    if isinstance(digest, str) and digest:
+        return digest
+    secret = package.get(SECRET_PACKAGE_KEY)
+    if isinstance(secret, str) and secret:
+        return hashlib.sha256(secret.encode("utf-8")).hexdigest()
+    return None
 
 
-@dataclass(frozen=True, kw_only=True)
-class AgentConversationEntry:
-    """One message exchanged with the game-building agent about one game."""
+def with_package_secret_hash(
+    package: dict[str, Any], digest: str | None
+) -> dict[str, Any]:
+    """A copy of [package] whose resubmission secret is stored as [digest]
+    (the secret's SHA-256 hash) only — the plaintext key never survives.
+    A digest of None drops the secret entirely."""
+    out = {key: value for key, value in package.items() if key != SECRET_PACKAGE_KEY}
+    if digest:
+        out[SECRET_HASH_PACKAGE_KEY] = digest
+    else:
+        out.pop(SECRET_HASH_PACKAGE_KEY, None)
+    return out
 
-    role: AgentMessageRole
-    text: str
-    created_at: dt.datetime
-    # The game's published version when the message was exchanged; 0 while the
-    # game had never been published (it existed only as a draft).
-    game_version: int
+
+def hash_package_secret(package: dict[str, Any]) -> dict[str, Any]:
+    """[package] with any plaintext resubmission secret replaced by its
+    hash (see package_secret_hash); the same dict when it carries none."""
+    if not package or SECRET_PACKAGE_KEY not in package:
+        return package
+    return with_package_secret_hash(package, package_secret_hash(package))
+
+
+def import_package_from_legacy_workflow(workflow: dict[str, Any]) -> dict[str, Any]:
+    """The import package for a game whose stored record still carries the old
+    builder workflow (games imported before the Builder deletion). The workflow
+    wrapped the same data in per-step artifacts; only the durable parts survive:
+    translations, the resubmission secret, rules/UI text, tutorial, images and
+    unit tests. Job, approval, history and conversation state are dropped.
+    Applied at Game materialization in QueryStore._decode; a converted record
+    is serialized with import_package (and without builder_workflow) on its
+    next save. The JSON file store does not convert: its data files never
+    carried workflows in practice."""
+    artifacts = workflow.get("artifacts") or {}
+
+    def value(step: str) -> dict[str, Any]:
+        step_value = (artifacts.get(step) or {}).get("value")
+        return step_value if isinstance(step_value, dict) else {}
+
+    logic = value("logic")
+    ui = value("ui")
+    tutorial = value("tutorial")
+    images = value("images")
+    return hash_package_secret({
+        "translations": workflow.get("translations") or {},
+        "game_addition_request_id_and_secret": workflow.get("game_addition_request_id_and_secret"),
+        "rules_text": logic.get("text", ""),
+        "ui_text": ui.get("text", ""),
+        "tutorial": {"text": tutorial.get("text", ""), "html": tutorial.get("html", "")},
+        "images": images.get("images", []) if isinstance(images, dict) else [],
+        "unit_tests": value("tests"),
+    })
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -240,21 +303,11 @@ class Translation:
 
 @dataclass(frozen=True, kw_only=True)
 class GameTestSeeds:
-    """The random-walk test seeds that failed for a game (or a draft with
-    the same id), replayed first on the next test run as regression seeds
-    (v2 Game API, see game_testing.py)."""
+    """The random-walk test seeds that failed for a game, replayed first on
+    the next test run as regression seeds (v2 Game API, see game_testing.py)."""
 
     game_id: str
     seeds: tuple[int, ...] = ()
-
-
-@dataclass(frozen=True, kw_only=True)
-class AgentConversation:
-    """The whole recorded agent conversation for one game (or draft), oldest
-    first. Admin-only: it is never part of a game or draft API response."""
-
-    game_id: str
-    entries: tuple[AgentConversationEntry, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -279,10 +332,10 @@ class Move:
     new_state: JsonValue
     # The seats that may make the next move; [None] ends the match.
     next_turn_player_indices: frozenset[int] | None
-    # v2 matches only: the game-defined move the player sent (the server computed
-    # [new_state] from it by running the game's server code), and the id of the
-    # player who moved ("computer-1", a user id, ...). Both default to None so
-    # v1 moves and older data files load unchanged.
+    # The game-defined move the player sent (the server computed
+    # [new_state] from it by running the game's server code), and the id
+    # of the player who moved ("computer-1", a user id, ...). Both
+    # default to None so older data files load unchanged.
     move: JsonValue = None
     player_id: str | None = None
 
@@ -344,16 +397,36 @@ class Match:
     turn_started_at: dt.datetime | None = None
     # Seats that ran out of time, oldest first; their people can still watch.
     timeouts: tuple[SeatTimeout, ...] = ()
-    # v2 matches: the seed the server's per-call random seeds are derived from
-    # (together with the move number), so a match can be replayed exactly.
-    # 0 on v1 matches and older data files.
+    # The secret the server's per-call random seeds are derived from
+    # (together with the move number), so a match can be replayed exactly
+    # by the server. Server-only: never sent to clients. 0 only on
+    # matches created before secret seeds, and older data files.
     seed: int = 0
-    # v2 matches: a pending leave-with-tokens preview (the playerLeft result
+    # Seed scheme version: 1 = the seed was derived from the match id, so
+    # anyone who knew the id could recompute it and predict the match's
+    # random outcomes; 2 = a random secret reduced to 32-bit call streams;
+    # 3 = a 256-bit secret with separated ChaCha20 streams. Older matches
+    # are rekeyed to 3 at their next gameplay move/start (Platform._rekey_seed).
+    # Rekeying cannot hide cards already dealt by a legacy stream.
+    seed_version: int = 1
+    # A pending leave-with-tokens preview (the playerLeft result
     # stored by POST /matches/{id}/maybeLeave): a JSON object with the leaving
     # player's id, their payout, and the state that leaving would produce.
     # Cleared by any move; applied by POST /matches/{id}/playerLeft.
     # The state inside is server-only and is never sent to clients.
     pending_leave: JsonValue = None
+    # Users the owner removed from the waiting room; they can't join this match
+    # again (so they can't keep taking a seat to block its start).
+    removed_user_ids: frozenset[str] = frozenset()
+    # A rematch: the original match's players. While it waits, a seat is held for
+    # each of them who hasn't joined yet, so a stranger can't take it.
+    reserved_for_user_ids: frozenset[str] = frozenset()
+
+    def held_seats(self) -> int:
+        """Seats a waiting rematch holds for original players not yet seated."""
+        if self.status != "waiting_for_players":
+            return 0
+        return len(self.reserved_for_user_ids - set(self.human_user_ids))
 
     @property
     def turn_deadline(self) -> dt.datetime | None:

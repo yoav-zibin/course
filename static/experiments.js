@@ -168,7 +168,9 @@
     window.syncPortalPreviewLinks?.();
   }
 
-  async function applyCurrentSkin() {
+  // Applies the cached skin assignment synchronously (no network), so the
+  // first paint already uses the right skin.
+  function applyCachedSkin() {
     const account = currentAccount();
     if (!account) {
       assignedSkin = "classic";
@@ -185,7 +187,15 @@
     } catch (error) {
       console.warn("Cached skin assignment could not be read.", error);
     }
+  }
 
+  // Refreshes the skin assignment from the server, after the cached one is
+  // already showing. Kept separate so the first load can defer it until the
+  // browser is idle instead of competing with the catalog fetch.
+  async function refreshSkinAssignment() {
+    const account = currentAccount();
+    if (!account) return;
+    const cacheKey = `${SKIN_CACHE_PREFIX}${account.id}`;
     try {
       const response = await fetch("/users/me/experiments/skin", {
         headers: {
@@ -208,6 +218,11 @@
       applySkin(activeSkin());
       syncSkinPicker();
     }
+  }
+
+  async function applyCurrentSkin() {
+    applyCachedSkin();
+    await refreshSkinAssignment();
   }
 
   document.getElementById("portal-skin-picker")?.addEventListener("change", (event) => {
@@ -234,6 +249,66 @@
     }
   };
 
-  applyCurrentSkin();
+  function skinOptionLabel(key) {
+    return key
+      .split("-")
+      .map((word) => (word ? word[0].toUpperCase() + word.slice(1) : word))
+      .join(" ");
+  }
+
+  // The selectable skins are the ones with a deployed design: every skin
+  // contributes a :root[data-skin="..."] rule to experiments.css. Discover
+  // those keys so a newly deployed skin becomes selectable in the portal
+  // menu (and via ?skin= / the saved preference) with no code change here.
+  function extendPortalSkins(keys) {
+    const picker = document.getElementById("portal-skin-picker");
+    for (const key of keys) {
+      if (!SKIN_KEY_PATTERN.test(key) || PORTAL_SKINS.has(key)) continue;
+      PORTAL_SKINS.add(key);
+      if (picker && ![...picker.options].some((option) => option.value === key)) {
+        const option = document.createElement("option");
+        option.value = key;
+        option.textContent = skinOptionLabel(key);
+        picker.appendChild(option);
+      }
+    }
+    // The URL and the saved preference were validated against the built-in
+    // set at startup; validate them again against the discovered set.
+    if (!previewSkin) {
+      previewSkin = portalSkinFromUrl();
+      if (previewSkin) savePortalSkinPreference(previewSkin);
+    }
+    if (!previewSkin && !savedSkin) savedSkin = readSavedPortalSkin();
+    applySkin(activeSkin());
+    syncSkinPicker();
+  }
+
+  async function discoverPortalSkins() {
+    try {
+      const href = document
+        .querySelector('link[href*="experiments.css"]')
+        ?.getAttribute("href");
+      if (!href) return;
+      const response = await fetch(href, { cache: "force-cache" });
+      if (!response.ok) return;
+      const css = await response.text();
+      const keys = new Set();
+      for (const match of css.matchAll(/data-skin="([a-z0-9][a-z0-9-]*)"/g))
+        keys.add(match[1]);
+      extendPortalSkins([...keys]);
+    } catch (error) {
+      console.warn("Skin discovery could not run.", error);
+    }
+  }
+
+  // Apply the cached skin now (before first paint); refresh the assignment
+  // from the server once the browser is idle, so the fetch does not compete
+  // with the first catalog load.
+  applyCachedSkin();
+  discoverPortalSkins();
+  if (typeof requestIdleCallback === "function")
+    requestIdleCallback(() => { refreshSkinAssignment(); }, {timeout: 2000});
+  else
+    setTimeout(() => { refreshSkinAssignment(); }, 0);
   document.addEventListener("auth-changed", applyCurrentSkin);
 })();

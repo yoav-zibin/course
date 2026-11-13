@@ -146,20 +146,13 @@ def test_real_sdk_and_event_driven_worker_use_budgeted_emulator(tmp_path):
     match = platform.create_match(
         caller_id=alice.id, game_id=game, num_computer_opponents=1
     )
-    platform.start_match(
-        caller_id=alice.id,
-        match_id=match.id,
-        first_turn_player_indices=frozenset({0}),
-        initial_state=None,
-    )
+    platform.start_match(caller_id=alice.id, match_id=match.id)
     platform.resume_computer_moves()
     try:
         platform.make_move(
             caller_id=alice.id,
             match_id=match.id,
             move={"cell": 0},
-            new_state=None,
-            next_turn_player_indices=None,
             expected_move_count=0,
         )
         deadline = time.monotonic() + 8
@@ -179,21 +172,17 @@ def test_real_sdk_and_event_driven_worker_use_budgeted_emulator(tmp_path):
         )
         with TestClient(app) as http:
             assert http.get("/storage/capabilities").status_code == 401
-            for entry in ("/", "/demo"):
-                response = http.get(
-                    entry, auth=("demo", "test"), follow_redirects=False
-                )
-                assert response.headers["location"] == "/portal"
+            root = http.get("/", auth=("demo", "test"), follow_redirects=False)
+            assert root.status_code == 200
+            assert "Game platform · Welcome" in root.text
+            demo = http.get("/demo", auth=("demo", "test"), follow_redirects=False)
+            assert demo.headers["location"] == "/portal"
             portal = http.get("/portal", auth=("demo", "test"))
             assert "Game platform · Portal" in portal.text
             assert "Play. Replay." not in portal.text
             assert http.get("/storage/capabilities", auth=("demo", "test")).json()[
                 "pagination"
             ]
-            assert (
-                http.post("/agent/chat", auth=("demo", "test"), json={}).status_code
-                == 403
-            )
             assert (
                 http.get("/v2/games?limit=2", auth=("demo", "test")).status_code == 200
             )

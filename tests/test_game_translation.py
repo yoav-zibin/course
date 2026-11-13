@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from game_platform import agent, game_text, translation
+from game_platform import game_text, translation
 from game_platform.json_file_store import JsonFileStore
 from game_platform.models import Translation
 from game_platform.store import InMemoryStore
@@ -341,10 +341,21 @@ t("missing");
     assert "draws text on a canvas" in text
 
 
-def test_the_helper_games_include_is_the_one_the_agent_is_told_about() -> None:
+def test_symbol_only_literals_need_no_translation() -> None:
+    table = '<script type="application/json" id="i18n-strings">{"a": "A"}</script>'
+    # A piece drawn as an emoji displays no letters, raw or written with
+    # escapes: it is the same in every language, so it passes.
+    assert game_text.lint(table + '<script>cell.textContent = "🐶"; other.textContent = t("a");</script>') == []
+    assert game_text.lint(table + r'<script>cell.textContent = "\uD83D\uDC36"; other.textContent = t("a");</script>') == []
+    # Words still fail: mixed with symbols, or partly spelled with escapes.
+    assert any("instead of the strings block" in w for w in
+               game_text.lint(table + '<script>cell.textContent = "Dog 🐶"; other.textContent = t("a");</script>'))
+    assert any("instead of the strings block" in w for w in
+               game_text.lint(table + r'<script>cell.textContent = "caf\u00E9"; other.textContent = t("a");</script>'))
+
+
+def test_the_helper_defines_the_translation_functions() -> None:
     assert "function t(key, params)" in game_text.HELPER_JS and "function applyLocale(message)" in game_text.HELPER_JS
-    assert game_text.HELPER_JS in agent.SYSTEM_PROMPT
-    assert agent.SYSTEM_PROMPT.index("TRANSLATION.") < agent.SYSTEM_PROMPT.index("RESPONSE FORMAT:")
 
 
 def test_the_helper_cannot_end_the_games_script_block_early() -> None:
@@ -370,10 +381,10 @@ class TranslatingApi(Api):
 
 
 def publish(api: TranslatingApi, owner: str, *, code: str = GAME, name: str = "Tic-tac-toe") -> str:
-    game = api.ok("POST", "/games", as_user=owner, json={
+    game = api.create_game({
         "name": name, "description": "Three in a row wins", "allowed_player_counts": [2],
         "allows_leave_mid_match": False, "allows_join_mid_match": False, "code": code,
-    })
+    }, owner)
     return game["id"]
 
 
@@ -493,3 +504,45 @@ def test_the_translation_admin_needs_the_master_password() -> None:
     assert client.put("/admin/translations", json={}).status_code == 401
     assert client.delete("/admin/translations/es/abc").status_code == 401
     assert client.get("/admin/translations", auth=("", "s3cret")).status_code == 200
+
+
+def test_prune_unshown_strings_removes_only_provably_dead_keys():
+    code = (
+        '<script type="application/json" id="i18n-strings">'
+        '{"shown": "Shown", "dead_key": "Never shown", '
+        '"dynamic_key": "Reached through a variable", "server_reason": "a server reason"}'
+        "</script>"
+        '<script>el.textContent = t("shown"); other.textContent = t(keys[0]);'
+        ' const keys = ["dynamic_key"];</script>'
+    )
+    pruned, removed = game_text.prune_unshown_strings(code)
+    assert removed == ["dead_key"]
+    assert set(game_text.extract_strings(pruned)) == {"shown", "dynamic_key", "server_reason"}
+    # The dynamically reached key is kept, so lint still flags it: only a
+    # regeneration can decide how showing it should work.
+    remaining = [p for p in game_text.lint(pruned) if "never shows" in p]
+    assert remaining and all("dynamic_key" in p for p in remaining)
+
+
+def test_absorb_unshown_strings_only_when_they_are_the_only_problem():
+    only_dead = (
+        '<script type="application/json" id="i18n-strings">'
+        '{"shown": "Shown", "dead_key": "Never shown"}</script>'
+        '<script>el.textContent = t("shown");</script>'
+    )
+    pruned, removed = game_text.absorb_unshown_strings(only_dead)
+    assert removed == ["dead_key"]
+    assert game_text.lint(pruned) == []
+    # With a hard-coded sentence as well, the unshown string is a symptom of
+    # the real defect: absorb nothing, so the repair sees the full diagnosis.
+    also_broken = only_dead.replace('t("shown")', '"Hard-coded"')
+    assert game_text.absorb_unshown_strings(also_broken) == (also_broken, [])
+
+
+def test_prune_unshown_strings_changes_nothing_without_dead_keys():
+    assert game_text.prune_unshown_strings("<p>no table</p>") == ("<p>no table</p>", [])
+    code = (
+        '<script type="application/json" id="i18n-strings">{"shown": "Shown"}</script>'
+        '<script>el.textContent = t("shown");</script>'
+    )
+    assert game_text.prune_unshown_strings(code) == (code, [])

@@ -34,41 +34,40 @@ def test_seeded_move_history_model(seed: int) -> None:
     api = Api(store=store)
     users = [api.new_user(f"fuzz-{n}") for n in range(3)]
     game = api.new_game(owner=users[0], allowed_player_counts=[3])
-    match = api.new_match(owner=users[0], game_id=game, joiners=users[1:])
-    turn = set(rng.sample(range(3), rng.randint(1, 3)))
-    api.ok("POST", f"/matches/{match}/start", as_user=users[0],
-           json={"first_turn_player_indices": sorted(turn), "initial_state": {"step": -1}})
+    match = api.new_match(owner=users[0], game_id=game, joiners=users[1:], start=True)
+    # The game's newMatch decides the opening turn: seat 0.
+    turn = {0}
     expected = []
     for step in range(40):
         mover = rng.randrange(3)
         proposed_turn = sorted(rng.sample(range(3), rng.randint(1, 3)))
         count = len(expected) if rng.random() < .75 else len(expected) + 1
         invalid_turn = rng.random() < .2
-        payload = {"new_state": {"seed": seed, "step": step},
-                   "next_turn_player_indices": [9] if invalid_turn else proposed_turn,
+        payload = {"move": {"state": {"seed": seed, "step": step},
+                            "turn_indices": [9] if invalid_turn else proposed_turn},
                    "expected_move_count": count}
-        before = api.ok("GET", f"/matches/{match}")
+        before = api.ok("GET", f"/matches/{match}", as_user=users[0])
         response = api.request("POST", f"/matches/{match}/moves", as_user=users[mover], json=payload)
         context = f"seed={seed}, step={step}, mover={mover}, payload={payload}"
         assert response.status_code < 500, context
         accepted = mover in turn and count == len(expected) and not invalid_turn
         assert response.is_success == accepted, (context, response.status_code, response.text)
-        after = api.ok("GET", f"/matches/{match}")
+        after = api.ok("GET", f"/matches/{match}", as_user=users[0])
         if accepted:
-            expected.append((mover, payload["new_state"], proposed_turn))
+            expected.append((mover, payload["move"]["state"], proposed_turn))
             turn = set(proposed_turn)
-            assert after["state"] == payload["new_state"], context
+            assert after["state"] == payload["move"]["state"], context
         else:
             assert persistent(after) == persistent(before), context
         assert_store_valid(store, context)
-        history = api.ok("GET", f"/matches/{match}/moves")
+        history = api.ok("GET", f"/matches/{match}/moves", as_user=users[0])
         assert len(history) == len(expected), context
         for number, (actual, model) in enumerate(zip(history, expected), 1):
             assert (actual["move_number"], actual["player_index"], actual["new_state"],
                     actual["next_turn_player_indices"]) == (number, *model), context
     mover = min(turn)
     api.ok("POST", f"/matches/{match}/moves", as_user=users[mover],
-           json={"new_state": {"finished": True}, "next_turn_player_indices": None,
+           json={"move": {"state": {"finished": True}, "turn_indices": None},
                  "expected_move_count": len(expected)})
     finished = api.ok("GET", f"/matches/{match}")
     assert finished["status"] == "over" and finished["turn_of_player_indices"] is None
@@ -89,7 +88,7 @@ def test_seeded_merge_chains_flatten_and_preserve_ownership(seed: int) -> None:
     survivor = users[0]
     replaced = []
     for target in users[1:]:
-        api.ok("POST", f"/users/{survivor}/merge", as_user=survivor, json={"into_user_id": target})
+        api.ok("POST", f"/users/{survivor}/merge", as_user=survivor, json={"into_user_id": target, "into_password": api.passwords_by_user_id[target]})
         replaced.append(survivor)
         survivor = target
         assert_store_valid(store, f"merge seed={seed}")
@@ -119,8 +118,9 @@ def test_seeded_malformed_move_payloads_never_crash_or_mutate(seed: int) -> None
     before = api.ok("GET", f"/matches/{match}")
     bad_turns = [[], [-1], [10], [0, 0], [None], ["not-a-seat"], {}, "bad", [[], 0]]
     for step in range(30):
-        payload = {"new_state": {"x": rng.randrange(1000)},
-                   "next_turn_player_indices": rng.choice(bad_turns), "expected_move_count": 0}
+        payload = {"move": {"state": {"x": rng.randrange(1000)},
+                            "turn_indices": rng.choice(bad_turns)},
+                   "expected_move_count": 0}
         response = api.request("POST", f"/matches/{match}/moves", as_user=owner, json=payload)
         assert 400 <= response.status_code < 500, (seed, step, payload, response.text)
         assert persistent(api.ok("GET", f"/matches/{match}")) == persistent(before), (seed, step, payload)

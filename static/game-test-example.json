@@ -1,0 +1,375 @@
+{
+  "name": "Count to three",
+  "description": "Reach three by adding one.",
+  "game_addition_request_id_and_secret": "example-secret-0123456789",
+  "allowed_player_counts": [
+    1
+  ],
+  "client_code": "<!doctype html><html><head><style>body{font:20px sans-serif;background:#eef2ff;color:#182140;padding:24px}button{min-width:100px;min-height:48px}h1{font-size:28px}</style></head><body><h1 id=\"title\"></h1><p id=\"number\">0</p><button id=\"add\"></button><script type=\"application/json\" id=\"i18n-strings\">{\"title\":\"Count to three\",\"add\":\"Add one\",\"server_add_one\":\"Add one\"}</script><script>// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.\nconst SOURCE_STRINGS = JSON.parse(document.getElementById(\"i18n-strings\").textContent);\nlet strings = SOURCE_STRINGS;\n\n// The text for a key in the viewer's language, with {name}-style placeholders filled in.\nfunction t(key, params) {\n  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;\n  return text.replace(/\\{(\\w+)\\}/g, (match, name) => (params && name in params ? params[name] : match));\n}\n\n// Call this first in the state_changed handler, before drawing anything: the platform sends\n// the viewer's translations (message.strings), language and writing direction with it.\nfunction applyLocale(message) {\n  if (message.strings) strings = { ...SOURCE_STRINGS, ...message.strings };\n  if (message.locale) document.documentElement.lang = message.locale;\n  if (message.direction) document.documentElement.dir = message.direction;\n}\n\nlet m;add.onclick=()=>parent.postMessage({type:'make_move',move:{add:1}},'*');window.addEventListener('message',e=>{if(e.data.type==='state_changed'){m=e.data;applyLocale(m);document.getElementById('title').textContent=t('title');add.textContent=t('add');number.textContent=(m.view||m.state).n;add.disabled=m.status==='over'||m.my_player_index===null;}});parent.postMessage({type:'game_ready'},'*');</script></body></html>",
+  "server_code": "const game={newMatch(ctx){return {state:{n:0},turn:[ctx.players[0].id]};},applyMove(state,id,move,ctx){if(move.add!==1)throw new InvalidMove('Add one');const n=state.n+1;return n>=3?{state:{n},turn:null,payouts:Object.fromEntries(ctx.players.filter(p=>p.kind==='human').map(p=>[p.id,ctx.pot]))}:{state:{n},turn:[ctx.players[0].id]};},viewFor(state,id,ctx){return {n:state.n};},computerMove(){return {add:1}},randomMove(){return {add:1}}};",
+  "rules": "One player adds one each turn, starting at zero. End at three. No stakes, joining or leaving.",
+  "ui_instructions": "A count and Add one button; readable on phones. Use a calm blue theme.",
+  "tutorial": {
+    "text": "Add one until three.",
+    "html": "<meta name=\"viewport\" content=\"width=device-width\"><h1>How to play</h1><p>Add one each turn. Reach three to win.</p>"
+  },
+  "images": [
+    {
+      "caption": "Cover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><circle cx=\"80\" cy=\"45\" r=\"30\"/></svg>"
+    },
+    {
+      "caption": "Before: Alice",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#eef2ff\"/><text x=\"30\" y=\"60\" fill=\"#182140\" font-size=\"28\">Count to three</text><text x=\"30\" y=\"120\" font-size=\"30\">0</text><rect x=\"30\" y=\"150\" width=\"140\" height=\"50\" rx=\"8\" fill=\"#8899ee\"/><text x=\"40\" y=\"183\" font-size=\"20\">Add one</text></svg>"
+    },
+    {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#eef2ff\"/><text x=\"30\" y=\"60\" fill=\"#182140\" font-size=\"28\">Count to three</text><text x=\"30\" y=\"120\" font-size=\"30\">0</text><rect x=\"30\" y=\"150\" width=\"140\" height=\"50\" rx=\"8\" fill=\"#8899ee\"/><text x=\"40\" y=\"183\" font-size=\"20\">Add one</text></svg>"
+    },
+    {
+      "caption": "After: Alice",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#eef2ff\"/><text x=\"30\" y=\"60\" fill=\"#182140\" font-size=\"28\">Count to three</text><text x=\"30\" y=\"120\" font-size=\"30\">1</text><rect x=\"30\" y=\"150\" width=\"140\" height=\"50\" rx=\"8\" fill=\"#8899ee\"/><text x=\"40\" y=\"183\" font-size=\"20\">Add one</text></svg>"
+    }
+  ],
+  "unit_tests": {
+    "state_schema": {
+      "type": "object",
+      "required": [
+        "n"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "n": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        }
+      }
+    },
+    "view_schema": {
+      "type": "object",
+      "required": [
+        "n"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "n": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        }
+      }
+    },
+    "move_schema": {
+      "type": "object",
+      "required": [
+        "add"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "add": {
+          "const": 1
+        }
+      }
+    },
+    "cases": [
+      {
+        "name": "Initial move",
+        "description": "Add one to the count. End at three.",
+        "kind": "initial",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 0
+            }
+          ],
+          "pot": 0,
+          "move_count": 0,
+          "seed": 1
+        },
+        "state": {
+          "n": 0
+        },
+        "view_of_mover": {
+          "n": 0
+        },
+        "view_of_other": {
+          "n": 0
+        },
+        "player_id": "u1",
+        "other_player_id": null,
+        "move": {
+          "add": 1
+        },
+        "expected_state": {
+          "n": 1
+        },
+        "expected_turn": [
+          "u1"
+        ],
+        "expected_view_of_mover": {
+          "n": 1
+        },
+        "expected_view_of_other": {
+          "n": 1
+        },
+        "images": [
+          {
+            "caption": "Before: Alice",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#eef2ff\"/><text x=\"30\" y=\"60\" fill=\"#182140\" font-size=\"28\">Count to three</text><text x=\"30\" y=\"120\" font-size=\"30\">0</text><rect x=\"30\" y=\"150\" width=\"140\" height=\"50\" rx=\"8\" fill=\"#8899ee\"/><text x=\"40\" y=\"183\" font-size=\"20\">Add one</text></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#eef2ff\"/><text x=\"30\" y=\"60\" fill=\"#182140\" font-size=\"28\">Count to three</text><text x=\"30\" y=\"120\" font-size=\"30\">0</text><rect x=\"30\" y=\"150\" width=\"140\" height=\"50\" rx=\"8\" fill=\"#8899ee\"/><text x=\"40\" y=\"183\" font-size=\"20\">Add one</text></svg>"
+          },
+          {
+            "caption": "After: Alice",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#eef2ff\"/><text x=\"30\" y=\"60\" fill=\"#182140\" font-size=\"28\">Count to three</text><text x=\"30\" y=\"120\" font-size=\"30\">1</text><rect x=\"30\" y=\"150\" width=\"140\" height=\"50\" rx=\"8\" fill=\"#8899ee\"/><text x=\"40\" y=\"183\" font-size=\"20\">Add one</text></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#eef2ff\"/><text x=\"30\" y=\"60\" fill=\"#182140\" font-size=\"28\">Count to three</text><text x=\"30\" y=\"120\" font-size=\"30\">1</text><rect x=\"30\" y=\"150\" width=\"140\" height=\"50\" rx=\"8\" fill=\"#8899ee\"/><text x=\"40\" y=\"183\" font-size=\"20\">Add one</text></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Intermediate move",
+        "description": "Add one to the count. End at three.",
+        "kind": "intermediate",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 0
+            }
+          ],
+          "pot": 0,
+          "move_count": 1,
+          "seed": 1
+        },
+        "state": {
+          "n": 1
+        },
+        "view_of_mover": {
+          "n": 1
+        },
+        "view_of_other": {
+          "n": 1
+        },
+        "player_id": "u1",
+        "other_player_id": null,
+        "move": {
+          "add": 1
+        },
+        "expected_state": {
+          "n": 2
+        },
+        "expected_turn": [
+          "u1"
+        ],
+        "expected_view_of_mover": {
+          "n": 2
+        },
+        "expected_view_of_other": {
+          "n": 2
+        },
+        "images": [
+          {
+            "caption": "Before: Alice",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#eef2ff\"/><text x=\"30\" y=\"60\" fill=\"#182140\" font-size=\"28\">Count to three</text><text x=\"30\" y=\"120\" font-size=\"30\">1</text><rect x=\"30\" y=\"150\" width=\"140\" height=\"50\" rx=\"8\" fill=\"#8899ee\"/><text x=\"40\" y=\"183\" font-size=\"20\">Add one</text></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#eef2ff\"/><text x=\"30\" y=\"60\" fill=\"#182140\" font-size=\"28\">Count to three</text><text x=\"30\" y=\"120\" font-size=\"30\">1</text><rect x=\"30\" y=\"150\" width=\"140\" height=\"50\" rx=\"8\" fill=\"#8899ee\"/><text x=\"40\" y=\"183\" font-size=\"20\">Add one</text></svg>"
+          },
+          {
+            "caption": "After: Alice",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#eef2ff\"/><text x=\"30\" y=\"60\" fill=\"#182140\" font-size=\"28\">Count to three</text><text x=\"30\" y=\"120\" font-size=\"30\">2</text><rect x=\"30\" y=\"150\" width=\"140\" height=\"50\" rx=\"8\" fill=\"#8899ee\"/><text x=\"40\" y=\"183\" font-size=\"20\">Add one</text></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#eef2ff\"/><text x=\"30\" y=\"60\" fill=\"#182140\" font-size=\"28\">Count to three</text><text x=\"30\" y=\"120\" font-size=\"30\">2</text><rect x=\"30\" y=\"150\" width=\"140\" height=\"50\" rx=\"8\" fill=\"#8899ee\"/><text x=\"40\" y=\"183\" font-size=\"20\">Add one</text></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Terminal move",
+        "description": "Add one to the count. End at three.",
+        "kind": "terminal",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 0
+            }
+          ],
+          "pot": 0,
+          "move_count": 2,
+          "seed": 1
+        },
+        "state": {
+          "n": 2
+        },
+        "view_of_mover": {
+          "n": 2
+        },
+        "view_of_other": {
+          "n": 2
+        },
+        "player_id": "u1",
+        "other_player_id": null,
+        "move": {
+          "add": 1
+        },
+        "expected_state": {
+          "n": 3
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "n": 3
+        },
+        "expected_view_of_other": {
+          "n": 3
+        },
+        "images": [
+          {
+            "caption": "Before: Alice",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#eef2ff\"/><text x=\"30\" y=\"60\" fill=\"#182140\" font-size=\"28\">Count to three</text><text x=\"30\" y=\"120\" font-size=\"30\">2</text><rect x=\"30\" y=\"150\" width=\"140\" height=\"50\" rx=\"8\" fill=\"#8899ee\"/><text x=\"40\" y=\"183\" font-size=\"20\">Add one</text></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#eef2ff\"/><text x=\"30\" y=\"60\" fill=\"#182140\" font-size=\"28\">Count to three</text><text x=\"30\" y=\"120\" font-size=\"30\">2</text><rect x=\"30\" y=\"150\" width=\"140\" height=\"50\" rx=\"8\" fill=\"#8899ee\"/><text x=\"40\" y=\"183\" font-size=\"20\">Add one</text></svg>"
+          },
+          {
+            "caption": "After: Alice",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#eef2ff\"/><text x=\"30\" y=\"60\" fill=\"#182140\" font-size=\"28\">Count to three</text><text x=\"30\" y=\"120\" font-size=\"30\">3</text><rect x=\"30\" y=\"150\" width=\"140\" height=\"50\" rx=\"8\" fill=\"#8899ee\"/><text x=\"40\" y=\"183\" font-size=\"20\">Add one</text></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#eef2ff\"/><text x=\"30\" y=\"60\" fill=\"#182140\" font-size=\"28\">Count to three</text><text x=\"30\" y=\"120\" font-size=\"30\">3</text><rect x=\"30\" y=\"150\" width=\"140\" height=\"50\" rx=\"8\" fill=\"#8899ee\"/><text x=\"40\" y=\"183\" font-size=\"20\">Add one</text></svg>"
+          }
+        ],
+        "expected_payouts": {
+          "u1": 0
+        }
+      }
+    ]
+  },
+  "translations": {
+    "es": {
+      "display_name": "Cuenta hasta tres",
+      "short_description": "Llega a tres sumando uno.",
+      "game_logic_rules": "Un jugador suma uno en cada turno, empezando en cero. Termina en tres. Sin apuestas, entradas ni salidas.",
+      "game_ui_rules": "Un contador y un botón «Suma uno»; legible en teléfonos. Usa un tema azul tranquilo.",
+      "tutorial_strings": {
+        "How to play": "Cómo jugar",
+        "Add one each turn. Reach three to win.": "Suma uno en cada turno. Llega a tres para ganar."
+      },
+      "client_strings": {
+        "title": "Cuenta hasta tres",
+        "add": "Suma uno",
+        "server_add_one": "Suma uno"
+      }
+    },
+    "fr": {
+      "display_name": "Comptez jusqu'à trois",
+      "short_description": "Atteignez trois en ajoutant un.",
+      "game_logic_rules": "Un joueur ajoute un à chaque tour, en commençant à zéro. Fin à trois. Ni enjeux, ni arrivées ni départs.",
+      "game_ui_rules": "Un compteur et un bouton « Ajouter un » ; lisible sur téléphone. Utilisez un thème bleu calme.",
+      "tutorial_strings": {
+        "How to play": "Comment jouer",
+        "Add one each turn. Reach three to win.": "Ajoutez un à chaque tour. Atteignez trois pour gagner."
+      },
+      "client_strings": {
+        "title": "Comptez jusqu'à trois",
+        "add": "Ajouter un",
+        "server_add_one": "Ajouter un"
+      }
+    },
+    "de": {
+      "display_name": "Zähle bis drei",
+      "short_description": "Erreiche drei, indem du eins addierst.",
+      "game_logic_rules": "Ein Spieler addiert in jedem Zug eins, beginnend bei null. Ende bei drei. Keine Einsätze, kein Ein- oder Aussteigen.",
+      "game_ui_rules": "Eine Zählung und eine Schaltfläche „Eins addieren“; gut lesbar auf Telefonen. Verwende ein ruhiges blaues Thema.",
+      "tutorial_strings": {
+        "How to play": "So wird gespielt",
+        "Add one each turn. Reach three to win.": "Addiere in jedem Zug eins. Erreiche drei, um zu gewinnen."
+      },
+      "client_strings": {
+        "title": "Zähle bis drei",
+        "add": "Eins addieren",
+        "server_add_one": "Eins addieren"
+      }
+    },
+    "pt": {
+      "display_name": "Conte até três",
+      "short_description": "Chegue a três somando um.",
+      "game_logic_rules": "Um jogador soma um a cada turno, começando do zero. Termina em três. Sem apostas, entradas ou saídas.",
+      "game_ui_rules": "Um contador e um botão «Somar um»; legível em telefones. Use um tema azul calmo.",
+      "tutorial_strings": {
+        "How to play": "Como jogar",
+        "Add one each turn. Reach three to win.": "Some um a cada turno. Chegue a três para vencer."
+      },
+      "client_strings": {
+        "title": "Conte até três",
+        "add": "Somar um",
+        "server_add_one": "Somar um"
+      }
+    },
+    "zh": {
+      "display_name": "数到三",
+      "short_description": "每次加一，达到三。",
+      "game_logic_rules": "一名玩家每回合加一，从零开始。到三结束。没有赌注，不能加入或离开。",
+      "game_ui_rules": "一个计数器和一个“加一”按钮；在手机上清晰可读。使用平静的蓝色主题。",
+      "tutorial_strings": {
+        "How to play": "玩法",
+        "Add one each turn. Reach three to win.": "每回合加一。达到三即可获胜。"
+      },
+      "client_strings": {
+        "title": "数到三",
+        "add": "加一",
+        "server_add_one": "加一"
+      }
+    },
+    "hi": {
+      "display_name": "तीन तक गिनें",
+      "short_description": "एक जोड़कर तीन तक पहुँचें।",
+      "game_logic_rules": "एक खिलाड़ी शून्य से शुरू करके हर बारी में एक जोड़ता है। तीन पर समाप्त। कोई दांव नहीं, कोई जुड़ना या छोड़ना नहीं।",
+      "game_ui_rules": "एक गिनती और 'एक जोड़ें' बटन; फ़ोन पर पढ़ने योग्य। शांत नीले रंग की थीम इस्तेमाल करें।",
+      "tutorial_strings": {
+        "How to play": "कैसे खेलें",
+        "Add one each turn. Reach three to win.": "हर बारी में एक जोड़ें। जीतने के लिए तीन तक पहुँचें।"
+      },
+      "client_strings": {
+        "title": "तीन तक गिनें",
+        "add": "एक जोड़ें",
+        "server_add_one": "एक जोड़ें"
+      }
+    },
+    "ar": {
+      "display_name": "عُدّ حتى ثلاثة",
+      "short_description": "صِل إلى ثلاثة بإضافة واحد.",
+      "game_logic_rules": "يضيف لاعب واحد في كل دور، بدءًا من الصفر. تنتهي اللعبة عند ثلاثة. لا رهانات ولا انضمام أو مغادرة.",
+      "game_ui_rules": "عدّاد وزر «أضف واحدًا»؛ مقروء على الهواتف. استخدم سمة زرقاء هادئة.",
+      "tutorial_strings": {
+        "How to play": "كيفية اللعب",
+        "Add one each turn. Reach three to win.": "أضف واحدًا في كل دور. صِل إلى ثلاثة لتفوز."
+      },
+      "client_strings": {
+        "title": "عُدّ حتى ثلاثة",
+        "add": "أضف واحدًا",
+        "server_add_one": "أضف واحدًا"
+      }
+    }
+  }
+}

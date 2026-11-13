@@ -1,16 +1,22 @@
-# Query-based storage: isolated test release
+# Query-based storage
+
+> **Status (Nov 9, 2026):** merged (PRs #32, #38, #39) and live in production —
+> the production server runs the query store. Passages below written as an
+> unmerged branch or a pre-cutover plan are historical. Snapshot storage was
+> removed from the code on Nov 9, 2026; the query store is the only Firestore
+> store, and unconfigured local runs use the JSON data file.
 
 This branch implements the first end-to-end release of the backend scaling plan.
-It is **opt-in**. Snapshot storage remains the configuration default. A converted
-namespace in the existing production database requires explicit opt-in; see
-`scaling-production-cutover.md`. The existing QuickJS Game API, generated client/server
+A converted namespace in the existing production database requires explicit
+opt-in; see `scaling-production-cutover.md`. The existing QuickJS Game API, generated client/server
 code, deterministic execution checks and random-walk repair loop are preserved.
 
-Merging this implementation and enabling query storage are separate steps. An
-existing config containing only `firestore.enabled: true` continues using
-snapshot mode and `(default)`. Neither normal startup nor CI deployment invokes
-synthetic-data generators, the isolated demo wrapper, namespace initialization
-or migration. Test data stays in its explicitly configured database/namespace;
+Merging this implementation and enabling query storage were separate steps. An
+existing config containing only `firestore.enabled: true` is incomplete: the
+query store requires an explicit `namespace`, and the `(default)` database
+requires `allow_default_database_query`. Neither normal startup nor CI deployment invokes
+synthetic-data generators, the isolated demo wrapper or namespace initialization.
+Test data stays in its explicitly configured database/namespace;
 separate VMs by themselves are not a data-isolation guarantee.
 
 The merge with main through `0091652` preserves the recent catalog/practice/replay
@@ -37,6 +43,16 @@ move again. Only Firestore `Aborted` conflicts are automatically retried, at mos
 five attempts, retaining the original transaction's retry priority. Domain
 conflicts are returned to the caller.
 
+Non-transactional reads go through a stale-while-revalidate cache
+(`read_cache.py`): documents, query results and move batches are served from
+memory, an entry older than one second is refreshed in the background (at most
+one refresh per key per second), and committed local writes are written through
+at commit time, so a value read on the VM that wrote it is never stale and a
+value written by another VM is at most about a second stale. The cache is
+LRU-evicted and capped at half the machine's RAM. Transactional reads never
+touch it — they read through their transaction so conflict detection keeps
+working.
+
 Computer turns and deadlines use durable revision-fenced jobs with leases.
 Workers process a bounded batch; restarting does not scan historical matches.
 Push delivery uses a transactional outbox and supports at-least-once delivery:
@@ -45,7 +61,7 @@ Match jobs move to `failed_jobs` after five failures. Outbox deliveries retry on
 lease expiry. Shared verification records persist expiry, attempts and request
 rate limits. Linked identities and referral codes have transactional lookup
 reservations. New referral codes use 16 hexadecimal characters; migration retains
-old codes. The compiled QuickJS cache is capped at 64 versions.
+old codes. The compiled QuickJS cache is capped at 2000 versions.
 
 The store uses the Firestore SDK's private transaction begin/commit methods to
 support the existing context-manager service boundaries. Emulator and cloud
@@ -57,7 +73,7 @@ integration tests must pass before upgrading that SDK.
 `{items, next_cursor}` with a default page size of 50 and maximum 100:
 
 * `/v2/games`: published catalog, optional single word-prefix `q` (2–24 characters).
-* `/v2/builder/games` and `/v2/game-drafts`: authenticated owner's records.
+* `/v2/builder/games` (legacy path name): the caller's published games. Drafts and `/v2/game-drafts` were removed with the Builder.
 * `/v2/users/me/referred-users` and `/v2/users/me/invites`: authenticated user's
   direct sign-ups and invite summaries, paginated. Existing screens still need to
   adopt these APIs. Individual invite acceptance histories remain embedded and
@@ -68,7 +84,7 @@ integration tests must pass before upgrading that SDK.
   endpoints retain their 100-record guard. Migration resumes library normalization;
   existing query namespaces can run `scaling_tools libraries --source-writers-stopped`
   repeatedly with a stable run ID until complete. Account jobs handle normalized
-  libraries. Portal/Builder owners should use the versioned API for library UI.
+  libraries. Portal owners should use the versioned API for library UI.
 * `/v2/matches`: authenticated membership; optional status/game filters.
 * `/v2/matches/open`: public joinable matches, including mid-game joins; current
   game publication is checked before returning a row.
@@ -86,7 +102,7 @@ chronological snapshots. Concurrent changes can affect a later page. They confer
 no authorization. Lists may be shorter than the limit when tombstones or newly
 unpublished games are filtered; follow `next_cursor` even after an empty page.
 
-Portal, Builder and Browse negotiate pagination. Detail/source is fetched when
+Portal and Browse negotiate pagination. Detail/source is fetched when
 needed. Portal history and offline retry reconciliation use bounded history
 reads, and queued moves retain an idempotency key. Catalog prefix search and
 client-side filtering apply to the current page; this is not a global substring
@@ -151,7 +167,6 @@ Example test-server config:
   "server": {"host": "127.0.0.1", "port": 8000},
   "firestore": {
     "enabled": true,
-    "mode": "query",
     "project_id": "PROJECT",
     "database": "game-platform-scaling",
     "namespace": "scaling_v1"
@@ -165,12 +180,9 @@ email, push, AI API credentials or private user data into a synthetic test setup
 
 ## Maintenance, migration and validation
 
-`scaling_tools migrate` copies the legacy schema into an empty query namespace.
-It requires `--source-writers-stopped`, binds checkpoints to the exact source,
-resumes at completed parent records, and preserves IDs, versions, visibility,
-histories and balances. It regenerates pending computer/deadline jobs. Stop both
-source and destination writers throughout the copy. The flag is an operator
-assertion, not a remote stop command. Do not resume against a changed source.
+The one-time copy from the legacy schema (`scaling_tools migrate`) was retired
+with snapshot mode on Nov 9, 2026; every live namespace is already in the query
+schema, and new namespaces start empty with `scaling_tools init`.
 
 `scaling_tools export --source-writers-stopped --output DIRECTORY` streams
 Firestore-typed JSONL including child records, with durable file offsets and
@@ -203,7 +215,7 @@ explicit named test database. CI includes a dedicated emulator workflow.
 
 ## Release gates and limits
 
-This release is not yet a replacement for every snapshot-mode feature:
+Known limits of the query release:
 
 * Ordinary account merges/deletions run atomically through bounded, user-filtered
   lookups, preserving sign-in, libraries, logical player IDs and token balances.
@@ -216,7 +228,7 @@ This release is not yet a replacement for every snapshot-mode feature:
   normal project/database/namespace flags) repeatedly until `complete` is
   true. Each run rewrites a bounded number of records, one record and its
   progress checkpoint per transaction, and resumes by run ID after a crash.
-  Merge mirrors the snapshot semantics (games, drafts, match seats with
+  Merge mirrors the original semantics (games, drafts, match seats with
   stable logic player IDs, move authors, invites, linked-account
   reservations; the source is marked replaced, never deleted) and refuses
   before any mutation when both accounts share a match that is not over.
@@ -229,8 +241,8 @@ This release is not yet a replacement for every snapshot-mode feature:
   endpoints still use bounded legacy representations. Records reject payloads
   above 800 KB; these features need their own child-record and pagination designs.
   The recent experiment-variant deletion endpoint also retains the 100-record
-  legacy assignment/event limit in query mode; an oversized request returns 409
-  with its writes rolled back. Its snapshot-mode behavior remains unchanged.
+  legacy assignment/event limit; an oversized request returns 409
+  with its writes rolled back.
 * Daily creation, A/B and transitive referral reports are available as offline
   snapshots. A/B metric counts retain the published snapshot date; experiment
   names, activation, variants and spend configuration come from current records,
@@ -241,7 +253,7 @@ This release is not yet a replacement for every snapshot-mode feature:
   with revision revalidation, remains a contention optimization. Job due-time
   indexes and 64 counter shards need measured throughput limits before large
   live workloads; this is not a 1-billion-match throughput claim.
-* Coordinate the API rollout with Portal/Builder owners and cached clients.
+* Coordinate the API rollout with Portal owners and cached clients.
   Before production cutover, rehearse full migration, failure recovery and
   two-process load, validate counts/checksums/ledger invariants, verify indexes
   and backups, and define rollback that preserves writes made after cutover.

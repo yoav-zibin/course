@@ -9,7 +9,6 @@ it at the level the class demo depends on:
 - a played match replays move for move on a fresh platform and lands
   in exactly the same state (tic-tac-toe against a server computer,
   and a poker hand, whose deck order comes from the seeded shuffle);
-- the emulator answers identical requests identically;
 - failed test seeds stored for a game are replayed first on the next
   test run, so a fixed bug is verified against the exact walk that
   found it.
@@ -43,6 +42,7 @@ def _platform(ids: Iterator[str]) -> GamePlatform:
         store=InMemoryStore(),
         clock=_Clock(),
         new_id=lambda: next(ids),
+        new_seed=lambda: 0x5EED,
         new_password=lambda: "pw",
         new_referral_code=lambda: next(referral_codes),
         computer_move_delay_seconds=0,
@@ -51,6 +51,10 @@ def _platform(ids: Iterator[str]) -> GamePlatform:
 
 def _ids(*values: str) -> Iterator[str]:
     return iter(values)
+
+
+def _game_schemas(name: str) -> dict:
+    return json.loads((GAMES_DIR / f"{name}.schema.json").read_text())
 
 
 def _play_tictactoe() -> list[tuple[int, dict]]:
@@ -70,6 +74,7 @@ def _play_tictactoe() -> list[tuple[int, dict]]:
         ),
         code=(GAMES_DIR / "tictactoe.html").read_text(),
         server_code=(GAMES_DIR / "tictactoe.server.js").read_text(),
+        game_schemas=_game_schemas("tictactoe"),
     )
     match = platform.create_match(
         caller_id=owner.id, game_id=game.id, num_computer_opponents=1
@@ -77,8 +82,6 @@ def _play_tictactoe() -> list[tuple[int, dict]]:
     platform.start_match(
         caller_id=owner.id,
         match_id=match.id,
-        first_turn_player_indices=frozenset({0}),
-        initial_state=None,
     )
     snapshots = []
     while True:
@@ -91,8 +94,6 @@ def _play_tictactoe() -> list[tuple[int, dict]]:
         platform.make_move(
             caller_id=owner.id,
             match_id=match.id,
-            new_state=None,
-            next_turn_player_indices=None,
             expected_move_count=None,
             move={"cell": cell},
         )
@@ -101,8 +102,8 @@ def _play_tictactoe() -> list[tuple[int, dict]]:
 def test_a_match_replays_move_for_move_to_the_same_state() -> None:
     first = _play_tictactoe()
     second = _play_tictactoe()
-    # Same ids -> same match seed -> the computer's minimax tie-breaks
-    # and every state along the way are identical.
+    # Same ids and the same (injected) match seed -> the computer's
+    # minimax tie-breaks and every state along the way are identical.
     assert len(first) > 3
     assert first == second
 
@@ -124,6 +125,7 @@ def _play_poker_hand() -> dict:
         ),
         code=(GAMES_DIR / "poker.html").read_text(),
         server_code=(GAMES_DIR / "poker.server.js").read_text(),
+        game_schemas=_game_schemas("poker"),
     )
     match = platform.create_match(
         caller_id=alice.id, game_id=game.id, num_computer_opponents=0
@@ -132,8 +134,6 @@ def _play_poker_hand() -> dict:
     platform.start_match(
         caller_id=alice.id,
         match_id=match.id,
-        first_turn_player_indices=frozenset({0}),
-        initial_state=None,
     )
     users = [alice.id, bob.id]
     for _ in range(40):
@@ -147,8 +147,6 @@ def _play_poker_hand() -> dict:
         platform.make_move(
             caller_id=users[seat],
             match_id=match.id,
-            new_state=None,
-            next_turn_player_indices=None,
             expected_move_count=None,
             move=action,
         )
@@ -162,28 +160,17 @@ def test_a_poker_hand_replays_to_the_same_state() -> None:
     assert first == second
 
 
-def test_the_emulator_answers_identical_requests_identically(api: Api) -> None:
-    user = api.new_user("dev")
-    server_code = (GAMES_DIR / "poker.server.js").read_text()
-    players = [
-        {"kind": "human", "name": "Dev"},
-        {"kind": "computer", "name": "Bot"},
-        {"kind": "computer", "name": "Bot 2"},
-    ]
-    body = {"server_code": server_code, "players": players, "seed": 42}
-    first = api.ok("POST", "/emulator/reset", as_user=user, json=body)
-    second = api.ok("POST", "/emulator/reset", as_user=user, json=body)
-    assert first["error"] is None
-    assert first == second
-    # The full state (deck included) is deterministic too, not just views.
-    assert first["state"]["deck"]
-
 
 def test_failed_seeds_are_replayed_first_on_the_next_run(api: Api) -> None:
     owner = api.new_user("owner")
-    draft = api.ok(
-        "POST", "/game-drafts", as_user=owner,
-        json={"name": "Crashy", "allowed_player_counts": [2], "code": "<div>crashy</div>"},
+    game = api.create_game(
+        {
+            "name": "Crashy",
+            "allowed_player_counts": [2],
+            "code": "<div>crashy</div>",
+            "server_code": "const game = { newMatch(ctx) { return {state: {count: 0}, turn: [ctx.players[0].id]}; }, applyMove(state, playerId, move, ctx) { return {state, turn: null}; }, viewFor(state, playerId, ctx) { return state; } };",
+        },
+        owner,
     )
     broken = """
     const game = {
@@ -194,15 +181,20 @@ def test_failed_seeds_are_replayed_first_on_the_next_run(api: Api) -> None:
       viewFor(state, playerId, ctx) { return state; },
     };
     """
-    body = {"server_code": broken, "allowed_player_counts": [2], "game_id": draft["id"]}
-    first = api.ok("POST", "/games/test", as_user=owner, json=body)
-    assert first["passed"] is False
-    assert first["failures"]
-    stored = api.ok("GET", "/debug/all-data", as_user=owner)["game_test_seeds"]
-    (record,) = [entry for entry in stored if entry["game_id"] == draft["id"]]
-    assert record["seeds"][0] == first["failures"][0]["seed"]
+    rules = api.platform._store.get_game(game["id"]).rules
+    schemas = {"state": True, "move": True, "view": True}
+    first = api.platform._run_game_tests(
+        server_code=broken, game_schemas=schemas, rules=rules, game_id=game["id"]
+    )
+    assert first.passed is False
+    assert first.failures
+    stored = api.platform._store.get_game_test_seeds(game["id"])
+    assert stored is not None
+    assert stored.seeds[0] == first.failures[0].seed
     # The next run replays the stored seeds first: its first failure is
     # the same walk failing the same way.
-    second = api.ok("POST", "/games/test", as_user=owner, json=body)
-    assert second["failures"][0]["seed"] == record["seeds"][0]
-    assert second["failures"][0]["message"] == first["failures"][0]["message"]
+    second = api.platform._run_game_tests(
+        server_code=broken, game_schemas=schemas, rules=rules, game_id=game["id"]
+    )
+    assert second.failures[0].seed == stored.seeds[0]
+    assert second.failures[0].message == first.failures[0].message

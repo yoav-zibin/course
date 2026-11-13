@@ -9,7 +9,7 @@ from main `674ae95` are retained, including game deep links and computer limits.
 
 ## Published games
 
-Published through buildplay.fun's builder using the student's Google-linked account:
+Published through buildplay.fun's POST /games import using the student's Google-linked account:
 
 | Game | Players | Published game ID |
 | --- | --- | --- |
@@ -37,16 +37,70 @@ competitive card service. No API change is proposed here.
   neither game JavaScript nor the worker receives credentials.
 - Local practice starts a separate device-only match against computers or in
   pass-and-play mode. It never creates a cloud match or uploads practice moves.
-- Real match moves are persisted before submission, with `expected_move_count`.
+- Real match moves normally are persisted before submission, with `expected_move_count`.
   Only the user's current turn, or a computer turn they can act for, is available.
   Other remote humans' turns cannot be played offline.
+- If a new move cannot be saved because storage is full, the portal can submit it
+  directly while online only if the match has no saved queue or conflict. A lost
+  acknowledgement is reported as an unknown outcome; refresh the match before
+  trying again. A move made offline still needs durable storage and is rejected
+  if it cannot be saved. Existing unsynced work is never evicted to make room.
 - Reconnection checks authoritative state and move history. A lost acknowledgement
   is matched against the same author's state and turn set, avoiding duplicate moves.
   Conflicts preserve the local branch and require explicit resolution. Download
   queued moves before choosing **Use server version**; an archive also remains
   in device storage.
 - Web Locks serialize portal mutations between tabs. Network requests time out
-  and retry with backoff. A storage quota error rejects an unsaved move.
+  and queued moves retry with backoff.
+- Open **Device storage** in the sidebar for per-account byte sizes
+  (UTF-8, not characters), cached-response, queue, practice and archive
+  sizes, the five largest cached responses, the eviction order and next
+  entry to evict, queued moves and practice broken down per match, totals
+  for every account on this device, other saved data on this origin
+  (accounts, language), the service-worker shell cache size, and
+  the browser's estimated total origin usage and quota when available.
+  **Clear recoverable cache** removes only that account's refetchable
+  responses; queued-match snapshots, local practice game code, queues and
+  archives remain. It does not clear other accounts, service worker assets,
+  or other site data. One recoverable response can also be removed
+  programmatically (`PortalOffline.deleteCached`); the panel itself has no
+  per-entry delete button yet.
+- Each account's data is stored per key instead of one JSON value
+  (`game-platform.portal.v1.<id>.meta` manifest,
+  `.recency` for the single least-recently-used order, `.r.<path>` per
+  cached response, `.q.<id>` per queued-match list, `.c.<id>` per conflict,
+  `.l.<id>` per local practice match, plus archives, archived matches and
+  the selected match). A legacy single-JSON blob migrates once on first
+  read and is kept untouched as a backup; a corrupt or missing piece only
+  loses that piece, and a manifest whose own write failed is rebuilt by
+  scanning the pieces. Unchanged pieces are not rewritten. A failed write
+  never deletes durable pieces the manifest still lists, and a response
+  dropped to free quota is deleted before the response writes that need
+  the room.
+- Recoverable responses are evicted least-recently-used first at a
+  one-MiB (UTF-8 byte) budget or on quota failure; entries never touched
+  evict first. Recency is one ordered record (oldest first, at most 1,000
+  entries, monotonic clock), touched on read and merged on write, so
+  concurrent tabs no longer keep separate orders. The protected data
+  can exceed this limit. The service worker retains at most 50 recently
+  used avatars (a hit moves the entry to the newest end) and will return
+  successful network responses even if caching fails. Its install now
+  installs each shell asset individually, so one failed asset leaves a
+  partial shell and a warning instead of no offline shell at all.
+- Browsers that deny localStorage entirely no longer brick the portal:
+  the boot probe falls back to an in-memory store (and Auth keeps the
+  login in memory for the page load), reads return empty state with a
+  "Device storage unavailable; online play still works" notice, and
+  caching failures never fail the page. If a new move cannot be saved
+  because storage is full, the portal submits it directly while online
+  only if the match has no saved queue or conflict. Writes that the
+  server operation has already survived (recording a conflict, resolving
+  one, archiving a deleted match, ending practice) report instead of
+  throwing. Browser eviction or clearing site data can still remove all
+  local work; offline durability cannot be guaranteed in those
+  circumstances. A login kept only in memory does not survive a reload,
+  and a corrupt legacy blob cannot be salvaged (its backup is kept for
+  inspection). Real Safari private-mode behaviour is still untested.
 - The portal alone accepts legacy null end-turn messages, fixing the old
   TicTacToe end-move compatibility issue without altering shared GameFrame code.
 
@@ -91,7 +145,7 @@ accepted a human move and a computer reply offline, then synchronized exactly fo
 moves after resuming the backend. The pending count returned to zero; an independent
 server read confirmed four moves. No production server was paused or restarted.
 
-The final JavaScript run passed 51 tests (13 game/offline checks, 27 builder checks, and 11 portal checks).
+The final JavaScript run passed its game/offline and portal checks.
 The portal test harness includes the offline adapter. Python: 206 passed, one existing stale
 example-data fixture failure. No backend files differ from upstream main.
 
@@ -103,15 +157,14 @@ deleted afterward. This is API-client coverage, not two physical phones.
 The local tests cover box completion/extra turns, Reversi captures and termination,
 100 simulated Crazy Eights matches, reload durability, account isolation, lost
 acknowledgements, conflicting remote moves, ordered queue replay, bounded conflict
-retries, and storage exhaustion. Shared builder checks are also run unchanged.
+retries, and storage exhaustion.
 
 ## Deployment handoff
 
 Publishing games updates cloud data immediately. Pushing portal code to GitHub
-alone does not deploy it: there is no checked-in automatic deployment workflow.
-
-The VM administrator should review the PR and use their established deployment
-procedure to update the actual served checkout. The portal-specific static files
+deploys it automatically when CI passes: `.github/workflows/ci.yml` runs the
+tests and, on a green push to main, SSH-deploys to the VM and restarts
+`game-platform.service`. The portal-specific static files
 are `portal.html`, `portal.js`, `portal-offline.js`, `portal-sw.js`,
 `portal.webmanifest`, and `portal-icon.svg`; keep them together with the current
 main versions of `common.css`, `common.js`, and `auth.js`.

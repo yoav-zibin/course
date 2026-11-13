@@ -1,7 +1,10 @@
-"""Speed matches: an optional per-move clock, enforced by the server when matches are
-read, listed or moved in. The tests set the clock by hand; nothing waits for real."""
+"""Speed matches: an optional per-move clock, enforced by the server when
+matches are read, listed or moved in — and, on the scalable backend, by a
+durable deadline job the background worker runs (test_query_store.py covers
+that path). The tests set the clock by hand; nothing waits for real."""
 
 import datetime as dt
+import json
 import threading
 from collections.abc import Sequence
 
@@ -12,6 +15,45 @@ from game_platform.api import create_app
 from game_platform.json_file_store import JsonFileStore, read_snapshot
 from game_platform.models import GameRules
 from game_platform.push import PushMessage
+from game_platform.tests.helpers import TEST_GAME_SCHEMAS
+
+# A pass-through server game (see tests.helpers.ECHO_SERVER_CODE) whose
+# state counts: newMatch starts at {"n": 0} and a move names the next
+# state and turn, so the clock tests can drive any turn pattern.
+DUEL_SERVER_CODE = """
+const game = {
+  newMatch(ctx) { return { state: { n: 0 }, turn: [ctx.players[0].id] }; },
+  applyMove(state, playerId, move, ctx) {
+    const m = move && typeof move === "object" && !Array.isArray(move) ? move : {};
+    let turn = null;
+    if (m.turn_indices != null) {
+      const bad = !Array.isArray(m.turn_indices)
+        || m.turn_indices.length === 0
+        || m.turn_indices.some((i) => !Number.isInteger(i) || i < 0 || i >= ctx.players.length)
+        || new Set(m.turn_indices).size !== m.turn_indices.length;
+      if (bad) throw new InvalidMove();
+      turn = m.turn_indices.map((i) => ctx.players[i].id);
+    }
+    const result = {
+      state: "state" in m ? m.state : state,
+      turn,
+    };
+    if (turn === null && ctx.pot) {
+      const humans = ctx.players.filter((p) => p.kind === "human" && p.active !== false);
+      const split = {};
+      const share = Math.floor(ctx.pot / humans.length);
+      let rest = ctx.pot - share * humans.length;
+      for (const p of humans) split[p.id] = share + (rest-- > 0 ? 1 : 0);
+      result.payouts = split;
+    }
+    return result;
+  },
+  computerMove(state, playerId, ctx) {
+    return { state: state, turn_indices: [0] };
+  },
+  viewFor(state, playerId, ctx) { return state; },
+};
+"""
 from game_platform.service import ConflictError, GamePlatform, InvalidRequestError
 
 START = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
@@ -61,6 +103,8 @@ class World:
                 allows_join_mid_match=True,
             ),
             code="<div>duel</div>",
+            server_code=DUEL_SERVER_CODE,
+            game_schemas=TEST_GAME_SCHEMAS,
         ).id
 
     def match(
@@ -81,20 +125,28 @@ class World:
         for user in joiners:
             self.platform.join_match(caller_id=user, match_id=match.id)
         if start:
-            self.platform.start_match(
-                caller_id=self.ann,
-                match_id=match.id,
-                first_turn_player_indices=frozenset(first),
-                initial_state={"n": 0},
-            )
+            self.platform.start_match(caller_id=self.ann, match_id=match.id)
+            if tuple(first) != (0,):
+                from dataclasses import replace as _replace
+
+                stored = self.platform._store.get_match(match.id)
+                self.platform._store.put_match(
+                    _replace(
+                        stored,
+                        turn_of_player_indices=frozenset(first),
+                        initial_turn_player_indices=frozenset(first),
+                    )
+                )
         return match.id
 
     def move(self, match_id: str, user: str, next_turn: Sequence[int] | None):
         return self.platform.make_move(
             caller_id=user,
             match_id=match_id,
-            new_state={"n": 1},
-            next_turn_player_indices=None if next_turn is None else frozenset(next_turn),
+            move={
+                "state": {"n": 1},
+                "turn_indices": None if next_turn is None else list(next_turn),
+            },
             expected_move_count=None,
         )
 
@@ -212,7 +264,7 @@ def test_a_late_move_from_the_offline_queue_gets_a_clear_409() -> None:
     response = client.post(
         f"/matches/{match_id}/moves",
         headers={"X-User-Id": world.ann, "X-User-Password": password},
-        json={"new_state": {"n": 1}, "next_turn_player_indices": [1], "expected_move_count": 0},
+        json={"move": {"state": {"n": 1}, "turn_indices": [1]}, "expected_move_count": 0},
     )
     assert response.status_code == 409
     assert response.json()["detail"] == "your time to move ran out"
@@ -263,17 +315,13 @@ def test_a_v2_timeout_ends_without_running_a_computer() -> None:
         ),
         code=(games / "debug.html").read_text(),
         server_code=(games / "debug.server.js").read_text(),
+        game_schemas=json.loads((games / "debug.schema.json").read_text()),
     )
     match = platform.create_match(
         caller_id=ann, game_id=game.id, num_computer_opponents=0, turn_seconds=60
     )
     platform.join_match(caller_id=bob, match_id=match.id)
-    platform.start_match(
-        caller_id=ann,
-        match_id=match.id,
-        first_turn_player_indices=frozenset({0}),
-        initial_state=None,
-    )
+    platform.start_match(caller_id=ann, match_id=match.id)
     clock.advance(61)
     after = platform.get_match(match.id, caller_id=ann)
     assert kinds(after) == ["human", "human"]
@@ -307,11 +355,70 @@ def test_the_match_ends_in_a_paid_match() -> None:
         caller_id=world.ann, game_id=world.game, num_computer_opponents=0, bet_per_player=1, turn_seconds=60
     )
     world.platform.join_match(caller_id=world.bob, match_id=match.id)
-    world.platform.start_match(
-        caller_id=world.ann, match_id=match.id, first_turn_player_indices=frozenset({0}), initial_state=None
-    )
+    world.platform.start_match(caller_id=world.ann, match_id=match.id)
     world.clock.advance(61)
     assert world.get(match.id).end_reason == "timed_out"
+
+
+def _balances(world: World) -> dict[str, int]:
+    return {
+        user: world.platform._store.get_user(user).token_balance
+        for user in (world.ann, world.bob, world.cy)
+    }
+
+
+def test_a_timeout_pays_the_pot_to_the_players_without_the_turn() -> None:
+    world = World()
+    match = world.platform.create_match(
+        caller_id=world.ann, game_id=world.game, num_computer_opponents=0, bet_per_player=2, turn_seconds=60
+    )
+    world.platform.join_match(caller_id=world.bob, match_id=match.id)
+    world.platform.join_match(caller_id=world.cy, match_id=match.id)
+    world.platform.start_match(caller_id=world.ann, match_id=match.id)
+    before = _balances(world)
+    # Ann (seat 0) holds the first turn and lets it run out.
+    world.clock.advance(61)
+    match = world.get(match.id)
+    assert match.end_reason == "timed_out"
+    # Ann gets nothing; Bob and Cy split the 6-token pot.
+    assert match.token_payouts == {1: 3, 2: 3}
+    after = _balances(world)
+    assert after[world.ann] == before[world.ann]
+    assert after[world.bob] == before[world.bob] + 3
+    assert after[world.cy] == before[world.cy] + 3
+
+
+def test_a_timeout_refunds_evenly_when_everyone_held_the_turn() -> None:
+    from dataclasses import replace as _replace
+
+    world = World()
+    match = world.platform.create_match(
+        caller_id=world.ann, game_id=world.game, num_computer_opponents=0, bet_per_player=2, turn_seconds=60
+    )
+    world.platform.join_match(caller_id=world.bob, match_id=match.id)
+    world.platform.start_match(caller_id=world.ann, match_id=match.id)
+    # Both seats hold the turn (a simultaneous turn): nobody was waiting,
+    # so the pot is refunded evenly.
+    stored = world.platform._store.get_match(match.id)
+    world.platform._store.put_match(
+        _replace(
+            stored,
+            turn_of_player_indices=frozenset({0, 1}),
+            initial_turn_player_indices=frozenset({0, 1}),
+        )
+    )
+    before = _balances(world)
+    world.clock.advance(61)
+    match = world.get(match.id)
+    assert match.end_reason == "timed_out"
+    assert sorted(t.user_id for t in match.timeouts) == sorted([world.ann, world.bob])
+    assert match.token_payouts == {0: 2, 1: 2}
+    after = _balances(world)
+    assert after[world.ann] == before[world.ann] + 2
+    assert after[world.bob] == before[world.bob] + 2
+
+
+
 
 
 def test_the_match_ends_when_no_humans_are_left() -> None:
@@ -469,7 +576,7 @@ def test_the_api_returns_the_clock_and_the_servers_time() -> None:
 # The data file
 
 
-def test_old_data_files_load_and_the_new_fields_survive_a_restart(tmp_path) -> None:
+def test_the_new_fields_survive_a_restart(tmp_path) -> None:
     path = tmp_path / "data.json"
     store = JsonFileStore(path, min_write_interval_seconds=0)
     world = World(store=store)
@@ -484,14 +591,3 @@ def test_old_data_files_load_and_the_new_fields_survive_a_restart(tmp_path) -> N
         before.turn_started_at,
         before.timeouts,
     )
-    # A version 9 file (before speed matches) still loads, as regular matches.
-    import json
-
-    file = json.loads(path.read_text())
-    file["format_version"] = 9
-    for match_json in file["data"]["matches"]:
-        for key in ("turn_seconds", "turn_started_at", "timeouts"):
-            match_json.pop(key, None)
-    path.write_text(json.dumps(file))
-    old = read_snapshot(path)
-    assert all(m.turn_seconds is None and m.timeouts == () for m in old.matches)

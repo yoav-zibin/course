@@ -5,8 +5,9 @@ import re
 
 import pytest
 
-from game_platform.game_logic import GameLogic, InvalidMoveError
-from game_platform.game_testing import test_server_code as run_gate
+from game_platform.tests.helpers import UnrestrictedGameLogic as GameLogic
+from game_platform.game_logic import InvalidMoveError
+from game_platform.tests.helpers import run_unrestricted_server_code as run_gate
 from game_platform.models import GameRules
 
 GAMES = Path(__file__).parent.parent / 'games' / 'audit-batch2'
@@ -24,7 +25,7 @@ def cards(ranks, suit=0):
 
 def engine(client=False, expression='detect(s.cards, s.tr)'):
     if client:
-        stubs = "const document={getElementById(){return {}}};const window={addEventListener(){}};const parent={postMessage(){}};"
+        stubs = "const document={getElementById(){return {textContent:'{}'}}};const window={addEventListener(){}};const parent={postMessage(){}};"
         return GameLogic(stubs + CLIENT + '\nconst game={randomMove(s,p,ctx){return ' + expression + ';}};')
     return GameLogic(SERVER + '\ngame.randomMove=function(s,p,ctx){return ' + expression + ';};')
 

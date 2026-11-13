@@ -1,17 +1,16 @@
 # Scaling coordination
 
-Before changing storage, Portal, Builder or admin pages, read
+Before changing storage, Portal or admin pages, read
 [the backend handoff](docs/handoff-sc5386-backend.md).
 
 The query backend, paginated interfaces and production conversion are already
-merged into main through PRs #32, #38 and #39. Current verified production main
-includes `01b11c8` (also PRs #40-43). Production
-is running query mode with real data. Merge/rebase current main before starting
+merged into main through PRs #32, #38 and #39. Production
+is running query mode (namespace `production_v3`) with real data. Merge/rebase current main before starting
 overlapping work; reuse its API contract instead of implementing storage again.
 
-The shared Admin/Portal/Builder top bar is covered by
+The shared Admin/Portal top bar is covered by
 [PR #40](https://github.com/yoav-zibin/course/pull/40), now merged and deployed on
-production and the isolated demo. Reuse its shared navigation
+production. Reuse its shared navigation
 initializer and current asset versions when integrating header changes.
 
 PR #43 repairs Python 3.12 startup after the monitoring/translation merges and

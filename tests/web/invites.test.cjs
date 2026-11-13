@@ -8,15 +8,34 @@ const path=require('node:path');
 const AUTH_JS=fs.readFileSync(path.join(__dirname,'../../static/auth.js'),'utf8');
 
 /** Loads auth.js as if the page were opened at [hash] (and [search]), with [storage] as localStorage. */
-function loadAuth(hash, storage=new Map(), search='') {
+function loadAuth(hash, storage=new Map(), search='', storageImpl=null) {
   const ctx=vm.createContext({console,URLSearchParams,CustomEvent:class{constructor(type){this.type=type;}},
-    localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,String(v)),removeItem:k=>storage.delete(k)},
+    localStorage: storageImpl || {getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,String(v)),removeItem:k=>storage.delete(k)},
     location:{hash,search,origin:'https://buildplay.fun'},
     window:{addEventListener(){}},document:{dispatchEvent(){}},
     apiRequest:async()=>{},el:()=>({})});
   vm.runInContext(AUTH_JS+'\nthis.Auth=Auth;',ctx);
   return {Auth:ctx.Auth,storage};
 }
+
+function deniedStorage() {
+  const error = () => Object.assign(new Error('denied'), { name: 'SecurityError' });
+  return { getItem: () => { throw error(); }, setItem: () => { throw error(); }, removeItem: () => { throw error(); } };
+}
+
+test('denied storage keeps login working in memory for this page load',()=>{
+  const {Auth}=loadAuth('',new Map(),'',deniedStorage());
+  assert.equal(Auth.current(),null);
+  Auth.upsert({user_id:'bob',display_name:'Bob',password:'pw',linked_accounts:[]});
+  assert.equal(Auth.current().id,'bob');
+  Auth.upsert({user_id:'cy',display_name:'Cy',password:'pw',linked_accounts:[]});
+  assert.equal(Auth.current().id,'cy');
+  Auth.setCurrent('bob');
+  assert.equal(Auth.current().id,'bob');
+  Auth.setCurrent(null);
+  assert.equal(Auth.current(),null);
+  assert.equal(Auth.accounts().length,2);
+});
 
 test('an invite link remembers who sent it, and new accounts carry the inviter',()=>{
   const {Auth}=loadAuth('#match=m1&ref=ann');

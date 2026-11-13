@@ -1,15 +1,28 @@
 import {test, expect} from '@playwright/test';
+import { createUser, loginAs, mockBatch, uniqueName } from './helpers';
 
-test('paged catalog keeps its controls usable after navigation and polling',async({page})=>{
+test('paged catalog keeps its controls usable after navigation and polling',async({page, request})=>{
   const errors:string[]=[];
   page.on('pageerror',error=>errors.push(error.message));
+  // The portal requires a login; plant a real account in the browser.
+  await loginAs(page, await createUser(request, uniqueName('Scaling visitor')));
   await page.route('**/storage/capabilities',route=>route.fulfill({json:{pagination:true}}));
-  await page.route('**/v2/matches/open?*',route=>route.fulfill({json:{items:[],next_cursor:null}}));
-  await page.route('**/v2/games?*',route=>{
-    const second=new URL(route.request().url()).searchParams.has('cursor');
-    const game={id:second?'page-two':'page-one',name:second?'Second page game':'First page game',
-      description:'Pagination fixture',version:1,allowed_player_counts:[2],published:true,owner_user_id:'fixture'};
-    return route.fulfill({json:{items:[game],next_cursor:second?null:'second-page'}});
+  await mockBatch(page, request, {
+    // A logged-in portal also pages its own matches; the real test server
+    // has no paginated storage, so this page must come from the mocks too —
+    // forwarded, its error would abort the whole refresh before rendering.
+    '/v2/matches': { items: [], next_cursor: null },
+    '/v2/matches/open': { items: [], next_cursor: null },
+    '/v2/games': (path: string) => {
+      const second = new URL(path, 'http://test').searchParams.has('cursor');
+      const game = {
+        id: second ? 'page-two' : 'page-one',
+        name: second ? 'Second page game' : 'First page game',
+        description: 'Pagination fixture', version: 1, allowed_player_counts: [2],
+        published: true, owner_user_id: 'fixture',
+      };
+      return { items: [game], next_cursor: second ? null : 'second-page' };
+    },
   });
   await page.goto('/portal');
   await page.locator('#browse-games').click();

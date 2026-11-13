@@ -144,8 +144,12 @@ function makeMove(newState, nextTurn) {
 }
 
 function actingSeat() {
-  if (!latest || latest.status !== "ongoing") return null;
-  return latest.acting_for_player_index;
+  if (!latest || latest.status !== "ongoing" || !latest.turn_of_player_indices?.length) return null;
+  const turn = latest.turn_of_player_indices[0];
+  if (turn === latest.my_player_index) return turn;
+  const humans = latest.players.filter((p) => p.kind === "human");
+  if (latest.my_player_index !== null && humans.length === 1 && latest.players[turn]?.kind === "computer") return turn;
+  return null;
 }
 
 const playerName = (seat) => latest.players[seat]?.name ?? `Player ${seat + 1}`;

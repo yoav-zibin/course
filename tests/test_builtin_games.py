@@ -8,13 +8,19 @@ through the emulator endpoints (the phase's exit check).
 """
 
 from pathlib import Path
+import json
 
 import pytest
 
-from game_platform.game_logic import GameLogic, InvalidMoveError
+from game_platform.tests.helpers import UnrestrictedGameLogic as GameLogic
+from game_platform.game_logic import InvalidMoveError
 from game_platform.tests.helpers import Api, error
 
 GAMES_DIR = Path(__file__).parent.parent / "games"
+
+
+def _game_schemas(name: str) -> dict:
+    return json.loads((GAMES_DIR / f"{name}.schema.json").read_text())
 
 
 def _create_game(api: Api, owner: str, name: str, **fields) -> dict:
@@ -22,9 +28,10 @@ def _create_game(api: Api, owner: str, name: str, **fields) -> dict:
         "name": name,
         "code": (GAMES_DIR / f"{name}.html").read_text(),
         "server_code": (GAMES_DIR / f"{name}.server.js").read_text(),
+        "game_schemas": _game_schemas(name),
     }
     body.update(fields)
-    return api.ok("POST", "/games", as_user=owner, json=body)
+    return api.create_game(body, owner)
 
 
 def _move(api: Api, match_id: str, user: str, move, expected: int) -> dict:
@@ -56,32 +63,6 @@ def test_tictactoe_plays_a_full_match_against_the_server_computer(api: Api):
     # Minimax never loses: the game is a draw or a computer win.
     assert current["state"]["winner"] in (1, None)
     assert current["state"]["draw"] is (current["state"]["winner"] is None)
-
-
-def test_tictactoe_through_the_emulator(api: Api):
-    user = api.new_user("dev")
-    server_code = (GAMES_DIR / "tictactoe.server.js").read_text()
-    players = [{"kind": "human", "name": "Dev"}, {"kind": "computer", "name": "Bot"}]
-    reply = api.ok(
-        "POST", "/emulator/reset", as_user=user,
-        json={"server_code": server_code, "players": players, "seed": 3},
-    )
-    assert reply["error"] is None
-    for _ in range(9):
-        if reply["status"] == "over":
-            break
-        cell = reply["state"]["board"].index("")
-        reply = api.ok(
-            "POST", "/emulator/act", as_user=user,
-            json={
-                "server_code": server_code, "players": players, "seed": 3,
-                "state": reply["state"], "turn": reply["turn"],
-                "move_count": reply["move_count"],
-                "player_id": "human-1", "move": {"cell": cell},
-            },
-        )
-        assert reply["error"] is None
-    assert reply["status"] == "over"
 
 
 def test_debug_game_passes_turns_and_ends(api: Api):
@@ -209,7 +190,10 @@ def test_poker_single_player_cannot_be_joined_mid_hand(api: Api):
 
 
 def test_poker_takeover_on_the_acting_seat_moves_the_turn_on():
-    logic = GameLogic((GAMES_DIR / "poker.server.js").read_text())
+    logic = GameLogic(
+        (GAMES_DIR / "poker.server.js").read_text(),
+        game_schemas=_game_schemas("poker"),
+    )
 
     def player(pid: str, kind: str) -> dict:
         return {"id": pid, "kind": kind, "display_name": pid,
@@ -236,7 +220,10 @@ def test_poker_takeover_on_the_acting_seat_moves_the_turn_on():
 
 
 def test_poker_cannot_fold_when_checking_is_free():
-    logic = GameLogic((GAMES_DIR / "poker.server.js").read_text())
+    logic = GameLogic(
+        (GAMES_DIR / "poker.server.js").read_text(),
+        game_schemas=_game_schemas("poker"),
+    )
 
     def player(pid: str) -> dict:
         return {"id": pid, "kind": "human", "display_name": pid,

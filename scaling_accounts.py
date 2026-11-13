@@ -16,7 +16,7 @@ operations in query mode and points at these commands: a merge or deletion is
 finished only when its run reports ``complete``.
 
 Merge semantics mirror ``GamePlatform._merge_locked``: games (all versions),
-drafts, matches (owner, seats with their stable logic player IDs, hidden
+matches (owner, seats with their stable logic player IDs, hidden
 flags), move authors, push subscriptions and invites move to the survivor;
 linked accounts are re-reserved for the survivor; the source is marked
 ``replaced_by`` the survivor (never deleted, so its credentials keep working
@@ -28,7 +28,7 @@ with ``shared_active_match`` and nothing has been rewritten yet.
 Deletion semantics mirror ``GamePlatform.admin_delete_user``: owned games are
 soft-deleted, owned matches are deleted with their invites, the user leaves
 every other match that is not over (through the platform, so v2 payouts and
-computer takeovers keep their normal rules), drafts / push subscriptions /
+computer takeovers keep their normal rules), push subscriptions /
 created invites are deleted, invitees are repointed at the deleted user's own
 inviter, and finally the user record is tombstoned and its referral and
 linked-account reservations are released.
@@ -45,7 +45,6 @@ MERGE_STAGES = (
     "check_matches",
     "game_versions",
     "games",
-    "game_drafts",
     "matches",
     "match_moves",
     "push_subscriptions",
@@ -59,7 +58,6 @@ DELETE_STAGES = (
     "games",
     "matches_owned",
     "matches_leave",
-    "game_drafts",
     "push_subscriptions",
     "invites",
     "invitees",
@@ -332,14 +330,6 @@ def _merge_stage_plan(stage, source_id, into_id):
                 store.put_game_version(replace(record, owner_user_id=into_id))
                 if record.owner_user_id == source_id
                 else None
-            ),
-        )
-    if stage == "game_drafts":
-        return (
-            "game_drafts",
-            [("owner_user_id", "==", source_id)],
-            lambda store, record: store.put_game_draft(
-                replace(record, owner_user_id=into_id)
             ),
         )
     if stage == "matches":
@@ -746,12 +736,6 @@ def _delete_stage_plan(stage, user_id):
             lambda store, record, state: (
                 store.delete_game(record.id) if not record.deleted else None
             ),
-        )
-    if stage == "game_drafts":
-        return (
-            "game_drafts",
-            [("owner_user_id", "==", user_id)],
-            lambda store, record, state: store.delete_game_draft(record.id),
         )
     if stage == "push_subscriptions":
         return (

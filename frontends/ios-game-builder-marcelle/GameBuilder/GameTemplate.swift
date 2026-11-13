@@ -40,7 +40,18 @@ enum GameTemplate {
 
     function render() {
       const s = stateOf(latest);
-      const acting = latest.status === "ongoing" ? latest.acting_for_player_index : null;
+      // The seat this client moves for: my own seat when it is my turn, or
+      // the computer's seat when this client is the only human (v1 games are
+      // computed here, so this client plays the computer). Never another
+      // human's seat.
+      const acting = (() => {
+        if (!latest || latest.status !== "ongoing" || !latest.turn_of_player_indices?.length) return null;
+        const turn = latest.turn_of_player_indices[0];
+        if (turn === latest.my_player_index) return turn;
+        const humans = latest.players.filter((p) => p.kind === "human");
+        if (latest.my_player_index !== null && humans.length === 1 && latest.players[turn]?.kind === "computer") return turn;
+        return null;
+      })();
       const name = (seat) => latest.players[seat].name;
       $("scores").textContent = latest.players.map((p, i) => `${p.name}: ${s.scores[i] ?? 0}`).join(" · ");
       $("status").textContent = s.winner !== null ? `${name(s.winner)} wins!`

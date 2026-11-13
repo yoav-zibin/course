@@ -9,7 +9,7 @@ const sizes = [
   { name: 'laptop', width: 1366, height: 768 },
   { name: 'wide desktop', width: 1920, height: 1080 },
 ];
-const pages = ['portal', 'builder', 'browse'];
+const pages = ['portal', 'browse'];
 
 test.describe('Layout at different screen sizes', () => {
   for (const size of sizes) {
@@ -17,7 +17,7 @@ test.describe('Layout at different screen sizes', () => {
       test(`${name}: no horizontal scrolling on ${size.name} (${size.width}x${size.height})`, async ({ page }) => {
         await page.setViewportSize({ width: size.width, height: size.height });
         await page.goto(`/static/${name}.html`);
-        await expect(page.getByRole('heading', { name: /Game platform|Game Builder/ }).first()).toBeVisible();
+        await expect(page.getByRole('heading', { name: /Game platform/ }).first()).toBeVisible();
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         expect(overflow).toBeLessThanOrEqual(0);
       });
@@ -51,11 +51,8 @@ test.describe('Layout at different screen sizes', () => {
     await page.goto('/static/portal.html');
     await page.getByRole('combobox', { name: 'Search games' }).fill(gameName);
     await page.getByRole('option', { name: new RegExp(gameName) }).click();
-    // A real match against a computer (server-side games have no local
-    // practice mode).
-    await page.getByRole('button', { name: /Create match/ }).click();
-    await page.getByRole('button', { name: 'Add computer opponent' }).click();
-    await page.getByRole('button', { name: 'Start game' }).click();
+    // Start a server match through the dedicated computer-play option.
+    await page.getByRole('button', { name: /Play with computers/ }).click();
 
     const frame = page.locator('#game-box iframe');
     const board = page.frameLocator('#game-box iframe').locator('#board button');

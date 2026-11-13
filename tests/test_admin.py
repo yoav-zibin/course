@@ -78,8 +78,8 @@ def test_admin_deletes_a_user_with_their_games_and_matches(api: Api) -> None:
 
     api.ok("DELETE", f"/admin/users/{alice}")
 
-    data = api.ok("GET", "/debug/all-data")
-    assert [user["display_name"] for user in data["users"]] == ["bob"]
+    platform = api.client.app.state.platform
+    assert [user.display_name for user in platform.all_data().users] == ["bob"]
     assert api.request("GET", f"/matches/{owned}").status_code == 404
     assert api.request("GET", f"/games/{game_id}").json()["deleted"] is True
     assert api.match_summary(joined)["players"] == ["bob", "alice"]
@@ -98,6 +98,22 @@ def test_admin_deletes_a_game_and_a_match(api: Api) -> None:
     assert api.request("GET", f"/matches/{match_id}").status_code == 404
     assert api.ok("GET", "/games") == []
     assert api.request("DELETE", f"/admin/games/{game_id}").status_code == 409
+
+
+def test_admin_deleting_a_game_deletes_its_matches(api: Api) -> None:
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game_id = api.new_game(owner=alice)
+    waiting = api.new_match(owner=alice, game_id=game_id)
+    started = api.new_match(owner=alice, game_id=game_id, joiners=[bob], start=True)
+    other_game = api.new_game(owner=bob)
+    other_match = api.new_match(owner=bob, game_id=other_game)
+
+    api.ok("DELETE", f"/admin/games/{game_id}")
+
+    assert api.request("GET", f"/matches/{waiting}").status_code == 404
+    assert api.request("GET", f"/matches/{started}").status_code == 404
+    assert api.request("GET", f"/matches/{other_match}").status_code == 200
+    assert [game["id"] for game in api.ok("GET", "/games")] == [other_game]
 
 
 def _allow_origin_headers(client: TestClient) -> list[str]:

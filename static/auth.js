@@ -1,4 +1,4 @@
-// Accounts and login, shared by the portal and the builder.
+// Accounts and login, shared by the site's pages.
 //
 // The browser remembers every logged-in account in localStorage:
 // [{id, display_name, password, linked: [{kind, identifier, linked_at}]}].
@@ -19,16 +19,27 @@ const Auth = (() => {
   const ACCOUNTS_KEY = "game-platform.accounts.v1";
   const CURRENT_KEY = "game-platform.current-account.v1";
 
+  // When this browser denies storage entirely (private mode, blocked
+  // cookies), accounts live in memory for this page load instead: login
+  // still works and online play is unaffected; only persistence is lost.
+  let memoryAccounts = null;
+  let memoryCurrentId = undefined;
+
   function load() {
     try {
       return JSON.parse(localStorage.getItem(ACCOUNTS_KEY)) ?? [];
     } catch {
-      return [];
+      return memoryAccounts ?? [];
     }
   }
 
   function save(accounts) {
-    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+    try {
+      localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+      memoryAccounts = null;
+    } catch {
+      memoryAccounts = accounts;
+    }
   }
 
   function changed() {
@@ -40,15 +51,26 @@ const Auth = (() => {
     return load();
   }
 
-  /** The current account, or null when logged out. */
+  /** The current account, or null when logged out. Never throws: denied
+   * storage reads as logged out (or the in-memory current account). */
   function current() {
-    const id = localStorage.getItem(CURRENT_KEY);
+    let id;
+    try {
+      id = localStorage.getItem(CURRENT_KEY);
+    } catch {
+      id = memoryCurrentId ?? null;
+    }
     return load().find((account) => account.id === id) ?? null;
   }
 
   function setCurrent(id) {
-    if (id) localStorage.setItem(CURRENT_KEY, id);
-    else localStorage.removeItem(CURRENT_KEY);
+    try {
+      if (id) localStorage.setItem(CURRENT_KEY, id);
+      else localStorage.removeItem(CURRENT_KEY);
+      memoryCurrentId = undefined;
+    } catch {
+      memoryCurrentId = id ?? null;
+    }
     changed();
   }
 
@@ -176,6 +198,32 @@ const Auth = (() => {
   rememberInviter();
   window.addEventListener?.("hashchange", rememberInviter);
 
+  /** Sends a logged-out visitor to the login page, and back here after.
+   * Every account page requires a login — a guest account counts and takes
+   * seconds — so a visitor with no account never lands on a page that can
+   * only refuse them. Exempt: the login page itself, and /admin, the
+   * master-password page, which has its own sign-in. Runs only in a real
+   * page context (test harnesses load this file with a stub location). */
+  function requireLogin() {
+    const exempt = ["/", "/static/welcome.html", "/admin", "/static/admin.html"];
+    if (
+      typeof location.pathname !== "string" ||
+      typeof location.replace !== "function" ||
+      exempt.includes(location.pathname) ||
+      current()
+    )
+      return;
+    const back = location.pathname + location.search + location.hash;
+    location.replace(`/?next=${encodeURIComponent(back)}`);
+  }
+
+  requireLogin();
+
+  // Logging out (the last account removed) leaves the visitor logged out
+  // on this page: send them to the login page the same way, and back here
+  // if they log in again.
+  document.addEventListener?.("auth-changed", requireLogin);
+
   // Login dialog
 
   let configPromise = null;
@@ -201,7 +249,7 @@ const Auth = (() => {
       script.async = true;
       script.defer = true;
       script.onload = resolve;
-      script.onerror = () => reject(new Error("couldn't load Google's login script"));
+      script.onerror = () => reject(new Error(I18n.t("ui.auth.google_script_failed", {}, "Couldn't load Google's login script")));
       document.head.appendChild(script);
     });
     return googleLoading.then(() => {
@@ -370,7 +418,7 @@ const Auth = (() => {
     const callButton = kind === "phone" && canCall
       ? el("button", {
           type: "button",
-          textContent: "Call me with a code",
+          textContent: I18n.t("ui.auth.call_me", {}, "Call me with a code"),
           onclick: () => send("call"),
         })
       : null;
@@ -405,19 +453,8 @@ const Auth = (() => {
     const input = el("input", { placeholder: I18n.t("ui.auth.guest_name", {}, "Guest name"), "aria-label": I18n.t("ui.auth.guest_name", {}, "Guest name") });
     const button = el("button", { type: "button", textContent: I18n.t("ui.auth.continue_as_guest", {}, "Continue as guest") });
     button.onclick = async () => {
-      const name = input.value.trim() || I18n.t("ui.auth.guest_default_name", { number: accounts().length + 1 }, `Guest ${accounts().length + 1}`);
       try {
-        const user = await apiRequest("POST", "/users", {
-          body: newAccountBody({ display_name: name }),
-        });
-        finishLogin(dialog, {
-          user_id: user.id,
-          display_name: user.display_name,
-          password: user.password,
-          referral_code: user.referral_code,
-          linked_accounts: [],
-          merged_from_user_id: null,
-        });
+        finishLogin(dialog, await createGuest(input.value));
       } catch (error) {
         dialogFailed(dialog, error);
       }
@@ -426,6 +463,21 @@ const Auth = (() => {
       el("label", { class: "inline" }, `${I18n.t("ui.auth.guest", {}, "Guest")} `, input),
       button
     );
+  }
+
+  async function createGuest(displayName = "") {
+    const name = displayName.trim() || I18n.t("ui.auth.guest_default_name", { number: accounts().length + 1 }, `Guest ${accounts().length + 1}`);
+    const user = await apiRequest("POST", "/users", {
+      body: newAccountBody({ display_name: name }),
+    });
+    return {
+      user_id: user.id,
+      display_name: user.display_name,
+      password: user.password,
+      referral_code: user.referral_code,
+      linked_accounts: [],
+      merged_from_user_id: null,
+    };
   }
 
   /** An <img> for a stored picture URL, or null when there is none. */
@@ -442,11 +494,17 @@ const Auth = (() => {
     const key = JSON.stringify([account?.id, all.map(user => [user.id, user.display_name, user.picture_url, user.linked]), I18n.revision?.() ?? 0]);
     if (container._authRenderKey === key && container.querySelector(".auth-menu-button")) return container;
     const panelWasOpen = container.querySelector(".auth-menu-panel")?.hidden === false;
+    // A profile picture or translation can arrive during a poll while the
+    // menu is in use. Restore the same action after replacing its DOM.
+    const focusedAction = container.contains(document.activeElement)
+      && container._authAccountId === account?.id
+      ? document.activeElement.dataset.authAction : null;
     container.replaceChildren();
     const button = el("button", {
       type: "button",
       class: "auth-menu-button",
       "aria-haspopup": "true",
+      "data-auth-action": "toggle",
     },
       avatarImg(account?.picture_url),
       account ? account.display_name : I18n.t("ui.auth.log_in", {}, "Log in")
@@ -477,7 +535,7 @@ const Auth = (() => {
     if (account) {
       panel.append(el("div", { class: "auth-menu-heading" },
         avatarImg(account.picture_url),
-        `Logged in as ${account.display_name}`));
+        I18n.t("ui.auth.logged_in_as", { name: account.display_name }, `Logged in as ${account.display_name}`)));
       if (account.linked.length) {
         panel.append(
           el("div", { class: "auth-menu-section" },
@@ -489,11 +547,12 @@ const Auth = (() => {
         );
       }
       panel.append(
-        el("button", { type: "button", textContent: I18n.t("ui.auth.link_method", {}, "Link a login method"), onclick: () => { hidePanel(); openDialog("link"); } }),
+        el("button", { type: "button", "data-auth-action": "link", textContent: I18n.t("ui.auth.link_method", {}, "Link a login method"), onclick: () => { hidePanel(); openDialog("link"); } }),
         el("button", {
           type: "button",
+          "data-auth-action": "invite",
           textContent: I18n.t("ui.auth.copy_invite", {}, "Copy my invite link"),
-          title: "Everyone who signs up through this link counts as invited by you",
+          title: I18n.t("ui.auth.invite_hint", {}, "Everyone who signs up through this link counts as invited by you"),
           onclick: () => {
             hidePanel();
             navigator.clipboard
@@ -506,6 +565,7 @@ const Auth = (() => {
         window.FeedbackDialog ? el("button", {
           type: "button",
           class: "feedback-menu-item",
+          "data-auth-action": "feedback",
           textContent: I18n.t("ui.feedback.send_feedback", {}, "Send feedback"),
           onclick: () => {
             hidePanel();
@@ -522,6 +582,7 @@ const Auth = (() => {
         panel.append(
           el("button", {
             type: "button",
+            "data-auth-action": `switch:${other.id}`,
             textContent: other.display_name,
             onclick: () => setCurrent(other.id),
           })
@@ -529,16 +590,21 @@ const Auth = (() => {
       }
     }
     panel.append(
-      el("button", { type: "button", textContent: account ? I18n.t("ui.auth.add_account", {}, "Add another account") : I18n.t("ui.auth.log_in", {}, "Log in"), onclick: () => { hidePanel(); openDialog("login"); } })
+      el("button", { type: "button", "data-auth-action": "login", textContent: account ? I18n.t("ui.auth.add_account", {}, "Add another account") : I18n.t("ui.auth.log_in", {}, "Log in"), onclick: () => { hidePanel(); openDialog("login"); } })
     );
     if (account) {
       panel.append(
-        el("button", { type: "button", textContent: I18n.t("ui.auth.log_out_name", { name: account.display_name }, `Log out ${account.display_name}`), onclick: () => remove(account.id) }),
-        el("button", { type: "button", textContent: I18n.t("ui.auth.log_out_all", {}, "Log out of all accounts"), onclick: removeAll })
+        el("button", { type: "button", "data-auth-action": "logout", textContent: I18n.t("ui.auth.log_out_name", { name: account.display_name }, `Log out ${account.display_name}`), onclick: () => remove(account.id) }),
+        el("button", { type: "button", "data-auth-action": "logout-all", textContent: I18n.t("ui.auth.log_out_all", {}, "Log out of all accounts"), onclick: removeAll })
       );
     }
     container.append(button, panel);
     container._authRenderKey = key;
+    container._authAccountId = account?.id;
+    if (focusedAction) {
+      Array.from(container.querySelectorAll("[data-auth-action]"))
+        .find(node => node.dataset.authAction === focusedAction)?.focus({preventScroll: true});
+    }
     return container;
   }
 
@@ -554,6 +620,7 @@ const Auth = (() => {
     setReferralCode,
     setPicture,
     newAccountBody,
+    createGuest,
     openDialog,
     closeDialog,
     renderMenu,

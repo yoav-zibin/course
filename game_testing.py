@@ -7,7 +7,8 @@ random seed per walk. After every call it makes the checks the contract
 requires — results the runner accepts, views for every player, payouts
 that sum to the pot and go to humans only — and it fuzzes `applyMove`
 with malformed moves, which must be rejected with InvalidMove (or
-return a valid result), never crash. Some calls are run twice with
+return a valid result), never crash. Game state transitions, generated moves
+and views are run twice with
 identical arguments and seed: the results must be identical, because
 game logic must be deterministic given `ctx.random`.
 
@@ -21,10 +22,12 @@ reported as too slow.
 See docs/server-side-game-api.md (the Testing section).
 """
 
+import hashlib
+import json
 import random
 import time
 from dataclasses import dataclass
-from typing import Any, Final
+from typing import Any, Callable, Final
 
 from pydantic import JsonValue
 
@@ -67,7 +70,10 @@ class TestFailure:
     """One distinct way the game failed its tests, with everything the
     author (or the AI fix loop) needs to reproduce it: the walk's seed
     replays the whole walk, and [state] / [player_id] / [move] are the
-    exact arguments of the failing call."""
+    exact arguments of the failing call. [ctx] is the platform context
+    at the time, [arguments] the exact arguments passed, [result] what
+    the call returned (when it returned one), and [duration_ms] /
+    [memory_used_bytes] what the call cost against its limits."""
 
     function: str
     message: str
@@ -81,6 +87,21 @@ class TestFailure:
     move: JsonValue = None
     # The last few moves of the walk, oldest first, as {"player_id", "move"}.
     last_moves: tuple[JsonValue, ...] = ()
+    # Reproduction detail: the ctx, the exact arguments, what the call
+    # returned, and what it cost.
+    ctx: JsonValue = None
+    arguments: JsonValue = None
+    result: JsonValue = None
+    duration_ms: float = 0.0
+    memory_used_bytes: int = 0
+    time_limit_seconds: float = 0.0
+    memory_limit_bytes: int = 0
+
+
+def _state_hash(state: JsonValue) -> str:
+    return hashlib.md5(
+        json.dumps(state, sort_keys=True, default=str).encode(), usedforsecurity=False
+    ).hexdigest()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -90,33 +111,50 @@ class GameTestReport:
     passed: bool
     walks_completed: int
     moves_made: int
+    # Distinct states the walks reached, and how many of them were terminal
+    # (turn null). Recorded for the /game-test trace metadata.
+    states_visited: int = 0
+    terminal_states: int = 0
     # True when no walk finished within the time budget.
     too_slow: bool
     failures: tuple[TestFailure, ...] = ()
     # The seeds of the walks that failed, in the order they ran; store
     # them and pass them back as regression seeds on the next run.
     failed_seeds: tuple[int, ...] = ()
+    game_schemas: dict[str, JsonValue] | None = None
 
 
 def test_server_code(
     server_code: str,
     *,
+    game_schemas: dict[str, JsonValue],
+    game_id: str = "unsaved",
     rules: GameRules,
     regression_seeds: tuple[int, ...] = (),
-    budget_seconds: float = 1.0,
+    budget_seconds: float = 10.0,
     max_walks: int = 1000,
     max_moves_per_walk: int = 1000,
     run_seed: int | None = None,
     contract: dict | None = None,
+    sample_observer: Callable[[str, tuple[Any, ...], Any], None] | None = None,
 ) -> GameTestReport:
     """Tests [server_code] under [rules] with random walks, replaying
     [regression_seeds] first. Never raises for a broken game: every game
     bug becomes a failure in the report."""
     if contract:
-        from game_platform.builder_validation import ContractLogic
-        logic = ContractLogic(server_code, contract)
+        from game_platform.game_contract import ContractLogic
+        logic = ContractLogic(
+            server_code,
+            contract,
+            game_schemas=game_schemas,
+            game_id=game_id,
+        )
     else:
-        logic = GameLogic(server_code)
+        logic = GameLogic(
+            server_code,
+            game_schemas=game_schemas,
+            game_id=game_id,
+        )
     master = random.Random(run_seed)
     deadline = time.monotonic() + budget_seconds
     walk_seeds = [
@@ -128,13 +166,23 @@ def test_server_code(
     failed_seeds: list[int] = []
     walks_completed = 0
     moves_made = 0
+    states_seen: set[str] = set()
+    terminal_seen: set[str] = set()
     for seed in walk_seeds:
         if walks_completed >= max_walks or time.monotonic() >= deadline:
             break
-        walk = _Walk(logic, rules=rules, seed=seed, deadline=deadline)
+        walk = _Walk(
+            logic,
+            rules=rules,
+            seed=seed,
+            deadline=deadline,
+            sample_observer=sample_observer,
+        )
         if walk.run(max_moves_per_walk):
             walks_completed += 1
         moves_made += walk.move_count
+        states_seen |= walk.states_seen
+        terminal_seen |= walk.terminal_states
         for failure in walk.failures:
             key = (failure.function, failure.message)
             if key not in seen and len(failures) < MAX_FAILURES:
@@ -160,10 +208,71 @@ def test_server_code(
         passed=not failures and not too_slow,
         walks_completed=walks_completed,
         moves_made=moves_made,
+        states_visited=len(states_seen),
+        terminal_states=len(terminal_seen),
         too_slow=too_slow,
         failures=tuple(failures),
         failed_seeds=tuple(failed_seeds),
     )
+
+
+def format_failure(failure: TestFailure) -> str:
+    """Renders one failure as a reproduction report: what failed, the
+    exact call (function, ctx, arguments), what it returned, what it
+    cost against its limits, and the seed that replays the walk."""
+    lines = [f"{failure.function}: {failure.message}"]
+    lines.append(
+        f"  seed {failure.seed} (replay the walk with this seed), "
+        f"{failure.player_count} players, move {failure.move_number}"
+    )
+    if failure.ctx is not None:
+        lines.append(f"  ctx: {json.dumps(failure.ctx, sort_keys=True)}")
+    if failure.arguments is not None:
+        lines.append(f"  arguments: {json.dumps(failure.arguments, sort_keys=True)}")
+    if failure.result is not None:
+        lines.append(f"  result: {json.dumps(failure.result, sort_keys=True)}")
+    if failure.time_limit_seconds or failure.memory_limit_bytes:
+        lines.append(
+            f"  took {failure.duration_ms:.1f} ms "
+            f"(limit {failure.time_limit_seconds * 1000:.0f} ms), "
+            f"memory {failure.memory_used_bytes} bytes "
+            f"(limit {failure.memory_limit_bytes} bytes)"
+        )
+    if failure.last_moves:
+        lines.append(
+            "  last moves: "
+            + json.dumps(list(failure.last_moves), sort_keys=True)
+        )
+    return "\n".join(lines)
+
+
+def format_report(report: "GameTestReport") -> str:
+    """Renders a whole test report's failures as reproduction reports,
+    one per distinct failure, plus the walk/move totals."""
+    parts = [
+        f"{report.walks_completed} walks, {report.moves_made} moves"
+        + (", too slow" if report.too_slow else "")
+    ]
+    parts.extend(format_failure(failure) for failure in report.failures)
+    return "\n".join(parts)
+
+
+def _json_type(value: JsonValue) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int):
+        return "integer"
+    if isinstance(value, float):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, list):
+        return "array"
+    if isinstance(value, dict):
+        return "object"
+    raise TypeError(f"not a JSON value: {type(value).__name__}")
 
 
 class _Walk:
@@ -171,15 +280,24 @@ class _Walk:
     generators, derived entirely from its seed."""
 
     def __init__(
-        self, logic: GameLogic, *, rules: GameRules, seed: int, deadline: float
+        self,
+        logic: GameLogic,
+        *,
+        rules: GameRules,
+        seed: int,
+        deadline: float,
+        sample_observer: Callable[[str, tuple[Any, ...], Any], None] | None = None,
     ) -> None:
         self._logic = logic
         self._rules = rules
         self._seed = seed
         self._deadline = deadline
+        self._sample_observer = sample_observer
         self._rng = random.Random(seed)
         self.failures: list[TestFailure] = []
         self.move_count = 0
+        self.states_seen: set[str] = set()
+        self.terminal_states: set[str] = set()
         self._call_number = 0
         self._last_moves: list[JsonValue] = []
         self._next_human = 1
@@ -239,7 +357,15 @@ class _Walk:
         state: JsonValue = None,
         player_id: str | None = None,
         move: JsonValue = None,
+        arguments: JsonValue = None,
+        result: JsonValue = None,
+        ctx: JsonValue = None,
     ) -> None:
+        """Records a failure with everything needed to reproduce it: the
+        walk's seed, the ctx, the exact arguments, what the call returned
+        (when it returned one), and what the call cost against its limits.
+        Duration/memory come from the last QuickJS call the logic ran."""
+        logic = self._logic
         self.failures.append(
             TestFailure(
                 function=function,
@@ -251,6 +377,13 @@ class _Walk:
                 player_id=player_id,
                 move=move,
                 last_moves=tuple(self._last_moves[-5:]),
+                ctx=ctx if ctx is not None else self._ctx(),
+                arguments=arguments,
+                result=result if result is not None else logic.last_call_result,
+                duration_ms=round(logic.last_call_duration_seconds * 1000, 1),
+                memory_used_bytes=logic.last_call_memory_used_bytes,
+                time_limit_seconds=logic.last_call_time_limit_seconds,
+                memory_limit_bytes=logic.last_call_memory_limit_bytes,
             )
         )
 
@@ -265,22 +398,28 @@ class _Walk:
     ) -> tuple[bool, Any]:
         """One game call; a bug becomes a failure. Returns (ok, result)."""
         try:
-            return True, self._call(
+            result = self._call(
                 function, *args, time_limit_seconds=time_limit_seconds
             )
+            if self._sample_observer is not None:
+                self._sample_observer(function, args, result)
+            return True, result
         except (GameLogicError, InvalidMoveError) as error:
             self._fail(
-                function, str(error), state=state, player_id=player_id, move=move
+                function, str(error), state=state, player_id=player_id, move=move,
+                arguments=list(args),
             )
             return False, None
 
     def _check_views(self, state: JsonValue) -> bool:
         """viewFor must answer for every player and for a spectator."""
         for player_id in [*(p["id"] for p in self._players), None]:
-            ok, _ = self._call_or_fail(
+            ok, result = self._call_or_fail(
                 "viewFor", state, player_id, state=state, player_id=player_id
             )
             if not ok:
+                return False
+            if not self._check_deterministic("viewFor", result, state, player_id, state=state):
                 return False
         return True
 
@@ -298,6 +437,8 @@ class _Walk:
                 f"non-deterministic: the first call succeeded but the "
                 f"identical re-run failed: {error}",
                 state=state,
+                arguments=list(args),
+                result=result,
             )
             return False
         if again != result:
@@ -306,6 +447,8 @@ class _Walk:
                 "non-deterministic: two identical calls returned "
                 "different results",
                 state=state,
+                arguments=list(args),
+                result=result,
             )
             return False
         return True
@@ -320,7 +463,8 @@ class _Walk:
             return True
         state: JsonValue = result.get("state")
         turn: list[str] | None = result.get("turn")
-        if turn is not None and not self._check_views(state):
+        self._note_state(state, turn)
+        if not self._check_views(state):
             return True
         steps = 0
         while turn is not None:
@@ -334,11 +478,19 @@ class _Walk:
                 failed, state, turn = event
                 if failed or not self._players:
                     return True
+                self._note_state(state, turn)
                 continue
             ok, state, turn = self._step(state, turn)
             if not ok:
                 return True
+            self._note_state(state, turn)
         return True
+
+    def _note_state(self, state: JsonValue, turn: list[str] | None) -> None:
+        digest = _state_hash(state)
+        self.states_seen.add(digest)
+        if turn is None:
+            self.terminal_states.add(digest)
 
     def _maybe_event(
         self, state: JsonValue
@@ -385,7 +537,9 @@ class _Walk:
                                      time_limit_seconds=_PLAYER_LEFT_TIME_LIMIT_SECONDS)
         if not ok or again != result:
             if ok:
-                self._fail("playerLeft", "non-deterministic leave result", state=state)
+                self._fail("playerLeft", "non-deterministic leave result", state=state,
+                           player_id=leaver["id"], arguments=[state, leaver["id"]],
+                           result=result)
             return True, state, None
         self._pot -= sum((result.get("payouts") or {}).values())
         leaver["active"] = False
@@ -410,10 +564,13 @@ class _Walk:
         if not ok:
             self._players.pop()
             return True, state, None
+        if not self._check_deterministic("playerJoined", result, state, joiner["id"], state=state):
+            self._players.pop()
+            return True, state, None
         self._pot += joiner["max_loss"]
         new_state: JsonValue = result.get("state")
         new_turn: list[str] | None = result.get("turn")
-        if new_turn is not None and not self._check_views(new_state):
+        if not self._check_views(new_state):
             return True, state, None
         return False, new_state, new_turn
 
@@ -444,6 +601,8 @@ class _Walk:
         )
         if not ok:
             return False, state, turn
+        if not self._check_deterministic(source, move, state, mover, state=state):
+            return False, state, turn
         try:
             result = self._call("applyMove", state, mover, move)
         except InvalidMoveError as error:
@@ -455,6 +614,7 @@ class _Walk:
                 state=state,
                 player_id=mover,
                 move=move,
+                arguments=[state, mover, move],
             )
             return False, state, turn
         except GameLogicError as error:
@@ -464,9 +624,12 @@ class _Walk:
                 state=state,
                 player_id=mover,
                 move=move,
+                arguments=[state, mover, move],
             )
             return False, state, turn
-        if self.move_count == 0 and not self._check_deterministic(
+        if self._sample_observer is not None:
+            self._sample_observer("applyMove", (state, mover, move), result)
+        if not self._check_deterministic(
             "applyMove", result, state, mover, move, state=state
         ):
             return False, state, turn
@@ -475,7 +638,7 @@ class _Walk:
         self._last_moves.append({"player_id": mover, "move": move})
         new_state: JsonValue = result.get("state")
         new_turn: list[str] | None = result.get("turn")
-        if new_turn is not None and not self._check_views(new_state):
+        if not self._check_views(new_state):
             return False, state, turn
         return True, new_state, new_turn
 
@@ -495,6 +658,7 @@ class _Walk:
                     state=state,
                     player_id=mover,
                     move=move,
+                    arguments=[state, mover, move],
                 )
                 return False
         return True

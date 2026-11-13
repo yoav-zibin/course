@@ -15,13 +15,10 @@ from collections.abc import Sequence
 from game_platform import observability
 
 from game_platform.models import (
-    AgentConversation,
-    AgentConversationEntry,
     Experiment,
     ExperimentAssignment,
     ExperimentEvent,
     Game,
-    GameDraft,
     GameTestSeeds,
     Translation,
     GameVersionError,
@@ -137,6 +134,19 @@ class SavingStore:
 
     # [Store] interface: reads delegate; writes delegate and schedule a save.
 
+    def record_game_match_start(self, game_id: str, player_count: int) -> None:
+        with self._lock:
+            self._inner.record_game_match_start(game_id, player_count)
+            self._set_dirty()
+
+    def game_popularity_score(self, game_id: str) -> int:
+        with self._lock:
+            return self._inner.game_popularity_score(game_id)
+
+    def list_popular_game_ids(self, limit: int) -> list[tuple[str, int]]:
+        with self._lock:
+            return self._inner.list_popular_game_ids(limit)
+
     def put_user(self, user: User) -> None:
         with self._lock:
             self._inner.put_user(user)
@@ -166,24 +176,6 @@ class SavingStore:
             self._inner.add_game_version(game)
             self._set_dirty()
 
-    def put_game_draft(self, draft: GameDraft) -> None:
-        with self._lock:
-            self._inner.put_game_draft(draft)
-            self._set_dirty()
-
-    def get_game_draft(self, draft_id: str) -> GameDraft | None:
-        with self._lock:
-            return self._inner.get_game_draft(draft_id)
-
-    def list_game_drafts(self, *, owner_user_id: str) -> list[GameDraft]:
-        with self._lock:
-            return self._inner.list_game_drafts(owner_user_id=owner_user_id)
-
-    def delete_game_draft(self, draft_id: str) -> None:
-        with self._lock:
-            self._inner.delete_game_draft(draft_id)
-            self._set_dirty()
-
     def put_game_version(self, game: Game) -> None:
         with self._lock:
             self._inner.put_game_version(game)
@@ -211,6 +203,18 @@ class SavingStore:
             self._inner.delete_game(game_id)
             self._set_dirty()
 
+    def delete_game_version(
+        self, game_id: str, version: int, *, allow_latest: bool = False
+    ) -> None:
+        """Deletes one version via the in-memory store; the next save drops the
+        version's document (Firestore) or JSON record (file). Guards (latest,
+        pinned matches) are the inner store's."""
+        with self._lock:
+            self._inner.delete_game_version(
+                game_id, version, allow_latest=allow_latest
+            )
+            self._set_dirty()
+
     def put_match(self, match: Match) -> None:
         with self._lock:
             self._inner.put_match(match)
@@ -223,6 +227,10 @@ class SavingStore:
     def list_matches_involving(self, user_id: str) -> list[Match]:
         with self._lock:
             return self._inner.list_matches_involving(user_id)
+
+    def list_matches_for_game(self, game_id: str) -> list[Match]:
+        with self._lock:
+            return self._inner.list_matches_for_game(game_id)
 
     def list_matches_by_status(self, status: MatchStatus) -> list[Match]:
         with self._lock:
@@ -240,26 +248,6 @@ class SavingStore:
     def list_all_matches(self) -> list[Match]:
         with self._lock:
             return self._inner.list_all_matches()
-
-    def append_agent_conversation_entries(
-        self, game_id: str, entries: list[AgentConversationEntry]
-    ) -> None:
-        with self._lock:
-            self._inner.append_agent_conversation_entries(game_id, entries)
-            self._set_dirty()
-
-    def put_agent_conversation(self, conversation: AgentConversation) -> None:
-        with self._lock:
-            self._inner.put_agent_conversation(conversation)
-            self._set_dirty()
-
-    def get_agent_conversation(self, game_id: str) -> AgentConversation | None:
-        with self._lock:
-            return self._inner.get_agent_conversation(game_id)
-
-    def list_agent_conversations(self) -> list[AgentConversation]:
-        with self._lock:
-            return self._inner.list_agent_conversations()
 
     def add_game_version_error(self, error: GameVersionError) -> None:
         with self._lock:

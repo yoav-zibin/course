@@ -34,6 +34,27 @@ const game = {
 };
 """
 
+GAME_SCHEMAS = {
+    "state": {
+        "type": "object",
+        "required": ["count"],
+        "properties": {"count": {"type": "integer", "minimum": 0}},
+        "additionalProperties": False,
+    },
+    "move": {
+        "type": "object",
+        "required": ["add"],
+        "properties": {"add": {"type": "integer", "minimum": 1, "maximum": 3}},
+        "additionalProperties": False,
+    },
+    "view": {
+        "type": "object",
+        "required": ["count"],
+        "properties": {"count": {"type": "integer", "minimum": 0}},
+        "additionalProperties": False,
+    },
+}
+
 
 def generate(store, *, run_id, users, games, matches, max_writes):
     if users < 4 or games < 1 or matches < 0:
@@ -66,8 +87,11 @@ def generate(store, *, run_id, users, games, matches, max_writes):
                     game,
                     server_code=LOGIC,
                     rules=replace(game.rules, allowed_player_counts=(1, 2, 3, 4)),
+                    game_schemas=GAME_SCHEMAS,
                 )
             )
+        elif game.game_schemas is None:
+            store.put_game_version(replace(game, game_schemas=GAME_SCHEMAS))
     base = dt.datetime(2026, 9, 1, tzinfo=dt.timezone.utc)
     for i in range(prior.get("done", 0), matches):
         rng = random.Random(f"{run_id}:{i}")
@@ -111,8 +135,6 @@ def generate(store, *, run_id, users, games, matches, max_writes):
                 match = platform.start_match(
                     caller_id=uid(people[0]),
                     match_id=mid,
-                    first_turn_player_indices=frozenset({0}),
-                    initial_state=None,
                 )
                 steps = rng.randint(1, 4) if rng.random() < 0.2 else 20
                 for _ in range(steps):
@@ -128,8 +150,6 @@ def generate(store, *, run_id, users, games, matches, max_writes):
                             caller_id=seat.user_id,
                             match_id=mid,
                             move={"add": rng.randint(1, 3)},
-                            new_state=None,
-                            next_turn_player_indices=None,
                             expected_move_count=len(match.moves),
                             request_id=f"activity:{i}:{len(match.moves)}",
                         )

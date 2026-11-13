@@ -9,11 +9,10 @@ def test_starting_snapshot_survives_moves_and_restart(tmp_path):
     owner = api.new_user("history owner")
     game = api.new_game(owner=owner, allowed_player_counts=[1])
     match = api.new_match(owner=owner, game_id=game)
-    api.ok("POST", f"/matches/{match}/start", as_user=owner,
-           json={"initial_state": {"score": 42}, "first_turn_player_indices": [0]})
+    api.ok("POST", f"/matches/{match}/start", as_user=owner)
     assert api.move(match, as_user=owner, next_turn=None, state={"score": 43}).is_success
     history = api.ok("GET", f"/matches/{match}/history", as_user=owner)
-    assert history["initial_state"] == {"score": 42}
+    assert history["initial_state"] == {"pot": 0}
     assert history["initial_turn_player_indices"] == [0]
     assert history["moves"][0]["new_state"] == {"score": 43}
     store.close()

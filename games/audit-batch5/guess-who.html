@@ -1,0 +1,119 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><style>*{box-sizing:border-box}body{margin:0;font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;background:linear-gradient(180deg,#bfe9ff,#fef6d8);color:#222;padding-bottom:140px}header{position:sticky;top:0;z-index:5;background:#6c5ce7;color:#fff;padding:10px 12px;text-align:center;border-radius:0 0 16px 16px}header h1{margin:0;font-size:18px}#turn{font-size:13px;opacity:.95;margin-top:2px}#wrap{max-width:900px;margin:0 auto;padding:10px}#secretBox{background:#fff;border-radius:14px;padding:8px;display:flex;gap:10px;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.15);margin-bottom:10px}#secretBox .mini{width:64px;height:76px;flex:none;border-radius:10px;overflow:hidden;border:2px solid #6c5ce7}#controls{position:sticky;top:64px;z-index:4;background:#fff;border-radius:14px;padding:10px;box-shadow:0 2px 10px rgba(0,0,0,.18);margin-bottom:10px}#controls select{width:100%;font-size:16px;padding:10px;border-radius:10px;border:2px solid #6c5ce7;margin-bottom:8px}.row{display:flex;gap:8px}.row button{flex:1;font-size:16px;font-weight:700;padding:12px;border-radius:12px;border:0;cursor:pointer}#ask{background:#6c5ce7;color:#fff}#guessBtn{background:#e17055;color:#fff}button:disabled{opacity:.4}#togRow{margin-top:8px;font-size:14px;display:flex;gap:8px;align-items:center;justify-content:space-between}#grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}@media(min-width:700px){#grid{grid-template-columns:repeat(6,1fr)}}.card{perspective:600px;cursor:pointer;user-select:none}.inner{position:relative;width:100%;padding-top:128%;transform-style:preserve-3d;transition:transform .45s}.card.down .inner{transform:rotateY(180deg)}.face{position:absolute;inset:0;backface-visibility:hidden;border-radius:12px;overflow:hidden;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.2);display:flex;flex-direction:column}.front{background:#fff}.back{background:#2d3436;color:#fff;transform:rotateY(180deg);align-items:center;justify-content:center;font-size:28px;font-weight:900}.face svg{width:100%;flex:1;display:block}.nm{font-size:11px;font-weight:800;text-align:center;padding:3px 1px;background:#fff;white-space:nowrap;overflow:hidden}.card.elim .front{filter:grayscale(1) brightness(.7)}#hist{background:#fff;border-radius:14px;padding:10px;margin-top:10px;font-size:14px}#hist div{padding:4px 0;border-bottom:1px solid #eee}#modal,#win{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:20;padding:14px}#mbox{background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:85vh;overflow:auto;padding:14px}#mbox h3{margin:0 0 8px}#ggrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}#ggrid button{border:2px solid #ddd;border-radius:10px;background:#fff;padding:2px;cursor:pointer;font-size:10px}#ggrid button.sel{border-color:#6c5ce7;box-shadow:0 0 0 3px #a29bfe}#winBox{background:#fff;border-radius:18px;padding:22px;text-align:center;max-width:420px;width:100%}#winBox h2{margin:0 0 8px}#rematch{background:#00b894;color:#fff;font-size:17px;font-weight:800;border:0;border-radius:12px;padding:12px 20px;cursor:pointer}</style></head><body><header><h1 id="title"></h1><div id="turn" role="status" aria-live="polite"></div></header><div id="wrap"><div id="secretBox"><div class="mini" id="secretPic"></div><div><b id="secretLabel"></b> <span id="secretName">?</span><br><small id="secretHint"></small></div></div><div id="controls"><select id="q"></select><div class="row"><button id="ask"></button><button id="guessBtn"></button></div><div id="togRow"><label><input type="checkbox" id="auto" checked> <span id="autoLabel"></span></label><button id="reset" style="border-radius:8px;border:1px solid #aaa;padding:6px 10px"></button></div></div><div id="grid"></div><div id="hist"><b id="histTitle"></b><div id="hlist"></div></div></div><div id="modal"><div id="mbox"><h3 id="modalTitle"></h3><div id="ggrid"></div><div class="row" style="margin-top:10px"><button id="confirm" style="background:#6c5ce7;color:#fff;border:0;border-radius:10px;padding:12px;font-weight:800"></button><button id="cancel" style="border-radius:10px;padding:12px"></button></div></div></div><div id="win"><div id="winBox"><h2 id="winT"></h2><div id="winPics" style="display:flex;gap:10px;justify-content:center"></div><p id="winS" style="font-size:14px"></p></div></div><script type="application/json" id="i18n-strings">
+{
+"title": "🕵️ Guess Pals",
+"waiting": "Waiting…",
+"your_secret": "Your secret:",
+"secret_hint": "Only you see this. Tap cards to flip down suspects. Use Reset to undo.",
+"spectating": "? (spectating)",
+"ask": "Ask ❓",
+"guess": "Guess 🎯",
+"auto_eliminate": "Auto-eliminate",
+"reset_board": "↩ Reset board",
+"history_title": "Question history",
+"no_questions": "No questions yet.",
+"who_is_opponent": "Who is your opponent?",
+"confirm_guess": "Confirm Guess",
+"cancel": "Cancel",
+"q_gl": "Does your character wear glasses?",
+"q_hat": "Is your character wearing a hat?",
+"q_be": "Does your character have facial hair?",
+"q_ear": "Does your character wear earrings?",
+"q_blonde": "Does your character have blonde hair?",
+"q_brownH": "Does your character have brown hair?",
+"q_blackH": "Does your character have black hair?",
+"q_redH": "Does your character have red hair?",
+"q_grayH": "Does your character have gray hair?",
+"q_long": "Does your character have long hair?",
+"q_short": "Does your character have short hair?",
+"q_blue": "Does your character have blue eyes?",
+"q_brownE": "Does your character have brown eyes?",
+"q_greenE": "Does your character have green eyes?",
+"player_n": "Player {n}",
+"seat": "P{n}",
+"hist_yes": "{name}: {question} → YES ✅",
+"hist_no": "{name}: {question} → NO ❌",
+"hist_guess_right": "{name} guessed {character} ✅",
+"hist_guess_wrong": "{name} guessed {character} ❌",
+"wins": "🏆 {name} wins!",
+"game_over": "Game over",
+"turn_of": "{name}'s turn",
+"turn_you": "{name}'s turn (you!)",
+"reveal_item": "{name}: {character}",
+"reveal_you": "You: {character}",
+"reveal_foe": "Foe: {character}",
+"you_guessed": "You guessed it! 🎉",
+"better_luck": "Better luck next time!",
+"server_unknown_player": "unknown player",
+"server_game_over": "game over",
+"server_bad_move": "bad move",
+"server_bad_question": "bad question",
+"server_already_asked": "already asked",
+"server_bad_guess": "bad guess",
+"server_unknown_move": "unknown move"
+}
+</script>
+<script>
+
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// A text the game's SERVER wrote (a log line, a hand name in the match state): finds its template
+// among the `server_` texts of the table (the most specific that fits, each {name} standing for
+// any text) and shows it in the viewer's language with the same values; any other text is
+// returned as written.
+const SERVER_TEMPLATES = Object.keys(SOURCE_STRINGS)
+  .filter((key) => key.startsWith("server_") && SOURCE_STRINGS[key])
+  .map((key) => {
+    const names = [];
+    let literal = 0;
+    const source = SOURCE_STRINGS[key]
+      .split(/\{(\w+)\}/)
+      .map((piece, index) => {
+        if (index % 2) { names.push(piece); return "([\\s\\S]+?)"; }
+        literal += piece.length;
+        return piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      })
+      .join("");
+    return { key, names, literal, pattern: new RegExp("^" + source + "$") };
+  })
+  .sort((a, b) => b.literal - a.literal || a.names.length - b.names.length || (a.key > b.key ? 1 : a.key === b.key ? 0 : -1));
+
+function tx(text) {
+  if (typeof text !== "string") return text;
+  for (const template of SERVER_TEMPLATES) {
+    const found = template.pattern.exec(text);
+    if (found) {
+      const params = {};
+      template.names.forEach((name, index) => { if (!(name in params)) params[name] = found[index + 1]; });
+      return t(template.key, params);
+    }
+  }
+  return text;
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings || message.locale) strings = { ...SOURCE_STRINGS, ...(message.strings || {}) };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+
+var CH=[{n:"Ava",skin:"#f8c8a0",hair:"black",len:"long",gl:0,hat:0,be:0,eye:"brown",ear:1,shirt:"#e74c3c"},{n:"Ben",skin:"#f1b98a",hair:"brown",len:"short",gl:0,hat:0,be:0,eye:"blue",ear:0,shirt:"#3498db"},{n:"Cleo",skin:"#8d5a3b",hair:"black",len:"medium",gl:1,hat:0,be:0,eye:"brown",ear:1,shirt:"#9b59b6"},{n:"Dan",skin:"#f8c8a0",hair:"blonde",len:"short",gl:0,hat:1,be:0,eye:"blue",ear:0,shirt:"#2ecc71"},{n:"Eli",skin:"#e8a870",hair:"red",len:"short",gl:0,hat:0,be:1,eye:"green",ear:0,shirt:"#e67e22"},{n:"Fay",skin:"#f8c8a0",hair:"red",len:"long",gl:0,hat:0,be:0,eye:"green",ear:1,shirt:"#1abc9c"},{n:"Gus",skin:"#c98d5e",hair:"gray",len:"short",gl:1,hat:0,be:1,eye:"brown",ear:0,shirt:"#34495e"},{n:"Hana",skin:"#fde0c8",hair:"black",len:"medium",gl:0,hat:1,be:0,eye:"brown",ear:0,shirt:"#fd79a8"},{n:"Ivan",skin:"#f1b98a",hair:"brown",len:"medium",gl:0,hat:0,be:1,eye:"brown",ear:0,shirt:"#6c5ce7"},{n:"Jade",skin:"#8d5a3b",hair:"black",len:"long",gl:0,hat:0,be:0,eye:"brown",ear:0,shirt:"#00cec9"},{n:"Kai",skin:"#e8a870",hair:"blonde",len:"medium",gl:1,hat:0,be:0,eye:"blue",ear:0,shirt:"#d63031"},{n:"Lena",skin:"#f8c8a0",hair:"blonde",len:"long",gl:0,hat:0,be:0,eye:"blue",ear:1,shirt:"#e84393"},{n:"Max",skin:"#f1b98a",hair:"brown",len:"short",gl:1,hat:0,be:0,eye:"green",ear:0,shirt:"#fdcb6e"},{n:"Nora",skin:"#fde0c8",hair:"gray",len:"medium",gl:0,hat:0,be:0,eye:"blue",ear:1,shirt:"#00b894"},{n:"Omar",skin:"#8d5a3b",hair:"black",len:"short",gl:0,hat:1,be:1,eye:"brown",ear:0,shirt:"#0984e3"},{n:"Pia",skin:"#e8a870",hair:"brown",len:"long",gl:1,hat:0,be:0,eye:"brown",ear:1,shirt:"#6c5ce7"},{n:"Quinn",skin:"#f8c8a0",hair:"red",len:"medium",gl:0,hat:1,be:0,eye:"green",ear:0,shirt:"#2d3436"},{n:"Rosa",skin:"#c98d5e",hair:"brown",len:"long",gl:0,hat:0,be:0,eye:"brown",ear:1,shirt:"#d63031"},{n:"Sam",skin:"#f1b98a",hair:"gray",len:"short",gl:0,hat:1,be:0,eye:"blue",ear:0,shirt:"#e17055"},{n:"Tara",skin:"#8d5a3b",hair:"brown",len:"medium",gl:0,hat:0,be:0,eye:"green",ear:1,shirt:"#fdcb6e"},{n:"Umar",skin:"#c98d5e",hair:"black",len:"short",gl:0,hat:0,be:1,eye:"brown",ear:0,shirt:"#00cec9"},{n:"Vera",skin:"#fde0c8",hair:"gray",len:"long",gl:1,hat:0,be:0,eye:"green",ear:1,shirt:"#9b59b6"},{n:"Will",skin:"#e8a870",hair:"blonde",len:"short",gl:0,hat:0,be:1,eye:"blue",ear:0,shirt:"#636e72"},{n:"Yuki",skin:"#fde0c8",hair:"black",len:"long",gl:1,hat:1,be:0,eye:"brown",ear:0,shirt:"#e84393"}];var QS=[{id:"gl",t:function(){return t("q_gl")}},{id:"hat",t:function(){return t("q_hat")}},{id:"be",t:function(){return t("q_be")}},{id:"ear",t:function(){return t("q_ear")}},{id:"blonde",t:function(){return t("q_blonde")}},{id:"brownH",t:function(){return t("q_brownH")}},{id:"blackH",t:function(){return t("q_blackH")}},{id:"redH",t:function(){return t("q_redH")}},{id:"grayH",t:function(){return t("q_grayH")}},{id:"long",t:function(){return t("q_long")}},{id:"short",t:function(){return t("q_short")}},{id:"blue",t:function(){return t("q_blue")}},{id:"brownE",t:function(){return t("q_brownE")}},{id:"greenE",t:function(){return t("q_greenE")}}];
+function put(node,markup){node.innerHTML=markup}
+function mk(tag,text,cls,parent){var e=document.createElement(tag);if(text!==undefined&&text!==null)e.textContent=text;if(cls)e.className=cls;if(parent)parent.appendChild(e);return e}function pic(c){var hairC={black:"#1e1e28",brown:"#6b3f1d",blonde:"#e8a90c",red:"#c0392b",gray:"#aeb6bf"}[c.hair];var eyeC={brown:"#4b2e14",blue:"#0984e3",green:"#00916e"}[c.eye];var backHair="";if(c.len==="long"){backHair="<rect x='12' y='22' width='16' height='60' rx='8' fill='"+hairC+"'/><rect x='72' y='22' width='16' height='60' rx='8' fill='"+hairC+"'/>"}else if(c.len==="medium"){backHair="<rect x='14' y='26' width='13' height='36' rx='6' fill='"+hairC+"'/><rect x='73' y='26' width='13' height='36' rx='6' fill='"+hairC+"'/>"}var topHair;if(c.hat){topHair="<ellipse cx='50' cy='30' rx='30' ry='12' fill='"+hairC+"'/>"}else if(c.len==="short"){topHair="<path d='M18 48 Q18 12 50 12 Q82 12 82 48 L76 40 Q74 26 50 24 Q26 26 24 40 Z' fill='"+hairC+"'/>"}else{topHair="<ellipse cx='50' cy='26' rx='32' ry='16' fill='"+hairC+"'/>"}var hat="";if(c.hat){hat="<ellipse cx='50' cy='30' rx='38' ry='9' fill='#2d3436'/><rect x='28' y='6' width='44' height='24' rx='5' fill='#e17055' stroke='#2d3436' stroke-width='2.5'/><rect x='28' y='22' width='44' height='7' fill='#fdcb6e' stroke='#2d3436' stroke-width='1.5'/>"}var beard="";if(c.be){beard="<path d='M28 56 Q30 86 50 86 Q70 86 72 56 Q70 74 50 76 Q30 74 28 56' fill='#3e2723' stroke='#211613' stroke-width='2'/>"}var gl="";if(c.gl){gl="<g><rect x='24' y='42' width='22' height='18' rx='6' fill='rgba(255,255,255,0.35)' stroke='#111' stroke-width='3.5'/><rect x='54' y='42' width='22' height='18' rx='6' fill='rgba(255,255,255,0.35)' stroke='#111' stroke-width='3.5'/><rect x='46' y='48' width='8' height='4' fill='#111'/></g>"}var ear="";if(c.ear){ear="<circle cx='19' cy='60' r='4.5' fill='#fdcb6e' stroke='#b7791f' stroke-width='2'/><circle cx='81' cy='60' r='4.5' fill='#fdcb6e' stroke='#b7791f' stroke-width='2'/>"}return "<svg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'><rect width='100' height='100' fill='"+c.shirt+"' opacity='0.22'/>"+backHair+"<rect x='30' y='78' width='40' height='22' rx='7' fill='"+c.shirt+"' stroke='rgba(0,0,0,0.25)' stroke-width='1.5'/><ellipse cx='50' cy='55' rx='30' ry='32' fill='"+c.skin+"' stroke='rgba(0,0,0,0.2)' stroke-width='1.5'/>"+topHair+"<ellipse cx='50' cy='66' rx='6.5' ry='4' fill='#a14a4a'/><circle cx='36' cy='52' r='5.5' fill='#fff'/><circle cx='64' cy='52' r='5.5' fill='#fff'/><circle cx='36' cy='53' r='3.2' fill='"+eyeC+"'/><circle cx='64' cy='53' r='3.2' fill='"+eyeC+"'/><circle cx='37' cy='52' r='1.1' fill='#fff'/><circle cx='65' cy='52' r='1.1' fill='#fff'/>"+beard+gl+ear+hat+"</svg>"}var latest=null,pending=false,flipped={},selGuess=null;function actingSeat(){if(!latest||latest.status!=="ongoing"||!latest.turn_of_player_indices?.length)return null;const turn=latest.turn_of_player_indices[0];if(turn===latest.my_player_index)return turn;const humans=(latest.players||[]).filter(p=>p.kind==="human");if(latest.my_player_index!==null&&humans.length===1&&latest.players[turn]?.kind==="computer")return turn;return null;}var qSel=document.getElementById("q"),grid=document.getElementById("grid");function buildQuestions(){var keep=qSel.value;qSel.replaceChildren();QS.forEach(function(q,i){var o=document.createElement("option");o.value=i;o.textContent=q.t();qSel.appendChild(o)});if(keep!=="")qSel.value=keep}
+function staticTexts(){document.getElementById("title").textContent=t("title");document.getElementById("secretLabel").textContent=t("your_secret");document.getElementById("secretHint").textContent=t("secret_hint");document.getElementById("ask").textContent=t("ask");document.getElementById("guessBtn").textContent=t("guess");document.getElementById("autoLabel").textContent=t("auto_eliminate");document.getElementById("reset").textContent=t("reset_board");document.getElementById("histTitle").textContent=t("history_title");document.getElementById("modalTitle").textContent=t("who_is_opponent");document.getElementById("confirm").textContent=t("confirm_guess");document.getElementById("cancel").textContent=t("cancel");buildQuestions()}
+staticTexts();
+document.getElementById("turn").textContent=t("waiting");
+(function(){var hl=document.getElementById("hlist");if(!hl.children.length)hl.appendChild(mk("i",t("no_questions")))})();CH.forEach(function(c,i){var d=document.createElement("div");d.className="card";d.id="c"+i;var inner=mk("div",null,"inner",d),front=mk("div",null,"face front",inner);var picBox=mk("div",null,null,front);picBox.style.display="contents";put(picBox,pic(c));mk("div",c.n,"nm",front);mk("div","?","face back",inner);d.onclick=function(){if(latest&&latest.status==="over")return;flipped[i]=!flipped[i];paint()};grid.appendChild(d)});function paint(){CH.forEach(function(c,i){var el=document.getElementById("c"+i);el.classList.toggle("down",!!flipped[i]);el.classList.toggle("elim",!!flipped[i])})}document.getElementById("reset").onclick=function(){flipped={};paint()};function canAct(){return latest&&latest.view&&!pending&&latest.status==="ongoing"&&latest.my_player_index!=null&&actingSeat()===latest.my_player_index}function askedQuestions(){var asked={};if(latest&&latest.view)(latest.view.hist||[]).forEach(function(h){if(h.by===latest.my_player_index&&h.q!=null)asked[h.q]=true});return asked}function canAsk(){var q=Number(qSel.value);return canAct()&&Number.isInteger(q)&&q>=0&&q<QS.length&&!askedQuestions()[q]}function syncControls(){var asked=askedQuestions();for(var i=0;i<qSel.children.length;i++){var o=qSel.children[i];o.disabled=!!asked[o.value]}var q=Number(qSel.value);if(!Number.isInteger(q)||q<0||q>=QS.length||asked[q]){var next=-1;for(var j=0;j<QS.length;j++)if(!asked[j]){next=j;break}qSel.value=next<0?"":String(next)}var en=canAct();document.getElementById("ask").disabled=!canAsk();document.getElementById("guessBtn").disabled=!en;qSel.disabled=!en||qSel.value==="";document.getElementById("confirm").disabled=!en}qSel.onchange=syncControls;function sendMove(m){if(!canAct())return;pending=true;syncControls();parent.postMessage({type:"make_move",move:m},"*")}document.getElementById("ask").onclick=function(){if(!canAsk())return;sendMove({kind:"ask",q:+qSel.value})};document.getElementById("guessBtn").onclick=function(){if(!canAct())return;selGuess=null;var g=document.getElementById("ggrid");g.replaceChildren();CH.forEach(function(c,i){var b=document.createElement("button");var pb=mk("span",null,null,b);put(pb,pic(c));mk("br",null,null,b);b.appendChild(document.createTextNode(c.n));b.onclick=function(){selGuess=i;var all=g.querySelectorAll("button");for(var k=0;k<all.length;k++)all[k].classList.remove("sel");b.classList.add("sel")};g.appendChild(b)});document.getElementById("modal").style.display="flex"};document.getElementById("cancel").onclick=function(){document.getElementById("modal").style.display="none"};document.getElementById("confirm").onclick=function(){if(selGuess===null||selGuess===undefined)return;document.getElementById("modal").style.display="none";if(!canAct())return;sendMove({kind:"guess",idx:selGuess})};function applyAuto(view,me){if(!document.getElementById("auto").checked)return;if(me===null||me===undefined)return;view.hist.forEach(function(h){if(h.q===undefined||h.q===null)return;if(h.by!==me)return;var ans=h.ans;CH.forEach(function(c,i){if(flipped[i])return;var v=attrLocal(i,h.q);if(v!==ans)flipped[i]=true})});paint()}function attrLocal(ci,qi){var c=CH[ci],id=QS[qi].id;if(id==="gl")return !!c.gl;if(id==="hat")return !!c.hat;if(id==="be")return !!c.be;if(id==="ear")return !!c.ear;if(id==="blonde")return c.hair==="blonde";if(id==="brownH")return c.hair==="brown";if(id==="blackH")return c.hair==="black";if(id==="redH")return c.hair==="red";if(id==="grayH")return c.hair==="gray";if(id==="long")return c.len==="long";if(id==="short")return c.len==="short";if(id==="blue")return c.eye==="blue";if(id==="brownE")return c.eye==="brown";if(id==="greenE")return c.eye==="green";return false}addEventListener("message",function(e){if(e.source!==parent||!e.data||e.data.type!=="state_changed")return;pending=false;applyLocale(e.data);latest=e.data;var view=latest.view,me=latest.my_player_index;staticTexts();
+if(!view){document.getElementById("turn").textContent=t("waiting");syncControls();return}var myS=(view.mySecret!==null&&view.mySecret!==undefined)?view.mySecret:0;document.getElementById("secretName").textContent=(me===null)?t("spectating"):CH[myS].n;put(document.getElementById("secretPic"),(me===null)?"":pic(CH[myS]));var hl=document.getElementById("hlist");hl.replaceChildren();if(!view.hist.length)hl.appendChild(mk("i",t("no_questions")));view.hist.forEach(function(h){var d=document.createElement("div");var nm=(latest.players[h.by]&&latest.players[h.by].name)||t("player_n",{n:h.by+1});if(h.q!==undefined&&h.q!==null){var hq={name:nm,question:QS[h.q].t()};d.textContent=h.ans?t("hist_yes",hq):t("hist_no",hq)}else{var hg={name:nm,character:CH[h.guess].n};d.textContent=h.correct?t("hist_guess_right",hg):t("hist_guess_wrong",hg)}hl.appendChild(d)});applyAuto(view,me);paint();var over=latest.status==="over"||(view.winner!==null&&view.winner!==undefined);var tEl=document.getElementById("turn");if(over){var w=view.winner;tEl.textContent=(w!==null&&latest.players[w])?t("wins",{name:latest.players[w].name}):t("game_over")}else{var a=(latest.turn_of_player_indices&&latest.turn_of_player_indices.length)?latest.turn_of_player_indices[0]:null;if(a===null||a===undefined){tEl.textContent=t("waiting")}else{var an=(latest.players[a]&&latest.players[a].name)||t("player_n",{n:a+1});tEl.textContent=a===me?t("turn_you",{name:an}):t("turn_of",{name:an})}}syncControls();if(over){var w2=document.getElementById("win");w2.style.display="flex";var wn=(view.winner!==null&&latest.players[view.winner])?latest.players[view.winner].name:"?";document.getElementById("winT").textContent=t("wins",{name:wn});var wp=document.getElementById("winPics");wp.replaceChildren();
+function winPic(index,label){var box=mk("div",null,null,wp);var pb=mk("div",null,null,box);pb.style.width="90px";put(pb,pic(CH[index]));mk("small",label,null,box)}
+if(view.reveal&&view.reveal.length===2){winPic(view.reveal[0],t("reveal_item",{name:(latest.players[0]&&latest.players[0].name)||t("seat",{n:1}),character:CH[view.reveal[0]].n}));winPic(view.reveal[1],t("reveal_item",{name:(latest.players[1]&&latest.players[1].name)||t("seat",{n:2}),character:CH[view.reveal[1]].n}))}else if(view.mySecret!==null&&view.oppSecret!==null&&view.oppSecret!==undefined){winPic(view.mySecret,t("reveal_you",{character:CH[view.mySecret].n}));winPic(view.oppSecret,t("reveal_foe",{character:CH[view.oppSecret].n}))}
+document.getElementById("winS").textContent=(view.winner===me)?t("you_guessed"):t("better_luck");}else{document.getElementById("win").style.display="none"}});</script></body></html>

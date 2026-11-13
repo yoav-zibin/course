@@ -15,14 +15,11 @@
     "backup_keep": 48
   },
   "firestore": {
-    "mode": "snapshot",
     "namespace": "",
     "enabled": false,
     "project_id": "",
     "database": "(default)",
-    "allow_default_database_query": false,
-    "collection_prefix": "",
-    "save_interval_seconds": 1.0
+    "allow_default_database_query": false
   },
   "debug_tools": true,
   "master_password": "",
@@ -43,6 +40,11 @@
     "overloaded_in_flight": 80,
     "memory_warn_percent": 70.0,
     "memory_critical_percent": 90.0,
+    "event_loop_blocked_ms": 500,
+    "event_loop_blocked_critical_ms": 5000,
+    "store_slow_p95_ms": 300,
+    "client_errors_per_client_per_minute": 10,
+    "client_error_spike_per_minute": 30,
     "metrics_interval_seconds": 60.0,
     "alert_cooldown_seconds": 300.0
   },
@@ -50,15 +52,8 @@
     "provider": "off",
     "google_api_key": "",
     "daily_character_limit": 200000,
-    "timeout_seconds": 10.0
-  },
-  "model_api": {
-    "api_key": "",
-    "model": "muse-spark-1.3",
-    "base_url": "https://api.ai.meta.com/v1",
-    "builder_input_usd_per_million": null,
-    "builder_output_usd_per_million": null,
-    "builder_max_input_tokens": null
+    "timeout_seconds": 10.0,
+    "require_strings": true
   },
   "auth": {
     "google": {
@@ -89,6 +84,5 @@
     "ttl_seconds": 86400,
     "max_subscriptions_per_user": 10
   },
-  "computer_move_delay_seconds": 0.6,
-  "ai_max_fix_attempts": 3
+  "computer_move_delay_seconds": 0.6
 }

@@ -16,9 +16,6 @@ def test_unpublish_hides_public_routes_and_keeps_owner_library(api: Api):
     assert hidden['code'] == before['code']
     assert api.ok('GET', '/games') == []
     assert api.ok('GET', '/games', params={'owner_user_id':owner}) == []
-    assert api.ok('GET', '/builder/games', as_user=owner) == [hidden]
-    assert api.ok('GET', '/builder/games', as_user=other) == []
-    assert api.request('GET', '/builder/games').status_code == 401
     for caller in [None, other]:
         assert api.request('GET', f'/games/{game}', as_user=caller).status_code == 404
         assert api.request('GET', f'/games/{game}/versions/1', as_user=caller).status_code == 404
@@ -45,25 +42,27 @@ def test_existing_participants_keep_playing_but_outsiders_cannot_read_or_join(ap
     assert api.move(match, as_user=b, next_turn=None, state={'done':True}).status_code == 201
 
 
-def test_unpublish_preserves_newer_draft_then_republish_and_delete(api: Api):
+def test_unpublish_then_resubmit_republishes_and_delete(api: Api):
+    from game_platform.tests.test_agent_import import payload, translations_for
+
     owner = api.new_user('owner')
-    game = api.new_game(owner=owner, allowed_player_counts=[1])
-    public = api.ok('GET', f'/games/{game}')
-    content = {k: public[k] for k in ['name','description','code','allowed_player_counts','allows_leave_mid_match','allows_join_mid_match']}
-    draft = api.ok('PUT', f'/game-drafts/{game}', as_user=owner, json={**content,'code':'<html>new private source</html>'})
-    api.ok('POST', f'/games/{game}/unpublish', as_user=owner)
-    assert api.ok('GET', f'/game-drafts/{game}', as_user=owner) == draft
+    secret = 'unpublish-secret-0123456789'
+    body = payload(); body['game_addition_request_id_and_secret'] = secret
+    first = api.ok('POST', '/games', as_user=owner, json=body)
+    assert first['published'] is True
+    hidden = api.ok('POST', f"/games/{first['id']}/unpublish", as_user=owner)
+    assert not hidden['published']
     assert api.ok('GET', '/games') == []
-    published = api.ok('POST', f'/game-drafts/{game}/publish', as_user=owner, json={'expected_revision':draft['revision']})
-    assert published['published'] and published['version'] == 2
-    assert published['code'] == draft['code']
-    assert api.ok('GET', f'/games/{game}') == published
-    assert [g['id'] for g in api.ok('GET', '/games')] == [game]
-    api.ok('POST', f'/games/{game}/unpublish', as_user=owner)
-    api.ok('DELETE', f'/games/{game}', as_user=owner)
-    assert api.ok('GET', '/builder/games', as_user=owner) == []
-    assert api.ok('GET', '/game-drafts', as_user=owner) == []
-    assert api.request('GET', f'/games/{game}').status_code == 404
+    updated = payload(); updated['game_addition_request_id_and_secret'] = secret
+    updated['description'] = 'Reach three by adding one, republished.'
+    updated['translations'] = translations_for(updated)
+    second = api.ok('POST', '/games', as_user=owner, json=updated)
+    assert second['id'] == first['id'] and second['version'] == 2
+    assert second['published'] is True
+    assert api.ok('GET', f"/games/{first['id']}") == second
+    api.ok('POST', f"/games/{first['id']}/unpublish", as_user=owner)
+    api.ok('DELETE', f"/games/{first['id']}", as_user=owner)
+    assert api.request('GET', f"/games/{first['id']}").status_code == 404
 
 
 def test_unpublish_survives_restart_without_exposing_source(tmp_path: Path):
@@ -80,8 +79,8 @@ def test_unpublish_survives_restart_without_exposing_source(tmp_path: Path):
         client.passwords_by_user_id = api.passwords_by_user_id
         assert client.ok('GET','/games') == []
         assert client.request('GET',f'/games/{game}').status_code == 404
-        draft = client.ok('GET',f'/game-drafts/{game}',as_user=owner)
-        published = client.ok('POST',f'/game-drafts/{game}/publish',as_user=owner,json={'expected_revision':draft['revision']})
-        assert published['published'] and published['version'] == 1
+        hidden = client.ok('GET', f'/games/{game}', as_user=owner)
+        assert hidden['published'] is False
+        assert hidden['code'] == '<div>poker</div>'
     finally:
         restored.close()

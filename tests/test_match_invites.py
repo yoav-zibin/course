@@ -4,7 +4,10 @@ from fastapi.testclient import TestClient
 
 from game_platform.api import create_app
 from game_platform.json_file_store import JsonFileStore
-from game_platform.tests.helpers import Api, error
+from game_platform.models import GameRules
+from game_platform.schemas import GameOut
+from game_platform.service import GamePlatform
+from game_platform.tests.helpers import Api, ECHO_SERVER_CODE, TEST_GAME_SCHEMAS, error
 
 
 def _invite(api: Api, match_id: str, *, as_user: str, **body: object) -> dict:
@@ -54,20 +57,26 @@ def test_an_invite_link_is_also_a_qr_code(api: Api) -> None:
 
 
 def test_links_use_the_configured_public_address() -> None:
-    client = TestClient(create_app(public_base_url="https://play.example.com/"))
+    # POST /games is deleted; create the game through the service directly.
+    platform = GamePlatform(store=None)
+    client = TestClient(create_app(platform, public_base_url="https://play.example.com/"))
     alice = client.post("/users", json={"display_name": "alice"}).json()
     headers = {"X-User-Id": alice["id"], "X-User-Password": alice["password"]}
-    game = client.post(
-        "/games",
-        headers=headers,
-        json={
-            "name": "Poker",
-            "allowed_player_counts": [2],
-            "allows_leave_mid_match": False,
-            "allows_join_mid_match": False,
-            "code": "",
-        },
-    ).json()
+    game = GameOut.of(
+        platform.create_game(
+            caller_id=alice["id"],
+            name="Poker",
+            description="",
+            rules=GameRules(
+                allowed_player_counts=(2,),
+                allows_leave_mid_match=False,
+                allows_join_mid_match=False,
+            ),
+            code="",
+            server_code=ECHO_SERVER_CODE,
+            game_schemas=TEST_GAME_SCHEMAS,
+        )
+    ).model_dump(mode="json")
     match = client.post("/matches", headers=headers, json={"game_id": game["id"]}).json()
     invite = client.post(f"/matches/{match['id']}/invites", headers=headers).json()
     assert invite["url"] == f"https://play.example.com/portal#invite={invite['token']}"
@@ -142,7 +151,7 @@ def test_merging_accounts_keeps_invites(api: Api) -> None:
     match_id = api.new_match(owner=alice, game_id=api.new_game(owner=alice))
     token = _invite(api, match_id, as_user=alice)["token"]
     api.ok("POST", f"/invites/{token}/accept", as_user=bob)
-    api.ok("POST", f"/users/{alice}/merge", as_user=alice, json={"into_user_id": alice2})
+    api.ok("POST", f"/users/{alice}/merge", as_user=alice, json={"into_user_id": alice2, "into_password": api.passwords_by_user_id[alice2]})
 
     (invite,) = api.ok("GET", "/users/me/invites", as_user=alice2)
     assert invite["created_by_user_id"] == alice2
