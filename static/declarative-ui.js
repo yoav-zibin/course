@@ -490,7 +490,7 @@
         if(previous&&from&&node.animate){
           const before=position(spec,previous);
           if(before.x!==point.x||before.y!==point.y||num(previous.rotation)!==num(piece.rotation)||num(previous.scale,1)!==num(piece.scale,1)){
-            const animation=node.animate([{transform:from},{transform:`translate(${point.x}px, ${point.y}px) rotate(${num(piece.rotation)}deg) scale(${num(piece.scale,1)})`}],{duration:360,easing:"ease-out"});
+            const animation=node.animate([{transform:from},{transform:`translate(${point.x}px, ${point.y}px) rotate(${num(piece.rotation)}deg) scale(${num(piece.scale,1)})`}],{duration:1440,easing:"ease-out"});
             pieceAnimations.add(animation);animation.onfinish=()=>pieceAnimations.delete(animation);
           }
         }
@@ -534,7 +534,12 @@
       localState=result.local_state===undefined?null:clone(result.local_state);
       errorBox.hidden=true;
       if(result.make_move!==undefined && message.type==="ui_event" && canAct()) {moveSent=true;callbacks.onMove?.(clone(result.make_move));}
-      draw(scene,message.type==="state_changed"&&callbacks.animate===true&&!latest?.replay);
+      const animate=message.type==="state_changed"&&callbacks.animate===true&&!latest?.replay&&!global.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      // Polls can arrive just after a move starts. Keep the existing elements
+      // and their animation clocks when the authoritative scene is unchanged.
+      if(animate&&currentScene&&JSON.stringify(scene)===JSON.stringify(currentScene)){
+        stage.setAttribute("aria-busy",String(moveSent));updateHints();
+      }else draw(scene,animate);
       callbacks.onScene?.(clone(scene));
     }
     callbacks.onReady?.();
@@ -551,10 +556,10 @@
     const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
     const data=value=>JSON.stringify(canonical(value)).replace(/</g,"\\u003c");
     return '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<link rel="stylesheet" href="/static/declarative-ui.css?v=3"><div id="declarative-game"></div>' +
+      '<link rel="stylesheet" href="/static/declarative-ui.css?v=4"><div id="declarative-game"></div>' +
       '<script type="application/json" id="i18n-strings">'+data(spec.strings || {})+'<'+'/script>' +
       '<script type="application/json" id="declarative-spec">'+data(spec)+'<'+'/script>' +
-      '<script src="/static/declarative-ui.js?v=3"><'+'/script><script>' +
+      '<script src="/static/declarative-ui.js?v=4"><'+'/script><script>' +
       'const host=DeclarativeUI.mount(document.getElementById("declarative-game"),' +
       'JSON.parse(document.getElementById("declarative-spec").textContent),' +
       '{onMove:move=>parent.postMessage({type:"make_move",move},"*"),' +

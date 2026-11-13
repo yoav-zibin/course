@@ -10,6 +10,15 @@ reloading, including on `portal.html?game=...` routes. A new practice can also
 start offline once that game's version has been saved. Device storage is scoped
 to the signed-in account; clearing browser storage removes local progress.
 
+When browser storage fills, the portal automatically frees the least recently
+used recoverable caches and retries the save. Game responses and translation
+bundles share this LRU order across accounts and languages. Old migration
+backups can also shed their cached responses. Pending moves, their snapshots
+and rules, saved practice games and history, archives, login credentials and
+preferences are retained. A full but readable browser store remains accessible
+on reload. Storage that is disabled, or filled entirely with durable data,
+still reports a failed save rather than discarding progress.
+
 - `newMatch`, `applyMove`, `computerMove`, and `viewFor` use the same deterministic
   prelude as `game_logic.py`, including `InvalidMove`, seeded randomness, the
   frozen clock, and `estimateWinChance`. A parity test guards this contract.

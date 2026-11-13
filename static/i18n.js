@@ -25,6 +25,8 @@ const I18n = (() => {
   const LOCALES_KEY = "game-platform.i18n-locales.v1";
   const GAMES_KEY = "game-platform.i18n-games.v1:"; // + language code
   const BUNDLE_KEY = "game-platform.i18n-bundle.v1:"; // + language code: {etag, data}
+  const RECENCY_KEY = "game-platform.i18n-recency.v1";
+  const RECENCY_CAP = 64;
   // The browser's storage is small and shared with the offline cache (portal-offline.js):
   // a bundle bigger than this is saved without the games' string tables.
   const MAX_STORED_CHARS = 200_000;
@@ -42,9 +44,39 @@ const I18n = (() => {
     { code: "ar", name: "العربية", direction: "rtl" },
   ];
 
+  const recoverableCacheKey = (key) => key === LOCALES_KEY ||
+    [CATALOG_KEY, GAMES_KEY, BUNDLE_KEY].some(prefix => key.startsWith(prefix));
+  // Shared with the Portal's origin-wide quota recovery. A failed timestamp
+  // must never turn a successful cache read or write into an application error.
+  function touchCache(key) {
+    if (!recoverableCacheKey(key)) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(RECENCY_KEY));
+      const entries = new Map();
+      for (const entry of Array.isArray(saved?.entries) ? saved.entries : []) {
+        if (typeof entry?.key === "string" && recoverableCacheKey(entry.key) &&
+            Number.isSafeInteger(entry.at) && entry.at >= 0)
+          entries.set(entry.key, Math.max(entries.get(entry.key) || 0, entry.at));
+      }
+      const clock = Math.max(Date.now(),
+        (Number.isSafeInteger(saved?.clock) ? saved.clock : 0) + 1,
+        ...[...entries.values()].map(at => at + 1));
+      entries.set(key, clock);
+      localStorage.setItem(RECENCY_KEY, JSON.stringify({clock,
+        entries: [...entries].sort((a, b) => a[1] - b[1]).slice(-RECENCY_CAP)
+          .map(([key, at]) => ({key, at})),
+      }));
+    } catch {
+      // Translation caches remain optional when storage is denied or full.
+    }
+  }
   const read = (key) => {
     try {
-      return JSON.parse(localStorage.getItem(key));
+      const raw = localStorage.getItem(key);
+      if (raw === null) return null;
+      const value = JSON.parse(raw);
+      touchCache(key);
+      return value;
     } catch {
       return null;
     }
@@ -52,6 +84,7 @@ const I18n = (() => {
   const write = (key, value) => {
     try {
       localStorage.setItem(key, JSON.stringify(value));
+      touchCache(key);
       return true;
     } catch {
       // Private mode or a full disk: the choice just doesn't persist.

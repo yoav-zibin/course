@@ -116,17 +116,17 @@ def test_protocol_schema_and_probe_expose_rotation_scaling_without_publishing(ap
     assert response.status_code == 200, response.text
     assert response.json()["local_state"] == {"rotation": 180, "scale": 1.5}
     assert api.client.get("/games").json() == []
-    assert "/static/declarative-ui.js?v=3" in client_document(spec())
-    assert "/static/declarative-ui.css?v=3" in client_document(spec())
+    assert "/static/declarative-ui.js?v=4" in client_document(spec())
+    assert "/static/declarative-ui.css?v=4" in client_document(spec())
 
 
 def legacy_client_document(ui, asset_query=""):
-    return client_document(ui).replace('href="/static/declarative-ui.css?v=3"',
+    return client_document(ui).replace('href="/static/declarative-ui.css?v=4"',
                                       f'href="/static/declarative-ui.css{asset_query}"').replace(
-        'src="/static/declarative-ui.js?v=3"', f'src="/static/declarative-ui.js{asset_query}"')
+        'src="/static/declarative-ui.js?v=4"', f'src="/static/declarative-ui.js{asset_query}"')
 
 
-@pytest.mark.parametrize("asset_query", ["", "?v=2"])
+@pytest.mark.parametrize("asset_query", ["", "?v=2", "?v=3"])
 def test_exact_legacy_platform_host_keeps_recorded_body_and_hash_unchanged(asset_query):
     from game_platform.agent_import import GameImport
     from game_platform import game_traces as traces

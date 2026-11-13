@@ -126,7 +126,7 @@ around the piece center. Uniform `scale` multiplies its dimensions.
 
 Keep the same piece ID when that physical piece moves. For multiplayer and
 computer matches, the portal animates changed piece positions and transforms
-over 360 ms between authoritative scenes. Initial rendering, replay,
+over 1,440 ms between authoritative scenes. Initial rendering, replay,
 pass-and-play and reduced-motion preferences use immediate updates. A scene is
 still a complete snapshot; no animation commands or delays belong in game
 logic. For games whose server stores counts rather than individual pieces,

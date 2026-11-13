@@ -23,7 +23,7 @@ function element(tag){
 // Objects made inside the sandbox have another realm's prototypes; compare their JSON.
 const plain=value=>JSON.parse(JSON.stringify(value));
 
-function setup({stored={},languages=['en-US'],user=null,accountLocale='',catalogs=CATALOGS,stringsAnswer=GAME_STRINGS,stringsFail=false,games=GAMES_TEXT,bundle=null,storageFails=false}={}){
+function setup({stored={},languages=['en-US'],user=null,accountLocale='',catalogs=CATALOGS,stringsAnswer=GAME_STRINGS,stringsFail=false,games=GAMES_TEXT,bundle=null,storageFails=false,storageFailureKeys=[]}={}){
   const storage=new Map(Object.entries(stored).map(([k,v])=>[k,JSON.stringify(v)]));
   const requests=[],apiCalls=[],events=[],bundleRequests=[];
   const topbar=element('header');
@@ -57,7 +57,7 @@ function setup({stored={},languages=['en-US'],user=null,accountLocale='',catalog
     console,Map,Set,JSON,Promise,URL,Headers,Request:class{},
     CustomEvent:class{constructor(type,init){this.type=type;this.detail=init?.detail;}},
     document,navigator:{languages},location:{href:'http://localhost/portal',origin:'http://localhost'},
-    localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>{if(storageFails)throw new Error('quota');storage.set(k,v);},removeItem:k=>storage.delete(k)},
+    localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>{if(storageFails||storageFailureKeys.includes(k))throw new Error('quota');storage.set(k,v);},removeItem:k=>storage.delete(k)},
     fetch:nativeFetch,
     Auth:{current:()=>user},
     apiRequest:async(method,url,options)=>{
@@ -306,4 +306,71 @@ test('switching language loads that language\'s bundle',async()=>{
   assert.equal(t.run('I18n.gameName("chess","Chess")'),'Ajedrez');
   await t.run('I18n.choose("en")');
   assert.equal(t.run('I18n.gameName("chess","Chess")'),'Chess');
+});
+
+const CACHE_RECENCY_KEY='game-platform.i18n-recency.v1';
+
+test('successful translation cache reads and writes update shared recency without tracking choices',async()=>{
+ const t=setup({stored:{...spanish,
+  'game-platform.i18n-catalog.v1:es':CATALOGS.es,
+  'game-platform.i18n-games.v1:es':GAMES_TEXT,
+  'game-platform.i18n-locales.v1':LOCALES,
+  'game-platform.auth.v1':{id:'owner',password:'private'},
+ }});
+ await t.settle();
+ const first=JSON.parse(t.storage.get(CACHE_RECENCY_KEY));
+ const keys=first.entries.map(entry=>entry.key);
+ assert.ok(keys.includes('game-platform.i18n-catalog.v1:es'));
+ assert.ok(keys.includes('game-platform.i18n-games.v1:es'));
+ assert.ok(keys.includes('game-platform.i18n-locales.v1'));
+ assert.ok(!keys.includes('game-platform.locale.v1'));
+ assert.ok(!keys.includes('game-platform.auth.v1'));
+ t.run('Date.now=()=>1'); // a clock adjustment must not reverse LRU order
+ await t.run('I18n.choose("ar")');
+ const after=JSON.parse(t.storage.get(CACHE_RECENCY_KEY));
+ assert.ok(after.clock>first.clock);
+ assert.equal(new Set(after.entries.map(entry=>entry.key)).size,after.entries.length);
+ assert.equal(JSON.parse(t.storage.get('game-platform.locale.v1')),'ar');
+ assert.equal(JSON.parse(t.storage.get('game-platform.auth.v1')).password,'private');
+});
+
+test('reading a cached bundle records use even when the server returns 304',async()=>{
+ const old=bundleOf();
+ const t=setup({stored:{...spanish,[BUNDLE_KEY]:{etag:old.etag,data:old.body},
+  [CACHE_RECENCY_KEY]:{clock:10,entries:[{key:BUNDLE_KEY,at:10}]},
+ },bundle:old});
+ await t.settle();
+ const log=JSON.parse(t.storage.get(CACHE_RECENCY_KEY));
+ assert.ok(log.entries.find(entry=>entry.key===BUNDLE_KEY).at>10);
+ assert.equal(t.bundleRequests[0].headers.get('if-none-match'),old.etag);
+});
+
+test('translation recency stays bounded and excludes non-cache keys from an older log',async()=>{
+ const entries=Array.from({length:80},(_,i)=>({key:'game-platform.i18n-catalog.v1:old'+i,at:i+1}));
+ entries.push({key:'game-platform.locale.v1',at:100},{key:'game-platform.auth.v1',at:101});
+ const t=setup({stored:{[CACHE_RECENCY_KEY]:{clock:101,entries}}});
+ await t.settle();
+ const log=JSON.parse(t.storage.get(CACHE_RECENCY_KEY));
+ assert.equal(log.entries.length,64);
+ assert.ok(log.entries.every(entry=>entry.key==='game-platform.i18n-locales.v1'||entry.key.startsWith('game-platform.i18n-catalog.v1:')));
+ assert.ok(!log.entries.some(entry=>entry.key==='game-platform.i18n-catalog.v1:old0'));
+ assert.equal(log.entries.at(-1).key,'game-platform.i18n-locales.v1');
+});
+
+test('a failed recency write preserves the successful full bundle write',async()=>{
+ const t=setup({stored:spanish,bundle:bundleOf(),storageFailureKeys:[CACHE_RECENCY_KEY]});
+ await t.settle();
+ const saved=JSON.parse(t.storage.get(BUNDLE_KEY));
+ assert.deepEqual(saved.data.games.chess.strings,{wins:'¡{name} gana!'});
+ assert.equal(t.run('I18n.t("ui.action.save")'),'Guardar');
+ assert.equal(t.storage.has(CACHE_RECENCY_KEY),false);
+});
+
+test('a failed cache write does not mark that cache as recently used',async()=>{
+ const t=setup({stored:spanish,bundle:bundleOf(),storageFailureKeys:[BUNDLE_KEY]});
+ await t.settle();
+ assert.equal(t.storage.has(BUNDLE_KEY),false);
+ const log=JSON.parse(t.storage.get(CACHE_RECENCY_KEY));
+ assert.ok(!log.entries.some(entry=>entry.key===BUNDLE_KEY));
+ assert.equal(t.run('I18n.gameName("chess","Chess")'),'Ajedrez');
 });

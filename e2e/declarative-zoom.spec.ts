@@ -89,8 +89,19 @@ test('server moves animate stable pieces, while replay, local mode and reduced m
   expect((await camera(page)).x).toBeLessThan(beforePan.x);
   await page.evaluate(async()=>{const w=window as any;await w.zoomHost.send({...w.zoomMessage,view:{x:380},move_count:1});});
   expect(await pieces.evaluate(node=>node.getAnimations().length)).toBe(1);
+  expect(await pieces.evaluate(node=>node.getAnimations()[0].effect!.getTiming().duration)).toBe(1440);
+  // An ordinary poll can land anywhere in the 2s polling cycle, including in
+  // the middle of a move. It must keep the same animation and elapsed time.
+  await pieces.evaluate(node=>{(window as any).inFlightMove=node.getAnimations()[0];});
+  await page.waitForFunction(()=>(window as any).inFlightMove.currentTime>=1000);
+  expect(await page.evaluate(()=>(window as any).inFlightMove.playState)).toBe('running');
+  await page.evaluate(async()=>{const w=window as any;await w.zoomHost.send({...w.zoomMessage,view:{x:380},move_count:1});});
+  const afterPoll=await pieces.evaluate(node=>{const animation=node.getAnimations()[0];return {same:animation===(window as any).inFlightMove,time:animation?.currentTime,state:animation?.playState};});
+  expect(afterPoll.same).toBe(true);expect(Number(afterPoll.time)).toBeGreaterThanOrEqual(1000);expect(afterPoll.state).toBe('running');
   const during=await pieces.evaluate(node=>node.getCTM()!.e);
   await expect.poll(()=>pieces.evaluate(node=>node.getAnimations().length)).toBe(0);
+  expect(await page.evaluate(()=>(window as any).inFlightMove.currentTime)).toBe(1440);
+  expect(await page.evaluate(()=>(window as any).zoomMoves)).toEqual([]);
   const settled=await pieces.evaluate(node=>node.getCTM()!.e);expect(settled).toBeGreaterThan(during);
   await page.evaluate(async()=>{const w=window as any;await w.zoomHost.send({...w.zoomMessage,view:{x:220},move_count:0,replay:{index:0,total:1}});});
   expect(await pieces.evaluate(node=>node.getAnimations().length)).toBe(0);
@@ -142,6 +153,7 @@ test('Backgammon legal drops work when pinched on phone and tablet, and opponent
   await page.locator('#zoom-test [data-camera-action="in"]').click();
   await page.evaluate(async()=>{const w=window as any;await w.bgHost.send({...w.bgAfter,my_player_index:1-w.bgAfter.my_player_index,acting_for_player_index:null});});
   expect(await piece.evaluate(node=>node.getAnimations().length)).toBe(1);
+  expect(await piece.evaluate(node=>node.getAnimations()[0].effect!.getTiming().duration)).toBe(1440);
   await expect(page.locator('#zoom-test .declarative-piece.actionable')).toHaveCount(0);
   await expect.poll(()=>piece.evaluate(node=>node.getAnimations().length)).toBe(0);
   expect(await page.evaluate(()=>(window as any).bgMoves)).toEqual([step.move]);

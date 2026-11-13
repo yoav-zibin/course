@@ -23,6 +23,10 @@ const PORTAL_PREFIX = "game-platform.portal.v1.";
 const PORTAL_DELETED = "__portal_offline_deleted__";
 const RESPONSE_BUDGET_BYTES = 1_000_000;
 const RECENCY_CAP = 1000;
+const I18N_RECENCY_KEY = "game-platform.i18n-recency.v1";
+const isI18nCacheKey = key => key === "game-platform.i18n-locales.v1" ||
+  /^game-platform\.i18n-(?:catalog|games|bundle)\.v1:/.test(key);
+const cacheTime = value => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
 
 const portalTextEncoder = typeof TextEncoder !== "undefined" ? new TextEncoder() : null;
 function utf8Bytes(text) {
@@ -79,7 +83,13 @@ class PortalOffline {
       if (storage.getItem(probe) !== "1") throw new Error("storage probe mismatch");
       if (typeof storage.removeItem === "function") storage.removeItem(probe);
       return storage;
-    } catch {
+    } catch (error) {
+      // A full origin is still readable. Keep its saved work visible so write()
+      // can reclaim caches; an empty memory fallback would hide pending moves.
+      if (error?.name === "QuotaExceededError" || error?.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+          error?.code === 22 || error?.code === 1014) {
+        try { storage.getItem("__portal_storage_probe__"); return storage; } catch {}
+      }
       return PortalOffline.memoryStorage();
     }
   }
@@ -146,45 +156,116 @@ class PortalOffline {
       return undefined;
     }
   }
-  /** Stored response-cache keys belonging to OTHER accounts on this
-   * device, least recently used first (from each account's recency log;
-   * unlogged entries count as oldest). Only `.r.` pieces are listed:
-   * another account's queues, practice matches and archives are durable
-   * data and are never reclaimed. */
-  foreignResponseKeys() {
+  /** Other accounts' recoverable answers, with their dependency pins and
+   * recency. Account boundaries do not change which data is safe to evict. */
+  foreignResponseEntries() {
     const mine = `${this.key()}.`;
     const accounts = new Map();
     for (const stored of this.storedKeys()) {
       if (!stored.startsWith(PORTAL_PREFIX) || stored.startsWith(mine)) continue;
-      const rest = stored.slice(PORTAL_PREFIX.length);
-      const dot = rest.indexOf(".");
-      if (dot < 0) continue;
-      const account = rest.slice(0, dot);
-      if (!accounts.has(account)) accounts.set(account, { recency: null, responses: [] });
-      const entry = accounts.get(account);
-      if (rest.slice(dot) === ".recency") {
-        const log = this.readJson(stored);
-        entry.recency = new Map(
-          (Array.isArray(log?.entries) ? log.entries : []).map((item) => [item.path, item.at || 0]),
-        );
-      } else if (rest.slice(dot).startsWith(".r.")) {
-        entry.responses.push(stored);
-      }
+      const marker = stored.indexOf(".r.", PORTAL_PREFIX.length);
+      if (marker < 0) continue;
+      const base = stored.slice(0, marker);
+      if (!accounts.has(base)) accounts.set(base, []);
+      accounts.get(base).push(stored);
     }
     const found = [];
-    for (const [account, entry] of accounts) {
-      const base = `${PORTAL_PREFIX}${account}`;
-      for (const stored of entry.responses) {
+    const keys = this.storedKeys();
+    for (const [base, responses] of accounts) {
+      const log = this.readJson(`${base}.recency`);
+      const recency = new Map((Array.isArray(log?.entries) ? log.entries : [])
+        .filter(item => item && typeof item.path === "string")
+        .map(item => [item.path, cacheTime(item.at)]));
+      const dependencies = { responses: {}, queues: {}, local: {}, conflicts: {} };
+      // An interrupted migration may still keep its only durable copy in the
+      // legacy blob. Include those pins until its split manifest is committed.
+      if (!this.readJson(`${base}.meta`)?.migrated) {
+        const legacy = this.readJson(base);
+        if (legacy && typeof legacy === "object") Object.assign(dependencies, {
+          responses: legacy.responses || {}, queues: legacy.queues || {}, local: legacy.local || {}, conflicts: legacy.conflicts || {},
+        });
+      }
+      for (const stored of keys) for (const [suffix, group] of [["q", "queues"], ["l", "local"], ["c", "conflicts"]]) {
+        const prefix = `${base}.${suffix}.`;
+        if (!stored.startsWith(prefix)) continue;
+        try {
+          const value = this.readJson(stored);
+          if (value !== undefined) dependencies[group][decodeURIComponent(stored.slice(prefix.length))] = value;
+        } catch {}
+      }
+      for (const id of new Set([...Object.keys(dependencies.queues), ...Object.keys(dependencies.conflicts)])) {
+        const path = `/matches/${id}`;
+        const match = this.readJson(`${base}.r.${encodeURIComponent(path)}`);
+        if (match !== undefined) dependencies.responses[path] = match;
+      }
+      for (const stored of responses) {
         let path = stored.slice(base.length + 3);
         try {
           path = decodeURIComponent(path);
         } catch {
           // An undecodable suffix sorts as oldest; the key is still cache.
         }
-        found.push({ key: stored, at: entry.recency?.get(path) || 0 });
+        if (!this.protectedCache(dependencies, path))
+          found.push({ key: stored, at: recency.get(path) || 0, kind: "response" });
       }
     }
-    return found.sort((a, b) => a.at - b.at).map((item) => item.key);
+    return found;
+  }
+  foreignResponseKeys() {
+    return this.foreignResponseEntries().sort((a, b) => a.at - b.at).map(item => item.key);
+  }
+  /** One LRU across recoverable data sharing this origin's quota. Unknown
+   * keys, credentials, preferences and durable game records are not caches. */
+  cacheEvictions(data) {
+    const entries = Object.keys(data.responses).filter(path => !this.protectedCache(data, path))
+      .map(path => ({ key: this.responseKey(path), path, at: cacheTime(data.cacheAccess[path]), kind: "own" }));
+    entries.push(...this.foreignResponseEntries());
+    const log = this.readJson(I18N_RECENCY_KEY);
+    const i18nTimes = new Map((Array.isArray(log?.entries) ? log.entries : [])
+      .filter(item => item && typeof item.key === "string")
+      .map(item => [item.key, cacheTime(item.at)]));
+    for (const key of this.storedKeys()) {
+      if (isI18nCacheKey(key)) entries.push({ key, at: i18nTimes.get(key) || 0, kind: "i18n" });
+      // Older versions kept a complete pre-migration blob as a backup. Its
+      // refetchable answers can be trimmed, while every durable field stays.
+      if (!key.startsWith(PORTAL_PREFIX) || /\.(?:r|q|c|l)\.|\.(?:meta|recency|archives|archived|selected|lru)$/.test(key.slice(PORTAL_PREFIX.length))) continue;
+      const legacy = this.readJson(key);
+      if (!legacy || typeof legacy !== "object" || !legacy.responses || !legacy.queues || !legacy.local) continue;
+      for (const path of Object.keys(legacy.responses)) if (!this.protectedCache(legacy, path))
+        entries.push({ key, path, at: cacheTime(legacy.cacheAccess?.[path]), kind: "legacy" });
+    }
+    return entries.sort((a, b) => a.at - b.at || a.key.localeCompare(b.key));
+  }
+  evictCache(entry, data) {
+    if (entry.kind === "own") {
+      delete data.responses[entry.path];
+      delete data.cacheAccess[entry.path];
+      // fanOut removes the physical key, including keys absent from a stale
+      // manifest. Keep deletion in that pass so failures cannot look saved.
+      return;
+    }
+    try {
+      if (entry.kind === "legacy") {
+        const legacy = this.readJson(entry.key);
+        if (!legacy?.responses || this.protectedCache(legacy, entry.path)) return;
+        delete legacy.responses[entry.path];
+        if (legacy.cacheAccess) delete legacy.cacheAccess[entry.path];
+        this.storage.setItem(entry.key, JSON.stringify(legacy));
+      } else {
+        if (typeof this.storage.removeItem === "function") this.storage.removeItem(entry.key);
+        else this.storage.setItem(entry.key, PORTAL_DELETED);
+        if (entry.kind === "i18n") {
+          const log = this.readJson(I18N_RECENCY_KEY);
+          if (Array.isArray(log?.entries)) {
+            log.entries = log.entries.filter(item => item?.key !== entry.key);
+            this.storage.setItem(I18N_RECENCY_KEY, JSON.stringify(log));
+          }
+        }
+      }
+    } catch {
+      // Try remaining recoverable entries; never sacrifice saved work to make
+      // a denied-storage write appear successful.
+    }
   }
   storedKeys() {
     try {
@@ -392,11 +473,12 @@ class PortalOffline {
         failed.push(key);
       }
     };
-    const oldIndex = this.readJson(this.metaKey()) || this.scanIndex() || { responses: [], queues: [], conflicts: [], local: [] };
+    const scanned = this.scanIndex();
+    const oldIndex = this.readJson(this.metaKey()) || scanned || { responses: [], queues: [], conflicts: [], local: [] };
     // Dropping a stale recoverable response frees quota and can never lose
     // durable work, so it runs first: a quota-blocked queue put must see
     // the freed space in the same pass.
-    for (const path of oldIndex.responses || [])
+    for (const path of new Set([...(oldIndex.responses || []), ...(scanned?.responses || [])]))
       if (!Object.hasOwn(data.responses || {}, path)) drop(this.responseKey(path));
     if (failed.length) return failed;
     for (const [id, queue] of Object.entries(data.queues || {})) put(this.queueKey(id), queue);
@@ -544,9 +626,13 @@ class PortalOffline {
   }
   protectedCache(data, path) {
     const id = /^\/matches\/([^/]+)$/.exec(path)?.[1];
-    return (id !== undefined && data.queues?.[id]?.length > 0) ||
-      Object.values(data.local || {}).some(match =>
-        path === `/games/${match.game_id}/versions/${match.game_version}`);
+    if (id !== undefined && (data.queues?.[id]?.length > 0 || data.conflicts?.[id])) return true;
+    const needsRules = match => match && typeof match === "object" &&
+      path === `/games/${match.game_id}/versions/${match.game_version}`;
+    return Object.values(data.local || {}).some(needsRules) ||
+      Object.keys(data.queues || {}).some(matchId => data.queues[matchId]?.length > 0 &&
+        needsRules(data.responses?.[`/matches/${matchId}`])) ||
+      Object.keys(data.conflicts || {}).some(matchId => needsRules(data.responses?.[`/matches/${matchId}`]));
   }
   clearCache() {
     const data = this.read();
@@ -595,26 +681,12 @@ class PortalOffline {
     };
     while (droppable.length && cacheBytes > RESPONSE_BUDGET_BYTES) evictOne();
     let failed = this.fanOut(data);
-    // A quota failure drops recoverable responses and retries the whole
-    // fan-out, so a move is still saved when the cache can make room and
-    // the evicted pieces are actually deleted.
-    while (failed.length && droppable.length) {
-      evictOne();
-      failed = this.fanOut(data);
-    }
-    // The quota is per browser origin, not per account: when this account
-    // has nothing left to drop, the space may be held by other accounts'
-    // cached answers on this device. Those are refetchable GET responses
-    // (never queues, practice matches or archives), so reclaim them
-    // before declaring the device full.
+    // LocalStorage quota is shared by every account and language. Evict in
+    // access order across all known recoverable caches, not account by account.
     if (failed.length) {
-      const foreign = this.foreignResponseKeys();
-      while (failed.length && foreign.length) {
-        try {
-          this.storage.removeItem(foreign.shift());
-        } catch {
-          // A denied removal must not mask the original failure.
-        }
+      const candidates = this.cacheEvictions(data);
+      while (failed.length && candidates.length) {
+        this.evictCache(candidates.shift(), data);
         failed = this.fanOut(data);
       }
     }
