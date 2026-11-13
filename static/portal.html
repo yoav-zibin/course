@@ -16,47 +16,60 @@
     <link rel="apple-touch-icon" href="/static/portal-icon-180.png" />
     <meta name="apple-mobile-web-app-title" content="Playroom" />
     <link rel="manifest" href="/static/portal.webmanifest" />
-    <title data-i18n="ui.page.portal">Game platform · Portal</title>
+    <title>BuildPlay.fun · Games</title>
     <link rel="stylesheet" href="/static/common.css?v=17" />
     <link rel="stylesheet" href="/static/portal.css?v=35" />
     <link rel="stylesheet" href="/static/portal-match-layout.css?v=1" />
     <link rel="stylesheet" href="/static/portal-speed.css?v=2" />
     <link rel="stylesheet" href="/static/feedback-dialog.css?v=1" />
-    <link rel="stylesheet" href="/static/experiments.css?v=12" />
+    <link rel="stylesheet" href="/static/experiments.css?v=38" />
   </head>
   <body>
-    <header class="topbar" data-app-page="portal">
-      <h1 data-i18n="ui.app_name">Game platform</h1>
+    <header class="topbar" data-app-page="portal" data-app-brand="BuildPlay.fun" data-app-home-href="#home">
+      <h1>BuildPlay.fun</h1>
+      <nav class="portal-nav" aria-label="Main navigation">
+        <a class="portal-nav-link is-active" data-portal-nav="games" href="#games">Games</a>
+        <a class="portal-nav-link" data-portal-nav="matches" href="#matches">Matches <span id="nav-match-count" class="nav-count">0</span></a>
+        <a class="portal-nav-link" data-portal-nav="leaderboards" href="#leaderboards">Leaderboards</a>
+      </nav>
       <span class="spacer"></span>
-      <span id="token-wallet" class="token-wallet" role="status" aria-live="polite" title="Your virtual tokens" data-i18n-title="ui.portal.wallet_title" hidden><span class="token-wallet-coin" aria-hidden="true">✦</span><span class="token-wallet-copy"><span class="token-wallet-label" data-i18n="ui.portal.wallet_label">MY WALLET</span><span class="token-wallet-number"><strong id="token-balance">0</strong> <span data-i18n="ui.portal.wallet_tokens">tokens</span></span></span></span>
-      <label class="portal-skin-picker" for="portal-skin-picker"><span data-i18n="ui.portal.skin">Skin</span><select id="portal-skin-picker" data-i18n-aria-label="ui.portal.skin" aria-label="Portal skin"><option value="" data-i18n="ui.portal.skin_assigned">Assigned</option><option value="classic" data-i18n="ui.portal.skin_classic">Classic</option><option value="aurora" data-i18n="ui.portal.skin_aurora">Aurora</option><option value="sunset" data-i18n="ui.portal.skin_sunset">Sunset</option><option value="immersive" data-i18n="ui.portal.skin_immersive">Immersive</option></select></label>
-      <label class="portal-layout-picker" for="portal-layout-picker"><span data-i18n="ui.portal.layout">Layout</span><select id="portal-layout-picker" data-i18n-aria-label="ui.portal.layout" aria-label="Portal layout"><option value="" data-i18n="ui.portal.layout_default">Skin default</option><option value="left" data-i18n="ui.portal.layout_left">Left sidebar</option><option value="hamburger" data-i18n="ui.portal.layout_hamburger">Hamburger</option><option value="top" data-i18n="ui.portal.layout_top">Top bar</option></select></label>
+      <span id="token-wallet" class="token-wallet" role="status" aria-live="polite" title="Your virtual gems" data-i18n-title="ui.portal.wallet_gems_title" hidden><span class="token-wallet-coin" aria-hidden="true"><svg class="token-gem-icon" viewBox="0 0 52 52"><path class="gem-outline" d="M14 4H38L49 16 26 48 3 16 14 4Z"/><path class="gem-top" d="M14 4 9 16h17L21 4h-7Z M21 4 26 16h17L38 4H21Z"/><path class="gem-left" d="M3 16h23v32L3 16Z"/><path class="gem-right" d="M26 16h23L26 48V16Z"/><path class="gem-facet" d="M14 4 9 16h17L14 4Zm24 0 5 12H26L38 4Z"/></svg></span><span class="token-wallet-copy"><span class="token-wallet-label" data-i18n="ui.portal.wallet_label">MY WALLET</span><span class="token-wallet-number"><strong id="token-balance">0</strong> <span data-i18n="ui.portal.wallet_gems">gems</span></span></span></span>
        <span id="account-menu"></span>
     </header>
+    <div id="portal-more-options" class="portal-more-options" hidden>
+      <section class="portal-profile-preferences" aria-label="Preferences" data-i18n-aria-label="ui.portal.preferences">
+        <h4 data-i18n="ui.portal.preferences">Preferences</h4>
+        <label class="portal-skin-picker" for="portal-skin-picker"><span data-i18n="ui.portal.skin">Skin</span><select id="portal-skin-picker" data-i18n-aria-label="ui.portal.skin" aria-label="Portal skin"><option value="" data-i18n="ui.portal.skin_assigned">Assigned</option><option value="classic" data-i18n="ui.portal.skin_classic">Classic</option><option value="aurora" data-i18n="ui.portal.skin_aurora">Aurora</option><option value="sunset" data-i18n="ui.portal.skin_sunset">Sunset</option><option value="immersive" data-i18n="ui.portal.skin_immersive">Immersive</option><option value="arcade">Arcade</option></select></label>
+        <label class="portal-layout-picker" for="portal-layout-picker"><span data-i18n="ui.portal.layout">Layout</span><select id="portal-layout-picker" data-i18n-aria-label="ui.portal.layout" aria-label="Portal layout"><option value="" data-i18n="ui.portal.layout_default">Skin default</option><option value="left" data-i18n="ui.portal.layout_left">Left sidebar</option><option value="hamburger" data-i18n="ui.portal.layout_hamburger">Hamburger</option><option value="top" data-i18n="ui.portal.layout_top">Top bar</option></select></label>
+        <div id="portal-language-slot"><span class="portal-language-label" data-i18n="ui.language">Language</span></div>
+      </section>
+      <div class="offline-controls" role="status"><span id="offline-status" data-i18n-managed>Preparing offline storage…</span><button id="retry-sync" type="button" data-i18n="ui.state.retry_sync">Retry sync</button><button id="notify-toggle" type="button" aria-pressed="false" hidden data-i18n-managed>Enable notifications</button></div>
+      <details id="offline-storage" class="offline-storage"><summary data-i18n="ui.offline.storage_title">Device storage</summary><p id="storage-details" role="status" data-i18n-managed>Open to inspect cached and unsynced data.</p><button id="storage-refresh" type="button" data-i18n="ui.offline.storage_refresh">Refresh storage usage</button><button id="storage-clear-cache" type="button" data-i18n="ui.offline.storage_clear">Clear recoverable cache</button></details>
+      <button id="install-portal" type="button" hidden data-i18n="ui.install.button">Install Playroom</button>
+      <details id="install-help"><summary data-i18n="ui.install.summary">Add to Home Screen</summary><p data-i18n="ui.install.help_1">On iPhone or iPad, open this page in Safari, tap Share, then Add to Home Screen. On Android or desktop, use Install Playroom or your browser’s install menu.</p><p data-i18n="ui.install.help_2">Open games and matches online first. Wait for “Portal saved for offline” before disconnecting. Offline moves sync when you reconnect.</p><p id="install-message" role="status"></p></details>
+    </div>
     <div class="app portal-shell">
-      <aside class="sidebar portal-sidebar">
-        <a class="app-brand" href="/" aria-label="Game platform home" data-i18n-aria-label="ui.portal.home_aria"><span class="app-brand-mark" aria-hidden="true">✳</span><span class="app-brand-name" data-i18n="ui.portal.brand">Game Portal</span></a>
-        <button id="show-creator" type="button" class="primary" data-i18n="ui.portal.new_match_button">+ New match</button>
-        <div id="portal-login-note" class="muted" data-i18n="ui.portal.login_note" hidden>Log in to see your matches.</div>
-        <div id="my-matches">
-          <details id="group-turn" name="my-match-groups" class="match-group" open hidden><summary title="Matches where it is your turn to play" data-i18n-title="ui.portal.turn_title"><span data-i18n="ui.match.your_turn">Your turn</span> <span id="count-turn" class="group-count">0</span></summary><div id="list-turn"></div></details>
-          <details id="group-ongoing" name="my-match-groups" class="match-group"><summary><span data-i18n="ui.section.ongoing">Ongoing</span> <span id="count-ongoing" class="group-count">0</span></summary><div id="list-ongoing"></div></details>
-          <details id="group-waiting" name="my-match-groups" class="match-group"><summary><span data-i18n="ui.section.waiting_for_players">Waiting for players</span> <span id="count-waiting" class="group-count">0</span></summary><div id="list-waiting"></div></details>
-          <details id="group-over" name="my-match-groups" class="match-group"><summary><span data-i18n="ui.section.finished">Finished</span> <span id="count-over" class="group-count">0</span></summary><div id="list-over"></div></details>
-        </div>
-        <details id="group-open" class="match-group open-group"><summary><span data-i18n="ui.section.open_matches">Open matches you can join</span> <span id="count-open" class="group-count">0</span></summary><div id="open-matches"></div></details>
-        <div class="sidebar-footer"><div class="offline-controls" role="status"><span id="offline-status" data-i18n-managed>Preparing offline storage…</span><button id="retry-sync" type="button" data-i18n="ui.state.retry_sync">Retry sync</button><button id="notify-toggle" type="button" aria-pressed="false" hidden data-i18n-managed>Enable notifications</button></div></div>
-        <details class="offline-storage"><summary data-i18n="ui.offline.storage_title">Device storage</summary><p id="storage-details" role="status" data-i18n-managed>Open to inspect cached and unsynced data.</p><button id="storage-refresh" type="button" data-i18n="ui.offline.storage_refresh">Refresh storage usage</button><button id="storage-clear-cache" type="button" data-i18n="ui.offline.storage_clear">Clear recoverable cache</button></details>
-        <div class="install-controls">
-          <button id="install-portal" type="button" hidden data-i18n="ui.install.button">Install Playroom</button>
-          <details id="install-help"><summary data-i18n="ui.install.summary">Add to Home Screen</summary><p data-i18n="ui.install.help_1">On iPhone or iPad, open this page in Safari, tap Share, then Add to Home Screen. On Android or desktop, use Install Playroom or your browser’s install menu.</p><p data-i18n="ui.install.help_2">Open games and matches online first. Wait for “Portal saved for offline” before disconnecting. Offline moves sync when you reconnect.</p><p id="install-message" role="status"></p></details>
-        </div>
-      </aside>
       <main class="work portal-main">
         <details id="match-creator" class="match-creator" open>
           <summary><span class="creator-title" data-i18n="ui.games.find_next">Find your next game</span><span class="creator-toggle" aria-hidden="true">+</span></summary>
           <div class="creator-content">
             <div id="game-catalog">
+              <section class="arcade-hero" aria-labelledby="arcade-hero-title">
+                <div class="arcade-hero-copy">
+                  <p class="arcade-kicker"><span class="arcade-live-dot" aria-hidden="true"></span>BUILDPLAY ARCADE IS OPEN</p>
+                  <h2 id="arcade-hero-title">PICK YOUR<br /><em>NEXT OBSESSION.</em></h2>
+                  <p class="arcade-hero-description">Quick rounds, clever friends, and games worth running back. Your next match is right here.</p>
+                  <a class="arcade-hero-cta" href="#games"><span>Explore the games</span><span aria-hidden="true">↘</span></a>
+                  <div class="arcade-hero-meta"><span><strong>01</strong> PICK A GAME</span><i aria-hidden="true"></i><span><strong>02</strong> CALL YOUR CREW</span><i aria-hidden="true"></i><span><strong>03</strong> PLAY AGAIN</span></div>
+                </div>
+                <div class="arcade-hero-art" aria-hidden="true">
+                  <span class="arcade-spark arcade-spark-one">✦</span><span class="arcade-spark arcade-spark-two">✧</span>
+                  <div class="arcade-orbit arcade-orbit-one"></div><div class="arcade-orbit arcade-orbit-two"></div>
+                  <div class="arcade-cabinet"><div class="arcade-cabinet-screen"><span>PLAY</span><b>▶</b></div><div class="arcade-cabinet-controls"><span></span><i></i><i></i></div></div>
+                  <span class="arcade-float arcade-float-one">✶</span><span class="arcade-float arcade-float-two">●</span><span class="arcade-float arcade-float-three">▲</span>
+                  <div class="arcade-art-caption"><span>INSERT</span><strong>GOOD TIMES</strong><span>PRESS START ↗</span></div>
+                </div>
+              </section>
               <p class="creator-description" data-i18n="ui.portal.creator_description">A quick round or a new rivalry. Pick a game and make it yours.</p>
               <section id="recent-games-section" class="popular-games-section" aria-labelledby="recent-games-title" hidden>
                 <div class="popular-games-heading"><div><p class="popular-eyebrow" data-i18n="ui.games.your_recent_games">YOUR RECENT GAMES</p><h2 id="recent-games-title" data-i18n="ui.games.recently_played">Recently played</h2></div><span class="popular-period" data-i18n="ui.games.recent_games_hint">Pick up where you left off</span></div>
@@ -67,12 +80,13 @@
                 </div>
               </section>
               <section id="popular-games-section" class="popular-games-section" aria-labelledby="popular-games-title" hidden>
-                <div class="popular-games-heading"><div><p id="popular-games-eyebrow" class="popular-eyebrow" data-i18n="ui.games.community_picks">TOP PICKS FROM THE COMMUNITY</p><h2 id="popular-games-title" data-i18n="ui.games.most_popular">Most popular</h2></div><span id="popular-games-metric" class="popular-period" data-i18n="ui.games.popularity_metric">Ranked by players in started matches</span></div>
+                <div class="popular-games-heading"><div><p id="popular-games-eyebrow" class="popular-eyebrow" data-i18n="ui.games.popular">POPULAR GAMES</p><h2 id="popular-games-title" data-i18n="ui.games.most_popular">Most popular</h2></div><span id="popular-games-metric" class="popular-period" data-i18n="ui.games.popularity_metric">Ranked by players in started matches</span></div>
                 <div class="popular-games-carousel">
                   <button id="popular-games-prev" class="popular-games-scroll-button is-prev" type="button" aria-label="Scroll to previous popular games" data-i18n-aria-label="ui.portal.prev_games_aria" aria-controls="popular-games" title="Previous games" data-i18n-title="ui.portal.prev_games" hidden>‹</button>
                   <div id="popular-games" class="popular-games-row"></div>
                   <button id="popular-games-next" class="popular-games-scroll-button is-next" type="button" aria-label="Scroll to next popular games" data-i18n-aria-label="ui.portal.next_games_aria" aria-controls="popular-games" title="Next games" data-i18n-title="ui.portal.next_games" hidden>›</button>
                 </div>
+                <p id="popular-games-empty" class="popular-games-empty" data-i18n="ui.games.popularity_empty" hidden>No popular games yet. Rankings appear as matches start.</p>
               </section>
               <label class="game-label" for="game-search" data-i18n="ui.portal.choose_your_game">Choose your game</label>
               <div id="game-chooser" class="game-chooser">
@@ -115,6 +129,39 @@
             </div>
           </div>
         </details>
+        <section id="matches-screen" class="portal-screen matches-screen" aria-labelledby="matches-screen-title" hidden>
+          <header class="portal-screen-heading matches-page-heading"><div><h2 id="matches-screen-title">Matches</h2><p>Jump back into a game or find a new lobby.</p></div></header>
+          <div class="matches-screen-groups matches-unified-board">
+            <div id="portal-login-note" class="muted" data-i18n="ui.portal.login_note" hidden>Log in to see your matches.</div>
+            <section id="my-matches" class="matches-board-group"><h3>My matches</h3>
+              <details id="group-turn" name="my-match-groups" class="match-group"><summary title="Matches where it is your turn to play" data-i18n-title="ui.portal.turn_title"><span data-i18n="ui.match.your_turn">Your turn</span> <span id="count-turn" class="group-count">0</span></summary><div id="list-turn"></div></details>
+              <details id="group-ongoing" name="my-match-groups" class="match-group"><summary><span data-i18n="ui.section.ongoing">Ongoing</span> <span id="count-ongoing" class="group-count">0</span></summary><div id="list-ongoing"></div></details>
+              <details id="group-waiting" name="my-match-groups" class="match-group"><summary><span data-i18n="ui.section.waiting_for_players">Waiting for players</span> <span id="count-waiting" class="group-count">0</span></summary><div id="list-waiting"></div></details>
+              <details id="group-over" name="my-match-groups" class="match-group"><summary><span data-i18n="ui.section.finished">Finished</span> <span id="count-over" class="group-count">0</span></summary><div id="list-over"></div></details>
+            </section>
+            <section class="matches-board-group open-matches-board"><details id="group-open" class="match-group open-group"><summary><span data-i18n="ui.section.open_matches">Open matches you can join</span> <span id="count-open" class="group-count">0</span></summary><div id="open-matches"></div></details></section>
+          </div>
+        </section>
+        <section id="leaderboards-screen" class="portal-screen leaderboards-screen" aria-labelledby="leaderboards-title" hidden>
+          <header class="leaderboard-header"><div><h2 id="leaderboards-title" data-i18n="ui.leaderboard.title">Leaderboard</h2></div></header>
+          <div class="leaderboard-controls"><div class="leaderboard-tabs" role="tablist" aria-label="Leaderboard category"><button id="leaderboard-tokens-tab" type="button" role="tab" aria-selected="true" aria-controls="leaderboard-tokens"><svg class="gem-token-icon" viewBox="0 0 52 52" aria-hidden="true"><path class="gem-outline" d="M14 4H38L49 16 26 48 3 16 14 4Z"/><path class="gem-top" d="M14 4 9 16h17L21 4h-7Z M21 4 26 16h17L38 4H21Z"/><path class="gem-left" d="M3 16h23v32L3 16Z"/><path class="gem-right" d="M26 16h23L26 48V16Z"/><path class="gem-facet" d="M14 4 9 16h17L14 4Zm24 0 5 12H26L38 4Z"/></svg><span data-i18n="ui.leaderboard.gems">Gems</span></button><button id="leaderboard-wins-tab" type="button" role="tab" aria-selected="false" aria-controls="leaderboard-wins"><span class="leaderboard-wins-icon" aria-hidden="true">👑</span> <span data-i18n="ui.leaderboard.wins">Wins</span></button></div></div>
+          <section id="leaderboard-tokens" class="leaderboard-content" role="tabpanel" aria-labelledby="leaderboard-tokens-tab">
+            <div class="leaderboard-podium" aria-label="Top three players">
+              <article class="podium-place podium-second"><span class="podium-rank">2</span><div class="podium-avatar" aria-hidden="true">Ⅱ</div><p class="podium-name" data-i18n="ui.leaderboard.challenger">Waiting for a challenger</p><strong class="podium-score">—</strong><span class="podium-metric" data-i18n="ui.leaderboard.gems">gems</span></article>
+              <article class="podium-place podium-first"><span class="podium-crown" aria-hidden="true">♛</span><span class="podium-rank">1</span><div class="podium-avatar" aria-hidden="true">Ⅰ</div><p class="podium-name" data-i18n="ui.leaderboard.top_open">The top spot is open</p><strong class="podium-score">—</strong><span class="podium-metric" data-i18n="ui.leaderboard.gems">gems</span></article>
+              <article class="podium-place podium-third"><span class="podium-rank">3</span><div class="podium-avatar" aria-hidden="true">Ⅲ</div><p class="podium-name" data-i18n="ui.leaderboard.challenger">Waiting for a challenger</p><strong class="podium-score">—</strong><span class="podium-metric" data-i18n="ui.leaderboard.gems">gems</span></article>
+            </div>
+            <section class="leaderboard-list" aria-label="Other ranked players"><header><span data-i18n="ui.leaderboard.rank">RANK</span><span data-i18n="ui.leaderboard.player">PLAYER</span><span data-i18n="ui.leaderboard.gems">GEMS</span></header><p class="leaderboard-empty" data-i18n="ui.leaderboard.empty">Player rankings will appear here when they are available.</p></section>
+          </section>
+          <section id="leaderboard-wins" class="leaderboard-content" role="tabpanel" aria-labelledby="leaderboard-wins-tab" hidden>
+            <div class="leaderboard-podium" aria-label="Top three players">
+              <article class="podium-place podium-second"><span class="podium-rank">2</span><div class="podium-avatar" aria-hidden="true">Ⅱ</div><p class="podium-name" data-i18n="ui.leaderboard.challenger">Waiting for a challenger</p><strong class="podium-score">—</strong><span class="podium-metric" data-i18n="ui.leaderboard.wins">wins</span></article>
+              <article class="podium-place podium-first"><span class="podium-crown" aria-hidden="true">♛</span><span class="podium-rank">1</span><div class="podium-avatar" aria-hidden="true">Ⅰ</div><p class="podium-name" data-i18n="ui.leaderboard.top_open">The top spot is open</p><strong class="podium-score">—</strong><span class="podium-metric" data-i18n="ui.leaderboard.wins">wins</span></article>
+              <article class="podium-place podium-third"><span class="podium-rank">3</span><div class="podium-avatar" aria-hidden="true">Ⅲ</div><p class="podium-name" data-i18n="ui.leaderboard.challenger">Waiting for a challenger</p><strong class="podium-score">—</strong><span class="podium-metric" data-i18n="ui.leaderboard.wins">wins</span></article>
+            </div>
+            <section class="leaderboard-list" aria-label="Other ranked players"><header><span data-i18n="ui.leaderboard.rank">RANK</span><span data-i18n="ui.leaderboard.player">PLAYER</span><span data-i18n="ui.leaderboard.wins">WINS</span></header><p class="leaderboard-empty" data-i18n="ui.leaderboard.empty">Player rankings will appear here when they are available.</p></section>
+          </section>
+        </section>
         <section id="game-detail-page" class="game-detail-page" hidden>
           <a class="back-to-games" href="/static/portal.html" data-i18n="ui.portal.back_to_games">← All games</a>
           <div id="game-detail-content">
@@ -125,10 +172,10 @@
             </div>
             <div class="play-options">
               <section class="play-option" aria-labelledby="online-play-title">
-                <div class="play-option-heading"><span class="play-option-icon" aria-hidden="true">↗</span><div><h3 id="online-play-title" data-i18n="ui.mode.online">Online match</h3><p data-i18n="ui.portal.online_hint">Set up your opponents in the lobby.</p></div></div>
+                <div class="play-option-heading"><span class="play-option-icon play-option-icon-online" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path d="M4 11.5a18 18 0 0 1 24 0M8.5 16a11.5 11.5 0 0 1 15 0M13 20.5a5 5 0 0 1 6 0M16 25v.2"/></svg></span><div><h3 id="online-play-title" data-i18n="ui.mode.online">Online match</h3><p data-i18n="ui.portal.online_hint">Set up your opponents in the lobby.</p></div></div>
                 <label id="speed-choice" class="speed-choice" for="match-speed"><span data-i18n="ui.speed.label">Time per move</span><select id="match-speed"><option value="" data-i18n="ui.speed.regular">Regular · no limit</option><option value="60" data-i18n="ui.speed.one_minute">Speed · 1 min</option><option value="180" data-i18n="ui.speed.three_minutes">Speed · 3 min</option><option value="600" data-i18n="ui.speed.ten_minutes">Speed · 10 min</option></select></label>
                 <div class="token-stake-panel" id="token-stake-panel">
-                   <div class="token-stake-heading"><span class="token-stake-icon" aria-hidden="true">✦</span><div><strong data-i18n="ui.stakes.play_for_tokens">Play for tokens</strong><span data-i18n="ui.stakes.optional">Optional · Virtual currency only</span></div></div>
+                   <div class="token-stake-heading"><span class="token-stake-icon" aria-hidden="true">💎</span><div><strong data-i18n="ui.stakes.play_for_gems">Play for gems</strong><span data-i18n="ui.stakes.optional">Optional · Virtual currency only</span></div></div>
                    <label class="stake-select" for="match-stake"><span data-i18n="ui.stakes.entry_per_player">Entry per player</span> <select id="match-stake"><option value="0" data-i18n="ui.stakes.option_free">Free · 0 tokens</option><option value="1" data-i18n="ui.stakes.option_1">1 token</option><option value="5" data-i18n="ui.stakes.option_5">5 tokens</option><option value="10" data-i18n="ui.stakes.option_10">10 tokens</option><option value="20" data-i18n="ui.stakes.option_20">20 tokens</option></select></label>
                    <div id="stake-preview" class="stake-preview" role="status" aria-live="polite" data-i18n-managed>Free game · No tokens at risk</div>
                    <p class="stake-help" id="stake-help" data-i18n="ui.stakes.help">Daily allowance: +10 tokens when you first enter a paid match each day. Stakes are collected when you create or join the lobby. Wagers are for human players only.</p>
@@ -139,7 +186,7 @@
                 <p id="create-hint" class="play-option-note"></p>
               </section>
               <section class="play-option practice-option" aria-labelledby="local-play-title">
-                <div class="play-option-heading"><span class="play-option-icon" aria-hidden="true">⌂</span><div><h3 id="local-play-title" data-i18n="ui.mode.pass_and_play">Pass and play</h3><p data-i18n="ui.portal.practice_hint">A quick game, saved on this device.</p></div></div>
+                <div class="play-option-heading"><span class="play-option-icon play-option-icon-players" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><circle cx="12" cy="10" r="4"/><circle cx="22" cy="12" r="3.25"/><path d="M4.5 25v-2a7.5 7.5 0 0 1 15 0v2zM19 19a6 6 0 0 1 8.5 5.5V25h-5"/></svg></span><div><h3 id="local-play-title" data-i18n="ui.mode.pass_and_play">Pass and play</h3><p data-i18n="ui.portal.practice_hint">A quick game, saved on this device.</p></div></div>
                 <div class="practice-controls">
                   <label id="practice-count-choice" for="practice-player-count"><span data-i18n="ui.match.players">Players</span><select id="practice-player-count"></select></label>
                   <button id="practice" type="button" aria-describedby="practice-offline-note" data-i18n="ui.portal.play_on_device">Play on this device ↗</button>
@@ -147,14 +194,14 @@
                 <p id="practice-offline-note" class="play-option-note" data-i18n="ui.portal.practice_offline_note">Plays on this device — the game downloads first if it isn't saved here yet.</p>
               </section>
               <section id="computer-match-option" class="play-option computer-match-option" aria-labelledby="computer-match-title" hidden>
-                <div class="play-option-heading"><span class="play-option-icon" aria-hidden="true">🤖</span><div><h3 id="computer-match-title" data-i18n="ui.portal.computers_title">Play with computers</h3><p data-i18n="ui.portal.computers_text">Start a server match with a computer in every other seat. Computer matches are single-player, so friends can't join them.</p></div></div>
+                <div class="play-option-heading"><span class="play-option-icon computer-match-illustration" aria-hidden="true"><img src="/static/images/arcade-bot.png" alt="" /></span><div><h3 id="computer-match-title" data-i18n="ui.portal.computers_title">Play with computers</h3><p data-i18n="ui.portal.computers_text">Start a server match with a computer in every other seat. Computer matches are single-player, so friends can't join them.</p></div></div>
                 <div class="computer-match-controls"><label id="computer-count-choice" class="computer-setting" for="computer-player-count"><span data-i18n="ui.match.players">Players</span><select id="computer-player-count"></select></label><button id="play-computers" type="button" class="primary" data-i18n-managed>Play with computers ↗</button></div>
               </section>
             </div>
             <div id="create-message" class="message" role="status"></div>
           </div>
         </section>
-        <div id="placeholder" class="muted" data-i18n="ui.portal.placeholder">Your match will open here. You can also select a match from the sidebar.</div>
+        <div id="placeholder" class="muted" data-i18n="ui.portal.placeholder">Your game will open here. Choose a game to get started, or open a match.</div>
         <section id="match" class="match-stage" aria-label="Play match" data-i18n-aria-label="ui.portal.play_match_aria" hidden>
           <div class="match-toolbar">
             <button id="match-back" type="button" aria-label="Back to games and matches" data-i18n-aria-label="ui.portal.back_aria" data-i18n="ui.portal.back">← Back</button>
@@ -185,10 +232,22 @@
           <div id="game-box" class="frame-box" hidden></div>
         </section>
       </main>
+      <aside id="community-chat" class="community-chat" aria-labelledby="community-chat-title">
+        <div class="chat-panel-heading"><h2 id="community-chat-title"><span class="chat-live-dot" aria-hidden="true"></span>Community Chat</h2></div>
+        <div id="chat-preview-log" class="chat-preview-log" role="log" aria-live="polite" aria-relevant="additions">
+          <div class="chat-day-divider"><span>WELCOME TO BUILDPLAY</span></div>
+        </div>
+        <form id="chat-preview-form" class="chat-preview-form">
+          <label class="sr-only" for="chat-preview-input">Write a chat message</label>
+          <input id="chat-preview-input" type="text" maxlength="240" autocomplete="off" placeholder="Say something friendly…" />
+          <button type="submit" aria-label="Send message">➤</button>
+        </form>
+        <p class="chat-preview-footer">1 player here</p>
+      </aside>
     </div>
-    <script src="/static/common.js?v=29"></script>
+    <script src="/static/common.js?v=32"></script>
     <script src="/static/i18n.js?v=5"></script>
-    <script src="/static/auth.js?v=16"></script>
+    <script src="/static/auth.js?v=17"></script>
 <script src="/static/portal-practice.js?v=5"></script>
     <script src="/static/portal-offline.js?v=18"></script>
     <script src="/static/experiments.js?v=9"></script>
@@ -198,6 +257,7 @@
     <script src="/static/push-notifications.js?v=3"></script>
     <script src="/static/storage-pages.js?v=4"></script>
     <script src="/static/tutorial-frame.js?v=1"></script>
-    <script src="/static/portal.js?v=94"></script>
+    <script src="/static/portal.js?v=106"></script>
+    <script src="/static/portal-chat-preview.js?v=6"></script>
   </body>
 </html>

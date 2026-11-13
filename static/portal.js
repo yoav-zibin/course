@@ -348,24 +348,29 @@ function me() {
   return Auth.current();
 }
 
+const portalMoreOptions = $("portal-more-options");
 function renderPortalAccountMenu() {
   const container = $("account-menu");
   Auth.renderMenu(container);
   const panel = container.querySelector(".auth-menu-panel");
   panel?.querySelector(".portal-immersive-menu")?.remove();
-  if (!panel || document.documentElement.dataset.skin !== "immersive" || document.documentElement.dataset.portalLayout) return;
-
-  const menu = el("div", { class: "portal-immersive-menu" },
-    el("button", {
-      type: "button",
-      textContent: I18n.t("ui.portal.my_matches", {}, "My matches"),
-      onclick: () => {
-        container._hideAuthMenu?.();
-        document.querySelector(".topbar .sidebar-toggle")?.click();
-      },
-    }),
-  );
-  panel.prepend(menu);
+  panel?.querySelector(".portal-profile-options")?.remove();
+  if (!panel) return;
+  if (document.documentElement.dataset.skin === "immersive" && !document.documentElement.dataset.portalLayout) {
+    panel.prepend(el("div", { class: "portal-immersive-menu" },
+      el("a", { href:"#matches", textContent:I18n.t("ui.portal.my_matches", {}, "My matches"), onclick:() => container._hideAuthMenu?.() }),
+    ));
+  }
+  const options = $("portal-more-options") || portalMoreOptions;
+  if (options) {
+    options.hidden = false;
+    const languagePicker = document.querySelector(".topbar .language-picker") || options.querySelector(".language-picker");
+    const languageSlot = $("portal-language-slot");
+    if (languagePicker && languageSlot && !languageSlot.contains(languagePicker))
+      languageSlot.append(languagePicker);
+    panel.append(el("section", { class:"portal-profile-options", "aria-label":I18n.t("ui.portal.more_options", {}, "More options") },
+      el("h3", { textContent:I18n.t("ui.portal.more_options", {}, "More options") }), options));
+  }
 }
 
 function syncPortalRoutes() {
@@ -377,6 +382,39 @@ function syncPortalRoutes() {
     back.href = "/static/portal.html" + (query ? `?${query}` : "");
 }
 
+function syncPortalScreen() {
+  const requested = location.hash.slice(1);
+  const params = new URLSearchParams(requested);
+  if (!params.has("match") && state.selectedId) {
+    const selectedId = state.selectedId;
+    state.selectedId = null;
+    state.match = null;
+    state.replay = null;
+    frame.unload();
+    state.loaded = null;
+    const saved = offline.read();
+    if (saved.selectedId === selectedId) {
+      saved.selectedId = null;
+      offline.writeCache(saved);
+    }
+    render();
+  }
+  const view = params.has("match") ? "matches"
+    : ["games", "matches", "leaderboards"].includes(requested) ? requested : "home";
+  document.body.dataset.portalView = view;
+  document.body.classList.toggle("portal-match-active", params.has("match"));
+  document.querySelectorAll("[data-portal-nav]").forEach(link => {
+    const active = link.dataset.portalNav === view;
+    link.classList.toggle("is-active", active);
+    if (active) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  });
+  const matchesScreen = $("matches-screen");
+  const leaderboardScreen = $("leaderboards-screen");
+  if (matchesScreen) matchesScreen.hidden = view !== "matches" || params.has("match");
+  if (leaderboardScreen) leaderboardScreen.hidden = view !== "leaderboards";
+}
+
 /** Leaves the game page for the catalog. The plain link is not enough: it
  * only drops the address's game marker, which the page reads once at load
  * (and the ?game= form is a full navigation back to the same game unless
@@ -386,18 +424,16 @@ function leaveGamePage(event) {
   const params = new URLSearchParams(location.search);
   params.delete("game");
   const query = params.toString();
-  const target = "/static/portal.html" + (query ? `?${query}` : "");
-  if (location.pathname + location.search !== target) {
-    location.assign(target);
-    return;
-  }
-  // Only the hash differs, so navigating would stay in this document:
-  // reset the game view in place instead.
-  history.replaceState(null, "", target);
+  const target = "/static/portal.html" + (query ? `?${query}` : "") + "#games";
+  history.pushState(null, "", target);
   state.detailGameId = null;
+  state.detailCreatorInitialized = false;
   state.requestedGameHandled = true;
-  $("match-creator").open = true;
+  $("match-creator").open = false;
+  syncPortalScreen();
+  updateMatchSetup();
   render();
+  window.scrollTo({top:0, behavior:"smooth"});
   refresh();
 }
 
@@ -743,7 +779,7 @@ async function refreshLocked() {
       user ? StoragePages.list(portalRequest, "/matches", {user}) : [],
       StoragePages.list(portalRequest, "/matches/open", {user}),
       popularityDue
-        ? portalRequest("GET", "/games/popular?limit=8", {user}).catch(() => null)
+        ? portalRequest("GET", "/games/popular?limit=10", {user}).catch(() => null)
         : null,
       recentGamesDue
         ? portalRequest("GET", "/users/me/recent-games", {user}).catch(() => null)
@@ -851,19 +887,26 @@ function matchItem(match) {
   const outcome = matchOutcome(match, user?.id);
   if (outcome) badges.push(el("span", {class:`badge result-${outcome.kind}`, textContent:outcome.label}));
   if (yourTurn) badges.unshift(el("span", { class: "badge turn", textContent: I18n.t("ui.match.your_turn", {}, "your turn") }));
+  const gameName = game ? I18n.gameName(game.id, game.name) : "?";
+  const hue = Array.from(match.game_id || "arcade").reduce((value, letter) => value + letter.charCodeAt(0), 0) % 360;
+  const initials = gameName.trim().split(/\s+/).slice(0, 2).map(word => Array.from(word)[0] || "").join("");
+  const art = el("div", {class:"match-card-art", style:`--art-hue:${hue}`, "aria-hidden":"true"},
+    game?.cover_url
+      ? el("img", {src:game.cover_url, alt:"", loading:"lazy"})
+      : el("span", {class:"match-card-monogram", textContent:initials}));
   return el(
     "button",
     {
       type: "button",
-      class: "list-item",
+      class: "list-item match-list-card",
       "aria-selected": String(match.id === state.selectedId),
       onclick: () => selectMatch(match.id),
     },
-    el("div", { class: "title" }, game ? I18n.gameName(game.id, game.name) : "?", ...badges),
-    el("div", {
-      class: "sub",
-      textContent: `${match.players.map(playerName).join(", ")} · ${I18n.t("ui.match.moves_count", { count: match.move_count }, `${match.move_count} moves`)}`,
-    }),
+    art,
+    el("span", {class:"match-card-copy"},
+      el("span", {class:"match-card-title-row"}, el("strong", {class:"match-card-title", textContent:gameName}), ...badges),
+      el("span", {class:"match-card-players", textContent:match.players.map(playerName).join(" · ")}),
+      el("span", {class:"match-card-moves", textContent:I18n.t("ui.match.moves_count", { count: match.move_count }, `${match.move_count} moves`)})),
   );
 }
 
@@ -880,7 +923,6 @@ function renderLists() {
     const matches = state.myMatches.filter((m) => !shown.has(m.id) && predicate(m));
     matches.forEach((m) => shown.add(m.id));
     $("count-" + id).textContent = String(matches.length);
-    if (id === "turn") $("group-turn").hidden = matches.length === 0;
     renderMatchList($("list-" + id), matches);
     if (matches.some((m) => m.id === state.selectedId) && state.revealedMatch !== state.selectedId) {
       $("group-" + id).open = true;
@@ -891,6 +933,8 @@ function renderLists() {
 
   const open = user ? state.openMatches.filter((m) => isJoinable(m, user.id)) : state.openMatches;
   $("count-open").textContent = String(open.length);
+  const navMatchCount = $("nav-match-count");
+  if (navMatchCount) navMatchCount.textContent = String(state.myMatches.length + open.length);
   renderMatchList($("open-matches"), open);
 
   const games = state.games;
@@ -920,10 +964,20 @@ function renderLists() {
 function openGamePage(id) {
   if (![state.games, state.popularGames, state.recentGames].some(games =>
     games.some(game => game.id === id))) return;
-  const route = new URLSearchParams({ game: id });
-  const skin = new URLSearchParams(location.search).get("skin");
-  if (skin) route.set("skin", skin);
-  location.assign(`/static/portal.html?${route}`);
+  const route = new URLSearchParams(location.hash.slice(1));
+  route.delete("matches");
+  route.delete("leaderboards");
+  route.delete("games");
+  route.delete("home");
+  route.delete("game");
+  route.set("game", id);
+  state.detailGameId = id;
+  state.detailCreatorInitialized = false;
+  history.pushState(null, "", `${location.pathname}${location.search}#${route}`);
+  syncPortalScreen();
+  updateMatchSetup();
+  window.scrollTo({top:0, behavior:"smooth"});
+  refresh();
 }
 
 async function joinRandomMatch() {
@@ -1040,6 +1094,14 @@ function renderLibrary() {
     const name = random ? I18n.t("ui.games.random_name", {}, game.name) : catalogGameLabel(game);
     const description = random ? I18n.t("ui.games.random_description", {}, game.description) : I18n.gameDescription(game.id, game.description);
     const initials = name.trim().split(/\s+/).slice(0, 2).map(word => Array.from(word)[0] || "").join("");
+    const openLabel = I18n.t("ui.games.open_game", {}, "Open game ↗");
+    const selectLabel = random
+      ? (state.randomJoining ? I18n.t("ui.games.finding_match", {}, "Finding a match…") : I18n.t("ui.games.random_join", {}, "Join a random match ↗"))
+      : openLabel;
+    // Arcade draws its own animated arrow after the action label.
+    const arcadeSelectLabel = document.documentElement.dataset.skin === "arcade"
+      ? selectLabel.replace(/\s*[↗→➜]\s*$/, "")
+      : selectLabel;
     return el("button", {type:"button", class:"library-card", "aria-pressed":String(game.id === selected),
       "aria-label":random ? `${name}. ${description}` : I18n.t("ui.games.open_aria", { name, players: gameCountLabel(game) }, `Open ${name}, ${gameCountLabel(game)}`),
       disabled:random && state.randomJoining,
@@ -1050,7 +1112,7 @@ function renderLibrary() {
       el("span", {class:"library-copy"}, el("span", {class:"library-mode", textContent:gameCountLabel(game)}),
         el("span", {class:"library-title", textContent:name}),
         el("span", {class:"library-description", textContent:description || I18n.t("ui.games.default_description", {}, "Choose this game to start a new match.")}),
-        el("span", {class:"library-select", textContent:random ? (state.randomJoining ? I18n.t("ui.games.finding_match", {}, "Finding a match…") : I18n.t("ui.games.random_join", {}, "Join a random match ↗")) : I18n.t("ui.games.open_game", {}, "Open game ↗")})));
+        el("span", {class:"library-select", textContent:arcadeSelectLabel})));
   }));
 }
 
@@ -1105,9 +1167,11 @@ function renderPopularGames() {
   // score arrives, keep this row useful with catalog games and explain the state.
   const games = hasRanking
     ? rankedGames
-    : state.games.filter(game => game.published !== false).slice(0, 8);
-  section.hidden = games.length === 0;
-  $("popular-games-eyebrow").hidden = !hasRanking;
+    : state.games.filter(game => game.published !== false).slice(0, 10);
+  section.hidden = false;
+  row.hidden = games.length === 0;
+  $("popular-games-empty").hidden = games.length > 0;
+  $("popular-games-eyebrow").hidden = false;
   $("popular-games-metric").textContent = hasRanking
     ? I18n.t("ui.games.popularity_metric", {}, "Ranked by players in started matches")
     : state.popularGamesStatus === "unavailable"
@@ -1296,7 +1360,6 @@ function updateMatchSetup() {
   document.body?.classList.toggle("game-detail-mode", detailPage);
   $("game-catalog").hidden = detailPage && !browsingGames;
   $("game-detail-page").hidden = !detailPage || browsingGames || Boolean(state.selectedId);
-  $("show-creator").hidden = detailPage;
   const maximum = game ? Math.max(...game.allowed_player_counts) - 1 : 0;
   $("create").disabled = !me() || !game || state.creating || !navigator.onLine;
   // Practice stays clickable while logged out: practice() sends the
@@ -1341,7 +1404,8 @@ function selectMatch(id) {
   if (state.detailGameId) route.set("game", state.detailGameId);
   if (id) route.set("match", id);
   const routeHash = route.toString();
-  history.replaceState(null, "", routeHash ? `#${routeHash}` : "#");
+  history.replaceState(null, "", routeHash ? `#${routeHash}` : "#matches");
+  syncPortalScreen();
   refresh();
 }
 
@@ -1399,7 +1463,7 @@ function renderMatch() {
   if (!match) {
     window.PortalMatchLayout?.update(null);
     $("placeholder").textContent = user
-      ? I18n.t("ui.portal.placeholder", {}, "Your match will open here. You can also select a match from the sidebar.")
+      ? I18n.t("ui.portal.placeholder", {}, "Your game will open here. You can also choose a match from the Matches menu.")
       : I18n.t("ui.portal.sign_in_to_play", {}, "Sign in at the top right, then choose a game above.");
     return;
   }
@@ -1656,6 +1720,7 @@ function renderMatch() {
       el("button", {
         type: "button",
         textContent: I18n.t("ui.match.invite_friends", {}, "Invite friends"),
+        class: "invite-action",
         onclick: async () => {
           let link;
           try {
@@ -2138,7 +2203,16 @@ async function playWithAllComputers() {
 }
 
 function selectFromHash() {
-  const id = new URLSearchParams(location.hash.slice(1)).get("match");
+  syncPortalScreen();
+  const params = new URLSearchParams(location.hash.slice(1));
+  const nextGameId = params.get("game");
+  if (!params.has("match") && nextGameId !== state.detailGameId) {
+    state.detailGameId = nextGameId;
+    state.detailCreatorInitialized = false;
+    updateMatchSetup();
+    if (nextGameId && !state.games.some(game => game.id === nextGameId)) refresh();
+  }
+  const id = params.get("match");
   if (id && id !== state.selectedId) selectMatch(id);
   openInviteFromHash();
 }
@@ -2236,6 +2310,24 @@ async function openInviteFromHash() {
   document.body.append(inviteDialog);
 }
 
+function navigatePortalView(view, event) {
+  if (!event || !["home", "games", "matches", "leaderboards"].includes(view)) return;
+  event.preventDefault();
+  const search = new URLSearchParams(location.search);
+  search.delete("game");
+  const query = search.toString();
+  const hash = view === "home" ? "home" : view;
+  const target = `${location.pathname}${query ? `?${query}` : ""}#${hash}`;
+  history.pushState(null, "", target);
+  state.detailGameId = null;
+  state.detailCreatorInitialized = false;
+  syncPortalScreen();
+  updateMatchSetup();
+  render();
+  window.scrollTo({top: 0, behavior: "smooth"});
+  refresh();
+}
+
 function shouldRestoreSavedMatch() {
   return !state.detailGameId && !location.hash;
 }
@@ -2251,6 +2343,10 @@ async function main() {
   });
   renderPortalAccountMenu();
   syncPortalRoutes();
+  document.querySelector(".topbar a")?.addEventListener("click", event => navigatePortalView("home", event));
+  document.querySelectorAll("[data-portal-nav]").forEach(link => {
+    link.addEventListener("click", event => navigatePortalView(link.dataset.portalNav, event));
+  });
   document.addEventListener("portal-skin-change", () => {
     renderPortalAccountMenu();
     syncPortalRoutes();
@@ -2372,11 +2468,6 @@ async function main() {
   document.addEventListener("click", (event) => {
     if (!$("game-chooser").contains(event.target)) closeGameSearch();
   });
-  $("show-creator").addEventListener("click", () => {
-    $("match-creator").open = true;
-    $("match-creator").scrollIntoView({behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start"});
-    $("game-search").focus({preventScroll: true});
-  });
   document.querySelectorAll("[data-game-filter]").forEach(button => button.addEventListener("click", () => {
     state.libraryFilter = button.dataset.gameFilter;
     document.querySelectorAll("[data-game-filter]").forEach(item => item.setAttribute("aria-pressed", String(item === button)));
@@ -2428,6 +2519,20 @@ async function main() {
   $("match-stake").addEventListener("change", updateStakePreview);
   $("create").addEventListener("click", createMatch);
   window.addEventListener("hashchange", selectFromHash);
+  window.addEventListener("popstate", selectFromHash);
+  $("leaderboard-tokens-tab").addEventListener("click", () => {
+    $("leaderboard-tokens-tab").setAttribute("aria-selected", "true");
+    $("leaderboard-wins-tab").setAttribute("aria-selected", "false");
+    $("leaderboard-tokens").hidden = false;
+    $("leaderboard-wins").hidden = true;
+  });
+  $("leaderboard-wins-tab").addEventListener("click", () => {
+    $("leaderboard-tokens-tab").setAttribute("aria-selected", "false");
+    $("leaderboard-wins-tab").setAttribute("aria-selected", "true");
+    $("leaderboard-tokens").hidden = true;
+    $("leaderboard-wins").hidden = false;
+  });
+  syncPortalScreen();
   if (shouldRestoreSavedMatch() && offline.read().selectedId)
     history.replaceState(null, "", `#match=${offline.read().selectedId}`);
   const cached = offline.read();
@@ -2441,7 +2546,7 @@ async function main() {
   // Render the catalog sections from the saved responses first, so a warm
   // load shows the game list, popular ranking and recent games immediately;
   // refresh() below re-fetches and re-renders with fresh data.
-  state.popularGames = cached.responses["/games/popular?limit=8"] || [];
+  state.popularGames = cached.responses["/games/popular?limit=10"] || [];
   state.recentGames = cached.responses["/users/me/recent-games"] || [];
   if (state.popularGames.length) state.popularGamesStatus = "ranked";
   // Tell refreshLocked this cached recent-games list already belongs to the
