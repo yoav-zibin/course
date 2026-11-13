@@ -52,12 +52,12 @@ test.describe('Guest login (real server)', () => {
     await page.waitForResponse(response => new URL(response.url()).pathname==='/batch' && response.request().method()==='GET');
     await expect(page.locator('.auth-menu-button img')).toHaveAttribute('src', /focus-refresh/);
     await expect(logout).toBeFocused();
-    await page.getByRole('heading',{name:'Game platform',exact:true}).click();
+    await page.getByRole('heading',{name:'BuildPlay.fun',exact:true}).click();
     await expect(page.locator('.auth-menu-panel')).toBeHidden();
     for(let i=0;i<2;i++) {
       await page.getByRole('button',{name,exact:true}).click();
       await expect(page.locator('.auth-menu-panel')).toBeVisible();
-      await page.getByRole('heading',{name:'Game platform',exact:true}).click();
+      await page.getByRole('heading',{name:'BuildPlay.fun',exact:true}).click();
       await expect(page.locator('.auth-menu-panel')).toBeHidden();
     }
   });

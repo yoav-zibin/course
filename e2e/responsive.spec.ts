@@ -17,7 +17,7 @@ test.describe('Layout at different screen sizes', () => {
       test(`${name}: no horizontal scrolling on ${size.name} (${size.width}x${size.height})`, async ({ page }) => {
         await page.setViewportSize({ width: size.width, height: size.height });
         await page.goto(`/static/${name}.html`);
-        await expect(page.getByRole('heading', { name: /Game platform/ }).first()).toBeVisible();
+        await expect(page.getByRole('heading', { name: /Game platform|BuildPlay.fun/ }).first()).toBeVisible();
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         expect(overflow).toBeLessThanOrEqual(0);
       });
