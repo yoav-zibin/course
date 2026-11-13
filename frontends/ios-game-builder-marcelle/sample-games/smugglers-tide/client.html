@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --sea:#0d2b3e; --rock:#173f57; --sand:#e9d8b4; --ink:#f2f7fa; --muted:#a9c3d1; --accent:#ffd166; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { background: radial-gradient(circle at 50% 0%, #15435e, var(--sea)); color: var(--ink); font: 16px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif; min-height: 100vh; }
+  header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(0,0,0,.3); }
+  h1 { margin: 0; font-size: 20px; }
+  .players { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 12px; }
+  .player { display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,.25); border-radius: 999px; padding: 3px 10px; font-size: 13px; }
+  .player.turn { outline: 2px solid var(--accent); }
+  .swatch { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .board { display: grid; grid-template-columns: repeat(6, minmax(44px, 1fr)); gap: 6px; padding: 8px 12px; max-width: 640px; margin: 0 auto; }
+  .end { grid-column: span 6; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: var(--rock); min-height: 44px; font-weight: 600; border: 2px solid transparent; color: inherit; font-size: 15px; }
+  .sq { position: relative; aspect-ratio: 1.4; min-height: 40px; border-radius: 10px; background: var(--sand); color: #1d2a33; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px solid transparent; padding: 2px; }
+  .sq .sym { font-size: 20px; line-height: 1; }
+  .sq.target { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+  .sq.last { border-color: #ff8fab; }
+  .dots { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; min-height: 12px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,.4); }
+  button.pick { font: inherit; color: inherit; cursor: pointer; }
+  .sq.pick { cursor: pointer; border-color: #7fd1ff; }
+  .sq.selected, .end.selected { border: 2px solid var(--accent); }
+  .S-A .sym { color: #1d3d7a; } .S-C .sym { color: #0a7c6f; } .S-L .sym { color: #b86a00; }
+  .S-S .sym { color: #c2185b; } .S-T .sym { color: #8a6d00; } .S-W .sym { color: #0b6fb3; }
+  footer { position: sticky; bottom: 0; padding: 8px 12px 12px; background: rgba(5,20,30,.92); }
+  .status { font-weight: 600; text-align: center; min-height: 1.4em; margin-bottom: 6px; }
+  .status.win { color: var(--accent); font-size: 18px; }
+  .hand, .actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .card { min-width: 44px; min-height: 56px; border-radius: 8px; border: 2px solid #c9b88f; background: var(--sand); color: #1d2a33; font: 600 24px/1 system-ui, sans-serif; display: inline-flex; align-items: center; justify-content: center; }
+  .card:disabled { opacity: .55; }
+  .card.ready { border-color: var(--accent); }
+  .actions { margin-top: 8px; }
+  .actions button { min-height: 44px; padding: 0 14px; border-radius: 8px; border: 0; font: 600 15px system-ui, sans-serif; cursor: pointer; }
+  .actions .back { background: #7fd1ff; color: #082233; } .actions .endturn { background: var(--accent); color: #2a2000; }
+  .info { text-align: center; color: var(--muted); font-size: 13px; margin-top: 6px; }
+  /* Short landscape screens: the board on the left, cards and buttons on the right. */
+  @media (orientation: landscape) and (max-height: 600px) {
+    body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 34%); grid-template-rows: auto auto 1fr; }
+    header { grid-column: 1 / -1; padding: 4px 12px; }
+    h1 { font-size: 17px; }
+    .players { grid-column: 1; grid-row: 2; padding: 4px 12px; }
+    .player { font-size: 12px; padding: 2px 8px; }
+    .board { grid-column: 1; grid-row: 3; width: 100%; max-width: calc((100vh - 140px) * 0.9); gap: 4px; padding: 4px 12px; }
+    .sq { min-height: 0; aspect-ratio: 1.6; }
+    .sq .sym { font-size: 15px; }
+    .dot { width: 9px; height: 9px; }
+    .end { min-height: 30px; padding: 2px 8px; font-size: 13px; }
+    footer { grid-column: 2; grid-row: 2 / 4; position: static; align-self: start; background: rgba(5,20,30,.6); border-radius: 10px; margin: 4px 8px; }
+    .card { min-width: 40px; min-height: 48px; font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+<header><h1 id="title"></h1><span class="info" id="deck"></span></header>
+<div class="players" id="players"></div>
+<div class="board" id="board"></div>
+<footer>
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+  <div class="hand" id="hand" role="group"></div>
+  <div class="actions" id="actions"></div>
+</footer>
+<script type="application/json" id="i18n-strings">
+{
+  "title": "Smugglers' Tide",
+  "cave": "Sea cave",
+  "boat": "Boat",
+  "sym_A": "anchor",
+  "sym_C": "compass",
+  "sym_L": "lantern",
+  "sym_S": "shell",
+  "sym_T": "star",
+  "sym_W": "wave",
+  "player_line": "{name}: {boat} of 6 in the boat, {cards} cards",
+  "deck": "Draw pile: {count}",
+  "your_hand": "Your cards",
+  "pick_smuggler": "Your turn: play a card to move the selected smuggler, or tap another smuggler first.",
+  "pick_more": "Moves left this turn: {left}. Make another move or end your turn.",
+  "no_move": "You have no move left: end your turn.",
+  "no_move_pass": "You cannot move: pass and draw 1 card.",
+  "back_1": "Move back and draw 1 card",
+  "back_2": "Move back and draw 2 cards",
+  "end_turn": "End turn",
+  "pass_draw": "Pass and draw 1 card",
+  "waiting_for": "Waiting for {name}.",
+  "you_win": "You win: all six smugglers reached the boat!",
+  "player_wins": "{name} wins: all six smugglers reached the boat!",
+  "watching": "You are watching this match.",
+  "card_label": "{symbol} card",
+  "square_label": "Square {number}, {symbol}, smugglers here: {count}",
+  "server_the_game_is_over": "the game is over",
+  "server_make_at_least_one_move_before_ending_your_turn": "make at least one move before ending your turn",
+  "server_you_have_used_all_three_moves": "you have used all three moves",
+  "server_you_have_no_smuggler_there": "you have no smuggler there",
+  "server_you_do_not_have_that_card": "you do not have that card",
+  "server_there_is_no_square_to_move_back_to": "there is no square to move back to",
+  "server_send_a_forward_move_a_back_move_or_end_your_turn": "send a forward move, a back move or end your turn",
+  "server_it_is_not_your_turn": "it is not your turn"
+}
+</script>
+<script>
+// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.
+const SOURCE_STRINGS = JSON.parse(document.getElementById("i18n-strings").textContent);
+let strings = SOURCE_STRINGS;
+
+// The text for a key in the viewer's language, with {name}-style placeholders filled in.
+function t(key, params) {
+  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? params[name] : match));
+}
+
+// Call this first in the state_changed handler, before drawing anything: the platform sends
+// the viewer's translations (message.strings), language and writing direction with it.
+function applyLocale(message) {
+  if (message.strings) strings = { ...SOURCE_STRINGS, ...message.strings };
+  if (message.locale) document.documentElement.lang = message.locale;
+  if (message.direction) document.documentElement.dir = message.direction;
+}
+
+const GLYPH = { A: "⚓", C: "✣", L: "♨", S: "✿", T: "★", W: "≈" };
+const COLORS = ["#e5484d", "#3b82f6", "#22a35a", "#f2c94c", "#a259ff"];
+const CAVE = -1, BOAT = 36;
+const $ = (id) => document.getElementById(id);
+let current = null, selected = null, sent = false;
+
+// Literal keys only, so the translation checker sees every one.
+function symbolName(s) {
+  switch (s) {
+    case "A": return t("sym_A"); case "C": return t("sym_C"); case "L": return t("sym_L");
+    case "S": return t("sym_S"); case "T": return t("sym_T"); default: return t("sym_W");
+  }
+}
+
+// The smuggler selected when a turn starts: the rearmost one that can move forward; with no
+// cards, the one whose move back draws the most cards for the shortest step back.
+function defaultSmuggler(moves) {
+  const forward = moves.filter((m) => m.kind === "forward");
+  if (forward.length) return Math.min(...forward.map((m) => m.from));
+  const back = moves.filter((m) => m.kind === "back").sort((a, b) => (b.draw - a.draw) || ((a.from - a.to) - (b.from - b.to)));
+  return back.length ? back[0].from : null;
+}
+
+function myTurn(message, view) {
+  return message.status === "ongoing" && message.acting_for_player_index !== null && !message.replay &&
+    view.my_seat !== null && view.my_seat === view.to_move && view.winner === null;
+}
+
+function send(move) {
+  if (sent) return;
+  sent = true;
+  parent.postMessage({ type: "make_move", move }, "*");
+}
+
+function dots(view, square) {
+  const box = document.createElement("div");
+  box.className = "dots";
+  view.pieces.forEach((list, seat) => list.forEach((p) => {
+    if (p !== square) return;
+    const d = document.createElement("span");
+    d.className = "dot";
+    d.style.background = COLORS[seat];
+    box.append(d);
+  }));
+  return box;
+}
+
+function count(view, square) {
+  return view.pieces.reduce((n, list) => n + list.filter((p) => p === square).length, 0);
+}
+
+function render(message) {
+  const view = message.view || message.state;
+  if (!view) return;
+  const mine = myTurn(message, view);
+  const moves = mine ? view.moves : [];
+  const sources = new Set(moves.filter((m) => m.kind !== "end").map((m) => m.from));
+  if (selected === null || !sources.has(selected)) selected = defaultSmuggler(moves);
+  const forSelected = moves.filter((m) => m.kind !== "end" && m.from === selected);
+  const targets = new Set(forSelected.map((m) => m.to));
+  const lastSquares = new Set(view.last.map((a) => a.to));
+  const passing = view.actions === 0;
+  const iWon = view.winner !== null && view.winner === view.my_seat;
+  $("title").textContent = t("title");
+  $("deck").textContent = t("deck", { count: view.deck_count });
+
+  $("players").replaceChildren(...message.players.map((player, seat) => {
+    const chip = document.createElement("span");
+    chip.className = "player" + (seat === view.to_move && view.winner === null ? " turn" : "");
+    const sw = document.createElement("span");
+    sw.className = "swatch";
+    sw.style.background = COLORS[seat];
+    const label = document.createElement("span");
+    const inBoat = view.pieces[seat].filter((p) => p === BOAT).length;
+    label.textContent = t("player_line", { name: player.name, boat: inBoat, cards: view.hand_counts[seat] });
+    chip.append(sw, label);
+    return chip;
+  }));
+
+  const makeEnd = (square, key) => {
+    const box = document.createElement(sources.has(square) ? "button" : "div");
+    box.className = "end" + (sources.has(square) ? " pick" : "") + (selected === square ? " selected" : "") + (targets.has(square) ? " target" : "");
+    const label = document.createElement("span");
+    const isCave = key === "cave";
+    label.textContent = isCave ? t("cave") : t("boat");
+    box.append(label, dots(view, square));
+    if (sources.has(square)) {
+      box.type = "button";
+      box.addEventListener("click", () => { selected = square; render(current); });
+    }
+    return box;
+  };
+  const cells = [makeEnd(CAVE, "cave")];
+  // A snake: rows of 6, alternating direction, so the tunnel reads as one path.
+  for (let row = 0; row < 6; row++) {
+    const indexes = [0, 1, 2, 3, 4, 5].map((k) => row * 6 + (row % 2 === 0 ? k : 5 - k));
+    for (const i of indexes) {
+      const s = view.track[i];
+      const pick = sources.has(i);
+      const cell = document.createElement(pick ? "button" : "div");
+      cell.className = `sq S-${s}` + (pick ? " pick" : "") + (selected === i ? " selected" : "") + (targets.has(i) ? " target" : "") + (lastSquares.has(i) ? " last" : "");
+      const sym = document.createElement("span");
+      sym.className = "sym";
+      sym.textContent = GLYPH[s];
+      sym.ariaHidden = true;
+      cell.append(sym, dots(view, i));
+      cell.setAttribute("aria-label", t("square_label", { number: i + 1, symbol: symbolName(s), count: count(view, i) }));
+      if (pick) {
+        cell.type = "button";
+        cell.addEventListener("click", () => { selected = i; render(current); });
+      }
+      cells.push(cell);
+    }
+  }
+  cells.push(makeEnd(BOAT, "boat"));
+  $("board").replaceChildren(...cells);
+
+  const hand = $("hand");
+  hand.setAttribute("aria-label", t("your_hand"));
+  const playable = new Set(forSelected.filter((m) => m.kind === "forward").map((m) => m.card));
+  hand.replaceChildren(...view.hand.map((card) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `card S-${card}` + (playable.has(card) ? " ready" : "");
+    b.textContent = GLYPH[card];
+    b.setAttribute("aria-label", t("card_label", { symbol: symbolName(card) }));
+    b.disabled = !playable.has(card);
+    if (playable.has(card)) {
+      b.dataset.auto = "1";
+      b.addEventListener("click", () => send({ kind: "forward", from: selected, card }));
+    }
+    return b;
+  }));
+
+  const actions = [];
+  const back = forSelected.find((m) => m.kind === "back");
+  if (back) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "back";
+    const drawsTwo = back.draw === 2;
+    b.textContent = drawsTwo ? t("back_2") : t("back_1");
+    // Automated test players move back only when out of cards, so their matches finish.
+    if (view.hand.length === 0) b.dataset.auto = "1";
+    b.addEventListener("click", () => send({ kind: "back", from: selected }));
+    actions.push(b);
+  }
+  if (moves.some((m) => m.kind === "end")) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "endturn";
+    b.textContent = passing ? t("pass_draw") : t("end_turn");
+    if (sources.size === 0) b.dataset.auto = "1";
+    b.addEventListener("click", () => send({ kind: "end" }));
+    actions.push(b);
+  }
+  $("actions").replaceChildren(...actions);
+
+  const status = $("status");
+  status.className = "status";
+  if (view.winner !== null) {
+    status.className = "status win";
+    status.textContent = iWon ? t("you_win") : t("player_wins", { name: message.players[view.winner].name });
+  } else if (mine && sources.size === 0) {
+    status.textContent = passing ? t("no_move_pass") : t("no_move");
+  } else if (mine && view.actions > 0) {
+    status.textContent = t("pick_more", { left: 3 - view.actions });
+  } else if (mine) {
+    status.textContent = t("pick_smuggler");
+  } else if (view.my_seat === null) {
+    status.textContent = t("watching");
+  } else {
+    status.textContent = t("waiting_for", { name: message.players[view.to_move].name });
+  }
+}
+
+window.addEventListener("message", (event) => {
+  const message = event.data;
+  if (!message || message.type !== "state_changed") return;
+  applyLocale(message);
+  current = message;
+  sent = false;
+  selected = null;
+  render(message);
+});
+parent.postMessage({ type: "game_ready" }, "*");
+</script>
+</body>
+</html>
