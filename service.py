@@ -4339,12 +4339,16 @@ class GamePlatform:
         with self._lock:
             return self._saved_games(self._require_user(caller_id))
 
-    def list_recent_games(self, *, caller_id: str) -> list[Game]:
+    def list_recent_games(self, *, caller_id: str, include_code: bool = True) -> list[Game]:
         """Returns the user's recently played, currently published games."""
-        with self._lock:
+        read_game = self._store.get_game
+        if not include_code:
+            read_game = getattr(self._store, 'get_game_without_code', read_game)
+
+        def read() -> list[Game]:
             user = self._resolve_replaced(self._require_user(caller_id))
             games = (
-                self._store.get_game(game_id)
+                read_game(game_id)
                 for game_id in user.recent_game_ids[: self.RECENT_GAME_LIMIT]
             )
             return [
@@ -4352,6 +4356,7 @@ class GamePlatform:
                 for game in games
                 if game is not None and game.published and not game.deleted
             ]
+        return self._plain_read(read)
 
     def record_recent_game(self, *, caller_id: str, game_id: str) -> list[Game]:
         """Records a local practice game in the user's server-side history."""

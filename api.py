@@ -441,7 +441,7 @@ def list_recent_games(platform: Platform, caller_id: CallerId) -> list[GameSumma
     """The caller's recently played published games, most recent first."""
     return [
         GameSummaryOut.of(game)
-        for game in platform.list_recent_games(caller_id=caller_id)
+        for game in platform.list_recent_games(caller_id=caller_id, include_code=False)
     ]
 
 
