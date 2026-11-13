@@ -3662,3 +3662,127 @@
   border-color: var(--color-border-2);
 }
 :root[data-skin="white"] .popular-game-open { color: var(--color-accent-hover); }
+/* Black Clover: the Black Bulls — near-black grimoire pages, the gold of
+   the five-leaf clover grimoire, clover green, and a touch of anti-magic
+   red (reserved for errors, so it stays rare). Warm parchment text on
+   green-tinted black keeps the manga-panel feel while staying readable.
+   Token-only skin, following the midnight/meadow pattern: no JS, no new
+   layout, no webfonts, no images. Key: black-clover. Display name:
+   "Black Clover". */
+:root[data-skin="black-clover"] {
+  color-scheme: dark;
+  --color-bg-0: #0b0e0a;
+  --color-bg-1: #11160f;
+  --color-bg-2: #171d13;
+  --color-bg-3: #20291a;
+  --color-bg-4: #2c3a24;
+  --color-text-primary: #f5f1df;
+  --color-text-secondary: #d6d2b8;
+  --color-text-tertiary: #a9b18c;
+  --color-text-quaternary: #8a9274;
+  --color-border-1: #1c2416;
+  --color-border-2: #2b3a22;
+  --color-border-3: #42573a;
+  --color-border-4: #5d7a4e;
+  --color-accent: #e8b73a;
+  --color-accent-hover: #f5c95c;
+  --color-focus-ring: #f5c95c;
+  --color-ok: #5ecf8f;
+  --color-warn: #e8b73a;
+  --color-error: #e5534b;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-3: 0 8px 24px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --font-sans: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+}
+
+:root[data-skin="black-clover"] .portal-shell {
+  --color-bg-0: #0b0e0a;
+  --color-bg-1: #11160f;
+  --color-bg-2: #171d13;
+  --color-bg-3: #20291a;
+  --color-bg-4: #2c3a24;
+  --color-text-primary: #f5f1df;
+  --color-text-secondary: #d6d2b8;
+  --color-text-tertiary: #a9b18c;
+  --color-border-2: #2b3a22;
+  --color-border-3: #42573a;
+  --color-accent: #e8b73a;
+  --color-accent-hover: #f5c95c;
+  --color-focus-ring: #f5c95c;
+  background: var(--color-bg-0);
+  color: var(--color-text-primary);
+}
+:root[data-skin="black-clover"] .portal-sidebar,
+:root[data-skin="black-clover"] .match-creator,
+:root[data-skin="black-clover"] .game-detail-page,
+:root[data-skin="black-clover"] .match-stage,
+:root[data-skin="black-clover"] .portal-shell .game-search-popup,
+:root[data-skin="black-clover"] .portal-shell .match-tools {
+  background: #11160f;
+  border-color: #2b3a22;
+  color: #f5f1df;
+}
+:root[data-skin="black-clover"] .popular-games-section,
+:root[data-skin="black-clover"] .play-option,
+:root[data-skin="black-clover"] .portal-shell .library-card,
+:root[data-skin="black-clover"] .selected-game-card {
+  background: #171d13;
+  border-color: #2b3a22;
+  color: #f5f1df;
+}
+:root[data-skin="black-clover"] .portal-shell input,
+:root[data-skin="black-clover"] .portal-shell select {
+  background: #0b0e0a;
+  border-color: #42573a;
+  color: #f5f1df;
+}
+:root[data-skin="black-clover"] .portal-shell button.primary,
+:root[data-skin="black-clover"] .portal-shell .library-toolbar button[aria-pressed="true"] {
+  background: #e8b73a;
+  border-color: #e8b73a;
+  color: #1a1405;
+}
+:root[data-skin="black-clover"] .portal-shell button.primary:hover:not(:disabled) {
+  background: #f5c95c; border-color: #f5c95c;
+}
+:root[data-skin="black-clover"] .portal-shell button:focus-visible,
+:root[data-skin="black-clover"] .portal-shell summary:focus-visible,
+:root[data-skin="black-clover"] .portal-shell .popular-game-card:focus-visible {
+  outline-color: #f5c95c;
+}
+:root[data-skin="black-clover"] .creator-title,
+:root[data-skin="black-clover"] .popular-games-heading h2,
+:root[data-skin="black-clover"] .play-option-heading h3,
+:root[data-skin="black-clover"] .selected-game-card h2 {
+  color: #f5f1df;
+}
+:root[data-skin="black-clover"] .creator-description,
+:root[data-skin="black-clover"] .popular-period,
+:root[data-skin="black-clover"] .play-option-heading p,
+:root[data-skin="black-clover"] .play-option .play-option-note,
+:root[data-skin="black-clover"] .library-description {
+  color: #a9b18c;
+}
+
+:root[data-skin="black-clover"] .topbar .token-wallet {
+  background: linear-gradient(135deg, #2c3a24, #0b0e0a);
+  border-color: #8a6d1f;
+  color: #f5f1df;
+  box-shadow: 0 4px 18px #00000055;
+}
+:root[data-skin="black-clover"] .topbar .token-wallet-coin {
+  background: #6e5510;
+  border-color: #e8b73a;
+  color: #ffe9a8;
+}
+:root[data-skin="black-clover"] .topbar .token-wallet-label {
+  color: #a9b18c;
+}
+:root[data-skin="black-clover"] .topbar .token-wallet-number {
+  color: #d6d2b8;
+}
+:root[data-skin="black-clover"] .topbar .token-wallet-number strong {
+  color: #f5f1df;
+}
