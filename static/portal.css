@@ -39,7 +39,7 @@
 .match-quick-delete { position:absolute; top:5px; right:5px; z-index:2; display:grid; place-items:center; width:22px; height:22px; padding:0; border:1px solid transparent; border-radius:50%; background:transparent; color:inherit; font-size:13px; line-height:1; cursor:pointer; opacity:.55; }
 .match-quick-delete:hover, .match-quick-delete:focus-visible { opacity:1; color:#ff5f8f; border-color:#ff5f8f; background:rgb(255 95 143 / .12); }
 .match-quick-delete:disabled { opacity:.3; cursor:default; }
-.match-delete-error { margin:0 0 8px; padding:0 8px; }
+.portal-shell .match-delete-error { margin:0 0 8px; padding:0 8px; color:var(--color-text-primary); }
 .portal-sidebar .title { flex-wrap:wrap; font-size:13px; gap:6px; overflow-wrap:anywhere; }
 .portal-sidebar .sub { margin-top:7px; font-size:10px; }
 .portal-shell .badge { white-space:normal; font-size:10px; border-radius:4px; }

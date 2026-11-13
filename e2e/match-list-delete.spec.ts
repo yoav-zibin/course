@@ -1,5 +1,6 @@
 import {test, expect} from '@playwright/test';
 import {createGame, createUser, loginAs, uniqueName} from './helpers';
+import {contrast} from './contrast';
 
 test('a failed list deletion stays visible through polling and can be retried', async ({page, request}) => {
   const owner = await createUser(request, uniqueName('List delete'));
@@ -26,6 +27,7 @@ test('a failed list deletion stays visible through polling and can be retried', 
   await expect(page.locator('#match')).toBeHidden();
   await remove.click();
   await expect(row.getByRole('alert')).toHaveText('Try this deletion again.');
+  expect(await contrast(row.getByRole('alert'))).toBeGreaterThanOrEqual(4.5);
   const players = row.locator('.match-card-players');
   const before = await players.textContent();
   const updated = await request.patch(`/matches/${match.id}`, {headers,
