@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from dataclasses import replace
 from unittest.mock import Mock, patch
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from game_platform.service import GamePlatform
 from game_platform.tests.fake_firestore import query_store
@@ -44,6 +46,7 @@ def test_translation_bundle_batches_only_the_game_tables_not_already_cached():
     prefetch = Mock()
     platform._store = SimpleNamespace(scalable=True, prefetch_game_versions=prefetch)
     platform._bundle_tables = {('known', 1): ({},)}
+    platform._bundle_source_lock = threading.Lock()
     games = [SimpleNamespace(id=key, version=1, code='', name=key, description='')
              for key in ['known', 'new']]
     platform._bundle_published_games = lambda: games
@@ -59,6 +62,53 @@ def test_translation_bundle_batches_only_the_game_tables_not_already_cached():
     prefetch.reset_mock()
     platform.translation_bundle('en')
     prefetch.assert_not_called()
+
+
+def test_concurrent_locales_share_one_cold_bundle_source_load():
+    platform = object.__new__(GamePlatform)
+    loading = threading.Event()
+    release = threading.Event()
+    second_waiting = threading.Event()
+
+    class ObservedLock:
+        def __init__(self):
+            self.lock = threading.Lock()
+
+        def __enter__(self):
+            if self.lock.locked():
+                second_waiting.set()
+            self.lock.acquire()
+
+        def __exit__(self, *_):
+            self.lock.release()
+
+    def fetch(_):
+        loading.set()
+        assert release.wait(5)
+
+    prefetch = Mock(side_effect=fetch)
+    platform._store = SimpleNamespace(scalable=True, prefetch_game_versions=prefetch)
+    platform._bundle_source_lock = ObservedLock()
+    platform._bundle_tables = {}
+    platform._bundle_published_games = lambda: [SimpleNamespace(
+        id='one', version=1, code='', name='One', description='')]
+
+    def table(game):
+        platform._bundle_tables[(game.id, game.version)] = ({},)
+        return {}
+
+    platform._bundle_table = table
+    platform._translate_for_bundle = lambda texts, code: SimpleNamespace(texts={}, status='source')
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(platform.translation_bundle, 'en')
+        assert loading.wait(5)
+        second = pool.submit(platform.translation_bundle, 'es')
+        try:
+            assert second_waiting.wait(5)
+        finally:
+            release.set()
+        assert set(first.result().games) == set(second.result().games) == {'one'}
+    prefetch.assert_called_once_with([('one', 1)])
 
 
 def test_import_identity_lookups_do_not_load_other_games_code():

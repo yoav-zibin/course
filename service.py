@@ -502,6 +502,9 @@ class GamePlatform:
         self._bundle_games_ttl_seconds = bundle_games_ttl_seconds
         self._bundle_games: tuple[float, list[Game]] | None = None
         self._bundle_tables: dict[tuple[str, int], tuple[dict[str, str] | None]] = {}
+        # All locales share source tables. Build them once after startup rather
+        # than letting simultaneous bundle requests each fetch every version.
+        self._bundle_source_lock = threading.Lock()
         # The compiled server-text templates of each game version (game_messages.py), kept
         # in memory: a version's code never changes.
         self._server_templates: dict[tuple[str, int], tuple[game_messages.Template, ...]] = {}
@@ -2161,13 +2164,14 @@ class GamePlatform:
         code = i18n.normalize_locale(locale)
         if code is None:
             raise NotFoundError(f"language not supported: {locale}")
-        games = self._bundle_published_games()
-        prefetch = getattr(self._store, 'prefetch_game_versions', None)
-        missing = [(game.id, game.version) for game in games
-                   if not game.code and (game.id, game.version) not in self._bundle_tables]
-        if prefetch is not None and missing:
-            self._plain_read(lambda: prefetch(missing))
-        tables = {game.id: self._bundle_table(game) for game in games}
+        with self._bundle_source_lock:
+            games = self._bundle_published_games()
+            prefetch = getattr(self._store, 'prefetch_game_versions', None)
+            missing = [(game.id, game.version) for game in games
+                       if not game.code and (game.id, game.version) not in self._bundle_tables]
+            if prefetch is not None and missing:
+                self._plain_read(lambda: prefetch(missing))
+            tables = {game.id: self._bundle_table(game) for game in games}
         wanted = [
             text
             for game in games
