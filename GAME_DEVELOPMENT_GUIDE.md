@@ -3,13 +3,16 @@
 A guide for an agent that writes a game and publishes it on the BuildPlay platform. Read this whole document before writing any code. The platform is at **https://buildplay.fun**. Publish a complete game with `POST /games` after the recorded `/game-test` flow in section 9. There is no builder UI or draft step. The import endpoint validates the final payload and reports failing checks before storing anything.
 
 For a native-ready UI, read [Authoring declarative games](docs/declarative-games.md).
+Declarative packages and hosts must meet the
+[declarative game requirements](docs/declarative-game-requirements.md), including
+physical interactions, persistent hints, rendered sizes and animated history.
 Submit `declarative_ui` instead of `client_code`; the portable package contains
 boards, piece types, image assets and pure QuickJS presentation code. The
 equivalent `POST /games/declarative` endpoint preserves this guide's server
 rules, translations, artifacts and recorded test requirements. The `/game-test`
 form accepts the package, and `/static/declarative-test.html` is the scene
 playground. See the [JSON schema](schemas/declarative-ui.schema.json) and
-[ten complete examples](games/declarative).
+[eleven complete examples](games/declarative).
 
 ## 1. Core concepts
 
@@ -281,6 +284,11 @@ Rules:
 - Keep the page accessible and responsive: readable on phones, tablets, and laptops, in portrait and landscape. Clickable targets at least 30 by 30 CSS pixels. Text contrast at least 4.5:1 (3:1 for large text and essential control boundaries).
 
 ### Client UI requirements (mandatory)
+
+For declarative UIs, the [declarative requirements](docs/declarative-game-requirements.md)
+govern native rendering and interaction where this HTML-client guidance differs.
+In particular, a completed legal drag/drop may submit a move directly; selecting
+an object alone must not submit an incomplete choice.
 
 The client is what a human actually plays. A game whose logic verifies but whose client is a bare template is not finished. Every generated client must meet all of these requirements:
 

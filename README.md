@@ -11,7 +11,8 @@ An in-memory REST backend for a multiplayer turn-based games platform, built wit
 > — the complete guide to the `POST /games` import API, the server and client
 > contracts, and the checks every game must pass.
 
-**Native-ready declarative games:** [authoring guide](docs/declarative-games.md),
+**Native-ready declarative games:** [requirements](docs/declarative-game-requirements.md),
+[authoring guide](docs/declarative-games.md),
 [JSON schema](schemas/declarative-ui.schema.json),
 [spreadsheet coverage review](docs/declarative-game-coverage.md), and
 [eleven complete games, including Backgammon](games/declarative). Submit a `declarative_ui` package

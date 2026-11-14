@@ -1,5 +1,10 @@
 # Authoring declarative games
 
+Read the [declarative game requirements](declarative-game-requirements.md)
+for the mandatory interaction, layout, sizing, shared-element and animation
+acceptance criteria. This guide describes the current format and host behavior;
+the requirements also identify targets that remain to implement.
+
 A declarative game has authoritative pure JavaScript rules, a JSON UI package,
 pure JavaScript presentation logic, and optional PNG, JPEG or SVG assets. The
 same presentation code can run in QuickJS inside an iOS or Android app. The
@@ -132,8 +137,10 @@ turn, to identify the actor. Unknown actors update immediately. If a snapshot
 combines an own move with computer replies, the portal first applies the last
 own position immediately using viewer-filtered history, then animates the
 opponent changes. Missing history or large gaps update immediately. Initial
-rendering, replay,
-pass-and-play and reduced-motion preferences use immediate updates. A scene is
+rendering, pass-and-play and reduced-motion preferences use immediate updates.
+History navigation currently updates immediately; the
+[requirements call for animated history review](declarative-game-requirements.md#5-show-what-happened-with-animations),
+including recorded own moves. A scene is
 still a complete snapshot; no animation commands or delays belong in game
 logic. For games whose server stores counts rather than individual pieces,
 presentation `local_state` can reconcile identities, as Backgammon does for
