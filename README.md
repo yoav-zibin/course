@@ -1,5 +1,11 @@
 # game-platform
 
+**Develop Android or iOS apps with an agent:** start with the
+[course VM and cloud-build guide](docs/mobile-development-on-vm.md). It lists
+the two native apps (Playroom Android and GamePortal iOS), build/download
+commands, installed VM toolchain, exact
+private credential-file locations, GitHub login steps and a student agent prompt.
+
 An in-memory REST backend for a multiplayer turn-based games platform, built with FastAPI.
 
 > Historical note (Nov 7, 2026): the Builder was deleted — games are now created only

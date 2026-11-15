@@ -1,5 +1,13 @@
 # Playroom · native Android portal
 
+**Cloud builds and agents:** the
+[shared VM guide](../docs/mobile-development-on-vm.md) lists the installed
+Android SDK/JDK, agent workflow, GitHub login and credential locations.
+The **Portal apps** workflow builds this app; its `Playroom-android-apk`
+artifact is available from the run page. Successful pushes to `main` update
+[Playroom.apk](https://github.com/yoav-zibin/course/releases/download/portal-apps/Playroom.apk).
+These debug builds require no private signing key.
+
 Kotlin, Jetpack Compose and Material 3 frontend for the **shared course repository**.
 The default server is [buildplay.fun](https://buildplay.fun/); Google Cloud console
 login is not required to play. Android and the existing [web portal](https://buildplay.fun/portal)
@@ -7,8 +15,8 @@ use the same accounts, games, matches and protocol.
 
 ## Local development
 
-Use Java 21, Android SDK 36 and build tools 36.0.0. Android Studio's Java 25 runtime
-is too new for this project's pinned Gradle 8.13. On Apple silicon:
+Use Java 21, Android SDK 36 and build tools 36.0.0. Select Java 21 to match CI
+even if Android Studio bundles a newer runtime. On Apple silicon:
 
 ```bash
 brew install --cask android-studio
@@ -125,7 +133,9 @@ mobile data, then restores their previous settings, including on failure:
   -Pandroid.testInstrumentationRunnerArguments.lifecycleBackend=true
 ```
 
-Work on a branch in `yoav-zibin/course`. Before committing, inspect staged paths and
+Work directly on `main` in `yoav-zibin/course`, using your own checkout. Fetch and
+integrate current upstream before pushing; do not create a branch or PR.
+Before committing, inspect staged paths and
 the diff. The intended additions live entirely under `android/`. Keep local Python
 environments and test-account files outside Git using `.git/info/exclude`. Do not include server data, account files, keys, APKs, or
 local IDE settings. Backend endpoints, schemas and portal/game messages remain unchanged.

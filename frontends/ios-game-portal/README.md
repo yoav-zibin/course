@@ -1,5 +1,13 @@
 # GamePortal iOS
 
+**Cloud builds and agents:** use the **Portal apps** GitHub Actions workflow
+to build the `GamePortal-ios-simulator` artifact on a hosted Mac. The
+[shared VM guide](../../docs/mobile-development-on-vm.md) provides the agent
+workflow, exact VM credential locations, GitHub login and download commands.
+The Linux VM can edit/push iOS code but cannot run Xcode. The same workflow includes an opt-in TestFlight job for this target; the
+maintainer configures `IOS_PORTAL_BUNDLE_ID`, `TESTFLIGHT_ENABLED` and the
+existing Apple secrets/access described in that guide.
+
 A SwiftUI app for the shared course platform at https://buildplay.fun, with bundled local Tic-Tac-Toe and downloaded shared games. Updated October 15, 2026.
 
 ## Run

@@ -1,5 +1,11 @@
 # Build Playroom on the course VM
 
+For the already-installed SDK/JDK, a headless **debug** build without a private
+signing key, GitHub Actions and the exact VM credential-file locations, start
+with the [shared mobile development guide](../docs/mobile-development-on-vm.md).
+This page is the separate **signed release** provisioning recipe. Its example
+keystore/configuration paths do not imply those files already exist on the VM.
+
 Use a separate build checkout on the existing class VM, so building does not change
 the backend's running checkout or data. This recipe targets Linux x86_64 (Ubuntu
 24.04 or equivalent), Java 21, SDK 36 and build tools 36.0.0. No emulator is needed
@@ -81,4 +87,6 @@ so they can coexist and have separate guest accounts.
   version and service stop behavior with the backend owner before claiming this check passes.
 - Install the VM-built release on a real Android phone and play against the web portal.
 
-VM execution and restart persistence verification remain pending until access is granted.
+Headless debug JVM tests and APK assembly were verified on the shared VM on
+November 15, 2026. Signed release, physical-device and service-restart checks
+remain separate operator work; a successful APK build does not establish them.
