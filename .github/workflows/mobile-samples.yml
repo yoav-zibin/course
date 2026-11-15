@@ -1,0 +1,179 @@
+# Tiny native sample apps for BuildPlay (mobile-samples/).
+#
+# Android: builds a debug APK on a free Ubuntu runner and publishes it to
+# the rolling "mobile-samples" GitHub release, so the newest APK is always
+# at a stable URL that can be opened directly on an Android phone:
+#   https://github.com/yoav-zibin/course/releases/download/mobile-samples/BuildPlaySample.apk
+#
+# iOS: builds on a GitHub-hosted Mac (free for this public repo) and
+# uploads a simulator build as an artifact. Installing on a real iPhone
+# requires an Apple Developer Program membership ($99/year); the
+# ios-testflight job below is fully written but stays dormant until the
+# repo variable TESTFLIGHT_ENABLED is set to "true" and the App Store
+# Connect secrets exist. See mobile-samples/README.md.
+name: Mobile samples
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "mobile-samples/**"
+      - ".github/workflows/mobile-samples.yml"
+  pull_request:
+    paths:
+      - "mobile-samples/**"
+      - ".github/workflows/mobile-samples.yml"
+
+jobs:
+  android:
+    name: Android sample (APK)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # update the rolling mobile-samples release
+    defaults:
+      run:
+        working-directory: mobile-samples/android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Build debug APK
+        run: gradle :app:assembleDebug --stacktrace
+      - name: Rename APK for a stable download name
+        run: cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/BuildPlaySample.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BuildPlaySample-android-apk
+          path: BuildPlaySample.apk
+          retention-days: 90
+      - name: Publish APK to the rolling release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mobile-samples
+          name: Mobile samples (latest builds)
+          body: |
+            Latest cloud builds of the tiny BuildPlay sample apps.
+
+            **Android:** download `BuildPlaySample.apk` below on your phone and install it
+            (allow "Install unknown apps" for your browser when asked).
+          prerelease: true
+          make_latest: false
+          files: BuildPlaySample.apk
+
+  ios:
+    name: iOS sample (simulator build)
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: mobile-samples/ios
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Build for the iOS Simulator (unsigned)
+        run: |
+          xcodebuild \
+            -project BuildPlaySample.xcodeproj \
+            -scheme BuildPlaySample \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$GITHUB_WORKSPACE/ios-build" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+      - name: Zip the simulator app
+        run: |
+          cd "$GITHUB_WORKSPACE/ios-build/Build/Products/Debug-iphonesimulator"
+          ditto -c -k --sequesterRsrc --keepParent BuildPlaySample.app "$GITHUB_WORKSPACE/BuildPlaySample-simulator.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BuildPlaySample-ios-simulator
+          path: BuildPlaySample-simulator.zip
+          retention-days: 90
+
+  ios-testflight:
+    name: iOS sample (TestFlight upload)
+    # Dormant until the Apple Developer Program setup in
+    # mobile-samples/README.md is done: set repo variable
+    # TESTFLIGHT_ENABLED=true and add secrets ASC_KEY_ID, ASC_ISSUER_ID,
+    # ASC_KEY_P8_BASE64 and APPLE_TEAM_ID.
+    if: vars.TESTFLIGHT_ENABLED == 'true'
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: mobile-samples/ios
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Write the App Store Connect API key
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          printf '%s' "$ASC_KEY_P8_BASE64" | base64 --decode \
+            > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+      - name: Archive (signed, automatic provisioning)
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcodebuild \
+            -project BuildPlaySample.xcodeproj \
+            -scheme BuildPlaySample \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$GITHUB_WORKSPACE/BuildPlaySample.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            archive
+      - name: Export the IPA
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          cat > "$GITHUB_WORKSPACE/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>${APPLE_TEAM_ID}</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>stripSwiftSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$GITHUB_WORKSPACE/BuildPlaySample.xcarchive" \
+            -exportPath "$GITHUB_WORKSPACE/export" \
+            -exportOptionsPlist "$GITHUB_WORKSPACE/ExportOptions.plist" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+      - name: Upload to TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$GITHUB_WORKSPACE/export/BuildPlaySample.ipa" \
+            --apiKey "$ASC_KEY_ID" \
+            --apiIssuer "$ASC_ISSUER_ID"
