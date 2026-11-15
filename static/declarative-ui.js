@@ -490,7 +490,7 @@
             const points = Array.from({length:6},(_,i)=>`${cell.x+Math.cos((i*60+30)*Math.PI/180)*radius},${cell.y+Math.sin((i*60+30)*Math.PI/180)*radius}`).join(" ");
             layer.append(svg("polygon", {points, fill:cell.color || board.color || "#264d53",stroke:board.line_color || "#829e9c"}));
           } else layer.append(svg("circle", {cx:cell.x,cy:cell.y,r:12,fill:cell.color || "#476474",stroke:board.line_color || "#91a7b7"}));
-          if (cell.label) layer.append(svg("text",{x:cell.x,y:cell.y,"text-anchor":"middle","dominant-baseline":"central",fill:"#fff","font-size":12},cell.label));
+          if (cell.label) layer.append(svg("text",{x:cell.x,y:cell.y,"text-anchor":"middle","dominant-baseline":"central",class:"declarative-location-label",fill:"#fff","font-size":12},cell.label));
         }
         stage.append(layer);
       }
@@ -502,7 +502,7 @@
         const height = board.kind === "grid" ? board.height/board.rows : 44;
         const node = svg("g",{class:"declarative-target",transform:`translate(${point.x} ${point.y})`});
         node.append(svg("rect",{class:"declarative-target-area",x:-width/2,y:-height/2,width,height,rx:5,fill:target.color || "#b8ef5b",stroke:"#c9ff63","stroke-width":2}));
-        if (target.label) node.append(svg("text",{"text-anchor":"middle","dominant-baseline":"central",fill:"#d7f6ab","font-size":14},target.label));
+        if (target.label) node.append(svg("text",{"text-anchor":"middle","dominant-baseline":"central",class:"declarative-location-label",fill:"#d7f6ab","font-size":14},target.label));
         activate(node,target.id,target.label,()=> {
           const piece = selectedPiece();
           if(pieceActions(piece||{actions:[]}).includes("move")){
@@ -628,10 +628,10 @@
     const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
     const data=value=>JSON.stringify(canonical(value)).replace(/</g,"\\u003c");
     return '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<link rel="stylesheet" href="/static/declarative-ui.css?v=6"><div id="declarative-game"></div>' +
+      '<link rel="stylesheet" href="/static/declarative-ui.css?v=7"><div id="declarative-game"></div>' +
       '<script type="application/json" id="i18n-strings">'+data(spec.strings || {})+'<'+'/script>' +
       '<script type="application/json" id="declarative-spec">'+data(spec)+'<'+'/script>' +
-      '<script src="/static/declarative-ui.js?v=6"><'+'/script><script>' +
+      '<script src="/static/declarative-ui.js?v=7"><'+'/script><script>' +
       'const host=DeclarativeUI.mount(document.getElementById("declarative-game"),' +
       'JSON.parse(document.getElementById("declarative-spec").textContent),' +
       '{onMove:move=>parent.postMessage({type:"make_move",move},"*"),' +

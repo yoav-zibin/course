@@ -19,9 +19,9 @@
 .declarative-target-area{opacity:.13;transition:opacity .12s,stroke-width .12s}
 .declarative-target[data-drop-state=placement] .declarative-target-area{opacity:.24;stroke-width:2}
 .declarative-target[data-drop-state=allowed] .declarative-target-area{opacity:.62;stroke:#ffffff;stroke-width:4;stroke-dasharray:6 3;filter:drop-shadow(0 0 5px #b8ef5b99)}
-.declarative-target[data-drop-state=unavailable]{opacity:.12;cursor:default}
+.declarative-target[data-drop-state=unavailable]{cursor:default}
 .declarative-target[data-drop-state=unavailable] .declarative-target-area,.declarative-target[data-drop-state=inactive] .declarative-target-area{stroke:none;opacity:0}
-.declarative-target[data-drop-state=inactive] text{opacity:.45}
+
 .declarative-piece-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px;border:1px solid #6d8c55;border-radius:8px;background:#18313e}
 .declarative-piece-actions>span{font-size:14px;margin-inline-end:8px}
 .declarative-piece-actions button{min-height:44px;padding:8px 12px;border:2px solid #d2ff5a;border-radius:8px;background:#1b3846;color:#e4edf4;font:inherit;cursor:pointer}
@@ -36,3 +36,7 @@
 .declarative-stage:focus-visible{outline:2px solid #d2ff5a;outline-offset:2px}
 .declarative-stage.zoomed{cursor:grab}.declarative-stage.camera-panning{cursor:grabbing}
 @media(prefers-reduced-motion:reduce){.declarative-target-area{transition:none}}
+
+/* An opaque halo keeps host-owned location text readable over any board palette
+   and the stronger legal-drop highlight. Game-authored labels keep their style. */
+.declarative-location-label{fill:#f5fff5;stroke:#102330;stroke-width:3;stroke-linejoin:round;paint-order:stroke fill}
