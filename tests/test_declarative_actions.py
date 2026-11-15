@@ -50,6 +50,19 @@ def test_legacy_tap_and_inferred_move_remain_valid_without_new_action_metadata()
                                         "targets": [target]}})
 
 
+@pytest.mark.parametrize("kind", ["pieces", "targets"])
+def test_scene_accessible_names_are_bounded_plain_text_separate_from_visible_text(kind):
+    item = piece(text="1") if kind == "pieces" else {
+        "id": "destination", "board": "board", "position": {"cell": "1"}, "label": "2"}
+    named = {**item, "aria_label": "Alice’s counter at A1"}
+    result = {"scene": {kind: [named]}}
+    assert validate_response(spec(), result) == result
+    for value in (None, 42, {}, "", "🙂" * 4001):
+        with pytest.raises(DeclarativeUIError):
+            validate_response(spec(), {"scene": {kind: [{**item, "aria_label": value}]}})
+    validate_response(spec(), {"scene": {kind: [{**item, "aria_label": "🙂" * 4000}]}})
+
+
 REDUCER = """
 const gameUI={reduce(message,localState){
   const m=message.type==='ui_event'?message.state_changed:message;
@@ -116,17 +129,17 @@ def test_protocol_schema_and_probe_expose_rotation_scaling_without_publishing(ap
     assert response.status_code == 200, response.text
     assert response.json()["local_state"] == {"rotation": 180, "scale": 1.5}
     assert api.client.get("/games").json() == []
-    assert "/static/declarative-ui.js?v=7" in client_document(spec())
-    assert "/static/declarative-ui.css?v=7" in client_document(spec())
+    assert "/static/declarative-ui.js?v=8" in client_document(spec())
+    assert "/static/declarative-ui.css?v=8" in client_document(spec())
 
 
 def legacy_client_document(ui, asset_query=""):
-    return client_document(ui).replace('href="/static/declarative-ui.css?v=7"',
+    return client_document(ui).replace('href="/static/declarative-ui.css?v=8"',
                                       f'href="/static/declarative-ui.css{asset_query}"').replace(
-        'src="/static/declarative-ui.js?v=7"', f'src="/static/declarative-ui.js{asset_query}"')
+        'src="/static/declarative-ui.js?v=8"', f'src="/static/declarative-ui.js{asset_query}"')
 
 
-@pytest.mark.parametrize("asset_query", ["", "?v=2", "?v=3", "?v=4", "?v=5", "?v=6"])
+@pytest.mark.parametrize("asset_query", ["", "?v=2", "?v=3", "?v=4", "?v=5", "?v=6", "?v=7"])
 def test_exact_legacy_platform_host_keeps_recorded_body_and_hash_unchanged(asset_query):
     from game_platform.agent_import import GameImport
     from game_platform import game_traces as traces

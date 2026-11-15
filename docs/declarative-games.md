@@ -199,6 +199,18 @@ front text and front-derived accessibility labels. Destinations require `id`, `b
 `position`, and can have a visible label. `move_targets` is a UI affordance,
 not server permission; `applyMove` must independently reject illegal moves.
 
+Pieces and destinations can supply `aria_label` independently of their visible
+`text` or `label`. Use a descriptive localized name containing the owner and
+location where appropriate, such as “Alice’s counter at A1”, while keeping the
+drawn counter text short. The field is plain text of 1–4000 Unicode characters;
+it never draws text into the scene or changes an event ID. Render it from the
+current `state_changed.strings` just like other translated content. Without it,
+the host keeps the existing visible-text/ID fallback. A face-down piece always
+uses the host's generic covered-piece name, ignoring both front text and
+`aria_label`; omit hidden pieces and never put private facts into public scenes.
+Accessible names remain available in waiting, spectator and history views even
+when gameplay inputs are disabled. They also name host-owned manipulation tools.
+
 ### Always show available actions
 
 Hosts must keep the next available actions visible. An active piece is

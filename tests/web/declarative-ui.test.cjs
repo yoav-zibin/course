@@ -28,6 +28,20 @@ test('scene identities and movement constraints reference declared nodes',()=>{
   scene.targets=[];scene.pieces[0].type='unknown';assert.throws(()=>api.validateScene(spec,scene),/Unknown piece type/);
 });
 
+test('pieces and destinations accept bounded accessible names independently of artwork text',()=>{
+  const spec=sample();
+  const piece={id:'one',type:'token',board:'main',position:{cell:'0'},text:'1'};
+  const target={id:'destination',board:'main',position:{cell:'1'},label:'2'};
+  const scene={pieces:[{...piece,aria_label:'Alice’s counter at A1'}],targets:[{...target,aria_label:'Column two'}]};
+  assert.equal(api.validateScene(spec,scene),scene);
+  for(const value of [null,42,{},'', '🙂'.repeat(4001)]){
+    assert.throws(()=>api.validateScene(spec,{pieces:[{...piece,aria_label:value}]}));
+    assert.throws(()=>api.validateScene(spec,{targets:[{...target,aria_label:value}]}));
+  }
+  assert.doesNotThrow(()=>api.validateScene(spec,{pieces:[{...piece,aria_label:'🙂'.repeat(4000)}]}));
+  assert.equal(scene.pieces[0].text,'1');assert.equal(scene.targets[0].label,'2');
+});
+
 test('renderer rejects explosive grids, non-finite geometry and unapproved image schemes',()=>{
   const spec=sample();spec.boards[0].rows=100000;assert.throws(()=>api.validateSpec(spec),/2048/);
   spec.boards[0].rows=3;spec.boards[0].width=Infinity;assert.throws(()=>api.validateSpec(spec),/non-finite/);

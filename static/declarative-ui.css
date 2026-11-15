@@ -22,9 +22,9 @@
 .declarative-target[data-drop-state=unavailable]{cursor:default}
 .declarative-target[data-drop-state=unavailable] .declarative-target-area,.declarative-target[data-drop-state=inactive] .declarative-target-area{stroke:none;opacity:0}
 
-.declarative-piece-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px;border:1px solid #6d8c55;border-radius:8px;background:#18313e}
-.declarative-piece-actions>span{font-size:14px;margin-inline-end:8px}
-.declarative-piece-actions button{min-height:44px;padding:8px 12px;border:2px solid #d2ff5a;border-radius:8px;background:#1b3846;color:#e4edf4;font:inherit;cursor:pointer}
+.declarative-piece-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0;max-width:100%;box-sizing:border-box;padding:8px;border:1px solid #6d8c55;border-radius:8px;background:#18313e}
+.declarative-piece-actions>span{font-size:14px;margin-inline-end:8px;min-width:0;max-width:calc(100% - 8px);overflow-wrap:anywhere}
+.declarative-piece-actions button{box-sizing:border-box;min-height:44px;padding:8px 12px;border:2px solid #d2ff5a;border-radius:8px;background:#1b3846;color:#e4edf4;font:inherit;cursor:pointer}
 .declarative-control.actionable :is(input,select){outline:2px solid #d2ff5a;outline-offset:2px}
 .declarative-zoom-controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px;flex:0 0 auto;font-size:13px}
 .declarative-zoom-controls button{min-width:44px;min-height:44px;padding:6px 12px;border:1px solid #607e90;border-radius:8px;background:#203b4b;color:#e4edf4;font:inherit;font-weight:700;cursor:pointer}

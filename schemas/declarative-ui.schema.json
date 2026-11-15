@@ -468,6 +468,11 @@
           "type": "string",
           "maxLength": 4000
         },
+        "aria_label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
         "asset": {
           "type": "string",
           "minLength": 1,
@@ -579,6 +584,11 @@
         },
         "label": {
           "type": "string",
+          "maxLength": 4000
+        },
+        "aria_label": {
+          "type": "string",
+          "minLength": 1,
           "maxLength": 4000
         },
         "color": {

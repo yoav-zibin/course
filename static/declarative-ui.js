@@ -165,11 +165,11 @@
     if([point.x,point.y].some(value=>typeof value!=="number"||Math.abs(value)>100000))throw new Error(t("ui.declarative.error.invalid_point_geometry", {}, "Invalid point geometry"));
   }
   function checkElement(kind,item) {
-    const fields={pieces:["id","type","board","position","text","asset","rotation","scale","opacity","z","face","move_targets","selected","hidden","draggable","actions"],targets:["id","board","position","label","color"],labels:["id","text","x","y","color","font_size"],controls:["id","label","kind","value","min","max","step","options","disabled"],paths:["id","points","color","width"]};
+    const fields={pieces:["id","type","board","position","text","aria_label","asset","rotation","scale","opacity","z","face","move_targets","selected","hidden","draggable","actions"],targets:["id","board","position","label","aria_label","color"],labels:["id","text","x","y","color","font_size"],controls:["id","label","kind","value","min","max","step","options","disabled"],paths:["id","points","color","width"]};
     const required={pieces:["id","type","board","position"],targets:["id","board","position"],labels:["id","text","x","y"],controls:["id","label","kind"],paths:["id","points"]};
     knownObject(item,fields[kind],required[kind]);
     for(const key of ["id","type","board","asset"])if(key in item&&!isId(item[key]))throw new Error(t("ui.declarative.error.invalid_ui_identifier", {}, "Invalid UI identifier"));
-    for(const key of ["text","label"])if(key in item&&(typeof item[key]!=="string"||Array.from(item[key]).length>4000))throw new Error(t("ui.declarative.error.invalid_display_text", {}, "Invalid display text"));
+    for(const key of ["text","label","aria_label"])if(key in item&&(typeof item[key]!=="string"||Array.from(item[key]).length>4000||key==="aria_label"&&!item[key].length))throw new Error(t("ui.declarative.error.invalid_display_text", {}, "Invalid display text"));
     if("color" in item&&!/^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$/.test(item.color))throw new Error(t("ui.declarative.error.invalid_display_color", {}, "Invalid display color"));
     for(const key of ["selected","hidden","draggable","disabled"])if(key in item&&typeof item[key]!=="boolean")throw new Error(t("ui.declarative.error.invalid_ui_flag", {}, "Invalid UI flag"));
     for(const key of ["rotation","z","x","y","min","max"])if(key in item&&(typeof item[key]!=="number"||Math.abs(item[key])>100000))throw new Error(t("ui.declarative.error.invalid_numeric_geometry", {}, "Invalid numeric geometry"));
@@ -403,7 +403,7 @@
     function error(error) { if (destroyed) return; errorBox.textContent = error.message; errorBox.hidden = false; callbacks.onError?.(error); }
     function canAct() { return latest && renderedRevision===revision && latest.status === "ongoing" && latest.acting_for_player_index !== null && latest.acting_for_player_index !== undefined && !latest.replay && !moveSent; }
     function selectedPiece(){return currentScene?.pieces?.find(piece=>piece.id===selected&&!piece.hidden&&pieceActions(piece).length);}
-    function pieceName(piece){return piece.face==="back"?t("ui.declarative.covered_piece", {}, "Covered piece"):piece.text||piece.id;}
+    function pieceName(piece){return piece.face==="back"?t("ui.declarative.covered_piece", {}, "Covered piece"):piece.aria_label||piece.text||piece.id;}
     function updateHints() {
       const active=canAct(),piece=selectedPiece();
       if(!piece)selected=null;
@@ -503,7 +503,7 @@
         const node = svg("g",{class:"declarative-target",transform:`translate(${point.x} ${point.y})`});
         node.append(svg("rect",{class:"declarative-target-area",x:-width/2,y:-height/2,width,height,rx:5,fill:target.color || "#b8ef5b",stroke:"#c9ff63","stroke-width":2}));
         if (target.label) node.append(svg("text",{"text-anchor":"middle","dominant-baseline":"central",class:"declarative-location-label",fill:"#d7f6ab","font-size":14},target.label));
-        activate(node,target.id,target.label,()=> {
+        activate(node,target.id,target.aria_label||target.label,()=> {
           const piece = selectedPiece();
           if(pieceActions(piece||{actions:[]}).includes("move")){
             if(piece.move_targets.includes(target.id)){dispatch({type:"drop",id:piece.id,piece_id:piece.id,target_id:target.id});selected=null;updateHints();}
@@ -628,10 +628,10 @@
     const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
     const data=value=>JSON.stringify(canonical(value)).replace(/</g,"\\u003c");
     return '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<link rel="stylesheet" href="/static/declarative-ui.css?v=7"><div id="declarative-game"></div>' +
+      '<link rel="stylesheet" href="/static/declarative-ui.css?v=8"><div id="declarative-game"></div>' +
       '<script type="application/json" id="i18n-strings">'+data(spec.strings || {})+'<'+'/script>' +
       '<script type="application/json" id="declarative-spec">'+data(spec)+'<'+'/script>' +
-      '<script src="/static/declarative-ui.js?v=7"><'+'/script><script>' +
+      '<script src="/static/declarative-ui.js?v=8"><'+'/script><script>' +
       'const host=DeclarativeUI.mount(document.getElementById("declarative-game"),' +
       'JSON.parse(document.getElementById("declarative-spec").textContent),' +
       '{onMove:move=>parent.postMessage({type:"make_move",move},"*"),' +
