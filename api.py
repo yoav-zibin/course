@@ -2006,7 +2006,11 @@ async def _choose_locale(
     response = await call_next(request)
     if response.headers.get("content-type", "").startswith("application/json"):
         response.headers["Content-Language"] = request.state.locale
-        response.headers.append("Vary", "Accept-Language, X-User-Id")
+        # GZip/CORS read a single Vary field when extending it. Consolidate
+        # existing fields so they cannot discard the language/cache identity.
+        response.headers["Vary"] = ", ".join(
+            [*response.headers.getlist("vary"), "Accept-Language, X-User-Id"]
+        )
     return response
 
 

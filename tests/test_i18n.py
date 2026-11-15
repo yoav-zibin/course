@@ -253,6 +253,15 @@ def test_errors_follow_accept_language(api: Api) -> None:
     assert "Accept-Language" in response.headers["vary"]
 
 
+def test_compression_and_cors_preserve_language_and_user_cache_variation(api: Api) -> None:
+    response = _get(api, "/matches/nope", accept_language="fr",
+                    accept_encoding="gzip", origin="https://example.com")
+    assert response.status_code == 404
+    assert response.headers["content-language"] == "fr"
+    vary = {token.strip().lower() for token in response.headers["vary"].split(",")}
+    assert {"origin", "accept-encoding", "accept-language", "x-user-id"} <= vary
+
+
 def test_the_lang_parameter_beats_accept_language(api: Api) -> None:
     response = api.client.get(
         "/matches/nope", params={"lang": "fr"}, headers={"Accept-Language": "es"}
