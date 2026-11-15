@@ -49,9 +49,29 @@ jobs:
       - name: Unit tests
         run: |
           chmod +x gradlew
-          ./gradlew :app:testDebugUnitTest --stacktrace
+          set -o pipefail
+          ./gradlew :app:testDebugUnitTest --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/playroom-test.log"
       - name: Build debug APK (points at https://buildplay.fun)
-        run: ./gradlew :app:assembleDebug --stacktrace
+        run: |
+          set -o pipefail
+          ./gradlew :app:assembleDebug --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/playroom-build.log"
+      - name: Publish Gradle logs (summary + artifact)
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: |
+          for f in playroom-test.log playroom-build.log; do
+            if [ -f "$f" ]; then
+              { echo "## $f — last 200 lines"; echo '```'; tail -n 200 "$f"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Playroom-gradle-logs
+          path: |
+            playroom-test.log
+            playroom-build.log
+          if-no-files-found: ignore
       - name: Rename APK for a stable download name
         run: cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/Playroom.apk"
       - uses: actions/upload-artifact@v4
