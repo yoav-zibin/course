@@ -338,6 +338,18 @@ def test_move_agreement_sweeps_only_schema_difficulty_levels():
     assert not any('state_schema' in failure for failure in failures), failures
 
 
+def test_difficulty_bot_exception_cannot_masquerade_as_invalid_synthetic_state():
+    code = REFERENCE.replace(
+        "computerMove(state, playerId, ctx) { return {type: 'pass'}; }",
+        "computerMove(state, playerId, ctx) { if (state.difficulty === 'easy') "
+        "throw new Error('state_schema is mentioned by this genuine bot bug'); "
+        "return {type: 'pass'}; }",
+    )
+    failures = probe_move_agreement(code, TWO_LEVEL_CONTRACT)
+    assert any('difficulty easy' in failure and 'computerMove raised' in failure
+               for failure in failures), failures
+
+
 # Lifecycle examples may intentionally start after the match finished. They
 # still have to pass exact playerLeft settlement/view checks; they are not
 # approved requests for a new ordinary move or a bot move after game over.

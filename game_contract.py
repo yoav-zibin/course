@@ -31,6 +31,15 @@ class ContractLogic(GameLogic):
         )
         self.contract = contract
         self.validators = {key:Draft202012Validator(contract[key]) for key in ('state_schema','view_schema','move_schema')}
+        # GameLogic already validates every input/output against game_schemas.
+        # Only a genuinely different illustrated-example schema needs a second
+        # validation. JSON comparison keeps booleans distinct from numbers.
+        def encoded(schema):
+            return json.dumps(schema, sort_keys=True, separators=(',', ':'), allow_nan=False)
+        self._additional_schema_checks = {
+            name for name in ('state', 'move', 'view')
+            if encoded(contract[name + '_schema']) != encoded(game_schemas[name])
+        }
 
     def check(self, schema, value, *, move=False):
         error = next(self.validators[schema].iter_errors(value), None)
@@ -39,12 +48,19 @@ class ContractLogic(GameLogic):
             raise exception(f'{schema}: {error.message}')
 
     def call(self, function, *args, **kwargs):
-        if args and function != 'newMatch': self.check('state_schema', args[0])
-        if function == 'applyMove': self.check('move_schema', args[2], move=True)
+        if args and function != 'newMatch' and 'state' in self._additional_schema_checks:
+            self.check('state_schema', args[0])
+        if function == 'applyMove' and 'move' in self._additional_schema_checks:
+            self.check('move_schema', args[2], move=True)
         result = super().call(function, *args, **kwargs)
-        if function == 'viewFor': self.check('view_schema', result)
-        elif function in ('computerMove','randomMove') and result is not None: self.check('move_schema', result)
-        elif isinstance(result, dict) and 'state' in result: self.check('state_schema', result['state'])
+        if function == 'viewFor':
+            if 'view' in self._additional_schema_checks:
+                self.check('view_schema', result)
+        elif function in ('computerMove','randomMove'):
+            if result is not None and 'move' in self._additional_schema_checks:
+                self.check('move_schema', result)
+        elif isinstance(result, dict) and 'state' in result and 'state' in self._additional_schema_checks:
+            self.check('state_schema', result['state'])
         return result
 
 
@@ -201,16 +217,19 @@ def probe_move_agreement(code, contract, *, samples=24):
                              for level in difficulty_levels
                              if level != state.get('difficulty')]
             for variant_index, (variant, variant_label) in enumerate(variants):
+                if variant_index:
+                    # Reject only an actually invalid synthetic input, never
+                    # a game exception whose text happens to mention a schema.
+                    try:
+                        logic.check('state_schema', variant)
+                    except GameLogicError:
+                        continue
                 try:
                     move = logic.call('computerMove', variant, mover, ctx=ctx, seed=7500,
                                       time_limit_seconds=0.1)
                     again = logic.call('computerMove', variant, mover, ctx=ctx, seed=7500,
                                        time_limit_seconds=0.1)
                 except Exception as exc:
-                    # A synthetic variant the game's own schema rejects says
-                    # nothing about the game — the probe invented that state.
-                    if variant_index and 'state_schema' in str(exc):
-                        continue
                     failures.append(f'{variant_label}: computerMove raised instead of returning a legal move: {exc}')
                     continue
                 if move != again:
