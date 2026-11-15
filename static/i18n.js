@@ -112,6 +112,9 @@ const I18n = (() => {
   // name, description, status, translatable, strings}}. null when the separate requests are used.
   let bundle = null;
   let revision = 0; // changes whenever the texts do, for scripts that skip unchanged redraws
+  let choiceRevision = 0; // a picker choice takes precedence over an older account lookup
+  let accountSyncRevision = 0;
+  let accountSaves = Promise.resolve();
 
   /** "es-MX" -> "es"; null when the language isn't supported. */
   function normalize(tag) {
@@ -216,7 +219,7 @@ const I18n = (() => {
     if (language === DEFAULT) return {};
     const fromBundle = await loadBundle(language);
     if (fromBundle) return fromBundle;
-    bundle = null;
+    if (language === code) bundle = null;
     const saved = read(CATALOG_KEY + language);
     const fetched = fetchCatalog(language, saved?.version);
     if (saved) {
@@ -274,6 +277,7 @@ const I18n = (() => {
   }
 
   function adoptBundle(language, data) {
+    if (language !== code) return;
     messages = data.catalog.messages;
     bundle = { locale: language, games: data.games };
     gamesText = {};
@@ -419,8 +423,9 @@ const I18n = (() => {
     code = next;
     gamesText = {};
     bundle = null;
-    messages = await load(next);
+    const loaded = await load(next);
     if (code !== next) return; // another switch happened meanwhile
+    messages = loaded;
     setDocument();
     apply();
     if (picker) picker.value = code;
@@ -430,8 +435,10 @@ const I18n = (() => {
 
   /** The person picked [language] in the picker. */
   async function choose(language) {
-    await setLanguage(language, { remember: true });
-    saveOnAccount();
+    choiceRevision++;
+    const next = normalize(language) ?? DEFAULT;
+    const changed = setLanguage(next, { remember: true });
+    await Promise.all([changed, saveOnAccount(next)]);
   }
 
   // The account
@@ -441,17 +448,23 @@ const I18n = (() => {
   }
 
   /** Saves the chosen language on the logged-in account (best effort). */
-  async function saveOnAccount() {
+  function saveOnAccount(language = code) {
     const who = account();
-    if (!who) return;
-    try {
-      await apiRequest("PATCH", `/users/${encodeURIComponent(who.id)}`, {
-        user: who,
-        body: { locale: code },
-      });
-    } catch (error) {
-      console.warn("Couldn't save the language on the account:", error);
-    }
+    if (!who) return Promise.resolve();
+    // Persist choices in picker order, independently of bundle download order. A
+    // delayed previous PATCH must finish before the next choice is sent.
+    accountSaves = accountSaves.then(async () => {
+      if (account()?.id !== who.id) return;
+      try {
+        await apiRequest("PATCH", `/users/${encodeURIComponent(who.id)}`, {
+          user: who,
+          body: { locale: language },
+        });
+      } catch {
+        console.warn("Couldn't save the language on the account.");
+      }
+    });
+    return accountSaves;
   }
 
   /** On login (and at page load): an account with a saved language gets it; one without
@@ -459,8 +472,11 @@ const I18n = (() => {
   async function syncWithAccount() {
     const who = account();
     if (!who) return;
+    const choice = choiceRevision;
+    const sync = ++accountSyncRevision;
     try {
       const user = await apiRequest("GET", `/users/${encodeURIComponent(who.id)}`);
+      if (account()?.id !== who.id || choice !== choiceRevision || sync !== accountSyncRevision) return;
       if (user.locale) {
         if (user.locale !== code) await setLanguage(user.locale, { remember: true });
       } else if (normalize(read(CHOICE_KEY))) {
@@ -536,15 +552,24 @@ const I18n = (() => {
   addPicker();
   apply();
   const ready = (async () => {
-    if (code !== DEFAULT) {
-      messages = await load(code);
-      apply();
-      announce();
-      loadGamesText();
+    const initial = code;
+    const choice = choiceRevision;
+    if (initial !== DEFAULT) {
+      const loaded = await load(initial);
+      if (code === initial) {
+        messages = loaded;
+        apply();
+        announce();
+        loadGamesText();
+      }
     }
     refreshLocales();
-    if (document.readyState === "complete") syncWithAccount();
-    else window.addEventListener("load", syncWithAccount, { once: true });
+    if (choice === choiceRevision) {
+      if (document.readyState === "complete") syncWithAccount();
+      else window.addEventListener("load", () => {
+        if (choice === choiceRevision) syncWithAccount();
+      }, { once: true });
+    }
   })();
   document.addEventListener("auth-changed", syncWithAccount);
 

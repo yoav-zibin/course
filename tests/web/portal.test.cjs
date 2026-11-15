@@ -165,6 +165,70 @@ test('catalog updates preserve the detail game when its version changes',()=>{
   assert.equal(node('new-game').value,'game');assert.equal(node('selected-game-name').textContent,'Hanoi');
 });
 
+test('Create resolves the selected detail game outside the refreshed catalog page',async()=>{
+  const calls=[];let release;
+  const t=setup(async(method,path,options)=>{
+    calls.push([method,path,options]);
+    if(path==='/games/deep')return new Promise(resolve=>{release=resolve;});
+    return {id:'match',game_version:3,players:[{kind:'human',user_id:'owner'}]};
+  },'#game=deep');
+  t.run('state.games=[]');t.node('new-game').value='deep';t.node('match-stake').value='1';
+  const pending=t.run('createMatch()');
+  try {
+    assert.equal(t.run('state.creating'),true);
+    assert.equal(calls.length,1);assert.equal(calls[0][1],'/games/deep');
+    assert.equal(calls[0][2].force,true);
+    t.node('match-stake').value='9';
+    await t.run('createMatch()');assert.equal(calls.length,1);
+  }finally{
+    release?.({id:'deep',version:3,name:'Selected game',allowed_player_counts:[2]});
+    await pending;
+  }
+  const post=calls.find(([method,path])=>method==='POST'&&path==='/matches');
+  assert.equal(post[2].body.game_id,'deep');assert.equal(post[2].body.bet_per_player,1);
+  assert.equal(t.run('state.selectedId'),'match');
+});
+
+test('Create does not post for a missing linked game or a changed account',async()=>{
+  for(const changedAccount of [false,true]){
+    const calls=[];let t;
+    t=setup(async(method,path)=>{
+      calls.push([method,path]);
+      if(path==='/games/deep'){
+        if(changedAccount){t.run('Auth.current=()=>({id:"someone-else"})');return {id:'deep',version:3,name:'Selected game',allowed_player_counts:[2]};}
+        const error=new Error('not found');error.status=404;throw error;
+      }
+      if(path==='/games/deep/popularity')return {};
+      throw new Error('unexpected request');
+    },'#game=deep');
+    t.run('state.games=[]');await t.run('createMatch()');
+    assert.deepEqual(calls[0],['GET','/games/deep']);
+    assert.equal(calls.some(([method])=>method==='POST'),false);
+    assert.equal(t.run('state.creating'),false);
+    if(!changedAccount)assert.match(t.node('create-message').textContent,/Choose a game from the search results/);
+  }
+});
+
+test('refresh retains the selected game while its detail fetch is pending',async()=>{
+  let release;
+  const t=setup(async(method,path)=>{
+    if(path==='/games')return [{id:'other',version:1,allowed_player_counts:[2]}];
+    if(path==='/games/deep')return new Promise(resolve=>{release=resolve;});
+    return [];
+  },'#game=deep');
+  t.run('state.games=[{id:"deep",version:2,name:"Selected game",allowed_player_counts:[2]}];offline.sync=async()=>{};ensureDetails=async()=>{};updateTokenWallet=async()=>{};render=()=>{};syncGame=async()=>{};offlineStatus=()=>{}');
+  const pending=t.run('refreshLocked()');
+  await new Promise(resolve=>setImmediate(resolve));
+  try {
+    assert.equal(typeof release,'function');
+    assert.equal(t.run('state.games.some(game=>game.id==="deep")'),true);
+  }finally{
+    release?.({id:'deep',version:3,name:'Selected game',allowed_player_counts:[2]});
+    await pending;
+  }
+  assert.deepEqual(Array.from(t.run('state.games.map(game=>game.id)')),['other','deep']);
+});
+
 test('gallery filters by description and player support without losing the selected match',()=>{
   const {node,run}=setup();
   run('state.games=[{id:"solo",name:"Puzzle",description:"Quiet cards",version:1,allowed_player_counts:[1]},{id:"mixed",name:"Chess",description:"Classic strategy",version:1,allowed_player_counts:[1,2]},{id:"party",name:"Party",description:"Cards with friends",version:1,allowed_player_counts:[3,4]}];state.libraryFilter="multiplayer";state.gameSearchQuery="cards";renderLibrary()');

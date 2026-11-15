@@ -863,7 +863,19 @@ async function refreshLocked() {
         ? portalRequest("GET", `/users/${encodeURIComponent(user.id)}`, {user}).catch(() => null)
         : null,
     ]);
-    state.games = games;
+    // A page may omit the game currently on screen. Keep the previous
+    // selection usable until its detail arrives instead of publishing a
+    // temporary catalog that makes an enabled Create button reject it.
+    let nextGames = games;
+    const detailGameId = state.detailGameId;
+    if (detailGameId && !games.some(game=>game.id===detailGameId)) {
+      try {
+        const detail = await portalRequest("GET", `/games/${encodeURIComponent(detailGameId)}`);
+        if (detail?.id === detailGameId) nextGames = [...games, detail];
+      } catch (error) { if(error.status!==404) throw error; }
+    }
+    if (user?.id !== me()?.id) return;
+    state.games = nextGames;
     state.myMatches = myMatches;
     state.openMatches = openMatches;
     if (recentGamesDue && recentGamesRequestVersion === state.recentGamesRequestVersion && user?.id === me()?.id) {
@@ -883,10 +895,6 @@ async function refreshLocked() {
       } else {
         state.popularGamesStatus = "unavailable";
       }
-    }
-    if (state.detailGameId && !state.games.some(game=>game.id===state.detailGameId)) {
-      try { state.games.push(await portalRequest("GET", `/games/${encodeURIComponent(state.detailGameId)}`)); }
-      catch (error) { if(error.status!==404) throw error; }
     }
     if (state.selectedId) {
       try {
@@ -2412,25 +2420,36 @@ async function createMatch() {
     $("create-message").className = "message error";
     return;
   }
-  if (!state.games.some((game) => game.id === gameId)) {
+  if (!gameId) {
     $("create-message").textContent = I18n.t("ui.portal.choose_game_search_first", {}, "Choose a game from the search results first.");
     return;
   }
   let match;
   state.creating = true;
   $("create").disabled = true;
-  const game = state.games.find((item) => item.id === gameId);
   try {
     const bet = Number($("match-stake").value);
+    const speedFields = window.PortalSpeed?.createFields($("match-speed").value) ?? {};
     if (!Number.isSafeInteger(bet) || bet < 0) throw new Error(I18n.t("ui.portal.invalid_stake", {}, "Invalid token stake"));
+    let game = state.games.find((item) => item.id === gameId);
+    if (!game) {
+      // The selected game is independent of the current bounded catalog
+      // page, including the first refresh of a direct link.
+      try {
+        game = await portalRequest("GET", `/games/${encodeURIComponent(gameId)}`, {force: true});
+      } catch (error) { if(error.status!==404) throw error; }
+      if (!game || game.id !== gameId) throw new Error(I18n.t("ui.portal.choose_game_search_first", {}, "Choose a game from the search results first."));
+      if (!state.games.some(item=>item.id===gameId)) state.games.push(game);
+    }
+    if (user.id !== me()?.id) return;
     if (bet > 0 && game?.allowed_player_counts?.length === 1 && game.allowed_player_counts[0] === 1) throw new Error(I18n.t("ui.portal.stake_needs_multiplayer", {}, "Token stakes require a multiplayer match"));
     match = await portalRequest("POST", "/matches", {
       user,
       body: {
         game_id: gameId,
         num_computer_opponents: 0,
-        bet_per_player: Number($("match-stake").value),
-        ...(window.PortalSpeed?.createFields($("match-speed").value) ?? {}),
+        bet_per_player: bet,
+        ...speedFields,
       },
     });
     // Solo-only games have no lobby or second seat to wait for. Start the pinned

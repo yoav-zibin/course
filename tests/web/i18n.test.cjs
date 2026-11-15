@@ -23,7 +23,7 @@ function element(tag){
 // Objects made inside the sandbox have another realm's prototypes; compare their JSON.
 const plain=value=>JSON.parse(JSON.stringify(value));
 
-function setup({stored={},languages=['en-US'],user=null,accountLocale='',catalogs=CATALOGS,stringsAnswer=GAME_STRINGS,stringsFail=false,games=GAMES_TEXT,bundle=null,storageFails=false,storageFailureKeys=[]}={}){
+function setup({stored={},languages=['en-US'],user=null,accountLocale='',catalogs=CATALOGS,stringsAnswer=GAME_STRINGS,stringsFail=false,games=GAMES_TEXT,bundle=null,storageFails=false,storageFailureKeys=[],apiAnswer=null}={}){
   const storage=new Map(Object.entries(stored).map(([k,v])=>[k,JSON.stringify(v)]));
   const requests=[],apiCalls=[],events=[],bundleRequests=[];
   const topbar=element('header');
@@ -62,6 +62,7 @@ function setup({stored={},languages=['en-US'],user=null,accountLocale='',catalog
     Auth:{current:()=>user},
     apiRequest:async(method,url,options)=>{
       apiCalls.push({method,url,body:options?.body});
+      if(apiAnswer)return apiAnswer(method,url,options);
       if(url.includes('/strings')){if(stringsFail)throw new Error('down');return stringsAnswer;}
       return method==='GET'?{locale:accountLocale}:{};
     },
@@ -139,6 +140,66 @@ test('a logged-in choice is saved on the account',async()=>{
   const t=setup({user:{id:'u1',password:'p'}});await t.settle();t.apiCalls.length=0;
   await t.run('I18n.choose("es")');
   assert.deepEqual(plain(t.apiCalls.filter(call=>call.method==='PATCH').map(call=>[call.url,call.body])),[['/users/u1',{locale:'es'}]]);
+});
+
+test('an initial account lookup cannot replace a newer picker choice',async()=>{
+  let release;
+  const t=setup({user:{id:'u1',password:'p'},apiAnswer:async(method)=>{
+    if(method==='GET')return new Promise(resolve=>{release=resolve;});
+    return {};
+  }});
+  await t.settle();assert.equal(typeof release,'function');
+  await t.run('I18n.choose("es")');
+  release({locale:'en'});await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(t.run('I18n.locale()'),'es');
+  assert.equal(t.document.documentElement.lang,'es');
+  assert.deepEqual(plain(t.apiCalls.filter(call=>call.method==='PATCH').map(call=>call.body)),[{locale:'es'}]);
+});
+
+test('account saves retain picker order while a previous PATCH is pending',async()=>{
+  const t=setup({user:{id:'u1',password:'p'}});await t.settle();t.apiCalls.length=0;
+  let release;
+  t.sandbox.apiRequest=async(method,url,options)=>{
+    t.apiCalls.push({method,url,body:options?.body});
+    if(options?.body?.locale==='es')return new Promise(resolve=>{release=resolve;});
+    return {};
+  };
+  const spanish=t.run('I18n.choose("es")');await new Promise(resolve=>setImmediate(resolve));
+  const arabic=t.run('I18n.choose("ar")');await new Promise(resolve=>setImmediate(resolve));
+  try {assert.deepEqual(plain(t.apiCalls.map(call=>call.body)),[{locale:'es'}]);}
+  finally {release?.({});await Promise.all([spanish,arabic]);}
+  assert.deepEqual(plain(t.apiCalls.map(call=>call.body)),[{locale:'es'},{locale:'ar'}]);
+  assert.equal(t.document.documentElement.lang,'ar');assert.equal(t.document.documentElement.dir,'rtl');
+});
+
+test('a queued language save does not follow a changed account',async()=>{
+  const t=setup({user:{id:'u1',password:'p'}});await t.settle();t.apiCalls.length=0;
+  let release;
+  t.sandbox.apiRequest=async(method,url,options)=>{
+    t.apiCalls.push({method,url,body:options?.body});
+    if(options?.body?.locale==='es')return new Promise(resolve=>{release=resolve;});
+    return {};
+  };
+  const spanish=t.run('I18n.choose("es")');await new Promise(resolve=>setImmediate(resolve));
+  const arabic=t.run('I18n.choose("ar")');await new Promise(resolve=>setImmediate(resolve));
+  t.sandbox.Auth.current=()=>({id:'other',password:'different'});
+  release?.({});await Promise.all([spanish,arabic]);
+  assert.deepEqual(plain(t.apiCalls.map(call=>[call.url,call.body])),[['/users/u1',{locale:'es'}]]);
+});
+
+test('a delayed language bundle cannot restore old texts after switching to English',async()=>{
+  const t=setup();await t.settle();let release;
+  const fetch=t.sandbox.fetch;
+  t.sandbox.fetch=(url,options)=>url==='/i18n/bundle/es'
+    ?new Promise(resolve=>{release=resolve;}):fetch(url,options);
+  const spanish=t.run('I18n.choose("es")');
+  await new Promise(resolve=>setImmediate(resolve));
+  await t.run('I18n.choose("en")');
+  release({ok:true,status:200,headers:{get:()=>null},json:async()=>({catalog:CATALOGS.es,games:{chess:{name:'Ajedrez',description:'Un clásico'}}})});
+  await spanish;
+  assert.equal(t.run('I18n.locale()'),'en');assert.equal(t.document.documentElement.lang,'en');
+  assert.equal(t.run('I18n.t("ui.action.save",{},"Save")'),'Save');
+  assert.equal(t.run('I18n.gameName("chess","Chess")'),'Chess');
 });
 
 test('logging in applies the account language over this browser\'s',async()=>{
