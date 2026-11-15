@@ -1,11 +1,11 @@
-# Playroom · native Android portal
+# BuildPlayFun · native Android portal
 
 **Cloud builds and agents:** the
 [shared VM guide](../docs/mobile-development-on-vm.md) lists the installed
 Android SDK/JDK, agent workflow, GitHub login and credential locations.
-The **Portal apps** workflow builds this app; its `Playroom-android-apk`
+The **Portal apps** workflow builds this app; its `BuildPlayFun-android-apk`
 artifact is available from the run page. Successful pushes to `main` update
-[Playroom.apk](https://github.com/yoav-zibin/course/releases/download/portal-apps/Playroom.apk).
+[BuildPlayFun.apk](https://github.com/yoav-zibin/course/releases/download/portal-apps/BuildPlayFun.apk).
 These debug builds require no private signing key.
 
 Kotlin, Jetpack Compose and Material 3 frontend for the **shared course repository**.
@@ -33,17 +33,17 @@ The build helper also sets `.gradle/config.properties` to the detected local JDK
 On macOS, generated build outputs go under the system temporary directory to avoid
 iCloud duplicating compiler files. `assembleDebug` exports the APK to ignored
 `android/artifacts/app-debug.apk`; `PORTAL_BUILD_DIR` can override the build directory.
-Launch **Playroom** on the emulator. Android 8/API 26 or newer is supported.
+Launch **BuildPlayFun** on the emulator. Android 8/API 26 or newer is supported.
 The debug APK is signed with the Android development key and connects to the
 public HTTPS backend even when the local Python server is stopped.
 
 ## Demo with the web portal
 
-1. In Playroom, enter a guest name. Create a Tic-tac-toe match.
+1. In BuildPlayFun, enter a guest name. Create a Tic-tac-toe match.
 2. Copy the match link. Open it on a second computer/phone in the web portal.
 3. The second player logs in with a different guest account and joins.
 4. The Android host presses **Start game**. Alternate moves to complete a win or draw.
-5. Reopen Playroom or rotate the device: the account and selected match are retained.
+5. Reopen BuildPlayFun or rotate the device: the account and selected match are retained.
 6. Turn off the emulator's network, then restore it. The app shows a connection
    failure and reloads the server's state; **Retry** requests an immediate refresh.
 7. Leave the local development server stopped throughout this demonstration.

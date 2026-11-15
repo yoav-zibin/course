@@ -97,7 +97,7 @@ fun PortalApp(vm: PortalViewModel = viewModel()) {
         Spacer(Modifier.height(28.dp))
         Text("A little game.\nA good connection.", fontSize = 36.sp, lineHeight = 42.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(14.dp))
-        Text("Welcome to Playroom. Pick a name, find a friend, and make your move.", color = Muted, style = MaterialTheme.typography.bodyLarge)
+        Text("Welcome to BuildPlayFun. Pick a name, find a friend, and make your move.", color = Muted, style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(32.dp))
         OutlinedTextField(name, { if (it.length <= 200) name = it }, label = { Text("Your player name") },
             singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
@@ -118,7 +118,7 @@ fun PortalApp(vm: PortalViewModel = viewModel()) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
         if (state.selectedId != null) TextButton(back, contentPadding = PaddingValues(end = 12.dp)) { Text("← Back") }
         Column(Modifier.weight(1f)) {
-            Text("Playroom", fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            Text("BuildPlayFun", fontSize = 25.sp, fontWeight = FontWeight.Bold)
             Text("Hey, ${state.account?.name}", color = Muted, style = MaterialTheme.typography.bodySmall)
         }
         TextButton(retry) {
@@ -159,7 +159,7 @@ fun PortalApp(vm: PortalViewModel = viewModel()) {
         }
     }
     if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             if (tab == 0) {
             if (state.games.isEmpty()) item { EmptyState("The table is being set", "Games will appear here when the server is ready.") }
             items(state.games, key = { it.id }) { game ->

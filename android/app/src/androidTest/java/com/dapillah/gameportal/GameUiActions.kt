@@ -31,9 +31,9 @@ fun AndroidComposeTestRule<ActivityScenarioRule<MainActivity>, MainActivity>.tap
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val resolver = instrumentation.targetContext.contentResolver
         val values = android.content.ContentValues().apply {
-            put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "playroom-test-failure.png")
+            put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "buildplayfun-test-failure.png")
             put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
-            put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Playroom")
+            put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/BuildPlayFun")
         }
         val uri = if (android.os.Build.VERSION.SDK_INT >= 29)
             resolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) else null

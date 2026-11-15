@@ -2,7 +2,7 @@
 
 The native GameBuilder app, its project and app UI tests were removed when the
 course consolidated to one iOS app and one Android app. The supported apps are
-[GamePortal](../ios-game-portal/README.md) and [Playroom](../../android/README.md).
+[BuildPlayFun iOS](../ios-game-portal/README.md) and [BuildPlayFun Android](../../android/README.md).
 See the [mobile development guide](../../docs/mobile-development-on-vm.md).
 
 `sample-games/` remains at its original path to preserve its standalone game
