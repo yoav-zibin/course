@@ -42,9 +42,19 @@ A scheduled agent checks the proposals every 12 hours:
   only after a `204` confirms deletion; a `404` means it is no longer
   available, so skip it. If deletion cannot be confirmed, do not start
   building until ownership is resolved.
-- After claiming it, build and submit the game through the normal
-  game-test flow (see GAME_DEVELOPMENT_GUIDE.md §9), at most 5 in
-  parallel. Retain the local work record until publication succeeds,
+- Author accepted proposals as **declarative games**. Read
+  [the authoring guide](declarative-games.md),
+  [the requirements](declarative-game-requirements.md) and
+  [the schema](../schemas/declarative-ui.schema.json). Supply
+  `declarative_ui` and authoritative `server_code`; the platform provides
+  the presentation host. Do not author an HTML gameplay client. Check
+  required interactions before claiming: if the declarative format lacks
+  a capability, leave the proposal queued and report the limitation.
+- After claiming it, build and submit through `POST /games/declarative`
+  after the normal game-test flow (see GAME_DEVELOPMENT_GUIDE.md §9),
+  at most 5 in parallel. Verify the published game has
+  `renderer_type: "declarative"` and its `declarative_ui` package.
+  Retain the local work record until publication succeeds,
   including across failed or interrupted runs. Do not wait until
   publication to delete the proposal — it was already removed when
   claimed.
