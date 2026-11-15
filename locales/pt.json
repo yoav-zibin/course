@@ -897,9 +897,9 @@
   "ui.declarative.zoom.controls": "Zoom do tabuleiro",
   "ui.declarative.zoom.in": "Ampliar",
   "ui.declarative.zoom.out": "Reduzir",
-  "ui.declarative.zoom.reset": "Ajustar tabuleiro",
+  "ui.declarative.zoom.reset": "Redefinir vista",
   "ui.declarative.zoom.level": "Zoom: {percent}%",
-  "ui.declarative.zoom.hint": "Use dois dedos para alterar o zoom. Arraste o tabuleiro ampliado para movê-lo.",
+  "ui.declarative.zoom.hint": "Faça o gesto de pinça para ampliar. Arraste o tabuleiro ou use os botões de seta para o deslocar.",
   "ui.portal.quick_play": "▶ Jogar",
   "ui.portal.quick_play_aria": "Jogar {name} contra computadores agora",
   "ui.quickplay.wait": "Aguarde…",
@@ -938,5 +938,9 @@
   "ui.quickplay.preview_open": "Abrir prévia ↗",
   "ui.quickplay.dolphin_title": "Dolphin Cove",
   "ui.quickplay.dolphin_collection": "BuildPlay · Coleção costeira",
-  "ui.quickplay.dolphin_choose": "Escolha um jogo e mergulhe."
+  "ui.quickplay.dolphin_choose": "Escolha um jogo e mergulhe.",
+  "ui.declarative.zoom.left": "Deslocar para a esquerda",
+  "ui.declarative.zoom.up": "Deslocar para cima",
+  "ui.declarative.zoom.down": "Deslocar para baixo",
+  "ui.declarative.zoom.right": "Deslocar para a direita"
 }

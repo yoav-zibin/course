@@ -238,15 +238,27 @@
     const spec = validateSpec(clone(rawSpec));
     container.replaceChildren();
     container.classList.add("declarative-game");
-    const stage = svg("svg", {viewBox: `0 0 ${spec.viewport.width} ${spec.viewport.height}`, role: "group", "aria-label": t("ui.declarative.board_aria", {}, "Game board"), class: "declarative-stage"});
+    const stage = svg("svg", {viewBox: `0 0 ${spec.viewport.width} ${spec.viewport.height}`, role: "group", tabindex: 0, "aria-label": t("ui.declarative.board_aria", {}, "Game board"), class: "declarative-stage"});
+    // Zoom changes the visible world, not the SVG's intrinsic aspect ratio.
+    stage.style.aspectRatio=`${spec.viewport.width} / ${spec.viewport.height}`;
     const hintMessage=document.createElement("p");hintMessage.className="declarative-hint-message";hintMessage.setAttribute("role","status");hintMessage.setAttribute("aria-live","polite");hintMessage.hidden=true;
     const pieceTools=document.createElement("div");pieceTools.className="declarative-piece-actions";pieceTools.hidden=true;
     const controls = document.createElement("div"); controls.className = "declarative-controls";
     const cameraTools=document.createElement("div");cameraTools.className="declarative-zoom-controls";cameraTools.setAttribute("role","group");cameraTools.setAttribute("aria-label",t("ui.declarative.zoom.controls", {}, "Board zoom"));
     const zoomOut=document.createElement("button"),zoomIn=document.createElement("button"),zoomReset=document.createElement("button"),zoomLevel=document.createElement("output"),zoomHint=document.createElement("span");
-    for(const [button,action,label,text] of [[zoomOut,"out",t("ui.declarative.zoom.out", {}, "Zoom out"),"−"],[zoomIn,"in",t("ui.declarative.zoom.in", {}, "Zoom in"),"+"],[zoomReset,"reset",t("ui.declarative.zoom.reset", {}, "Fit board"),null]]){button.type="button";button.dataset.cameraAction=action;button.setAttribute("aria-label",label);button.title=label;button.textContent=text||label;}
-    zoomLevel.className="declarative-zoom-level";zoomHint.className="declarative-zoom-hint";zoomHint.textContent=t("ui.declarative.zoom.hint", {}, "Pinch to zoom. Drag the board to pan when zoomed.");
+    for(const [button,action,label,text] of [[zoomOut,"out",t("ui.declarative.zoom.out", {}, "Zoom out"),"−"],[zoomIn,"in",t("ui.declarative.zoom.in", {}, "Zoom in"),"+"],[zoomReset,"reset",t("ui.declarative.zoom.reset", {}, "Reset view"),null]]){button.type="button";button.dataset.cameraAction=action;button.setAttribute("aria-label",label);button.title=label;button.textContent=text||label;}
+    zoomLevel.className="declarative-zoom-level";zoomHint.className="declarative-zoom-hint";zoomHint.textContent=t("ui.declarative.zoom.hint", {}, "Pinch to zoom. Drag the board or use the arrow buttons to pan.");
     cameraTools.append(zoomOut,zoomLevel,zoomIn,zoomReset,zoomHint);
+    const panButtons=[];
+    for(const [action,label,text,dx,dy] of [
+      ["left",t("ui.declarative.zoom.left",{},"Pan left"),"←",-1,0],
+      ["up",t("ui.declarative.zoom.up",{},"Pan up"),"↑",0,-1],
+      ["down",t("ui.declarative.zoom.down",{},"Pan down"),"↓",0,1],
+      ["right",t("ui.declarative.zoom.right",{},"Pan right"),"→",1,0],
+    ]){
+      const button=document.createElement("button");button.type="button";button.dataset.cameraAction=action;button.setAttribute("aria-label",label);button.title=label;button.textContent=text;
+      button.addEventListener("click",()=>panBy(dx,dy));cameraTools.insertBefore(button,zoomHint);panButtons.push([button,dx,dy]);
+    }
     const errorBox = document.createElement("p"); errorBox.className = "declarative-error"; errorBox.setAttribute("role", "alert"); errorBox.hidden = true;
     container.append(hintMessage, cameraTools, stage, pieceTools, controls, errorBox);
     const engine = createEngine(container);
@@ -255,7 +267,7 @@
     // The camera belongs to the host. It never reaches the reducer or make_move,
     // and survives complete scene snapshots, including replay and turn changes.
     const camera={x:0,y:0,zoom:1},touches=new Map();
-    let cameraGesture=null,cameraClickUntil=0;
+    let cameraGesture=null,cameraClickUntil=0,minimumZoom=1,minimumScale=0,cameraFrame=null,firstScene=true;
     const pieceAnimations=new Set();
     function applyCamera() {
       const width=spec.viewport.width/camera.zoom,height=spec.viewport.height/camera.zoom;
@@ -263,9 +275,57 @@
       camera.y=Math.max(0,Math.min(spec.viewport.height-height,num(camera.y)));
       stage.setAttribute("viewBox",`${camera.x} ${camera.y} ${width} ${height}`);
       stage.classList.toggle("zoomed",camera.zoom>1);
-      zoomOut.disabled=camera.zoom<=1;zoomIn.disabled=camera.zoom>=4;zoomReset.disabled=camera.zoom===1;
-      zoomLevel.textContent=t("ui.declarative.zoom.level", {percent:Math.round(camera.zoom*100)}, "Zoom: {percent}%");
+      zoomOut.disabled=camera.zoom<=minimumZoom+1e-9;zoomIn.disabled=camera.zoom>=minimumZoom*4-1e-9;
+      zoomReset.disabled=camera.zoom===1&&camera.x===0&&camera.y===0;
+      for(const [button,dx,dy] of panButtons)button.disabled=dx<0?camera.x<=0:dx>0?camera.x>=spec.viewport.width-width-1e-9:dy<0?camera.y<=0:camera.y>=spec.viewport.height-height-1e-9;
+      zoomLevel.textContent=t("ui.declarative.zoom.level", {percent:Math.round(camera.zoom/minimumZoom*100)}, "Zoom: {percent}%");
     }
+    function panBy(dx,dy){camera.x+=dx*spec.viewport.width/camera.zoom*.1;camera.y+=dy*spec.viewport.height/camera.zoom*.1;applyCamera();}
+    stage.addEventListener("keydown",event=>{
+      if(event.target!==stage)return;
+      const directions={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
+      if(directions[event.key]){event.preventDefault();panBy(...directions[event.key]);}
+      else if(event.key==="Home"){event.preventDefault();camera.x=0;camera.y=0;applyCamera();}
+      else if(event.key==="End"){event.preventDefault();camera.x=spec.viewport.width;camera.y=spec.viewport.height;applyCamera();}
+    });
+    // A whole-board fit is not a usable minimum on a dense board. Measure the
+    // actual screen transform (including ancestor scaling), then keep visible
+    // piece artwork/targets >=32 CSS px and text >=16px. Never enlarge only an
+    // invisible hit box. The camera can reach the rest of the board by panning.
+    function fitReadableScene(){
+      if(destroyed||!currentScene)return;
+      let required=minimumScale;
+      const size=(width,height,scale=1)=>{required=Math.max(required,32/(width*scale),32/(height*scale));};
+      const text=(font,scale=1)=>{required=Math.max(required,16/(font*scale));};
+      for(const piece of currentScene.pieces||[]){
+        if(piece.hidden)continue;
+        const type=spec.piece_types[piece.type],board=position(spec,piece).board;
+        const width=num(type.width,board.kind==="grid"?board.width/board.columns*.76:42),height=num(type.height,board.kind==="grid"?board.height/board.rows*.76:width),scale=num(piece.scale,1);
+        size(width,height,scale);
+        if(piece.text!==undefined||piece.face==="back")text(Math.min(width*.5,height*.6,40),scale);
+        if(pieceActions(piece).length)text(14,scale);
+      }
+      for(const target of currentScene.targets||[]){const board=position(spec,target).board;size(board.kind==="grid"?board.width/board.columns:44,board.kind==="grid"?board.height/board.rows:44);if(target.label)text(14);}
+      for(const label of currentScene.labels||[])if(label.text)text(num(label.font_size,18));
+      for(const board of spec.boards)for(const cell of board.cells||[])if(cell.label)text(12);
+      const matrix=stage.getScreenCTM(),fit=matrix?Math.min(Math.hypot(matrix.a,matrix.b),Math.hypot(matrix.c,matrix.d))/camera.zoom:0;
+      if(!(fit>0)||!Number.isFinite(required)||!Number.isFinite(required/fit))return;
+      minimumScale=required;const next=Math.max(1,required/fit);
+      if(Math.abs(next-minimumZoom)>1e-7){
+        const center={x:camera.x+spec.viewport.width/camera.zoom/2,y:camera.y+spec.viewport.height/camera.zoom/2},relative=camera.zoom/minimumZoom;
+        minimumZoom=next;camera.zoom=minimumZoom*Math.max(1,Math.min(4,relative));
+        camera.x=center.x-spec.viewport.width/camera.zoom/2;camera.y=center.y-spec.viewport.height/camera.zoom/2;applyCamera();
+      }
+      if(firstScene&&((currentScene.pieces||[]).some(piece=>!piece.hidden)||(currentScene.targets||[]).length)){firstScene=false;resetCamera();}
+    }
+    function resetCamera(){
+      camera.zoom=minimumZoom;camera.x=0;camera.y=0;
+      if(minimumZoom>1){const first=(currentScene?.pieces||[]).find(piece=>!piece.hidden&&pieceActions(piece).length)||(currentScene?.targets||[])[0];if(first){const point=position(spec,first);camera.x=point.x-spec.viewport.width/camera.zoom/2;camera.y=point.y-spec.viewport.height/camera.zoom/2;}}
+      applyCamera();
+    }
+    function scheduleCamera(){if(cameraFrame===null)cameraFrame=global.requestAnimationFrame(()=>{cameraFrame=null;fitReadableScene();});}
+    const cameraObserver=typeof ResizeObserver!=="undefined"?new ResizeObserver(scheduleCamera):null;
+    cameraObserver?.observe(stage);global.addEventListener("resize",scheduleCamera);
     function boardPoint(x,y) {
       const point=stage.createSVGPoint();point.x=x;point.y=y;
       const matrix=stage.getScreenCTM();
@@ -274,12 +334,12 @@
     function zoomAt(zoom,x,y,anchor=boardPoint(x,y)) {
       if(!Number.isFinite(zoom))return;
       const current=boardPoint(x,y),fx=(current.x-camera.x)/(spec.viewport.width/camera.zoom),fy=(current.y-camera.y)/(spec.viewport.height/camera.zoom);
-      camera.zoom=Math.max(1,Math.min(4,zoom));
+      camera.zoom=Math.max(minimumZoom,Math.min(minimumZoom*4,zoom));
       camera.x=anchor.x-fx*spec.viewport.width/camera.zoom;camera.y=anchor.y-fy*spec.viewport.height/camera.zoom;applyCamera();
     }
     function zoomBy(factor) {const bounds=stage.getBoundingClientRect();zoomAt(camera.zoom*factor,bounds.x+bounds.width/2,bounds.y+bounds.height/2);}
     zoomOut.addEventListener("click",()=>zoomBy(1/1.25));zoomIn.addEventListener("click",()=>zoomBy(1.25));
-    zoomReset.addEventListener("click",()=>{camera.x=0;camera.y=0;camera.zoom=1;applyCamera();});
+    zoomReset.addEventListener("click",resetCamera);
     function cameraClickBlocked(){return Boolean(cameraGesture)||Date.now()<cameraClickUntil;}
     function beginPinch() {
       const [a,b]=[...touches.entries()];if(!b)return;
@@ -519,7 +579,7 @@
         }
         node.dataset.uiId=control.id;node.disabled=Boolean(control.disabled)||!canAct();wrapper.classList.toggle("actionable",!node.disabled);wrapper.append(node);controls.append(wrapper);
       }
-      updateHints();
+      fitReadableScene();scheduleCamera();updateHints();
       if(activeId)for(const node of container.querySelectorAll("[data-ui-id]"))if(node.dataset.uiId===activeId){node.focus({preventScroll:true});break;}
       if(activePieceAction)for(const node of pieceTools.querySelectorAll("[data-piece-action]"))if(node.dataset.pieceAction===activePieceAction){node.focus({preventScroll:true});break;}
     }
@@ -560,7 +620,7 @@
         latest=clone(message);revision++;moveSent=false;selected=null;dragging=null;nativeDragging=null;updateHints();const atRevision=revision;
         queue=queue.then(()=>reduce(latest,atRevision,options)).catch(error);return queue;
       },
-      destroy(){destroyed=true;revision++;touches.clear();cameraGesture=null;for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();global.removeEventListener("pointermove",cameraPointerMove);global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game");},
+      destroy(){destroyed=true;revision++;touches.clear();cameraGesture=null;cameraObserver?.disconnect();global.removeEventListener("resize",scheduleCamera);if(cameraFrame!==null)global.cancelAnimationFrame(cameraFrame);for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();global.removeEventListener("pointermove",cameraPointerMove);global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game");},
       dispatch,
     };
   }
@@ -568,10 +628,10 @@
     const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
     const data=value=>JSON.stringify(canonical(value)).replace(/</g,"\\u003c");
     return '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<link rel="stylesheet" href="/static/declarative-ui.css?v=5"><div id="declarative-game"></div>' +
+      '<link rel="stylesheet" href="/static/declarative-ui.css?v=6"><div id="declarative-game"></div>' +
       '<script type="application/json" id="i18n-strings">'+data(spec.strings || {})+'<'+'/script>' +
       '<script type="application/json" id="declarative-spec">'+data(spec)+'<'+'/script>' +
-      '<script src="/static/declarative-ui.js?v=5"><'+'/script><script>' +
+      '<script src="/static/declarative-ui.js?v=6"><'+'/script><script>' +
       'const host=DeclarativeUI.mount(document.getElementById("declarative-game"),' +
       'JSON.parse(document.getElementById("declarative-spec").textContent),' +
       '{onMove:move=>parent.postMessage({type:"make_move",move},"*"),' +

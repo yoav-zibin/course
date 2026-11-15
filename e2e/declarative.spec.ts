@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { createUser, loginAs, uniqueName } from './helpers';
+import {revealDeclarativeTarget} from './declarative-camera';
 
 const kinds=['tictactoe','connect4','reversi','nim','mancala','gomoku','hex','domineering','memory','pig'];
 const auth=(user:any)=>({'X-User-Id':user.id,'X-User-Password':user.password});
@@ -76,6 +77,7 @@ for(const [index,kind] of kinds.entries())test(`declarative ${kind}: submit and 
         }
       }
       const response=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`/matches/${match.id}/moves`);
+      if(await target.evaluate(node=>Boolean(node.closest('svg.declarative-stage'))))await revealDeclarativeTarget(page,target);
       await target.click();
       const result=await response;expect(result.ok(),await result.text()).toBeTruthy();
     }

@@ -897,9 +897,9 @@
   "ui.declarative.zoom.controls": "बोर्ड ज़ूम",
   "ui.declarative.zoom.in": "बड़ा करें",
   "ui.declarative.zoom.out": "छोटा करें",
-  "ui.declarative.zoom.reset": "पूरा बोर्ड दिखाएँ",
+  "ui.declarative.zoom.reset": "दृश्य रीसेट करें",
   "ui.declarative.zoom.level": "ज़ूम: {percent}%",
-  "ui.declarative.zoom.hint": "ज़ूम करने के लिए दो उँगलियों को पास या दूर करें। ज़ूम किए गए बोर्ड को खिसकाने के लिए खींचें।",
+  "ui.declarative.zoom.hint": "ज़ूम करने के लिए दो उँगलियों से पिंच करें। बोर्ड खिसकाने के लिए उसे खींचें या तीर वाले बटन दबाएँ।",
   "ui.portal.quick_play": "▶ खेलें",
   "ui.portal.quick_play_aria": "अभी कंप्यूटरों के विरुद्ध {name} खेलें",
   "ui.quickplay.wait": "कृपया प्रतीक्षा करें…",
@@ -938,5 +938,9 @@
   "ui.quickplay.preview_open": "पूर्वावलोकन खोलें ↗",
   "ui.quickplay.dolphin_title": "Dolphin Cove",
   "ui.quickplay.dolphin_collection": "BuildPlay · तटीय संग्रह",
-  "ui.quickplay.dolphin_choose": "एक खेल चुनें और मज़े में डूब जाएँ।"
+  "ui.quickplay.dolphin_choose": "एक खेल चुनें और मज़े में डूब जाएँ।",
+  "ui.declarative.zoom.left": "बाईं ओर खिसकाएँ",
+  "ui.declarative.zoom.up": "ऊपर खिसकाएँ",
+  "ui.declarative.zoom.down": "नीचे खिसकाएँ",
+  "ui.declarative.zoom.right": "दाईं ओर खिसकाएँ"
 }

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {test,expect,type Page} from '@playwright/test';
+import {revealDeclarativeTarget} from './declarative-camera';
 
 declare const offline:any;
 declare const state:any;
@@ -36,8 +37,8 @@ async function checkerMove(page:Page){
   const before=await savedMatch(page);
   if(before.state.needRoll){await page.locator('#game-box [data-ui-id="roll"]').click();await expect.poll(async()=>(await savedMatch(page)).move_count).toBeGreaterThan(before.move_count);}
   const rolled=await savedMatch(page);
-  const piece=page.locator('#game-box .declarative-piece.actionable[data-actions~="move"]').first();await expect(piece).toBeVisible();await piece.click();
-  const target=page.locator('#game-box .declarative-target[data-drop-state="allowed"]').first();await expect(target).toBeVisible();await target.click();
+  const piece=page.locator('#game-box .declarative-piece.actionable[data-actions~="move"]').first();await expect(piece).toBeVisible();await revealDeclarativeTarget(page,piece);await piece.locator(':scope > g[opacity]').click();
+  const target=page.locator('#game-box .declarative-target[data-drop-state="allowed"]').first();await expect(target).toBeVisible();await revealDeclarativeTarget(page,target);await target.click();
   await expect.poll(async()=>(await savedMatch(page)).move_count).toBeGreaterThan(rolled.move_count);
   await expect(page.locator('#game-box .declarative-error:visible')).toHaveCount(0);
   return savedMatch(page);

@@ -2080,13 +2080,13 @@
 
 /* Narrow screens: the chat moves under the lobby, like Arcade. */
 @media (max-width: 860px) {
-  :root[data-skin="neon"] .portal-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 420px; }
-  :root[data-skin="neon"] .community-chat { border-left: 0; border-top: 1px solid #00e5ff55; }
+  /* A fixed 420px chat row consumes the entire short landscape viewport. */
+  :root[data-skin="neon"] .portal-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(180px, 1fr) clamp(120px, 30dvh, 260px); }
+  :root[data-skin="neon"] .community-chat { min-height: 0; overflow: auto; border-left: 0; border-top: 1px solid #00e5ff55; }
 }
 @media (max-width: 600px) {
   :root[data-skin="neon"] .arcade-hero { min-height: 0; padding: 26px 20px 30px; }
   :root[data-skin="neon"] .arcade-hero-meta { display: none; }
-  :root[data-skin="neon"] .portal-shell { grid-template-rows: minmax(0, 1fr) 260px; }
 }
 @media (prefers-reduced-motion: reduce) {
   :root[data-skin="neon"] .arcade-live-dot,

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {test,expect,type APIRequestContext,type Page} from '@playwright/test';
 import {createUser,loginAs,uniqueName} from './helpers';
+import {revealDeclarativeTarget} from './declarative-camera';
 
 declare const state:any;
 declare const offline:any;
@@ -23,10 +24,13 @@ async function backgammon(request:APIRequestContext){
   expect(response.ok(),await response.text()).toBeTruthy();return response.json();
 }
 
-async function nextAction(page:Page){
+async function nextAction(page:Page,expectedMoveCount?:number){
   const stage=page.locator('#game-box .declarative-stage');
   await expect(stage).toBeVisible();
   await expect(page.locator('#game-box .declarative-error:visible')).toHaveCount(0);
+  // A committed parent response can precede the reducer's rendered snapshot.
+  const expected=expectedMoveCount??await page.evaluate(()=>state.match.move_count);
+  await expect.poll(()=>page.evaluate(count=>(window as any).backgammonRendered.some((message:any)=>message.host_id===(window as any).backgammonActiveHostId&&message.move_count===count),expected)).toBe(true);
   const signature=()=>stage.evaluate(node=>JSON.stringify([
     Array.from(node.querySelectorAll('.declarative-piece')).map(piece=>[piece.getAttribute('data-ui-id'),piece.getAttribute('transform'),piece.textContent]),
     Array.from(node.querySelectorAll(':scope > text')).map(label=>label.textContent),
@@ -38,10 +42,10 @@ async function nextAction(page:Page){
   else{
     const checker=page.locator('#game-box .declarative-piece.actionable').first();
     await expect(checker).toHaveAttribute('data-actions','move');
-    await checker.click();
+    await revealDeclarativeTarget(page,checker);await checker.locator(':scope > g[opacity]').click();
     await expect(stage).toHaveClass(/show-drop-hints/);
     const target=page.locator('#game-box .declarative-target[data-drop-state="allowed"]').first();
-    await expect(target).toBeVisible();await target.click();
+    await expect(target).toBeVisible();await revealDeclarativeTarget(page,target);await target.click();
   }
   // Local QuickJS moves do not have an HTTP response to await. Wait for the
   // actual new scene before choosing the next action from its DOM.
@@ -118,7 +122,7 @@ test('Backgammon appears in the ordinary catalog and finishes a two-player porta
     while(current.status==='ongoing'&&moves<305){
       const seat=current.turn_of_player_indices[0],page=pages[seat];
       const response=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`/matches/${created.id}/moves`);
-      await nextAction(page);const result=await response;expect(result.ok(),await result.text()).toBeTruthy();
+      await nextAction(page,current.move_count);const result=await response;expect(result.ok(),await result.text()).toBeTruthy();
       current=await result.json();moves++;
       expect(current.last_move_player_index).toBe(seat);await expectOwnMoveImmediate(page,current.move_count,seat);
       if(result.request().postDataJSON()?.move?.action==='move'&&current.status==='ongoing'&&!current.turn_of_player_indices.includes(seat))ownTurnEndingCheckerMoves++;

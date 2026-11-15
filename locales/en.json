@@ -897,9 +897,9 @@
   "ui.declarative.zoom.controls": "Board zoom",
   "ui.declarative.zoom.in": "Zoom in",
   "ui.declarative.zoom.out": "Zoom out",
-  "ui.declarative.zoom.reset": "Fit board",
+  "ui.declarative.zoom.reset": "Reset view",
   "ui.declarative.zoom.level": "Zoom: {percent}%",
-  "ui.declarative.zoom.hint": "Pinch to zoom. Drag the board to pan when zoomed.",
+  "ui.declarative.zoom.hint": "Pinch to zoom. Drag the board or use the arrow buttons to pan.",
   "ui.portal.quick_play": "▶ Play",
   "ui.portal.quick_play_aria": "Play {name} against computers now",
   "ui.quickplay.wait": "Please wait…",
@@ -938,5 +938,9 @@
   "ui.quickplay.preview_open": "Open preview ↗",
   "ui.quickplay.dolphin_title": "Dolphin Cove",
   "ui.quickplay.dolphin_collection": "BuildPlay · Coastal collection",
-  "ui.quickplay.dolphin_choose": "Pick a game and dive in."
+  "ui.quickplay.dolphin_choose": "Pick a game and dive in.",
+  "ui.declarative.zoom.left": "Pan left",
+  "ui.declarative.zoom.up": "Pan up",
+  "ui.declarative.zoom.down": "Pan down",
+  "ui.declarative.zoom.right": "Pan right"
 }

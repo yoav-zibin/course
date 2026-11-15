@@ -897,9 +897,9 @@
   "ui.declarative.zoom.controls": "棋盘缩放",
   "ui.declarative.zoom.in": "放大",
   "ui.declarative.zoom.out": "缩小",
-  "ui.declarative.zoom.reset": "适合棋盘",
+  "ui.declarative.zoom.reset": "重置视图",
   "ui.declarative.zoom.level": "缩放：{percent}%",
-  "ui.declarative.zoom.hint": "双指捏合可缩放。放大后拖动棋盘可平移。",
+  "ui.declarative.zoom.hint": "双指捏合可缩放。拖动棋盘或使用箭头按钮可平移。",
   "ui.portal.quick_play": "▶ 开始",
   "ui.portal.quick_play_aria": "立即与电脑玩{name}",
   "ui.quickplay.wait": "请稍候…",
@@ -938,5 +938,9 @@
   "ui.quickplay.preview_open": "打开预览 ↗",
   "ui.quickplay.dolphin_title": "Dolphin Cove",
   "ui.quickplay.dolphin_collection": "BuildPlay · 海岸精选",
-  "ui.quickplay.dolphin_choose": "选择游戏，尽情畅玩。"
+  "ui.quickplay.dolphin_choose": "选择游戏，尽情畅玩。",
+  "ui.declarative.zoom.left": "向左平移",
+  "ui.declarative.zoom.up": "向上平移",
+  "ui.declarative.zoom.down": "向下平移",
+  "ui.declarative.zoom.right": "向右平移"
 }

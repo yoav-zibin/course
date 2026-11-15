@@ -897,9 +897,9 @@
   "ui.declarative.zoom.controls": "تكبير اللوحة",
   "ui.declarative.zoom.in": "تكبير",
   "ui.declarative.zoom.out": "تصغير",
-  "ui.declarative.zoom.reset": "ملاءمة اللوحة",
+  "ui.declarative.zoom.reset": "إعادة ضبط العرض",
   "ui.declarative.zoom.level": "التكبير: {percent}%",
-  "ui.declarative.zoom.hint": "استخدم إصبعين للتكبير والتصغير. اسحب اللوحة المكبرة لتحريكها.",
+  "ui.declarative.zoom.hint": "باعد بين إصبعين أو قرّبهما للتكبير والتصغير. اسحب اللوحة أو استخدم أزرار الأسهم لتحريكها.",
   "ui.portal.quick_play": "▶ العب",
   "ui.portal.quick_play_aria": "العب {name} ضد الكمبيوتر الآن",
   "ui.quickplay.wait": "يرجى الانتظار…",
@@ -938,5 +938,9 @@
   "ui.quickplay.preview_open": "فتح المعاينة ↗",
   "ui.quickplay.dolphin_title": "Dolphin Cove",
   "ui.quickplay.dolphin_collection": "BuildPlay · المجموعة الساحلية",
-  "ui.quickplay.dolphin_choose": "اختر لعبة وانطلق."
+  "ui.quickplay.dolphin_choose": "اختر لعبة وانطلق.",
+  "ui.declarative.zoom.left": "تحريك إلى اليسار",
+  "ui.declarative.zoom.up": "تحريك إلى الأعلى",
+  "ui.declarative.zoom.down": "تحريك إلى الأسفل",
+  "ui.declarative.zoom.right": "تحريك إلى اليمين"
 }

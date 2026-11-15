@@ -146,10 +146,15 @@ logic. For games whose server stores counts rather than individual pieces,
 presentation `local_state` can reconcile identities, as Backgammon does for
 moves, captures, bar entry and bearing off.
 
-The portal camera supports two-finger pinch/spread zoom from 1× to 4× and
-panning the enlarged board by dragging its background. Zoom buttons and Fit
-board provide keyboard alternatives. Camera state survives scene changes and
-replay, and resets when the host opens a new match. Camera gestures stay in
+The portal camera starts at a readable view: visible piece bodies and targets
+stay at least 32 CSS pixels in both dimensions, and scene text at least 16 CSS
+pixels, after actual screen scaling. A dense board opens a focused, pannable
+view instead of shrinking its artwork to fit. Two-finger pinch/spread and zoom
+buttons allow up to four times this readable baseline; zooming out stops there.
+Drag the board background, use the arrow buttons, or focus the board and press
+the arrow keys to reach the rest of the board. Reset view restores the baseline
+and first actionable piece. Camera state survives scene changes and replay,
+adapts to viewport resizing, and resets when the host opens a new match. Camera gestures stay in
 the host and never emit `make_move`; two fingers cancel an unfinished piece
 gesture. Native renderers can provide equivalent camera controls independently
 of the game spec.

@@ -897,9 +897,9 @@
   "ui.declarative.zoom.controls": "Spielbrett-Zoom",
   "ui.declarative.zoom.in": "Vergrößern",
   "ui.declarative.zoom.out": "Verkleinern",
-  "ui.declarative.zoom.reset": "Spielbrett einpassen",
+  "ui.declarative.zoom.reset": "Ansicht zurücksetzen",
   "ui.declarative.zoom.level": "Zoom: {percent}%",
-  "ui.declarative.zoom.hint": "Mit zwei Fingern zoomen. Das vergrößerte Spielbrett zum Verschieben ziehen.",
+  "ui.declarative.zoom.hint": "Zum Zoomen zwei Finger zusammen- oder auseinanderziehen. Das Brett ziehen oder die Pfeiltasten zum Verschieben verwenden.",
   "ui.portal.quick_play": "▶ Spielen",
   "ui.portal.quick_play_aria": "Jetzt {name} gegen Computer spielen",
   "ui.quickplay.wait": "Bitte warten…",
@@ -938,5 +938,9 @@
   "ui.quickplay.preview_open": "Vorschau öffnen ↗",
   "ui.quickplay.dolphin_title": "Dolphin Cove",
   "ui.quickplay.dolphin_collection": "BuildPlay · Küstenkollektion",
-  "ui.quickplay.dolphin_choose": "Wähle ein Spiel und tauche ein."
+  "ui.quickplay.dolphin_choose": "Wähle ein Spiel und tauche ein.",
+  "ui.declarative.zoom.left": "Nach links verschieben",
+  "ui.declarative.zoom.up": "Nach oben verschieben",
+  "ui.declarative.zoom.down": "Nach unten verschieben",
+  "ui.declarative.zoom.right": "Nach rechts verschieben"
 }
