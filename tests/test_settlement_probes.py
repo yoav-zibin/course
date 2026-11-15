@@ -6,6 +6,8 @@ must be caught by the probes with the matching scenario label.
 """
 from types import SimpleNamespace
 
+import pytest
+
 from game_platform.game_checks import CHECKS, settlement_probes
 from game_platform.game_contract import probe_leaving
 
@@ -334,3 +336,66 @@ def test_move_agreement_sweeps_only_schema_difficulty_levels():
     assert any('difficulty easy' in failure and 'computerMove returned a move applyMove rejects' in failure
                for failure in failures), failures
     assert not any('state_schema' in failure for failure in failures), failures
+
+
+# Lifecycle examples may intentionally start after the match finished. They
+# still have to pass exact playerLeft settlement/view checks; they are not
+# approved requests for a new ordinary move or a bot move after game over.
+TERMINAL_REFERENCE = REFERENCE.replace(
+    "randomMove(state, playerId, ctx) { return {type: 'pass'}; }",
+    "randomMove(state, playerId, ctx) { if (state.finalPayouts) return null; return {type: 'pass'}; }",
+).replace(
+    "computerMove(state, playerId, ctx) { return {type: 'pass'}; }",
+    "computerMove(state, playerId, ctx) { if (state.finalPayouts) return null; return {type: 'pass'}; }",
+).replace(
+    "const s = {...state, moves: state.moves + 1, left: [...state.left]};",
+    "if (state.finalPayouts || move.type !== 'pass') throw new InvalidMove('no legal move');\n"
+    "    const s = {...state, moves: state.moves + 1, left: [...state.left]};",
+)
+
+
+def post_end_leave_contract(move):
+    state = {'moves': 5, 'turnSeat': 0, 'left': [], 'winner': 'human-1',
+             'finalPayouts': {'human-1': 11}}
+    return {**CONTRACT, 'cases': [{
+        'name': 'leave after a settled win', 'kind': 'intermediate',
+        'ctx': {**AGREEMENT_CONTRACT['cases'][0]['ctx'], 'pot': 11, 'move_count': 5},
+        'state': state, 'player_id': 'human-1', 'other_player_id': 'human-2',
+        'view_of_mover': state, 'view_of_other': state, 'move': move,
+        'expected_state': state, 'expected_turn': None,
+        'expected_payouts': {'human-1': 11},
+        'expected_view_of_mover': state, 'expected_view_of_other': state,
+    }]}
+
+
+@pytest.mark.parametrize('move', [None, {'type': 'leave'}])
+def test_settled_leave_example_does_not_require_a_post_end_bot_move(move):
+    from game_platform.game_contract import ContractLogic, verify_examples
+    from game_platform.game_logic import InvalidMoveError
+    contract = post_end_leave_contract(move)
+    assert verify_examples(TERMINAL_REFERENCE, contract) == [
+        {'name': 'leave after a settled win', 'passed': True}]
+    case = contract['cases'][0]
+    ctx = {key: value for key, value in case['ctx'].items() if key != 'seed'}
+    with pytest.raises(InvalidMoveError):
+        ContractLogic(TERMINAL_REFERENCE, contract).call(
+            'applyMove', case['state'], case['player_id'], {'type': 'pass'}, ctx=ctx)
+    assert probe_move_agreement(TERMINAL_REFERENCE, contract) == []
+
+
+def test_lifecycle_example_cannot_hide_generator_failure_on_same_live_position():
+    ordinary = {**AGREEMENT_CONTRACT['cases'][0], 'move': {'type': 'pass'}}
+    leave = {**ordinary, 'name': 'leave from opening', 'move': None}
+    failures = probe_move_agreement(DIVERGENT_RANDOM, {
+        **CONTRACT, 'cases': [leave, ordinary]})
+    assert any("example 'opening'" in failure and 'applyMove rejects' in failure
+               for failure in failures), failures
+
+
+def test_post_end_lifecycle_settlement_is_still_checked_exactly():
+    from game_platform.game_contract import verify_examples
+    bad = TERMINAL_REFERENCE.replace('return {state, turn: null, payouts: out};',
+                                     "return {state, turn: null, payouts: {'human-2': 11}};")
+    results = verify_examples(bad, post_end_leave_contract(None))
+    assert results[0]['passed'] is False
+    assert results[0]['error'] == 'Payouts differ'

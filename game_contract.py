@@ -52,6 +52,12 @@ class _RandomExample(Exception):
     """The illustrated outcome depends on a random draw."""
 
 
+def _uses_player_left(case):
+    # These examples exercise the lifecycle callback, including post-end
+    # settlement. Their inputs are not approved ordinary move positions.
+    return 'move' in case and (case['move'] is None or case['move'] == {'type': 'leave'})
+
+
 def verify_examples(code, contract):
     logic = ContractLogic(code, contract)
     results = []
@@ -91,7 +97,7 @@ def verify_examples(code, contract):
                         raise GameLogicError('Rejected move changed the player view')
                 results.append({'name':case['name'],'passed':True,'expected_error':'InvalidMove'})
                 continue
-            if case['move'] is None or case['move'] == {'type': 'leave'}:
+            if _uses_player_left(case):
                 # A leave example is executed through playerLeft, the same
                 # channel the settlement probes use. applyMove has no leave
                 # move, so routing the example there failed it with the
@@ -123,7 +129,7 @@ def probe_move_agreement(code, contract, *, samples=24):
     returns moves its own applyMove rejects (a second, divergent legality
     implementation), and generators that throw or crawl on ordinary
     positions. The probe samples randomMove (and calls computerMove once)
-    on every approved example's before-state and on one played-out
+    on every approved ordinary-move example's before-state and on one played-out
     mid-game position reached with the game's own generator, and
     requires every returned move to be accepted by applyMove. The
     played-out position matters: preconditions that only bite later —
@@ -220,7 +226,7 @@ def probe_move_agreement(code, contract, *, samples=24):
     for case in contract['cases']:
         if len(failures) >= 6:
             break
-        if 'expected_error' in case:
+        if 'expected_error' in case or _uses_player_left(case):
             continue
         state = case['state']
         if any(state == other for other in seen):
