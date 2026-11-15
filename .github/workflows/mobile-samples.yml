@@ -103,7 +103,7 @@ jobs:
     # Dormant until the Apple Developer Program setup in
     # mobile-samples/README.md is done: set repo variable
     # TESTFLIGHT_ENABLED=true and add secrets ASC_KEY_ID, ASC_ISSUER_ID,
-    # ASC_KEY_P8_BASE64 and APPLE_TEAM_ID.
+    # ASC_KEY_P8 (the raw .p8 file contents) and APPLE_TEAM_ID.
     if: vars.TESTFLIGHT_ENABLED == 'true'
     runs-on: macos-15
     defaults:
@@ -117,10 +117,10 @@ jobs:
       - name: Write the App Store Connect API key
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
         run: |
           mkdir -p "$HOME/.appstoreconnect/private_keys"
-          printf '%s' "$ASC_KEY_P8_BASE64" | base64 --decode \
+          printf '%s' "$ASC_KEY_P8" \
             > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
       - name: Archive (signed, automatic provisioning)
         env:
