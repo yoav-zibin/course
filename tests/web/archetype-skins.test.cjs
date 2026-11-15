@@ -140,7 +140,7 @@ function setupLayout(archetype) {
   node('match-title').textContent = 'Tic-Tac-Toe';
   const media = {matches: false, addEventListener: (_, fn) => { media.change = fn; }};
   const body = {classList: classes()};
-  const context = {I18n: {t: (key, params, fallback) => fallback ?? key}, window: {matchMedia: () => media}, navigator: {onLine: true},
+  const context = {I18n: {t: (key, params, fallback) => fallback ?? key}, window: {matchMedia: () => media, addEventListener() {}}, navigator: {onLine: true},
     document: {getElementById: node, body,
       documentElement: {dataset: archetype ? {portalArchetype: archetype} : {}},
       addEventListener: () => {}},

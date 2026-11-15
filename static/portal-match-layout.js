@@ -13,6 +13,14 @@ window.PortalMatchLayout = (() => {
   let previousStatus = null;
   let previousConflict = null;
 
+  function positionTools() {
+    const toolbar = $("match-toolbar-title").parentElement;
+    // Fixed offsets cannot account for wrapped titles, clocks and translated
+    // buttons. Keep the panel below the actual toolbar, including after resize.
+    if (!toolbar?.getBoundingClientRect) return;
+    $("match").style.setProperty("--match-tools-top", `${toolbar.offsetTop + toolbar.offsetHeight + 8}px`);
+  }
+
   function render() {
     const active = Boolean(match);
     const waiting = match?.status === "waiting_for_players";
@@ -54,6 +62,7 @@ window.PortalMatchLayout = (() => {
     $("match-play-notice").textContent = notices.join(" · ");
     $("match-play-notice").hidden = notices.length === 0;
     $("match-play-notice").classList.toggle("error", Boolean(error || match?.conflict));
+    positionTools();
   }
 
   function update(next) {
@@ -74,6 +83,9 @@ window.PortalMatchLayout = (() => {
   }
 
   function init(onExit) {
+    const toolbar = $("match-toolbar-title").parentElement;
+    if (window.ResizeObserver && toolbar) new ResizeObserver(positionTools).observe(toolbar);
+    window.addEventListener("resize", positionTools);
     $("match-back").addEventListener("click", onExit);
     $("match-controls-toggle").addEventListener("click", () => {
       controlsOpen = !controlsOpen;

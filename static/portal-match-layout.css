@@ -12,6 +12,7 @@
 .match-tools #match-message:empty { display:none; }
 .match-tools .computer-stepper button { min-width:44px; min-height:44px; }
 .match-tools .match-result { font-size:18px; }
+.match-tools #how-to-play > summary { box-sizing:border-box; min-height:44px; padding:12px 4px; cursor:pointer; }
 
 body.match-page .portal-main > :not(#match) { display:none!important; }
 body.match-page .portal-main { padding:12px; gap:0; }
@@ -20,8 +21,8 @@ body.match-page .match-stage {
   flex:1; min-height:0; padding:8px; border-top-width:1px;
 }
 body.match-page .match-tools {
-  position:absolute; z-index:30; top:60px; right:8px;
-  width:min(360px,calc(100% - 16px)); max-height:calc(100% - 76px);
+  position:absolute; z-index:30; top:var(--match-tools-top,60px); right:8px;
+  width:min(360px,calc(100% - 16px)); max-height:calc(100% - var(--match-tools-top,60px) - 8px);
   overflow:auto; overscroll-behavior:contain; border:1px solid #44506b;
   border-radius:12px; box-shadow:0 8px 24px #0006;
 }
@@ -49,7 +50,7 @@ body.match-lobby .match-tools { position:static; width:100%; max-height:none; ov
   body.match-page .match-toolbar { flex-wrap:wrap; }
   body.match-page .match-toolbar h2 { flex-basis:calc(100% - 100px); }
   body.match-page #match-focus-toggle { margin-left:auto; }
-  body.match-page .match-tools { top:104px; max-height:calc(100% - 112px); }
+  body.match-page .match-tools { top:var(--match-tools-top,104px); max-height:calc(100% - var(--match-tools-top,104px) - 8px); }
 }
 
 /* Focus is a CSS layout, not the browser Fullscreen API: it works on Safari,
@@ -64,7 +65,7 @@ body.match-focus .match-toolbar h2 { flex-basis:auto; overflow:hidden; text-over
 body.match-focus .match-toolbar button { min-height:44px; padding:6px 10px; font-size:12px; background:transparent; border-color:transparent; }
 body.match-focus #match-focus-toggle { margin-left:0; }
 body.match-focus .frame-box { border:0; border-radius:0; }
-body.match-focus .match-tools { top:52px; max-height:calc(100% - 60px); }
+body.match-focus .match-tools { top:var(--match-tools-top,52px); max-height:calc(100% - var(--match-tools-top,52px) - 8px); }
 body.match-focus .match-play-notice { padding:4px 12px; }
 @media(max-width:360px) {
   body.match-focus .match-toolbar { gap:2px; padding-inline:2px; }
