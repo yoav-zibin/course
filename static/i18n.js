@@ -361,7 +361,7 @@ const I18n = (() => {
       const response = await fetch(`/i18n/games/${encodeURIComponent(asked)}`);
       if (!response.ok || code !== asked) return;
       const data = await response.json();
-      if (data.status === "unavailable") return; // nothing translated: keep what we have
+      if (code !== asked || data.status === "unavailable") return; // choice may change while the body arrives
       gamesText = data.games ?? {};
       write(GAMES_KEY + asked, gamesText);
       apply();

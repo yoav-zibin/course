@@ -209,6 +209,44 @@ test('Create does not post for a missing linked game or a changed account',async
   }
 });
 
+for(const failed of [false,true])test(`Create response ${failed?'failure':'success'} cannot replace another account's screen`,async()=>{
+  const calls=[];let release,reject;
+  const t=setup(async(method,path)=>{
+    calls.push([method,path]);
+    if(method==='POST'&&path==='/matches')return new Promise((resolve,fail)=>{release=resolve;reject=fail;});
+    throw new Error('Unexpected request after the account changed');
+  });
+  const pending=t.run('createMatch()');
+  assert.equal(typeof release,'function');
+  t.run('Auth.current=()=>({id:"other"});state.selectedId="other-account-match"');
+  t.node('create-message').textContent='Other account message';
+  if(failed)reject(new Error('Old account request failed'));
+  else release({id:'old-account-match',game_version:2,players:[{kind:'human',user_id:'owner'}]});
+  await pending;
+  assert.deepEqual(calls,[['POST','/matches']]);
+  assert.equal(t.run('state.selectedId'),'other-account-match');
+  assert.equal(t.node('create-message').textContent,'Other account message');
+});
+
+test('a delayed solo auto-start response cannot select a match for another account',async()=>{
+  let release;
+  const match={id:'old-account-match',game_version:2,players:[{kind:'human',user_id:'owner'}]};
+  const t=setup(async(method,path)=>{
+    if(path==='/matches')return match;
+    if(path==='/matches/old-account-match/start')return new Promise(resolve=>{release=resolve;});
+    throw new Error('Unexpected request');
+  });
+  const pending=t.run('createMatch()');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(typeof release,'function');
+  t.run('Auth.current=()=>({id:"other"});state.selectedId="other-account-match"');
+  t.node('create-message').textContent='Other account message';
+  release({...match,status:'ongoing'});
+  await pending;
+  assert.equal(t.run('state.selectedId'),'other-account-match');
+  assert.equal(t.node('create-message').textContent,'Other account message');
+});
+
 test('refresh retains the selected game while its detail fetch is pending',async()=>{
   let release;
   const t=setup(async(method,path)=>{

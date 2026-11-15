@@ -202,6 +202,23 @@ test('a delayed language bundle cannot restore old texts after switching to Engl
   assert.equal(t.run('I18n.gameName("chess","Chess")'),'Chess');
 });
 
+test('a delayed game-name response body cannot undo a newer language choice',async()=>{
+  const t=setup();await t.settle();let release;
+  const fetch=t.sandbox.fetch;
+  t.sandbox.fetch=async(url,options)=>url==='/i18n/games/es'
+    ?{ok:true,json:()=>new Promise(resolve=>{release=resolve;})}:fetch(url,options);
+  await t.run('I18n.choose("es")');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(typeof release,'function');
+  await t.run('I18n.choose("en")');
+  release({status:'translated',games:GAMES_TEXT});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(t.run('I18n.locale()'),'en');
+  assert.equal(t.document.documentElement.lang,'en');
+  assert.equal(t.run('I18n.gameName("chess","Chess")'),'Chess');
+  assert.equal(t.run('I18n.gameDescription("chess","A classic")'),'A classic');
+});
+
 test('logging in applies the account language over this browser\'s',async()=>{
   const t=setup({user:{id:'u1',password:'p'},accountLocale:'ar',stored:{'game-platform.locale.v1':'es'}});
   await t.settle();

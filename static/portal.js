@@ -2438,6 +2438,7 @@ async function createMatch() {
       try {
         game = await portalRequest("GET", `/games/${encodeURIComponent(gameId)}`, {force: true});
       } catch (error) { if(error.status!==404) throw error; }
+      if (user.id !== me()?.id) return;
       if (!game || game.id !== gameId) throw new Error(I18n.t("ui.portal.choose_game_search_first", {}, "Choose a game from the search results first."));
       if (!state.games.some(item=>item.id===gameId)) state.games.push(game);
     }
@@ -2452,10 +2453,12 @@ async function createMatch() {
         ...speedFields,
       },
     });
+    if (user.id !== me()?.id) return;
     // Solo-only games have no lobby or second seat to wait for. Start the pinned
     // version returned by the server; if the catalog changed, leave Start available.
     if (game && game.version === match.game_version && game.allowed_player_counts.length === 1 && game.allowed_player_counts[0] === 1 && match.players.length === 1) {
       match = await portalRequest("POST", `/matches/${match.id}/start`, {user, body: {first_turn_player_indices: [0]}});
+      if (user.id !== me()?.id) return;
       invalidatePopularGames();
       invalidateRecentGames();
       invalidateGamePopularity(match.game_id);
@@ -2463,6 +2466,7 @@ async function createMatch() {
     $("create-message").textContent = "";
     selectMatch(match.id);
   } catch (error) {
+    if (user.id !== me()?.id) return;
     if (match) selectMatch(match.id);
     $("create-message").textContent = match ? I18n.t("ui.portal.created_not_started", {message: error.message}, `Match created, but couldn't start automatically: ${error.message}. Press Start to retry.`) : error.message;
     $("create-message").className = "message error";
