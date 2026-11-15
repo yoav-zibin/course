@@ -88,6 +88,12 @@ jobs:
             -derivedDataPath "$GITHUB_WORKSPACE/ios-build" \
             CODE_SIGNING_ALLOWED=NO \
             build
+      - name: Verify distribution metadata in the built app
+        run: |
+          app="$GITHUB_WORKSPACE/ios-build/Build/Products/Debug-iphonesimulator/BuildPlaySample.app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$app/Info.plist")" = AppIcon
+          /usr/libexec/PlistBuddy -c 'Print :UILaunchScreen' "$app/Info.plist"
+          test -f "$app/Assets.car"
       - name: Zip the simulator app
         run: |
           cd "$GITHUB_WORKSPACE/ios-build/Build/Products/Debug-iphonesimulator"
@@ -104,7 +110,9 @@ jobs:
     # mobile-samples/README.md is done: set repo variable
     # TESTFLIGHT_ENABLED=true and add secrets ASC_KEY_ID, ASC_ISSUER_ID,
     # ASC_KEY_P8 (the raw .p8 file contents) and APPLE_TEAM_ID.
-    if: vars.TESTFLIGHT_ENABLED == 'true'
+    # Signing credentials and uploads are limited to main, including manual runs.
+    if: vars.TESTFLIGHT_ENABLED == 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: ios
     runs-on: macos-15
     defaults:
       run:
@@ -139,6 +147,7 @@ jobs:
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" \
             archive
       - name: Export the IPA
         env:

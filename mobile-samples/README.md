@@ -89,13 +89,18 @@ Then:
    **App Store Connect API key** (role: App Manager is enough) and
    download the `.p8` file — Apple only lets you download it once.
 3. In this repo → Settings → Secrets and variables → Actions, add:
-   - Secrets: `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8_BASE64`
-     (the `.p8` file content, base64-encoded), `APPLE_TEAM_ID`
+   - Secrets: `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`
+     (the raw `.p8` file content, including its BEGIN/END lines), `APPLE_TEAM_ID`
    - Variable: `TESTFLIGHT_ENABLED` = `true`
-4. Re-run the **Mobile samples** workflow. The build appears in
+4. Run the **Mobile samples** workflow on **main**. The build appears in
    TestFlight (App Store Connect → your app → TestFlight) after Apple
    finishes processing it, typically within ~15 minutes. Add yourself
    as an internal tester, install via the TestFlight app, done.
+
+Once enabled, TestFlight uploads run only for pushes to **main** and manual
+runs on **main**. Pull requests still build the unsigned simulator sample.
+Each archive uses the workflow run number and attempt as its build string
+(for example, `12.1`), so new runs and retries get distinct build numbers.
 
 Keep the `.p8` key and passwords in a password manager / secure vault —
 never commit them to this repository.
