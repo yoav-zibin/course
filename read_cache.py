@@ -24,6 +24,7 @@ import queue
 import threading
 import time
 from collections import OrderedDict
+from dataclasses import fields, is_dataclass
 
 REFRESH_SECONDS = 1.0
 _WORKERS = 4
@@ -50,6 +51,9 @@ def estimate_size(value) -> int:
         )
     if isinstance(value, (list, tuple)):
         return 64 + sum(estimate_size(v) for v in value)
+    if is_dataclass(value) and not isinstance(value, type):
+        return 64 + sum(64 + len(field.name) + estimate_size(getattr(value, field.name))
+                        for field in fields(value))
     return 64
 
 
@@ -66,9 +70,10 @@ class _Entry:
 class ReadCache:
     """Thread-safe LRU cache with background stale-while-revalidate refresh.
 
-    Keys are opaque hashables; values are Firestore-shaped data (dicts, or
-    None for a missing document). [submit] schedules background work; tests
-    inject a synchronous submit, production uses a small daemon thread pool.
+    Keys are opaque hashables; values are copied on read and write. A caller
+    may supply a specialized copier for validated models. [submit] schedules
+    background work; tests inject a synchronous submit, production uses a small
+    daemon thread pool.
     """
 
     def __init__(
@@ -78,6 +83,7 @@ class ReadCache:
         refresh_seconds=REFRESH_SECONDS,
         clock=time.monotonic,
         submit=None,
+        copy_value=copy.deepcopy,
     ):
         self._max_bytes = (
             default_max_bytes() if max_bytes is None else max_bytes
@@ -92,6 +98,7 @@ class ReadCache:
         self._workers_started = False
         self._closed = False
         self._submit = submit if submit is not None else self._enqueue
+        self._copy_value = copy_value
 
     # -- reads -------------------------------------------------------------
 
@@ -112,7 +119,7 @@ class ReadCache:
         if job is not None:
             self._submit(job)
         if value is not _MISSING:
-            return copy.deepcopy(value)
+            return self._copy_value(value)
         fresh = fetch()
         self.put(key, fresh)
         return fresh
@@ -157,7 +164,7 @@ class ReadCache:
             for key in missing:
                 self.put(key, fetched[key])
                 values[key] = fetched[key]
-        return {key: copy.deepcopy(values[key]) for key in keys}
+        return {key: self._copy_value(values[key]) for key in keys}
 
     # -- writes ------------------------------------------------------------
 
@@ -181,7 +188,7 @@ class ReadCache:
             self._total_bytes -= evicted.size
         now = self._clock()
         self._entries[key] = _Entry(
-            copy.deepcopy(value),
+            self._copy_value(value),
             size,
             now + self._refresh_seconds,
             now + self._refresh_seconds,

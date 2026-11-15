@@ -21,6 +21,7 @@ from google.api_core.exceptions import Aborted, AlreadyExists, FailedPreconditio
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import TypeAdapter
+from pydantic_core import to_jsonable_python
 
 from game_platform.models import (
     Experiment,
@@ -94,6 +95,15 @@ ADAPTERS = {k: TypeAdapter(v) for k, v in TYPES.items()}
 MOVE_ADAPTER = TypeAdapter(Move)
 SCHEMA = 1
 LEGACY_LIMIT = 100
+
+
+def _copy_game_metadata(value):
+    raw, game = value
+    # Game and GameRules are frozen; only these JSON fields contain mutable
+    # containers. The native serializer clones those containers without Python
+    # deepcopy traversal or another validation pass over the large source JSON.
+    return raw, replace(game, import_package=to_jsonable_python(game.import_package),
+                        game_schemas=to_jsonable_python(game.game_schemas))
 
 
 def key(value: str) -> str:
@@ -203,6 +213,12 @@ class QueryStore:
         # cache (see read_cache.py); transactional reads always go through
         # their Firestore transaction.
         self._cache = ReadCache()
+        # Cache decoding by complete source JSON, after the ordinary document
+        # read has established freshness. Values are copied on every hit.
+        # Including source JSON in the value accounts for its key's memory too.
+        self._game_metadata_cache = ReadCache(
+            max_bytes=256 * 1024 * 1024, refresh_seconds=float('inf'),
+            copy_value=_copy_game_metadata)
         self.translation_memory = TranslationMemory(_BundleBackend(self))
         marker = self.collection("meta").document("schema").get()
         if not marker.exists or marker.to_dict().get("version") != SCHEMA:
@@ -308,6 +324,7 @@ class QueryStore:
         from Firestore. Used by callers that invalidate cached state
         end-to-end (the live demo's epoch invalidation)."""
         self._cache.clear()
+        self._game_metadata_cache.clear()
 
     def _cache_committed(self, path, data):
         self._cache.put(("doc", path), data)
@@ -326,6 +343,7 @@ class QueryStore:
 
     def close(self):
         self._cache.close()
+        self._game_metadata_cache.close()
 
     def put_experiment(self, experiment):
         self._put("experiments", experiment.id, experiment)
@@ -729,7 +747,12 @@ class QueryStore:
     def _decode(self, kind, data, ref, *, detail=True):
         if data is None or data.get("tombstone"):
             return None
-        record = ADAPTERS[kind].validate_json(data["json"])
+        if kind in ("games", "game_versions"):
+            raw = data['json']
+            _, record = self._game_metadata_cache.get_or_fetch(
+                (kind, raw), lambda: (raw, self._decode_game_metadata(kind, raw)))
+        else:
+            record = ADAPTERS[kind].validate_json(data["json"])
         if kind in ("games", "game_versions") and detail:
             chunks = data.get("body_chunks", 0)
             body = "".join(
@@ -738,20 +761,6 @@ class QueryStore:
             )
             if body:
                 record = replace(record, **json.loads(body))
-        if kind in ("games", "game_versions"):
-            # Records written before the Builder deletion carry the old builder
-            # workflow instead of an import package; convert on read.
-            if record.import_package is None:
-                legacy = json.loads(data["json"]).get("builder_workflow")
-                if legacy:
-                    record = replace(record, import_package=import_package_from_legacy_workflow(legacy))
-            if record.import_package:
-                # Packages written before the hash-only change carry the
-                # resubmission secret itself; normalize on read (the record
-                # is serialized in hash form on its next save).
-                normalized = hash_package_secret(record.import_package)
-                if normalized is not record.import_package:
-                    record = replace(record, import_package=normalized)
         if kind == "matches":
             count = data.get("move_count", 0)
             record = replace(
@@ -759,6 +768,19 @@ class QueryStore:
                 moves=MoveHistory(count, lambda a, b: self._read_moves(ref, a, b),
                                   last_move_player_index=data.get("last_move_player_index")),
             )
+        return record
+
+    def _decode_game_metadata(self, kind, raw):
+        record = ADAPTERS[kind].validate_json(raw)
+        # Old Builder records convert to import packages without rereading code.
+        if record.import_package is None:
+            legacy = json.loads(raw).get('builder_workflow')
+            if legacy:
+                record = replace(record, import_package=import_package_from_legacy_workflow(legacy))
+        if record.import_package:
+            normalized = hash_package_secret(record.import_package)
+            if normalized is not record.import_package:
+                record = replace(record, import_package=normalized)
         return record
 
     def _get(self, kind, identity, *, detail=True):

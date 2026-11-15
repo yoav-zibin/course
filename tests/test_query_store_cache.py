@@ -3,11 +3,15 @@ results and move batches are served from memory, own writes are written
 through at commit, and transactional reads always bypass the cache."""
 
 import datetime as dt
+import json
+from dataclasses import replace
+from unittest.mock import patch
 
 from game_platform.models import Move
-from game_platform.query_store import MOVE_ADAPTER
+from game_platform.query_store import ADAPTERS, MOVE_ADAPTER
 from game_platform.read_cache import ReadCache
 from game_platform.tests.fake_firestore import FakeClient, query_store
+from game_platform.tests.helpers import Api
 
 NS = "testcache"
 
@@ -26,6 +30,78 @@ def make_store():
 def drain(jobs):
     while jobs:
         jobs.pop(0)()
+
+
+def cached_game():
+    store, client, clock, jobs = make_store()
+    api = Api(store=store)
+    owner = api.new_user('decoded cache owner')
+    game_id = api.new_game(owner=owner)
+    original = store.get_game(game_id)
+    original = replace(original, import_package={'images': []},
+                       game_schemas={**original.game_schemas, 'state': {'description': 'Cache isolation fixture'}})
+    store.put_game_version(original)
+    store.clear_cache()
+    return store, client, clock, jobs, game_id, original
+
+
+def test_decoded_game_cache_avoids_revalidation_and_isolates_mutable_fields():
+    store, _, _, _, game_id, _ = cached_game()
+    adapter = ADAPTERS['games']
+    with patch.object(adapter, 'validate_json', wraps=adapter.validate_json) as validate:
+        first = store.get_game_without_code(game_id)
+        first.import_package['images'].append({'svg': 'changed by caller'})
+        first.game_schemas['state']['title'] = 'caller-only change'
+        second = store.get_game_without_code(game_id)
+        assert second.import_package == {'images': []}
+        assert second.game_schemas['state'].get('title') != 'caller-only change'
+        second.import_package['images'].append({'svg': 'changed after cache hit'})
+        assert store.get_game_without_code(game_id).import_package == {'images': []}
+        assert validate.call_count == 1
+    store.close()
+
+
+def test_decoded_game_cache_preserves_transaction_freshness_and_cross_instance_refresh():
+    first, client, clock, jobs, game_id, original = cached_game()
+    assert first.get_game_without_code(game_id).published
+    second = query_store(NS, client)
+    second.put_game_version(replace(original, published=False, name='Updated elsewhere'))
+    reads = client.reads
+    with first.atomic():
+        game = first.get_game_without_code(game_id)
+        assert not game.published and game.name == 'Updated elsewhere'
+    assert client.reads > reads  # The transaction still reads the database.
+    assert first.get_game_without_code(game_id).published  # Existing one-second read window.
+    clock[0] += 2
+    first.get_game_without_code(game_id)
+    drain(jobs)
+    game = first.get_game_without_code(game_id)
+    assert not game.published and game.name == 'Updated elsewhere'
+    first.close()
+    second.close()
+
+
+def test_decoded_game_cache_keeps_code_chunks_separate_and_observes_new_bodies():
+    store, _, _, _, game_id, original = cached_game()
+    assert store.get_game_without_code(game_id).code == ''
+    assert store.get_game(game_id).code == original.code
+    ref = store.ref('games', game_id).collection('body').document('000000')
+    store.raw_put(ref, {'text': json.dumps({'code': '<main>Updated code</main>',
+                                         'server_code': original.server_code})})
+    assert store.get_game(game_id).code == '<main>Updated code</main>'
+    assert store.get_game_without_code(game_id).code == ''
+    store.close()
+
+
+def test_clearing_cache_discards_decoded_game_models_too():
+    store, _, _, _, game_id, _ = cached_game()
+    adapter = ADAPTERS['games']
+    with patch.object(adapter, 'validate_json', wraps=adapter.validate_json) as validate:
+        store.get_game_without_code(game_id)
+        store.clear_cache()
+        store.get_game_without_code(game_id)
+        assert validate.call_count == 2
+    store.close()
 
 
 def test_raw_get_is_served_from_cache():

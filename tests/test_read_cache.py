@@ -1,6 +1,7 @@
 """The stale-while-revalidate read cache in front of Firestore."""
 
 import pytest
+from dataclasses import dataclass
 
 from game_platform.read_cache import ReadCache, default_max_bytes, estimate_size
 from game_platform.scaling_service import LOGIC_CACHE_LIMIT
@@ -148,6 +149,20 @@ def test_oversized_value_is_never_cached():
     fetch = lambda: calls.append(1) or {"s": "x" * 1000}
     cache.get_or_fetch("big", fetch)
     cache.get_or_fetch("big", fetch)
+    assert len(calls) == 2
+
+
+def test_large_dataclass_payload_counts_toward_the_memory_budget():
+    @dataclass(frozen=True)
+    class Record:
+        payload: dict
+
+    cache, _, _ = make_cache(max_bytes=1024)
+    calls = []
+    record = Record({'nested': ['x' * 4096]})
+    fetch = lambda: calls.append(1) or record
+    assert cache.get_or_fetch('record', fetch) == record
+    assert cache.get_or_fetch('record', fetch) == record
     assert len(calls) == 2
 
 
