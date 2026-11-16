@@ -18,10 +18,11 @@ for (const skin of ['classic', 'aurora']) {
     // representative carousel beneath the menu so every viewport tests overlap.
     await menu.evaluate(panel => {
       const bounds = panel.getBoundingClientRect();
+      const left = Math.max(bounds.left + 20, 20);
       const carousel = document.createElement('div');
       carousel.id = 'stacking-carousel';
       carousel.className = 'popular-games-carousel';
-      carousel.style.cssText = `position:absolute;left:0;top:0;width:${Math.min(180, bounds.width - 40)}px;height:210px`;
+      carousel.style.cssText = `position:absolute;left:0;top:0;width:${Math.min(180, bounds.right - left - 20)}px;height:210px`;
       carousel.innerHTML = `
         <div class="popular-game-card-wrap" style="height:100%">
           <button class="popular-game-card" type="button">
@@ -34,7 +35,7 @@ for (const skin of ['classic', 'aurora']) {
         <button class="popular-games-scroll-button is-next" type="button" aria-label="Next fixture game">›</button>`;
       document.querySelector('.portal-main')!.append(carousel);
       const origin = carousel.getBoundingClientRect();
-      carousel.style.left = `${bounds.left + 20 - origin.left}px`;
+      carousel.style.left = `${left - origin.left}px`;
       carousel.style.top = `${bounds.top + 24 - origin.top}px`;
     });
 
