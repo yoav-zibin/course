@@ -656,7 +656,12 @@ button:disabled {
   border: 1px solid var(--color-border-3);
   border-radius: var(--radius-sm);
   padding: var(--space-sm);
-  min-width: 240px;
+  width: max-content;
+  min-width: min(240px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 2px;

@@ -513,6 +513,7 @@ const Auth = (() => {
     const focusedAction = container.contains(document.activeElement)
       && container._authAccountId === account?.id
       ? document.activeElement.dataset.authAction : null;
+    container._authMenuResizeObserver?.disconnect();
     container.replaceChildren();
     const button = el("button", {
       type: "button",
@@ -527,6 +528,19 @@ const Auth = (() => {
     panel.hidden = !panelWasOpen;
     panel.inert = !panelWasOpen;
     panel.setAttribute("aria-hidden", String(!panelWasOpen));
+    const positionPanel = () => {
+      if (panel.hidden) return;
+      // Right alignment can put a wrapped mobile header's menu off-screen.
+      // Measure without a previous correction, then keep both edges visible.
+      panel.style.right = "0px";
+      const bounds = panel.getBoundingClientRect();
+      const viewport = document.documentElement;
+      const left = Math.max(8, Math.min(bounds.left, viewport.clientWidth - bounds.width - 8));
+      panel.style.right = `${bounds.left - left}px`;
+      // offsetTop excludes the reveal animation's temporary translation.
+      const top = container.getBoundingClientRect().top + panel.offsetTop;
+      panel.style.maxHeight = `${Math.max(0, viewport.clientHeight - top - 8)}px`;
+    };
     const hidePanel = () => {
       panel.inert = true;
       panel.setAttribute("aria-hidden", "true");
@@ -537,13 +551,16 @@ const Auth = (() => {
       panel.hidden = !panel.hidden;
       panel.inert = panel.hidden;
       panel.setAttribute("aria-hidden", String(panel.hidden));
+      positionPanel();
     };
     container._hideAuthMenu = hidePanel;
+    container._positionAuthMenu = positionPanel;
     if (!container._authCloseBound) {
       container._authCloseBound = true;
       document.addEventListener("click", event => {
         if (!container.contains(event.target)) container._hideAuthMenu?.();
       });
+      window.addEventListener("resize", () => container._positionAuthMenu?.());
     }
 
     if (account) {
@@ -613,6 +630,14 @@ const Auth = (() => {
       );
     }
     container.append(button, panel);
+    positionPanel();
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(positionPanel);
+      observer.observe(panel);
+      const header = container.closest(".topbar");
+      if (header) observer.observe(header);
+      container._authMenuResizeObserver = observer;
+    }
     container._authRenderKey = key;
     container._authAccountId = account?.id;
     if (focusedAction) {
