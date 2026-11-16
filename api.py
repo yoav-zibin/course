@@ -1918,7 +1918,7 @@ def _error_page_content(status_code: int, locale: str = i18n.DEFAULT_LOCALE) -> 
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#10131d" />
     <title>{html.escape(label)} · {html.escape(app_name)}</title>
-    <link rel="stylesheet" href="/static/common.css?v=16" />
+    <link rel="stylesheet" href="/static/common.css?v=18" />
     <link rel="stylesheet" href="/static/error.css?v=1" />
   </head>
   <body class="error-page-body">
