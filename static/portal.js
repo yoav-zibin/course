@@ -290,6 +290,30 @@ const frame = {
 
 // TOKEN_UI_POLISH_V1: backend-owned balances; never award or settle tokens in the browser.
 let walletBalance = null;
+let walletUserId = null;
+function initializeTokenWallet(user = me()) {
+  const wallet = $("token-wallet");
+  if (!user) {
+    wallet.hidden = true;
+    walletUserId = null;
+    walletBalance = null;
+    $("token-balance").textContent = "0";
+    updateStakePreview();
+    return;
+  }
+  if (walletUserId !== user.id) {
+    walletUserId = user.id;
+    const cached = offline.cached?.(`/users/${encodeURIComponent(user.id)}`);
+    walletBalance = Number.isSafeInteger(cached?.token_balance) && cached.token_balance >= 0
+      ? cached.token_balance : null;
+    // The initial 0 reserves the wallet's space; it is not a confirmed balance
+    // for stake previews. Reuse a saved server balance when one is available.
+    $("token-balance").textContent = String(walletBalance ?? 0);
+    syncWalletTitle();
+    updateStakePreview();
+  }
+  wallet.hidden = false;
+}
 function portalCurrencyName() {
   return document.documentElement?.dataset?.portalCurrency === "gems" ? "gems" : "tokens";
 }
@@ -316,7 +340,7 @@ function syncPortalCurrencyLabels() {
 }
 function syncWalletTitle() {
   const wallet = $("token-wallet");
-  if (wallet) wallet.title = portalCurrencyText("ui.portal.wallet_hint", {balance:I18n.number(walletBalance)}, "{balance} virtual tokens · +10 daily allowance on your first paid match entry");
+  if (wallet) wallet.title = portalCurrencyText("ui.portal.wallet_hint", {balance:I18n.number(walletBalance ?? 0)}, "{balance} virtual tokens · +10 daily allowance on your first paid match entry");
 }
 function updateStakePreview() {
   const select = $("match-stake"), preview = $("stake-preview"), panel = $("token-stake-panel");
@@ -344,22 +368,24 @@ function updateStakePreview() {
 }
 
 async function updateTokenWallet(user, record) {
+  if (me()?.id !== user?.id) return;
+  initializeTokenWallet(user);
   const wallet = $("token-wallet");
-  if (!user) { wallet.hidden = true; walletBalance = null; updateStakePreview(); return; }
+  if (!user) return;
   try {
     // [record] is the /users/{id} row fetched with the catalog batch; when it
     // is not supplied (or the batch fetch failed), fetch it directly.
     if (record === undefined)
       record = await portalTransport("GET", `/users/${encodeURIComponent(user.id)}`, {user});
-    if (!record) { wallet.hidden = true; walletBalance = null; updateStakePreview(); return; }
     if (me()?.id !== user.id) return;
+    if (!record) return;
     // Accounts saved before short invite links learn their referral code here.
     state.pictureCache.set(user.id, record.picture_url);
     state.nameCache.set(user.id, record.display_name);
     if (record.referral_code) Auth.setReferralCode?.(user.id, record.referral_code);
     if (Auth.setPicture?.(user.id, record.picture_url)) renderPortalAccountMenu();
     if (!Number.isSafeInteger(record.token_balance) || record.token_balance < 0) {
-      wallet.hidden = true; walletBalance = null; updateStakePreview(); return;
+      return;
     }
     walletBalance = record.token_balance;
     const balance = String(walletBalance);
@@ -369,7 +395,7 @@ async function updateTokenWallet(user, record) {
     // No optimistic balance adjustments: the server may grant today's +10 at start.
     updateStakePreview();
   } catch {
-    wallet.hidden = true; walletBalance = null; updateStakePreview();
+    // Keep this account's last balance visible while the network recovers.
   }
 }
 
@@ -415,6 +441,7 @@ function me() {
 
 const portalMoreOptions = $("portal-more-options");
 function renderPortalAccountMenu() {
+  initializeTokenWallet();
   const container = $("account-menu");
   Auth.renderMenu(container);
   const panel = container.querySelector(".auth-menu-panel");
@@ -831,7 +858,7 @@ async function refreshLocked() {
       showPageError("");
       return;
     }
-    if (!user) $("token-wallet").hidden = true;
+    initializeTokenWallet(user);
     if (!user) {
       state.recentGames = [];
       state.recentGamesFetchedAt = 0;
@@ -848,7 +875,7 @@ async function refreshLocked() {
     const popularityRequestVersion = state.popularGamesRequestVersion;
     const recentGamesDue = Boolean(user) && (state.recentGamesForceRefresh || Date.now() - state.recentGamesFetchedAt >= 60_000);
     const recentGamesRequestVersion = state.recentGamesRequestVersion;
-    const [games, myMatches, openMatches, popularGames, recentGames, userRecord] = await Promise.all([
+    const [games, myMatches, openMatches, popularGames, recentGames] = await Promise.all([
       StoragePages.list(portalRequest, "/games", {user}),
       user ? StoragePages.list(portalRequest, "/matches", {user}) : [],
       StoragePages.list(portalRequest, "/matches/open", {user}),
@@ -860,7 +887,8 @@ async function refreshLocked() {
         : null,
       // The token-wallet row rides the same batch instead of its own call.
       user
-        ? portalRequest("GET", `/users/${encodeURIComponent(user.id)}`, {user}).catch(() => null)
+        ? portalRequest("GET", `/users/${encodeURIComponent(user.id)}`, {user})
+          .then(record => updateTokenWallet(user, record)).catch(() => null)
         : null,
     ]);
     // A page may omit the game currently on screen. Keep the previous
@@ -915,8 +943,6 @@ async function refreshLocked() {
       }
     }
     await ensureDetails();
-    if (user?.id !== me()?.id) return;
-    await updateTokenWallet(user, userRecord);
     if (user?.id !== me()?.id) return;
     render();
     window.PortalFeedback?.update(state.match, user?.id, {
@@ -2685,6 +2711,7 @@ function shouldRestoreSavedMatch() {
 }
 
 async function main() {
+  initializeTokenWallet();
   setupPopularGamesCarousel();
   syncPortalCurrencyLabels();
   window.PortalMatchLayout?.init(() => {

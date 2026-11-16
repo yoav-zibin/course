@@ -521,8 +521,12 @@ const Auth = (() => {
       "aria-haspopup": "true",
       "data-auth-action": "toggle",
     },
-      avatarImg(account?.picture_url),
-      account ? account.display_name : I18n.t("ui.auth.log_in", {}, "Log in")
+      avatarImg(account?.picture_url) || el("span", {
+        class: "auth-avatar auth-avatar-placeholder",
+        "aria-hidden": "true",
+        textContent: account?.display_name?.trim().charAt(0).toLocaleUpperCase() || "○",
+      }),
+      el("span", { class: "auth-menu-label", textContent: account ? account.display_name : I18n.t("ui.auth.log_in", {}, "Log in") })
     );
     const panel = el("div", { class: "auth-menu-panel", hidden: true });
     panel.hidden = !panelWasOpen;

@@ -1097,6 +1097,73 @@ test('the catalog count leaves out the Random game card',()=>{
 });
 
 
+test('the wallet appears immediately without treating its placeholder as a confirmed balance',()=>{
+  const {node,run}=setup();
+  node('token-wallet').hidden=true;
+  run('initializeTokenWallet()');
+  assert.equal(node('token-wallet').hidden,false);
+  assert.equal(node('token-balance').textContent,'0');
+  assert.equal(run('walletBalance'),null);
+});
+
+test('initial wallet balances are cached per account and reset on account changes',()=>{
+  const {node,run}=setup();
+  run('offline.cached=path=>path==="/users/owner"?{token_balance:27}:{token_balance:-1};initializeTokenWallet()');
+  assert.equal(node('token-balance').textContent,'27');
+  run('Auth.current=()=>({id:"other"});initializeTokenWallet()');
+  assert.equal(node('token-balance').textContent,'0');
+  assert.equal(run('walletBalance'),null);
+  run('Auth.current=()=>null;initializeTokenWallet()');
+  assert.equal(node('token-wallet').hidden,true);
+});
+
+test('missing, malformed and failed profile refreshes retain the displayed wallet',async()=>{
+  const {node,run}=setup();
+  await run('updateTokenWallet(me(),{token_balance:41})');
+  for(const record of ['null','{}','{token_balance:-1}','{token_balance:1.5}']) {
+    await run(`updateTokenWallet(me(),${record})`);
+    assert.equal(node('token-wallet').hidden,false);
+    assert.equal(node('token-balance').textContent,'41');
+  }
+  run('portalTransport=async()=>{throw new Error("Temporary network failure")}');
+  await run('updateTokenWallet(me())');
+  assert.equal(node('token-wallet').hidden,false);
+  assert.equal(node('token-balance').textContent,'41');
+});
+
+for(const failed of [false,true])test(`a delayed wallet ${failed?'failure':'response'} cannot change another account's balance`,async()=>{
+  const {node,run}=setup();
+  run('portalTransport=()=>new Promise((resolve,reject)=>{globalThis.releaseWallet=resolve;globalThis.rejectWallet=reject})');
+  const pending=run('updateTokenWallet(me())');
+  run('Auth.current=()=>({id:"other"});initializeTokenWallet()');
+  await run('updateTokenWallet(me(),{token_balance:12})');
+  if(failed)run('rejectWallet(new Error("Old account request failed"))');
+  else run('releaseWallet({token_balance:999})');
+  await pending;
+  assert.equal(node('token-wallet').hidden,false);
+  assert.equal(node('token-balance').textContent,'12');
+});
+
+test('wallet refresh does not wait for the catalog response',async()=>{
+  let release;
+  const {node,run}=setup(async(method,path)=>{
+    if(path==='/games')return new Promise(resolve=>{release=resolve});
+    if(path==='/users/owner')return {token_balance:37};
+    return [];
+  });
+  run('offline.sync=async()=>{};ensureDetails=async()=>{};render=()=>{};syncGame=async()=>{};offlineStatus=()=>{}');
+  const pending=run('refreshLocked()');
+  await new Promise(resolve=>setImmediate(resolve));
+  try {
+    assert.equal(typeof release,'function');
+    assert.equal(node('token-wallet').hidden,false);
+    assert.equal(node('token-balance').textContent,'37');
+  } finally {
+    release?.([]);
+    await pending;
+  }
+});
+
 test('the stake preview sizes the pot by the smallest multiplayer count',()=>{
   // Regression (bug 16): a 3-4 player game read "20 tokens in a 2-player pot".
   const {node,run}=setup();
