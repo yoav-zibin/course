@@ -330,8 +330,11 @@
 
 /* Keep the primary controls together while navigation can use its own row. */
 @media (max-width:720px) {
-  html:root .topbar[data-app-page="portal"][data-app-brand] {
+  /* Match and focus views keep their existing match-first visibility rules. */
+  html:root body:not(.match-page):not(.match-focus) > .topbar[data-app-page="portal"][data-app-brand] {
     display:grid;
+  }
+  html:root .topbar[data-app-page="portal"][data-app-brand] {
     grid-template-columns:auto minmax(0,1fr) auto 44px;
     align-items:center;
     gap:6px;

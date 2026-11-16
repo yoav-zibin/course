@@ -8,7 +8,7 @@ function deferred() {
 }
 
 test('wallet appears before the profile response and refreshes its balance later', async ({ page, request }) => {
-  const user = await createUser(request, uniqueName('Wallet'));
+  const user = await createUser(request, uniqueName('😀 Wallet'));
   await loginAs(page, user);
   let gate = deferred();
   let profileRequested = deferred();
@@ -36,6 +36,7 @@ test('wallet appears before the profile response and refreshes its balance later
     await expect(wallet).toBeVisible();
     await expect(wallet.locator('#token-balance')).toHaveText('0');
     await expect(page.locator('#account-menu .auth-menu-button')).toBeVisible();
+    await expect(page.locator('#account-menu .auth-avatar-placeholder')).toHaveText('😀');
   } finally {
     gate.resolve();
   }
@@ -60,6 +61,34 @@ test('wallet appears before the profile response and refreshes its balance later
   await page.evaluate('refresh()');
   await expect(wallet).toBeVisible();
   await expect(wallet.locator('#token-balance')).toHaveText('41');
+});
+
+test('mobile match and focus layouts retain their header visibility rules', async ({ page, request }) => {
+  await loginAs(page, await createUser(request, uniqueName('Match header')));
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const skin of ['classic', 'sunset', 'neon', 'arcade', 'immersive']) {
+    await page.goto(`/static/portal.html?skin=${skin}`);
+    await page.addScriptTag({url: '/static/portal-match-layout.js'});
+    // Exercise the real layout controller and styles without creating a match.
+    const views = await page.evaluate(() => {
+      const layout = (window as any).PortalMatchLayout;
+      layout.init(() => {});
+      const header = document.querySelector('.topbar[data-app-page="portal"]')!;
+      layout.update({id: 'header-layout-fixture', status: 'waiting_for_players'});
+      const lobby = getComputedStyle(header).display;
+      layout.update({id: 'header-layout-fixture', status: 'ongoing'});
+      const match = getComputedStyle(header).display;
+      if (!document.body.classList.contains('match-focus'))
+        document.getElementById('match-focus-toggle')!.click();
+      const focused = getComputedStyle(header).display;
+      layout.update(null);
+      return {lobby, match, focused, catalog: getComputedStyle(header).display};
+    });
+    expect(views.lobby, `${skin} lobby`).toBe('none');
+    expect(views.match, `${skin} match`).toBe(skin === 'immersive' ? 'flex' : 'none');
+    expect(views.focused, `${skin} focus`).toBe(skin === 'immersive' ? 'flex' : 'none');
+    expect(views.catalog, `${skin} catalog`).toBe('grid');
+  }
 });
 
 test('phone header keeps brand, wallet, and account on one row', async ({ page, request }, testInfo) => {
