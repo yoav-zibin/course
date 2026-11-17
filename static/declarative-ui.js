@@ -234,70 +234,79 @@
     if(action==="rotate")return t("ui.declarative.hints.rotate", {}, "Rotate");
     return t("ui.declarative.hints.scale", {}, "Resize");
   }
+  function contentBounds(spec, scene = {}) {
+    const boxes = spec.boards.map(board => ({x:num(board.x),y:num(board.y),width:board.width,height:board.height}));
+    // Hands and other playable pieces may live outside their board surface.
+    // Include their rotated bodies and legal destinations, but not headings or
+    // instructions placed around the scene by an older game package.
+    for(const piece of scene.pieces || []) {
+      if(piece.hidden)continue;
+      const point=position(spec,piece),board=point.board,type=spec.piece_types[piece.type];
+      const width=num(type.width,board.kind==="grid"?board.width/board.columns*.76:42),height=num(type.height,board.kind==="grid"?board.height/board.rows*.76:width);
+      const angle=num(piece.rotation)*Math.PI/180,scale=num(piece.scale,1);
+      const w=(Math.abs(Math.cos(angle))*width+Math.abs(Math.sin(angle))*height)*scale;
+      const h=(Math.abs(Math.sin(angle))*width+Math.abs(Math.cos(angle))*height)*scale;
+      boxes.push({x:point.x-w/2,y:point.y-h/2,width:w,height:h});
+    }
+    for(const target of scene.targets || []) {
+      const point=position(spec,target),board=point.board;
+      const width=board.kind==="grid"?board.width/board.columns:44,height=board.kind==="grid"?board.height/board.rows:44;
+      boxes.push({x:point.x-width/2,y:point.y-height/2,width,height});
+    }
+    const x=Math.min(...boxes.map(box=>box.x)),y=Math.min(...boxes.map(box=>box.y));
+    return {x,y,width:Math.max(...boxes.map(box=>box.x+box.width))-x,height:Math.max(...boxes.map(box=>box.y+box.height))-y};
+  }
   function mount(container, rawSpec, callbacks = {}) {
     const spec = validateSpec(clone(rawSpec));
     container.replaceChildren();
     container.classList.add("declarative-game");
+    container.classList.toggle("declarative-immersive",Boolean(callbacks.immersive));
     const stage = svg("svg", {viewBox: `0 0 ${spec.viewport.width} ${spec.viewport.height}`, role: "group", tabindex: 0, "aria-label": t("ui.declarative.board_aria", {}, "Game board"), class: "declarative-stage"});
-    // Zoom changes the visible world, not the SVG's intrinsic aspect ratio.
-    stage.style.aspectRatio=`${spec.viewport.width} / ${spec.viewport.height}`;
-    const hintMessage=document.createElement("p");hintMessage.className="declarative-hint-message";hintMessage.setAttribute("role","status");hintMessage.setAttribute("aria-live","polite");hintMessage.hidden=true;
+    // The board takes the available panel in both dimensions. SVG's meet
+    // scaling preserves its geometry without an intrinsic-height overflow.
+    stage.setAttribute("aria-keyshortcuts", "+ - 0 ArrowLeft ArrowRight ArrowUp ArrowDown Home End");
     const pieceTools=document.createElement("div");pieceTools.className="declarative-piece-actions";pieceTools.hidden=true;
     const controls = document.createElement("div"); controls.className = "declarative-controls";
-    const cameraTools=document.createElement("div");cameraTools.className="declarative-zoom-controls";cameraTools.setAttribute("role","group");cameraTools.setAttribute("aria-label",t("ui.declarative.zoom.controls", {}, "Board zoom"));
-    const zoomOut=document.createElement("button"),zoomIn=document.createElement("button"),zoomReset=document.createElement("button"),zoomLevel=document.createElement("output"),zoomHint=document.createElement("span");
-    for(const [button,action,label,text] of [[zoomOut,"out",t("ui.declarative.zoom.out", {}, "Zoom out"),"−"],[zoomIn,"in",t("ui.declarative.zoom.in", {}, "Zoom in"),"+"],[zoomReset,"reset",t("ui.declarative.zoom.reset", {}, "Reset view"),null]]){button.type="button";button.dataset.cameraAction=action;button.setAttribute("aria-label",label);button.title=label;button.textContent=text||label;}
-    zoomLevel.className="declarative-zoom-level";zoomHint.className="declarative-zoom-hint";zoomHint.textContent=t("ui.declarative.zoom.hint", {}, "Pinch to zoom. Drag the board or use the arrow buttons to pan.");
-    cameraTools.append(zoomOut,zoomLevel,zoomIn,zoomReset,zoomHint);
-    const panButtons=[];
-    for(const [action,label,text,dx,dy] of [
-      ["left",t("ui.declarative.zoom.left",{},"Pan left"),"←",-1,0],
-      ["up",t("ui.declarative.zoom.up",{},"Pan up"),"↑",0,-1],
-      ["down",t("ui.declarative.zoom.down",{},"Pan down"),"↓",0,1],
-      ["right",t("ui.declarative.zoom.right",{},"Pan right"),"→",1,0],
-    ]){
-      const button=document.createElement("button");button.type="button";button.dataset.cameraAction=action;button.setAttribute("aria-label",label);button.title=label;button.textContent=text;
-      button.addEventListener("click",()=>panBy(dx,dy));cameraTools.insertBefore(button,zoomHint);panButtons.push([button,dx,dy]);
-    }
+    const sceneStatus=document.createElement("p");sceneStatus.className="declarative-scene-status";sceneStatus.setAttribute("role","status");sceneStatus.setAttribute("aria-live","polite");sceneStatus.hidden=true;
     const errorBox = document.createElement("p"); errorBox.className = "declarative-error"; errorBox.setAttribute("role", "alert"); errorBox.hidden = true;
-    container.append(hintMessage, cameraTools, stage, pieceTools, controls, errorBox);
+    container.append(stage, pieceTools, controls, sceneStatus, errorBox);
     const engine = createEngine(container);
     let latest = null, localState = null, revision = 0, renderedRevision = -1, destroyed = false, moveSent = false, selected = null, dragging = null, nativeDragging = null, currentScene = null, suppressClick = false;
     let lastStateMoveCount = null, lastStateWasReplay = false;
     // The camera belongs to the host. It never reaches the reducer or make_move,
     // and survives complete scene snapshots, including replay and turn changes.
-    const camera={x:0,y:0,zoom:1},touches=new Map();
+    let cameraBounds=callbacks.immersive?contentBounds(spec):{x:0,y:0,...spec.viewport};
+    const camera={x:cameraBounds.x,y:cameraBounds.y,zoom:1},touches=new Map();
     const minimumZoom=.25,maximumZoom=4;
     let cameraGesture=null,cameraClickUntil=0,cameraFrame=null;
     const pieceAnimations=new Set();
     function applyCamera() {
-      const width=spec.viewport.width/camera.zoom,height=spec.viewport.height/camera.zoom;
+      const width=cameraBounds.width/camera.zoom,height=cameraBounds.height/camera.zoom;
       // Below the fitted view, center the complete board in the extra space.
       // Above it, clamp panning to the board's actual edges.
-      const minX=Math.min(0,(spec.viewport.width-width)/2),maxX=Math.max(minX,spec.viewport.width-width);
-      const minY=Math.min(0,(spec.viewport.height-height)/2),maxY=Math.max(minY,spec.viewport.height-height);
+      const minX=cameraBounds.x+Math.min(0,(cameraBounds.width-width)/2),maxX=Math.max(minX,cameraBounds.x+cameraBounds.width-width);
+      const minY=cameraBounds.y+Math.min(0,(cameraBounds.height-height)/2),maxY=Math.max(minY,cameraBounds.y+cameraBounds.height-height);
       camera.x=Math.max(minX,Math.min(maxX,num(camera.x)));
       camera.y=Math.max(minY,Math.min(maxY,num(camera.y)));
       stage.setAttribute("viewBox",`${camera.x} ${camera.y} ${width} ${height}`);
       stage.classList.toggle("zoomed",camera.zoom>1);
-      zoomOut.disabled=camera.zoom<=minimumZoom+1e-9;zoomIn.disabled=camera.zoom>=maximumZoom-1e-9;
-      zoomReset.disabled=camera.zoom===1&&camera.x===0&&camera.y===0;
-      for(const [button,dx,dy] of panButtons)button.disabled=dx<0?camera.x<=minX+1e-9:dx>0?camera.x>=maxX-1e-9:dy<0?camera.y<=minY+1e-9:camera.y>=maxY-1e-9;
-      zoomLevel.textContent=t("ui.declarative.zoom.level", {percent:Math.round(camera.zoom*100)}, "Zoom: {percent}%");
     }
-    function panBy(dx,dy){camera.x+=dx*spec.viewport.width/camera.zoom*.1;camera.y+=dy*spec.viewport.height/camera.zoom*.1;applyCamera();}
+    function panBy(dx,dy){camera.x+=dx*cameraBounds.width/camera.zoom*.1;camera.y+=dy*cameraBounds.height/camera.zoom*.1;applyCamera();}
     stage.addEventListener("keydown",event=>{
       if(event.target!==stage)return;
       const directions={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
       if(directions[event.key]){event.preventDefault();panBy(...directions[event.key]);}
-      else if(event.key==="Home"){event.preventDefault();camera.x=0;camera.y=0;applyCamera();}
-      else if(event.key==="End"){event.preventDefault();camera.x=spec.viewport.width;camera.y=spec.viewport.height;applyCamera();}
+      else if(event.key==="+"||event.key==="="){event.preventDefault();zoomBy(1.25);}
+      else if(event.key==="-"||event.key==="_"){event.preventDefault();zoomBy(1/1.25);}
+      else if(event.key==="0"){event.preventDefault();resetCamera();}
+      else if(event.key==="Home"){event.preventDefault();camera.x=cameraBounds.x;camera.y=cameraBounds.y;applyCamera();}
+      else if(event.key==="End"){event.preventDefault();camera.x=cameraBounds.x+cameraBounds.width;camera.y=cameraBounds.y+cameraBounds.height;applyCamera();}
     });
     // 100% is the complete declared viewport. Keep this overview on first
     // load instead of cropping dense boards to enforce a fixed artwork size.
     // Users can magnify the same scene for precision without changing game state.
     function fitScene(){if(!destroyed)applyCamera();}
-    function resetCamera(){camera.zoom=1;camera.x=0;camera.y=0;applyCamera();}
+    function resetCamera(){camera.zoom=1;camera.x=cameraBounds.x;camera.y=cameraBounds.y;applyCamera();}
     function scheduleCamera(){if(cameraFrame===null)cameraFrame=global.requestAnimationFrame(()=>{cameraFrame=null;fitScene();});}
     const cameraObserver=typeof ResizeObserver!=="undefined"?new ResizeObserver(scheduleCamera):null;
     cameraObserver?.observe(stage);global.addEventListener("resize",scheduleCamera);
@@ -308,13 +317,15 @@
     }
     function zoomAt(zoom,x,y,anchor=boardPoint(x,y)) {
       if(!Number.isFinite(zoom))return;
-      const current=boardPoint(x,y),fx=(current.x-camera.x)/(spec.viewport.width/camera.zoom),fy=(current.y-camera.y)/(spec.viewport.height/camera.zoom);
+      const current=boardPoint(x,y),fx=(current.x-camera.x)/(cameraBounds.width/camera.zoom),fy=(current.y-camera.y)/(cameraBounds.height/camera.zoom);
       camera.zoom=Math.max(minimumZoom,Math.min(maximumZoom,zoom));
-      camera.x=anchor.x-fx*spec.viewport.width/camera.zoom;camera.y=anchor.y-fy*spec.viewport.height/camera.zoom;applyCamera();
+      camera.x=anchor.x-fx*cameraBounds.width/camera.zoom;camera.y=anchor.y-fy*cameraBounds.height/camera.zoom;applyCamera();
     }
     function zoomBy(factor) {const bounds=stage.getBoundingClientRect();zoomAt(camera.zoom*factor,bounds.x+bounds.width/2,bounds.y+bounds.height/2);}
-    zoomOut.addEventListener("click",()=>zoomBy(1/1.25));zoomIn.addEventListener("click",()=>zoomBy(1.25));
-    zoomReset.addEventListener("click",resetCamera);
+    stage.addEventListener("wheel",event=>{
+      event.preventDefault();
+      zoomAt(camera.zoom*Math.exp(-Math.max(-500,Math.min(500,event.deltaY))*.002),event.clientX,event.clientY);
+    },{passive:false});
     function cameraClickBlocked(){return Boolean(cameraGesture)||Date.now()<cameraClickUntil;}
     function beginPinch() {
       const [a,b]=[...touches.entries()];if(!b)return;
@@ -396,9 +407,6 @@
         node.dataset.dropState=!active?"inactive":destinations?(allowed?"allowed":"unavailable"):"placement";
         node.setAttribute("aria-disabled",String(!allowed));node.setAttribute("tabindex",allowed?"0":"-1");
       }
-      const hasAction=active&&Boolean(currentScene?.pieces?.some(piece=>pieceActions(piece).length)||currentScene?.targets?.length||currentScene?.controls?.some(control=>!control.disabled));
-      hintMessage.hidden=!hasAction;
-      hintMessage.textContent=destinations?t("ui.declarative.hints.choose_destination", {}, "Choose a highlighted destination"):t("ui.declarative.hints.legend", {}, "Highlights show what you can do next.");
       for(const wrapper of controls.querySelectorAll(".declarative-control")){
         const node=wrapper.querySelector("button,input,select");
         const control=currentScene?.controls?.find(item=>item.id===node?.dataset.uiId);
@@ -536,7 +544,12 @@
         }
       }
       stage.append(targetLayer);
-      for(const label of scene.labels || [])stage.append(svg("text",{x:num(label.x),y:num(label.y),fill:label.color || "#e4edf4","font-size":num(label.font_size,18),"dominant-baseline":"hanging"},label.text));
+      const externalLabels=[];
+      for(const label of scene.labels || []){
+        if(callbacks.immersive&&!spec.boards.some(board=>label.x>=num(board.x)&&label.x<num(board.x)+board.width&&label.y>=num(board.y)&&label.y<num(board.y)+board.height)){externalLabels.push(label.text);continue;}
+        stage.append(svg("text",{x:num(label.x),y:num(label.y),fill:label.color || "#e4edf4","font-size":num(label.font_size,18),"dominant-baseline":"hanging"},label.text));
+      }
+      sceneStatus.textContent=externalLabels.join(". ");sceneStatus.hidden=!externalLabels.length;
       for(const control of scene.controls || []) {
         const wrapper=document.createElement("label");wrapper.className="declarative-control";
         let node;
@@ -558,6 +571,7 @@
         }
         node.dataset.uiId=control.id;node.disabled=Boolean(control.disabled)||!canAct();wrapper.classList.toggle("actionable",!node.disabled);wrapper.append(node);controls.append(wrapper);
       }
+      if(callbacks.immersive)cameraBounds=contentBounds(spec,scene);
       fitScene();scheduleCamera();updateHints();
       if(activeId)for(const node of container.querySelectorAll("[data-ui-id]"))if(node.dataset.uiId===activeId){node.focus({preventScroll:true});break;}
       if(activePieceAction)for(const node of pieceTools.querySelectorAll("[data-piece-action]"))if(node.dataset.pieceAction===activePieceAction){node.focus({preventScroll:true});break;}
@@ -599,7 +613,7 @@
         latest=clone(message);revision++;moveSent=false;selected=null;dragging=null;nativeDragging=null;updateHints();const atRevision=revision;
         queue=queue.then(()=>reduce(latest,atRevision,options)).catch(error);return queue;
       },
-      destroy(){destroyed=true;revision++;touches.clear();cameraGesture=null;cameraObserver?.disconnect();global.removeEventListener("resize",scheduleCamera);if(cameraFrame!==null)global.cancelAnimationFrame(cameraFrame);for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();global.removeEventListener("pointermove",cameraPointerMove);global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game");},
+      destroy(){destroyed=true;revision++;touches.clear();cameraGesture=null;cameraObserver?.disconnect();global.removeEventListener("resize",scheduleCamera);if(cameraFrame!==null)global.cancelAnimationFrame(cameraFrame);for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();global.removeEventListener("pointermove",cameraPointerMove);global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game","declarative-immersive");},
       dispatch,
     };
   }
@@ -607,10 +621,10 @@
     const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
     const data=value=>JSON.stringify(canonical(value)).replace(/</g,"\\u003c");
     return '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<link rel="stylesheet" href="/static/declarative-ui.css?v=10"><div id="declarative-game"></div>' +
+      '<link rel="stylesheet" href="/static/declarative-ui.css?v=11"><div id="declarative-game"></div>' +
       '<script type="application/json" id="i18n-strings">'+data(spec.strings || {})+'<'+'/script>' +
       '<script type="application/json" id="declarative-spec">'+data(spec)+'<'+'/script>' +
-      '<script src="/static/declarative-ui.js?v=10"><'+'/script><script>' +
+      '<script src="/static/declarative-ui.js?v=11"><'+'/script><script>' +
       'const host=DeclarativeUI.mount(document.getElementById("declarative-game"),' +
       'JSON.parse(document.getElementById("declarative-spec").textContent),' +
       '{onMove:move=>parent.postMessage({type:"make_move",move},"*"),' +
@@ -619,7 +633,7 @@
       '<'+'/script>';
   }
 
-  const api={mount,clientDocument,position,boardCell,validateScene,validateSpec,assetURI,pieceActions};
+  const api={mount,clientDocument,position,boardCell,validateScene,validateSpec,assetURI,pieceActions,contentBounds};
   global.DeclarativeUI=api;
   if(typeof module!=="undefined"&&module.exports)module.exports=api;
 })(typeof window!=="undefined"?window:globalThis);

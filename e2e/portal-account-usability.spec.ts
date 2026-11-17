@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createGame, createUser, loginAs, uniqueName } from './helpers';
+import { createGame, createUser, loginAs, openMatchControls, uniqueName } from './helpers';
 
 test('all portal languages switch and English labels return after a translated reload', async ({ page, request }) => {
   const user = await createUser(request, uniqueName('Languages'));
@@ -67,7 +67,7 @@ test('Escape closes only the login dialog before reaching match controls', async
   await page.goto(`/static/portal.html?skin=classic#match=${match.id}`);
   await expect(page.locator('#game-box .declarative-stage')).toBeVisible();
   const controls = page.locator('#match-controls-toggle');
-  if (await controls.getAttribute('aria-expanded') !== 'true') await controls.click();
+  await openMatchControls(page);
   await page.evaluate('Auth.openDialog()');
   const dialog = page.getByRole('dialog', {name: 'Log in', exact: true});
   await expect(dialog).toBeVisible();

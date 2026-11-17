@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createGame, createUser, loginAs, uniqueName } from './helpers';
+import { createGame, createUser, loginAs, openMatchControls, uniqueName } from './helpers';
 
 test('a guest reports a player and sends feedback on the website; both show on the admin Feedback tab', async ({ browser, request }) => {
   const alice = await createUser(request, uniqueName('Alice'));
@@ -14,9 +14,7 @@ test('a guest reports a player and sends feedback on the website; both show on t
   const page = await context.newPage();
   await loginAs(page, alice);
   await page.goto(`/static/portal.html#match=${match.id}`);
-  const toggle = page.locator('#match-controls-toggle');
-  await expect(toggle).toBeVisible();
-  if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
+  await openMatchControls(page);
 
   // Only the other player can be reported; never yourself. A report is always a problem.
   const reportBob = page.getByRole('button', { name: `Report player ${bob.display_name}` });

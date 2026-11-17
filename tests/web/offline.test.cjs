@@ -95,6 +95,105 @@ test("a forced sync ignores the retry backoff; a background sync respects it", a
   assert.equal(posts, 1);
   assert.deepEqual(o.read().queues, {});
 });
+test("a fresh online move posts once without a preliminary read or unrelated queue work", async () => {
+  const calls = [], next = { ...base, move_count: 1, state: { score: 1 } };
+  const move = { move: { from: 6, to: 5 }, expected_move_count: 0 };
+  const { o, setOnline } = setup(async (method, path, options) => {
+    calls.push({ method, path, options });
+    assert.equal(method, "POST");
+    assert.equal(path, "/matches/match/moves");
+    assert.deepEqual(options.body, move);
+    assert.equal(options.user.id, "alice");
+    assert.equal(typeof options.requestId, "string");
+    assert.equal(o.read().queues.match[0].requestId, options.requestId);
+    return next;
+  });
+  const other = { ...base, id: "other" };
+  o.save("/matches/other", other);
+  o.enqueue(other, move);
+  setOnline(true);
+  const updated = await o.submitMove(base, move);
+  assert.deepEqual(updated, next);
+  assert.equal(calls.length, 1);
+  assert.equal(o.read().queues.match, undefined);
+  assert.equal(o.read().queues.other.length, 1);
+});
+test("a fresh move with a lost acknowledgement reconciles history before retrying", async () => {
+  const calls = [], move = { move: { from: 6, to: 5 }, expected_move_count: 0 };
+  const next = { ...base, move_count: 1, state: { score: 1 } };
+  const { o, setOnline } = setup(async (method, path) => {
+    calls.push(`${method} ${path}`);
+    if (method === "POST") throw new TypeError("lost acknowledgement after commit");
+    if (path === "/matches/match/moves")
+      return [{ made_by_user_id: "alice", move: move.move }];
+    return next;
+  });
+  setOnline(true);
+  const pending = await o.submitMove(base, move);
+  assert.equal(pending.pending, 1);
+  assert.deepEqual(calls, ["POST /matches/match/moves"]);
+  await o.sync({ force: true });
+  assert.deepEqual(calls, ["POST /matches/match/moves", "GET /matches/match", "GET /matches/match/moves"]);
+  assert.deepEqual(o.cached("/matches/match"), next);
+  assert.deepEqual(o.read().queues, {});
+});
+test("a fresh move rejected as stale reconciles the other player's move without resubmitting", async () => {
+  const calls = [], move = { move: { from: 6, to: 5 }, expected_move_count: 0 };
+  const remote = { ...base, move_count: 1, state: { other: true } };
+  const { o, setOnline } = setup(async (method, path) => {
+    calls.push(`${method} ${path}`);
+    if (method === "POST") throw Object.assign(new Error("expected 0 moves"), { status: 409 });
+    if (path === "/matches/match/moves")
+      return [{ made_by_user_id: "bob", move: { from: 8, to: 7 } }];
+    return remote;
+  });
+  setOnline(true);
+  await o.submitMove(base, move);
+  assert.deepEqual(calls, ["POST /matches/match/moves", "GET /matches/match", "GET /matches/match/moves"]);
+  assert.ok(o.read().conflicts.match);
+  assert.equal(o.read().queues.match.length, 1);
+});
+test("a transient first-post conflict retries after a read with the same idempotency key", async () => {
+  const calls = [], move = { move: { from: 6, to: 5 }, expected_move_count: 0 };
+  let posts = 0;
+  const { o, setOnline } = setup(async (method, path, options) => {
+    calls.push({ method, path, requestId: options?.requestId });
+    if (method === "GET") return base;
+    if (++posts === 1) throw Object.assign(new Error("transaction conflict"), { status: 409 });
+    return { ...base, move_count: 1 };
+  });
+  setOnline(true);
+  assert.equal((await o.submitMove(base, move)).move_count, 1);
+  assert.deepEqual(calls.map(({method}) => method), ["POST", "GET", "POST"]);
+  assert.equal(calls[0].requestId, calls[2].requestId);
+  assert.deepEqual(o.read().queues, {});
+});
+test("a move queued offline still checks its saved base before posting on reconnect", async () => {
+  const calls = [], move = { move: { from: 6, to: 5 }, expected_move_count: 0 };
+  const { o, setOnline } = setup(async (method, path) => {
+    calls.push(`${method} ${path}`);
+    return method === "GET" ? base : { ...base, move_count: 1 };
+  });
+  await o.submitMove(base, move);
+  assert.deepEqual(calls, []);
+  setOnline(true);
+  await o.sync();
+  assert.deepEqual(calls, ["GET /matches/match", "POST /matches/match/moves"]);
+});
+test("account switches during a fresh post never save its response into the new account", async () => {
+  let switchAccount;
+  const { o, setOnline, setUser } = setup(async () => {
+    switchAccount();
+    return { ...base, move_count: 1 };
+  });
+  switchAccount = () => setUser({ id: "bob", password: "test" });
+  setOnline(true);
+  await assert.rejects(o.submitMove(base, { move: { from: 6, to: 5 }, expected_move_count: 0 }), /Account changed/);
+  assert.equal(o.cached("/matches/match"), undefined);
+  assert.deepEqual(o.read().queues, {});
+  setUser({ id: "alice", password: "test" });
+  assert.equal(o.read().queues.match.length, 1);
+});
 test("conflicting remote move is kept and offline branch remains available for explicit resolution", async () => {
   const remote = { ...base, move_count: 1, state: { other: 1 } };
   const { o, setOnline } = setup(async (method, path) =>

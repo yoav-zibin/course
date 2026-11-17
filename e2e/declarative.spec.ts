@@ -65,7 +65,7 @@ for(const [index,kind] of kinds.entries())test(`declarative ${kind}: submit and 
       await expect(target).toBeVisible();
       await expect(target).not.toHaveAttribute('aria-disabled','true');
       if(count===0){
-        await expect(page.locator('#game-box .declarative-hint-message')).toBeVisible();
+        await expect(page.locator('#game-box .declarative-hint-message,.declarative-zoom-controls')).toHaveCount(0);
         const actionablePieces=kind==='memory'||kind==='mancala'?options.length:kind==='domineering'?1:0;
         await expect(page.locator('#game-box .declarative-piece.actionable')).toHaveCount(actionablePieces);
         await expect(page.locator('#game-box .declarative-control.actionable')).toHaveCount(kind==='nim'||kind==='pig'?options.length:0);
@@ -155,6 +155,7 @@ test('declarative local practice survives reload, replay and an offline move',as
   await expect(page.locator('#game-box [data-ui-id="piece_0"]')).toContainText('X');
   await page.locator('#game-box [data-ui-id="cell_1"]').click();
   await expect(page.locator('#game-box [data-ui-id="piece_1"]')).toContainText('O');
+  await page.locator('#match-menu-toggle').click();
   await page.locator('#match-controls-toggle').click();
   await page.locator('#history-back').click();
   await expect(page.locator('#history-position')).toContainText('read only');

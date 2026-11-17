@@ -16,7 +16,8 @@ test.describe('Choosing and playing a game (logged in, real server)', () => {
       const creation = page.waitForRequest(request => request.method() === 'POST' && new URL(request.url()).pathname === '/matches');
       await button.click();
       expect((await creation).postDataJSON()).toEqual({game_id: game, num_computer_opponents: 1, bet_per_player: 0});
-      await expect(page.locator('#match-toolbar-title')).toContainText(name);
+      await expect(page.locator('body')).toHaveClass(/match-immersive/);
+      await expect(page.locator('#match-toolbar-title')).toBeEmpty();
       const board = page.locator('#game-box .declarative-target');
       await expect(board).toHaveCount(9);
       await board.first().click();

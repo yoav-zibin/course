@@ -253,6 +253,7 @@ const frame = {
     if (!spec) throw new Error(I18n.t("ui.portal.legacy_game_retired", {}, "This legacy game is no longer available in the portal."));
     this.declarative = DeclarativeUI.mount($("game-box"), spec, {
         animate: options.animate === true,
+        immersive: true,
         onMove: move => onMakeMove({move}),
         onError: error => console.error(I18n.t("ui.declarative.error_prefix", {}, "Declarative game UI:"), error),
       });
@@ -1688,7 +1689,8 @@ function renderMatch() {
   }
   const counts = game ? game.allowed_player_counts : [];
   const ownerName = nameOf(match.owner_user_id);
-  $("match-title").textContent =
+  const boardOnly = Boolean(game?.declarative_ui) && match.status !== "waiting_for_players";
+  $("match-title").textContent = boardOnly ? "" :
     I18n.t("ui.match.title", {name: game ? displayGameName(game) : "?", version: match.game_version}, `${game ? displayGameName(game) : "?"} (version ${match.game_version})`);
   const outcome = matchOutcome(match, user?.id);
   $("match-result").hidden = !outcome;
@@ -2005,10 +2007,8 @@ function renderMatch() {
       match.players.some((player) => player.kind === "computer")
     ? I18n.t("ui.match.computers_no_join", {}, "This match has computer opponents, so it can't be joined. A match is played either against computers or against other people.")
     : null;
-  window.PortalMatchLayout?.update(
-    speedNotice || joinNotice
-      ? {...match, ...(speedNotice ? {speedNotice} : {}), ...(joinNotice ? {joinNotice} : {})}
-      : match);
+  window.PortalMatchLayout?.update({...match, boardOnly,
+    ...(speedNotice ? {speedNotice} : {}), ...(joinNotice ? {joinNotice} : {})});
 }
 
 // The 10-second alert for the player to move (sound, vibration, tab title, notification).
@@ -2257,15 +2257,18 @@ async function syncGame() {
 }
 
 async function onMakeMove(move) {
+  if (!move || typeof move !== "object" || !Object.hasOwn(move, "move")) return;
   if (state.moveInFlight || state.replay?.id === state.match?.id) return;
   const receivedFor = state.match;
   if (!receivedFor || state.loaded !== `${receivedFor.id}@${receivedFor.game_id}@${receivedFor.game_version}`) return;
+  const receivedUserId = me()?.id;
+  const stillSelected = () => state.match?.id === receivedFor.id && me()?.id === receivedUserId;
   state.moveInFlight = true;
   try {
     await portalLock(async () => {
       const match = state.match,
         user = me();
-      if (match?.id !== receivedFor.id) return;
+      if (!stillSelected()) return;
       if ("move" in move) {
         // A game sends only its move: the server validates and applies
         // it, so the client checks nothing but whose turn it is.
@@ -2273,8 +2276,10 @@ async function onMakeMove(move) {
           throw new Error(I18n.t("ui.error.not_your_turn", {}, "It isn't your turn."));
         if (match.localMode) {
           const updated = await offline.practiceMove(match, move.move);
-          if (state.match?.id === match.id) state.match = updated;
-          state.lastSent = null;
+          if (stillSelected()) {
+            state.match = updated;
+            state.lastSent = null;
+          }
           return;
         }
         if (offline.read().queues?.[match.id]?.length) {
@@ -2283,14 +2288,18 @@ async function onMakeMove(move) {
           // view — queueing it behind the first could only conflict once
           // the server answers. Drop it and push the pending move
           // instead; the game replays from the synced state.
-          await offline.sync({ force: true });
+          await offline.sync({ force: true, matchId: match.id });
+          if (stillSelected()) state.match = offline.decorate(offline.cached(`/matches/${match.id}`) || match);
           return;
         }
-        state.match = await offline.submitMove(match, {
+        const updated = await offline.submitMove(match, {
           move: move.move,
           expected_move_count: match.move_count,
         });
-        state.lastSent = null;
+        if (stillSelected()) {
+          state.match = updated;
+          state.lastSent = null;
+        }
         return;
       }
       // Anything else (a client-computed state, a next-turn claim) is
@@ -2298,14 +2307,26 @@ async function onMakeMove(move) {
       // to submit. Ignore it.
     });
   } catch (error) {
-    showMessage(error.message, "error");
+    if (stillSelected()) showMessage(error.message, "error");
   } finally {
-    state.moveInFlight = false;
-    state.lastSent = null;
-    await refresh();
-    // Poll the match right away instead of waiting for the next interval
-    // tick, so the server's answer (and any computer moves) shows at once.
-    void pollActiveMatch();
+    try {
+      // The move response already contains the authoritative position. Paint
+      // it before fetching any catalog, wallet, profiles or computer reply.
+      if (stillSelected()) {
+        state.lastSent = null;
+        renderMatch();
+        renderHistory();
+        await syncGame();
+        offlineStatus();
+      }
+    } catch (error) {
+      if (stillSelected()) showMessage(error.message, "error");
+      void refresh();
+    } finally {
+      state.moveInFlight = false;
+      void pollActiveMatch();
+      if (stillSelected() && state.match.status !== "ongoing") void refresh();
+    }
   }
 }
 
@@ -2955,7 +2976,12 @@ async function main() {
   loadPortalScript("/static/portal-speed.js?v=2").catch(() => {});
   loadPortalScript("/static/portal-feedback.js?v=4").catch(() => {});
   setInterval(() => {
-    if (!document.hidden && !state.moveInFlight) refresh();
+    // Declarative play has its own match poll. Background catalog/account
+    // requests must not occupy the shared move lock during board interaction.
+    if (!document.hidden && !state.moveInFlight &&
+        (!frame.declarative || !state.match || state.match.status !== "ongoing" || !state.loaded ||
+          state.match.players.some(player => player.user_id && !state.nameCache.has(player.user_id)) ||
+          Object.values(offline.read().queues || {}).some(queue => queue.length))) refresh();
   }, POLL_MS);
   setInterval(pollActiveMatch, MATCH_POLL_MS);
   setInterval(updateSpeedClock, 250);

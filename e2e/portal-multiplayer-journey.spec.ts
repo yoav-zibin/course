@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createGame, createUser, loginAs, uniqueName } from './helpers';
+import { createGame, createUser, loginAs, openMatchControls, showMatchMenu, uniqueName } from './helpers';
 
 declare const I18n: any;
 
@@ -69,7 +69,7 @@ test('friends create, share, join, play, rematch and leave through the portal', 
     await expect(a.getByRole('button', { name: 'Start game', exact: true })).toBeEnabled();
     await a.getByRole('button', { name: 'Start game', exact: true }).click();
     await expect(boardB).toBeVisible();
-    await b.getByRole('button', { name: 'Controls', exact: true }).click();
+    await openMatchControls(b);
     b.once('dialog', async dialog => {
       expect(dialog.message()).toContain('leave?');
       await dialog.accept();
@@ -82,7 +82,7 @@ test('friends create, share, join, play, rematch and leave through the portal', 
   }
 });
 
-test('one click exits the focus selected by a skin or portal layout', async ({ page, request }) => {
+test('the corner menu reveals navigation across skins and layouts without remounting the board', async ({ page, request }) => {
   const owner = await createUser(request, uniqueName('Focus host'));
   const game = await createGame(request, owner, uniqueName('Focus duel'));
   const headers = { 'X-User-Id': owner.id, 'X-User-Password': owner.password };
@@ -99,10 +99,16 @@ test('one click exits the focus selected by a skin or portal layout', async ({ p
       document.dispatchEvent(new Event('portal-skin-change'));
     }, variant.archetype);
     await expect(page.locator('body')).toHaveClass(/match-focus/);
-    await page.getByRole('button', { name: 'Exit focus', exact: true }).click();
-    await expect(page.locator('body')).not.toHaveClass(/match-focus/);
-    await expect(page.getByRole('button', { name: 'Focus', exact: true })).toHaveAttribute('aria-pressed', 'false');
-    await page.getByRole('button', { name: 'Focus', exact: true }).click();
+    await expect(page.locator('body')).toHaveClass(/match-immersive/);
+    await expect(page.locator('#match-focus-toggle')).toBeHidden();
+    const board = page.locator('#game-box .declarative-stage');
+    await board.evaluate(node => { (window as any).originalMatchBoard = node; });
+    await showMatchMenu(page);
+    await expect(page.locator('#match-back')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.match-toolbar')).toBeHidden();
+    await expect(page.locator('#match-menu-toggle')).toBeFocused();
+    expect(await board.evaluate(node => node === (window as any).originalMatchBoard)).toBe(true);
     await expect(page.locator('body')).toHaveClass(/match-focus/);
   }
   await page.evaluate(async () => {

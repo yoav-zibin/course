@@ -166,6 +166,24 @@ export async function loginAs(page: Page, user: Account) {
   }, stored);
 }
 
+/** Reveal match navigation without taking space from an immersive board. */
+export async function showMatchMenu(page: Page) {
+  const menu = page.locator('#match-menu-toggle');
+  await expect(menu).toBeVisible();
+  if (await menu.getAttribute('aria-expanded') !== 'true')
+    await menu.click();
+}
+
+/** Open the deliberate navigation disclosure before its Controls panel. */
+export async function openMatchControls(page: Page) {
+  const toggle = page.locator('#match-controls-toggle');
+  if (await toggle.getAttribute('aria-expanded') !== 'true') {
+    await showMatchMenu(page);
+    await toggle.click();
+  }
+  await expect(page.locator('#match-tools')).toBeVisible();
+}
+
 export const uniqueName = (prefix: string) => `${prefix} ${Date.now().toString(36)}${Math.floor(Math.random() * 1000)}`;
 
 /** Mocks GET endpoints for a portal page now that reads go through /batch.

@@ -1,3 +1,4 @@
+import {zoomDeclarativeBoard} from './declarative-camera';
 import {test, expect, Page} from '@playwright/test';
 
 // Native renderer fixtures, not completed-game audit evidence. These exercise
@@ -42,7 +43,7 @@ test('dense boards fit by default, allow an overview below 100%, and retain user
   for(const size of [{width:390,height:844},{width:844,height:390},{width:820,height:1180},{width:1180,height:820}]){
     await page.setViewportSize(size);
     await expect(stage).toHaveAttribute('viewBox',fit);
-    await expect(host.locator('.declarative-zoom-level')).toHaveText('Zoom: 100%');
+
     // Both corners of the declared board are inside the SVG viewport, even
     // when a phone or an ancestor scale makes the overview artwork small.
     expect(await stage.evaluate((node:SVGSVGElement)=>{
@@ -51,22 +52,22 @@ test('dense boards fit by default, allow an overview below 100%, and retain user
       point.x=920;point.y=680;const end=point.matrixTransform(matrix);
       return start.x>=rect.left-.01&&start.y>=rect.top-.01&&end.x<=rect.right+.01&&end.y<=rect.bottom+.01;
     })).toBe(true);
-    await host.locator('[data-camera-action="out"]').click();
-    await expect(host.locator('.declarative-zoom-level')).toHaveText('Zoom: 80%');
+    await zoomDeclarativeBoard(host.locator('.declarative-stage'),'out');
+
     const overview=(await visibleSizes(page)).viewBox;
     expect(overview).toBe('-115 -85 1150 850');
     await page.evaluate(async()=>{const w=window as any;await w.readableHost.send({...w.readableMessage,replay:{index:0,total:2}});});
     expect((await visibleSizes(page)).viewBox).toBe(overview);
     for(const piece of await host.locator('.declarative-piece').all())await expect(piece).not.toHaveClass(/actionable/);
     await page.evaluate(async()=>{const w=window as any;await w.readableHost.send(w.readableMessage);});
-    await host.locator('[data-camera-action="reset"]').click();
-    for(let i=0;i<8;i++)if(await host.locator('[data-camera-action="in"]').isEnabled())await host.locator('[data-camera-action="in"]').click();
+    await zoomDeclarativeBoard(host.locator('.declarative-stage'),'reset');
+    for(let i=0;i<8;i++)await zoomDeclarativeBoard(host.locator('.declarative-stage'),'in');
     const sizes=await visibleSizes(page);
     expect(sizes.piece).toBeGreaterThanOrEqual(32);
     expect(sizes.target).toBeGreaterThanOrEqual(32);
     expect(sizes.font).toBeGreaterThanOrEqual(16);
-    await host.locator('[data-camera-action="reset"]').click();
-    await expect(host.locator('[data-camera-action="out"]')).toBeEnabled();
+    await zoomDeclarativeBoard(host.locator('.declarative-stage'),'reset');
+
     await expect(stage).toHaveAttribute('viewBox',fit);
     expect((await visibleSizes(page)).scrollWidth).toBeLessThanOrEqual((await visibleSizes(page)).width+1);
   }
@@ -79,8 +80,8 @@ test('dense boards fit by default, allow an overview below 100%, and retain user
 test('keyboard camera controls reach the last piece without submitting a move',async({page})=>{
   await page.setViewportSize({width:844,height:390});await denseBoard(page);
   const stage=page.locator('#readable-test .declarative-stage');
-  await page.locator('#readable-test [data-camera-action="in"]').click();
-  await page.locator('#readable-test [data-camera-action="in"]').click();
+  await zoomDeclarativeBoard(page.locator('#readable-test .declarative-stage'),'in');
+  await zoomDeclarativeBoard(page.locator('#readable-test .declarative-stage'),'in');
   const before=await stage.getAttribute('viewBox');
   await stage.focus();
   await page.keyboard.press('ArrowRight');await page.keyboard.press('ArrowDown');

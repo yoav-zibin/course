@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createUser, createGame, importGame, loginAs, uniqueName, testCtx, caseImages } from './helpers';
+import { createUser, createGame, importGame, loginAs, openMatchControls, uniqueName, testCtx, caseImages } from './helpers';
 
 test('multiplayer lobby offers no computer opponents', async ({page, request}) => {
   const alice = await createUser(request, uniqueName('Alice'));
@@ -163,7 +163,7 @@ test('leave dialog quotes the game payout and ends without a replacement bot', a
   expect((await request.post(`/matches/${match.id}/start`,{headers:auth(alice),data:{}})).ok()).toBeTruthy();
   await loginAs(page,bob);
   await page.goto(`/static/portal.html#match=${match.id}`);
-  await page.getByRole('button',{name:'Controls',exact:true}).click();
+  await openMatchControls(page);
   page.once('dialog',async dialog=>{
     expect(dialog.message()).toContain('20 tokens');
     expect(dialog.message()).toContain('ends the match');

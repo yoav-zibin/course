@@ -988,6 +988,7 @@ class PortalOffline {
   }
   async submitMove(match, body) {
     let pending;
+    const fresh = !this.read().queues[match.id]?.length;
     try {
       pending = this.enqueue(match, body, {reportFailure: !this.online()});
     } catch (error) {
@@ -1009,10 +1010,15 @@ class PortalOffline {
       this.notice = I18n.t("ui.offline.cache_unavailable", {}, "Device cache unavailable; online play still works.");
       return result;
     }
-    await this.sync({force:true});
+    // A fresh online move already has the current expected_move_count. Let
+    // the authoritative POST validate it instead of paying for a preliminary
+    // GET. Only this first attempt may skip reconciliation: a saved/retried
+    // move can have committed despite a lost response and must read history.
+    const item = fresh && this.read().queues[match.id]?.[0];
+    await this.sync({force:true, matchId:match.id, freshRequestId:item?.requestId});
     return this.read().queues[match.id]?.length ? pending : this.cached(`/matches/${match.id}`) || pending;
   }
-  async sync({ force = false } = {}) {
+  async sync({ force = false, matchId = null, freshRequestId = null } = {}) {
     // The retry backoff keeps background polls from hammering a dead
     // connection; an explicit move (force) still gets its attempt.
     if (!this.online() || !this.user() || (!force && Date.now() < this.retryAfter)) return;
@@ -1023,20 +1029,25 @@ class PortalOffline {
       if (identity !== this.key())
         throw new Error(I18n.t("ui.offline.err_account_sync", {}, "Account changed; sync paused."));
     };
-    for (const id of Object.keys(this.read().queues)) {
+    // An explicit move must not wait for unrelated matches' offline queues.
+    // The regular background sync still drains all saved matches.
+    for (const id of matchId ? [matchId] : Object.keys(this.read().queues)) {
       if (this.read().conflicts[id]) continue;
       let retries = 0;
       while (this.read().queues[id]?.length) {
         const item = this.read().queues[id][0],
           body = item.body;
         try {
-          const remote = await this.request("GET", `/matches/${id}`, {
-            user: account,
-          });
-          guard();
-          this.network = true;
+          const freshAttempt = item.requestId === freshRequestId;
+          freshRequestId = null;
+          let remote;
           let accepted = false;
-          if (remote.move_count > body.expected_move_count) {
+          if (!freshAttempt) {
+            remote = await this.request("GET", `/matches/${id}`, {user: account});
+            guard();
+            this.network = true;
+          }
+          if (!freshAttempt && remote.move_count > body.expected_move_count) {
             const paged = typeof StoragePages !== "undefined" && await StoragePages.enabled();
             const history = await this.request("GET", paged ? `/v2/matches/${id}/history?start=${body.expected_move_count}&limit=1` : `/matches/${id}/moves`, {user: account});
             guard();
@@ -1058,12 +1069,12 @@ class PortalOffline {
               );
               break;
             }
-          } else if (
+          } else if (!freshAttempt && (
             remote.move_count !== body.expected_move_count ||
             remote.status !== "ongoing" ||
             !PortalOffline.equal(remote.state, item.baseState) ||
             !PortalOffline.equal(remote.turn_of_player_indices, item.baseTurn)
-          ) {
+          )) {
             this.conflict(
               id,
               remote,
@@ -1079,6 +1090,7 @@ class PortalOffline {
                 body,
               });
           guard();
+          this.network = true;
           const data = this.read();
           data.queues[id].shift();
           data.responses[`/matches/${id}`] = updated;

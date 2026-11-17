@@ -1,6 +1,6 @@
-import {expect, Locator, Page} from '@playwright/test';
+import {Locator, Page} from '@playwright/test';
 
-// Camera navigation uses the same native buttons as a keyboard/touch user.
+// Camera navigation uses the same keyboard input as an accessible board user.
 // SVG nodes can exist outside the viewBox, where locator.isVisible() alone
 // does not prove they can receive a real click.
 export async function revealDeclarativeTarget(page:Page, target:Locator) {
@@ -16,8 +16,13 @@ export async function revealDeclarativeTarget(page:Page, target:Locator) {
       return x<first.x+2?'left':x>last.x-2?'right':y<first.y+2?'up':y>last.y-2?'down':null;
     });
     if(!direction)return;
-    const button=host.locator(`[data-camera-action="${direction}"]`);
-    await expect(button).toBeEnabled();await button.click();
+    await host.locator('.declarative-stage').focus();
+    await page.keyboard.press({left:'ArrowLeft',right:'ArrowRight',up:'ArrowUp',down:'ArrowDown'}[direction]);
   }
   throw new Error('Native camera navigation could not reach the scene target');
+}
+
+export async function zoomDeclarativeBoard(stage:Locator, action:'in'|'out'|'reset') {
+  await stage.focus();
+  await stage.press(action==='in'?'+':action==='out'?'-':'0');
 }

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createGame, createUser, loginAs, uniqueName } from './helpers';
+import { createGame, createUser, loginAs, openMatchControls, uniqueName } from './helpers';
 
 test('computer play and pass-and-play appear together while the game source is downloading',async({page,request})=>{
   const owner=await createUser(request,uniqueName('Play option owner'));
@@ -71,7 +71,7 @@ test('local pass-and-play practice works after disconnect and reload, with no ma
   await expect(page.locator('#game-box .declarative-piece').filter({hasText:'X'})).toHaveCount(2);
   await board.first().click();
   await expect(page.locator('#game-box .declarative-piece').filter({hasText:'O'})).toHaveCount(2);
-  await page.locator('#match-controls-toggle').click();
+  await openMatchControls(page);
   await page.locator('#history-back').click();
   await expect(page.locator('#history-position')).toContainText('read only');
   await expect(page.locator('#game-box .declarative-target[aria-disabled=false]')).toHaveCount(0);

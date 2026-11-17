@@ -1,11 +1,12 @@
-.declarative-game{display:flex;flex-direction:column;gap:12px;width:100%;min-width:0;box-sizing:border-box;background:#102330;color:#e4edf4;padding:12px;border-radius:12px;overflow:auto;font-family:system-ui,sans-serif}.declarative-stage{display:block;width:100%;height:auto;max-height:min(74vh,900px);min-height:180px;flex:0 0 auto;touch-action:none;overflow:hidden}.declarative-stage text{pointer-events:none;font-family:system-ui,sans-serif}.declarative-target,.declarative-piece{cursor:pointer}.declarative-target[aria-disabled=true],.declarative-piece[aria-disabled=true]{cursor:default}.declarative-target:focus-visible,.declarative-piece:focus-visible{outline:none;filter:drop-shadow(0 0 4px #d2ff5a)}.declarative-controls{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;flex:0 0 auto}.declarative-control{display:flex;align-items:center;gap:6px;max-width:100%;font-size:14px}.declarative-control button,.declarative-control input,.declarative-control select{font:inherit;box-sizing:border-box;min-height:44px;border:1px solid #5c7482;border-radius:8px;padding:8px 12px}.declarative-control button{background:#d2ff5a;color:#142530;font-weight:700;cursor:pointer}.declarative-control input,.declarative-control select{background:#203744;color:#fff;max-width:170px}.declarative-control :disabled{opacity:.5;cursor:default}.declarative-error{margin:0;padding:10px;color:#ffb6bf;white-space:pre-wrap}.frame-box.declarative-game{height:auto;min-height:320px}body:has(>#declarative-game){margin:0;background:#102330}#declarative-game{min-height:100vh}
+.declarative-game{display:flex;flex-direction:column;position:relative;width:100%;height:100%;min-width:0;min-height:0;box-sizing:border-box;background:#102330;color:#e4edf4;padding:0;border-radius:0;overflow:hidden;font-family:system-ui,sans-serif}.declarative-stage{display:block;width:100%;height:100%;min-height:0;flex:1 1 0;touch-action:none;overflow:hidden}.declarative-stage text{pointer-events:none;font-family:system-ui,sans-serif}.declarative-target,.declarative-piece{cursor:pointer}.declarative-target[aria-disabled=true],.declarative-piece[aria-disabled=true]{cursor:default}.declarative-target:focus-visible,.declarative-piece:focus-visible{outline:none;filter:drop-shadow(0 0 4px #d2ff5a)}.declarative-controls{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;flex:0 0 auto}.declarative-control{display:flex;align-items:center;gap:6px;max-width:100%;font-size:14px}.declarative-control button,.declarative-control input,.declarative-control select{font:inherit;box-sizing:border-box;min-height:44px;border:1px solid #5c7482;border-radius:8px;padding:8px 12px}.declarative-control button{background:#d2ff5a;color:#142530;font-weight:700;cursor:pointer}.declarative-control input,.declarative-control select{background:#203744;color:#fff;max-width:170px}.declarative-control :disabled{opacity:.5;cursor:default}.declarative-error{margin:0;padding:10px;color:#ffb6bf;white-space:pre-wrap}.frame-box.declarative-game{min-height:0}body:has(>#declarative-game){margin:0;background:#102330}#declarative-game{height:100vh;height:100dvh}
 /* Match-shell themes use more specific frame backgrounds. Keep the scene's
    declared palette readable while leaving HTML game frames untouched. */
-#game-box.declarative-game{background:#102330;color:#e4edf4;padding:12px}
+#game-box.declarative-game{background:#102330;color:#e4edf4;padding:0}
 /* Action affordances belong to the host, so every game and input method gets
    the same persistent hints rather than relying on hover or game artwork. */
-.declarative-hint-message{margin:0;padding:8px 12px;border-left:3px solid #d2ff5a;background:#1a3440;border-radius:5px;font-size:14px;line-height:1.4}
-.declarative-hint-message[hidden],.declarative-piece-actions[hidden]{display:none}
+.declarative-piece-actions[hidden],.declarative-controls:empty{display:none}
+.declarative-scene-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.declarative-game.declarative-immersive .declarative-action-badges{display:none}
 .declarative-piece{cursor:default}
 .declarative-piece.actionable{cursor:pointer}
 .declarative-piece.actionable[data-actions~=move]{cursor:grab}
@@ -26,11 +27,6 @@
 .declarative-piece-actions>span{font-size:14px;margin-inline-end:8px;min-width:0;max-width:calc(100% - 8px);overflow-wrap:anywhere}
 .declarative-piece-actions button{box-sizing:border-box;min-height:44px;padding:8px 12px;border:2px solid #d2ff5a;border-radius:8px;background:#1b3846;color:#e4edf4;font:inherit;cursor:pointer}
 .declarative-control.actionable :is(input,select){outline:2px solid #d2ff5a;outline-offset:2px}
-.declarative-zoom-controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px;flex:0 0 auto;font-size:13px}
-.declarative-zoom-controls button{min-width:44px;min-height:44px;padding:6px 12px;border:1px solid #607e90;border-radius:8px;background:#203b4b;color:#e4edf4;font:inherit;font-weight:700;cursor:pointer}
-.declarative-zoom-controls button:disabled{opacity:.45;cursor:default}
-.declarative-zoom-level{min-width:82px;text-align:center;font-variant-numeric:tabular-nums}
-.declarative-zoom-hint{flex:1 1 200px;color:#bdd1dd;line-height:1.4}
 .declarative-control{min-width:0;flex-wrap:wrap}
 .declarative-control button,.declarative-piece-actions button{min-width:44px;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 .declarative-stage:focus-visible{outline:2px solid #d2ff5a;outline-offset:2px}

@@ -1,7 +1,7 @@
 import {test,expect,Page} from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
-import {revealDeclarativeTarget} from './declarative-camera';
+import {revealDeclarativeTarget, zoomDeclarativeBoard} from './declarative-camera';
 
 async function mountBoard(page:Page,animate=true){
   // Fixed world-coordinate camera oracles below use a whole-board fitted view.
@@ -55,23 +55,22 @@ test('pinch zoom stays anchored, pans, preserves state and still drops the legal
   await session.send('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]});
   await home.dispatchEvent('click');
   expect(await page.evaluate(()=>(window as any).zoomMoves)).toEqual([]);
-  // Pinch inward reduces magnification; the fit button restores the whole board.
-  await page.locator('#zoom-test [data-camera-action="reset"]').click();
-  await expect(page.locator('#zoom-test [data-camera-action="out"]')).toBeEnabled();
-  await page.locator('#zoom-test [data-camera-action="out"]').click();
-  await expect(page.locator('#zoom-test .declarative-zoom-level')).toHaveText('Zoom: 80%');
+  // Pinch inward reduces magnification; the keyboard shortcut restores the whole board.
+  await zoomDeclarativeBoard(page.locator('#zoom-test .declarative-stage'),'reset');
+
+  await zoomDeclarativeBoard(page.locator('#zoom-test .declarative-stage'),'out');
+
   expect(await camera(page)).toEqual({x:-75,y:-52.5,width:750,height:525});
-  for(let i=0;i<8;i++)if(await page.locator('#zoom-test [data-camera-action="out"]').isEnabled())await page.locator('#zoom-test [data-camera-action="out"]').click();
-  await expect(page.locator('#zoom-test [data-camera-action="out"]')).toBeDisabled();
-  await expect(page.locator('#zoom-test .declarative-zoom-level')).toHaveText('Zoom: 25%');
+  for(let i=0;i<8;i++)await zoomDeclarativeBoard(page.locator('#zoom-test .declarative-stage'),'out');
+
   expect(await camera(page)).toEqual({x:-900,y:-630,width:2400,height:1680});
-  await page.locator('#zoom-test [data-camera-action="reset"]').click();
+  await zoomDeclarativeBoard(page.locator('#zoom-test .declarative-stage'),'reset');
   expect(await camera(page)).toEqual({x:0,y:0,width:600,height:420});
-  for(let i=0;i<8;i++)if(await page.locator('#zoom-test [data-camera-action="in"]').isEnabled())await page.locator('#zoom-test [data-camera-action="in"]').click();
-  await expect(page.locator('#zoom-test [data-camera-action="in"]')).toBeDisabled();expect((await camera(page)).width).toBeCloseTo(150);
-  await page.locator('#zoom-test [data-camera-action="reset"]').click();
-  await page.locator('#zoom-test [data-camera-action="in"]').click();
-  await page.locator('#zoom-test [data-camera-action="in"]').click();
+  for(let i=0;i<8;i++)await zoomDeclarativeBoard(page.locator('#zoom-test .declarative-stage'),'in');
+  expect((await camera(page)).width).toBeCloseTo(150);
+  await zoomDeclarativeBoard(page.locator('#zoom-test .declarative-stage'),'reset');
+  await zoomDeclarativeBoard(page.locator('#zoom-test .declarative-stage'),'in');
+  await zoomDeclarativeBoard(page.locator('#zoom-test .declarative-stage'),'in');
   const beforeInward=await camera(page);
   const center=await screenPoint(page,300,210);
   await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(6,center.x-50,center.y),touch(7,center.x+50,center.y)]});
@@ -86,7 +85,7 @@ test('pinch zoom stays anchored, pans, preserves state and still drops the legal
   await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
   await expect.poll(()=>page.evaluate(()=>(window as any).zoomMoves)).toEqual([{to:'home'}]);
   await expect(checker).not.toHaveClass(/actionable/);
-  await page.locator('#zoom-test [data-camera-action="reset"]').click();expect(await camera(page)).toEqual({x:0,y:0,width:600,height:420});
+  await zoomDeclarativeBoard(page.locator('#zoom-test .declarative-stage'),'reset');expect(await camera(page)).toEqual({x:0,y:0,width:600,height:420});
   // Destroying/remounting clears camera fingers and starts fitted for a new match.
   await page.evaluate(async()=>{const w=window as any;w.zoomHost.destroy();w.zoomHost=w.DeclarativeUI.mount(document.getElementById('zoom-test'),w.zoomSpec,{onMove:(m:any)=>w.zoomMoves.push(m)});await w.zoomHost.send(w.zoomMessage);});
   expect(await camera(page)).toEqual({x:0,y:0,width:600,height:420});
@@ -97,7 +96,7 @@ test('only opponent and computer actors animate; own accepted moves, replay and 
   await mountBoard(page);
   const pieces=page.locator('#zoom-test .declarative-piece');
   expect(await pieces.evaluate(node=>node.getAnimations().length)).toBe(0);
-  await page.locator('#zoom-test [data-camera-action="in"]').click();
+  await zoomDeclarativeBoard(page.locator('#zoom-test .declarative-stage'),'in');
   const panStart=await screenPoint(page,300,300),beforePan=await camera(page);
   await page.mouse.move(panStart.x,panStart.y);await page.mouse.down();await page.mouse.move(panStart.x+20,panStart.y);await page.mouse.up();
   expect((await camera(page)).x).toBeLessThan(beforePan.x);
@@ -192,7 +191,7 @@ test('Backgammon legal drops work when pinched on phone and tablet, and opponent
   expect(await camera(page)).toEqual(fittedCamera);
   // Watch the same authoritative move as the opponent, with no actionable pieces.
   await page.evaluate(async()=>{const w=window as any;w.bgHost.destroy();w.bgHost=w.DeclarativeUI.mount(document.getElementById('zoom-test'),w.bgSpec,{animate:true,onMove:(move:any)=>w.bgMoves.push(move)});await w.bgHost.send({...w.bgBefore,my_player_index:1-w.bgBefore.my_player_index,acting_for_player_index:null});});
-  await page.locator('#zoom-test [data-camera-action="in"]').click();
+  await zoomDeclarativeBoard(page.locator('#zoom-test .declarative-stage'),'in');
   await page.evaluate(async()=>{const w=window as any;await w.bgHost.send({...w.bgAfter,my_player_index:1-w.bgAfter.my_player_index,acting_for_player_index:null});});
   expect(await piece.evaluate(node=>node.getAnimations().length)).toBe(1);
   expect(await piece.evaluate(node=>node.getAnimations()[0].effect!.getTiming().duration)).toBe(1440);
@@ -211,7 +210,7 @@ test('Backgammon legal drops work when pinched on phone and tablet, and opponent
     expect(await page.locator('#zoom-test .declarative-piece').evaluateAll(nodes=>nodes.flatMap(node=>node.getAnimations()).length)).toBe(0);
     const beforeVector=message(vector.view_of_mover,vector.ctx.move_count,viewer),afterVector=message(vector.expected_view_of_mover,vector.ctx.move_count+1,viewer,actor);
     await page.evaluate(async({before,after})=>{const w=window as any;w.bgHost.destroy();w.bgHost=w.DeclarativeUI.mount(document.getElementById('zoom-test'),w.bgSpec,{animate:true,onScene:(scene:any)=>w.bgScene=scene});await w.bgHost.send(before);w.bgAfter=after;w.bgIds=w.bgScene.pieces.filter((piece:any)=>piece.id.startsWith('checker_')).map((piece:any)=>piece.id).sort();},{before:beforeVector,after:afterVector});
-    await page.locator('#zoom-test [data-camera-action="in"]').click();
+    await zoomDeclarativeBoard(page.locator('#zoom-test .declarative-stage'),'in');
     await page.evaluate(async()=>{const w=window as any;await w.bgHost.send(w.bgAfter);});
     const animationState=await page.locator('#zoom-test').evaluate(node=>{const w=window as any;return {ids:w.bgScene.pieces.filter((piece:any)=>piece.id.startsWith('checker_')).map((piece:any)=>piece.id).sort(),before:w.bgIds,moving:node.getAnimations({subtree:true}).length,animated:[...node.querySelectorAll('.declarative-piece')].filter(piece=>piece.getAnimations().length).map((piece:HTMLElement)=>piece.dataset.uiId)};});
     expect(animationState.ids).toEqual(animationState.before);expect(animationState.ids.length).toBe(30);expect(animationState.moving).toBeGreaterThanOrEqual(vector.name==='Hit a blot'?2:1);

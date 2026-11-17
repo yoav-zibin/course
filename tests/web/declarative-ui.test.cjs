@@ -87,3 +87,19 @@ test('piece actions distinguish legal interaction from decorative transforms',()
   for(const actions of [null,'tap',['spin'],['tap','tap'],['move']])assert.throws(()=>api.validateScene(spec,{pieces:[{...piece,actions}]}));
   assert.doesNotThrow(()=>api.validateScene(spec,{pieces:[{...piece,actions:['move','rotate','scale'],move_targets:['home']}],targets:[{id:'home',board:'main',position:{cell:'1'}}]}));
 });
+
+test('immersive fitting includes every board while excluding exterior headings',()=>{
+  const spec=sample();
+  spec.boards.push({id:'off',kind:'zone',x:350,y:20,width:40,height:300});
+  assert.deepEqual(api.contentBounds(spec,{labels:[{id:'title',x:0,y:-1000,text:'Game title'}]}),{x:10,y:20,width:380,height:300});
+});
+
+test('immersive fitting preserves hands and legal destinations outside board surfaces',()=>{
+  const spec=sample();spec.piece_types.card={shape:'card',width:80,height:40};
+  const scene={pieces:[{id:'hand',type:'card',board:'main',position:{x:400,y:180},rotation:90,scale:2},
+    {id:'hidden',type:'card',board:'main',position:{x:-900,y:-900},hidden:true}],
+    targets:[{id:'outside',board:'main',position:{x:160,y:400}}]};
+  const bounds=api.contentBounds(spec,scene);
+  assert.equal(bounds.x,10);assert.equal(bounds.y,20);
+  assert.equal(bounds.width,440);assert.equal(bounds.height,450);
+});

@@ -78,7 +78,7 @@ test('action hints distinguish passive art, show legal drops immediately and cle
   }
   await page.evaluate(async()=>{const w=window as any;await w.hintHost.send({...w.hintMessage,move_count:1});});
   await expect(movable).toHaveClass(/actionable/);
-  const pending=await page.evaluate(()=>{const w=window as any;w.hintHost.send({...w.hintMessage,move_count:2});return {actionable:document.querySelectorAll('#hints-test .actionable').length,hintsHidden:(document.querySelector('#hints-test .declarative-hint-message') as HTMLElement).hidden};});
+  const pending=await page.evaluate(()=>{const w=window as any;w.hintHost.send({...w.hintMessage,move_count:2});return {actionable:document.querySelectorAll('#hints-test .actionable').length,hintsHidden:!document.querySelector('#hints-test .declarative-hint-message')};});
   expect(pending).toEqual({actionable:0,hintsHidden:true});
   await expect(movable).toHaveClass(/actionable/);
   await movable.focus();await page.keyboard.press('Enter');

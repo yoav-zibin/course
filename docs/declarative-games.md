@@ -145,17 +145,20 @@ logic. For games whose server stores counts rather than individual pieces,
 presentation `local_state` can reconcile identities, as Backgammon does for
 moves, captures, bar entry and bearing off.
 
-The portal camera starts with the complete declared viewport fitted into the
-board panel at **100%**, including dense boards. Zoom buttons and two-finger
-pinch/spread allow **25%–400%** of this whole-board fit. Below 100%, the board
-is centered in the additional space. Use magnification for a closer view of
-small pieces, dice and labels; the host does not force a cropped camera view.
-Drag the board background, use the arrow buttons, or focus the board and press
-the arrow keys to pan when magnified. Reset view restores the whole board at
-100%. Camera state survives scene changes, replay and viewport resizing, and
-resets when the host opens a new match. Camera gestures stay in the host and
-never emit `make_move`; two fingers cancel an unfinished piece gesture. Native
-renderers can provide equivalent camera controls independently of the game spec.
+The Portal's immersive camera fits all board surfaces, visible piece bodies and
+legal destinations into the available panel at **100%**. Hands outside a board
+remain in view. Exterior headings and instructions do not reserve board space;
+their text remains available to screen readers. Labels inside board surfaces
+remain visible. Other mounts fit the complete declared viewport by default.
+
+The board uses drag and two-finger pinch/spread without a camera toolbar or
+instruction panel. Pinch and mouse-wheel zoom allow **25%–400%** of the fitted
+view. Below 100%, the board is centered in the additional space. Keyboard users
+can focus the board and use `+`/`-` to zoom, `0` to restore the fitted view,
+arrow keys to pan when magnified, and Home/End to reach the board's edges.
+Camera state survives scene changes, replay and viewport resizing, and resets
+when the host opens a new match. Camera gestures stay in the host and never
+emit `make_move`; two fingers cancel an unfinished piece gesture.
 
 A grid supplies `rows` and `columns`. Its implicit cell IDs are row-major
 decimal strings, starting at `"0"`; an 8-by-8 grid ends at `"63"`. Pieces and

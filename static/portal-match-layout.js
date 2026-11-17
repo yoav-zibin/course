@@ -1,6 +1,6 @@
 "use strict";
 
-// Presentation only: keeps the game renderer mounted or changes a match's state.
+// Presentation only: preserves the game renderer and match state.
 window.PortalMatchLayout = (() => {
   const $ = id => document.getElementById(id);
   const landscape = window.matchMedia(
@@ -9,6 +9,7 @@ window.PortalMatchLayout = (() => {
   let match = null;
   let manualFocus = null;
   let controlsOpen = false;
+  let menuOpen = false;
   let online = navigator.onLine;
   let previousStatus = null;
   let previousConflict = null;
@@ -24,17 +25,23 @@ window.PortalMatchLayout = (() => {
   function render() {
     const active = Boolean(match);
     const waiting = match?.status === "waiting_for_players";
+    const boardOnly = active && !waiting && match.boardOnly === true;
     const immersive = document.documentElement?.dataset?.skin === "immersive";
     // Focus is match-first too: auto-focus a live match on any screen, like
     // immersive. (The generic body.match-focus CSS already hides the topbar
     // and sidebar for every skin; no rule moves here.)
     const focusArchetype = document.documentElement?.dataset?.portalArchetype === "focus";
-    const focused = active && !waiting && (manualFocus ?? (landscape.matches || immersive || focusArchetype));
+    const focused = boardOnly || (active && !waiting && (manualFocus ?? (landscape.matches || immersive || focusArchetype)));
     const focusChanged = active && document.body.classList.contains("match-page") &&
       document.body.classList.contains("match-focus") !== focused;
     document.body.classList.toggle("match-page", active);
     document.body.classList.toggle("match-focus", focused);
     document.body.classList.toggle("match-lobby", active && waiting);
+    document.body.classList.toggle("match-immersive", boardOnly);
+    document.body.classList.toggle("match-menu-open", boardOnly && (menuOpen || controlsOpen));
+    $("match-menu-toggle").hidden = !boardOnly;
+    $("match-menu-toggle").setAttribute("aria-expanded", String(menuOpen || controlsOpen));
+    $("match-menu-toggle").textContent = menuOpen || controlsOpen ? "×" : "⋯";
     // Fade the toolbar after the layout switches; keep the game renderer mounted.
     if (focusChanged && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       const toolbar = $("match-focus-toggle").parentElement;
@@ -46,10 +53,10 @@ window.PortalMatchLayout = (() => {
     $("match-controls-toggle").hidden = waiting;
     $("match-controls-toggle").setAttribute("aria-expanded", String(waiting || controlsOpen));
     $("match-controls-toggle").textContent = controlsOpen ? I18n.t("ui.portal.hide_controls", {}, "Hide controls") : I18n.t("ui.portal.controls", {}, "Controls");
-    $("match-focus-toggle").hidden = waiting;
+    $("match-focus-toggle").hidden = waiting || boardOnly;
     $("match-focus-toggle").setAttribute("aria-pressed", String(focused));
     $("match-focus-toggle").textContent = focused ? I18n.t("ui.portal.exit_focus", {}, "Exit focus") : I18n.t("ui.portal.focus", {}, "Focus");
-    $("match-toolbar-title").textContent = active ? $("match-title").textContent : "";
+    $("match-toolbar-title").textContent = active && !boardOnly ? $("match-title").textContent : "";
     const error = $("match-message").classList.contains("error") ? $("match-message").textContent : "";
     const notices = [];
     if (match?.conflict) notices.push(I18n.t("ui.portal.sync_review", {}, "Sync needs review — open Controls"));
@@ -70,6 +77,7 @@ window.PortalMatchLayout = (() => {
   function update(next) {
     if (next?.id !== match?.id) {
       manualFocus = null;
+      menuOpen = false;
       controlsOpen = next?.status === "over";
       previousStatus = null;
       previousConflict = null;
@@ -89,6 +97,11 @@ window.PortalMatchLayout = (() => {
     if (window.ResizeObserver && toolbar) new ResizeObserver(positionTools).observe(toolbar);
     window.addEventListener("resize", positionTools);
     $("match-back").addEventListener("click", onExit);
+    $("match-menu-toggle").addEventListener("click", () => {
+      menuOpen = !(menuOpen || controlsOpen);
+      if (!menuOpen) controlsOpen = false;
+      render();
+    });
     $("match-controls-toggle").addEventListener("click", () => {
       controlsOpen = !controlsOpen;
       render();
@@ -103,6 +116,13 @@ window.PortalMatchLayout = (() => {
     document.addEventListener("portal-skin-change", render);
     document.addEventListener("keydown", event => {
       if (event.key !== "Escape" || !match) return;
+      if (match.boardOnly) {
+        menuOpen = !(menuOpen || controlsOpen);
+        controlsOpen = false;
+        render();
+        $("match-menu-toggle").focus();
+        return;
+      }
       if (controlsOpen && match.status !== "waiting_for_players") {
         controlsOpen = false;
         render();

@@ -614,10 +614,85 @@ test('a second v2 move is not queued behind a pending one',async()=>{
   assert.deepEqual([...t.run('state.forces')],[true]);
   // The first move is now stuck waiting to sync: another click is a
   // decision on the same stale view and must not queue behind it.
-  t.run('offline.read=()=>({queues:{m:[{body:{move:{type:"call"},expected_move_count:3}}]}})');
+  t.run('offline.read=()=>({queues:{m:[{body:{move:{type:"call"},expected_move_count:3}}]}});offline.cached=()=>null;offline.decorate=match=>match');
   await t.run('onMakeMove({move:{type:"fold"}})');
   assert.equal(t.run('state.enq'),1);
   assert.deepEqual([...t.run('state.forces')],[true,true]);
+});
+
+function immediateMoveSetup() {
+  const t=setup();
+  t.run(`navigator.locks={request:async(_name,run)=>run()};
+    state.match={id:'m',game_id:'g',game_version:1,status:'ongoing',move_count:3,
+      state:{position:'before'},turn_of_player_indices:[0],
+      players:[{player_index:0,user_id:'owner',kind:'human'}]};
+    state.selectedId='m';state.loaded='m@g@1';globalThis.moveEvents=[];
+    offline.read=()=>({queues:{}});
+    renderMatch=()=>moveEvents.push('match');renderHistory=()=>moveEvents.push('history');
+    syncGame=async()=>moveEvents.push('board:'+state.match.state.position);
+    offlineStatus=()=>moveEvents.push('storage');
+    pollActiveMatch=async()=>moveEvents.push('poll');
+    refresh=()=>{moveEvents.push('metadata');return new Promise(()=>{});};`);
+  return t;
+}
+
+test('a confirmed own move paints immediately without waiting for portal metadata',async()=>{
+  const t=immediateMoveSetup();
+  t.run(`offline.submitMove=async match=>({...match,move_count:4,state:{position:'after'}});`);
+  await t.run('onMakeMove({move:{from:1,to:2}})');
+  assert.deepEqual(Array.from(t.run('moveEvents')),['match','history','board:after','storage','poll']);
+  assert.equal(t.run('state.moveInFlight'),false);
+});
+
+test('local practice paints the returned position before any network work',async()=>{
+  const t=immediateMoveSetup();
+  t.run(`state.match.localMode='pass';
+    offline.practiceMove=async match=>({...match,move_count:4,state:{position:'local'}});
+    offline.submitMove=()=>{throw new Error('local move sent online');};`);
+  await t.run('onMakeMove({move:{from:1,to:2}})');
+  assert.equal(t.run('state.match.state.position'),'local');
+  assert.deepEqual(Array.from(t.run('moveEvents')),['match','history','board:local','storage','poll']);
+});
+
+for(const change of ['match','account']) {
+  test(`a move response cannot overwrite a newly selected ${change}`,async()=>{
+    const t=immediateMoveSetup();
+    t.run('offline.submitMove=match=>new Promise(resolve=>{globalThis.releaseMove=()=>resolve({...match,move_count:4,state:{position:"old response"}});});');
+    const pending=t.run('onMakeMove({move:{from:1,to:2}})');
+    await new Promise(resolve=>setImmediate(resolve));
+    t.run(change==='match'
+      ? 'state.match={...state.match,id:"new-match",state:{position:"new screen"}};'
+      : 'Auth.current=()=>({id:"new-account"});state.match={...state.match,state:{position:"new screen"}};');
+    t.run('releaseMove()');await pending;
+    assert.equal(t.run('state.match.state.position'),'new screen');
+    assert.deepEqual(Array.from(t.run('moveEvents')),['poll']);
+  });
+}
+
+test('finished moves paint the result before a background metadata refresh',async()=>{
+  const t=immediateMoveSetup();
+  t.run(`offline.submitMove=async match=>({...match,status:'over',move_count:4,state:{position:'finished'}});`);
+  await t.run('onMakeMove({move:{from:1,to:2}})');
+  assert.deepEqual(Array.from(t.run('moveEvents')),['match','history','board:finished','storage','poll','metadata']);
+});
+
+test('retrying a saved move paints its reconciled position without another metadata fetch',async()=>{
+  const t=setup();
+  t.run(`navigator.locks={request:async(_name,run)=>run()};
+    state.match={id:'m',game_id:'g',game_version:1,status:'ongoing',move_count:3,turn_of_player_indices:[0],players:[{player_index:0,user_id:'owner',kind:'human'}]};
+    state.loaded='m@g@1';globalThis.sentPositions=[];
+    offline.read=()=>({queues:{m:[{body:{move:{action:'roll'},expected_move_count:3}}]}});
+    offline.submitMove=()=>{throw new Error('must reconcile saved move');};
+    offline.sync=async options=>{globalThis.syncOptions=options;};
+    offline.cached=()=>({...state.match,move_count:4,state:{dice:[3,4]}});
+    offline.decorate=match=>({...match,pending:0});
+    renderMatch=()=>{};renderHistory=()=>{};offlineStatus=()=>{};pollActiveMatch=async()=>{};
+    syncGame=async()=>sentPositions.push(state.match);`);
+  await t.run('onMakeMove({move:{action:"roll"}})');
+  assert.equal(t.run('syncOptions.matchId'),'m');
+  assert.equal(t.run('sentPositions[0].move_count'),4);
+  assert.equal(t.run('sentPositions[0].pending'),0);
+  assert.deepEqual(Array.from(t.run('sentPositions[0].state.dice')),[3,4]);
 });
 test('switching matches unloads the old renderer immediately',()=>{
   const t=setup();t.run('state.loaded="old@g@1";frame.unload=()=>{state.unloaded=true};selectMatch("new")');

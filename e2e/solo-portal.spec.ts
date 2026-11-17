@@ -1,5 +1,5 @@
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
-import { createUser, loginAs, mockBatch, uniqueName } from './helpers';
+import { createUser, loginAs, mockBatch, openMatchControls, showMatchMenu, uniqueName } from './helpers';
 
 // A declarative solo fixture exercises portal setup, replay and local controls.
 const star = {
@@ -132,8 +132,7 @@ for (const game of [star]) {
     await expect(page.locator('#match-play-notice')).toHaveText('Match finished');
     await expect(page.locator('#match-result')).toHaveText('Match finished');
     const finishedUrl = page.url();
-    if (await page.locator('#match-controls-toggle').getAttribute('aria-expanded') !== 'true')
-      await page.locator('#match-controls-toggle').click();
+    await openMatchControls(page);
     await page.locator('#history-back').click();
     await expect(page.locator('#history-position')).toContainText('read only');
     await page.locator('#history-live').click();
@@ -143,12 +142,12 @@ for (const game of [star]) {
     await expect(page).not.toHaveURL(finishedUrl);
     await expect(page.locator('#match-status')).toHaveClass('badge ongoing');
     await expect(frame.locator('.declarative-stage > text')).toContainText('Count: 0 of 5');
-    if (await page.locator('#match-controls-toggle').getAttribute('aria-expanded') !== 'true')
-      await page.locator('#match-controls-toggle').click();
+    await openMatchControls(page);
     await page.getByRole('button', {name: 'End practice', exact: true}).click();
     await expect(page.locator('#match-status')).toHaveClass('badge over');
     await page.getByRole('button', {name: 'Resume practice', exact: true}).click();
     await expect(page.locator('#match-status')).toHaveClass('badge ongoing');
+    await showMatchMenu(page);
     await page.locator('#match-back').click();
     await expect(page.locator('#match')).toBeHidden();
     await expect(page.locator('#game-detail-page')).toBeVisible();

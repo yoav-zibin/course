@@ -1,3 +1,4 @@
+import {zoomDeclarativeBoard} from './declarative-camera';
 import fs from 'node:fs';
 import path from 'node:path';
 import {test, expect} from '@playwright/test';
@@ -30,9 +31,9 @@ test('an existing Backgammon version gets fitted clickable dice without changing
   await expect(host.locator('.declarative-controls button')).toHaveCount(0);
   const stage = host.locator('.declarative-stage');
   await expect(stage).toHaveAttribute('viewBox', `0 0 ${repaired.viewport.width} ${repaired.viewport.height}`);
-  await host.locator('[data-camera-action="out"]').click();
+  await zoomDeclarativeBoard(host.locator('.declarative-stage'),'out');
   expect(await stage.evaluate((node:SVGSVGElement) => node.viewBox.baseVal.width)).toBeGreaterThan(repaired.viewport.width);
-  await host.locator('[data-camera-action="reset"]').click();
+  await zoomDeclarativeBoard(host.locator('.declarative-stage'),'reset');
   const die = host.locator('[data-ui-id="die_0"]');
   await expect(die).toHaveClass(/actionable/);
   await expect(die.locator('.declarative-piece-action-outline')).toBeVisible();

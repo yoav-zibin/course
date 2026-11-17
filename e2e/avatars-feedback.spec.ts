@@ -1,5 +1,5 @@
 import {test, expect} from '@playwright/test';
-import {createUser, createGame, loginAs, uniqueName} from './helpers';
+import {createUser, createGame, loginAs, openMatchControls, uniqueName} from './helpers';
 
 test('avatars load, sound preference persists, and reduced motion disables transitions', async ({page, request}) => {
  const user=await createUser(request, uniqueName('Avatar'));
@@ -10,7 +10,7 @@ test('avatars load, sound preference persists, and reduced motion disables trans
  await page.getByRole('combobox',{name:'Search games'}).fill(name);
  await page.getByRole('option',{name:new RegExp(name)}).click();
  await page.getByRole('button',{name:/Play with computers/}).click();
- await page.getByRole('button',{name:'Controls',exact:true}).click();
+ await openMatchControls(page);
  await expect(page.locator('#seats img')).toHaveCount(2);
  await expect.poll(() => page.locator('#seats img').evaluateAll(images => images.every(image => (image as HTMLImageElement).naturalWidth === 96))).toBe(true);
  const paths=await page.locator('#seats img').evaluateAll(images=>images.map(image=>(image as HTMLImageElement).src));
@@ -38,7 +38,7 @@ test('avatars load, sound preference persists, and reduced motion disables trans
  });
  await expect.poll(()=>page.evaluate(()=>(window as any).toneCount)).toBe(2);
  await page.reload();
- if (!(await sound.isVisible())) await page.getByRole('button',{name:'Controls',exact:true}).click();
+ if (!(await sound.isVisible())) await openMatchControls(page);
  await expect(sound).toHaveAttribute('aria-pressed','true');
  await page.emulateMedia({reducedMotion:'reduce'});
  await expect.poll(()=>page.locator('#match-tools').evaluate(node=>getComputedStyle(node).animationName)).toBe('none');

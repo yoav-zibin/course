@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { createGame, createUser, loginAs, uniqueName } from './helpers';
 
+declare function refresh(): Promise<void>;
+
 test('referral match link survives switching accounts and opens the intended lobby', async ({ page, request }) => {
   const alice = await createUser(request, uniqueName('Inviter'));
   const bob = await createUser(request, uniqueName('Joiner'));
@@ -47,6 +49,9 @@ test('two players in separate browsers: join an online match and see each other\
 
   await expect(a.board).toBeVisible();
   await expect(b.board).toBeVisible();
+  // A visible SVG can precede completion of its startup refresh. Finish that
+  // refresh before installing a gate, so the next call cannot coalesce it.
+  await b.page.evaluate(() => refresh());
 
   // Hold Bob's next catalog refresh open. His active match must still receive
   // Alice's move without waiting for that unrelated request to finish. The
@@ -61,6 +66,9 @@ test('two players in separate browsers: join an online match and see each other\
     await catalogBlocked;
     await route.continue().catch(() => {});
   });
+  // Live boards poll only their match. Start this unrelated metadata refresh
+  // explicitly instead of relying on the catalog's idle-page timer.
+  await b.page.evaluate(() => { void refresh(); });
   await started;
   await a.board.locator('[data-ui-id=cell_4]').click();
   await expect(a.board.locator('[data-ui-id=piece_4]')).toHaveText(/X|O/);

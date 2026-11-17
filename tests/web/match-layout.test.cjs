@@ -72,3 +72,26 @@ test('finished matches reveal rematch once, Escape restores control focus, Back 
   layout.update({...ongoing,status:'over'});assert.equal(node('match-tools').hidden,true);
   node('match-back').events.click();assert.equal(exitCount(),1);
 });
+
+test('declarative play opens board-only and preserves an explicitly disclosed navigation menu',()=>{
+  const {layout,node,body,events,exitCount}=setup(false);
+  layout.update({...ongoing,boardOnly:true});
+  assert.equal(body.classList.contains('match-immersive'),true);
+  assert.equal(body.classList.contains('match-focus'),true);
+  assert.equal(body.classList.contains('match-menu-open'),false);
+  assert.equal(node('match-toolbar-title').textContent,'');
+  assert.equal(node('match-focus-toggle').hidden,true);
+  assert.equal(node('match-menu-toggle').hidden,false);
+  node('match-menu-toggle').events.click();
+  layout.update({...ongoing,boardOnly:true,move_count:1});
+  assert.equal(body.classList.contains('match-menu-open'),true);
+  assert.equal(node('match-menu-toggle').attrs['aria-expanded'],'true');
+  events.keydown({key:'Escape'});
+  assert.equal(body.classList.contains('match-menu-open'),false);
+  events.keydown({key:'Escape'});
+  assert.equal(body.classList.contains('match-menu-open'),true);
+  node('match-back').events.click();assert.equal(exitCount(),1);
+  layout.update(null);
+  assert.equal(body.classList.contains('match-immersive'),false);
+  assert.equal(node('match-menu-toggle').hidden,true);
+});

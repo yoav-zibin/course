@@ -1,3 +1,4 @@
+import {zoomDeclarativeBoard} from './declarative-camera';
 import {test, expect, Page} from '@playwright/test';
 
 async function labelContrasts(page:Page){
@@ -39,19 +40,19 @@ test('location labels retain contrast over light and dark boards and hints', asy
   for(const size of [{width:390,height:844},{width:844,height:390},{width:820,height:1180},{width:1180,height:820}]){
     await page.setViewportSize(size);
     const host=page.locator('#contrast-test');
-    if(await host.locator('[data-camera-action="reset"]').isEnabled())await host.locator('[data-camera-action="reset"]').click();
+    await zoomDeclarativeBoard(host.locator('.declarative-stage'),'reset');
     const font=()=>host.locator('.declarative-target text').first().evaluate(t=>{
       const m=(t as SVGGraphicsElement).getScreenCTM()!;
       return parseFloat(getComputedStyle(t).fontSize)*Math.hypot(m.a,m.b);
     });
     // Start with the full-board overview, then use the host's magnification
-    // controls when location labels need a closer view on a small screen.
-    for(let i=0;await font()<16-.01&&i<8;i++)await host.locator('[data-camera-action="in"]').click();
+    // shortcuts when location labels need a closer view on a small screen.
+    for(let i=0;await font()<16-.01&&i<8;i++)await zoomDeclarativeBoard(host.locator('.declarative-stage'),'in');
     expect(await font()).toBeGreaterThanOrEqual(16-.01);
     const ratios=await labelContrasts(page);
     expect(Math.min(...ratios)).toBeGreaterThanOrEqual(4.5);
     if(size.width===390||size.width===844){
-      // After user magnification, native camera controls still expose the
+      // After user magnification, keyboard camera shortcuts still expose the
       // complete first and last labels, including their halo.
       const stage=page.locator('#contrast-test .declarative-stage');
       await stage.focus();await stage.press('Home');

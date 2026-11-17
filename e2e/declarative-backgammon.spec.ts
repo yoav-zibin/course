@@ -16,10 +16,10 @@ async function backgammon(request:APIRequestContext){
   if(known)return known;
   const payload=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../games/declarative/backgammon.json'),'utf8'));
   payload.game_addition_request_id_and_secret=uniqueName('backgammon-test-secret');
-  let response=await request.post('/games',{data:payload,timeout:210000});
+  let response=await request.post('/games/declarative',{data:payload,timeout:210000});
   for(let i=0;response.status()===429&&i<30;i++){
     await new Promise(resolve=>setTimeout(resolve,1000));
-    response=await request.post('/games',{data:payload,timeout:210000});
+    response=await request.post('/games/declarative',{data:payload,timeout:210000});
   }
   expect(response.ok(),await response.text()).toBeTruthy();return response.json();
 }
@@ -229,10 +229,10 @@ test('Backgammon pass-and-play is immediate and computer play uses the ordinary 
   for(let i=0;i<5;i++)await nextAction(page);
   expect(writes).toEqual([]);
   expect(await page.evaluate(()=>(window as any).backgammonAnimations.length)).toBe(0);
-  await page.locator('#match-controls-toggle').click();await page.locator('#history-back').click();
+  await page.locator('#match-menu-toggle').click();await page.locator('#match-controls-toggle').click();await page.locator('#history-back').click();
   await expect(page.locator('#game-box .actionable')).toHaveCount(0);
   await page.locator('#history-live').click();
-  await expect(page.locator('#game-box .declarative-hint-message')).toBeVisible();
+  await expect(page.locator('#game-box .declarative-hint-message,.declarative-zoom-controls')).toHaveCount(0);
   await page.goto(`/static/portal.html#game=${game.id}`);
   const created=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname==='/matches');
   await page.locator('#play-computers').click();const response=await created;expect(response.ok(),await response.text()).toBeTruthy();
