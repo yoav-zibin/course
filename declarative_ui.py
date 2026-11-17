@@ -227,7 +227,7 @@ class DeclarativeLogic:
 
 def client_document(spec):
     """Platform-owned compatibility host for existing test/practice clients."""
-    return _client_document(spec, asset_query="?v=9")
+    return _client_document(spec, asset_query="?v=10")
 
 
 def _client_document(spec, *, asset_query):
@@ -259,6 +259,7 @@ def accepted_platform_host(spec, code):
     """
     return code in (
         client_document(spec),
+        _client_document(spec, asset_query="?v=9"),
         _client_document(spec, asset_query="?v=8"),
         _client_document(spec, asset_query="?v=7"),
         _client_document(spec, asset_query="?v=6"),

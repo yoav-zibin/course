@@ -2180,7 +2180,7 @@ async function reviewedDeclarativePresentation(game) {
   // cached game records, their versions, and the move path stay pinned.
   if (!spec || game.id !== "5f5293c3-2a3a-4eec-b631-9debf59be0ca") return spec;
   try {
-    await loadPortalScript("/static/declarative-presentation.js?v=1");
+    await loadPortalScript("/static/declarative-presentation.js?v=2");
     return await window.DeclarativePresentation.forGame(game);
   } catch {
     return spec;

@@ -7,7 +7,7 @@ test('an existing Backgammon version gets fitted clickable dice without changing
   const rules = fs.readFileSync(path.resolve(__dirname, '../games/audit-batch3/backgammon.server.js'), 'utf8');
   const body = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../games/declarative/backgammon.json'), 'utf8'));
   await page.goto('/static/declarative-test.html');
-  await page.addScriptTag({url:'/static/declarative-presentation.js?v=1'});
+  await page.addScriptTag({url:'/static/declarative-presentation.js?v=2'});
   const repaired = await page.evaluate(async ({original, rules, view}) => {
     const w = window as any;
     const game = {id:'5f5293c3-2a3a-4eec-b631-9debf59be0ca', version:1, server_code:rules, declarative_ui:original};

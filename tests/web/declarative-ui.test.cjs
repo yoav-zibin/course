@@ -57,6 +57,15 @@ test('compatibility clients escape script terminators and contain platform code 
   assert.match(source,/event.source===parent/);assert.match(source,/type:"make_move"/);
 });
 
+test('compatibility clients use the same versioned renderer assets as the portal',()=>{
+  const portal=fs.readFileSync(path.join(__dirname,'../../static/portal.html'),'utf8');
+  const source=api.clientDocument(sample());
+  for(const extension of ['js','css']){
+    const url=portal.match(new RegExp(`/static/declarative-ui\\.${extension}\\?v=\\d+`))[0];
+    assert.ok(source.includes(`"${url}"`),`compatibility client must load ${url}`);
+  }
+});
+
 
 test('dynamic scenes reject unknown fields, malformed positions and invalid transforms',()=>{
   const spec=sample();
