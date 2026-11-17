@@ -477,6 +477,42 @@ test('Play again starts a one-player rematch and preserves its lobby for a faile
   }
 });
 
+for (const failed of [false,true]) test(`a delayed solo restart ${failed?'failure':'success'} cannot change another account's message`,async()=>{
+  let release,reject;
+  const t=setup(async(method,path)=>{
+    if(path.endsWith('/rematch')) return {id:'solo-rematch',game_id:'game',game_version:2,status:'waiting_for_players',players:[{kind:'human',user_id:'owner'}]};
+    if(path.endsWith('/start')) return new Promise((resolve,fail)=>{release=resolve;reject=fail;});
+    throw new Error('Unexpected request');
+  });
+  t.run('state.gameCache.set("game@2",state.games[0]);state.match={id:"solo-finished",game_id:"game",game_version:2,owner_user_id:"owner",status:"over",end_reason:"finished",players:[{player_index:0,kind:"human",user_id:"owner"}],move_count:5,state:{count:5}};renderMatch()');
+  const pending=t.node('actions').children.find(button=>button.textContent==='Play again').onclick();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(typeof release,'function');
+  t.run('Auth.current=()=>({id:"other"});state.selectedId="other-account-match";state.match=null');
+  t.node('match-message').textContent='Other account message';
+  if(failed)reject(new Error('Old account start failed'));
+  else release({status:'ongoing'});
+  await pending;
+  assert.equal(t.run('state.selectedId'),'other-account-match');
+  assert.equal(t.node('match-message').textContent,'Other account message');
+});
+
+test('a match button retained across an account change cannot send a request',async()=>{
+  const calls=[];
+  const t=setup(async(method,path)=>{
+    calls.push([method,path]);
+    return {id:'solo-rematch',status:'waiting_for_players',players:[]};
+  });
+  t.run('state.gameCache.set("game@2",state.games[0]);state.match={id:"solo-finished",game_id:"game",game_version:2,owner_user_id:"owner",status:"over",end_reason:"finished",players:[{player_index:0,kind:"human",user_id:"owner"}],move_count:5,state:{count:5}};renderMatch()');
+  const play=t.node('actions').children.find(button=>button.textContent==='Play again');
+  t.run('Auth.current=()=>({id:"other"});state.selectedId="other-account-match"');
+  t.node('match-message').textContent='Other account message';
+  await play.onclick();
+  assert.deepEqual(calls,[]);
+  assert.equal(t.run('state.selectedId'),'other-account-match');
+  assert.equal(t.node('match-message').textContent,'Other account message');
+});
+
 test('finished results are personalized including seat zero, draws, and spectators',()=>{
   const {run}=setup();
   run('state.match={status:"over",end_reason:"finished",players:[{player_index:0,user_id:"owner",kind:"human"},{player_index:1,user_id:"other",kind:"human"}],state:{winner:0}}');

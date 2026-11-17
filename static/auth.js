@@ -345,7 +345,9 @@ const Auth = (() => {
     dialog.root.append(box);
     document.body.append(dialog.root);
     close.focus();
-    dialog.root.addEventListener("keydown", (event) => {
+    // Disabling a focused submit button can return focus to the document.
+    // Keep Escape and the focus trap active until this dialog is closed.
+    dialog.onKeydown = (event) => {
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
@@ -354,15 +356,17 @@ const Auth = (() => {
         const controls = [...box.querySelectorAll("button:not([disabled]),input:not([disabled]),a[href],select,textarea,iframe,[tabindex='0']")]
           .filter(node => node.getClientRects().length && !node.closest("[hidden],[inert]"));
         const first = controls[0], last = controls.at(-1);
-        if (event.shiftKey && document.activeElement === first) {
+        const outside = !box.contains(document.activeElement);
+        if (event.shiftKey && (document.activeElement === first || outside)) {
           event.preventDefault();
           last?.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
+        } else if (!event.shiftKey && (document.activeElement === last || outside)) {
           event.preventDefault();
           first?.focus();
         }
       }
-    });
+    };
+    document.addEventListener("keydown", dialog.onKeydown);
 
     dialog.onGoogle = async (idToken) => {
       try {
@@ -413,6 +417,7 @@ const Auth = (() => {
     if (!pendingDialog) return;
     const dialog = pendingDialog;
     pendingDialog = null;
+    document.removeEventListener("keydown", dialog.onKeydown);
     dialog.root.remove();
     if (dialog.returnFocus?.isConnected && dialog.returnFocus.getClientRects().length && !dialog.returnFocus.closest("[hidden],[inert]"))
       dialog.returnFocus.focus({ preventScroll: true });
@@ -426,6 +431,7 @@ const Auth = (() => {
   }
 
   function finishLogin(dialog, response) {
+    if (pendingDialog !== dialog) return;
     upsert(response);
     closeDialog();
     if (response.merged_from_user_id) {

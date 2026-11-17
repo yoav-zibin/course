@@ -56,6 +56,46 @@ test('a guest can submit the login dialog by pressing Enter', async ({ page }) =
   await expect(page.locator('.auth-menu-button')).toHaveAccessibleName(name);
 });
 
+test('a canceled guest login cannot switch accounts or close a newer dialog', async ({ page, request }) => {
+  const user = await createUser(request, uniqueName('Keep current account'));
+  await loginAs(page, user);
+  let release!: () => void, received!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const requested = new Promise<void>(resolve => { received = resolve; });
+  await page.route('**/users', async route => {
+    if (route.request().method() !== 'POST') return route.continue();
+    const response = await route.fetch();
+    received();
+    await gate;
+    await route.fulfill({response});
+  });
+  await page.goto('/static/portal.html');
+  const openLogin = async () => {
+    await page.locator('.auth-menu-button').click();
+    await page.locator('[data-auth-action="login"]').click();
+  };
+  await openLogin();
+  const dialog = page.getByRole('dialog', {name: 'Log in', exact: true});
+  await dialog.getByLabel('Guest name').fill('Canceled guest');
+  const submit = dialog.getByRole('button', {name: 'Continue as guest'});
+  await submit.evaluate(button => { (window as any).pendingGuestSubmit = button; });
+  await submit.click();
+  try {
+    await requested;
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await openLogin();
+    await dialog.getByLabel('Guest name').fill('Still editing');
+    release();
+    await page.waitForFunction(() => !(window as any).pendingGuestSubmit.disabled);
+    expect(await page.evaluate('Auth.current()?.id')).toBe(user.id);
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel('Guest name')).toHaveValue('Still editing');
+  } finally {
+    release();
+  }
+});
+
 test('email code forms support Enter to send and verify without losing resend', async ({ page, request }) => {
   const user = await createUser(request, uniqueName('Code keyboard'));
   await page.route('**/auth/config', route => route.fulfill({ json: { email_login_enabled: true } }));

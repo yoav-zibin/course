@@ -1627,6 +1627,7 @@ function actionButton(
   { primary = false, danger = false, confirm = null, disabled = false } = {},
 ) {
   const armed = confirm && state.armed === label;
+  const accountId = me()?.id;
   return el("button", {
     type: "button",
     class: primary ? "primary" : danger ? "danger" : "",
@@ -1634,6 +1635,7 @@ function actionButton(
     textContent: armed ? I18n.t("ui.match.click_again", {label}, `${label}: click again to confirm`) : label,
     title: confirm ?? "",
     onclick: async () => {
+      if (accountId !== me()?.id) return;
       if (confirm && !armed) {
         state.armed = label;
         showMessage(confirm, "error");
@@ -1643,8 +1645,10 @@ function actionButton(
       state.armed = null;
       try {
         await run();
+        if (accountId !== me()?.id) return;
         showMessage("");
       } catch (error) {
+        if (accountId !== me()?.id) return;
         showMessage(error.message, "error");
       }
       await refresh();
@@ -1914,6 +1918,7 @@ function renderMatch() {
           selectMatch(rematch.id);
           if (playingSolo && rematch.status === "waiting_for_players" && rematch.players.length === 1) {
             await portalRequest("POST", `/matches/${rematch.id}/start`, {user, body: {first_turn_player_indices: [0]}});
+            if (user.id !== me()?.id) return;
             invalidatePopularGames();
             invalidateRecentGames();
             invalidateGamePopularity(rematch.game_id);
