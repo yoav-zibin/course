@@ -27,11 +27,11 @@
     if (!replacementPromise) {
       replacementPromise = (async () => {
         const response = await global.fetch("/static/backgammon-declarative-ui.json?v=1", {credentials: "omit"});
-        if (!response.ok) throw new Error("Backgammon presentation unavailable");
+        if (!response.ok) throw new Error();
         const spec = await response.json();
         if (spec?.format !== "buildplay-ui" || spec.version !== 1 || typeof spec.ui_code !== "string" ||
             await digest(canonical(spec)) !== REPAIRED_UI_SHA256)
-          throw new Error("Unexpected Backgammon presentation");
+          throw new Error();
         return spec;
       })().catch(error => {
         replacementPromise = null;
