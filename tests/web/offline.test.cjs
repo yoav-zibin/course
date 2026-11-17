@@ -52,6 +52,18 @@ test("durable offline moves survive reload and accounts stay isolated", () => {
   assert.equal(o.cached("/matches/match"), undefined);
   assert.deepEqual(o.read().queues, {});
 });
+
+for (const key of ['archivesKey', 'archivedKey']) test(`a malformed ${key} entry cannot hide durable offline moves`, () => {
+  const {o, storage} = setup();
+  o.enqueue(base, body);
+  const valid = {id:'older-match', moves:[body]};
+  storage.setItem(o[key](), JSON.stringify([null, valid]));
+  const data = o.read();
+  assert.equal(data.queues.match.length, 1);
+  assert.deepEqual(data.queues.match[0].body, body);
+  assert.deepEqual(key === 'archivesKey' ? data.archives : data.archivedMatches, [valid]);
+});
+
 test("commit with lost response is recognized from history, never double submitted", async () => {
   let remote = base,
     posts = 0;

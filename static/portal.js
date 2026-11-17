@@ -2243,7 +2243,6 @@ async function syncGame() {
   if (json !== state.lastSent) {
     const transition = await declarativeTransition(match, message);
     if (!stillCurrent() || state.loaded !== key || json === state.lastSent) return;
-    state.lastSent = json;
     if (transition.baseline) {
       if (frame.lastMessage !== transition.previous) transition.animate = false;
       else {
@@ -2252,7 +2251,15 @@ async function syncGame() {
         if (!applied) transition.animate = false;
       }
     }
-    await frame.send(message, {animate: transition.animate});
+    // Only deduplicate the final board once its send starts. A poll can cancel
+    // the baseline above while leaving exactly the same board to send next.
+    state.lastSent = json;
+    let applied = false;
+    try {
+      applied = await frame.send(message, {animate: transition.animate});
+    } finally {
+      if (!applied && state.lastSent === json) state.lastSent = null;
+    }
   }
 }
 

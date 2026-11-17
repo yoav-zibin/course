@@ -111,7 +111,7 @@ is inserted. The checks, in order:
    unique integers 1–10, each code field 1–200,000 chars, 4–6 images,
    `game_addition_request_id_and_secret` 16–200 chars, required.
 2a. **Recorded test flow.** The game must have completed the five-step test
-   flow under this secret (guide §9): the endpoint looks up
+   REST flow under this secret: the endpoint looks up
    the traces recorded for `game_addition_request_id_and_secret`, takes the
    last step 1 submission, requires this payload to be identical to it, and
    requires steps 2–5 complete for it (server code tests passed; one verified
@@ -123,8 +123,8 @@ is inserted. The checks, in order:
    A shortfall returns 422 naming the missing steps. Any code change after
    step 1 therefore needs a fresh run before resubmitting. Step 1 itself is
    the `POST /game-test/submissions` call, which runs this endpoint's full
-   verification (checks 2–8) on the payload before storing it; the test page
-   fetches the stored inputs back with `GET /game-test/submission?secret=`.
+   verification (checks 2–8) on the payload before storing it. Retrieve the stored
+   inputs with `GET /game-test/submission?secret=`.
 3. **Translations — all 8 languages.** `translations` must cover exactly the
    7 languages other than the game's own language. Each entry is checked for
    exact key coverage of the client string table and the tutorial vocabulary,
@@ -142,12 +142,12 @@ is inserted. The checks, in order:
    the size/format rules.
 5. **Test-case rosters.** Every unit test's `ctx.players` length must be one
    of `allowed_player_counts` (a human plus a computer is two seats).
-6. **Localization lint.** The client code must have a valid `i18n-strings`
-   table (≤ 400 keys), every `t("key")` used must exist, every non-`server_`
-   key must be used, no hard-coded display text, no sentence-building by
-   concatenation, no markup in strings, and every text the server writes
-   (every `InvalidMove` reason, log line, state label) must match a
-   `server_…` template. The client must call `applyLocale(`.
+6. **Declarative localization.** The package declares its finite `strings` map
+   (≤ 400 keys); translations must cover those keys and preserve placeholders.
+   Every text the server writes (including `InvalidMove` reasons, log lines and
+   state labels) must match a `server_…` template. Render UI text from the
+   viewer's `message.strings`, using whole translated templates rather than
+   building sentences from fragments. The host supplies locale and direction.
 7. **Size caps.** Each SVG ≤ 120,000 bytes, combined workflow ≤ 400,000
    bytes, stored package ≤ 900,000 bytes.
 8. **Deterministic verification suite** (`run_checks`, all five checks):
@@ -164,8 +164,7 @@ is inserted. The checks, in order:
      (every difficulty) on every approved before-state plus a played-out
      mid-game position: every returned move must be accepted by `applyMove`;
      generators deterministic, ≤ 100 ms, never null on a live position.
-   - **Localization.** The lint from (6), plus the client must call
-     `applyLocale(message)`.
+   - **Localization.** The declared strings and server-text checks from (6).
    - **Random walks.** The server code is loaded in QuickJS (a load error
      fails the import) and played: up to 1000 walks of up to 1000 moves,
      each from a fresh random seed, a random player count from
@@ -231,6 +230,8 @@ has bounded concurrent validation per server process, not distributed user quota
 
 ## Example agent client
 
+After recording steps 1–5 for the exact payload, publish it with:
+
 ```python
 import json, os
 import httpx
@@ -254,26 +255,30 @@ print(published['id'], published['version'])
    variants and supported player counts. Do not copy or edit an existing game.
 2. Read the contracts linked above. Design rules, legal moves, hidden-information
    filtering, deterministic randomness, terminal conditions and exact pot payouts.
-3. Implement server code and responsive client code; provide tutorial, cover and
+3. Implement server rules and a declarative presentation; provide tutorial, cover and
    supporting illustrations. Use translation tables, accessible controls and
    player/spectator views. Never expose secret state through `viewFor`.
 4. Write independent rule assertions and illegal-move/privacy tests, plus the
    required initial/intermediate/terminal examples. Generated replay snapshots
-   alone do not establish rule correctness. Run random walks to completion and
-   local UI checks using `/static/declarative-test.html` across supported player modes, phone, tablet
-   and laptop sizes, in portrait and landscape. Enter both game files, select
-   each supported player count in turn, and play several randomly chosen matches
-   to completion in each scenario. Check clickable targets are at least
-   30 by 30 CSS pixels and contrast is at least 4.5:1 for normal text and 3:1
-   for large text and essential control boundaries. Repeat logic calls with
+   alone do not establish rule correctness. Run random walks to completion.
+   Inspect scenes, layout and gestures in `/static/declarative-test.html` on
+   phone, tablet and laptop sizes in both orientations. This playground emits
+   UI events and previews scenes; it does not apply the game's rules or play
+   complete matches. Exercise actual gameplay in browser integration tests and
+   record steps 1–5 through the `/game-test/*` REST endpoints. The
+   `tools/publish_declarative_games.py` example records rules and presentation
+   traces for server replay; browser checks provide the layout and gesture
+   evidence separately. Cover every supported player count and the required
+   pass-and-play, multiplayer and computer-seat scenarios. Keep fixed controls
+   usable, and verify pieces and targets reach at least 32×32 CSS pixels when
+   magnified for precise play. Require contrast of 4.5:1 for normal text and
+   3:1 for large text and essential control boundaries. Repeat logic calls with
    identical inputs, context and random seed to check determinism; applying a
    move twice to successive states is not an equivalent idempotence test. Report
    what was actually tested, including any untested modes or viewports. Save the
-   recording, wait for the server confirmation, then reload and replay the
-   recording by ID to verify persistence. The matrix's sticky replay bar can
-   follow the active scenario or focus one at a time. Browser access must be
-   provided to the agent separately; the text-only generation API cannot itself
-   operate the page.
+   traces, wait for server verification, then retrieve the stored submission
+   and replay traces to verify persistence. Browser access must be provided to
+   the agent separately; the text-only generation API cannot operate the page.
 5. Submit only to the agreed isolated test instance with your assigned account.
    Record the response ID and validation results. A 201 means the game is
    published; never claim otherwise.

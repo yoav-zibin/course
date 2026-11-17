@@ -862,6 +862,27 @@ test('a baseline rejected by the presentation reducer forces the final opponent 
  assert.equal(t.run('sent[1].options.animate'),false);
 });
 
+test('a poll arriving during an animation baseline cannot suppress the final board forever',async()=>{
+ const t=transitionSyncSetup();
+ t.run('declarativeTransition=async()=>({previous:originalPrevious,baseline:{move_count:3,view:{n:3},my_player_index:0,last_move_player_index:0}});frame.send=async(message)=>{sent.push({message});if(sent.length===1)return new Promise(resolve=>{globalThis.releaseBaseline=resolve});return true;}');
+ const pending=t.run('syncGame()');await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(t.run('sent[0].message.move_count'),3);
+ // The server clock changes on every poll even when the board is identical.
+ t.run('state.match={...state.match,server_time:"newer-poll"};releaseBaseline(true)');
+ await pending;
+ await t.run('syncGame()');
+ assert.equal(t.run('sent.at(-1).message.move_count'),4);
+});
+
+test('an unapplied final renderer send can be retried by an identical poll',async()=>{
+ const t=transitionSyncSetup();
+ t.run('declarativeTransition=async()=>({});frame.send=async(message)=>{sent.push({message});return sent.length>1;}');
+ await t.run('syncGame()');
+ await t.run('syncGame()');
+ assert.equal(t.run('sent.length'),2);
+ assert.equal(t.run('sent[1].message.move_count'),4);
+});
+
 test('current account avatar wins over stale match profile cache',()=>{
   const {run}=setup();
   run('Auth.current=()=>({id:"owner",picture_url:"/saved-deer.png"});state.pictureCache.set("owner","/old-puppy.png")');

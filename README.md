@@ -854,16 +854,14 @@ Once the server is running, open these pages in a browser:
   waiting for players, over), a form to create a match for any game with some computer
   opponents, and open matches you can join. The selected match shows its players and
   the actions you can take (join, add or remove computers and start if you own it,
-  leave, delete or hide), and runs the game in an iframe. The page checks the server
-  every 2 seconds, so other players' moves show up on their own. Links like
+  leave, delete or hide), and renders its declarative scene with platform-owned
+  boards, pieces and controls. The page polls for other players' moves. Links like
   `/portal#match=<id>` open a match directly, also for people who aren't playing in it.
 - `/r/<code>`: a short invite link. Redirects to `/portal?ref=<code>`, keeping any
   `#match=<id>`; see [Invite links](#invite-links-referrals).
-- `/builder`: create, edit and delete your games (those owned by the logged-in user).
-  New games start from a small template that shows the [game API](#game-api). The Test
-  tab runs the editor's code (saved or not) in pass-and-play mode: pick the number of
-  players and which seats are computers, and play every human seat yourself, in turn.
-  Test moves stay in the page; a log shows every message, and you can undo moves.
+- `/static/declarative-test.html`: inspect declarative scenes and their UI events.
+  Use the [recorded REST test flow](docs/agent-game-import.md) to verify complete
+  matches and publish the tested package.
 - `/console`: API console. Pick an operation, fill in its parameters and JSON
   body (prefilled with an example and the most recent ids), choose who to act as
   (`X-User-Id` and `X-User-Password`) at the top, and send (Ctrl+Enter). Picking a user
@@ -970,7 +968,7 @@ the password with each request.
 
 ## Game API
 
-Games can use a [declarative UI package](docs/declarative-games.md): a portable
+Games use a [declarative UI package](docs/declarative-games.md): a portable
 JSON scene vocabulary and pure JavaScript presentation reducer. The portal
 renders these games with platform-owned boards, pieces and controls; native
 apps can run the same reducer in QuickJS and implement native scene rendering.

@@ -84,9 +84,16 @@ def test_a_live_change_to_a_remote_target_is_refused(tmp_path):
     assert generator.settings.target_url == "http://127.0.0.1:8000"
 
 
-def test_stop_closes_every_browser_within_seconds(tmp_path):
+@pytest.mark.parametrize("context_delay", [0, 0.1])
+def test_stop_closes_every_browser_within_seconds(tmp_path, context_delay):
     log = {"open": 0}
-    browser = FakeBrowser(log)
+
+    class StartingBrowser(FakeBrowser):
+        async def new_context(self):
+            await asyncio.sleep(context_delay)
+            return await super().new_context()
+
+    browser = StartingBrowser(log)
 
     async def launcher(generator):
         return browser
@@ -96,7 +103,8 @@ def test_stop_closes_every_browser_within_seconds(tmp_path):
                               user_factory=ForeverUser, total_memory=16 * 1024**3)
         await generator.start()
         for _ in range(100):
-            if generator.active == 6:
+            # A session reserves its slot before its browser context opens.
+            if generator.active == 6 and log["open"] == 6:
                 break
             await asyncio.sleep(0.05)
         assert generator.active == 6 and log["open"] == 6  # max_users holds

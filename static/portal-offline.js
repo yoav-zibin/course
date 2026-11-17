@@ -46,8 +46,8 @@ function normalizeState(data) {
   out.queues = out.queues && typeof out.queues === "object" ? out.queues : {};
   out.conflicts = out.conflicts && typeof out.conflicts === "object" ? out.conflicts : {};
   out.local = out.local && typeof out.local === "object" ? out.local : {};
-  out.archives = Array.isArray(out.archives) ? out.archives : [];
-  out.archivedMatches = Array.isArray(out.archivedMatches) ? out.archivedMatches : [];
+  out.archives = Array.isArray(out.archives) ? out.archives.filter(entry => entry && typeof entry === "object") : [];
+  out.archivedMatches = Array.isArray(out.archivedMatches) ? out.archivedMatches.filter(entry => entry && typeof entry === "object") : [];
   out.selectedId = out.selectedId ?? null;
   out.cacheAccess = out.cacheAccess && typeof out.cacheAccess === "object" ? out.cacheAccess : {};
   out.cacheClock = Number.isSafeInteger(out.cacheClock) ? out.cacheClock : 0;
