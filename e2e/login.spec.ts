@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { uniqueName } from './helpers';
+import { createUser, loginAs, uniqueName } from './helpers';
 
 // Every page requires a login: a logged-out visitor to the portal is sent
 // to the login (welcome) page and returns after logging in. The welcome
@@ -73,6 +73,7 @@ test.describe('Guest login (real server)', () => {
 
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading', { name: 'Log in' })).toBeVisible();
+    await expect(dialog.locator('#auth-verified-bonus')).toBeVisible();
     await dialog.getByLabel('Guest name').fill(name);
     await dialog.getByRole('button', { name: 'Continue as guest' }).click();
 
@@ -125,5 +126,54 @@ test.describe('Guest login (real server)', () => {
     await expect(page.getByRole('dialog').locator('.message.error')).toBeVisible();
     await expect(page.getByRole('dialog')).toBeVisible();
     await expect(page.locator('#welcome-login')).toBeVisible();
+  });
+});
+
+test.describe('Verified login bonus messaging', () => {
+  test.afterEach(async ({ page }) => {
+    if (!page.isClosed()) await page.unrouteAll({ behavior: 'wait' });
+  });
+
+  test('an eligible guest still sees the verified-login offer', async ({ page, request }) => {
+    const guest = await createUser(request, uniqueName('Eligible guest'));
+    await loginAs(page, guest);
+    await page.goto('/static/portal.html');
+    await page.locator('.auth-menu-button').click();
+    await page.locator('[data-auth-action="link"]').click();
+    await expect(page.getByRole('dialog').locator('#auth-verified-bonus')).toBeVisible();
+    await expect(page.getByRole('dialog').locator('#auth-verified-bonus')).toContainText('Get 1,000 tokens once');
+  });
+
+  test('a rewarded account sees no offer even when its wallet is empty', async ({ page, request }) => {
+    const user = await createUser(request, uniqueName('Rewarded player'));
+    // The real fixture wallet is empty; the durable bonus flag, rather than
+    // the current balance, determines whether the offer is still relevant.
+    const remembered = { ...user, verified_login_bonus_granted: true };
+    await loginAs(page, remembered);
+    await page.goto('/static/portal.html');
+    await page.locator('.auth-menu-button').click();
+    await page.locator('[data-auth-action="link"]').click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.getByRole('dialog').locator('#auth-verified-bonus')).toBeHidden();
+  });
+
+  test('an old remembered account learns that its bonus was already granted', async ({ page, request }) => {
+    const user = await createUser(request, uniqueName('Remembered player'));
+    await loginAs(page, user);
+    await page.route('**/auth/me', route => route.fulfill({ json: {
+      ...user, user_id: user.id, verified_login_bonus_granted: true,
+    } }));
+    await page.goto('/static/portal.html');
+    await page.locator('.auth-menu-button').click();
+    const refreshed = page.waitForResponse('**/auth/me');
+    await page.locator('[data-auth-action="link"]').click();
+    await refreshed;
+    await expect(page.getByRole('dialog').locator('#auth-verified-bonus')).toBeHidden();
+    await expect.poll(() => page.evaluate('Auth.current().verified_login_bonus_granted')).toBe(true);
+    // The marker is remembered, so reopening the dialog also hides the offer.
+    await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
+    await page.locator('.auth-menu-button').click();
+    await page.locator('[data-auth-action="link"]').click();
+    await expect(page.getByRole('dialog').locator('#auth-verified-bonus')).toBeHidden();
   });
 });

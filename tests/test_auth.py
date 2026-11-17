@@ -341,7 +341,9 @@ def test_linking_a_login_to_the_current_account(
 ) -> None:
     api = _google_api(monkeypatch)
     bob = api.new_user("bob")
+    assert api.ok("GET", "/auth/me", as_user=bob)["verified_login_bonus_granted"] is False
     response = api.ok("POST", "/auth/google", json={"id_token": "token"}, as_user=bob)
+    assert response["verified_login_bonus_granted"] is True
     assert response["user_id"] == bob
     assert response["merged_from_user_id"] is None
     assert ("google", "sub-1") in [
@@ -350,10 +352,22 @@ def test_linking_a_login_to_the_current_account(
     ]
     # /auth/me shows the same linked logins.
     me = api.ok("GET", "/auth/me", as_user=bob)
+    assert me["verified_login_bonus_granted"] is True
     assert me["user_id"] == bob
     assert ("google", "sub-1") in [
         (account["kind"], account["identifier"]) for account in me["linked_accounts"]
     ]
+
+
+def test_auth_me_remembers_bonus_after_tokens_are_spent(monkeypatch: pytest.MonkeyPatch) -> None:
+    from dataclasses import replace
+
+    api = _google_api(monkeypatch)
+    user_id = _track(api, api.ok("POST", "/auth/google", json={"id_token": "token"}))
+    store = api.platform._store
+    store.put_user(replace(store.get_user(user_id), token_balance=0))
+    assert api.ok("GET", "/auth/me", as_user=user_id)["verified_login_bonus_granted"] is True
+    assert "verified_login_bonus_granted" not in api.ok("GET", f"/users/{user_id}")
 
 
 def test_linking_a_login_owned_by_someone_else_merges_the_accounts(

@@ -231,6 +231,7 @@ class AuthResponse(BaseModel):
     picture_url: str = ""
     password: str
     linked_accounts: list[LinkedAccountOut] = []
+    verified_login_bonus_granted: bool = False
     merged_from_user_id: str | None = None
     # The user's short invite code, for invite links (/r/<code>).
     referral_code: str | None = None
@@ -245,6 +246,7 @@ class AuthResponse(BaseModel):
             picture_url=user.picture_url,
             password=user.password,
             linked_accounts=[LinkedAccountOut.of(a) for a in user.linked_accounts],
+            verified_login_bonus_granted=user.verified_login_bonus_granted,
             merged_from_user_id=merged_from_user_id,
         )
 

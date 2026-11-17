@@ -89,6 +89,7 @@ const Auth = (() => {
       picture_url: response.picture_url ?? "",
       password: response.password,
       linked: response.linked_accounts ?? [],
+      verified_login_bonus_granted: response.verified_login_bonus_granted === true,
       referral_code: response.referral_code ?? null,
     });
     save(rest);
@@ -314,9 +315,26 @@ const Auth = (() => {
     dialog.root.onclick = (event) => {
       if (event.target === dialog.root) closeDialog();
     };
-    box.append(close, title,
-      el("p", { class: "muted", textContent: I18n.t("ui.auth.verified_bonus", {}, "Get 1,000 tokens once with your first verified login. Use Google or verify a code sent to your email or phone. Guests receive no welcome bonus.") }),
-      dialog.message);
+    const bonus = el("p", {
+      id: "auth-verified-bonus", class: "muted", hidden: !!account,
+      textContent: I18n.t("ui.auth.verified_bonus", {}, "Get 1,000 tokens once with your first verified login. Use Google or verify a code sent to your email or phone. Guests receive no welcome bonus."),
+    });
+    box.append(close, title, bonus, dialog.message);
+    if (account && !account.verified_login_bonus_granted) {
+      // Old remembered accounts lack the flag, and another device may have
+      // claimed it since our last login. Keep the offer hidden until checked.
+      apiRequest("GET", "/auth/me", { user: account }).then(profile => {
+        const granted = profile.verified_login_bonus_granted;
+        if (typeof granted !== "boolean") return;
+        const all = load(), stored = all.find(user => user.id === account.id);
+        if (stored) {
+          stored.verified_login_bonus_granted = stored.verified_login_bonus_granted === true || granted;
+          save(all);
+        }
+        if (pendingDialog === dialog && current()?.id === account.id)
+          bonus.hidden = granted || stored?.verified_login_bonus_granted === true;
+      }).catch(() => {});
+    }
     if (mode === "link") {
       box.append(
         el("p", { class: "muted", textContent: I18n.t("ui.auth.merge_note", {}, "If this login belongs to another of your accounts, that account is merged into this one.") })
