@@ -2285,7 +2285,7 @@
       ],
       "round_winner": null,
       "undo_stack": [
-        "{\"owner\":[-1,-1,-1,-1,-1,-1,1,-1,-1,1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1],\"cnt\":[0,0,0,0,0,0,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,13],\"bar\":[0,0],\"off\":[14,0],\"cur\":0,\"dice\":[1,4],\"moves\":[1,4],\"needRoll\":false,\"winner\":null,\"n\":0,\"opening\":false,\"opening_roll\":null,\"cube\":{\"value\":1,\"owner\":null,\"offer\":null},\"configured\":true,\"difficulty\":1,\"cube_enabled\":true,\"goal\":5,\"scores\":[0,0],\"round_winner\":null,\"last_roll\":null}"
+        "{\"bar\":[0,0],\"cnt\":[0,0,0,0,0,0,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,13],\"configured\":true,\"cube\":{\"offer\":null,\"owner\":null,\"value\":1},\"cube_enabled\":true,\"cur\":0,\"dice\":[1,4],\"difficulty\":1,\"goal\":5,\"last_roll\":null,\"moves\":[1,4],\"n\":0,\"needRoll\":false,\"off\":[14,0],\"opening\":false,\"opening_roll\":null,\"owner\":[-1,-1,-1,-1,-1,-1,1,-1,-1,1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1],\"round_winner\":null,\"scores\":[0,0],\"winner\":null}"
       ]
     },
     "expected_turn": [

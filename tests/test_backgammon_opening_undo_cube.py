@@ -1,10 +1,14 @@
 """Opening initiative, turn-local undo and cube offers use authoritative state."""
 import copy
+import json
 from pathlib import Path
 
 import pytest
 
+from game_platform.agent_import import GameImport
+from game_platform.game_contract import verify_examples
 from game_platform.game_logic import GameLogic, InvalidMoveError
+from game_platform.game_traces import canonical_json
 from game_platform.tests.test_declarative_backgammon import (
     apply_with_counted_random, context, setup_board,
 )
@@ -134,6 +138,36 @@ def test_undo_restores_capture_dice_and_roll_without_randomness(code, rules):
         rules.call('applyMove', moved['state'], 'b', {'action': 'undo'}, ctx=ctx, seed=7)
     with pytest.raises(InvalidMoveError):
         rules.call('applyMove', before, 'a', {'action': 'undo'}, ctx=ctx, seed=7)
+
+
+def test_all_approved_examples_survive_canonical_submission_storage():
+    package = json.loads((ROOT / 'games/declarative/backgammon.json').read_text())
+    submitted = GameImport.model_validate(package)
+    # Step 1 stores the complete validated payload this way, sorting nested
+    # object keys while preserving opaque undo snapshot strings.
+    stored = GameImport.model_validate(json.loads(canonical_json(submitted.model_dump())))
+    results = verify_examples(stored.server_code, stored.unit_tests)
+    assert len(results) == len(submitted.unit_tests['cases'])
+    assert all(result['passed'] for result in results), results
+
+
+def test_capture_and_undo_survive_canonical_state_storage(rules):
+    ctx = context()
+    state = board(rules, ctx, dice=(2, 1))
+    state['last_roll'] = {'seat': 0, 'turn': 0, 'values': [2, 1], 'move_count': 1}
+    before = copy.deepcopy(state)
+    stored = json.loads(canonical_json(state))
+    move = {'action': 'move', 'from': 6, 'to': 5}
+    direct = rules.call('applyMove', state, 'a', move, ctx=ctx, seed=7)
+    moved = rules.call('applyMove', stored, 'a', move, ctx=ctx, seed=7)
+    # Equal board objects must produce the same opaque snapshot, regardless
+    # of the object-key ordering returned by storage or another host.
+    assert moved == direct
+    assert moved['state']['bar'] == [0, 1] and moved['state']['moves'] == [2]
+    restored = rules.call('applyMove', json.loads(canonical_json(moved['state'])),
+                          'a', {'action': 'undo'}, ctx={**ctx, 'move_count': 1}, seed=7)
+    assert restored == {'state': before, 'turn': ['a']}
+    assert state == before
 
 
 def test_combined_drag_is_one_undo_choice_and_finished_turn_cannot_be_undone(rules):

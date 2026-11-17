@@ -19,6 +19,12 @@
   const snapshot = state => Object.assign(bgCopy(state), metadata(state), {
     last_roll: state.last_roll ? clone(state.last_roll) : null,
   });
+  // Storage may reorder object keys. Undo snapshots are opaque strings, so
+  // order every nested object before encoding while preserving array order.
+  const snapshotValue = value => Array.isArray(value) ? value.map(snapshotValue) :
+    value !== null && typeof value === 'object' ? Object.fromEntries(
+      Object.keys(value).sort().map(key => [key, snapshotValue(value[key])])) : value;
+  const encodeSnapshot = state => JSON.stringify(snapshotValue(snapshot(state)));
   const canUndo = state => modern(state) && state.configured && !state.opening && !state.needRoll &&
     state.winner === null && state.round_winner === null && history(state).length > 0;
   const canDouble = state => modern(state) && state.configured && state.cube_enabled &&
@@ -156,7 +162,7 @@
     // One compound drag is one choice. Snapshots never contain another stack.
     result.state.undo_stack = move && move.action === 'move' &&
       result.state.cur === seat && !result.state.needRoll && result.state.winner === null
-      ? history(state).concat([JSON.stringify(snapshot(state))]).slice(-4) : [];
+      ? history(state).concat([encodeSnapshot(state)]).slice(-4) : [];
     return finishRound(result, state, ctx);
   };
 
