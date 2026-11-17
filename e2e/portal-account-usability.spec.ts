@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createUser, loginAs, uniqueName } from './helpers';
+import { createGame, createUser, loginAs, uniqueName } from './helpers';
 
 test('all portal languages switch and English labels return after a translated reload', async ({ page, request }) => {
   const user = await createUser(request, uniqueName('Languages'));
@@ -54,6 +54,29 @@ test('a guest can submit the login dialog by pressing Enter', async ({ page }) =
   await input.press('Enter');
   await expect(page.getByRole('dialog')).toBeHidden();
   await expect(page.locator('.auth-menu-button')).toHaveAccessibleName(name);
+});
+
+test('Escape closes only the login dialog before reaching match controls', async ({ page, request }) => {
+  test.setTimeout(60_000);
+  const user = await createUser(request, uniqueName('Modal keyboard'));
+  const game = await createGame(request, user, uniqueName('Modal match'));
+  const headers = {'X-User-Id': user.id, 'X-User-Password': user.password};
+  const match = await (await request.post('/matches', {headers, data: {game_id: game, num_computer_opponents: 1}})).json();
+  expect((await request.post(`/matches/${match.id}/start`, {headers, data: {}})).ok()).toBeTruthy();
+  await loginAs(page, user);
+  await page.goto(`/static/portal.html?skin=classic#match=${match.id}`);
+  await expect(page.frameLocator('#game-box iframe').locator('#board button')).toHaveCount(9);
+  const controls = page.locator('#match-controls-toggle');
+  if (await controls.getAttribute('aria-expanded') !== 'true') await controls.click();
+  await page.evaluate('Auth.openDialog()');
+  const dialog = page.getByRole('dialog', {name: 'Log in', exact: true});
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(controls).toHaveAttribute('aria-expanded', 'true');
+  await controls.focus();
+  await page.keyboard.press('Escape');
+  await expect(controls).toHaveAttribute('aria-expanded', 'false');
 });
 
 test('a canceled guest login cannot switch accounts or close a newer dialog', async ({ page, request }) => {

@@ -87,14 +87,15 @@ for (const skin of ['sunset', 'meadow', 'isaac-ui', 'lobby', 'library', 'white']
     await page.goto(`/static/portal.html?skin=${skin}#games`);
     const copy = page.locator('.game-proposal > p').first();
     await expect(copy).toBeVisible();
-    expect(await contrast(copy)).toBeGreaterThanOrEqual(4.5);
-    expect(await contrast(page.locator('#browse-games'))).toBeGreaterThanOrEqual(4.5);
+    // Theme colors transition briefly; still fail if the settled contrast is low.
+    await expect.poll(() => contrast(copy)).toBeGreaterThanOrEqual(4.5);
+    await expect.poll(() => contrast(page.locator('#browse-games'))).toBeGreaterThanOrEqual(4.5);
     // Exercise real form validation and submission, with only the response stubbed.
     await page.route('**/game-proposals', route => route.fulfill({status: 201, json: {id: 'proposal'}}));
     await page.locator('#proposal-name').fill('A new party game');
     await page.locator('#proposal-submit').click();
     await expect(page.locator('#proposal-status')).toContainText('Thank you');
-    expect(await contrast(page.locator('#proposal-status'))).toBeGreaterThanOrEqual(4.5);
+    await expect.poll(() => contrast(page.locator('#proposal-status'))).toBeGreaterThanOrEqual(4.5);
     await expect(page.locator('#proposal-name')).toHaveValue('');
   });
 }

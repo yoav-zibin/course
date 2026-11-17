@@ -366,7 +366,7 @@ const Auth = (() => {
         }
       }
     };
-    document.addEventListener("keydown", dialog.onKeydown);
+    document.addEventListener("keydown", dialog.onKeydown, true);
 
     dialog.onGoogle = async (idToken) => {
       try {
@@ -417,7 +417,7 @@ const Auth = (() => {
     if (!pendingDialog) return;
     const dialog = pendingDialog;
     pendingDialog = null;
-    document.removeEventListener("keydown", dialog.onKeydown);
+    document.removeEventListener("keydown", dialog.onKeydown, true);
     dialog.root.remove();
     if (dialog.returnFocus?.isConnected && dialog.returnFocus.getClientRects().length && !dialog.returnFocus.closest("[hidden],[inert]"))
       dialog.returnFocus.focus({ preventScroll: true });
