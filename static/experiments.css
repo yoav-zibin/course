@@ -3760,7 +3760,7 @@
 }
 
 /* These light skins must also replace Portal's hard-coded dark-theme inks. */
-:root:is([data-skin="isaac-ui"], [data-skin="lobby"], [data-skin="library"], [data-skin="white"]) .portal-shell #browse-games {
+:root:is([data-skin="sunset"], [data-skin="isaac-ui"], [data-skin="lobby"], [data-skin="library"], [data-skin="white"]) .portal-shell #browse-games {
   color: var(--color-accent-hover);
   border-color: var(--color-accent);
 }

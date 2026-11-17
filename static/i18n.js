@@ -510,8 +510,11 @@ const I18n = (() => {
     picker.id = "language-picker";
     picker.setAttribute("data-i18n-aria-label", "ui.language");
     picker.setAttribute("data-i18n-title", "ui.language");
-    picker.setAttribute("aria-label", t("ui.language", {}, "Language"));
-    picker.title = t("ui.language", {}, "Language");
+    // apply() remembers these source attributes before translating them. Keep
+    // that source in English even when a cached catalog starts the page in
+    // another language, so switching back restores the right label.
+    picker.setAttribute("aria-label", "Language");
+    picker.title = "Language";
     picker.addEventListener("change", () => choose(picker.value));
     const wrapper = document.createElement("label");
     wrapper.className = "language-picker";

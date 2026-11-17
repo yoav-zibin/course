@@ -623,8 +623,8 @@ function isYourTurn(match, userId) {
   return match.status === "ongoing" && seat && (match.turn_of_player_indices ?? []).includes(seat.player_index);
 }
 
-function isJoinable(match, userId) {
-  if (match.localMode || !userId || match.players.some(player => player.user_id === userId)) return false;
+function hasOpenMatchSeat(match) {
+  if (match.localMode) return false;
   if (match.players.some(player => player.kind === "computer")) return false;
   const game = gameMetaOf(match.game_id, match.game_version);
   if (!game) return false;
@@ -635,6 +635,10 @@ function isJoinable(match, userId) {
     return match.players.length < max;
   }
   return false;
+}
+
+function isJoinable(match, userId) {
+  return Boolean(userId) && !match.players.some(player => player.user_id === userId) && hasOpenMatchSeat(match);
 }
 
 /** Fetches the player names for everything on screen, plus the full version
@@ -973,7 +977,10 @@ function matchOutcome(match, userId) {
     return {label:I18n.t("ui.match.ended_early", {}, "Ended early"), kind:"neutral"};
   const result = match.state ?? match.result;
   const seat = seatOf(match, userId);
-  let outcome = {label:I18n.t("ui.match.result_unavailable", {}, "Result unavailable"), kind:"neutral"};
+  // A one-player puzzle can finish without a winner field in its opaque view.
+  // Acknowledge completion without inventing a win from its game-owned state.
+  const soloFinished = match.end_reason === "finished" && match.players.length === 1 && match.players[0].kind === "human";
+  let outcome = {label:soloFinished ? I18n.t("ui.match.finished", {}, "Match finished") : I18n.t("ui.match.result_unavailable", {}, "Result unavailable"), kind:"neutral"};
   if (result && typeof result === "object") {
     if (Number.isInteger(result.winner) && match.players.some(player => player.player_index === result.winner)) {
       outcome = seat
@@ -1225,20 +1232,28 @@ function libraryGames() {
 // Keep the renderer visible even when the translated name omits its suffix.
 // The legacy suffix also recognizes saved games and invite views from older APIs.
 function displayGameName(game) {
+  if (isRandomGame(game)) return I18n.t("ui.games.random_name", {}, game.name);
   const suffix = /\s*(?:\(Declarative\)|·\s*Declarative)\s*$/i;
   const shown = I18n.gameName(game.id, game.name);
   const declarative = game.renderer_type === "declarative" || game.declarative_ui || suffix.test(game.name);
   return declarative ? `${shown.replace(suffix, "").trim()} (Declarative)` : shown;
 }
 
+function displayGameDescription(game) {
+  return isRandomGame(game)
+    ? I18n.t("ui.games.random_description", {}, game.description)
+    : I18n.gameDescription(game.id, game.description);
+}
+
 function gameMatchesQuery(game, query) {
-  return `${game.name} ${displayGameName(game)} ${game.description || ""} ${I18n.gameDescription(game.id, game.description) || ""}`
+  return `${game.name} ${displayGameName(game)} ${game.description || ""} ${displayGameDescription(game) || ""}`
     .toLocaleLowerCase().includes(query);
 }
 
 // Distinguish games that share a name, even when filtering hides one of them.
 function catalogGameLabel(game) {
   const shown = displayGameName(game);
+  if (isRandomGame(game)) return shown;
   const name = shown.trim().toLocaleLowerCase();
   const duplicate = state.games.some(other => other.id !== game.id && displayGameName(other).trim().toLocaleLowerCase() === name);
   const short = game.id.slice(0, 8);
@@ -1263,8 +1278,8 @@ function renderLibrary() {
     const hue = Array.from(game.id).reduce((value, letter) => value + letter.charCodeAt(0), 0) % 360;
     const random = isRandomGame(game);
     // The "Random" card is built into the page; every other game's text is its builder's.
-    const name = random ? I18n.t("ui.games.random_name", {}, game.name) : catalogGameLabel(game);
-    const description = random ? I18n.t("ui.games.random_description", {}, game.description) : I18n.gameDescription(game.id, game.description);
+    const name = catalogGameLabel(game);
+    const description = displayGameDescription(game);
     const initials = name.trim().split(/\s+/).slice(0, 2).map(word => Array.from(word)[0] || "").join("");
     const openLabel = I18n.t("ui.games.open_game", {}, "Open game ↗");
     const selectLabel = random
@@ -1415,10 +1430,10 @@ function renderGameSearch() {
   input.setAttribute("aria-expanded", String(state.gameSearchOpen));
   $("game-search-popup").hidden = !state.gameSearchOpen;
   const query = state.gameSearchQuery.trim().toLocaleLowerCase();
-  const results = [RANDOM_GAME, ...state.games].filter((game) => gameMatchesQuery(game, query));
+  const results = libraryGames();
   state.filteredGames = results;
   state.gameSearchActive = Math.min(state.gameSearchActive, Math.max(0, state.filteredGames.length - 1));
-  const key = JSON.stringify([state.gameSearchOpen, state.gameSearchQuery, state.gameSearchActive,
+  const key = JSON.stringify([state.gameSearchOpen, state.gameSearchQuery, state.gameSearchActive, I18n.revision(),
     results.map((game) => [game.id, game.version, catalogGameLabel(game)])]);
   if (key === state.gameSearchKey) return;
   state.gameSearchKey = key;
@@ -1428,8 +1443,8 @@ function renderGameSearch() {
     class: "game-option", "aria-selected": String(index === state.gameSearchActive),
     onclick: () => isRandomGame(game) ? joinRandomMatch() : openGamePage(game.id),
   }, el("span", {class: "game-option-copy"},
-    el("span", {textContent: isRandomGame(game) ? game.name : catalogGameLabel(game)}),
-    ...(game.description ? [el("span", {class: "game-option-description", textContent: game.description})] : [])),
+    el("span", {textContent: catalogGameLabel(game)}),
+    ...(displayGameDescription(game) ? [el("span", {class: "game-option-description", textContent: displayGameDescription(game)})] : [])),
     el("small", {textContent: gameCountLabel(game)}))));
   $("game-results-note").textContent = results.length === 0 ? I18n.t("ui.portal.no_matching", {}, "No matching games. Try a different name.")
     : query
@@ -1446,6 +1461,9 @@ function revealPortalSection(id) {
 }
 
 function browseAllGames() {
+  state.libraryFilter = "all";
+  document.querySelectorAll("[data-game-filter]").forEach(item =>
+    item.setAttribute("aria-pressed", String(item.dataset.gameFilter === "all")));
   if (!state.gameSearchOpen) state.gameSearchOriginal = $("new-game").value;
   $("game-search").value = "";
   onGameSearchInput();
@@ -1553,7 +1571,16 @@ function updateMatchSetup() {
   $("quick-play").disabled = state.creating || !navigator.onLine;
   $("quick-play").textContent = I18n.t("ui.portal.quick_play", {}, "▶ Play");
   const solo = game?.allowed_player_counts.length === 1 && maximum === 0;
+  const localTitle = $("local-play-title");
+  localTitle.dataset.i18n = solo ? "ui.mode.solo" : "ui.mode.pass_and_play";
+  localTitle.textContent = solo ? I18n.t("ui.mode.solo", {}, "Solo") : I18n.t("ui.mode.pass_and_play", {}, "Pass and play");
+  const onlineHint = $("online-play-hint");
+  onlineHint.dataset.i18n = solo ? "ui.portal.hint_solo" : "ui.portal.online_hint";
+  onlineHint.textContent = solo ? I18n.t("ui.portal.hint_solo", {}, "Starts immediately. No opponent needed.") : I18n.t("ui.portal.online_hint", {}, "Set up your opponents in the lobby.");
   $("speed-choice").hidden = solo;
+  $("match-speed").disabled = solo;
+  if (solo) $("match-speed").value = "";
+  $("token-stake-panel").hidden = solo;
   updateStakePreview();
   $("create").textContent = solo ? I18n.t("ui.portal.play_solo", {}, "Play solo ↗") : I18n.t("ui.portal.create_match", {}, "Create match ↗");
   $("selected-game-card").hidden = !game;
@@ -1864,11 +1891,13 @@ function renderMatch() {
     }
   } else if (match.status === "over") {
     if (mySeat && !match.localMode) {
+      const playingSolo = match.players.length === 1 &&
+        game?.allowed_player_counts.length === 1 && game.allowed_player_counts[0] === 1;
       const playingSoloWithComputers =
         match.players.filter((player) => player.kind === "human").length === 1 &&
         match.players.some((player) => player.kind === "computer");
       actions.push(actionButton(
-        playingSoloWithComputers
+        playingSolo || playingSoloWithComputers
           ? I18n.t("ui.match.play_again", {}, "Play again")
           : match.rematch_match_id
             ? I18n.t("ui.match.join_rematch", {}, "Join rematch")
@@ -1879,7 +1908,16 @@ function renderMatch() {
             `/matches/${match.id}/rematch`,
             {user},
           );
+          if (user.id !== me()?.id) return;
+          // Select the returned lobby first so Start remains available if the
+          // automatic restart fails. Solo games have nobody else to wait for.
           selectMatch(rematch.id);
+          if (playingSolo && rematch.status === "waiting_for_players" && rematch.players.length === 1) {
+            await portalRequest("POST", `/matches/${rematch.id}/start`, {user, body: {first_turn_player_indices: [0]}});
+            invalidatePopularGames();
+            invalidateRecentGames();
+            invalidateGamePopularity(rematch.game_id);
+          }
         },
         {primary:true},
       ));
@@ -1899,7 +1937,9 @@ function renderMatch() {
     actions.push(
       el("button", {
         type: "button",
-        textContent: I18n.t("ui.match.invite_friends", {}, "Invite friends"),
+        textContent: hasOpenMatchSeat(match)
+          ? I18n.t("ui.match.invite_friends", {}, "Invite friends")
+          : I18n.t("ui.match.share_match", {}, "Share match"),
         class: "invite-action",
         onclick: async () => {
           let link;
@@ -2455,7 +2495,7 @@ async function createMatch() {
   $("create").disabled = true;
   try {
     const bet = Number($("match-stake").value);
-    const speedFields = window.PortalSpeed?.createFields($("match-speed").value) ?? {};
+    let speedFields = window.PortalSpeed?.createFields($("match-speed").value) ?? {};
     if (!Number.isSafeInteger(bet) || bet < 0) throw new Error(I18n.t("ui.portal.invalid_stake", {}, "Invalid token stake"));
     let game = state.games.find((item) => item.id === gameId);
     if (!game) {
@@ -2469,6 +2509,9 @@ async function createMatch() {
       if (!state.games.some(item=>item.id===gameId)) state.games.push(game);
     }
     if (user.id !== me()?.id) return;
+    // A previous multiplayer setup must not put a clock on a solo game while
+    // its time control is hidden. Decide from the resolved game as well as UI.
+    if (game?.allowed_player_counts?.length === 1 && game.allowed_player_counts[0] === 1) speedFields = {};
     if (bet > 0 && game?.allowed_player_counts?.length === 1 && game.allowed_player_counts[0] === 1) throw new Error(I18n.t("ui.portal.stake_needs_multiplayer", {}, "Token stakes require a multiplayer match"));
     match = await portalRequest("POST", "/matches", {
       user,
@@ -2710,6 +2753,32 @@ function shouldRestoreSavedMatch() {
   return !state.detailGameId && !location.hash;
 }
 
+function setupLeaderboardTabs() {
+  const tabs = [$("leaderboard-tokens-tab"), $("leaderboard-wins-tab")];
+  const panels = [$("leaderboard-tokens"), $("leaderboard-wins")];
+  const activate = (index, focus = false) => {
+    tabs.forEach((tab, i) => {
+      tab.setAttribute("aria-selected", String(i === index));
+      tab.tabIndex = i === index ? 0 : -1;
+      panels[i].hidden = i !== index;
+    });
+    if (focus) tabs[index].focus();
+  };
+  tabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => activate(index));
+    tab.addEventListener("keydown", event => {
+      let next;
+      if (event.key === "ArrowRight" || event.key === "ArrowLeft") next = 1 - index;
+      else if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = tabs.length - 1;
+      else return;
+      event.preventDefault();
+      activate(next, true);
+    });
+  });
+  activate(0);
+}
+
 async function main() {
   initializeTokenWallet();
   setupPopularGamesCarousel();
@@ -2863,7 +2932,8 @@ async function main() {
   document.querySelectorAll("[data-game-filter]").forEach(button => button.addEventListener("click", () => {
     state.libraryFilter = button.dataset.gameFilter;
     document.querySelectorAll("[data-game-filter]").forEach(item => item.setAttribute("aria-pressed", String(item === button)));
-    renderLibrary();
+    state.gameSearchActive = 0;
+    renderGameSearch();
     revealPortalSection("game-library");
   }));
   document.querySelectorAll("[data-game-view]").forEach(button => button.addEventListener("click", () => {
@@ -2912,18 +2982,7 @@ async function main() {
   $("create").addEventListener("click", createMatch);
   window.addEventListener("hashchange", selectFromHash);
   window.addEventListener("popstate", selectFromHash);
-  $("leaderboard-tokens-tab").addEventListener("click", () => {
-    $("leaderboard-tokens-tab").setAttribute("aria-selected", "true");
-    $("leaderboard-wins-tab").setAttribute("aria-selected", "false");
-    $("leaderboard-tokens").hidden = false;
-    $("leaderboard-wins").hidden = true;
-  });
-  $("leaderboard-wins-tab").addEventListener("click", () => {
-    $("leaderboard-tokens-tab").setAttribute("aria-selected", "false");
-    $("leaderboard-wins-tab").setAttribute("aria-selected", "true");
-    $("leaderboard-tokens").hidden = true;
-    $("leaderboard-wins").hidden = false;
-  });
+  setupLeaderboardTabs();
   syncPortalScreen();
   if (shouldRestoreSavedMatch() && offline.read().selectedId)
     history.replaceState(null, "", `#match=${offline.read().selectedId}`);

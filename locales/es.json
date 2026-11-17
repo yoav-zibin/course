@@ -944,5 +944,9 @@
   "ui.declarative.zoom.down": "Desplazar hacia abajo",
   "ui.declarative.zoom.right": "Desplazar a la derecha",
   "ui.auth.verified_bonus": "Recibe 1000 fichas una sola vez con tu primer inicio de sesión verificado. Usa Google o verifica un código enviado a tu correo o teléfono. Los invitados no reciben el bono de bienvenida.",
-  "ui.auth.guest_bonus_note": "Juega como invitado sin bono de bienvenida. Vincula después un inicio de sesión verificado para recibir tus 1000 fichas por única vez."
+  "ui.auth.guest_bonus_note": "Juega como invitado sin bono de bienvenida. Vincula después un inicio de sesión verificado para recibir tus 1000 fichas por única vez.",
+  "ui.portal.sync_review": "Revisa la sincronización en Controles",
+  "ui.portal.offline_practice": "Sin conexión · jugando en este dispositivo",
+  "ui.portal.offline_moves": "Sin conexión · las jugadas se guardan en este dispositivo",
+  "ui.match.share_match": "Compartir partida"
 }

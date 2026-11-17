@@ -21,6 +21,9 @@ test('multiplayer lobby offers no computer opponents', async ({page, request}) =
 });
 
 test('leave dialog quotes the game payout and ends without a replacement bot', async ({page,request}, testInfo) => {
+  // Publication validates the full fixture before the browser flow; allow it
+  // to share the validation queue with other games in the complete suite.
+  test.setTimeout(60_000);
   // Explicit wallets seeded by start-server.py; playing grants no free tokens.
   const fundedAccount = (name: string) => ({
     id: `paid-${testInfo.project.name}-${testInfo.retry}-${name.toLowerCase()}`,

@@ -543,7 +543,9 @@ function linkTopbarBrandToPortal() {
       "aria-label": heading.closest(".topbar")?.dataset?.appBrand
         ? `${heading.closest(".topbar").dataset.appBrand} home`
         : I18n.t("ui.portal.home_aria", {}, "Game platform home"),
+      "data-i18n-aria-label": heading.closest(".topbar")?.dataset?.appBrand ? null : "ui.portal.home_aria",
       title: I18n.t("ui.common.back_to_games", {}, "Back to games"),
+      "data-i18n-title": "ui.common.back_to_games",
     });
     heading.parentNode.insertBefore(link, heading);
     link.append(heading);
@@ -566,6 +568,9 @@ function setUpSidebarDrawer() {
   const backdrop=el('button',{type:'button',class:'sidebar-backdrop',tabIndex:-1,onclick:()=>setOpen(false)});
   document.body.append(backdrop);
   function render() {
+    // Top navigation has no drawer. Clear its state when a layout or skin
+    // switch hides it, including the modal state that makes the main inert.
+    if (document.documentElement?.dataset.portalNavigation === 'modern') opened=false;
     const visible=opened||pinned();
     const modal=visible && !wide.matches;
     document.body.classList.toggle('sidebar-open',visible);

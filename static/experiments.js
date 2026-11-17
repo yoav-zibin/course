@@ -121,8 +121,7 @@
       document.documentElement.dataset.skin = key;
     else delete document.documentElement.dataset.skin;
     const current = document.documentElement.dataset.skin || "";
-    const modernPortal = MODERN_PORTAL_SKINS.has(current);
-    document.documentElement.dataset.portalNavigation = modernPortal ? "modern" : "legacy";
+    syncPortalNavigation(current);
     document.documentElement.dataset.portalCurrency = GEM_PORTAL_SKINS.has(current) ? "gems" : "tokens";
     // Archetype flag for the portal: portal.js reads it for the default
     // screen, portal-match-layout.js for focus match auto-focus. Set here
@@ -130,15 +129,22 @@
     const archetype = PORTAL_ARCHETYPES[current] || "";
     if (archetype) document.documentElement.dataset.portalArchetype = archetype;
     else delete document.documentElement.dataset.portalArchetype;
-    syncPortalMatchNavigation(modernPortal);
     const wallet = document.getElementById("token-wallet");
     if (wallet) {
-      wallet.setAttribute("data-i18n-title", modernPortal ? "ui.portal.wallet_gems_title" : "ui.portal.wallet_title");
+      wallet.setAttribute("data-i18n-title", GEM_PORTAL_SKINS.has(current) ? "ui.portal.wallet_gems_title" : "ui.portal.wallet_title");
       I18n.apply(wallet.parentElement || wallet);
     }
     if (previous !== current)
       document.dispatchEvent(new CustomEvent("portal-skin-change", { detail: { key: current || null } }));
     return previous !== current;
+  }
+
+  function syncPortalNavigation(skin) {
+    const modernPortal = previewLayout
+      ? previewLayout === "top"
+      : MODERN_PORTAL_SKINS.has(skin);
+    document.documentElement.dataset.portalNavigation = modernPortal ? "modern" : "legacy";
+    syncPortalMatchNavigation(modernPortal);
   }
 
   function syncPortalMatchNavigation(modernPortal) {
@@ -191,6 +197,7 @@
     if (previewLayout) document.documentElement.dataset.portalLayout = previewLayout;
     else delete document.documentElement.dataset.portalLayout;
     const current = document.documentElement.dataset.portalLayout || "";
+    syncPortalNavigation(document.documentElement.dataset.skin || activeSkin());
     if (previous !== current)
       document.dispatchEvent(new CustomEvent("portal-layout-change", { detail: { key: current || null } }));
     return previous !== current;

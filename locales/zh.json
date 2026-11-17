@@ -944,5 +944,9 @@
   "ui.declarative.zoom.down": "向下平移",
   "ui.declarative.zoom.right": "向右平移",
   "ui.auth.verified_bonus": "首次完成验证登录，即可一次性获得1,000枚代币。使用Google登录，或输入发送到邮箱或手机的验证码。游客不享受欢迎奖励。",
-  "ui.auth.guest_bonus_note": "游客可直接游玩，但不享受欢迎奖励。之后关联已验证的登录方式，即可一次性领取1,000枚代币。"
+  "ui.auth.guest_bonus_note": "游客可直接游玩，但不享受欢迎奖励。之后关联已验证的登录方式，即可一次性领取1,000枚代币。",
+  "ui.portal.sync_review": "同步需要检查 — 请打开控制面板",
+  "ui.portal.offline_practice": "离线 · 正在此设备上游戏",
+  "ui.portal.offline_moves": "离线 · 操作保存在此设备上",
+  "ui.match.share_match": "分享对局"
 }

@@ -944,5 +944,9 @@
   "ui.declarative.zoom.down": "Nach unten verschieben",
   "ui.declarative.zoom.right": "Nach rechts verschieben",
   "ui.auth.verified_bonus": "Erhalte einmalig 1.000 Spielmarken bei deiner ersten verifizierten Anmeldung. Nutze Google oder bestätige einen Code per E-Mail oder Telefon. Gäste erhalten keinen Willkommensbonus.",
-  "ui.auth.guest_bonus_note": "Spiele als Gast ohne Willkommensbonus. Verknüpfe später eine verifizierte Anmeldung, um einmalig 1.000 Spielmarken zu erhalten."
+  "ui.auth.guest_bonus_note": "Spiele als Gast ohne Willkommensbonus. Verknüpfe später eine verifizierte Anmeldung, um einmalig 1.000 Spielmarken zu erhalten.",
+  "ui.portal.sync_review": "Synchronisierung prüfen — Steuerung öffnen",
+  "ui.portal.offline_practice": "Offline · Spiel auf diesem Gerät",
+  "ui.portal.offline_moves": "Offline · Züge werden auf diesem Gerät gespeichert",
+  "ui.match.share_match": "Match teilen"
 }

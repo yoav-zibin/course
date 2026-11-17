@@ -944,5 +944,9 @@
   "ui.declarative.zoom.down": "Deslocar para baixo",
   "ui.declarative.zoom.right": "Deslocar para a direita",
   "ui.auth.verified_bonus": "Receba 1.000 fichas uma única vez no seu primeiro login verificado. Use o Google ou confirme um código enviado por e-mail ou telefone. Visitantes não recebem o bônus de boas-vindas.",
-  "ui.auth.guest_bonus_note": "Jogue como visitante sem bônus de boas-vindas. Vincule depois um login verificado para receber suas 1.000 fichas uma única vez."
+  "ui.auth.guest_bonus_note": "Jogue como visitante sem bônus de boas-vindas. Vincule depois um login verificado para receber suas 1.000 fichas uma única vez.",
+  "ui.portal.sync_review": "Revise a sincronização nos controles",
+  "ui.portal.offline_practice": "Offline · jogando neste dispositivo",
+  "ui.portal.offline_moves": "Offline · as jogadas são salvas neste dispositivo",
+  "ui.match.share_match": "Compartilhar partida"
 }

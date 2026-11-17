@@ -52,10 +52,12 @@ window.PortalMatchLayout = (() => {
     $("match-toolbar-title").textContent = active ? $("match-title").textContent : "";
     const error = $("match-message").classList.contains("error") ? $("match-message").textContent : "";
     const notices = [];
-    if (match?.conflict) notices.push("Sync needs review — open Controls");
+    if (match?.conflict) notices.push(I18n.t("ui.portal.sync_review", {}, "Sync needs review — open Controls"));
     else if (error) notices.push(error);
-    if (match?.pending) notices.push(`${match.pending} move${match.pending === 1 ? "" : "s"} saved on this device · waiting to sync`);
-    else if (active && !online) notices.push(match.localMode ? "Offline · playing on this device" : "Offline · moves save on this device");
+    if (match?.pending) notices.push(I18n.t("ui.match.pending_sync", {count: match.pending}, `${match.pending} move${match.pending === 1 ? "" : "s"} saved on this device · waiting to sync`));
+    else if (active && !online) notices.push(match.localMode
+      ? I18n.t("ui.portal.offline_practice", {}, "Offline · playing on this device")
+      : I18n.t("ui.portal.offline_moves", {}, "Offline · moves save on this device"));
     if (match?.speedNotice) notices.push(match.speedNotice); // speed matches: time ran out
     if (match?.joinNotice) notices.push(match.joinNotice); // why this match can't be joined
     if (match?.status === "over") notices.push($("match-result").textContent || I18n.t("ui.match.finished", {}, "Match finished"));
@@ -92,7 +94,9 @@ window.PortalMatchLayout = (() => {
       render();
     });
     $("match-focus-toggle").addEventListener("click", () => {
-      manualFocus = !(manualFocus ?? landscape.matches);
+      // The initial focus state can come from the skin or the selected portal
+      // layout as well as the screen orientation. Toggle what is shown.
+      manualFocus = !document.body.classList.contains("match-focus");
       render();
     });
     document.addEventListener("i18n-changed", render);

@@ -674,7 +674,8 @@ button:disabled {
 }
 
 .auth-menu-panel button {
-  text-align: left;
+  text-align: start;
+  white-space: normal;
   background: none;
   border: none;
   padding: var(--space-xs) var(--space-sm);

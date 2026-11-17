@@ -298,13 +298,15 @@ const Auth = (() => {
     const dialog = {
       mode,
       account,
+      returnFocus: document.activeElement,
       root: el("div", { class: "auth-dialog-backdrop" }),
-      message: el("div", { class: "message" }),
+      message: el("div", { class: "message", role: "alert" }),
     };
     pendingDialog = dialog;
 
-    const box = el("div", { class: "auth-dialog", role: "dialog", "aria-modal": "true" });
+    const box = el("div", { class: "auth-dialog", role: "dialog", "aria-modal": "true", "aria-labelledby": "auth-dialog-title" });
     const title = el("h2", {
+      id: "auth-dialog-title",
       textContent: mode === "link" ? I18n.t("ui.auth.link_title", { name: account.display_name }, `Link a login to ${account.display_name}`) : I18n.t("ui.auth.log_in", {}, "Log in"),
     });
     const close = el("button", { type: "button", class: "auth-close", textContent: "×", "aria-label": I18n.t("ui.action.close", {}, "Close") });
@@ -324,6 +326,25 @@ const Auth = (() => {
     box.append(methods);
     dialog.root.append(box);
     document.body.append(dialog.root);
+    close.focus();
+    dialog.root.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        closeDialog();
+      } else if (event.key === "Tab") {
+        const controls = [...box.querySelectorAll("button:not([disabled]),input:not([disabled]),a[href],select,textarea,iframe,[tabindex='0']")]
+          .filter(node => node.getClientRects().length && !node.closest("[hidden],[inert]"));
+        const first = controls[0], last = controls.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+    });
 
     dialog.onGoogle = async (idToken) => {
       try {
@@ -359,17 +380,25 @@ const Auth = (() => {
       if (config.email_login_enabled) {
         methods.append(codeMethod(dialog, "email", I18n.t("ui.auth.email", {}, "Email"), "player@example.com", "/auth/email", "email", I18n.t("ui.auth.email_me_code", {}, "Email me a code")));
       }
-      methods.append(guestMethod(dialog));
+      // A guest has no verified credential to link. Offering guest creation
+      // here silently switched accounts instead of protecting this account.
+      if (mode === "login") methods.append(guestMethod(dialog));
       if (!methods.children.length) {
         dialog.message.textContent = I18n.t("ui.auth.no_methods", {}, "No login methods are configured on this server yet.");
         dialog.message.className = "message error";
       }
+      if (document.activeElement === close) methods.querySelector("input")?.focus();
     });
   }
 
   function closeDialog() {
-    pendingDialog?.root.remove();
-    if (pendingDialog) pendingDialog = null;
+    if (!pendingDialog) return;
+    const dialog = pendingDialog;
+    pendingDialog = null;
+    dialog.root.remove();
+    if (dialog.returnFocus?.isConnected && dialog.returnFocus.getClientRects().length && !dialog.returnFocus.closest("[hidden],[inert]"))
+      dialog.returnFocus.focus({ preventScroll: true });
+    else document.querySelector(".auth-menu-button")?.focus({ preventScroll: true });
   }
 
   function dialogFailed(dialog, error) {
@@ -390,10 +419,16 @@ const Auth = (() => {
   function codeMethod(dialog, kind, label, placeholder, base, field, sendLabel, canCall = false) {
     const input = el("input", { type: kind === "phone" ? "tel" : "email", placeholder, "aria-label": label });
     const codeInput = el("input", { inputmode: "numeric", placeholder: "123456", "aria-label": I18n.t("ui.auth.code", {}, "Code"), hidden: true, style: "width: 120px" });
-    const message = el("div", { class: "message" });
+    const message = el("div", { class: "message", role: "status" });
     let verificationId = null;
 
     const send = async (channel = "sms") => {
+      if (sendButton.disabled) return;
+      sendButton.disabled = true;
+      if (callButton) callButton.disabled = true;
+      codeInput.disabled = true;
+      verifyButton.disabled = true;
+      let sent = false;
       message.textContent = "";
       message.className = "message";
       try {
@@ -409,15 +444,20 @@ const Auth = (() => {
         sendButton.textContent = I18n.t("ui.auth.send_again", {}, "Send again");
         message.textContent = I18n.t("ui.auth.code_sent", { minutes: Math.round(started.expires_in_seconds / 60) }, `Code sent — it expires in ${Math.round(started.expires_in_seconds / 60)} minutes.`);
         message.className = "message ok";
-        codeInput.focus();
+        sent = true;
       } catch (error) {
         dialogFailed({ message }, error);
+      } finally {
+        sendButton.disabled = false;
+        if (callButton) callButton.disabled = false;
+        codeInput.disabled = false;
+        verifyButton.disabled = false;
+        if (sent) codeInput.focus();
       }
     };
     const sendButton = el("button", {
-      type: "button",
+      type: "submit",
       textContent: sendLabel,
-      onclick: () => send("sms"),
     });
     const callButton = kind === "phone" && canCall
       ? el("button", {
@@ -441,7 +481,7 @@ const Auth = (() => {
         dialogFailed({ message }, error);
       }
     };
-    return el("div", { class: "auth-method" },
+    const form = el("form", { class: "auth-method" },
       el("label", { class: "inline" }, `${label} `, input),
       el("div", { class: "inline-row" },
         sendButton,
@@ -451,23 +491,39 @@ const Auth = (() => {
       ),
       message
     );
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      send("sms");
+    });
+    codeInput.addEventListener("keydown", event => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      verifyButton.click();
+    });
+    return form;
   }
 
   function guestMethod(dialog) {
     const input = el("input", { placeholder: I18n.t("ui.auth.guest_name", {}, "Guest name"), "aria-label": I18n.t("ui.auth.guest_name", {}, "Guest name") });
-    const button = el("button", { type: "button", textContent: I18n.t("ui.auth.continue_as_guest", {}, "Continue as guest") });
-    button.onclick = async () => {
-      try {
-        finishLogin(dialog, await createGuest(input.value));
-      } catch (error) {
-        dialogFailed(dialog, error);
-      }
-    };
-    return el("div", { class: "auth-method" },
+    const button = el("button", { type: "submit", textContent: I18n.t("ui.auth.continue_as_guest", {}, "Continue as guest") });
+    const form = el("form", { class: "auth-method" },
       el("label", { class: "inline" }, `${I18n.t("ui.auth.guest", {}, "Guest")} `, input),
       button,
       el("p", { class: "muted", textContent: I18n.t("ui.auth.guest_bonus_note", {}, "Play as a guest without a welcome bonus. Link a verified login later to receive your one-time 1,000 tokens.") })
     );
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (button.disabled) return;
+      button.disabled = true;
+      try {
+        finishLogin(dialog, await createGuest(input.value));
+      } catch (error) {
+        dialogFailed(dialog, error);
+      } finally {
+        button.disabled = false;
+      }
+    });
+    return form;
   }
 
   /** The match invite token in this page's #invite=, or, on the login page a
@@ -521,7 +577,8 @@ const Auth = (() => {
     const button = el("button", {
       type: "button",
       class: "auth-menu-button",
-      "aria-haspopup": "true",
+      "aria-expanded": String(panelWasOpen),
+      "aria-controls": `${container.id || "auth-menu"}-actions`,
       "data-auth-action": "toggle",
     },
       avatarImg(account?.picture_url) || el("span", {
@@ -531,7 +588,7 @@ const Auth = (() => {
       }),
       el("span", { class: "auth-menu-label", textContent: account ? account.display_name : I18n.t("ui.auth.log_in", {}, "Log in") })
     );
-    const panel = el("div", { class: "auth-menu-panel", hidden: true });
+    const panel = el("div", { id: `${container.id || "auth-menu"}-actions`, class: "auth-menu-panel", hidden: true });
     panel.hidden = !panelWasOpen;
     panel.inert = !panelWasOpen;
     panel.setAttribute("aria-hidden", String(!panelWasOpen));
@@ -539,16 +596,23 @@ const Auth = (() => {
       if (panel.hidden) return;
       // Right alignment can put a wrapped mobile header's menu off-screen.
       // Measure without a previous correction, then keep both edges visible.
-      panel.style.right = "0px";
+      // Start from the reading direction's trailing edge. In RTL, measuring a
+      // right-anchored menu beside a left-side avatar first scrolls the page
+      // horizontally, so its viewport bounds no longer describe its placement.
+      const rtl = document.documentElement.dir === "rtl";
+      panel.style.right = rtl ? "auto" : "0px";
+      panel.style.left = rtl ? "0px" : "auto";
       const bounds = panel.getBoundingClientRect();
       const viewport = document.documentElement;
       const left = Math.max(8, Math.min(bounds.left, viewport.clientWidth - bounds.width - 8));
-      panel.style.right = `${bounds.left - left}px`;
+      if (rtl) panel.style.left = `${left - bounds.left}px`;
+      else panel.style.right = `${bounds.left - left}px`;
       // offsetTop excludes the reveal animation's temporary translation.
       const top = container.getBoundingClientRect().top + panel.offsetTop;
       panel.style.maxHeight = `${Math.max(0, viewport.clientHeight - top - 8)}px`;
     };
     const hidePanel = () => {
+      button.setAttribute("aria-expanded", "false");
       panel.inert = true;
       panel.setAttribute("aria-hidden", "true");
       panel.hidden = true;
@@ -558,7 +622,16 @@ const Auth = (() => {
       panel.hidden = !panel.hidden;
       panel.inert = panel.hidden;
       panel.setAttribute("aria-hidden", String(panel.hidden));
+      button.setAttribute("aria-expanded", String(!panel.hidden));
       positionPanel();
+    };
+    container.onkeydown = event => {
+      if (event.key === "Escape" && !panel.hidden) {
+        event.preventDefault();
+        event.stopPropagation();
+        hidePanel();
+        button.focus({ preventScroll: true });
+      }
     };
     container._hideAuthMenu = hidePanel;
     container._positionAuthMenu = positionPanel;

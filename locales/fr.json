@@ -944,5 +944,9 @@
   "ui.declarative.zoom.down": "Déplacer vers le bas",
   "ui.declarative.zoom.right": "Déplacer vers la droite",
   "ui.auth.verified_bonus": "Recevez 1 000 jetons une seule fois lors de votre première connexion vérifiée. Utilisez Google ou validez un code reçu par e-mail ou téléphone. Les invités ne reçoivent pas ce bonus de bienvenue.",
-  "ui.auth.guest_bonus_note": "Jouez en invité sans bonus de bienvenue. Associez ensuite une connexion vérifiée pour recevoir votre bonus unique de 1 000 jetons."
+  "ui.auth.guest_bonus_note": "Jouez en invité sans bonus de bienvenue. Associez ensuite une connexion vérifiée pour recevoir votre bonus unique de 1 000 jetons.",
+  "ui.portal.sync_review": "Vérifiez la synchronisation dans les commandes",
+  "ui.portal.offline_practice": "Hors ligne · partie sur cet appareil",
+  "ui.portal.offline_moves": "Hors ligne · les coups sont enregistrés sur cet appareil",
+  "ui.match.share_match": "Partager la partie"
 }

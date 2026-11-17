@@ -944,5 +944,9 @@
   "ui.declarative.zoom.down": "Pan down",
   "ui.declarative.zoom.right": "Pan right",
   "ui.auth.verified_bonus": "Get 1,000 tokens once with your first verified login. Use Google or verify a code sent to your email or phone. Guests receive no welcome bonus.",
-  "ui.auth.guest_bonus_note": "Play as a guest without a welcome bonus. Link a verified login later to receive your one-time 1,000 tokens."
+  "ui.auth.guest_bonus_note": "Play as a guest without a welcome bonus. Link a verified login later to receive your one-time 1,000 tokens.",
+  "ui.portal.sync_review": "Sync needs review — open Controls",
+  "ui.portal.offline_practice": "Offline · playing on this device",
+  "ui.portal.offline_moves": "Offline · moves save on this device",
+  "ui.match.share_match": "Share match"
 }

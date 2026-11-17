@@ -44,6 +44,22 @@ test('creating a solo-only game starts one human immediately',async()=>{
   assert.equal(node('create').textContent,'Play solo ↗');
 });
 
+test('creating a deep-linked solo game ignores a previous multiplayer clock',async()=>{
+  const calls=[];
+  const t=setup(async(method,path,opts)=>{
+    if(path==='/games/solo') return {id:'solo',version:2,name:'Solo puzzle',allowed_player_counts:[1]};
+    if(method==='POST') calls.push([path,opts.body]);
+    return {id:'match',game_version:2,players:[{kind:'human',user_id:'owner'}]};
+  });
+  t.node('match-speed').value='60';
+  t.run('window.PortalSpeed={createFields:value=>({turn_seconds:Number(value)})};state.games=[];state.detailGameId="solo"');
+  await t.run('createMatch()');
+  assert.equal(calls[0][0],'/matches');
+  assert.equal(calls[0][1].game_id,'solo');
+  assert.equal(Object.hasOwn(calls[0][1],'turn_seconds'),false);
+  assert.equal(calls[1][0],'/matches/match/start');
+});
+
 test('ranked games retain server order and open even outside the current catalog page',()=>{
   const {node,run,navigations}=setup();
   run('state.popularGames=[{id:"leader",name:"Most popular",version:1,allowed_player_counts:[2]}, {id:"runner-up",name:"Next game",version:1,allowed_player_counts:[2]}];renderPopularGames()');
@@ -438,6 +454,29 @@ test('finished solo-versus-computers match offers Play again',()=>{
   assert.ok(!node('actions').children.some(button=>button.textContent==='Request rematch'));
 });
 
+test('Play again starts a one-player rematch and preserves its lobby for a failed-start retry',async()=>{
+  for (const failStart of [false,true]) {
+    const calls=[];
+    let t;
+    t=setup(async(method,path,options)=>{
+      calls.push([method,path,options?.body]);
+      if(path.endsWith('/start')) {
+        assert.equal(t.run('state.selectedId'),'solo-rematch');
+        if(failStart) throw new Error('Start connection interrupted');
+      }
+      return {id:'solo-rematch',game_id:'game',game_version:2,status:'waiting_for_players',players:[{kind:'human',user_id:'owner'}]};
+    });
+    t.run('state.gameCache.set("game@2",state.games[0]);state.match={id:"solo-finished",game_id:"game",game_version:2,owner_user_id:"owner",status:"over",end_reason:"finished",players:[{player_index:0,kind:"human",user_id:"owner"}],move_count:5,state:{count:5}};renderMatch()');
+    const play=t.node('actions').children.find(button=>button.textContent==='Play again');
+    assert.ok(play);
+    await play.onclick();
+    assert.deepEqual(calls.map(call=>call.slice(0,2)),[['POST','/matches/solo-finished/rematch'],['POST','/matches/solo-rematch/start']]);
+    assert.equal(t.run('state.selectedId'),'solo-rematch');
+    assert.deepEqual(Array.from(calls[1][2].first_turn_player_indices),[0]);
+    if(failStart) assert.match(t.node('match-message').textContent,/Start connection interrupted/);
+  }
+});
+
 test('finished results are personalized including seat zero, draws, and spectators',()=>{
   const {run}=setup();
   run('state.match={status:"over",end_reason:"finished",players:[{player_index:0,user_id:"owner",kind:"human"},{player_index:1,user_id:"other",kind:"human"}],state:{winner:0}}');
@@ -448,6 +487,17 @@ test('finished results are personalized including seat zero, draws, and spectato
   assert.equal(run('matchOutcome(state.match,"owner").label'),'Draw');
   run('state.match.state={winner:null,done:true}');
   assert.equal(run('matchOutcome(state.match,"owner").label'),'Draw');
+});
+
+test('naturally finished one-player puzzles show completion without inferring a win',()=>{
+  const {run}=setup();
+  run('state.match={status:"over",end_reason:"finished",players:[{player_index:0,user_id:"owner",kind:"human"}],state:{count:5}}');
+  assert.equal(run('matchOutcome(state.match,"owner").label'),'Match finished');
+  assert.equal(run('matchOutcome(state.match,"owner").kind'),'neutral');
+  run('state.match.state={phase:"play",solved:true,moves:7}');
+  assert.equal(run('matchOutcome(state.match,"spectator").label'),'Match finished');
+  run('state.match.end_reason="player_left"');
+  assert.equal(run('matchOutcome(state.match,"owner").label'),'Ended early');
 });
 
 test('list summaries carry the outcome as result, without a state',()=>{
