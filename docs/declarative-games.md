@@ -44,10 +44,12 @@ server validation. Sending a forged scene, local state, dice or illegal move
 cannot replace server state. Offline practice runs locally; multiplayer and
 online computer matches remain server authoritative.
 
-The Backgammon package uses the exact rules JavaScript of the regular audited
-Backgammon game. Its strict move schema describes roll, pass and moves from a
-point or bar to a point or off tray. Only the server rolls dice and computes
-`view.legalMoves`, including forced bar entry, maximum dice use and bearing off.
+The Backgammon package keeps the regular audited game's rules as its base,
+with reviewed wrappers for retained rolls and unambiguous moves that use several
+dice with one checker. Its strict move schema describes roll, pass and moves
+from a point or bar to a point or off tray. Only the server rolls dice and
+computes `view.legalMoves` and optional `view.combinedMoves`, including forced
+bar entry, maximum dice use and bearing off.
 The presentation only displays those legal choices and sends the selected move.
 See [Backgammon's package notes](../games/declarative/BACKGAMMON.md) for the
 source hash, preserved variant rules and native event examples.
@@ -82,6 +84,17 @@ alias for that filtered view. A local interaction wraps the latest message:
   }
 }
 ```
+
+An optional `state_changed.presentation_history` supplies up to 12 recent
+viewer-filtered snapshots for rebuilding presentation memory after a reload or
+missed update. Each entry is exactly `{view, move_count, last_move_player_index?}`:
+`view` is filtered JSON, `move_count` is a nonnegative integer, and the optional
+actor is an index from 0 through 9 or `null`. Entries never include authoritative
+hidden state or acting permissions. Hosts and reducers must use ordered entries
+at or before the current message's move count; the schema checks their shape and
+size, while consumers enforce this temporal relationship. Fold them only into
+presentation memory, such as the original dice pair, without emitting moves or
+changing the current message's permissions. Omitting history remains valid.
 
 The reducer always returns a **complete scene snapshot**. Optional
 `local_state` is JSON interaction state, such as a selected piece ID or an
@@ -140,8 +153,8 @@ rendering, pass-and-play and reduced-motion preferences use immediate updates.
 History navigation currently updates immediately; the
 [requirements call for animated history review](declarative-game-requirements.md#5-show-what-happened-with-animations),
 including recorded own moves. A scene is
-still a complete snapshot; no animation commands or delays belong in game
-logic. For games whose server stores counts rather than individual pieces,
+still a complete snapshot; animation timing and transforms belong to the host.
+For games whose server stores counts rather than individual pieces,
 presentation `local_state` can reconcile identities, as Backgammon does for
 moves, captures, bar entry and bearing off.
 
@@ -153,9 +166,12 @@ remain visible. Other mounts fit the complete declared viewport by default.
 
 The board uses drag and two-finger pinch/spread without a camera toolbar or
 instruction panel. Pinch and mouse-wheel zoom allow **25%–400%** of the fitted
-view. Below 100%, the board is centered in the additional space. Keyboard users
+view. Below 100%, the overview leaves additional space around the board.
+Background dragging works at every zoom level and permits a bounded margin of
+18% of the visible area beyond each edge, so edge pieces can be moved away from
+the screen boundary. The board cannot be panned completely out of view. Keyboard users
 can focus the board and use `+`/`-` to zoom, `0` to restore the fitted view,
-arrow keys to pan when magnified, and Home/End to reach the board's edges.
+arrow keys to pan, and Home/End to reach the board's edges.
 Camera state survives scene changes, replay and viewport resizing, and resets
 when the host opens a new match. Camera gestures stay in the host and never
 emit `make_move`; two fingers cancel an unfinished piece gesture.
@@ -199,6 +215,25 @@ asset or a generic back when none is supplied; it suppresses front artwork,
 front text and front-derived accessibility labels. Destinations require `id`, `board` and
 `position`, and can have a visible label. `move_targets` is a UI affordance,
 not server permission; `applyMove` must independently reject illegal moves.
+
+Targets may declare `hit_area:{x,y,width,height}` in logical units relative to
+their center. Both offsets and positive dimensions are required; coordinates
+use the same ±100000 bounds as positions and dimensions are at most 100000.
+The rectangle changes tap and legal-drop hit testing while the target's visible
+marker stays at its declared position. This lets a Backgammon point accept a
+checker anywhere along its triangle. It does not make an unavailable target
+legal or change a piece's movement permissions. Omit it for the default marker
+hit area; it is not a piece property.
+
+Pieces can attach `animation:{kind:"roll",key:"turn-12"}` to identify a visual
+roll event. Both fields are required when the object is present; no other
+fields are accepted. The key uses the same 1–80 character identifier alphabet
+as piece IDs. Keep it stable while showing the same roll, including subsequent
+spent-die shading, so polling does not restart the effect. A new accepted roll
+gets a new key. The host chooses the brief visual effect and can suppress it
+for initial mounting, history or reduced-motion settings. This metadata neither
+changes the final die value nor grants an action, changes the board camera, or
+controls authoritative randomness. It carries no duration or executable code.
 
 Pieces and destinations can supply `aria_label` independently of their visible
 `text` or `label`. Use a descriptive localized name containing the owner and

@@ -811,6 +811,81 @@ test('opponent-only gaps need no own baseline and own final moves never animate'
  assert.equal(own.animate,false);assert.equal(own.baseline,undefined);
 });
 
+test('opponent-only presentation history contains only the last twelve filtered views and public actors',async()=>{
+ const t=transitionSetup();
+ t.run(`transitionMessage.move_count=20;
+  transitionMoves=Array.from({length:20},(_,i)=>({move_number:i+1,player_index:1,
+   new_state:{visible:i+1},next_turn_player_indices:[0],
+   move:{privateChoice:'not presentation metadata'},made_by_user_id:'not forwarded'}));`);
+ const result=await t.run('declarativeTransition({id:"m",move_count:20,localMode:"computer",moves:transitionMoves},transitionMessage)');
+ assert.equal(result.baseline,undefined);assert.notEqual(result.animate,false);
+ assert.deepEqual(Array.from(result.presentation_history,item=>item.move_count),Array.from({length:12},(_,i)=>i+9));
+ assert.deepEqual(Object.keys(result.presentation_history[0]).sort(),['last_move_player_index','move_count','view']);
+ assert.deepEqual(JSON.parse(JSON.stringify(result.presentation_history[0])),{view:{visible:9},move_count:9,last_move_player_index:1});
+});
+
+test('a mixed animation baseline receives no observations from after its own accepted move',async()=>{
+ const t=transitionSetup();
+ const result=await t.run('declarativeTransition({id:"m",move_count:4,localMode:"computer",moves:transitionMoves},transitionMessage)');
+ assert.deepEqual(Array.from(result.presentation_history,item=>item.move_count),[1,2,3,4]);
+ assert.deepEqual(Array.from(result.baseline.presentation_history,item=>item.move_count),[1,2,3]);
+ assert.equal(result.baseline.move_count,3);
+ assert.equal(result.baseline.acting_for_player_index,null);
+});
+
+test('initial presentation recovery asks for one bounded authenticated history tail',async()=>{
+ const calls=[];
+ const t=transitionSetup(async(method,path,options)=>{
+  calls.push([method,path,options.user.id]);
+  return {items:Array.from({length:12},(_,i)=>({move_number:i+29,player_index:1,
+   new_state:{publicFace:i+29},next_turn_player_indices:[0]})),total:1000};
+ });
+ t.run('StoragePages.enabled=async()=>true;frame.lastMessage=null;transitionMessage.move_count=40');
+ const result=await t.run('declarativeTransition({id:"m",move_count:40},transitionMessage)');
+ assert.deepEqual(calls,[['GET','/v2/matches/m/history?start=28&limit=12','owner']]);
+ assert.equal(result.animate,false);
+ assert.deepEqual(Array.from(result.presentation_history,item=>item.move_count),Array.from({length:12},(_,i)=>i+29));
+});
+
+test('a large JSON-store remount never downloads its entire history for presentation',async()=>{
+ let requests=0;
+ const t=transitionSetup(async()=>{requests++;return [];});
+ t.run('frame.lastMessage=null;transitionMessage.move_count=40');
+ const result=await t.run('declarativeTransition({id:"m",move_count:40},transitionMessage)');
+ assert.equal(requests,0);assert.equal(result.animate,false);
+ assert.equal(result.presentation_history.length,0);
+});
+
+test('local replay observations stop at the displayed move and never include future local views',async()=>{
+ const t=transitionSetup(async()=>{throw new Error('Local presentation read went online');});
+ t.run(`transitionMessage.move_count=5;transitionMessage.replay={index:5,total:20};
+  transitionMoves=Array.from({length:20},(_,i)=>({player_index:i%2,new_state:{visible:i+1},next_turn_player_indices:[0]}));`);
+ const result=await t.run('declarativeTransition({id:"m",move_count:20,localMode:"computer",moves:transitionMoves},transitionMessage)');
+ assert.equal(result.animate,false);assert.equal(result.baseline,undefined);
+ assert.deepEqual(Array.from(result.presentation_history,item=>item.move_count),[1,2,3,4,5]);
+ assert.equal(result.presentation_history.at(-1).view.visible,5);
+});
+
+test('a normal own single move never waits for capability discovery or history',async()=>{
+ const t=transitionSetup(async()=>{throw new Error('Own move tried to read history');});
+ t.run('StoragePages.enabled=()=>{throw new Error("Own move waited for capabilities")};transitionMessage.move_count=1;transitionMessage.last_move_player_index=0');
+ const result=await t.run('declarativeTransition({id:"m",move_count:1},transitionMessage)');
+ assert.deepEqual(Object.keys(result),[]);
+});
+
+for(const mutation of ['delete transitionMoves[1].move_number','transitionMoves[1].move_number=4',
+ 'transitionMoves[1].player_index=null','transitionMoves[1].player_index=10',
+ 'transitionMoves[1].next_turn_player_indices=[11]']) {
+ test(`malformed remote presentation history is omitted: ${mutation}`,async()=>{
+  let t;
+  t=transitionSetup(async()=>({items:t.run('transitionMoves')}));
+  t.run('StoragePages.enabled=async()=>true;'+mutation);
+  const result=await t.run('declarativeTransition({id:"m",move_count:4},transitionMessage)');
+  assert.equal(result.animate,false);assert.equal(result.baseline,undefined);
+  assert.equal(result.presentation_history,undefined);
+ });
+}
+
 test('malformed, unavailable and excessively large history gaps settle without motion',async()=>{
  const t=transitionSetup(async()=>{throw new Error('history unavailable')});
  assert.equal((await t.run('declarativeTransition({id:"m"},transitionMessage)')).animate,false);
@@ -840,6 +915,32 @@ function transitionSyncSetup() {
  t.run('state.loaded="match@game@2";state.match={...state.match,move_count:4,state:{n:4},last_move_player_index:1};globalThis.originalPrevious={move_count:0,my_player_index:0,replay:null};frame.declarative={};frame.lastMessage=originalPrevious;globalThis.stateChangedMessage=options=>({type:"state_changed",state:options.state,view:options.view,move_count:options.moveCount,my_player_index:options.mySeat,replay:null});frame.send=async(message,options={})=>{sent.push({message,options});return true;}');
  return t;
 }
+
+for(const [name,mutation] of [
+ ['account','Auth.current=()=>({id:"another-account"})'],
+ ['match','state.match={...state.match,id:"another-match"}'],
+ ['replay','state.replay={id:"match",index:1,move:{new_state:{n:1},next_turn_player_indices:[0]}}'],
+ ['newer move','state.match={...state.match,move_count:5,state:{n:5}}'],
+]) test(`late initial presentation history cannot enter a changed ${name} context`,async()=>{
+ const t=transitionSyncSetup();
+ t.run('frame.lastMessage=null;recoverPresentationHistory=()=>new Promise(resolve=>{globalThis.releasePresentationHistory=resolve})');
+ const pending=t.run('syncGame()');await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(t.run('typeof releasePresentationHistory'),'function');
+ t.run(mutation);
+ t.run('releasePresentationHistory([{view:{n:3},move_count:3,last_move_player_index:1}])');
+ await pending;
+ assert.equal(t.run('sent.length'),0);
+});
+
+test('presentation history does not change the base board deduplication key',async()=>{
+ const t=transitionSyncSetup();
+ t.run(`globalThis.historyTransitions=0;declarativeTransition=async()=>{
+  historyTransitions++;return {presentation_history:[{view:{n:3},move_count:3,last_move_player_index:1}]};};`);
+ await t.run('syncGame()');await t.run('syncGame()');
+ assert.equal(t.run('historyTransitions'),1);assert.equal(t.run('sent.length'),1);
+ assert.equal(t.run('sent[0].message.presentation_history[0].view.n'),3);
+ assert.equal(t.run('JSON.parse(state.lastSent).presentation_history'),undefined);
+});
 
 test('a history baseline made obsolete by another rendered update cannot animate the combined final state',async()=>{
  const t=transitionSyncSetup();

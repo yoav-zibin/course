@@ -41,8 +41,17 @@ test('the exact original Backgammon package receives the reviewed presentation w
   assert.equal(input.version, 1);
   assert.equal(input.server_code, rules);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0][0], '/static/backgammon-declarative-ui.json?v=1');
+  assert.equal(calls[0][0], '/static/backgammon-declarative-ui.json?v=2');
   assert.equal(calls[0][1].credentials, 'omit');
+});
+
+test('the exact second Backgammon presentation receives the same repair with its original rules and version pinned', async () => {
+  const input = game(); input.version = 2;
+  input.declarative_ui = JSON.parse(fs.readFileSync(path.join(root, 'tests/fixtures/declarative/backgammon-v2-ui.json'), 'utf8'));
+  const original = JSON.stringify(input), {forGame, calls} = setup();
+  assert.deepEqual(clone(await forGame(freeze(input))), repaired());
+  assert.equal(JSON.stringify(input), original);
+  assert.equal(calls.length, 1);
 });
 
 test('the replacement asset matches the hardcoded reviewed content hash', () => {

@@ -2110,44 +2110,98 @@ function redrawAfterLanguageChange() {
   }
 }
 
+const PRESENTATION_HISTORY_LIMIT = 12;
+
+function validatedPresentationMoves(moves, start, stop, local = false) {
+  if (!Array.isArray(moves) || moves.length !== stop - start) return null;
+  const validActor = actor => Number.isInteger(actor) && actor >= 0 && actor <= 9;
+  for (let index = 0; index < moves.length; index++) {
+    const move = moves[index], number = start + index + 1;
+    if (!move || !validActor(move.player_index) || !Object.hasOwn(move, "new_state") ||
+        move.new_state === undefined || !Object.hasOwn(move, "next_turn_player_indices") ||
+        (move.move_number !== number && !(local && move.move_number === undefined))) return null;
+    const turn = move.next_turn_player_indices;
+    if (turn !== null && (!Array.isArray(turn) || !turn.length || turn.length > 10 ||
+        turn.some(actor => !validActor(actor)) || new Set(turn).size !== turn.length)) return null;
+  }
+  return moves;
+}
+
+async function filteredPresentationMoves(match, start, stop, boundedOnly = false) {
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(stop) || start < 0 ||
+      stop <= start || stop - start > 100) return null;
+  let moves;
+  if (match.localMode) {
+    const offset = Number.isSafeInteger(match.historyStart) ? match.historyStart : 0;
+    if (!Array.isArray(match.moves) || start < offset) return null;
+    moves = match.moves.slice(start - offset, stop - offset);
+  } else if (typeof StoragePages !== "undefined" && await StoragePages.enabled()) {
+    const page = await portalRequest("GET", `/v2/matches/${match.id}/history?start=${start}&limit=${stop - start}`, {user: me()});
+    moves = page?.items;
+  } else {
+    // The JSON-store compatibility endpoint returns its whole history. Avoid
+    // turning an initial mount or replay into a large download on that backend.
+    if (boundedOnly && match.move_count > PRESENTATION_HISTORY_LIMIT) return null;
+    const history = await portalRequest("GET", `/matches/${match.id}/moves`, {user: me()});
+    if (!Array.isArray(history)) return null;
+    moves = history.slice(start, stop);
+  }
+  return validatedPresentationMoves(moves, start, stop, Boolean(match.localMode));
+}
+
+function presentationObservations(moves, stop) {
+  return moves.slice(-PRESENTATION_HISTORY_LIMIT).map((move, index, tail) => ({
+    view: move.new_state,
+    move_count: stop - tail.length + index + 1,
+    last_move_player_index: move.player_index,
+  }));
+}
+
+async function recoverPresentationHistory(match, message) {
+  const stop = message.move_count;
+  if (!Number.isSafeInteger(stop) || stop <= 0) return [];
+  const start = Math.max(0, stop - PRESENTATION_HISTORY_LIMIT);
+  const moves = await filteredPresentationMoves(match, start, stop, true);
+  return moves ? presentationObservations(moves, stop) : [];
+}
+
 // A poll or local computer chain can contain both our move and its replies.
-// Put the latest own move in place first, using only viewer-filtered history;
-// movement from there to the final snapshot then belongs to other players.
+// History is already filtered to this viewer. Supply only bounded observation
+// metadata, and snap the latest own baseline before animating another actor.
 async function declarativeTransition(match, message) {
   const previous = frame.lastMessage;
-  if (!frame.declarative || !previous) return {};
-  if (previous.replay || message.replay) return {animate: false};
-  const delta = message.move_count - previous.move_count;
-  if (delta < 0) return {animate: false};
-  if (delta <= 1 || message.my_player_index === null) return {};
-  if (message.last_move_player_index === message.my_player_index || delta > 100) return {animate: false};
+  if (!frame.declarative || !Number.isSafeInteger(message.move_count)) return {};
+  const delta = previous ? message.move_count - previous.move_count : null;
   try {
-    let moves;
-    if (match.localMode) moves = (match.moves || []).slice(previous.move_count, message.move_count);
-    else if (typeof StoragePages !== "undefined" && await StoragePages.enabled()) {
-      const page = await portalRequest("GET", `/v2/matches/${match.id}/history?start=${previous.move_count}&limit=${delta}`, {user: me()});
-      moves = page.items;
-    } else {
-      const history = await portalRequest("GET", `/matches/${match.id}/moves`, {user: me()});
-      moves = history.slice(previous.move_count, message.move_count);
+    if (!previous || !Number.isSafeInteger(previous.move_count) || previous.replay || message.replay || delta < 0 || delta > 100) {
+      return {animate: false, presentation_history: await recoverPresentationHistory(match, message)};
     }
-    if (!Array.isArray(moves) || moves.length !== delta || moves.some((move, index) =>
-      !Number.isInteger(move.player_index) || move.player_index < 0 || move.player_index > 9 ||
-      !Object.hasOwn(move, "new_state") || !Object.hasOwn(move, "next_turn_player_indices") ||
-      (move.move_number !== undefined && move.move_number !== previous.move_count + index + 1))) return {animate: false};
+    // An ordinary accepted own move paints directly from its response; no
+    // metadata fetch belongs on this frequent path. Single opponent snapshots
+    // also contain their own current view for ordinary presentation reducers.
+    if (delta <= 1) return {};
+    const moves = await filteredPresentationMoves(match, previous.move_count, message.move_count);
+    if (!moves) return {animate: false};
+    const observations = presentationObservations(moves, message.move_count);
+    const result = {presentation_history: observations};
+    if (!Number.isInteger(message.last_move_player_index) || message.last_move_player_index < 0 || message.last_move_player_index > 9 ||
+        message.last_move_player_index === message.my_player_index) return {...result, animate: false};
+    if (message.my_player_index === null) return result;
     let ownIndex = -1;
     for (let index = moves.length - 1; index >= 0; index--) if (moves[index].player_index === message.my_player_index) { ownIndex = index; break; }
-    if (ownIndex < 0) return {};
+    if (ownIndex < 0) return result;
     const own = moves[ownIndex];
-    if (ownIndex === moves.length - 1) return {animate: false};
-    return {previous, baseline: {...message,
+    if (ownIndex === moves.length - 1) return {...result, animate: false};
+    const baselineCount = previous.move_count + ownIndex + 1;
+    return {...result, previous, baseline: {...message,
       state: own.new_state, view: own.new_state,
       turn_of_player_indices: own.next_turn_player_indices,
       acting_for_player_index: null,
       status: own.next_turn_player_indices === null ? "over" : "ongoing",
       end_reason: own.next_turn_player_indices === null ? "finished" : null,
-      move_count: previous.move_count + ownIndex + 1,
+      move_count: baselineCount,
       last_move_player_index: own.player_index,
+      presentation_history: presentationObservations(moves.slice(0, ownIndex + 1), baselineCount),
     }};
   } catch {
     // Recovering from missing/old history must never animate our own move.
@@ -2162,7 +2216,7 @@ async function reviewedDeclarativePresentation(game) {
   // cached game records, their versions, and the move path stay pinned.
   if (!spec || game.id !== "5f5293c3-2a3a-4eec-b631-9debf59be0ca") return spec;
   try {
-    await loadPortalScript("/static/declarative-presentation.js?v=2");
+    await loadPortalScript("/static/declarative-presentation.js?v=3");
     return await window.DeclarativePresentation.forGame(game);
   } catch {
     return spec;
@@ -2243,6 +2297,7 @@ async function syncGame() {
   if (json !== state.lastSent) {
     const transition = await declarativeTransition(match, message);
     if (!stillCurrent() || state.loaded !== key || json === state.lastSent) return;
+    if (transition.presentation_history?.length) message.presentation_history = transition.presentation_history;
     if (transition.baseline) {
       if (frame.lastMessage !== transition.previous) transition.animate = false;
       else {

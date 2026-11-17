@@ -20,6 +20,104 @@ async function camera(page:Page){return page.locator('#zoom-test .declarative-st
 async function screenPoint(page:Page,x:number,y:number){return page.locator('#zoom-test .declarative-stage').evaluate((node:SVGSVGElement,point)=>{const p=node.createSVGPoint();p.x=point.x;p.y=point.y;const result=p.matrixTransform(node.getScreenCTM()!);return {x:result.x,y:result.y};},{x,y});}
 async function boardPoint(page:Page,x:number,y:number){return page.locator('#zoom-test .declarative-stage').evaluate((node:SVGSVGElement,point)=>{const p=node.createSVGPoint();p.x=point.x;p.y=point.y;const result=p.matrixTransform(node.getScreenCTM()!.inverse());return {x:result.x,y:result.y};},{x,y});}
 
+test('background taps and small pointer jitter allow the next intentional mouse or touch move immediately',async({page})=>{
+  await mountBoard(page,false);
+  const stage=page.locator('#zoom-test .declarative-stage');
+  const session=await page.context().newCDPSession(page);
+  let accepted=0;
+  for(const mode of ['mouse','touch'])for(const zoomSteps of [-1,0,2])for(const jitter of [0,3]){
+    await page.evaluate(async count=>{const w=window as any;await w.zoomHost.send({...w.zoomMessage,move_count:count});},accepted);
+    await zoomDeclarativeBoard(stage,'reset');
+    for(let i=0;i<Math.abs(zoomSteps);i++)await zoomDeclarativeBoard(stage,zoomSteps<0?'out':'in');
+    const before=await camera(page),background=await screenPoint(page,300,100);
+    const checker=await screenPoint(page,220,210),home=await screenPoint(page,380,210);
+    await session.send('Emulation.setTouchEmulationEnabled',{enabled:mode==='touch',maxTouchPoints:5});
+    if(mode==='mouse'){
+      await page.mouse.move(background.x,background.y);await page.mouse.down();
+      if(jitter)await page.mouse.move(background.x+jitter,background.y);
+      await page.mouse.up();
+      expect(await camera(page)).toEqual(before);
+      await page.mouse.click(checker.x,checker.y);await page.mouse.click(home.x,home.y);
+    }else{
+      const touch=(p:{x:number,y:number})=>({id:1,...p,radiusX:1,radiusY:1,force:1});
+      await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(background)]});
+      if(jitter)await session.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[touch({x:background.x+jitter,y:background.y})]});
+      await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+      expect(await camera(page)).toEqual(before);
+      for(const point of [checker,home]){
+        await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(point)]});
+        await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+      }
+    }
+    accepted++;
+    await expect.poll(()=>page.evaluate(()=>(window as any).zoomMoves.length)).toBe(accepted);
+  }
+});
+
+for(const size of [{width:390,height:844},{width:844,height:390}])test(`background touch panning leaves room beyond every edge at all zoom levels (${size.width}x${size.height})`,async({page})=>{
+  await mountBoard(page,false);await page.setViewportSize(size);
+  const stage=page.locator('#zoom-test .declarative-stage');
+  const session=await page.context().newCDPSession(page);
+  await session.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:5});
+  const touch=(x:number,y:number)=>({id:1,x,y,radiusX:1,radiusY:1,force:1});
+  async function pan(direction:'left'|'right'|'up'|'down'){
+    const box=(await stage.boundingBox())!;
+    const horizontal=direction==='left'||direction==='right',positive=direction==='left'||direction==='up';
+    const from={x:box.x+box.width*(horizontal?(positive?.18:.82):.1),y:box.y+box.height*(horizontal?.1:(positive?.18:.82))};
+    const to={x:horizontal?box.x+box.width*(positive?.82:.18):from.x,y:horizontal?from.y:box.y+box.height*(positive?.82:.18)};
+    await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(from.x,from.y)]});
+    await session.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[touch(to.x,to.y)]});
+    await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  }
+  for(const zoomSteps of [-1,0,2]){
+    for(const direction of ['left','right','up','down'] as const){
+      await zoomDeclarativeBoard(stage,'reset');
+      for(let i=0;i<Math.abs(zoomSteps);i++)await zoomDeclarativeBoard(stage,zoomSteps<0?'out':'in');
+      const centered=await camera(page);
+      await pan(direction);await pan(direction);
+      const panned=await camera(page);
+      if(direction==='left')expect(panned.x).toBeLessThan(Math.min(0,(600-panned.width)/2));
+      if(direction==='right')expect(panned.x).toBeGreaterThan(Math.max(centered.x,600-panned.width));
+      if(direction==='up')expect(panned.y).toBeLessThan(Math.min(0,(420-panned.height)/2));
+      if(direction==='down')expect(panned.y).toBeGreaterThan(Math.max(centered.y,420-panned.height));
+      // Repeated swipes stop at a stable limit while retaining most of the
+      // smaller of the board and visible area in each dimension.
+      await pan(direction);expect(await camera(page)).toEqual(panned);
+      const overlapX=Math.min(panned.x+panned.width,600)-Math.max(panned.x,0);
+      const overlapY=Math.min(panned.y+panned.height,420)-Math.max(panned.y,0);
+      expect(overlapX).toBeGreaterThanOrEqual(Math.min(600,panned.width)*.8);
+      expect(overlapY).toBeGreaterThanOrEqual(Math.min(420,panned.height)*.8);
+    }
+  }
+  expect(await page.evaluate(()=>(window as any).zoomMoves)).toEqual([]);
+  expect(await page.evaluate(()=>(window as any).zoomScenes)).toBe(1);
+  // After moving the fitted board above its original edge, an ordinary native
+  // checker drag still emits exactly one legal move in the shifted coordinates.
+  await zoomDeclarativeBoard(stage,'reset');
+  const empty=await screenPoint(page,300,100);
+  await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(empty.x,empty.y)]});
+  await session.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[touch(empty.x,empty.y-25)]});
+  await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  expect((await camera(page)).y).toBeGreaterThan(0);
+  const from=await screenPoint(page,220,210),to=await screenPoint(page,380,210);
+  await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(from.x,from.y)]});
+  await expect(page.locator('#zoom-test [data-ui-id="home"]')).toHaveAttribute('data-drop-state','allowed');
+  await session.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[touch(to.x,to.y)]});
+  await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await expect.poll(()=>page.evaluate(()=>(window as any).zoomMoves)).toEqual([{to:'home'}]);
+  await zoomDeclarativeBoard(stage,'reset');
+  expect(await camera(page)).toEqual({x:0,y:0,width:600,height:420});
+  await session.send('Emulation.setTouchEmulationEnabled',{enabled:false});
+  for(const overview of [false,true]){
+    await zoomDeclarativeBoard(stage,'reset');if(overview)await zoomDeclarativeBoard(stage,'out');
+    const before=await camera(page),background=await screenPoint(page,300,100);
+    await page.mouse.move(background.x,background.y);await page.mouse.down();
+    await page.mouse.move(background.x+25,background.y+15);await page.mouse.up();
+    const after=await camera(page);expect(after.x).toBeLessThan(before.x);expect(after.y).toBeLessThan(before.y);
+  }
+  expect(await page.evaluate(()=>(window as any).zoomMoves)).toEqual([{to:'home'}]);
+});
+
 test('pinch zoom stays anchored, pans, preserves state and still drops the legal piece',async({page})=>{
   await mountBoard(page);
   const session=await page.context().newCDPSession(page);
@@ -92,6 +190,34 @@ test('pinch zoom stays anchored, pans, preserves state and still drops the legal
   await test.info().attach('zoom-board',{body:await page.locator('#zoom-test').screenshot(),contentType:'image/png'});
 });
 
+test('cancelled custom drags restore artwork position and original stacking before another gesture',async({page})=>{
+  await mountBoard(page,false);
+  const checker=page.locator('#zoom-test [data-ui-id="checker"]'),visual=checker.locator('.declarative-drag-visual');
+  const index=()=>checker.evaluate(node=>[...node.parentElement!.children].indexOf(node));
+  const original=await index(),start=await screenPoint(page,220,210),denied=await screenPoint(page,500,100);
+  await page.mouse.move(start.x,start.y);await page.mouse.down();await page.mouse.move(denied.x,denied.y,{steps:4});
+  await expect(checker).toHaveClass(/dragging/);
+  expect(await visual.getAttribute('transform')).not.toBeNull();
+  expect(await index()).toBeGreaterThan(original);
+  await page.mouse.up();
+  await expect(checker).not.toHaveClass(/dragging/);
+  expect(await visual.getAttribute('transform')).toBeNull();
+  expect(await index()).toBe(original);
+  const session=await page.context().newCDPSession(page);
+  await session.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:5});
+  const touch=(id:number,p:{x:number,y:number})=>({id,...p,radiusX:1,radiusY:1,force:1});
+  const moved=await screenPoint(page,300,150),second=await screenPoint(page,450,300);
+  await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(1,start)]});
+  await session.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[touch(1,moved)]});
+  await expect(checker).toHaveClass(/dragging/);
+  await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(1,moved),touch(2,second)]});
+  await expect(checker).not.toHaveClass(/dragging/);
+  expect(await visual.getAttribute('transform')).toBeNull();
+  expect(await index()).toBe(original);
+  await session.send('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]});
+  expect(await page.evaluate(()=>(window as any).zoomMoves)).toEqual([]);
+});
+
 test('only opponent and computer actors animate; own accepted moves, replay and reduced motion settle immediately',async({page})=>{
   await mountBoard(page);
   const pieces=page.locator('#zoom-test .declarative-piece');
@@ -149,7 +275,9 @@ test('Backgammon legal drops work when pinched on phone and tablet, and opponent
   if(testInfo.project.name==='chromium')await page.setViewportSize({width:820,height:1180});
   const example=JSON.parse(fs.readFileSync(path.join(__dirname,'../games/declarative/backgammon.json'),'utf8'));
   // Reuse the package's ordinary-server test vector and its filtered views.
-  const step=example.unit_tests.cases[1],seat=step.ctx.players.findIndex((player:any)=>player.id===step.player_id);
+  const step=example.unit_tests.cases.find((item:any)=>item.name==='Hit a blot');
+  expect(step).toBeTruthy();
+  const seat=step.ctx.players.findIndex((player:any)=>player.id===step.player_id);
   const message=(view:any,count:number,viewer=seat,actor:number|null=null)=>({type:'state_changed',state:view,view,players:step.ctx.players.map((player:any,index:number)=>({player_index:index,player_id:player.id,name:player.display_name,kind:player.kind})),status:view.winner===null?'ongoing':'over',acting_for_player_index:view.winner===null&&view.cur===viewer?viewer:null,my_player_index:viewer,turn_of_player_indices:view.winner===null?[view.cur]:null,last_move_player_index:actor,move_count:count});
   const before=message(step.view_of_mover,step.ctx.move_count),after=message(step.expected_view_of_mover,step.ctx.move_count+1,seat,seat);
   await page.goto('/static/declarative-test.html');

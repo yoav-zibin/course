@@ -86,7 +86,8 @@ def source_schemas():
     schemas = json.loads((DEST / 'backgammon.schema.json').read_text())
     # The old inferred contract omitted "off" and admitted arbitrary fields.
     # Describe exactly the authority's three move shapes, including bearing off;
-    # clients cannot submit state/dice overrides. Server bytes remain identical.
+    # clients cannot submit state/dice overrides. The reviewed wrapper below
+    # adds public roll metadata without changing the canonical game's rules.
     coordinate = {'type': 'integer', 'minimum': 0, 'maximum': 23}
     schemas['move'] = {'$schema': 'https://json-schema.org/draft/2020-12/schema',
         'oneOf': [
@@ -96,6 +97,21 @@ def source_schemas():
              'properties': {'action': {'const': 'move'},
                             'from': {'anyOf': [coordinate, {'const': 'bar'}]},
                             'to': {'anyOf': [coordinate, {'const': 'off'}]}}}]}
+    roll = {'type': ['object', 'null'], 'additionalProperties': False,
+            'required': ['seat', 'turn', 'values', 'move_count'],
+            'properties': {'seat': {'type': 'integer', 'minimum': 0, 'maximum': 1},
+                           'turn': {'type': 'integer', 'minimum': 0},
+                           'values': {'type': 'array', 'minItems': 2, 'maxItems': 2,
+                                      'items': {'type': 'integer', 'minimum': 1, 'maximum': 6}},
+                           'move_count': {'type': 'integer', 'minimum': 1}}}
+    for name in ('state', 'view'):
+        schemas[name]['properties']['last_roll'] = copy.deepcopy(roll)
+    schemas['view']['properties']['combinedMoves'] = {
+        'type': 'array', 'maxItems': 100,
+        'items': {'type': 'object', 'required': ['from', 'to'], 'additionalProperties': False,
+                  'properties': {'from': {'anyOf': [coordinate, {'const': 'bar'}]},
+                                 'to': {'anyOf': [coordinate, {'const': 'off'}]}}},
+    }
     return schemas
 
 
@@ -181,10 +197,12 @@ def illustration(view, caption):
     return {'caption': caption, 'svg': ''.join(parts)}
 
 
-def package():
+def package_with_fixtures():
     code = (ROOT / 'games/declarative/backgammon.server.js').read_text()
     if hashlib.sha256(code.encode()).hexdigest() != SOURCE_SHA256:
         raise RuntimeError('Ordinary Backgammon authority changed; audit source identity before rebuilding')
+    code += '\n' + (DEST / 'backgammon-roll-history.js').read_text()
+    code += '\n' + (DEST / 'backgammon-combined-moves.js').read_text()
     schemas = source_schemas()
     logic = GameLogic(code, game_schemas=schemas)
     ctx = {'players': [{'id': 'u1', 'kind': 'human', 'display_name': 'Alice', 'picture_url': '', 'max_loss': 0, 'active': True},
@@ -202,13 +220,16 @@ def package():
     else:
         raise RuntimeError('Backgammon did not finish')
     cases = []
-    intermediate = next(i for i, step in enumerate(steps) if step[3]['action'] == 'move')
     selected = [(kind, kind.title() + ' move', steps[index]) for kind, index in
-                [('initial', 0), ('intermediate', intermediate), ('terminal', len(steps) - 1)]]
+                [('initial', 0), ('terminal', len(steps) - 1)]]
     for label, own, enemy, dice, bar, move in [
         ('Hit a blot', {6: 1}, {5: 1, 23: 14}, [1], 0, {'action': 'move', 'from': 6, 'to': 5}),
         ('Re-enter from bar', {}, {21: 2, 19: 13}, [1, 2], 1, {'action': 'move', 'from': 'bar', 'to': 22}),
         ('Bear off', {0: 1, 1: 1}, {20: 15}, [1, 2], 0, {'action': 'move', 'from': 0, 'to': 'off'}),
+        ('Combined four ones', {9: 1}, {23: 15}, [1, 1, 1, 1], 0, {'action': 'move', 'from': 9, 'to': 5}),
+        ('Combined one and four', {9: 1}, {23: 15}, [1, 4], 0, {'action': 'move', 'from': 9, 'to': 4}),
+        ('Forced combined hit', {9: 1}, {5: 2, 8: 1, 23: 12}, [1, 4], 0, {'action': 'move', 'from': 9, 'to': 4}),
+        ('Ambiguous combined hit stays single', {10: 1}, {9: 1, 6: 1, 23: 13}, [1, 4], 0, {'action': 'move', 'from': 10, 'to': 9}),
     ]:
         case_ctx = {**ctx, 'move_count': 10}
         state = logic.call('newMatch', ctx=case_ctx, seed=7)['state']
@@ -235,7 +256,12 @@ def package():
     cover = re.sub(r'<text\b[^>]*>.*?</text>', '', cases[0]['images'][0]['svg'])
     cover = re.sub(r'^<svg\b[^>]*>', '', cover).removesuffix('</svg>')
     cover = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450"><rect width="800" height="450" fill="#342924"/><g transform="translate(50 5)">' + cover + '</g></svg>'
-    return {'name': TITLES[0] + ' (Declarative)', 'description': RULES[0], 'allowed_player_counts': [2],
+    combined_cases = cases[-4:]
+    # Import artifacts allow at most four intermediate cases. Keep canonical
+    # hit/bar/off coverage and one combined gesture in the public submission;
+    # retain every compound regression in a separately generated test fixture.
+    cases = cases[:-3]
+    payload = {'name': TITLES[0] + ' (Declarative)', 'description': RULES[0], 'allowed_player_counts': [2],
             'server_code': code, 'declarative_ui': specification(),
             'game_addition_request_id_and_secret': 'example-only-declarative-backgammon-replace-before-publishing',
             'rules': RULES[0], 'ui_instructions': UI_RULES[0],
@@ -246,15 +272,23 @@ def package():
                                       'game_logic_rules': RULES[i], 'game_ui_rules': UI_RULES[i],
                                       'tutorial_strings': {RULES[0]: RULES[i]}, 'client_strings': strings(i)}
                              for i, locale in enumerate(LOCALES) if i}}
+    return payload, combined_cases
+
+
+def package():
+    return package_with_fixtures()[0]
 
 
 def main():
-    payload = package()
+    payload, combined_cases = package_with_fixtures()
     target = DEST / 'backgammon.json'
     target.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n')
     (ROOT / 'static' / 'backgammon-declarative-ui.json').write_text(
         json.dumps(payload['declarative_ui'], ensure_ascii=False, indent=2) + '\n')
-    print(f'{target.name}: {len(json.dumps(payload).encode())} bytes; authority SHA256 {SOURCE_SHA256}')
+    (ROOT / 'tests/fixtures/declarative/backgammon-combined-cases.json').write_text(
+        json.dumps(combined_cases, ensure_ascii=False, indent=2) + '\n')
+    authority = hashlib.sha256(payload['server_code'].encode()).hexdigest()
+    print(f'{target.name}: {len(json.dumps(payload).encode())} bytes; base authority SHA256 {SOURCE_SHA256}; bundled authority SHA256 {authority}')
 
 
 if __name__ == '__main__':

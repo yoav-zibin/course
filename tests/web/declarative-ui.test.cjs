@@ -42,6 +42,33 @@ test('pieces and destinations accept bounded accessible names independently of a
   assert.equal(scene.pieces[0].text,'1');assert.equal(scene.targets[0].label,'2');
 });
 
+test('roll animation metadata matches portable schema cases without granting actions',()=>{
+  const spec=sample(),piece={id:'die',type:'token',board:'main',position:{cell:'0'},actions:[]};
+  const cases=JSON.parse(fs.readFileSync(path.join(__dirname,'../fixtures/declarative/piece-animation-cases.json'),'utf8'));
+  for(const {value,valid} of cases){
+    const scene={pieces:[{...piece,animation:value}]};
+    if(valid){assert.equal(api.validateScene(spec,scene),scene);assert.deepEqual(api.pieceActions(scene.pieces[0]),[]);}
+    else assert.throws(()=>api.validateScene(spec,scene));
+  }
+  assert.doesNotThrow(()=>api.validateScene(spec,{pieces:[{...piece,animation:{kind:'roll',key:'r'.repeat(80)}}]}));
+  assert.throws(()=>api.validateScene(spec,{pieces:[{...piece,animation:{kind:'roll',key:'r'.repeat(81)}}]}));
+});
+
+test('expanded target hit areas match portable schema geometry without changing marker positions',()=>{
+  const spec=sample(),target={id:'destination',board:'main',position:{cell:'1'},label:'Point 2'};
+  const cases=JSON.parse(fs.readFileSync(path.join(__dirname,'../fixtures/declarative/target-hit-area-cases.json'),'utf8'));
+  for(const {value,valid} of cases){
+    const scene={targets:[{...target,hit_area:value}]};
+    if(valid){
+      assert.equal(api.validateScene(spec,scene),scene);
+      assert.deepEqual(api.position(spec,scene.targets[0]),api.position(spec,target));
+    }else assert.throws(()=>api.validateScene(spec,scene));
+  }
+  assert.doesNotThrow(()=>api.validateScene(spec,{targets:[{...target,hit_area:{x:-100000,y:100000,width:100000,height:100000}}]}));
+  assert.throws(()=>api.validateScene(spec,{targets:[{...target,hit_area:{x:Infinity,y:0,width:48,height:200}}]}));
+  assert.throws(()=>api.validateScene(spec,{pieces:[{id:'piece',type:'token',board:'main',position:{cell:'0'},hit_area:cases[0].value}]}));
+});
+
 test('renderer rejects explosive grids, non-finite geometry and unapproved image schemes',()=>{
   const spec=sample();spec.boards[0].rows=100000;assert.throws(()=>api.validateSpec(spec),/2048/);
   spec.boards[0].rows=3;spec.boards[0].width=Infinity;assert.throws(()=>api.validateSpec(spec),/non-finite/);
@@ -102,4 +129,22 @@ test('immersive fitting preserves hands and legal destinations outside board sur
   const bounds=api.contentBounds(spec,scene);
   assert.equal(bounds.x,10);assert.equal(bounds.y,20);
   assert.equal(bounds.width,440);assert.equal(bounds.height,450);
+});
+
+test('camera margins expose every edge at overview, fitted and magnified zoom without losing the board',()=>{
+  const board={x:20,y:105,width:764,height:440};
+  for(const zoom of [.25,.8,1,1.5,4]){
+    const limits=api.cameraLimits(board,zoom);
+    const ordinaryX=board.x+Math.min(0,(board.width-limits.width)/2);
+    const ordinaryY=board.y+Math.min(0,(board.height-limits.height)/2);
+    assert.ok(limits.minX<ordinaryX);assert.ok(limits.minY<ordinaryY);
+    assert.ok(limits.maxX>Math.max(ordinaryX,board.x+board.width-limits.width));
+    assert.ok(limits.maxY>Math.max(ordinaryY,board.y+board.height-limits.height));
+    for(const x of [limits.minX,limits.maxX])for(const y of [limits.minY,limits.maxY]){
+      const overlapX=Math.min(x+limits.width,board.x+board.width)-Math.max(x,board.x);
+      const overlapY=Math.min(y+limits.height,board.y+board.height)-Math.max(y,board.y);
+      assert.ok(overlapX>=Math.min(limits.width,board.width)*.8);
+      assert.ok(overlapY>=Math.min(limits.height,board.height)*.8);
+    }
+  }
 });

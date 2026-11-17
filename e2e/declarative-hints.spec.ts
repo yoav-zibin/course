@@ -58,11 +58,13 @@ test('action hints distinguish passive art, show legal drops immediately and cle
   await page.locator('#foreign-drop').dispatchEvent('pointerup',{pointerId:6,pointerType:'touch',clientX:foreign.x+20,clientY:foreign.y+20});
   expect(await page.evaluate(()=>(window as any).hintMoves)).toEqual([]);
   await page.locator('#foreign-drop').evaluate(node=>node.remove());
-  // Native HTML drag causes pointercancel; it must retain legal destinations.
-  await movable.dispatchEvent('dragstart');
-  await movable.dispatchEvent('pointercancel',{pointerId:6,pointerType:'mouse'});
+  // The host owns pointer dragging, so native HTML dragging is suppressed.
+  expect(await movable.evaluate(node=>!node.dispatchEvent(new DragEvent('dragstart',{cancelable:true,bubbles:true})))).toBe(true);
+  const destination=(await home.locator('.declarative-target-area').boundingBox())!;
+  await movable.dispatchEvent('pointerdown',{pointerId:7,pointerType:'touch',button:0,clientX:from.x,clientY:from.y});
+  await page.locator('body').dispatchEvent('pointermove',{pointerId:7,pointerType:'touch',clientX:destination.x+destination.width/2,clientY:destination.y+destination.height/2});
   await expect(home).toHaveAttribute('data-drop-state','allowed');
-  await home.dispatchEvent('drop');
+  await page.locator('body').dispatchEvent('pointerup',{pointerId:7,pointerType:'touch',clientX:destination.x+destination.width/2,clientY:destination.y+destination.height/2});
   await expect.poll(()=>page.evaluate(()=>(window as any).hintMoves)).toEqual([{to:'home'}]);
   await page.evaluate(async()=>{const w=window as any;await w.hintHost.send({...w.hintMessage,move_count:1});});
   await movable.focus();await page.keyboard.press('Enter');

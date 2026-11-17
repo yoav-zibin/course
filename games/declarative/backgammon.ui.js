@@ -1,4 +1,4 @@
-// Presentation only. legalMoves comes from the ordinary authoritative game.
+// Presentation only. legalMoves and optional combinedMoves come from authority.
 // Native hosts select a movable checker, then emit drop(piece_id,target_id).
 const gameUI = {
   reduce(message, localState) {
@@ -9,7 +9,10 @@ const gameUI = {
       (_, key) => String(args[key] === undefined ? '' : args[key]));
     const active = m.status === 'ongoing' && !m.replay && s.winner === null &&
       m.acting_for_player_index === s.cur;
-    const legal = active && !s.needRoll ? s.legalMoves || [] : [];
+    // The authority separately declares safe multi-die destinations. Older
+    // pinned rules omit them and continue to offer their ordinary single moves.
+    const legal = active && !s.needRoll ?
+      (s.legalMoves || []).concat(s.combinedMoves || []) : [];
     const pieces = [], targets = [], controls = [], sources = {};
     // Identity is a presentation concern. Reconcile counts against the previous
     // scene so a moved, captured or borne-off checker keeps its ID for animation.
@@ -75,6 +78,9 @@ const gameUI = {
       targets.push({id, board: move.to === 'off' ? 'off' : 'main',
         position: move.to === 'off' ? {x: 24, y: s.cur === 0 ? 235 : 205} :
           {x: pointX(move.to), y: move.to < 12 ? 237 : 203},
+        hit_area: move.to === 'off'
+          ? {x: -24, y: s.cur === 0 ? -15 : -205, width: 48, height: 220}
+          : {x: -24, y: move.to < 12 ? -20 : -200, width: 48, height: 220},
         label: move.to === 'off' ? t('bear_off') : t('point', {n: move.to + 1})});
     }
     if (active && !s.needRoll && !legal.length)
@@ -83,26 +89,56 @@ const gameUI = {
     // Keep the original physical pair only as presentation memory for this turn.
     const remaining = s.moves || s.dice || [];
     const previousRoll = localState && localState.roll;
+    const turn = s.n || 0;
+    const isFace = value => Number.isInteger(value) && value >= 1 && value <= 6;
+    const validMemory = previousRoll && Array.isArray(previousRoll.values) && previousRoll.values.length === 2 &&
+      previousRoll.values.every(value => value === null || isFace(value)) &&
+      typeof previousRoll.double === 'boolean' && typeof previousRoll.known === 'boolean' &&
+      Number.isInteger(previousRoll.cur) && Number.isInteger(previousRoll.turn);
+    const wantedTurn = s.needRoll ? turn - 1 : turn;
+    const finished = m.status === 'over' || s.winner !== null;
+    const belongsToRoll = candidate => candidate && (finished ? candidate.turn <= turn :
+      candidate.turn === wantedTurn && (s.needRoll || candidate.cur === s.cur));
+    const observedRoll = (view, moveCount) => {
+      const values = view && (view.moves || view.dice);
+      if (!view || view.needRoll || !Array.isArray(values) || values.length < 2 || values.length > 4 ||
+          !values.every(isFace) || values.length > 2 && !values.every(value => value === values[0])) return null;
+      return {cur: view.cur, turn: view.n || 0, values: values.slice(0, 2),
+        double: values[0] === values[1], known: true, move_count: moveCount};
+    };
+    // New matches retain the accepted roll in their public server view. Older
+    // pinned rules instead recover original faces from bounded filtered history.
+    const last = s.last_roll;
+    let recordedRoll = last && Number.isInteger(last.seat) && Number.isInteger(last.turn) &&
+      Array.isArray(last.values) && last.values.length === 2 && last.values.every(isFace) &&
+      Number.isInteger(last.move_count) && (!Number.isInteger(m.move_count) || last.move_count <= m.move_count)
+      ? {cur: last.seat, turn: last.turn, values: last.values.slice(),
+        double: last.values[0] === last.values[1], known: true, move_count: last.move_count} : null;
+    if (!belongsToRoll(recordedRoll)) recordedRoll = null;
+    let historicalRoll = null;
+    const history = Array.isArray(m.presentation_history) ? m.presentation_history.slice(-12) : [];
+    for (const item of history) {
+      if (!item || !Number.isInteger(item.move_count) || item.move_count < 0 ||
+          Number.isInteger(m.move_count) && item.move_count > m.move_count) continue;
+      const candidate = observedRoll(item.view, item.move_count);
+      if (belongsToRoll(candidate) && (!historicalRoll || candidate.turn > historicalRoll.turn ||
+          candidate.turn === historicalRoll.turn && candidate.move_count < historicalRoll.move_count))
+        historicalRoll = candidate;
+    }
     let roll = null;
-    if (s.needRoll) {
-      // The server clears dice at the turn boundary. Keep the completed pair
-      // visibly spent until the next roll, without relabeling its turn identity.
-      if (previousRoll && previousRoll.known && previousRoll.turn + 1 === (s.n || 0) && Array.isArray(previousRoll.values) &&
-          previousRoll.values.length === 2 && previousRoll.values.every(value => Number.isInteger(value) && value >= 1 && value <= 6))
-        roll = previousRoll;
+    if (s.needRoll || finished) {
+      // Keep the last known pair until a new accepted roll replaces it. A past
+      // turn guard prevents replay from borrowing faces from its own future.
+      roll = recordedRoll || historicalRoll ||
+        (validMemory && previousRoll.known && (previousRoll.turn < turn || finished && previousRoll.turn === turn) ? previousRoll : null);
     } else {
-      if (previousRoll && previousRoll.cur === s.cur && previousRoll.turn === (s.n || 0) &&
-          Array.isArray(previousRoll.values) && previousRoll.values.length === 2 &&
-          previousRoll.values.every(value => value === null || Number.isInteger(value) && value >= 1 && value <= 6) &&
-          typeof previousRoll.double === 'boolean' && typeof previousRoll.known === 'boolean')
-        roll = previousRoll;
-      else if (remaining.length >= 2) {
-        const double = remaining.every(value => value === remaining[0]);
-        roll = {cur: s.cur, turn: s.n || 0, values: remaining.slice(0, 2), double, known: true};
-      } else {
+      roll = recordedRoll || historicalRoll ||
+        (validMemory && previousRoll.cur === s.cur && previousRoll.turn === turn ? previousRoll : null) ||
+        observedRoll(s, m.move_count);
+      if (!roll) {
         // An arbitrary mid-turn replay/remount may have no original roll. Show
         // the known remaining value and a neutral face instead of inventing one.
-        roll = {cur: s.cur, turn: s.n || 0, values: [remaining[0] || null, null], double: false, known: false};
+        roll = {cur: s.cur, turn, values: [remaining[0] || null, null], double: false, known: false};
       }
     }
     const unused = remaining.slice();
@@ -126,6 +162,7 @@ const gameUI = {
         position: {x: 336, y: 180 + i * 80}, z: 100,
         asset: 'die_' + (value || 0) + '_used_' + used,
         aria_label: label,
+        ...(roll && roll.known ? {animation: {kind: 'roll', key: 'roll:' + roll.cur + ':' + roll.turn}} : {}),
         actions: canRoll ? ['tap'] : []});
     }
     pieces.push(...dice);

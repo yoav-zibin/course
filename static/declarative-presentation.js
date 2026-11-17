@@ -4,8 +4,11 @@
   "use strict";
   const GAME_ID = "5f5293c3-2a3a-4eec-b631-9debf59be0ca";
   const RULES_SHA256 = "0206fffd96b1447a457f63431d013c6de5d5337dfc40285157304a95204b3c4e";
-  const LEGACY_UI_SHA256 = "bb690c066a3f779a8a0a9e13a7bda77c6f48fccb14d859508d4ddb32a986b843";
-  const REPAIRED_UI_SHA256 = "4bee425e8a8b1690212fb1e018370d2a8badbc3c6a825d2f34d8a91d28107c21";
+  const LEGACY_UI_SHA256 = new Set([
+    "bb690c066a3f779a8a0a9e13a7bda77c6f48fccb14d859508d4ddb32a986b843",
+    "4bee425e8a8b1690212fb1e018370d2a8badbc3c6a825d2f34d8a91d28107c21",
+  ]);
+  const REPAIRED_UI_SHA256 = "40463fb1a19489a19055c9824951edda17ec821b7ea718c8978eab18c05fd314";
   let replacementPromise = null;
 
   // Match Python's sort_keys=True, ensure_ascii=False, separators=(",", ":").
@@ -26,7 +29,7 @@
   function loadReplacement() {
     if (!replacementPromise) {
       replacementPromise = (async () => {
-        const response = await global.fetch("/static/backgammon-declarative-ui.json?v=1", {credentials: "omit"});
+        const response = await global.fetch("/static/backgammon-declarative-ui.json?v=2", {credentials: "omit"});
         if (!response.ok) throw new Error();
         const spec = await response.json();
         if (spec?.format !== "buildplay-ui" || spec.version !== 1 || typeof spec.ui_code !== "string" ||
@@ -46,7 +49,7 @@
     if (game?.id !== GAME_ID || !original || !global.crypto?.subtle) return original;
     try {
       if (await digest(game.server_code) !== RULES_SHA256 ||
-          await digest(canonical(original)) !== LEGACY_UI_SHA256) return original;
+          !LEGACY_UI_SHA256.has(await digest(canonical(original)))) return original;
       const repaired = await loadReplacement();
       // Keep the validated cached copy private, so a host cannot change the
       // presentation used by a later match when retaining its own local state.

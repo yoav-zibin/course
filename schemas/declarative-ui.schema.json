@@ -538,6 +538,26 @@
         },
         "draggable": {
           "type": "boolean"
+        },
+        "animation": {
+          "type": "object",
+          "description": "Optional host-rendered visual event. Keep the key stable for the same event; a roll effect does not alter game state, grant actions, or determine dice values.",
+          "properties": {
+            "kind": {
+              "const": "roll"
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9_.:-]+$"
+            }
+          },
+          "required": [
+            "kind",
+            "key"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -567,6 +587,18 @@
     "target": {
       "type": "object",
       "properties": {
+        "hit_area": {
+          "type": "object",
+          "description": "Optional interaction rectangle in logical units relative to the target center. It expands declared tap/drop geometry without changing the visible marker or granting a move.",
+          "properties": {
+            "x": {"type": "number", "minimum": -100000, "maximum": 100000},
+            "y": {"type": "number", "minimum": -100000, "maximum": 100000},
+            "width": {"type": "number", "exclusiveMinimum": 0, "maximum": 100000},
+            "height": {"type": "number", "exclusiveMinimum": 0, "maximum": 100000}
+          },
+          "required": ["x", "y", "width", "height"],
+          "additionalProperties": false
+        },
         "id": {
           "type": "string",
           "minLength": 1,
@@ -977,6 +1009,34 @@
             "ltr",
             "rtl"
           ]
+        },
+        "presentation_history": {
+          "type": "array",
+          "maxItems": 12,
+          "description": "Recent ordered viewer-filtered presentation snapshots, never authoritative hidden state or acting permissions. Consumers only use entries at or before the current move_count; metadata may be omitted.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "view": {},
+              "move_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "last_move_player_index": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 9
+              }
+            },
+            "required": [
+              "view",
+              "move_count"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "required": [

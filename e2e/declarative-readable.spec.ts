@@ -27,9 +27,9 @@ async function denseBoard(page:Page) {
 async function visibleSizes(page:Page) {
   return page.locator('#readable-test').evaluate(box=>{
     const stage=box.querySelector('svg.declarative-stage') as SVGSVGElement;
-    const body=box.querySelector('.declarative-piece>g>ellipse')!.getBoundingClientRect();
+    const body=box.querySelector('.declarative-piece-art>ellipse')!.getBoundingClientRect();
     const target=box.querySelector('.declarative-target-area')!.getBoundingClientRect();
-    const text=box.querySelector('.declarative-piece>g>text') as SVGGraphicsElement;
+    const text=box.querySelector('.declarative-piece-art>text') as SVGGraphicsElement;
     const m=text.getScreenCTM()!,font=parseFloat(getComputedStyle(text).fontSize)*Math.hypot(m.a,m.b);
     return {piece:Math.min(body.width,body.height),target:Math.min(target.width,target.height),font,
       viewBox:stage.getAttribute('viewBox'),scrollWidth:box.scrollWidth,width:box.clientWidth};

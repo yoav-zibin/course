@@ -1,0 +1,18 @@
+[
+  {"value":{"kind":"roll","key":"turn-12:seat_0.dice"},"valid":true},
+  {"value":{"kind":"roll","key":"a"},"valid":true},
+  {"value":null,"valid":false},
+  {"value":[],"valid":false},
+  {"value":"roll","valid":false},
+  {"value":{},"valid":false},
+  {"value":{"kind":"roll"},"valid":false},
+  {"value":{"key":"turn-12"},"valid":false},
+  {"value":{"kind":"spin","key":"turn-12"},"valid":false},
+  {"value":{"kind":"roll","key":""},"valid":false},
+  {"value":{"kind":"roll","key":"two words"},"valid":false},
+  {"value":{"kind":"roll","key":"roll/12"},"valid":false},
+  {"value":{"kind":"roll","key":"🎲"},"valid":false},
+  {"value":{"kind":"roll","key":12},"valid":false},
+  {"value":{"kind":"roll","key":null},"valid":false},
+  {"value":{"kind":"roll","key":"turn-12","duration":600},"valid":false}
+]

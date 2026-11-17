@@ -165,7 +165,7 @@
     if([point.x,point.y].some(value=>typeof value!=="number"||Math.abs(value)>100000))throw new Error(t("ui.declarative.error.invalid_point_geometry", {}, "Invalid point geometry"));
   }
   function checkElement(kind,item) {
-    const fields={pieces:["id","type","board","position","text","aria_label","asset","rotation","scale","opacity","z","face","move_targets","selected","hidden","draggable","actions"],targets:["id","board","position","label","aria_label","color"],labels:["id","text","x","y","color","font_size"],controls:["id","label","kind","value","min","max","step","options","disabled"],paths:["id","points","color","width"]};
+    const fields={pieces:["id","type","board","position","text","aria_label","asset","rotation","scale","opacity","z","face","move_targets","selected","hidden","draggable","actions","animation"],targets:["id","board","position","label","aria_label","color","hit_area"],labels:["id","text","x","y","color","font_size"],controls:["id","label","kind","value","min","max","step","options","disabled"],paths:["id","points","color","width"]};
     const required={pieces:["id","type","board","position"],targets:["id","board","position"],labels:["id","text","x","y"],controls:["id","label","kind"],paths:["id","points"]};
     knownObject(item,fields[kind],required[kind]);
     for(const key of ["id","type","board","asset"])if(key in item&&!isId(item[key]))throw new Error(t("ui.declarative.error.invalid_ui_identifier", {}, "Invalid UI identifier"));
@@ -183,6 +183,16 @@
     }
     if("move_targets" in item&&(!Array.isArray(item.move_targets)||item.move_targets.length>2048||item.move_targets.some(value=>!isId(value))||new Set(item.move_targets).size!==item.move_targets.length))throw new Error(t("ui.declarative.error.invalid_move_targets", {}, "Invalid move targets"));
     if("actions" in item&&(!Array.isArray(item.actions)||item.actions.some(action=>!["tap","move","rotate","scale"].includes(action))||new Set(item.actions).size!==item.actions.length||item.actions.includes("move")&&!item.move_targets?.length))throw new Error(t("ui.declarative.error.invalid_move_targets", {}, "Invalid move targets"));
+    if("animation" in item){
+      knownObject(item.animation,["kind","key"],["kind","key"]);
+      if(item.animation.kind!=="roll")throw new Error(t("ui.declarative.error.invalid_ui_object_fields", {}, "Invalid UI object fields"));
+      if(!isId(item.animation.key))throw new Error(t("ui.declarative.error.invalid_ui_identifier", {}, "Invalid UI identifier"));
+    }
+    if("hit_area" in item){
+      knownObject(item.hit_area,["x","y","width","height"],["x","y","width","height"]);
+      for(const key of ["x","y"])if(typeof item.hit_area[key]!=="number"||Math.abs(item.hit_area[key])>100000)throw new Error(t("ui.declarative.error.invalid_numeric_geometry", {}, "Invalid numeric geometry"));
+      for(const key of ["width","height"])if(typeof item.hit_area[key]!=="number"||item.hit_area[key]<=0||item.hit_area[key]>100000)throw new Error(t("ui.declarative.error.invalid_positive_geometry", {}, "Invalid positive geometry"));
+    }
     if(kind==="paths"){
       if(!Array.isArray(item.points)||item.points.length<2||item.points.length>4096)throw new Error(t("ui.declarative.error.invalid_path_points", {}, "Invalid path points"));
       item.points.forEach(checkPoint);
@@ -256,6 +266,15 @@
     const x=Math.min(...boxes.map(box=>box.x)),y=Math.min(...boxes.map(box=>box.y));
     return {x,y,width:Math.max(...boxes.map(box=>box.x+box.width))-x,height:Math.max(...boxes.map(box=>box.y+box.height))-y};
   }
+  function cameraLimits(bounds, zoom) {
+    const width=bounds.width/zoom,height=bounds.height/zoom;
+    // Leave room to bring edge pieces under a finger without letting the board
+    // disappear. The margin stays proportional to the currently visible area.
+    const marginX=width*.18,marginY=height*.18;
+    const left=bounds.x+Math.min(0,(bounds.width-width)/2),top=bounds.y+Math.min(0,(bounds.height-height)/2);
+    return {width,height,minX:left-marginX,maxX:Math.max(left,bounds.x+bounds.width-width)+marginX,
+      minY:top-marginY,maxY:Math.max(top,bounds.y+bounds.height-height)+marginY};
+  }
   function mount(container, rawSpec, callbacks = {}) {
     const spec = validateSpec(clone(rawSpec));
     container.replaceChildren();
@@ -272,7 +291,7 @@
     container.append(stage, pieceTools, controls, sceneStatus, errorBox);
     const engine = createEngine(container);
     let latest = null, localState = null, revision = 0, renderedRevision = -1, destroyed = false, moveSent = false, selected = null, dragging = null, nativeDragging = null, currentScene = null, suppressClick = false;
-    let lastStateMoveCount = null, lastStateWasReplay = false;
+    let lastStateMoveCount = null, lastStateWasReplay = false, dragPreview = null;
     // The camera belongs to the host. It never reaches the reducer or make_move,
     // and survives complete scene snapshots, including replay and turn changes.
     let cameraBounds=callbacks.immersive?contentBounds(spec):{x:0,y:0,...spec.viewport};
@@ -281,11 +300,7 @@
     let cameraGesture=null,cameraClickUntil=0,cameraFrame=null;
     const pieceAnimations=new Set();
     function applyCamera() {
-      const width=cameraBounds.width/camera.zoom,height=cameraBounds.height/camera.zoom;
-      // Below the fitted view, center the complete board in the extra space.
-      // Above it, clamp panning to the board's actual edges.
-      const minX=cameraBounds.x+Math.min(0,(cameraBounds.width-width)/2),maxX=Math.max(minX,cameraBounds.x+cameraBounds.width-width);
-      const minY=cameraBounds.y+Math.min(0,(cameraBounds.height-height)/2),maxY=Math.max(minY,cameraBounds.y+cameraBounds.height-height);
+      const {width,height,minX,maxX,minY,maxY}=cameraLimits(cameraBounds,camera.zoom);
       camera.x=Math.max(minX,Math.min(maxX,num(camera.x)));
       camera.y=Math.max(minY,Math.min(maxY,num(camera.y)));
       stage.setAttribute("viewBox",`${camera.x} ${camera.y} ${width} ${height}`);
@@ -331,16 +346,15 @@
       const [a,b]=[...touches.entries()];if(!b)return;
       const x=(a[1].x+b[1].x)/2,y=(a[1].y+b[1].y)/2;
       cameraGesture={kind:"pinch",ids:[a[0],b[0]],distance:Math.max(1,Math.hypot(a[1].x-b[1].x,a[1].y-b[1].y)),zoom:camera.zoom,anchor:boardPoint(x,y)};
-      dragging=null;nativeDragging=null;selected=null;cameraClickUntil=Date.now()+450;updateHints();
+      resetDrag();nativeDragging=null;selected=null;cameraClickUntil=Date.now()+450;updateHints();
     }
     function cameraPointerDown(event) {
       const interactive=event.target.closest?.(".declarative-piece.actionable,.declarative-target[aria-disabled=false]");
-      if(event.pointerType!=="touch"&&(event.button!==0||camera.zoom<=1||interactive))return;
+      if(event.pointerType!=="touch"&&(event.button!==0||interactive))return;
       touches.set(event.pointerId,{x:event.clientX,y:event.clientY});
       if(touches.size>=2){beginPinch();event.preventDefault();event.stopPropagation();}
-      else if(camera.zoom>1&&!interactive){
-        cameraGesture={kind:"pan",id:event.pointerId,point:boardPoint(event.clientX,event.clientY)};
-        stage.classList.add("camera-panning");event.preventDefault();event.stopPropagation();
+      else if(!interactive){
+        cameraGesture={kind:"pan",id:event.pointerId,point:boardPoint(event.clientX,event.clientY),start:{x:event.clientX,y:event.clientY},moved:false};
       }
       // Capturing only camera fingers keeps ordinary piece/native dragging intact.
       if(cameraGesture)try{stage.setPointerCapture(event.pointerId);}catch(_){}
@@ -349,44 +363,98 @@
       if(!touches.has(event.pointerId))return;
       touches.set(event.pointerId,{x:event.clientX,y:event.clientY});
       if(!cameraGesture)return;
-      event.preventDefault();
       if(cameraGesture.kind==="pinch"){
+        event.preventDefault();
         const [a,b]=cameraGesture.ids.map(id=>touches.get(id));if(!a||!b)return;
         zoomAt(cameraGesture.zoom*Math.hypot(a.x-b.x,a.y-b.y)/cameraGesture.distance,(a.x+b.x)/2,(a.y+b.y)/2,cameraGesture.anchor);
       }else if(cameraGesture.id===event.pointerId){
+        if(!cameraGesture.moved&&Math.hypot(event.clientX-cameraGesture.start.x,event.clientY-cameraGesture.start.y)<5)return;
+        event.preventDefault();cameraGesture.moved=true;stage.classList.add("camera-panning");
         const point=boardPoint(event.clientX,event.clientY);camera.x+=cameraGesture.point.x-point.x;camera.y+=cameraGesture.point.y-point.y;applyCamera();
       }
     }
     function cameraPointerEnd(event) {
       if(!touches.has(event.pointerId))return false;
+      if(cameraGesture?.kind==="pan"&&!cameraGesture.moved&&cameraGesture.id===event.pointerId&&event.type!=="pointercancel")cameraPointerMove(event);
       touches.delete(event.pointerId);if(!cameraGesture)return false;
-      event.preventDefault();dragging=null;nativeDragging=null;selected=null;cameraClickUntil=Date.now()+450;
+      const consumed=cameraGesture.kind==="pinch"||cameraGesture.moved;
+      if(consumed){event.preventDefault();cameraClickUntil=Date.now()+450;}
+      resetDrag();nativeDragging=null;selected=null;
       stage.classList.remove("camera-panning");
       if(touches.size>=2)beginPinch();
-      else if(touches.size===1){const [id,point]=[...touches.entries()][0];cameraGesture={kind:"pan",id,point:boardPoint(point.x,point.y)};stage.classList.add("camera-panning");}
+      else if(touches.size===1){const [id,point]=[...touches.entries()][0];cameraGesture={kind:"pan",id,point:boardPoint(point.x,point.y),start:{...point},moved:consumed};if(consumed)stage.classList.add("camera-panning");}
       else cameraGesture=null;
-      updateHints();return true;
+      updateHints();return consumed;
     }
     applyCamera();
     stage.addEventListener("pointerdown",cameraPointerDown,true);
     stage.addEventListener("click",event=>{if(cameraClickBlocked()){event.preventDefault();event.stopPropagation();}},true);
     global.addEventListener("pointermove",cameraPointerMove,{passive:false});
+    function resetDrag(keepPreview=false) {
+      const drag=dragging;dragging=null;
+      if(drag){
+        if(!keepPreview){
+          drag.body.removeAttribute("transform");
+          if(drag.nextSibling?.parentNode===stage)stage.insertBefore(drag.node,drag.nextSibling);
+        }
+        drag.node.style.pointerEvents="";drag.node.classList.remove("dragging");
+        try{drag.node.releasePointerCapture(drag.pointerId);}catch(_){}
+      }
+      if(!keepPreview){
+        dragPreview=null;
+        for(const node of stage.querySelectorAll(".declarative-drag-visual"))node.removeAttribute("transform");
+      }
+    }
+    function piecePoint(node,x,y){
+      const point=stage.createSVGPoint();point.x=x;point.y=y;
+      const matrix=node.getScreenCTM();return matrix?point.matrixTransform(matrix.inverse()):null;
+    }
+    function movePointer(event){
+      if(!dragging||cameraGesture||event.pointerId!==dragging.pointerId)return;
+      const drag=dragging;
+      if(!drag.moved&&Math.hypot(event.clientX-drag.x,event.clientY-drag.y)<5)return;
+      const point=piecePoint(drag.node,event.clientX,event.clientY);if(!point||!drag.point)return;
+      event.preventDefault();drag.moved=true;drag.node.classList.add("dragging");
+      drag.node.style.pointerEvents="none";
+      drag.body.setAttribute("transform",`translate(${point.x-drag.point.x} ${point.y-drag.point.y})`);
+      // Draw the held checker above the board and legal destination markers.
+      stage.append(drag.node);
+    }
+    function dropTarget(drag,event){
+      const element=document.elementFromPoint(event.clientX,event.clientY);
+      const hit=element?.closest(".declarative-target");
+      if(hit&&stage.contains(hit)&&drag.targets.includes(hit.dataset.uiId))return hit.dataset.uiId;
+      if(!element||!stage.contains(element))return null;
+      const rect=stage.getBoundingClientRect();
+      if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)return null;
+      const point=boardPoint(event.clientX,event.clientY);
+      for(const target of currentScene?.targets||[]){
+        if(!drag.targets.includes(target.id)||!target.hit_area)continue;
+        const at=position(spec,target),area=target.hit_area,x=point.x-at.x,y=point.y-at.y;
+        if(x>=area.x&&x<=area.x+area.width&&y>=area.y&&y<=area.y+area.height)return target.id;
+      }
+      return null;
+    }
+    global.addEventListener("pointermove",movePointer,{passive:false});
     function finishPointer(event) {
       if(cameraPointerEnd(event))return;
       if(!dragging||nativeDragging||event.pointerId!==dragging.pointerId)return;
-      const drag=dragging;dragging=null;
-      if(Math.hypot(event.clientX-drag.x,event.clientY-drag.y)<5){updateHints();return;}
-      suppressClick=true;setTimeout(()=>{suppressClick=false;},0);
-      const target=document.elementFromPoint(event.clientX,event.clientY)?.closest(".declarative-target");
-      if(target&&stage.contains(target)&&drag.targets.includes(target.dataset.uiId)&&canAct()){event.preventDefault();dispatch({type:"drop",id:drag.id,piece_id:drag.id,target_id:target.dataset.uiId});}
+      const drag=dragging;
+      if(!drag.moved&&Math.hypot(event.clientX-drag.x,event.clientY-drag.y)>=5)movePointer(event);
+      if(!drag.moved){resetDrag();updateHints();return;}
+      suppressClick=true;setTimeout(()=>{suppressClick=false;},350);
+      const target=dropTarget(drag,event),valid=target&&canAct();
+      if(valid)dragPreview={id:drag.id,transform:drag.body.getAttribute("transform")};
+      resetDrag(Boolean(valid));
+      if(valid){event.preventDefault();dispatch({type:"drop",id:drag.id,piece_id:drag.id,target_id:target});}
       selected=null;updateHints();
     }
-    function cancelPointer(event){if(cameraPointerEnd(event))return;if(!dragging||nativeDragging||event.pointerId!==dragging.pointerId)return;dragging=null;selected=null;updateHints();}
+    function cancelPointer(event){if(cameraPointerEnd(event))return;if(!dragging||nativeDragging||event.pointerId!==dragging.pointerId)return;resetDrag();selected=null;updateHints();}
     global.addEventListener("pointerup",finishPointer);
     global.addEventListener("pointercancel",cancelPointer);
-    container.addEventListener("keydown",event=>{if(event.key==="Escape"){dragging=null;nativeDragging=null;selected=null;updateHints();}});
+    container.addEventListener("keydown",event=>{if(event.key==="Escape"){resetDrag();nativeDragging=null;selected=null;updateHints();}});
     let queue = Promise.resolve();
-    function error(error) { if (destroyed) return; errorBox.textContent = error.message; errorBox.hidden = false; callbacks.onError?.(error); }
+    function error(error) { if (destroyed) return; resetDrag();errorBox.textContent = error.message; errorBox.hidden = false; callbacks.onError?.(error); }
     function canAct() { return latest && renderedRevision===revision && latest.status === "ongoing" && latest.acting_for_player_index !== null && latest.acting_for_player_index !== undefined && !latest.replay && !moveSent; }
     function selectedPiece(){return currentScene?.pieces?.find(piece=>piece.id===selected&&!piece.hidden&&pieceActions(piece).length);}
     function pieceName(piece){return piece.face==="back"?t("ui.declarative.covered_piece", {}, "Covered piece"):piece.aria_label||piece.text||piece.id;}
@@ -438,7 +506,7 @@
       node.addEventListener("click", () => { if (!suppressClick&&!cameraClickBlocked()&&enabled()) fn(); });
       node.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); if (enabled()) fn(); } });
     }
-    function draw(scene,animate=false) {
+    function draw(scene,animate=false,rollEffects=false) {
       const previousPieces=new Map((currentScene?.pieces||[]).map(piece=>[piece.id,piece]));
       const previousTransforms=new Map();
       if(animate&&!global.matchMedia?.("(prefers-reduced-motion: reduce)").matches){
@@ -484,6 +552,7 @@
         const width = board.kind === "grid" ? board.width/board.columns : 44;
         const height = board.kind === "grid" ? board.height/board.rows : 44;
         const node = svg("g",{class:"declarative-target",transform:`translate(${point.x} ${point.y})`});
+        if(target.hit_area)node.append(svg("rect",{class:"declarative-target-hit",...target.hit_area,fill:"transparent"}));
         node.append(svg("rect",{class:"declarative-target-area",x:-width/2,y:-height/2,width,height,rx:5,fill:target.color || "#b8ef5b",stroke:"#c9ff63","stroke-width":2}));
         if (target.label) node.append(svg("text",{"text-anchor":"middle","dominant-baseline":"central",class:"declarative-location-label",fill:"#d7f6ab","font-size":14},target.label));
         activate(node,target.id,target.aria_label||target.label,()=> {
@@ -503,25 +572,27 @@
         const actions=pieceActions(piece);
         const node=svg("g",{class:"declarative-piece"+(piece.selected?" selected":""),transform:`translate(${point.x} ${point.y}) rotate(${num(piece.rotation)}) scale(${num(piece.scale,1)})`});
         node.dataset.uiId=piece.id;node.dataset.actions=actions.join(" ");
-        const body=svg("g",{opacity:num(piece.opacity,1)});node.append(body);
+        const visual=svg("g",{opacity:num(piece.opacity,1),class:"declarative-drag-visual"});node.append(visual);
+        const body=svg("g",{class:piece.animation?.kind==="roll"?"declarative-roll":"declarative-piece-art"});visual.append(body);
+        if(dragPreview?.id===piece.id&&dragPreview.transform)visual.setAttribute("transform",dragPreview.transform);
         if (type.shape==="circle") body.append(svg("ellipse",{rx:width/2,ry:height/2,fill:piece.color || type.color || "#d2ff5a",stroke:type.border_color || "#0d202c","stroke-width":2}));
         else if((type.shape!=="text"&&type.shape!=="image")||piece.face==="back")body.append(svg("rect",{x:-width/2,y:-height/2,width,height,rx:type.shape==="card"?7:4,fill:piece.face==="back"?"#324a88":piece.color || type.color || "#e4eced",stroke:type.border_color || "#1d3544","stroke-width":2}));
         const uri=assetURI(spec.assets?.[piece.face==="back" ? type.back_asset : piece.asset || type.asset]);
         if(uri)body.append(svg("image",{href:uri,x:-width/2,y:-height/2,width,height,preserveAspectRatio:"xMidYMid meet"}));
         const text=piece.face==="back"?"◆":piece.text;
         if(text!==undefined)body.append(svg("text",{"text-anchor":"middle","dominant-baseline":"central",fill:type.text_color || (type.shape==="text"?"#ecf4fa":"#122735"),"font-size":Math.min(width*.5,height*.6,40),"font-weight":700},text));
-        if(piece.selected)node.append(svg("rect",{x:-width/2-3,y:-height/2-3,width:width+6,height:height+6,rx:5,fill:"none",stroke:"#fff","stroke-width":3}));
+        if(piece.selected)visual.append(svg("rect",{x:-width/2-3,y:-height/2-3,width:width+6,height:height+6,rx:5,fill:"none",stroke:"#fff","stroke-width":3}));
         if(actions.length){
           const summary=t("ui.declarative.hints.piece_actions", {piece:pieceName(piece),actions:actions.map(actionLabel).join(", ")}, "{piece}: {actions}");
           node.append(svg("title",{},summary));
-          node.append(svg("rect",{class:"declarative-piece-action-outline",x:-width/2-4,y:-height/2-4,width:width+8,height:height+8,rx:8,fill:"none","vector-effect":"non-scaling-stroke"}));
+          visual.append(svg("rect",{class:"declarative-piece-action-outline",x:-width/2-4,y:-height/2-4,width:width+8,height:height+8,rx:8,fill:"none","vector-effect":"non-scaling-stroke"}));
           const badges=svg("g",{class:"declarative-action-badges",transform:`translate(${-width/2} ${-height/2-13})`,"aria-hidden":"true"});
           actions.forEach((action,index)=>{
             const badge=svg("g",{transform:`translate(${index*22} 0)`,"data-action-hint":action});
             badge.append(svg("rect",{x:0,y:-8,width:20,height:18,rx:5}));
             badge.append(svg("text",{x:10,y:1,"text-anchor":"middle","dominant-baseline":"central","font-size":14},({tap:"↖",move:"↔",rotate:"↻",scale:"↗"})[action]));
             badges.append(badge);
-          });node.append(badges);
+          });visual.append(badges);
           activate(node,piece.id,summary,()=>{selected=piece.id;updateHints();if(actions.includes("tap"))dispatch({type:"tap",id:piece.id});});
         }else{
           // Passive artwork must not intercept a legal piece or drop beneath it.
@@ -530,11 +601,14 @@
         }
         if(actions.includes("move")){
           node.style.touchAction="none";
-          node.addEventListener("pointerdown",event=>{if(canAct()){suppressClick=false;selected=piece.id;dragging={id:piece.id,pointerId:event.pointerId,x:event.clientX,y:event.clientY,targets:piece.move_targets || []};updateHints();}});
-          node.setAttribute("draggable","true");node.addEventListener("dragstart",event=>{if(!canAct()){event.preventDefault();return;}selected=piece.id;nativeDragging=piece.id;updateHints();event.dataTransfer?.setData("text/plain",piece.id);});
-          node.addEventListener("dragend",()=>{dragging=null;nativeDragging=null;selected=null;updateHints();});}
+          node.addEventListener("pointerdown",event=>{if(canAct()&&!cameraGesture&&event.button===0){resetDrag();suppressClick=false;selected=piece.id;dragging={id:piece.id,node,body:visual,nextSibling:node.nextSibling,pointerId:event.pointerId,x:event.clientX,y:event.clientY,point:piecePoint(node,event.clientX,event.clientY),targets:piece.move_targets || []};try{node.setPointerCapture(event.pointerId);}catch(_){}updateHints();}});
+          node.addEventListener("dragstart",event=>event.preventDefault());}
         stage.append(node);
         const previous=previousPieces.get(piece.id),from=previousTransforms.get(piece.id);
+        if(rollEffects&&piece.animation?.kind==="roll"&&previous&&previous.animation?.key!==piece.animation.key&&body.animate){
+          const animation=body.animate([{transform:"rotate(-28deg) scale(.8)",offset:0},{transform:"rotate(155deg) scale(1.12)",offset:.35},{transform:"rotate(310deg) scale(.92)",offset:.72},{transform:"rotate(360deg) scale(1)",offset:1}],{duration:650,easing:"ease-out"});
+          pieceAnimations.add(animation);animation.onfinish=()=>pieceAnimations.delete(animation);
+        }
         if(previous&&from&&node.animate){
           const before=position(spec,previous);
           if(before.x!==point.x||before.y!==point.y||num(previous.rotation)!==num(piece.rotation)||num(previous.scale,1)!==num(piece.scale,1)){
@@ -588,7 +662,9 @@
       localState=result.local_state===undefined?null:clone(result.local_state);
       errorBox.hidden=true;
       if(result.make_move!==undefined && message.type==="ui_event" && canAct()) {moveSent=true;callbacks.onMove?.(clone(result.make_move));}
+      else if(message.type==="ui_event")resetDrag();
       const motionEnabled=message.type==="state_changed"&&options.animate!==false&&callbacks.animate===true&&!latest?.replay&&!global.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      const rollEffects=message.type==="state_changed"&&options.animate!==false&&!latest?.replay&&!lastStateWasReplay&&Number.isInteger(lastStateMoveCount)&&Number.isInteger(message.move_count)&&message.move_count>lastStateMoveCount&&!global.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
       // The actor belongs to the completed move, not the next turn. Missing
       // metadata snaps conservatively; an own move never animates captures either.
       const actor=message.last_move_player_index;
@@ -597,9 +673,10 @@
       const animate=motionEnabled&&!lastStateWasReplay&&Number.isInteger(lastStateMoveCount)&&Number.isInteger(message.move_count)&&message.move_count>lastStateMoveCount&&Number.isInteger(actor)&&actor>=0&&actor<10&&knownOther;
       // Polls can arrive just after a move starts. Keep the existing elements
       // and their animation clocks when the authoritative scene is unchanged.
-      if(motionEnabled&&currentScene&&JSON.stringify(scene)===JSON.stringify(currentScene)){
+      const preserveEffects=message.type==="state_changed"&&options.animate!==false&&!latest?.replay&&!global.matchMedia?.("(prefers-reduced-motion: reduce)").matches&&pieceAnimations.size>0;
+      if((motionEnabled||preserveEffects)&&currentScene&&JSON.stringify(scene)===JSON.stringify(currentScene)){
         stage.setAttribute("aria-busy",String(moveSent));updateHints();
-      }else draw(scene,animate);
+      }else draw(scene,animate,rollEffects);
       if(message.type==="state_changed"){
         lastStateMoveCount=Number.isInteger(message.move_count)?message.move_count:null;
         lastStateWasReplay=Boolean(message.replay);
@@ -610,10 +687,10 @@
     callbacks.onReady?.();
     return {
       send(message, options = {}) {
-        latest=clone(message);revision++;moveSent=false;selected=null;dragging=null;nativeDragging=null;updateHints();const atRevision=revision;
+        resetDrag();latest=clone(message);revision++;moveSent=false;selected=null;nativeDragging=null;updateHints();const atRevision=revision;
         queue=queue.then(()=>reduce(latest,atRevision,options)).catch(error);return queue;
       },
-      destroy(){destroyed=true;revision++;touches.clear();cameraGesture=null;cameraObserver?.disconnect();global.removeEventListener("resize",scheduleCamera);if(cameraFrame!==null)global.cancelAnimationFrame(cameraFrame);for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();global.removeEventListener("pointermove",cameraPointerMove);global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game","declarative-immersive");},
+      destroy(){resetDrag();destroyed=true;revision++;touches.clear();cameraGesture=null;cameraObserver?.disconnect();global.removeEventListener("resize",scheduleCamera);if(cameraFrame!==null)global.cancelAnimationFrame(cameraFrame);for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();global.removeEventListener("pointermove",cameraPointerMove);global.removeEventListener("pointermove",movePointer);global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game","declarative-immersive");},
       dispatch,
     };
   }
@@ -621,10 +698,10 @@
     const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
     const data=value=>JSON.stringify(canonical(value)).replace(/</g,"\\u003c");
     return '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<link rel="stylesheet" href="/static/declarative-ui.css?v=11"><div id="declarative-game"></div>' +
+      '<link rel="stylesheet" href="/static/declarative-ui.css?v=12"><div id="declarative-game"></div>' +
       '<script type="application/json" id="i18n-strings">'+data(spec.strings || {})+'<'+'/script>' +
       '<script type="application/json" id="declarative-spec">'+data(spec)+'<'+'/script>' +
-      '<script src="/static/declarative-ui.js?v=11"><'+'/script><script>' +
+      '<script src="/static/declarative-ui.js?v=12"><'+'/script><script>' +
       'const host=DeclarativeUI.mount(document.getElementById("declarative-game"),' +
       'JSON.parse(document.getElementById("declarative-spec").textContent),' +
       '{onMove:move=>parent.postMessage({type:"make_move",move},"*"),' +
@@ -633,7 +710,7 @@
       '<'+'/script>';
   }
 
-  const api={mount,clientDocument,position,boardCell,validateScene,validateSpec,assetURI,pieceActions,contentBounds};
+  const api={mount,clientDocument,position,boardCell,validateScene,validateSpec,assetURI,pieceActions,contentBounds,cameraLimits};
   global.DeclarativeUI=api;
   if(typeof module!=="undefined"&&module.exports)module.exports=api;
 })(typeof window!=="undefined"?window:globalThis);

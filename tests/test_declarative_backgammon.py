@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
+import quickjs
 
 from game_platform.agent_import import GameImport, prepare
 from game_platform.declarative_ui import DeclarativeLogic
@@ -61,21 +62,47 @@ def emitted_move(ui, frame, changed, move):
     return ui.reduce({'type': 'ui_event', 'event': event, 'state_changed': changed}, frame['local_state'])
 
 
-def test_complete_package_uses_exact_ordinary_authority(body):
+def test_complete_package_wraps_ordinary_authority_with_roll_history_and_combined_moves(body):
     canonical = (ROOT / 'games/declarative/backgammon.server.js').read_text()
-    assert body.server_code == canonical
-    assert hashlib.sha256(body.server_code.encode()).hexdigest() == SOURCE_SHA256
+    wrapper = (ROOT / 'games/declarative/backgammon-roll-history.js').read_text()
+    compound = (ROOT / 'games/declarative/backgammon-combined-moves.js').read_text()
+    assert body.server_code == canonical + '\n' + wrapper + '\n' + compound
+    assert hashlib.sha256(canonical.encode()).hexdigest() == SOURCE_SHA256
     assert body.game_schemas() == source_schemas()
     prepared = prepare(body)
     assert set(prepared['translations']) == {'en', 'es', 'fr', 'de', 'pt', 'zh', 'hi', 'ar'}
     assert all(value['display_name'].endswith(' (Declarative)') for value in prepared['translations'].values())
     assert all(case['passed'] for case in verify_examples(body.server_code, body.unit_tests))
+    assert len(body.unit_tests['cases']) == 6
+    assert sum(case['kind'] == 'intermediate' for case in body.unit_tests['cases']) == 4
+    assert any(case['name'] == 'Combined four ones' for case in body.unit_tests['cases'])
+    combined_cases = json.loads((ROOT / 'tests/fixtures/declarative/backgammon-combined-cases.json').read_text())
+    assert [case['name'] for case in combined_cases] == [
+        'Combined four ones', 'Combined one and four', 'Forced combined hit', 'Ambiguous combined hit stays single']
+    assert all(case['passed'] for case in verify_examples(body.server_code, {**body.unit_tests, 'cases': combined_cases}))
     assert len(body.declarative_ui['boards'][0]['cells']) == 24
     assert body.declarative_ui == json.loads((ROOT / 'static/backgammon-declarative-ui.json').read_text())
 
 
 def dice(frame):
     return [piece for piece in frame['scene']['pieces'] if piece['type'] == 'die']
+
+
+def without_roll_metadata(result):
+    plain = copy.deepcopy(result)
+    plain['state'].pop('last_roll', None)
+    return plain
+
+
+def apply_with_counted_random(code, state, ctx, move, draws=(.1, .8)):
+    runtime = quickjs.Context()
+    runtime.eval('class InvalidMove extends Error {}')
+    runtime.eval(code)
+    return json.loads(runtime.eval(
+        '(() => {const ctx=' + json.dumps(ctx) + ';const values=' + json.dumps(draws) + ';let count=0;'
+        'ctx.random=()=>values[count++ % values.length];const result=game.applyMove('
+        + json.dumps(state) + ',' + json.dumps(ctx['players'][state['cur']]['id']) + ',' + json.dumps(move) + ',ctx);'
+        'return JSON.stringify({result,count});})()'))
 
 
 def test_two_central_dice_replace_the_roll_button_and_only_offer_legal_rolls(body):
@@ -160,6 +187,174 @@ def test_ordinary_used_die_keeps_its_face_and_midturn_mount_does_not_invent_a_ro
     assert 'unknown' in dice(fresh)[1]['aria_label']
 
 
+@pytest.mark.parametrize('blocked', [False, True])
+def test_roll_metadata_records_the_same_two_random_draws_even_when_the_turn_auto_passes(body, blocked):
+    rules = GameLogic(body.server_code, game_schemas=body.game_schemas())
+    ctx = context()
+    if blocked:
+        state = setup_board(rules, ctx, {}, {18: 2, 19: 2, 20: 2, 21: 2, 22: 2, 23: 5}, [], bar=1)
+    else:
+        state = setup_board(rules, ctx, {20: 15}, {0: 15}, [])
+    state['needRoll'] = True
+    canonical = (ROOT / 'games/declarative/backgammon.server.js').read_text()
+    ordinary = apply_with_counted_random(canonical, state, ctx, {'action': 'roll'})
+    recorded = apply_with_counted_random(body.server_code, state, ctx, {'action': 'roll'})
+    assert ordinary['count'] == recorded['count'] == 2
+    assert without_roll_metadata(recorded['result']) == ordinary['result']
+    last = recorded['result']['state']['last_roll']
+    assert last == {'seat': 0, 'turn': 0, 'values': [1, 5], 'move_count': 1}
+    assert recorded['result']['state']['needRoll'] is blocked
+    changed = message(rules, recorded['result'], {**ctx, 'move_count': 1}, 'b' if blocked else 'a')
+    assert changed['view']['last_roll'] == last
+    # A reload needs no earlier local scene or extra history, even after a
+    # blocked roll that never persisted a nonempty authoritative dice array.
+    frame = DeclarativeLogic(body.declarative_ui).reduce(changed)
+    used = 2 if blocked else 0
+    assert [piece['asset'] for piece in dice(frame)] == [f'die_1_used_{used}', f'die_5_used_{used}']
+    assert all(piece['animation']['key'] == 'roll:0:0' for piece in dice(frame))
+
+
+def test_turn_completion_retains_exact_roll_faces_without_local_presentation_memory(body):
+    rules = GameLogic(body.server_code, game_schemas=body.game_schemas())
+    ctx = context()
+    state = setup_board(rules, ctx, {20: 15}, {0: 15}, [])
+    state['needRoll'] = True
+    result = rules.call('applyMove', state, 'a', {'action': 'roll'}, ctx=ctx, seed=13)
+    original = copy.deepcopy(result['state']['last_roll'])
+    count = 1
+    while not result['state']['needRoll']:
+        move = rules.call('computerMove', result['state'], 'a', ctx={**ctx, 'move_count': count}, seed=13)
+        result = rules.call('applyMove', result['state'], 'a', move, ctx={**ctx, 'move_count': count}, seed=13)
+        count += 1
+        assert result['state']['last_roll'] == original
+    changed = message(rules, result, {**ctx, 'move_count': count}, 'b')
+    frame = DeclarativeLogic(body.declarative_ui).reduce(changed)
+    assert [piece['asset'] for piece in dice(frame)] == [f'die_{value}_used_2' for value in original['values']]
+    assert all(piece['actions'] == ['tap'] and piece['animation']['key'] == 'roll:0:0' for piece in dice(frame))
+
+
+def test_endcap_without_a_roll_does_not_invent_faces_or_consume_randomness(body):
+    rules = GameLogic(body.server_code, game_schemas=body.game_schemas())
+    ctx = {**context(), 'move_count': 301}
+    state = setup_board(rules, ctx, {20: 15}, {0: 15}, [])
+    state['needRoll'] = True
+    state['last_roll'] = {'seat': 1, 'turn': 0, 'values': [2, 6], 'move_count': 300}
+    recorded = apply_with_counted_random(body.server_code, state, ctx, {'action': 'roll'})
+    canonical = (ROOT / 'games/declarative/backgammon.server.js').read_text()
+    ordinary = apply_with_counted_random(canonical, state, ctx, {'action': 'roll'})
+    assert recorded['count'] == ordinary['count'] == 0
+    assert without_roll_metadata(recorded['result']) == ordinary['result']
+    assert recorded['result']['state']['last_roll'] == state['last_roll']
+
+
+def test_finite_match_end_keeps_the_last_roll_when_the_authority_advances_its_turn_counter(body):
+    rules = GameLogic(body.server_code, game_schemas=body.game_schemas())
+    ui = DeclarativeLogic(body.declarative_ui)
+    ctx = {**context(), 'move_count': 291}
+    state = setup_board(rules, ctx, {20: 15}, {0: 15}, [1])
+    state['n'] = 120
+    state['last_roll'] = {'seat': 0, 'turn': 120, 'values': [1, 2], 'move_count': 290}
+    before = message(rules, {'state': state, 'turn': ['a']}, ctx, 'a')
+    previous = ui.reduce(before)
+    result = rules.call('applyMove', state, 'a', {'action': 'move', 'from': 20, 'to': 19}, ctx=ctx, seed=13)
+    assert result['turn'] is None and result['state']['n'] == 121 and not result['state']['needRoll']
+    final = message(rules, result, {**ctx, 'move_count': 292}, 'a')
+    frame = ui.reduce(final)
+    assert [piece['asset'] for piece in dice(frame)] == ['die_1_used_2', 'die_2_used_2']
+    assert all(piece['actions'] == [] for piece in dice(frame))
+    # Earlier pinned rules can recover the same ended pair from the latest
+    # eligible history turn, or retain a pair already observed locally.
+    legacy_view = {**final['view'], 'last_roll': None}
+    legacy_final = {**final, 'state': legacy_view, 'view': legacy_view}
+    for history, local in [
+        ([{'view': {**before['view'], 'n': 119, 'dice': [6, 6, 6, 6], 'moves': [6, 6, 6, 6]}, 'move_count': 285},
+          {'view': {**before['view'], 'dice': [1, 2], 'moves': [1, 2]}, 'move_count': 290}], None),
+        ([], previous['local_state']),
+    ]:
+        recovered = ui.reduce({**legacy_final, 'presentation_history': history}, local)
+        assert [piece['asset'] for piece in dice(recovered)] == ['die_1_used_2', 'die_2_used_2']
+
+
+def test_legacy_computer_turn_recovers_its_roll_from_filtered_history(body):
+    canonical = (ROOT / 'games/declarative/backgammon.server.js').read_text()
+    rules = GameLogic(canonical, game_schemas=body.game_schemas())
+    ctx = context()
+    ctx['players'][0]['kind'] = 'computer'
+    state = setup_board(rules, ctx, {20: 15}, {0: 15}, [])
+    state['needRoll'] = True
+    result = rules.call('applyMove', state, 'a', {'action': 'roll'}, ctx=ctx, seed=13)
+    values = result['state']['dice'][:2]
+    observations = []
+    count = 1
+    while not result['state']['needRoll']:
+        filtered = message(rules, result, {**ctx, 'move_count': count}, 'b')
+        observations.append({'view': filtered['view'], 'move_count': count, 'last_move_player_index': 0})
+        move = rules.call('computerMove', result['state'], 'a', ctx={**ctx, 'move_count': count}, seed=13)
+        result = rules.call('applyMove', result['state'], 'a', move, ctx={**ctx, 'move_count': count}, seed=13)
+        count += 1
+    final = message(rules, result, {**ctx, 'move_count': count}, 'b')
+    assert final['view']['dice'] == [] and 'last_roll' not in final['view']
+    ui = DeclarativeLogic(body.declarative_ui)
+    frame = ui.reduce({**final, 'presentation_history': observations})
+    assert [piece['asset'] for piece in dice(frame)] == [f'die_{value}_used_2' for value in values]
+    assert all(piece['actions'] == ['tap'] and piece['animation']['key'] == 'roll:0:0' for piece in dice(frame))
+    # Polls must not retrigger rolling while only spent halves or labels change.
+    again = ui.reduce({**final, 'presentation_history': observations}, frame['local_state'])
+    assert [piece['animation'] for piece in dice(again)] == [piece['animation'] for piece in dice(frame)]
+    earlier = {**message(rules, {'state': state, 'turn': ['a']}, ctx, 'b'), 'replay': True,
+               'presentation_history': observations}
+    replay = ui.reduce(earlier, frame['local_state'])
+    assert all(piece['asset'] == 'die_0_used_0' and piece['actions'] == [] and 'animation' not in piece for piece in dice(replay))
+
+
+def test_history_never_overrides_a_recorded_roll_or_supplies_future_replay_faces(body):
+    rules = GameLogic(body.server_code, game_schemas=body.game_schemas())
+    ctx = context()
+    state = setup_board(rules, ctx, {20: 15}, {0: 15}, [])
+    state['needRoll'] = True
+    result = apply_with_counted_random(body.server_code, state, ctx, {'action': 'roll'})['result']
+    changed = message(rules, result, {**ctx, 'move_count': 1}, 'a')
+    false_view = {**changed['view'], 'dice': [6, 6, 6, 6], 'moves': [6, 6, 6, 6]}
+    ui = DeclarativeLogic(body.declarative_ui)
+    frame = ui.reduce({**changed, 'presentation_history': [{'view': false_view, 'move_count': 1}]})
+    assert [piece['asset'] for piece in dice(frame)] == ['die_1_used_0', 'die_5_used_0']
+    partial = {**changed['view'], 'last_roll': None, 'dice': [5], 'moves': [5]}
+    replay = ui.reduce({**changed, 'view': partial, 'state': partial, 'move_count': 2, 'replay': True,
+                        'presentation_history': [{'view': false_view, 'move_count': 3}]})
+    assert [piece['asset'] for piece in dice(replay)] == ['die_5_used_0', 'die_0_used_0']
+
+
+def test_legacy_roll_memory_stays_visible_across_an_unobserved_turn(body):
+    rules = GameLogic(body.server_code, game_schemas=body.game_schemas())
+    ui = DeclarativeLogic(body.declarative_ui)
+    ctx = context()
+    state = setup_board(rules, ctx, {20: 15}, {0: 15}, [1, 5])
+    rolled = message(rules, {'state': state, 'turn': ['a']}, ctx, 'a')
+    first = ui.reduce(rolled)
+    later_view = {**rolled['view'], 'last_roll': None, 'dice': [], 'moves': [], 'needRoll': True, 'n': 2}
+    later = {**rolled, 'view': later_view, 'state': later_view, 'move_count': 10}
+    retained = ui.reduce(later, first['local_state'])
+    assert [piece['asset'] for piece in dice(retained)] == ['die_1_used_2', 'die_5_used_2']
+    assert [piece['animation'] for piece in dice(retained)] == [piece['animation'] for piece in dice(first)]
+
+
+def test_legal_drop_hit_areas_cover_point_triangles_and_the_off_tray(body):
+    rules = GameLogic(body.server_code, game_schemas=body.game_schemas())
+    ui = DeclarativeLogic(body.declarative_ui)
+    ctx = context()
+    for own, enemy, dice_values, point, expected in [
+        ({20: 15}, {0: 15}, [1, 2], 'to_19', {'x': -24, 'y': -200, 'width': 48, 'height': 220}),
+        ({6: 1}, {5: 1, 23: 14}, [1], 'to_5', {'x': -24, 'y': -20, 'width': 48, 'height': 220}),
+        ({0: 1, 1: 1}, {20: 15}, [1, 2], 'to_off', {'x': -24, 'y': -15, 'width': 48, 'height': 220}),
+    ]:
+        state = setup_board(rules, ctx, own, enemy, dice_values)
+        scene = ui.reduce(message(rules, {'state': state, 'turn': ['a']}, ctx, 'a'))['scene']
+        target = next(item for item in scene['targets'] if item['id'] == point)
+        assert target['hit_area'] == expected
+        passive = ui.reduce(message(rules, {'state': state, 'turn': ['a']}, ctx, None))['scene']
+        assert not passive['targets']
+
+
 @pytest.mark.parametrize('seed', [7, 31])
 def test_same_full_match_through_regular_rules_and_declarative_events(body, seed):
     rules = GameLogic(body.server_code, game_schemas=body.game_schemas())
@@ -170,7 +365,7 @@ def test_same_full_match_through_regular_rules_and_declarative_events(body, seed
     regular = ordinary.call('newMatch', ctx=ctx, seed=seed)
     local = None
     for step in range(320):
-        assert result == regular
+        assert without_roll_metadata(result) == regular
         ctx['move_count'] = step
         viewer = result['turn'][0]
         changed = message(rules, result, ctx, viewer)
@@ -192,7 +387,7 @@ def test_same_full_match_through_regular_rules_and_declarative_events(body, seed
             assert result['state']['off'][seat] + result['state']['bar'][seat] + sum(
                 count for owner, count in zip(result['state']['owner'], result['state']['cnt']) if owner == seat) == 15
         if result['turn'] is None:
-            assert result == regular and sum(result['payouts'].values()) == 10
+            assert without_roll_metadata(result) == regular and sum(result['payouts'].values()) == 10
             final = ui.reduce(message(rules, result, {**ctx, 'move_count': step + 1}, viewer), local)
             assert not final['scene']['targets'] and not final['scene']['controls']
             assert all(piece['actions'] == [] for piece in final['scene']['pieces'])
@@ -281,6 +476,7 @@ def test_standard_import_catalog_pinned_match_and_cheat_rejections(payload):
     rejected({'action': 'roll'}, other)
     rejected({'action': 'move', 'from': 0, 'to': 23})
     for forged in ({'action': 'roll', 'dice': [6, 6, 6, 6]}, {'action': 'roll', 'state': {'off': [15, 0]}},
+                   {'action': 'roll', 'last_roll': {'seat': 0, 'turn': 0, 'values': [6, 6], 'move_count': 1}},
                    {'action': 'roll', 'payouts': {alice: 100000}}, {'action': 'move', 'from': 1, 'to': 'off', 'die': 6}):
         rejected(forged)
     rolled = api.ok('POST', f'/matches/{match_id}/moves', as_user=current, json={'move': {'action': 'roll'}})

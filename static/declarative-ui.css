@@ -11,6 +11,11 @@
 .declarative-piece.actionable{cursor:pointer}
 .declarative-piece.actionable[data-actions~=move]{cursor:grab}
 .declarative-piece.actionable.hint-selected[data-actions~=move]{cursor:grabbing}
+.declarative-piece.dragging{cursor:grabbing}
+.declarative-drag-visual{will-change:transform}
+.declarative-roll{transform-box:fill-box;transform-origin:center}
+.declarative-target-hit{pointer-events:none}
+.show-drop-hints .declarative-target[data-drop-state=allowed] .declarative-target-hit{pointer-events:all}
 .declarative-piece-action-outline,.declarative-action-badges{visibility:hidden;pointer-events:none}
 .declarative-piece.actionable .declarative-piece-action-outline,.declarative-piece.actionable .declarative-action-badges{visibility:visible}
 .declarative-piece-action-outline{stroke:#d2ff5a;stroke-width:2;stroke-dasharray:4 3;filter:drop-shadow(0 0 3px #a7f07099)}

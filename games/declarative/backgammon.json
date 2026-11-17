@@ -4,7 +4,7 @@
   "allowed_player_counts": [
     2
   ],
-  "server_code": "function bgOwner(){var o=new Array(24).fill(-1);o[23]=0;o[12]=0;o[7]=0;o[5]=0;o[0]=1;o[11]=1;o[16]=1;o[18]=1;return o;}\nfunction bgCnt(){var c=new Array(24).fill(0);c[23]=2;c[12]=5;c[7]=3;c[5]=5;c[0]=2;c[11]=5;c[16]=3;c[18]=5;return c;}\nfunction bgAllHome(s,p){if(s.bar[p]>0)return false;for(var i=0;i<24;i++){if(s.owner[i]===p&&s.cnt[i]>0){if(p===0){if(i>5)return false;}else{if(i<18)return false;}}}return true;}\nfunction bgCanBear(s,p,from,die){var d=p===0?from+1:24-from;if(die===d)return true;if(die>d){if(p===0){for(var j=from+1;j<=5;j++)if(s.owner[j]===p&&s.cnt[j]>0)return false;return true;}else{for(var k=18;k<from;k++)if(s.owner[k]===p&&s.cnt[k]>0)return false;return true;}}return false;}\nfunction bgLegalForDie(s,p,die){var res=[];var opp=1-p;var i,to,dir;\nif(s.bar[p]>0){to=p===0?24-die:die-1;if(!(s.owner[to]===opp&&s.cnt[to]>=2))res.push({from:'bar',to:to});return res;}\ndir=p===0?-1:1;\nfor(i=0;i<24;i++){if(s.owner[i]!==p||s.cnt[i]<=0)continue;to=i+dir*die;\nif(to<0||to>=24){if(bgAllHome(s,p)&&bgCanBear(s,p,i,die))res.push({from:i,to:'off'});}\nelse{if(s.owner[to]===opp&&s.cnt[to]>=2)continue;res.push({from:i,to:to});}}\nreturn res;}\n// Search the remaining dice, keeping only first moves that use the maximum count.\n// Stop a branch as soon as every remaining die can be used; doubles are deduplicated.\nfunction bgChoices(s,p,memo){\nvar key=s.owner.join(',')+'|'+s.cnt.join(',')+'|'+s.bar.join(',')+'|'+s.off.join(',')+'|'+s.moves.join(',');\nif(memo[key])return memo[key];\nvar out=[],best=0,seen={};\nfor(var k=0;k<s.moves.length;k++){\nvar die=s.moves[k];if(seen[die])continue;seen[die]=true;\nvar lm=bgLegalForDie(s,p,die);\nfor(var j=0;j<lm.length;j++){\nvar next=bgCopy(s);bgDoBoard(next,p,lm[j].from,lm[j].to);next.moves.splice(k,1);\nvar count=1+bgMaxCount(next,p,memo);\nif(count>best){best=count;out=[];}\nif(count===best)out.push({from:lm[j].from,to:lm[j].to,die:die,idx:k});\n}}\nif(best===1&&s.moves.length===2&&s.moves[0]!==s.moves[1]){\nvar high=Math.max(s.moves[0],s.moves[1]);var higher=out.filter(function(m){return m.die===high;});if(higher.length)out=higher;\n}\nreturn memo[key]={count:best,moves:out};\n}\nfunction bgMaxCount(s,p,memo){\nif(!s.moves.length)return 0;\n// A short-circuit depth search avoids enumerating all full double sequences.\nvar seen={};for(var k=0;k<s.moves.length;k++){\nvar die=s.moves[k];if(seen[die])continue;seen[die]=true;\nvar lm=bgLegalForDie(s,p,die);for(var j=0;j<lm.length;j++){\nvar next=bgCopy(s);bgDoBoard(next,p,lm[j].from,lm[j].to);next.moves.splice(k,1);\nif(1+bgMaxCount(next,p,memo)===s.moves.length)return s.moves.length;\n}}\nreturn bgChoices(s,p,memo).count;\n}\nfunction bgAllMoves(s,p){return bgChoices(s,p,{}).moves;}\nfunction bgHasAny(s,p){return bgAllMoves(s,p).length>0;}\nfunction bgDoBoard(s,p,from,to){var opp=1-p;\nif(from==='bar')s.bar[p]--;\nelse{s.cnt[from]--;if(s.cnt[from]===0)s.owner[from]=-1;}\nif(to==='off')s.off[p]++;\nelse{if(s.owner[to]===opp&&s.cnt[to]===1){s.owner[to]=p;s.cnt[to]=1;s.bar[opp]++;}\nelse if(s.owner[to]===-1||s.cnt[to]===0){s.owner[to]=p;s.cnt[to]=1;}\nelse s.cnt[to]++;}}\nfunction bgPayouts(ctx,w){var humans=[];for(var i=0;i<ctx.players.length;i++)if(ctx.players[i].kind==='human')humans.push(ctx.players[i]);\nvar out={};var pot=ctx.pot||0;var h;\nif(humans.length===0)return out;\nif(pot<=0){for(h=0;h<humans.length;h++)out[humans[h].id]=0;return out;}\nvar wId=(ctx.players[w]&&ctx.players[w].id)||null;var wHuman=false;\nfor(h=0;h<humans.length;h++)if(humans[h].id===wId)wHuman=true;\nif(wHuman){for(h=0;h<humans.length;h++)out[humans[h].id]=humans[h].id===wId?pot:0;}\nelse{var share=Math.floor(pot/humans.length);var rem=pot-share*humans.length;\nfor(h=0;h<humans.length;h++){out[humans[h].id]=share+(rem>0?1:0);if(rem>0)rem--;}}\nreturn out;}\nfunction bgCopy(s){return{owner:s.owner.slice(),cnt:s.cnt.slice(),bar:s.bar.slice(),off:s.off.slice(),cur:s.cur,dice:s.dice.slice(),moves:s.moves.slice(),needRoll:s.needRoll,winner:s.winner,n:s.n||0};}\nfunction bgTurnFor(ctx,seat){if(!ctx.players||ctx.players.length===0)return null;var i=seat%ctx.players.length;if(i<0)i+=ctx.players.length;return[ctx.players[i].id];}\nconst game={\nnewMatch(ctx){var cur=0;try{if(ctx.random()<0.5)cur=1;}catch(e){cur=0;}\nif(ctx.players&&ctx.players.length>0)cur=cur%ctx.players.length;\nelse cur=0;\nvar state={owner:bgOwner(),cnt:bgCnt(),bar:[0,0],off:[0,0],cur:cur,dice:[],moves:[],needRoll:true,winner:null,n:0};\nvar t=bgTurnFor(ctx,cur);if(!t)return{state:state,turn:[]};return{state:state,turn:t};},\napplyMove(state,playerId,move,ctx){\nvar idx=-1;for(var i=0;i<ctx.players.length;i++)if(ctx.players[i].id===playerId)idx=i;\nif(idx<0)throw new InvalidMove('unknown player');\nif(state.winner!==null)throw new InvalidMove('game over');\nvar mc=ctx.move_count||0;\nif(mc>300||(state.n||0)>300){var wend=state.off[0]>=state.off[1]?0:1;state=bgCopy(state);state.winner=wend;return{state:state,turn:null,payouts:bgPayouts(ctx,wend)};}\nif(idx!==state.cur)throw new InvalidMove('not your turn');\nvar p=state.cur;var s=bgCopy(state);var m=move||{};\nif(m.action==='roll'){\nif(!s.needRoll)throw new InvalidMove('already rolled');\nvar d1=1+Math.floor(ctx.random()*6),d2=1+Math.floor(ctx.random()*6);\ns.dice=d1===d2?[d1,d1,d1,d1]:[d1,d2];s.moves=s.dice.slice();s.needRoll=false;\nif(!bgHasAny(s,p)){s.n=(s.n||0)+1;if(s.n>120||mc>300){var w0=s.off[0]>=s.off[1]?0:1;s.winner=w0;return{state:s,turn:null,payouts:bgPayouts(ctx,w0)};}\ns.cur=1-p;if(ctx.players.length>0)s.cur=s.cur%ctx.players.length;\ns.needRoll=true;s.dice=[];s.moves=[];return{state:s,turn:bgTurnFor(ctx,s.cur)};}\nreturn{state:s,turn:bgTurnFor(ctx,p)};}\nif(m.action==='pass'){\nif(s.needRoll)throw new InvalidMove('roll first');\nif(bgHasAny(s,p))throw new InvalidMove('moves available');\ns.n=(s.n||0)+1;\nif(s.n>120||mc>300){var w1=s.off[0]>=s.off[1]?0:1;s.winner=w1;return{state:s,turn:null,payouts:bgPayouts(ctx,w1)};}\ns.cur=1-p;if(ctx.players.length>0)s.cur=s.cur%ctx.players.length;\ns.needRoll=true;s.dice=[];s.moves=[];return{state:s,turn:bgTurnFor(ctx,s.cur)};}\nif(m.action==='move'){\nif(s.needRoll)throw new InvalidMove('roll first');\nif(s.moves.length===0)throw new InvalidMove('no moves');\nvar from=m.from,to=m.to;\nif(from!=='bar'){if(typeof from!=='number'||!Number.isInteger(from))throw new InvalidMove('bad from');if(!(from>=0&&from<24))throw new InvalidMove('bad from');}\nif(to!=='off'){if(typeof to!=='number'||!Number.isInteger(to))throw new InvalidMove('bad to');if(!(to>=0&&to<24))throw new InvalidMove('bad to');}\nvar use=-1;var allowed=bgAllMoves(s,p);\nfor(var k=0;k<allowed.length;k++){if(allowed[k].from===from&&allowed[k].to===to){use=allowed[k].idx;break;}}\nif(use<0)throw new InvalidMove('illegal move');\nbgDoBoard(s,p,from,to);s.moves.splice(use,1);s.dice=s.moves.slice();\nif(s.off[p]===15){s.winner=p;return{state:s,turn:null,payouts:bgPayouts(ctx,p)};}\nif(s.moves.length===0||!bgHasAny(s,p)){s.n=(s.n||0)+1;\nif(s.n>120||mc>300){var w2=s.off[0]>=s.off[1]?0:1;s.winner=w2;return{state:s,turn:null,payouts:bgPayouts(ctx,w2)};}\ns.cur=1-p;if(ctx.players.length>0)s.cur=s.cur%ctx.players.length;\ns.needRoll=true;s.dice=[];s.moves=[];return{state:s,turn:bgTurnFor(ctx,s.cur)};}\nreturn{state:s,turn:bgTurnFor(ctx,p)};}\nthrow new InvalidMove('unknown move');},\nrandomMove(state,playerId,ctx){\nvar idx=-1;for(var i=0;i<ctx.players.length;i++)if(ctx.players[i].id===playerId)idx=i;\nvar p=idx>=0?idx:state.cur;\nif(state.needRoll)return{action:'roll'};\nvar ms=bgAllMoves(state,p);\nif(ms.length===0)return{action:'pass'};\nvar k=Math.floor(ctx.random()*ms.length);\nreturn{action:'move',from:ms[k].from,to:ms[k].to};},\ncomputerMove(state,playerId,ctx){\nvar idx=-1;for(var i=0;i<ctx.players.length;i++)if(ctx.players[i].id===playerId)idx=i;\nvar p=idx>=0?idx:state.cur;\nif(state.needRoll)return{action:'roll'};\nvar ms=bgAllMoves(state,p);\nif(ms.length===0)return{action:'pass'};\nvar opp=1-p;var best=ms[0];var bs=-1e9;\nfor(var i2=0;i2<ms.length;i2++){var m=ms[i2];var sc=0;\nif(m.to==='off')sc+=100;\nelse{if(state.owner[m.to]===opp&&state.cnt[m.to]===1)sc+=60;\nelse if(state.owner[m.to]===p&&state.cnt[m.to]===1)sc+=22;\nelse if(state.owner[m.to]===-1)sc+=6;\nif(p===0&&m.to<=5)sc+=10;if(p===1&&m.to>=18)sc+=10;}\nif(m.from==='bar')sc+=25;\nsc+=ctx.random()*3;\nif(sc>bs){bs=sc;best=m;}}\nreturn{action:'move',from:best.from,to:best.to};},\nviewFor(state,playerId,ctx){\nreturn{owner:state.owner.slice(),cnt:state.cnt.slice(),bar:state.bar.slice(),off:state.off.slice(),cur:state.cur,dice:state.dice.slice(),moves:state.moves.slice(),needRoll:state.needRoll,winner:state.winner,n:state.n||0,legalMoves:state.needRoll||state.winner!==null?[]:bgAllMoves(state,state.cur)};}\n};",
+  "server_code": "function bgOwner(){var o=new Array(24).fill(-1);o[23]=0;o[12]=0;o[7]=0;o[5]=0;o[0]=1;o[11]=1;o[16]=1;o[18]=1;return o;}\nfunction bgCnt(){var c=new Array(24).fill(0);c[23]=2;c[12]=5;c[7]=3;c[5]=5;c[0]=2;c[11]=5;c[16]=3;c[18]=5;return c;}\nfunction bgAllHome(s,p){if(s.bar[p]>0)return false;for(var i=0;i<24;i++){if(s.owner[i]===p&&s.cnt[i]>0){if(p===0){if(i>5)return false;}else{if(i<18)return false;}}}return true;}\nfunction bgCanBear(s,p,from,die){var d=p===0?from+1:24-from;if(die===d)return true;if(die>d){if(p===0){for(var j=from+1;j<=5;j++)if(s.owner[j]===p&&s.cnt[j]>0)return false;return true;}else{for(var k=18;k<from;k++)if(s.owner[k]===p&&s.cnt[k]>0)return false;return true;}}return false;}\nfunction bgLegalForDie(s,p,die){var res=[];var opp=1-p;var i,to,dir;\nif(s.bar[p]>0){to=p===0?24-die:die-1;if(!(s.owner[to]===opp&&s.cnt[to]>=2))res.push({from:'bar',to:to});return res;}\ndir=p===0?-1:1;\nfor(i=0;i<24;i++){if(s.owner[i]!==p||s.cnt[i]<=0)continue;to=i+dir*die;\nif(to<0||to>=24){if(bgAllHome(s,p)&&bgCanBear(s,p,i,die))res.push({from:i,to:'off'});}\nelse{if(s.owner[to]===opp&&s.cnt[to]>=2)continue;res.push({from:i,to:to});}}\nreturn res;}\n// Search the remaining dice, keeping only first moves that use the maximum count.\n// Stop a branch as soon as every remaining die can be used; doubles are deduplicated.\nfunction bgChoices(s,p,memo){\nvar key=s.owner.join(',')+'|'+s.cnt.join(',')+'|'+s.bar.join(',')+'|'+s.off.join(',')+'|'+s.moves.join(',');\nif(memo[key])return memo[key];\nvar out=[],best=0,seen={};\nfor(var k=0;k<s.moves.length;k++){\nvar die=s.moves[k];if(seen[die])continue;seen[die]=true;\nvar lm=bgLegalForDie(s,p,die);\nfor(var j=0;j<lm.length;j++){\nvar next=bgCopy(s);bgDoBoard(next,p,lm[j].from,lm[j].to);next.moves.splice(k,1);\nvar count=1+bgMaxCount(next,p,memo);\nif(count>best){best=count;out=[];}\nif(count===best)out.push({from:lm[j].from,to:lm[j].to,die:die,idx:k});\n}}\nif(best===1&&s.moves.length===2&&s.moves[0]!==s.moves[1]){\nvar high=Math.max(s.moves[0],s.moves[1]);var higher=out.filter(function(m){return m.die===high;});if(higher.length)out=higher;\n}\nreturn memo[key]={count:best,moves:out};\n}\nfunction bgMaxCount(s,p,memo){\nif(!s.moves.length)return 0;\n// A short-circuit depth search avoids enumerating all full double sequences.\nvar seen={};for(var k=0;k<s.moves.length;k++){\nvar die=s.moves[k];if(seen[die])continue;seen[die]=true;\nvar lm=bgLegalForDie(s,p,die);for(var j=0;j<lm.length;j++){\nvar next=bgCopy(s);bgDoBoard(next,p,lm[j].from,lm[j].to);next.moves.splice(k,1);\nif(1+bgMaxCount(next,p,memo)===s.moves.length)return s.moves.length;\n}}\nreturn bgChoices(s,p,memo).count;\n}\nfunction bgAllMoves(s,p){return bgChoices(s,p,{}).moves;}\nfunction bgHasAny(s,p){return bgAllMoves(s,p).length>0;}\nfunction bgDoBoard(s,p,from,to){var opp=1-p;\nif(from==='bar')s.bar[p]--;\nelse{s.cnt[from]--;if(s.cnt[from]===0)s.owner[from]=-1;}\nif(to==='off')s.off[p]++;\nelse{if(s.owner[to]===opp&&s.cnt[to]===1){s.owner[to]=p;s.cnt[to]=1;s.bar[opp]++;}\nelse if(s.owner[to]===-1||s.cnt[to]===0){s.owner[to]=p;s.cnt[to]=1;}\nelse s.cnt[to]++;}}\nfunction bgPayouts(ctx,w){var humans=[];for(var i=0;i<ctx.players.length;i++)if(ctx.players[i].kind==='human')humans.push(ctx.players[i]);\nvar out={};var pot=ctx.pot||0;var h;\nif(humans.length===0)return out;\nif(pot<=0){for(h=0;h<humans.length;h++)out[humans[h].id]=0;return out;}\nvar wId=(ctx.players[w]&&ctx.players[w].id)||null;var wHuman=false;\nfor(h=0;h<humans.length;h++)if(humans[h].id===wId)wHuman=true;\nif(wHuman){for(h=0;h<humans.length;h++)out[humans[h].id]=humans[h].id===wId?pot:0;}\nelse{var share=Math.floor(pot/humans.length);var rem=pot-share*humans.length;\nfor(h=0;h<humans.length;h++){out[humans[h].id]=share+(rem>0?1:0);if(rem>0)rem--;}}\nreturn out;}\nfunction bgCopy(s){return{owner:s.owner.slice(),cnt:s.cnt.slice(),bar:s.bar.slice(),off:s.off.slice(),cur:s.cur,dice:s.dice.slice(),moves:s.moves.slice(),needRoll:s.needRoll,winner:s.winner,n:s.n||0};}\nfunction bgTurnFor(ctx,seat){if(!ctx.players||ctx.players.length===0)return null;var i=seat%ctx.players.length;if(i<0)i+=ctx.players.length;return[ctx.players[i].id];}\nconst game={\nnewMatch(ctx){var cur=0;try{if(ctx.random()<0.5)cur=1;}catch(e){cur=0;}\nif(ctx.players&&ctx.players.length>0)cur=cur%ctx.players.length;\nelse cur=0;\nvar state={owner:bgOwner(),cnt:bgCnt(),bar:[0,0],off:[0,0],cur:cur,dice:[],moves:[],needRoll:true,winner:null,n:0};\nvar t=bgTurnFor(ctx,cur);if(!t)return{state:state,turn:[]};return{state:state,turn:t};},\napplyMove(state,playerId,move,ctx){\nvar idx=-1;for(var i=0;i<ctx.players.length;i++)if(ctx.players[i].id===playerId)idx=i;\nif(idx<0)throw new InvalidMove('unknown player');\nif(state.winner!==null)throw new InvalidMove('game over');\nvar mc=ctx.move_count||0;\nif(mc>300||(state.n||0)>300){var wend=state.off[0]>=state.off[1]?0:1;state=bgCopy(state);state.winner=wend;return{state:state,turn:null,payouts:bgPayouts(ctx,wend)};}\nif(idx!==state.cur)throw new InvalidMove('not your turn');\nvar p=state.cur;var s=bgCopy(state);var m=move||{};\nif(m.action==='roll'){\nif(!s.needRoll)throw new InvalidMove('already rolled');\nvar d1=1+Math.floor(ctx.random()*6),d2=1+Math.floor(ctx.random()*6);\ns.dice=d1===d2?[d1,d1,d1,d1]:[d1,d2];s.moves=s.dice.slice();s.needRoll=false;\nif(!bgHasAny(s,p)){s.n=(s.n||0)+1;if(s.n>120||mc>300){var w0=s.off[0]>=s.off[1]?0:1;s.winner=w0;return{state:s,turn:null,payouts:bgPayouts(ctx,w0)};}\ns.cur=1-p;if(ctx.players.length>0)s.cur=s.cur%ctx.players.length;\ns.needRoll=true;s.dice=[];s.moves=[];return{state:s,turn:bgTurnFor(ctx,s.cur)};}\nreturn{state:s,turn:bgTurnFor(ctx,p)};}\nif(m.action==='pass'){\nif(s.needRoll)throw new InvalidMove('roll first');\nif(bgHasAny(s,p))throw new InvalidMove('moves available');\ns.n=(s.n||0)+1;\nif(s.n>120||mc>300){var w1=s.off[0]>=s.off[1]?0:1;s.winner=w1;return{state:s,turn:null,payouts:bgPayouts(ctx,w1)};}\ns.cur=1-p;if(ctx.players.length>0)s.cur=s.cur%ctx.players.length;\ns.needRoll=true;s.dice=[];s.moves=[];return{state:s,turn:bgTurnFor(ctx,s.cur)};}\nif(m.action==='move'){\nif(s.needRoll)throw new InvalidMove('roll first');\nif(s.moves.length===0)throw new InvalidMove('no moves');\nvar from=m.from,to=m.to;\nif(from!=='bar'){if(typeof from!=='number'||!Number.isInteger(from))throw new InvalidMove('bad from');if(!(from>=0&&from<24))throw new InvalidMove('bad from');}\nif(to!=='off'){if(typeof to!=='number'||!Number.isInteger(to))throw new InvalidMove('bad to');if(!(to>=0&&to<24))throw new InvalidMove('bad to');}\nvar use=-1;var allowed=bgAllMoves(s,p);\nfor(var k=0;k<allowed.length;k++){if(allowed[k].from===from&&allowed[k].to===to){use=allowed[k].idx;break;}}\nif(use<0)throw new InvalidMove('illegal move');\nbgDoBoard(s,p,from,to);s.moves.splice(use,1);s.dice=s.moves.slice();\nif(s.off[p]===15){s.winner=p;return{state:s,turn:null,payouts:bgPayouts(ctx,p)};}\nif(s.moves.length===0||!bgHasAny(s,p)){s.n=(s.n||0)+1;\nif(s.n>120||mc>300){var w2=s.off[0]>=s.off[1]?0:1;s.winner=w2;return{state:s,turn:null,payouts:bgPayouts(ctx,w2)};}\ns.cur=1-p;if(ctx.players.length>0)s.cur=s.cur%ctx.players.length;\ns.needRoll=true;s.dice=[];s.moves=[];return{state:s,turn:bgTurnFor(ctx,s.cur)};}\nreturn{state:s,turn:bgTurnFor(ctx,p)};}\nthrow new InvalidMove('unknown move');},\nrandomMove(state,playerId,ctx){\nvar idx=-1;for(var i=0;i<ctx.players.length;i++)if(ctx.players[i].id===playerId)idx=i;\nvar p=idx>=0?idx:state.cur;\nif(state.needRoll)return{action:'roll'};\nvar ms=bgAllMoves(state,p);\nif(ms.length===0)return{action:'pass'};\nvar k=Math.floor(ctx.random()*ms.length);\nreturn{action:'move',from:ms[k].from,to:ms[k].to};},\ncomputerMove(state,playerId,ctx){\nvar idx=-1;for(var i=0;i<ctx.players.length;i++)if(ctx.players[i].id===playerId)idx=i;\nvar p=idx>=0?idx:state.cur;\nif(state.needRoll)return{action:'roll'};\nvar ms=bgAllMoves(state,p);\nif(ms.length===0)return{action:'pass'};\nvar opp=1-p;var best=ms[0];var bs=-1e9;\nfor(var i2=0;i2<ms.length;i2++){var m=ms[i2];var sc=0;\nif(m.to==='off')sc+=100;\nelse{if(state.owner[m.to]===opp&&state.cnt[m.to]===1)sc+=60;\nelse if(state.owner[m.to]===p&&state.cnt[m.to]===1)sc+=22;\nelse if(state.owner[m.to]===-1)sc+=6;\nif(p===0&&m.to<=5)sc+=10;if(p===1&&m.to>=18)sc+=10;}\nif(m.from==='bar')sc+=25;\nsc+=ctx.random()*3;\nif(sc>bs){bs=sc;best=m;}}\nreturn{action:'move',from:best.from,to:best.to};},\nviewFor(state,playerId,ctx){\nreturn{owner:state.owner.slice(),cnt:state.cnt.slice(),bar:state.bar.slice(),off:state.off.slice(),cur:state.cur,dice:state.dice.slice(),moves:state.moves.slice(),needRoll:state.needRoll,winner:state.winner,n:state.n||0,legalMoves:state.needRoll||state.winner!==null?[]:bgAllMoves(state,state.cur)};}\n};\n// Version 3 presentation metadata. The canonical authority above stays intact:\n// record its two accepted roll draws without consuming any extra randomness.\n(() => {\n  const newMatch = game.newMatch;\n  const applyMove = game.applyMove;\n  const viewFor = game.viewFor;\n  const copyRoll = roll => roll ? {\n    seat: roll.seat, turn: roll.turn, values: roll.values.slice(), move_count: roll.move_count,\n  } : null;\n\n  game.newMatch = function (ctx) {\n    const result = newMatch.call(game, ctx);\n    result.state.last_roll = null;\n    return result;\n  };\n\n  game.applyMove = function (state, playerId, move, ctx) {\n    const draws = [];\n    const tracked = move && move.action === 'roll' ? Object.assign({}, ctx, {\n      random() {\n        const value = ctx.random();\n        draws.push(value);\n        return value;\n      },\n    }) : ctx;\n    const result = applyMove.call(game, state, playerId, move, tracked);\n    result.state.last_roll = draws.length === 2 ? {\n      seat: state.cur, turn: state.n || 0,\n      values: draws.map(value => 1 + Math.floor(value * 6)),\n      move_count: (ctx.move_count || 0) + 1,\n    } : copyRoll(state.last_roll);\n    return result;\n  };\n\n  game.viewFor = function (state, playerId, ctx) {\n    const result = viewFor.call(game, state, playerId, ctx);\n    result.last_roll = copyRoll(state.last_roll);\n    return result;\n  };\n})();\n\n// A compound gesture follows one checker through canonical legal single moves.\n// Only destinations whose legal orders all produce the same complete outcome\n// are offered. Ordinary single moves always retain their original behavior.\n(() => {\n  const singleApplyMove = game.applyMove;\n  const ordinaryViewFor = game.viewFor;\n  const endpoint = (from, to) => JSON.stringify([from, to]);\n  const signature = result => JSON.stringify({\n    state: Object.assign({}, result.state, {\n      dice: result.state.dice.slice().sort((a, b) => a - b),\n      moves: result.state.moves.slice().sort((a, b) => a - b),\n    }),\n    turn: result.turn,\n    payouts: result.payouts || null,\n  });\n\n  function combinations(state, ctx) {\n    const remaining = state.moves;\n    if (state.needRoll || state.winner !== null || !Array.isArray(remaining) ||\n        remaining.length < 2 || remaining.length > 4 || (ctx.move_count || 0) > 300 || (state.n || 0) > 300 ||\n        !remaining.every(value => Number.isInteger(value) && value >= 1 && value <= 6) ||\n        remaining.length > 2 && !remaining.every(value => value === remaining[0])) return [];\n    const seat = state.cur, playerId = ctx.players[seat] && ctx.players[seat].id;\n    if (!playerId) return [];\n    const legality = new Map();\n    const legal = current => {\n      const key = JSON.stringify(current);\n      if (!legality.has(key)) legality.set(key, bgAllMoves(current, seat));\n      return legality.get(key);\n    };\n    const firstMoves = legal(state);\n    const singles = new Set(firstMoves.map(move => endpoint(move.from, move.to)));\n    const outcomes = new Map();\n\n    function visit(from, to, result, steps) {\n      if (steps.length >= 2 && !singles.has(endpoint(from, to))) {\n        const key = endpoint(from, to);\n        if (!outcomes.has(key)) outcomes.set(key, new Map());\n        const variants = outcomes.get(key), outcome = signature(result);\n        if (!variants.has(outcome)) variants.set(outcome, {from, to, steps});\n      }\n      if (steps.length >= 4 || to === 'off' || result.state.winner !== null || result.state.needRoll ||\n          result.state.cur !== seat || result.turn === null || !result.turn.includes(playerId)) return;\n      for (const move of legal(result.state)) {\n        if (move.from !== to) continue;\n        const leg = {action: 'move', from: move.from, to: move.to};\n        const next = singleApplyMove.call(game, result.state, playerId, leg, ctx);\n        visit(from, move.to, next, steps.concat([leg]));\n      }\n    }\n\n    for (const move of firstMoves) {\n      const leg = {action: 'move', from: move.from, to: move.to};\n      const result = singleApplyMove.call(game, state, playerId, leg, ctx);\n      visit(move.from, move.to, result, [leg]);\n    }\n    const safe = [];\n    for (const variants of outcomes.values()) if (variants.size === 1) safe.push(variants.values().next().value);\n    return safe;\n  }\n\n  game.applyMove = function (state, playerId, move, ctx) {\n    try {\n      return singleApplyMove.call(game, state, playerId, move, ctx);\n    } catch (error) {\n      // Preserve canonical turn, input and endcap validation. Only an otherwise\n      // illegal single destination can be interpreted as a compound gesture.\n      if (!(error instanceof InvalidMove) || error.message !== 'illegal move' || !move || move.action !== 'move') throw error;\n      const combined = combinations(state, ctx).find(candidate => candidate.from === move.from && candidate.to === move.to);\n      if (!combined) throw error;\n      let result = {state};\n      for (const leg of combined.steps) result = singleApplyMove.call(game, result.state, playerId, leg, ctx);\n      return result;\n    }\n  };\n\n  game.viewFor = function (state, playerId, ctx) {\n    const view = ordinaryViewFor.call(game, state, playerId, ctx);\n    view.combinedMoves = combinations(state, ctx).map(move => ({from: move.from, to: move.to}));\n    return view;\n  };\n})();\n",
   "declarative_ui": {
     "format": "buildplay-ui",
     "version": 1,
@@ -328,7 +328,7 @@
       "server_illegal_move": "illegal move",
       "server_unknown_move": "unknown move"
     },
-    "ui_code": "const SOURCE_STRINGS={\"title\": \"Backgammon (Declarative)\", \"player\": \"Player {n}\", \"winner\": \"{name} wins\", \"roll_turn\": \"{name}: roll the dice\", \"move_turn\": \"{name}: move a highlighted checker\", \"roll\": \"Roll dice\", \"die_roll\": \"Die {n}: roll dice\", \"die_ready\": \"Die {n}: waiting to roll\", \"die_value\": \"Die {n}: {value}\", \"die_used\": \"Die {n}: {value}, used\", \"die_half_used\": \"Die {n}: {value}, one of two moves used\", \"die_unknown\": \"Die {n}: previous value unknown\", \"moves_remaining\": \"Moves remaining: {count}\", \"pass\": \"Pass\", \"point\": \"Point {n}\", \"bear_off\": \"Bear off\", \"bar\": \"Bar\", \"off\": \"Off\", \"off_count\": \"Borne off: {a} / {b}\", \"white\": \"White: toward point 1\", \"black\": \"Black: toward point 24\", \"server_unknown_player\": \"unknown player\", \"server_game_over\": \"game over\", \"server_not_your_turn\": \"not your turn\", \"server_already_rolled\": \"already rolled\", \"server_roll_first\": \"roll first\", \"server_moves_available\": \"moves available\", \"server_no_moves\": \"no moves\", \"server_bad_from\": \"bad from\", \"server_bad_to\": \"bad to\", \"server_illegal_move\": \"illegal move\", \"server_unknown_move\": \"unknown move\"};\n// Presentation only. legalMoves comes from the ordinary authoritative game.\n// Native hosts select a movable checker, then emit drop(piece_id,target_id).\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state;\n    const strings = Object.assign({}, SOURCE_STRINGS, m.strings || {});\n    const t = (key, args = {}) => (strings[key] || key).replace(/\\{(\\w+)\\}/g,\n      (_, key) => String(args[key] === undefined ? '' : args[key]));\n    const active = m.status === 'ongoing' && !m.replay && s.winner === null &&\n      m.acting_for_player_index === s.cur;\n    const legal = active && !s.needRoll ? s.legalMoves || [] : [];\n    const pieces = [], targets = [], controls = [], sources = {};\n    // Identity is a presentation concern. Reconcile counts against the previous\n    // scene so a moved, captured or borne-off checker keeps its ID for animation.\n    // This never determines a move or edits the authoritative game state.\n    const locations = Array.from({length: 24}, (_, i) => String(i)).concat(['bar', 'off']);\n    const stacks = [{}, {}];\n    for (let seat = 0; seat < 2; seat++) {\n      const previous = localState && localState.stacks && localState.stacks[seat] || {};\n      const used = new Set(), displaced = [];\n      const desired = at => at === 'bar' ? s.bar[seat] : at === 'off' ? s.off[seat] :\n        s.owner[Number(at)] === seat ? s.cnt[Number(at)] : 0;\n      for (const at of locations) {\n        const ids = Array.isArray(previous[at]) ? previous[at].filter(id => {\n          const valid = typeof id === 'string' && new RegExp('^checker_' + seat + '_([0-9]|1[0-4])$').test(id) && !used.has(id);\n          if (valid) used.add(id);\n          return valid;\n        }) : [];\n        stacks[seat][at] = ids.slice(0, desired(at));\n        displaced.push(...ids.slice(desired(at)).reverse());\n      }\n      for (let i = 0; i < 15; i++) {\n        const id = 'checker_' + seat + '_' + i;\n        if (!used.has(id)) displaced.push(id);\n      }\n      for (const at of locations) while (stacks[seat][at].length < desired(at))\n        stacks[seat][at].push(displaced.shift());\n    }\n    const pointX = n => {\n      const col = n < 12 ? 11 - n : n - 12;\n      return 36 + col * 52 + (col >= 6 ? 28 : 0);\n    };\n    const destinationId = to => 'to_' + to;\n    const legalFrom = from => legal.filter(move => move.from === from);\n    const uniqueTargets = options => [...new Set(options.map(move => destinationId(move.to)))];\n    const addStack = (seat, from, count, x, y, direction, board = 'main', depth = 146) => {\n      const step = Math.min(32, depth / Math.max(4, count - 1));\n      for (let i = 0; i < count; i++) {\n        const id = stacks[seat][String(from)][i];\n        const available = seat === s.cur && i === count - 1 ? legalFrom(from) : [];\n        const destinations = uniqueTargets(available);\n        pieces.push({id, type: 'p' + seat, board,\n          position: {x, y: y + direction * i * step}, z: i,\n          text: count > 5 && i === count - 1 ? String(count) : '',\n          actions: destinations.length ? ['move'] : [],\n          ...(destinations.length ? {draggable: true, move_targets: destinations} : {})});\n        if (destinations.length) sources[id] = from;\n      }\n    };\n    for (let point = 0; point < 24; point++) {\n      if (s.cnt[point] > 0) addStack(s.owner[point], point, s.cnt[point],\n        pointX(point), point < 12 ? 410 : 30, point < 12 ? -1 : 1);\n    }\n    // Every checker remains represented, including captured and borne-off ones.\n    addStack(0, 'bar', s.bar[0], 336, 30, 1, 'main', 100);\n    addStack(1, 'bar', s.bar[1], 336, 410, -1, 'main', 100);\n    addStack(0, 'off', s.off[0], 24, 405, -1, 'off');\n    addStack(1, 'off', s.off[1], 24, 35, 1, 'off');\n    const seen = {};\n    for (const move of legal) {\n      const id = destinationId(move.to);\n      if (seen[id]) continue;\n      seen[id] = true;\n      targets.push({id, board: move.to === 'off' ? 'off' : 'main',\n        position: move.to === 'off' ? {x: 24, y: s.cur === 0 ? 235 : 205} :\n          {x: pointX(move.to), y: move.to < 12 ? 237 : 203},\n        label: move.to === 'off' ? t('bear_off') : t('point', {n: move.to + 1})});\n    }\n    if (active && !s.needRoll && !legal.length)\n      controls.push({id: 'pass', kind: 'button', label: t('pass')});\n    // The ordinary authority removes each used value from both dice and moves.\n    // Keep the original physical pair only as presentation memory for this turn.\n    const remaining = s.moves || s.dice || [];\n    const previousRoll = localState && localState.roll;\n    let roll = null;\n    if (s.needRoll) {\n      // The server clears dice at the turn boundary. Keep the completed pair\n      // visibly spent until the next roll, without relabeling its turn identity.\n      if (previousRoll && previousRoll.known && previousRoll.turn + 1 === (s.n || 0) && Array.isArray(previousRoll.values) &&\n          previousRoll.values.length === 2 && previousRoll.values.every(value => Number.isInteger(value) && value >= 1 && value <= 6))\n        roll = previousRoll;\n    } else {\n      if (previousRoll && previousRoll.cur === s.cur && previousRoll.turn === (s.n || 0) &&\n          Array.isArray(previousRoll.values) && previousRoll.values.length === 2 &&\n          previousRoll.values.every(value => value === null || Number.isInteger(value) && value >= 1 && value <= 6) &&\n          typeof previousRoll.double === 'boolean' && typeof previousRoll.known === 'boolean')\n        roll = previousRoll;\n      else if (remaining.length >= 2) {\n        const double = remaining.every(value => value === remaining[0]);\n        roll = {cur: s.cur, turn: s.n || 0, values: remaining.slice(0, 2), double, known: true};\n      } else {\n        // An arbitrary mid-turn replay/remount may have no original roll. Show\n        // the known remaining value and a neutral face instead of inventing one.\n        roll = {cur: s.cur, turn: s.n || 0, values: [remaining[0] || null, null], double: false, known: false};\n      }\n    }\n    const unused = remaining.slice();\n    const dice = [];\n    for (let i = 0; i < 2; i++) {\n      const value = roll && roll.values[i];\n      let used = 0;\n      if (roll && roll.known) {\n        if (roll.double) used = Math.max(0, Math.min(2, 4 - remaining.length - i * 2));\n        else {\n          const index = unused.indexOf(value);\n          if (index < 0) used = 2;\n          else unused.splice(index, 1);\n        }\n      }\n      const canRoll = active && s.needRoll;\n      const label = s.needRoll ? t(canRoll ? 'die_roll' : 'die_ready', {n: i + 1}) :\n        value === null || value === undefined ? t('die_unknown', {n: i + 1}) :\n          t(used === 2 ? 'die_used' : used === 1 ? 'die_half_used' : 'die_value', {n: i + 1, value});\n      dice.push({id: 'die_' + i, type: 'die', board: 'main',\n        position: {x: 336, y: 180 + i * 80}, z: 100,\n        asset: 'die_' + (value || 0) + '_used_' + used,\n        aria_label: label,\n        actions: canRoll ? ['tap'] : []});\n    }\n    pieces.push(...dice);\n    const players = m.players || [];\n    const name = seat => players[seat] && players[seat].name || t('player', {n: seat + 1});\n    const labels = [\n      {id: 'title', text: t('title'), x: 20, y: 14, font_size: 26},\n      {id: 'turn', text: s.winner !== null ? t('winner', {name: name(s.winner)}) :\n        t(s.needRoll ? 'roll_turn' : 'move_turn', {name: name(s.cur)}), x: 20, y: 50, font_size: 18},\n      ...(!s.needRoll ? [{id: 'moves_remaining', text: t('moves_remaining', {count: remaining.length}),\n        x: 20, y: 77, font_size: 15}] : []),\n      {id: 'off_score', text: t('off_count', {a: s.off[0], b: s.off[1]}), x: 475, y: 57, font_size: 16},\n      {id: 'white_label', text: t('white'), x: 20, y: 560, font_size: 16},\n      {id: 'black_label', text: t('black'), x: 410, y: 560, font_size: 16},\n      {id: 'bar_label', text: t('bar'), x: 342, y: 83, font_size: 14},\n      {id: 'off_label', text: t('off'), x: 742, y: 83, font_size: 14}\n    ];\n    const out = {scene: {pieces, targets, controls, labels}, local_state: {stacks, roll}};\n    if (message.type === 'ui_event' && active) {\n      const e = message.event;\n      if (e.type === 'tap' && s.needRoll && dice.some(die => die.id === e.id))\n        out.make_move = {action: 'roll'};\n      if (e.type === 'tap' && controls.some(control => control.id === e.id))\n        out.make_move = {action: e.id};\n      if (e.type === 'drop' && Object.prototype.hasOwnProperty.call(sources, e.piece_id || e.id)) {\n        const from = sources[e.piece_id || e.id];\n        const option = legal.find(move => move.from === from && destinationId(move.to) === e.target_id);\n        if (option) out.make_move = {action: 'move', from: option.from, to: option.to};\n      }\n    }\n    return out;\n  }\n};\n"
+    "ui_code": "const SOURCE_STRINGS={\"title\": \"Backgammon (Declarative)\", \"player\": \"Player {n}\", \"winner\": \"{name} wins\", \"roll_turn\": \"{name}: roll the dice\", \"move_turn\": \"{name}: move a highlighted checker\", \"roll\": \"Roll dice\", \"die_roll\": \"Die {n}: roll dice\", \"die_ready\": \"Die {n}: waiting to roll\", \"die_value\": \"Die {n}: {value}\", \"die_used\": \"Die {n}: {value}, used\", \"die_half_used\": \"Die {n}: {value}, one of two moves used\", \"die_unknown\": \"Die {n}: previous value unknown\", \"moves_remaining\": \"Moves remaining: {count}\", \"pass\": \"Pass\", \"point\": \"Point {n}\", \"bear_off\": \"Bear off\", \"bar\": \"Bar\", \"off\": \"Off\", \"off_count\": \"Borne off: {a} / {b}\", \"white\": \"White: toward point 1\", \"black\": \"Black: toward point 24\", \"server_unknown_player\": \"unknown player\", \"server_game_over\": \"game over\", \"server_not_your_turn\": \"not your turn\", \"server_already_rolled\": \"already rolled\", \"server_roll_first\": \"roll first\", \"server_moves_available\": \"moves available\", \"server_no_moves\": \"no moves\", \"server_bad_from\": \"bad from\", \"server_bad_to\": \"bad to\", \"server_illegal_move\": \"illegal move\", \"server_unknown_move\": \"unknown move\"};\n// Presentation only. legalMoves and optional combinedMoves come from authority.\n// Native hosts select a movable checker, then emit drop(piece_id,target_id).\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state;\n    const strings = Object.assign({}, SOURCE_STRINGS, m.strings || {});\n    const t = (key, args = {}) => (strings[key] || key).replace(/\\{(\\w+)\\}/g,\n      (_, key) => String(args[key] === undefined ? '' : args[key]));\n    const active = m.status === 'ongoing' && !m.replay && s.winner === null &&\n      m.acting_for_player_index === s.cur;\n    // The authority separately declares safe multi-die destinations. Older\n    // pinned rules omit them and continue to offer their ordinary single moves.\n    const legal = active && !s.needRoll ?\n      (s.legalMoves || []).concat(s.combinedMoves || []) : [];\n    const pieces = [], targets = [], controls = [], sources = {};\n    // Identity is a presentation concern. Reconcile counts against the previous\n    // scene so a moved, captured or borne-off checker keeps its ID for animation.\n    // This never determines a move or edits the authoritative game state.\n    const locations = Array.from({length: 24}, (_, i) => String(i)).concat(['bar', 'off']);\n    const stacks = [{}, {}];\n    for (let seat = 0; seat < 2; seat++) {\n      const previous = localState && localState.stacks && localState.stacks[seat] || {};\n      const used = new Set(), displaced = [];\n      const desired = at => at === 'bar' ? s.bar[seat] : at === 'off' ? s.off[seat] :\n        s.owner[Number(at)] === seat ? s.cnt[Number(at)] : 0;\n      for (const at of locations) {\n        const ids = Array.isArray(previous[at]) ? previous[at].filter(id => {\n          const valid = typeof id === 'string' && new RegExp('^checker_' + seat + '_([0-9]|1[0-4])$').test(id) && !used.has(id);\n          if (valid) used.add(id);\n          return valid;\n        }) : [];\n        stacks[seat][at] = ids.slice(0, desired(at));\n        displaced.push(...ids.slice(desired(at)).reverse());\n      }\n      for (let i = 0; i < 15; i++) {\n        const id = 'checker_' + seat + '_' + i;\n        if (!used.has(id)) displaced.push(id);\n      }\n      for (const at of locations) while (stacks[seat][at].length < desired(at))\n        stacks[seat][at].push(displaced.shift());\n    }\n    const pointX = n => {\n      const col = n < 12 ? 11 - n : n - 12;\n      return 36 + col * 52 + (col >= 6 ? 28 : 0);\n    };\n    const destinationId = to => 'to_' + to;\n    const legalFrom = from => legal.filter(move => move.from === from);\n    const uniqueTargets = options => [...new Set(options.map(move => destinationId(move.to)))];\n    const addStack = (seat, from, count, x, y, direction, board = 'main', depth = 146) => {\n      const step = Math.min(32, depth / Math.max(4, count - 1));\n      for (let i = 0; i < count; i++) {\n        const id = stacks[seat][String(from)][i];\n        const available = seat === s.cur && i === count - 1 ? legalFrom(from) : [];\n        const destinations = uniqueTargets(available);\n        pieces.push({id, type: 'p' + seat, board,\n          position: {x, y: y + direction * i * step}, z: i,\n          text: count > 5 && i === count - 1 ? String(count) : '',\n          actions: destinations.length ? ['move'] : [],\n          ...(destinations.length ? {draggable: true, move_targets: destinations} : {})});\n        if (destinations.length) sources[id] = from;\n      }\n    };\n    for (let point = 0; point < 24; point++) {\n      if (s.cnt[point] > 0) addStack(s.owner[point], point, s.cnt[point],\n        pointX(point), point < 12 ? 410 : 30, point < 12 ? -1 : 1);\n    }\n    // Every checker remains represented, including captured and borne-off ones.\n    addStack(0, 'bar', s.bar[0], 336, 30, 1, 'main', 100);\n    addStack(1, 'bar', s.bar[1], 336, 410, -1, 'main', 100);\n    addStack(0, 'off', s.off[0], 24, 405, -1, 'off');\n    addStack(1, 'off', s.off[1], 24, 35, 1, 'off');\n    const seen = {};\n    for (const move of legal) {\n      const id = destinationId(move.to);\n      if (seen[id]) continue;\n      seen[id] = true;\n      targets.push({id, board: move.to === 'off' ? 'off' : 'main',\n        position: move.to === 'off' ? {x: 24, y: s.cur === 0 ? 235 : 205} :\n          {x: pointX(move.to), y: move.to < 12 ? 237 : 203},\n        hit_area: move.to === 'off'\n          ? {x: -24, y: s.cur === 0 ? -15 : -205, width: 48, height: 220}\n          : {x: -24, y: move.to < 12 ? -20 : -200, width: 48, height: 220},\n        label: move.to === 'off' ? t('bear_off') : t('point', {n: move.to + 1})});\n    }\n    if (active && !s.needRoll && !legal.length)\n      controls.push({id: 'pass', kind: 'button', label: t('pass')});\n    // The ordinary authority removes each used value from both dice and moves.\n    // Keep the original physical pair only as presentation memory for this turn.\n    const remaining = s.moves || s.dice || [];\n    const previousRoll = localState && localState.roll;\n    const turn = s.n || 0;\n    const isFace = value => Number.isInteger(value) && value >= 1 && value <= 6;\n    const validMemory = previousRoll && Array.isArray(previousRoll.values) && previousRoll.values.length === 2 &&\n      previousRoll.values.every(value => value === null || isFace(value)) &&\n      typeof previousRoll.double === 'boolean' && typeof previousRoll.known === 'boolean' &&\n      Number.isInteger(previousRoll.cur) && Number.isInteger(previousRoll.turn);\n    const wantedTurn = s.needRoll ? turn - 1 : turn;\n    const finished = m.status === 'over' || s.winner !== null;\n    const belongsToRoll = candidate => candidate && (finished ? candidate.turn <= turn :\n      candidate.turn === wantedTurn && (s.needRoll || candidate.cur === s.cur));\n    const observedRoll = (view, moveCount) => {\n      const values = view && (view.moves || view.dice);\n      if (!view || view.needRoll || !Array.isArray(values) || values.length < 2 || values.length > 4 ||\n          !values.every(isFace) || values.length > 2 && !values.every(value => value === values[0])) return null;\n      return {cur: view.cur, turn: view.n || 0, values: values.slice(0, 2),\n        double: values[0] === values[1], known: true, move_count: moveCount};\n    };\n    // New matches retain the accepted roll in their public server view. Older\n    // pinned rules instead recover original faces from bounded filtered history.\n    const last = s.last_roll;\n    let recordedRoll = last && Number.isInteger(last.seat) && Number.isInteger(last.turn) &&\n      Array.isArray(last.values) && last.values.length === 2 && last.values.every(isFace) &&\n      Number.isInteger(last.move_count) && (!Number.isInteger(m.move_count) || last.move_count <= m.move_count)\n      ? {cur: last.seat, turn: last.turn, values: last.values.slice(),\n        double: last.values[0] === last.values[1], known: true, move_count: last.move_count} : null;\n    if (!belongsToRoll(recordedRoll)) recordedRoll = null;\n    let historicalRoll = null;\n    const history = Array.isArray(m.presentation_history) ? m.presentation_history.slice(-12) : [];\n    for (const item of history) {\n      if (!item || !Number.isInteger(item.move_count) || item.move_count < 0 ||\n          Number.isInteger(m.move_count) && item.move_count > m.move_count) continue;\n      const candidate = observedRoll(item.view, item.move_count);\n      if (belongsToRoll(candidate) && (!historicalRoll || candidate.turn > historicalRoll.turn ||\n          candidate.turn === historicalRoll.turn && candidate.move_count < historicalRoll.move_count))\n        historicalRoll = candidate;\n    }\n    let roll = null;\n    if (s.needRoll || finished) {\n      // Keep the last known pair until a new accepted roll replaces it. A past\n      // turn guard prevents replay from borrowing faces from its own future.\n      roll = recordedRoll || historicalRoll ||\n        (validMemory && previousRoll.known && (previousRoll.turn < turn || finished && previousRoll.turn === turn) ? previousRoll : null);\n    } else {\n      roll = recordedRoll || historicalRoll ||\n        (validMemory && previousRoll.cur === s.cur && previousRoll.turn === turn ? previousRoll : null) ||\n        observedRoll(s, m.move_count);\n      if (!roll) {\n        // An arbitrary mid-turn replay/remount may have no original roll. Show\n        // the known remaining value and a neutral face instead of inventing one.\n        roll = {cur: s.cur, turn, values: [remaining[0] || null, null], double: false, known: false};\n      }\n    }\n    const unused = remaining.slice();\n    const dice = [];\n    for (let i = 0; i < 2; i++) {\n      const value = roll && roll.values[i];\n      let used = 0;\n      if (roll && roll.known) {\n        if (roll.double) used = Math.max(0, Math.min(2, 4 - remaining.length - i * 2));\n        else {\n          const index = unused.indexOf(value);\n          if (index < 0) used = 2;\n          else unused.splice(index, 1);\n        }\n      }\n      const canRoll = active && s.needRoll;\n      const label = s.needRoll ? t(canRoll ? 'die_roll' : 'die_ready', {n: i + 1}) :\n        value === null || value === undefined ? t('die_unknown', {n: i + 1}) :\n          t(used === 2 ? 'die_used' : used === 1 ? 'die_half_used' : 'die_value', {n: i + 1, value});\n      dice.push({id: 'die_' + i, type: 'die', board: 'main',\n        position: {x: 336, y: 180 + i * 80}, z: 100,\n        asset: 'die_' + (value || 0) + '_used_' + used,\n        aria_label: label,\n        ...(roll && roll.known ? {animation: {kind: 'roll', key: 'roll:' + roll.cur + ':' + roll.turn}} : {}),\n        actions: canRoll ? ['tap'] : []});\n    }\n    pieces.push(...dice);\n    const players = m.players || [];\n    const name = seat => players[seat] && players[seat].name || t('player', {n: seat + 1});\n    const labels = [\n      {id: 'title', text: t('title'), x: 20, y: 14, font_size: 26},\n      {id: 'turn', text: s.winner !== null ? t('winner', {name: name(s.winner)}) :\n        t(s.needRoll ? 'roll_turn' : 'move_turn', {name: name(s.cur)}), x: 20, y: 50, font_size: 18},\n      ...(!s.needRoll ? [{id: 'moves_remaining', text: t('moves_remaining', {count: remaining.length}),\n        x: 20, y: 77, font_size: 15}] : []),\n      {id: 'off_score', text: t('off_count', {a: s.off[0], b: s.off[1]}), x: 475, y: 57, font_size: 16},\n      {id: 'white_label', text: t('white'), x: 20, y: 560, font_size: 16},\n      {id: 'black_label', text: t('black'), x: 410, y: 560, font_size: 16},\n      {id: 'bar_label', text: t('bar'), x: 342, y: 83, font_size: 14},\n      {id: 'off_label', text: t('off'), x: 742, y: 83, font_size: 14}\n    ];\n    const out = {scene: {pieces, targets, controls, labels}, local_state: {stacks, roll}};\n    if (message.type === 'ui_event' && active) {\n      const e = message.event;\n      if (e.type === 'tap' && s.needRoll && dice.some(die => die.id === e.id))\n        out.make_move = {action: 'roll'};\n      if (e.type === 'tap' && controls.some(control => control.id === e.id))\n        out.make_move = {action: e.id};\n      if (e.type === 'drop' && Object.prototype.hasOwnProperty.call(sources, e.piece_id || e.id)) {\n        const from = sources[e.piece_id || e.id];\n        const option = legal.find(move => move.from === from && destinationId(move.to) === e.target_id);\n        if (option) out.make_move = {action: 'move', from: option.from, to: option.to};\n      }\n    }\n    return out;\n  }\n};\n"
   },
   "game_addition_request_id_and_secret": "example-only-declarative-backgammon-replace-before-publishing",
   "rules": "Move 15 checkers home and bear them off. Roll two dice; doubles give four moves. Enter captured checkers from the bar first. A point with two opposing checkers is blocked; a lone checker is hit. Use the maximum possible dice, and the higher die if only one can be used. Bear off only when all your checkers are home. This uses the ordinary platform Backgammon rules, including its finite-match safeguard: after 120 turns or 300 actions, the player with more checkers off wins; ties favor player one.",
@@ -422,6 +422,44 @@
             "null",
             "number"
           ]
+        },
+        "last_roll": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "seat",
+            "turn",
+            "values",
+            "move_count"
+          ],
+          "properties": {
+            "seat": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "turn": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "values": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 6
+              }
+            },
+            "move_count": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
         }
       },
       "additionalProperties": true
@@ -556,6 +594,82 @@
             "null",
             "number"
           ]
+        },
+        "last_roll": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "seat",
+            "turn",
+            "values",
+            "move_count"
+          ],
+          "properties": {
+            "seat": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "turn": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "values": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 6
+              }
+            },
+            "move_count": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "combinedMoves": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "required": [
+              "from",
+              "to"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 23
+                  },
+                  {
+                    "const": "bar"
+                  }
+                ]
+              },
+              "to": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 23
+                  },
+                  {
+                    "const": "off"
+                  }
+                ]
+              }
+            }
+          }
         }
       },
       "additionalProperties": true
@@ -654,7 +768,8 @@
           "moves": [],
           "needRoll": true,
           "winner": null,
-          "n": 0
+          "n": 0,
+          "last_roll": null
         },
         "view_of_mover": {
           "owner": [
@@ -723,7 +838,9 @@
           "needRoll": true,
           "winner": null,
           "n": 0,
-          "legalMoves": []
+          "legalMoves": [],
+          "last_roll": null,
+          "combinedMoves": []
         },
         "view_of_other": {
           "owner": [
@@ -792,7 +909,9 @@
           "needRoll": true,
           "winner": null,
           "n": 0,
-          "legalMoves": []
+          "legalMoves": [],
+          "last_roll": null,
+          "combinedMoves": []
         },
         "player_id": "u2",
         "other_player_id": null,
@@ -875,633 +994,16 @@
           ],
           "needRoll": false,
           "winner": null,
-          "n": 0
-        },
-        "expected_turn": [
-          "u2"
-        ],
-        "expected_view_of_mover": {
-          "owner": [
-            1,
-            -1,
-            -1,
-            -1,
-            -1,
-            0,
-            -1,
-            0,
-            -1,
-            -1,
-            -1,
-            1,
-            0,
-            -1,
-            -1,
-            -1,
-            1,
-            -1,
-            1,
-            -1,
-            -1,
-            -1,
-            -1,
-            0
-          ],
-          "cnt": [
-            2,
-            0,
-            0,
-            0,
-            0,
-            5,
-            0,
-            3,
-            0,
-            0,
-            0,
-            5,
-            5,
-            0,
-            0,
-            0,
-            3,
-            0,
-            5,
-            0,
-            0,
-            0,
-            0,
-            2
-          ],
-          "bar": [
-            0,
-            0
-          ],
-          "off": [
-            0,
-            0
-          ],
-          "cur": 1,
-          "dice": [
-            4,
-            4,
-            4,
-            4
-          ],
-          "moves": [
-            4,
-            4,
-            4,
-            4
-          ],
-          "needRoll": false,
-          "winner": null,
           "n": 0,
-          "legalMoves": [
-            {
-              "from": 0,
-              "to": 4,
-              "die": 4,
-              "idx": 0
-            },
-            {
-              "from": 11,
-              "to": 15,
-              "die": 4,
-              "idx": 0
-            },
-            {
-              "from": 16,
-              "to": 20,
-              "die": 4,
-              "idx": 0
-            },
-            {
-              "from": 18,
-              "to": 22,
-              "die": 4,
-              "idx": 0
-            }
-          ]
-        },
-        "expected_view_of_other": {
-          "owner": [
-            1,
-            -1,
-            -1,
-            -1,
-            -1,
-            0,
-            -1,
-            0,
-            -1,
-            -1,
-            -1,
-            1,
-            0,
-            -1,
-            -1,
-            -1,
-            1,
-            -1,
-            1,
-            -1,
-            -1,
-            -1,
-            -1,
-            0
-          ],
-          "cnt": [
-            2,
-            0,
-            0,
-            0,
-            0,
-            5,
-            0,
-            3,
-            0,
-            0,
-            0,
-            5,
-            5,
-            0,
-            0,
-            0,
-            3,
-            0,
-            5,
-            0,
-            0,
-            0,
-            0,
-            2
-          ],
-          "bar": [
-            0,
-            0
-          ],
-          "off": [
-            0,
-            0
-          ],
-          "cur": 1,
-          "dice": [
-            4,
-            4,
-            4,
-            4
-          ],
-          "moves": [
-            4,
-            4,
-            4,
-            4
-          ],
-          "needRoll": false,
-          "winner": null,
-          "n": 0,
-          "legalMoves": [
-            {
-              "from": 0,
-              "to": 4,
-              "die": 4,
-              "idx": 0
-            },
-            {
-              "from": 11,
-              "to": 15,
-              "die": 4,
-              "idx": 0
-            },
-            {
-              "from": 16,
-              "to": 20,
-              "die": 4,
-              "idx": 0
-            },
-            {
-              "from": 18,
-              "to": 22,
-              "die": 4,
-              "idx": 0
-            }
-          ]
-        },
-        "images": [
-          {
-            "caption": "Before: mover",
-            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"636\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"377\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"377\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"346\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"315\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"284\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"377\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"346\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"377\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"346\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"315\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"284\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"32\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"63\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"94\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"125\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"156\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/></svg>"
-          },
-          {
-            "caption": "Before: spectator",
-            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"636\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"377\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"377\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"346\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"315\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"284\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"377\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"346\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"377\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"346\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"315\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"284\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"32\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"63\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"94\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"125\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"156\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/></svg>"
-          },
-          {
-            "caption": "After: mover",
-            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"636\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"377\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"377\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"346\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"315\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"284\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"377\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"346\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"377\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"346\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"315\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"284\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"32\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"63\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"94\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"125\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"156\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/></svg>"
-          },
-          {
-            "caption": "After: spectator",
-            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"636\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"377\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"377\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"346\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"315\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"284\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"377\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"346\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"377\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"346\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"315\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"284\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"32\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"63\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"94\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"125\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"156\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/></svg>"
+          "last_roll": {
+            "seat": 1,
+            "turn": 0,
+            "values": [
+              4,
+              4
+            ],
+            "move_count": 1
           }
-        ]
-      },
-      {
-        "name": "Intermediate move",
-        "description": "Move 15 checkers home and bear them off. Roll two dice; doubles give four moves. Enter captured checkers from the bar first. A point with two opposing checkers is blocked; a lone checker is hit. Use the maximum possible dice, and the higher die if only one can be used. Bear off only when all your checkers are home. This uses the ordinary platform Backgammon rules, including its finite-match safeguard: after 120 turns or 300 actions, the player with more checkers off wins; ties favor player one.",
-        "kind": "intermediate",
-        "ctx": {
-          "players": [
-            {
-              "id": "u1",
-              "kind": "human",
-              "display_name": "Alice",
-              "picture_url": "",
-              "max_loss": 0,
-              "active": true
-            },
-            {
-              "id": "u2",
-              "kind": "human",
-              "display_name": "Bob",
-              "picture_url": "",
-              "max_loss": 0,
-              "active": true
-            }
-          ],
-          "pot": 0,
-          "move_count": 1,
-          "seed": 12
-        },
-        "state": {
-          "owner": [
-            1,
-            -1,
-            -1,
-            -1,
-            -1,
-            0,
-            -1,
-            0,
-            -1,
-            -1,
-            -1,
-            1,
-            0,
-            -1,
-            -1,
-            -1,
-            1,
-            -1,
-            1,
-            -1,
-            -1,
-            -1,
-            -1,
-            0
-          ],
-          "cnt": [
-            2,
-            0,
-            0,
-            0,
-            0,
-            5,
-            0,
-            3,
-            0,
-            0,
-            0,
-            5,
-            5,
-            0,
-            0,
-            0,
-            3,
-            0,
-            5,
-            0,
-            0,
-            0,
-            0,
-            2
-          ],
-          "bar": [
-            0,
-            0
-          ],
-          "off": [
-            0,
-            0
-          ],
-          "cur": 1,
-          "dice": [
-            4,
-            4,
-            4,
-            4
-          ],
-          "moves": [
-            4,
-            4,
-            4,
-            4
-          ],
-          "needRoll": false,
-          "winner": null,
-          "n": 0
-        },
-        "view_of_mover": {
-          "owner": [
-            1,
-            -1,
-            -1,
-            -1,
-            -1,
-            0,
-            -1,
-            0,
-            -1,
-            -1,
-            -1,
-            1,
-            0,
-            -1,
-            -1,
-            -1,
-            1,
-            -1,
-            1,
-            -1,
-            -1,
-            -1,
-            -1,
-            0
-          ],
-          "cnt": [
-            2,
-            0,
-            0,
-            0,
-            0,
-            5,
-            0,
-            3,
-            0,
-            0,
-            0,
-            5,
-            5,
-            0,
-            0,
-            0,
-            3,
-            0,
-            5,
-            0,
-            0,
-            0,
-            0,
-            2
-          ],
-          "bar": [
-            0,
-            0
-          ],
-          "off": [
-            0,
-            0
-          ],
-          "cur": 1,
-          "dice": [
-            4,
-            4,
-            4,
-            4
-          ],
-          "moves": [
-            4,
-            4,
-            4,
-            4
-          ],
-          "needRoll": false,
-          "winner": null,
-          "n": 0,
-          "legalMoves": [
-            {
-              "from": 0,
-              "to": 4,
-              "die": 4,
-              "idx": 0
-            },
-            {
-              "from": 11,
-              "to": 15,
-              "die": 4,
-              "idx": 0
-            },
-            {
-              "from": 16,
-              "to": 20,
-              "die": 4,
-              "idx": 0
-            },
-            {
-              "from": 18,
-              "to": 22,
-              "die": 4,
-              "idx": 0
-            }
-          ]
-        },
-        "view_of_other": {
-          "owner": [
-            1,
-            -1,
-            -1,
-            -1,
-            -1,
-            0,
-            -1,
-            0,
-            -1,
-            -1,
-            -1,
-            1,
-            0,
-            -1,
-            -1,
-            -1,
-            1,
-            -1,
-            1,
-            -1,
-            -1,
-            -1,
-            -1,
-            0
-          ],
-          "cnt": [
-            2,
-            0,
-            0,
-            0,
-            0,
-            5,
-            0,
-            3,
-            0,
-            0,
-            0,
-            5,
-            5,
-            0,
-            0,
-            0,
-            3,
-            0,
-            5,
-            0,
-            0,
-            0,
-            0,
-            2
-          ],
-          "bar": [
-            0,
-            0
-          ],
-          "off": [
-            0,
-            0
-          ],
-          "cur": 1,
-          "dice": [
-            4,
-            4,
-            4,
-            4
-          ],
-          "moves": [
-            4,
-            4,
-            4,
-            4
-          ],
-          "needRoll": false,
-          "winner": null,
-          "n": 0,
-          "legalMoves": [
-            {
-              "from": 0,
-              "to": 4,
-              "die": 4,
-              "idx": 0
-            },
-            {
-              "from": 11,
-              "to": 15,
-              "die": 4,
-              "idx": 0
-            },
-            {
-              "from": 16,
-              "to": 20,
-              "die": 4,
-              "idx": 0
-            },
-            {
-              "from": 18,
-              "to": 22,
-              "die": 4,
-              "idx": 0
-            }
-          ]
-        },
-        "player_id": "u2",
-        "other_player_id": null,
-        "move": {
-          "action": "move",
-          "from": 18,
-          "to": 22
-        },
-        "expected_state": {
-          "owner": [
-            1,
-            -1,
-            -1,
-            -1,
-            -1,
-            0,
-            -1,
-            0,
-            -1,
-            -1,
-            -1,
-            1,
-            0,
-            -1,
-            -1,
-            -1,
-            1,
-            -1,
-            1,
-            -1,
-            -1,
-            -1,
-            1,
-            0
-          ],
-          "cnt": [
-            2,
-            0,
-            0,
-            0,
-            0,
-            5,
-            0,
-            3,
-            0,
-            0,
-            0,
-            5,
-            5,
-            0,
-            0,
-            0,
-            3,
-            0,
-            4,
-            0,
-            0,
-            0,
-            1,
-            2
-          ],
-          "bar": [
-            0,
-            0
-          ],
-          "off": [
-            0,
-            0
-          ],
-          "cur": 1,
-          "dice": [
-            4,
-            4,
-            4
-          ],
-          "moves": [
-            4,
-            4,
-            4
-          ],
-          "needRoll": false,
-          "winner": null,
-          "n": 0
         },
         "expected_turn": [
           "u2"
@@ -1530,7 +1032,7 @@
             -1,
             -1,
             -1,
-            1,
+            -1,
             0
           ],
           "cnt": [
@@ -1552,11 +1054,11 @@
             0,
             3,
             0,
-            4,
+            5,
             0,
             0,
             0,
-            1,
+            0,
             2
           ],
           "bar": [
@@ -1571,9 +1073,11 @@
           "dice": [
             4,
             4,
+            4,
             4
           ],
           "moves": [
+            4,
             4,
             4,
             4
@@ -1605,6 +1109,25 @@
               "to": 22,
               "die": 4,
               "idx": 0
+            }
+          ],
+          "last_roll": {
+            "seat": 1,
+            "turn": 0,
+            "values": [
+              4,
+              4
+            ],
+            "move_count": 1
+          },
+          "combinedMoves": [
+            {
+              "from": 0,
+              "to": 8
+            },
+            {
+              "from": 11,
+              "to": 19
             }
           ]
         },
@@ -1632,7 +1155,7 @@
             -1,
             -1,
             -1,
-            1,
+            -1,
             0
           ],
           "cnt": [
@@ -1654,11 +1177,11 @@
             0,
             3,
             0,
-            4,
+            5,
             0,
             0,
             0,
-            1,
+            0,
             2
           ],
           "bar": [
@@ -1673,9 +1196,11 @@
           "dice": [
             4,
             4,
+            4,
             4
           ],
           "moves": [
+            4,
             4,
             4,
             4
@@ -1708,6 +1233,25 @@
               "die": 4,
               "idx": 0
             }
+          ],
+          "last_roll": {
+            "seat": 1,
+            "turn": 0,
+            "values": [
+              4,
+              4
+            ],
+            "move_count": 1
+          },
+          "combinedMoves": [
+            {
+              "from": 0,
+              "to": 8
+            },
+            {
+              "from": 11,
+              "to": 19
+            }
           ]
         },
         "images": [
@@ -1721,11 +1265,11 @@
           },
           {
             "caption": "After: mover",
-            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"636\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"377\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"377\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"346\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"315\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"284\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"377\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"346\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"377\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"346\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"315\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"284\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"32\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"63\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"94\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"125\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"156\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"584\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/></svg>"
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"636\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"377\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"377\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"346\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"315\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"284\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"377\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"346\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"377\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"346\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"315\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"284\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"32\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"63\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"94\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"125\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"156\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/></svg>"
           },
           {
             "caption": "After: spectator",
-            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"636\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"377\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"377\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"346\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"315\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"284\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"377\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"346\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"377\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"346\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"315\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"284\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"32\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"63\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"94\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"125\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"156\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"584\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/></svg>"
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"636\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"377\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"377\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"346\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"315\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"284\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"377\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"346\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"377\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"346\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"315\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"284\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"32\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"63\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"94\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"125\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"36\" cy=\"156\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"244\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/></svg>"
           }
         ]
       },
@@ -1826,7 +1370,16 @@
           ],
           "needRoll": false,
           "winner": null,
-          "n": 94
+          "n": 94,
+          "last_roll": {
+            "seat": 1,
+            "turn": 94,
+            "values": [
+              6,
+              1
+            ],
+            "move_count": 300
+          }
         },
         "view_of_mover": {
           "owner": [
@@ -1930,7 +1483,17 @@
               "die": 1,
               "idx": 0
             }
-          ]
+          ],
+          "last_roll": {
+            "seat": 1,
+            "turn": 94,
+            "values": [
+              6,
+              1
+            ],
+            "move_count": 300
+          },
+          "combinedMoves": []
         },
         "view_of_other": {
           "owner": [
@@ -2034,7 +1597,17 @@
               "die": 1,
               "idx": 0
             }
-          ]
+          ],
+          "last_roll": {
+            "seat": 1,
+            "turn": 94,
+            "values": [
+              6,
+              1
+            ],
+            "move_count": 300
+          },
+          "combinedMoves": []
         },
         "player_id": "u2",
         "other_player_id": null,
@@ -2113,7 +1686,16 @@
           ],
           "needRoll": false,
           "winner": 0,
-          "n": 94
+          "n": 94,
+          "last_roll": {
+            "seat": 1,
+            "turn": 94,
+            "values": [
+              6,
+              1
+            ],
+            "move_count": 300
+          }
         },
         "expected_turn": null,
         "expected_view_of_mover": {
@@ -2187,7 +1769,17 @@
           "needRoll": false,
           "winner": 0,
           "n": 94,
-          "legalMoves": []
+          "legalMoves": [],
+          "last_roll": {
+            "seat": 1,
+            "turn": 94,
+            "values": [
+              6,
+              1
+            ],
+            "move_count": 300
+          },
+          "combinedMoves": []
         },
         "expected_view_of_other": {
           "owner": [
@@ -2260,7 +1852,17 @@
           "needRoll": false,
           "winner": 0,
           "n": 94,
-          "legalMoves": []
+          "legalMoves": [],
+          "last_roll": {
+            "seat": 1,
+            "turn": 94,
+            "values": [
+              6,
+              1
+            ],
+            "move_count": 300
+          },
+          "combinedMoves": []
         },
         "images": [
           {
@@ -2382,7 +1984,8 @@
           ],
           "needRoll": false,
           "winner": null,
-          "n": 0
+          "n": 0,
+          "last_roll": null
         },
         "view_of_mover": {
           "owner": [
@@ -2462,7 +2065,9 @@
               "die": 1,
               "idx": 0
             }
-          ]
+          ],
+          "last_roll": null,
+          "combinedMoves": []
         },
         "view_of_other": {
           "owner": [
@@ -2542,7 +2147,9 @@
               "die": 1,
               "idx": 0
             }
-          ]
+          ],
+          "last_roll": null,
+          "combinedMoves": []
         },
         "player_id": "u1",
         "other_player_id": null,
@@ -2617,7 +2224,8 @@
           "moves": [],
           "needRoll": true,
           "winner": null,
-          "n": 1
+          "n": 1,
+          "last_roll": null
         },
         "expected_turn": [
           "u2"
@@ -2689,7 +2297,9 @@
           "needRoll": true,
           "winner": null,
           "n": 1,
-          "legalMoves": []
+          "legalMoves": [],
+          "last_roll": null,
+          "combinedMoves": []
         },
         "expected_view_of_other": {
           "owner": [
@@ -2758,7 +2368,9 @@
           "needRoll": true,
           "winner": null,
           "n": 1,
-          "legalMoves": []
+          "legalMoves": [],
+          "last_roll": null,
+          "combinedMoves": []
         },
         "images": [
           {
@@ -2878,7 +2490,8 @@
           ],
           "needRoll": false,
           "winner": null,
-          "n": 0
+          "n": 0,
+          "last_roll": null
         },
         "view_of_mover": {
           "owner": [
@@ -2960,7 +2573,9 @@
               "die": 2,
               "idx": 1
             }
-          ]
+          ],
+          "last_roll": null,
+          "combinedMoves": []
         },
         "view_of_other": {
           "owner": [
@@ -3042,7 +2657,9 @@
               "die": 2,
               "idx": 1
             }
-          ]
+          ],
+          "last_roll": null,
+          "combinedMoves": []
         },
         "player_id": "u1",
         "other_player_id": null,
@@ -3117,7 +2734,8 @@
           "moves": [],
           "needRoll": true,
           "winner": null,
-          "n": 1
+          "n": 1,
+          "last_roll": null
         },
         "expected_turn": [
           "u2"
@@ -3189,7 +2807,9 @@
           "needRoll": true,
           "winner": null,
           "n": 1,
-          "legalMoves": []
+          "legalMoves": [],
+          "last_roll": null,
+          "combinedMoves": []
         },
         "expected_view_of_other": {
           "owner": [
@@ -3258,7 +2878,9 @@
           "needRoll": true,
           "winner": null,
           "n": 1,
-          "legalMoves": []
+          "legalMoves": [],
+          "last_roll": null,
+          "combinedMoves": []
         },
         "images": [
           {
@@ -3378,7 +3000,8 @@
           ],
           "needRoll": false,
           "winner": null,
-          "n": 0
+          "n": 0,
+          "last_roll": null
         },
         "view_of_mover": {
           "owner": [
@@ -3472,7 +3095,9 @@
               "die": 2,
               "idx": 1
             }
-          ]
+          ],
+          "last_roll": null,
+          "combinedMoves": []
         },
         "view_of_other": {
           "owner": [
@@ -3566,7 +3191,9 @@
               "die": 2,
               "idx": 1
             }
-          ]
+          ],
+          "last_roll": null,
+          "combinedMoves": []
         },
         "player_id": "u1",
         "other_player_id": null,
@@ -3645,7 +3272,8 @@
           ],
           "needRoll": false,
           "winner": null,
-          "n": 0
+          "n": 0,
+          "last_roll": null
         },
         "expected_turn": [
           "u1"
@@ -3728,7 +3356,9 @@
               "die": 2,
               "idx": 0
             }
-          ]
+          ],
+          "last_roll": null,
+          "combinedMoves": []
         },
         "expected_view_of_other": {
           "owner": [
@@ -3808,7 +3438,9 @@
               "die": 2,
               "idx": 0
             }
-          ]
+          ],
+          "last_roll": null,
+          "combinedMoves": []
         },
         "images": [
           {
@@ -3826,6 +3458,554 @@
           {
             "caption": "After: spectator",
             "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"584\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"480\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"480\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"480\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"480\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"480\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Combined four ones",
+        "description": "Move 15 checkers home and bear them off. Roll two dice; doubles give four moves. Enter captured checkers from the bar first. A point with two opposing checkers is blocked; a lone checker is hit. Use the maximum possible dice, and the higher die if only one can be used. Bear off only when all your checkers are home. This uses the ordinary platform Backgammon rules, including its finite-match safeguard: after 120 turns or 300 actions, the player with more checkers off wins; ties favor player one.",
+        "kind": "intermediate",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "kind": "human",
+              "display_name": "Bob",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 10,
+          "seed": 7
+        },
+        "state": {
+          "owner": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1
+          ],
+          "cnt": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            15
+          ],
+          "bar": [
+            0,
+            0
+          ],
+          "off": [
+            14,
+            0
+          ],
+          "cur": 0,
+          "dice": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "moves": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "needRoll": false,
+          "winner": null,
+          "n": 0,
+          "last_roll": null
+        },
+        "view_of_mover": {
+          "owner": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1
+          ],
+          "cnt": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            15
+          ],
+          "bar": [
+            0,
+            0
+          ],
+          "off": [
+            14,
+            0
+          ],
+          "cur": 0,
+          "dice": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "moves": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "needRoll": false,
+          "winner": null,
+          "n": 0,
+          "legalMoves": [
+            {
+              "from": 9,
+              "to": 8,
+              "die": 1,
+              "idx": 0
+            }
+          ],
+          "last_roll": null,
+          "combinedMoves": [
+            {
+              "from": 9,
+              "to": 7
+            },
+            {
+              "from": 9,
+              "to": 6
+            },
+            {
+              "from": 9,
+              "to": 5
+            }
+          ]
+        },
+        "view_of_other": {
+          "owner": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1
+          ],
+          "cnt": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            15
+          ],
+          "bar": [
+            0,
+            0
+          ],
+          "off": [
+            14,
+            0
+          ],
+          "cur": 0,
+          "dice": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "moves": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "needRoll": false,
+          "winner": null,
+          "n": 0,
+          "legalMoves": [
+            {
+              "from": 9,
+              "to": 8,
+              "die": 1,
+              "idx": 0
+            }
+          ],
+          "last_roll": null,
+          "combinedMoves": [
+            {
+              "from": 9,
+              "to": 7
+            },
+            {
+              "from": 9,
+              "to": 6
+            },
+            {
+              "from": 9,
+              "to": 5
+            }
+          ]
+        },
+        "player_id": "u1",
+        "other_player_id": null,
+        "move": {
+          "action": "move",
+          "from": 9,
+          "to": 5
+        },
+        "expected_state": {
+          "owner": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1
+          ],
+          "cnt": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            15
+          ],
+          "bar": [
+            0,
+            0
+          ],
+          "off": [
+            14,
+            0
+          ],
+          "cur": 1,
+          "dice": [],
+          "moves": [],
+          "needRoll": true,
+          "winner": null,
+          "n": 1,
+          "last_roll": null
+        },
+        "expected_turn": [
+          "u2"
+        ],
+        "expected_view_of_mover": {
+          "owner": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1
+          ],
+          "cnt": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            15
+          ],
+          "bar": [
+            0,
+            0
+          ],
+          "off": [
+            14,
+            0
+          ],
+          "cur": 1,
+          "dice": [],
+          "moves": [],
+          "needRoll": true,
+          "winner": null,
+          "n": 1,
+          "legalMoves": [],
+          "last_roll": null,
+          "combinedMoves": []
+        },
+        "expected_view_of_other": {
+          "owner": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1
+          ],
+          "cnt": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            15
+          ],
+          "bar": [
+            0,
+            0
+          ],
+          "off": [
+            14,
+            0
+          ],
+          "cur": 1,
+          "dice": [],
+          "moves": [],
+          "needRoll": true,
+          "winner": null,
+          "n": 1,
+          "legalMoves": [],
+          "last_roll": null,
+          "combinedMoves": []
+        },
+        "images": [
+          {
+            "caption": "Before: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"140\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"140\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
+          },
+          {
+            "caption": "After: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"376\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"376\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
           }
         ]
       }

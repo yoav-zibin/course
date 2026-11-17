@@ -1,0 +1,19 @@
+[
+  {"value":{"x":-24,"y":-200,"width":48,"height":200},"valid":true},
+  {"value":{"x":-24,"y":0,"width":48,"height":200},"valid":true},
+  {"value":{"x":0,"y":0,"width":0.25,"height":1},"valid":true},
+  {"value":null,"valid":false},
+  {"value":[],"valid":false},
+  {"value":{},"valid":false},
+  {"value":{"x":-24,"y":0,"width":48},"valid":false},
+  {"value":{"x":0,"y":0,"width":0,"height":200},"valid":false},
+  {"value":{"x":0,"y":0,"width":48,"height":-1},"valid":false},
+  {"value":{"x":"0","y":0,"width":48,"height":200},"valid":false},
+  {"value":{"x":0,"y":false,"width":48,"height":200},"valid":false},
+  {"value":{"x":0,"y":0,"width":true,"height":200},"valid":false},
+  {"value":{"x":-100001,"y":0,"width":48,"height":200},"valid":false},
+  {"value":{"x":0,"y":100001,"width":48,"height":200},"valid":false},
+  {"value":{"x":0,"y":0,"width":100001,"height":200},"valid":false},
+  {"value":{"x":0,"y":0,"width":48,"height":100001},"valid":false},
+  {"value":{"x":0,"y":0,"width":48,"height":200,"action":"move"},"valid":false}
+]

@@ -230,6 +230,8 @@ test('declarative piece selection and pointer movement honor targets, transforms
   await page.mouse.move(from.x+from.width/2,from.y+from.height/2);await page.mouse.down();
   await page.mouse.move(denied.x+denied.width/2,denied.y+denied.height/2,{steps:8});await page.mouse.up();
   expect(await page.evaluate(()=>(window as any).movementMoves.length)).toBe(1);
+  // Coalesced touch delivery can omit an intermediate move; the release still
+  // resolves the legal destination using the final transformed coordinates.
   await piece.dispatchEvent('pointerdown',{pointerId:7,pointerType:'touch',clientX:from.x+from.width/2,clientY:from.y+from.height/2});
   await legal.dispatchEvent('pointerup',{pointerId:7,pointerType:'touch',clientX:allowed.x+allowed.width/2,clientY:allowed.y+allowed.height/2});
   await expect.poll(()=>page.evaluate(()=>(window as any).movementMoves.length)).toBe(2);
