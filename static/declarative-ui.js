@@ -515,7 +515,11 @@
             badges.append(badge);
           });node.append(badges);
           activate(node,piece.id,summary,()=>{selected=piece.id;updateHints();if(actions.includes("tap"))dispatch({type:"tap",id:piece.id});});
-        }else{node.setAttribute("role","img");node.setAttribute("aria-label",pieceName(piece));}
+        }else{
+          // Passive artwork must not intercept a legal piece or drop beneath it.
+          node.style.pointerEvents="none";
+          node.setAttribute("role","img");node.setAttribute("aria-label",pieceName(piece));
+        }
         if(actions.includes("move")){
           node.style.touchAction="none";
           node.addEventListener("pointerdown",event=>{if(canAct()){suppressClick=false;selected=piece.id;dragging={id:piece.id,pointerId:event.pointerId,x:event.clientX,y:event.clientY,targets:piece.move_targets || []};updateHints();}});

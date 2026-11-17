@@ -96,7 +96,8 @@ test('two central dice roll by pointer and keyboard and show doubles usage',asyn
     if(used===1||used===3)await host.screenshot({path:testInfo.outputPath(`doubles-${used}-used.png`)});
   }
   // A passive die cannot submit another roll while checker moves are pending.
-  await dice.first().locator(':scope > g[opacity]').click();
+  const passiveDie = (await dice.first().locator(':scope > g[opacity]').boundingBox())!;
+  await page.mouse.click(passiveDie.x + passiveDie.width / 2, passiveDie.y + passiveDie.height / 2);
   expect(await page.evaluate(()=>(window as any).diceMoves)).toHaveLength(2);
   // The fourth move advances the turn and clears authoritative dice. Preserve
   // the completed physical pair until the next player actually rolls again.
