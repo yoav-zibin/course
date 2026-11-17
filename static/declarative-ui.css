@@ -46,10 +46,11 @@
    dragged-over or touch-armed destination. They never take pointer input. */
 .declarative-preview-cell{opacity:.62}
 .declarative-preview-cell rect{stroke:#ffffff;stroke-width:3;stroke-dasharray:7 4;vector-effect:non-scaling-stroke}
-.declarative-target.previewing .declarative-target-area{opacity:.3;fill:none}
+.declarative-target.previewing .declarative-target-area{opacity:.3;fill:none;pointer-events:all}
 .declarative-target.armed .declarative-target-area{opacity:.85;stroke:#ffffff;stroke-width:5;stroke-dasharray:none}
 .declarative-preview-status{margin:0;padding:6px 10px;font-size:15px;font-weight:600;text-align:center;color:#d2ff5a}
 .declarative-preview-status[hidden]{display:none}
+.declarative-has-previews .declarative-preview-status[hidden]{display:block!important;visibility:hidden}
 .declarative-piece-actions{flex:0 0 auto}
 .declarative-piece-actions .declarative-piece-actions-caption{flex:1 0 100%;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .declarative-piece-actions .declarative-tool-icon{font-size:20px;line-height:1;font-weight:700}

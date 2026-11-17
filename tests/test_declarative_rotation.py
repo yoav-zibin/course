@@ -129,3 +129,24 @@ def test_publisher_search_is_bounded_when_no_offered_action_matches():
     with pytest.raises(ValueError, match="no offered UI action"):
         scene_event(logic, state_changed(), logic.reduce(state_changed()),
                     {"place": "elsewhere", "rotation": 0, "flipped": False}, budget=60)
+
+
+@pytest.mark.parametrize("event_type", ["tap", "drop"])
+@pytest.mark.parametrize("hidden", [False, True])
+def test_publisher_cannot_play_hidden_pieces(event_type, hidden):
+    from game_platform.tools.publish_declarative_games import scene_event
+    code = """const gameUI={reduce(m){return {
+      scene:{pieces:[{id:'tile',type:'token',board:'board',position:{cell:'0'},
+        hidden:HIDDEN,actions:['tap'],move_targets:['place']}],
+        targets:[{id:'place',board:'board',position:{cell:'4'}}]},
+      ...(m.type==='ui_event'&&m.event.id==='tile'&&m.event.type==='EVENT'
+        ?{make_move:{place:'place'}}:{})};}};"""
+    code = code.replace("HIDDEN", "true" if hidden else "false").replace("EVENT", event_type)
+    logic = DeclarativeLogic(spec(code))
+    message = state_changed()
+    frame = logic.reduce(message)
+    if hidden:
+        with pytest.raises(ValueError, match="no offered UI action"):
+            scene_event(logic, message, frame, {"place": "place"}, budget=10)
+    else:
+        assert scene_event(logic, message, frame, {"place": "place"})["make_move"] == {"place": "place"}

@@ -1,6 +1,7 @@
-import {test,expect} from '@playwright/test';
+import {test,expect,type Page} from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
+declare const I18n:any;
 
 // An L-shaped tromino: rotate both ways, flip, preview its cells before placing.
 const UI_CODE=`const SHAPE=[[0,0],[1,0],[0,1]];
@@ -21,8 +22,9 @@ const gameUI={reduce(message,local){
   return result;
 }};`;
 
-test('rotation tools, keyboard, flip and placement previews work for touch, mouse and keyboard',async({page},testInfo)=>{
+async function mountRotation(page:Page,code=UI_CODE,locale?:string){
   await page.goto('/static/declarative-test.html');
+  if(locale)await page.evaluate(language=>I18n.choose(language),locale);
   await page.evaluate(async code=>{
     const box=document.createElement('div');box.id='rotation-test';box.style.cssText='position:fixed;inset:0;z-index:9999;background:#102330;display:flex;flex-direction:column';document.body.append(box);
     const spec={format:'buildplay-ui',version:1,viewport:{width:640,height:360},
@@ -31,7 +33,11 @@ test('rotation tools, keyboard, flip and placement previews work for touch, mous
     const message={type:'state_changed',view:{},state:{},status:'ongoing',my_player_index:0,acting_for_player_index:0,move_count:0};
     const w=window as any;w.rotMoves=[];w.rotMessage=message;
     w.rotHost=w.DeclarativeUI.mount(box,spec,{onMove:(move:any)=>w.rotMoves.push(move)});await w.rotHost.send(message);
-  },UI_CODE);
+  },code);
+}
+
+test('rotation tools, keyboard, flip and placement previews work for touch, mouse and keyboard',async({page},testInfo)=>{
+  await mountRotation(page);
   const root=page.locator('#rotation-test');
   const cell=root.locator('[data-ui-id="cell0"]');
   const place=root.locator('[data-ui-id="place"]'),other=root.locator('[data-ui-id="other"]');
@@ -56,11 +62,10 @@ test('rotation tools, keyboard, flip and placement previews work for touch, mous
   await expect(tools.nth(1)).toHaveAccessibleName('Rotate L piece');
   await expect(tools.nth(2)).toHaveAccessibleName('Flip L piece');
   for(let i=0;i<3;i++){const box=(await tools.nth(i).boundingBox())!;expect(box.width).toBeGreaterThanOrEqual(44);expect(box.height).toBeGreaterThanOrEqual(44);}
-  // The playground page is wider than a phone, so emulated phones zoom out;
-  // press the tools through their click handlers rather than screen points.
-  await tools.nth(0).dispatchEvent('click');await expect(state).toHaveText('270');
-  await tools.nth(1).dispatchEvent('click');await expect(state).toHaveText('0');
-  await tools.nth(2).dispatchEvent('click');await expect(state).toHaveText('0 flipped');
+  const pressTool=async(index:number)=>testInfo.project.name==='mobile'?tools.nth(index).tap():tools.nth(index).click();
+  await pressTool(0);await expect(state).toHaveText('270');
+  await pressTool(1);await expect(state).toHaveText('0');
+  await pressTool(2);await expect(state).toHaveText('0 flipped');
   await tools.nth(2).focus();
   // Keyboard: R clockwise, Shift+R counterclockwise, F flips.
   await page.keyboard.press('r');await expect(state).toHaveText('90 flipped');
@@ -107,4 +112,40 @@ test('rotation tools, keyboard, flip and placement previews work for touch, mous
   await place.dispatchEvent('focus');await expect(ghosts).toHaveCount(0);
   await page.keyboard.press('r');await expect(state).toHaveText('0');
   await page.evaluate(()=>(window as any).rotHost.destroy());
+});
+
+test('a previewed destination keeps its interior clickable with the mouse',async({page})=>{
+  await mountRotation(page);
+  const root=page.locator('#rotation-test');
+  await root.locator('[data-ui-id="cell0"]').click();
+  const place=root.locator('[data-ui-id="place"]');
+  await place.hover();
+  await expect(root.locator('.declarative-preview-cell')).toHaveCount(3);
+  await place.click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).rotMoves)).toEqual([{at:'place',rotation:0,flipped:false}]);
+});
+
+test.describe('native touch placement',()=>{
+  test.use({hasTouch:true});
+  for(const locale of ['en','de','ar','hi'])test(`two taps at the same screen position place the preview in ${locale}`,async({page})=>{
+    await page.setViewportSize({width:360,height:780});
+    const adjacent=UI_CODE.replace("move_targets:['place','other']","move_targets:['place','other','below']")
+      .replace("preview:preview(6)}];","preview:preview(6)},{id:'below',board:'main',position:{cell:'17'},aria_label:'Below',preview:preview(17)}];");
+    await mountRotation(page,adjacent,locale);
+    await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+    const root=page.locator('#rotation-test'),stage=root.locator('.declarative-stage');
+    await root.locator('[data-ui-id="cell0"]').tap();
+    const place=root.locator('[data-ui-id="place"]');
+    const box=(await place.boundingBox())!,before=(await stage.boundingBox())!;
+    const point={x:box.x+box.width/2,y:box.y+box.height/2};
+    await page.touchscreen.tap(point.x,point.y);
+    await expect(place).toHaveClass(/armed/);
+    await expect(root.locator('.declarative-preview-cell')).toHaveCount(3);
+    expect(await page.evaluate(()=>(window as any).rotMoves)).toEqual([]);
+    await expect.poll(async()=>(await stage.boundingBox())!.height).toBeCloseTo(before.height,1);
+    // Reuse the physical position, rather than relocating the element after
+    // the confirmation line appears. Nearby destinations must not replace it.
+    await page.touchscreen.tap(point.x,point.y);
+    await expect.poll(()=>page.evaluate(()=>(window as any).rotMoves)).toEqual([{at:'place',rotation:0,flipped:false}]);
+  });
 });

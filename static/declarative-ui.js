@@ -308,6 +308,7 @@
     const controls = document.createElement("div"); controls.className = "declarative-controls";
     const sceneStatus=document.createElement("p");sceneStatus.className="declarative-scene-status";sceneStatus.setAttribute("role","status");sceneStatus.setAttribute("aria-live","polite");sceneStatus.hidden=true;
     const previewStatus=document.createElement("p");previewStatus.className="declarative-preview-status";previewStatus.setAttribute("role","status");previewStatus.setAttribute("aria-live","polite");previewStatus.hidden=true;
+    const previewPrompt=()=>t("ui.declarative.hints.tap_again_to_place", {}, "Tap the same spot again to place it there.");
     const errorBox = document.createElement("p"); errorBox.className = "declarative-error"; errorBox.setAttribute("role", "alert"); errorBox.hidden = true;
     container.append(stage, pieceTools, previewStatus, controls, sceneStatus, errorBox);
     const engine = createEngine(container);
@@ -519,7 +520,7 @@
       for(const node of stage.querySelectorAll(".declarative-target"))node.classList.toggle("previewing",node.dataset.uiId===id);
     }
     function disarm(){
-      armedTarget=null;previewStatus.hidden=true;previewStatus.textContent="";
+      armedTarget=null;previewStatus.hidden=true;
       for(const node of stage.querySelectorAll(".declarative-target.armed"))node.classList.remove("armed");
     }
     let queue = Promise.resolve();
@@ -528,6 +529,7 @@
     function selectedPiece(){return currentScene?.pieces?.find(piece=>piece.id===selected&&!piece.hidden&&pieceActions(piece).length);}
     function pieceName(piece){return piece.face==="back"?t("ui.declarative.covered_piece", {}, "Covered piece"):piece.aria_label||piece.text||piece.id;}
     function updateHints() {
+      previewStatus.textContent=previewPrompt();
       const active=canAct(),piece=selectedPiece();
       if(!piece)selected=null;
       if(!active){clearPreview();disarm();}
@@ -660,7 +662,7 @@
           const touch=targetPointerType==="touch";targetPointerType=null;
           if(target.preview?.length&&touch&&armedTarget!==target.id){
             disarm();armedTarget=target.id;node.classList.add("armed");showPreview(target.id);
-            previewStatus.textContent=t("ui.declarative.hints.tap_again_to_place", {}, "Tap the same spot again to place it there.");previewStatus.hidden=false;
+            previewStatus.hidden=false;
             return;
           }
           disarm();clearPreview();
@@ -730,6 +732,9 @@
       const keepPreview=previewTarget,keepArmed=armedTarget;
       previewLayer=svg("g",{class:"declarative-preview","aria-hidden":"true"});previewLayer.style.pointerEvents="none";
       stage.append(previewLayer,targetLayer);
+      // Reserve the localized confirmation line before the first touch, so
+      // arming a target cannot move that target under the player's finger.
+      container.classList.toggle("declarative-has-previews",Boolean(scene.targets?.some(target=>target.preview?.length)));
       previewTarget=null;armedTarget=keepArmed;
       if(keepPreview&&scene.targets?.some(target=>target.id===keepPreview&&target.preview?.length))showPreview(keepPreview);else disarm();
       if(armedTarget)for(const node of stage.querySelectorAll(".declarative-target"))node.classList.toggle("armed",node.dataset.uiId===armedTarget);
@@ -805,7 +810,7 @@
         resetDrag();latest=clone(message);revision++;moveSent=false;selected=null;nativeDragging=null;updateHints();const atRevision=revision;
         queue=queue.then(()=>reduce(latest,atRevision,options)).catch(error);return queue;
       },
-      destroy(){resetDrag();destroyed=true;revision++;touches.clear();cameraGesture=null;cameraObserver?.disconnect();global.removeEventListener("resize",scheduleCamera);if(cameraFrame!==null)global.cancelAnimationFrame(cameraFrame);for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();global.removeEventListener("pointermove",cameraPointerMove);global.removeEventListener("pointermove",previewUnderPointer);global.removeEventListener("keydown",toolKeys);global.removeEventListener("pointermove",movePointer);global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game","declarative-immersive");},
+      destroy(){resetDrag();destroyed=true;revision++;touches.clear();cameraGesture=null;cameraObserver?.disconnect();global.removeEventListener("resize",scheduleCamera);if(cameraFrame!==null)global.cancelAnimationFrame(cameraFrame);for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();global.removeEventListener("pointermove",cameraPointerMove);global.removeEventListener("pointermove",previewUnderPointer);global.removeEventListener("keydown",toolKeys);global.removeEventListener("pointermove",movePointer);global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game","declarative-immersive","declarative-has-previews");},
       dispatch,
     };
   }
@@ -813,10 +818,10 @@
     const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
     const data=value=>JSON.stringify(canonical(value)).replace(/</g,"\\u003c");
     return '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<link rel="stylesheet" href="/static/declarative-ui.css?v=13"><div id="declarative-game"></div>' +
+      '<link rel="stylesheet" href="/static/declarative-ui.css?v=14"><div id="declarative-game"></div>' +
       '<script type="application/json" id="i18n-strings">'+data(spec.strings || {})+'<'+'/script>' +
       '<script type="application/json" id="declarative-spec">'+data(spec)+'<'+'/script>' +
-      '<script src="/static/declarative-ui.js?v=13"><'+'/script><script>' +
+      '<script src="/static/declarative-ui.js?v=14"><'+'/script><script>' +
       'const host=DeclarativeUI.mount(document.getElementById("declarative-game"),' +
       'JSON.parse(document.getElementById("declarative-spec").textContent),' +
       '{onMove:move=>parent.postMessage({type:"make_move",move},"*"),' +

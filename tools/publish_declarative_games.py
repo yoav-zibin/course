@@ -49,16 +49,15 @@ def ui_message(logic, result, ctx, seat, seed):
 
 def offered_events(scene):
     """Every event a player can send from this scene, including rotate/flip tools."""
+    pieces = [piece for piece in scene.get("pieces", []) if not piece.get("hidden")]
     events = [{"type": "drop", "id": p["id"], "piece_id": p["id"], "target_id": target}
-              for p in scene.get("pieces", []) for target in p.get("move_targets", [])]
+              for p in pieces for target in p.get("move_targets", [])]
     events += [{"type": "tap", "id": item["id"]}
                for group in ("controls", "targets") for item in scene.get(group, [])
                if not item.get("disabled")]
-    events += [{"type": "tap", "id": item["id"]} for item in scene.get("pieces", [])
+    events += [{"type": "tap", "id": item["id"]} for item in pieces
                if "tap" in item.get("actions", [])]
-    for piece in scene.get("pieces", []):
-        if piece.get("hidden"):
-            continue
+    for piece in pieces:
         if "rotate" in piece.get("actions", []):
             events += [{"type": "rotate", "id": piece["id"], "delta": 90},
                        {"type": "rotate", "id": piece["id"], "delta": -90}]
