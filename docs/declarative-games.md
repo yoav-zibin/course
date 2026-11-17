@@ -204,9 +204,9 @@ omitted arrays are empty. All element IDs must be unique across the scene.
 | Rotate, resize, fade or reorder | Change `rotation`, positive `scale`, `opacity` or `z`. Larger z values render later. |
 | Select or turn over | Set `selected`, or `face` to `front`/`back`. |
 | Offer movement | Emit destination `targets`, then reference their IDs in that piece's `move_targets`. |
-| Offer a click, rotation or resize | Set the piece's `actions` to the currently available operations; the host supplies persistent hints and action controls. |
+| Offer a click, rotation, flip or resize | Set the piece's `actions` to the currently available operations; the host supplies persistent hints and action controls. |
 | Change a die, score or card text | Change the piece's `text` or the relevant label. A `dice` appearance does not generate random results. |
-| Group a polyomino or composite token | Compute positions/rotations for several stable pieces in the reducer. V1 has no implicit group transform. |
+| Group a polyomino or composite token | Compute positions/rotations for several stable pieces in the reducer. V1 has no implicit group transform; see [Rotation, flipping and placement previews](#rotation-flipping-and-placement-previews). |
 
 Each piece requires `id`, `type`, `board` and `position`. It can override its
 type's front artwork with an `asset` ID. A piece type can declare `back_asset`
@@ -251,7 +251,7 @@ when gameplay inputs are disabled. They also name host-owned manipulation tools.
 
 Hosts must keep the next available actions visible. An active piece is
 highlighted and its action indicators identify whether it can be tapped,
-moved, rotated or scaled; enabled scene controls and placement targets remain
+moved, rotated, flipped or scaled; enabled scene controls and placement targets remain
 visibly actionable. A cursor that changes only on hover is insufficient for
 touch devices. Selection or the start of a drag adds a stronger source hint
 and highlights that piece's legal destination IDs. Unrelated destinations
@@ -271,11 +271,11 @@ Declare these capabilities on each piece:
 }
 ```
 
-`actions` is a unique subset of `tap`, `move`, `rotate` and `scale`. Declaring
+`actions` is a unique subset of `tap`, `move`, `rotate`, `flip` and `scale`. Declaring
 `move` requires at least one `move_targets` destination, and every referenced
 destination must exist in the scene. Nonempty `move_targets` always implies
 movement, even when the action list does not explicitly name `move`.
-`actions:[]` disables tap/rotate/scale; combine it with no movement targets for
+`actions:[]` disables tap/rotate/flip/scale; combine it with no movement targets for
 a fully passive piece. Omitted `actions` preserves the original renderer's
 legacy tap behavior. New games should declare the field explicitly, including
 `[]` on decorative pieces, so hints cannot suggest a click that does nothing.
@@ -295,6 +295,7 @@ The renderer sends these JSON events:
 {"type":"drop","id":"piece-id","piece_id":"piece-id","target_id":"destination-id"}
 {"type":"change","id":"control-id","value":"new value"}
 {"type":"rotate","id":"piece-id","delta":90}
+{"type":"flip","id":"piece-id"}
 {"type":"scale","id":"piece-id","factor":1.1}
 ```
 
@@ -304,11 +305,12 @@ shape. Handle `tap` for placements, selection and buttons. Targets are explicit
 so touch and keyboard clients can offer equivalent actions.
 
 For `rotate`, `delta` requests a relative clockwise angle in degrees; it must
-be nonzero and between -360 and 360. The standard rotate control requests 90
-degrees. For `scale`, `factor` is a relative multiplier greater than zero and
+be nonzero and between -360 and 360. The standard rotate controls request 90
+(clockwise) and -90 (counterclockwise) degrees. `flip` requests a mirror image
+of the piece and has no parameters; the reducer decides the mirror axis. For `scale`, `factor` is a relative multiplier greater than zero and
 at most 100; standard grow/shrink controls request `1.1` and `1/1.1`.
-These parameters belong only to their corresponding event types. A rotation
-or scale control sends a request to the reducer, and never edits match state
+These parameters belong only to their corresponding event types. A rotation,
+flip or scale control sends a request to the reducer, and never edits match state
 or the rendered piece optimistically. The reducer can keep a preview in
 `local_state`, emit a new scene, or submit the game's own move shape. Server
 rules remain authoritative when the operation affects gameplay. A game that
@@ -329,6 +331,45 @@ their value on change rather than on every keystroke.
 stroke-input event, trusted reaction clock, 3D scene or physics engine. Explicit
 cells/targets can implement discrete line-drawing games; a faithful freehand or
 physical game needs an extension or a documented adaptation.
+
+### Rotation, flipping and placement previews
+
+Tiles, dominoes and polyominoes use the same building blocks:
+
+- **Rotate and flip.** Add `rotate` and/or `flip` to the piece's `actions`.
+  When the viewer selects the piece, the host shows ↺ (counterclockwise, -90),
+  ↻ (clockwise, 90) and ⇋ (flip) buttons of at least 44×44 pixels. Keyboard
+  users press R, Shift+R and F on the selected piece. Each sends the event
+  above; the reducer keeps the orientation in `local_state` and redraws.
+- **Composite pieces.** Draw each cell of a polyomino or domino as its own
+  stable piece. Give every cell the same `actions` and `move_targets`, mark all
+  of them `selected` together, and map any cell ID back to its shape in the
+  reducer. Rotating or flipping only changes the cells' computed positions.
+- **Legal placements.** For the current orientation, emit one target per legal
+  placement, usually at the cell under the shape's anchor, and list those IDs
+  in the pieces' `move_targets`. Illegal placements are simply absent.
+- **Placement previews.** A target may carry `preview`: up to 64 ghost cells on
+  the target's board, each with a `position` and optional `color`, `asset`,
+  `rotation` and short `text`. The host draws them translucently while the
+  destination is hovered, keyboard-focused or dragged over. On touch screens,
+  which have no hover, the first tap on a destination with a preview shows the
+  ghost and the second tap on the same spot places the piece; a drag places it
+  on release. Previews are presentation only; `applyMove` still validates.
+
+```json
+{
+  "id": "place-r3-c4",
+  "board": "board",
+  "position": {"cell": "28"},
+  "preview": [{"position": {"cell": "28"}, "color": "#4f8cff"},
+              {"position": {"cell": "29"}, "color": "#4f8cff"},
+              {"position": {"cell": "36"}, "color": "#4f8cff"}]
+}
+```
+
+A move that needs several choices, such as placing a marble and then twisting
+a board quadrant, uses ordinary targets for each step and keeps the earlier
+choices in `local_state` until the final event emits `make_move`.
 
 ## Assets and hidden information
 
@@ -489,8 +530,11 @@ remain supported.
    JSON. Keep match rules on the authoritative server for online play.
 3. On `state_changed`, call `gameUI.reduce(message, localState)` and render its
    complete scene with native views/layers. Save only the returned local state.
-4. Translate taps, destination selections, drags and control changes to the
-   event shapes above. Call the reducer with the current filtered state message.
+4. Translate taps, destination selections, drags, control changes and the
+   rotate/flip tools (R, Shift+R and F on the keyboard) to the event shapes
+   above. Draw target `preview` cells while a destination is hovered, focused
+   or dragged over; on touch, arm a previewed destination on the first tap and
+   place on the second. Call the reducer with the current filtered state message.
 5. Accept a move only from a current-seat UI event, at most once per state
    update; submit it through the existing move API with its expected move count.
    Render the server's next view after success or rejection.

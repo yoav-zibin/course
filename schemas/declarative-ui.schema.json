@@ -518,16 +518,17 @@
         },
         "actions": {
           "type": "array",
-          "description": "Available piece operations, used by hosts to show persistent action hints. Nonempty move_targets always implies move. Omit for legacy tap behavior; use [] and no move_targets for a passive piece. Rotation/scale presentation values alone do not grant actions.",
+          "description": "Available piece operations, used by hosts to show persistent action hints. rotate offers clockwise and counterclockwise 90-degree tools; flip offers a mirror tool. Nonempty move_targets always implies move. Omit for legacy tap behavior; use [] and no move_targets for a passive piece. Rotation/scale presentation values alone do not grant actions.",
           "items": {
             "enum": [
               "tap",
               "move",
               "rotate",
+              "flip",
               "scale"
             ]
           },
-          "maxItems": 4,
+          "maxItems": 5,
           "uniqueItems": true
         },
         "selected": {
@@ -626,6 +627,13 @@
         "color": {
           "type": "string",
           "pattern": "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"
+        },
+        "preview": {
+          "type": "array",
+          "description": "Ghost cells the host draws on this target's board while the destination is hovered, focused, dragged over or armed by a first touch tap (the second tap places). Presentation only: the server still validates the move.",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {"$ref": "#/$defs/preview_cell"}
         }
       },
       "required": [
@@ -633,6 +641,18 @@
         "board",
         "position"
       ],
+      "additionalProperties": false
+    },
+    "preview_cell": {
+      "type": "object",
+      "properties": {
+        "position": {"$ref": "#/$defs/position"},
+        "color": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"},
+        "asset": {"type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[A-Za-z0-9_.:-]+$"},
+        "rotation": {"type": "number", "minimum": -100000, "maximum": 100000},
+        "text": {"type": "string", "maxLength": 40}
+      },
+      "required": ["position"],
       "additionalProperties": false
     },
     "control": {
@@ -854,6 +874,7 @@
             "drop",
             "change",
             "rotate",
+            "flip",
             "scale"
           ]
         },

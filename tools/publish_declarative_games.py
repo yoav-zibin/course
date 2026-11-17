@@ -47,29 +47,79 @@ def ui_message(logic, result, ctx, seat, seed):
     }
 
 
-def scene_event(ui, message, frame, move):
-    """Find a real offered UI action producing the chosen authoritative move."""
-    scene = frame["scene"]
+def offered_events(scene):
+    """Every event a player can send from this scene, including rotate/flip tools."""
     events = [{"type": "drop", "id": p["id"], "piece_id": p["id"], "target_id": target}
-               for p in scene.get("pieces", []) for target in p.get("move_targets", [])]
+              for p in scene.get("pieces", []) for target in p.get("move_targets", [])]
     events += [{"type": "tap", "id": item["id"]}
                for group in ("controls", "targets") for item in scene.get(group, [])
                if not item.get("disabled")]
     events += [{"type": "tap", "id": item["id"]} for item in scene.get("pieces", [])
                if "tap" in item.get("actions", [])]
-    # Reviewed packages name targets after their JSON intent. Try likely IDs
-    # first on large boards; the reducer must still emit an exact matching move.
+    for piece in scene.get("pieces", []):
+        if piece.get("hidden"):
+            continue
+        if "rotate" in piece.get("actions", []):
+            events += [{"type": "rotate", "id": piece["id"], "delta": 90},
+                       {"type": "rotate", "id": piece["id"], "delta": -90}]
+        if "flip" in piece.get("actions", []):
+            events.append({"type": "flip", "id": piece["id"]})
+    return events
+
+
+def _move_tokens(value):
+    """Scalar values of a move, as the strings a reviewed package uses in IDs."""
+    if isinstance(value, dict):
+        return {token for item in value.values() for token in _move_tokens(item)}
+    if isinstance(value, list):
+        return {token for item in value for token in _move_tokens(item)}
+    return {str(value).lower()}
+
+
+def scene_event(ui, message, frame, move, *, budget=4000, depth=8):
+    """Find real offered UI actions producing the chosen authoritative move.
+
+    Single taps/drops are tried first. Multi-step moves (select, rotate, flip,
+    then place; or place, then choose a follow-up) are found by a bounded
+    best-first search over distinct local states. Events whose IDs mention the
+    move's values are tried first; the reducer must still emit the exact move.
+    """
     likely_ids = {"_".join(f"{key}_{value}" for key, value in move.items())}
     if isinstance(move.get("action"), str):
         likely_ids.add(move["action"])
     if "to" in move:
         likely_ids.add(f"to_{move['to']}")
-    events.sort(key=lambda event: event.get("target_id", event["id"]) not in likely_ids)
-    for event in events:
-        answer = ui.reduce({"type": "ui_event", "event": event,
-                            "state_changed": message}, frame.get("local_state"))
-        if canonical_json(answer.get("make_move")) == canonical_json(move):
-            return answer
+    tokens = _move_tokens(move)
+
+    def relevance(event):
+        ident = event.get("target_id", event["id"])
+        parts = set(ident.lower().replace("-", "_").replace(":", "_").replace(".", "_").split("_"))
+        return (ident not in likely_ids, -len(parts & tokens), event["type"] in ("rotate", "flip"))
+
+    target = canonical_json(move)
+    seen = {canonical_json(frame.get("local_state"))}
+    frontier = [(0, (), frame)]
+    calls = 0
+    while frontier:
+        frontier.sort(key=lambda item: item[0])
+        _, path, current = frontier.pop(0)
+        events = sorted(offered_events(current["scene"]), key=relevance)
+        for event in events:
+            if calls >= budget:
+                break
+            calls += 1
+            answer = ui.reduce({"type": "ui_event", "event": event,
+                                "state_changed": message}, current.get("local_state"))
+            emitted = answer.get("make_move")
+            if canonical_json(emitted) == target:
+                return answer
+            key = canonical_json(answer.get("local_state"))
+            if emitted is None and len(path) + 1 < depth and key not in seen:
+                seen.add(key)
+                # Shallow paths and events naming more of the move's values first.
+                not_likely, minus_matches, _ = relevance(event)
+                priority = (len(path) + 1) * 0.5 + not_likely + minus_matches
+                frontier.append((priority, path + (event,), answer))
     raise ValueError(f"no offered UI action emits {move!r}")
 
 

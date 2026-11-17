@@ -157,7 +157,13 @@ def validate_response(spec, response):
     boards = {board["id"]: board for board in spec["boards"]}
     assets = spec.get("assets", {})
     targets = {target["id"]: target for target in scene.get("targets", [])}
-    for item in [*scene.get("pieces", []), *scene.get("targets", [])]:
+    # Target previews are ghost cells on the target's own board.
+    previews = [{"board": target["board"], "position": cell["position"]}
+                for target in scene.get("targets", []) for cell in target.get("preview", [])]
+    for target in scene.get("targets", []):
+        for cell in target.get("preview", []):
+            _asset_reference(cell.get("asset"), assets)
+    for item in [*scene.get("pieces", []), *scene.get("targets", []), *previews]:
         board = boards.get(item["board"])
         if board is None:
             raise DeclarativeUIError("Scene references an unknown board")
@@ -227,7 +233,7 @@ class DeclarativeLogic:
 
 def client_document(spec):
     """Platform-owned compatibility host for existing test/practice clients."""
-    return _client_document(spec, asset_query="?v=12")
+    return _client_document(spec, asset_query="?v=13")
 
 
 def _client_document(spec, *, asset_query):
@@ -259,6 +265,7 @@ def accepted_platform_host(spec, code):
     """
     return code in (
         client_document(spec),
+        _client_document(spec, asset_query="?v=12"),
         _client_document(spec, asset_query="?v=11"),
         _client_document(spec, asset_query="?v=10"),
         _client_document(spec, asset_query="?v=9"),

@@ -165,7 +165,7 @@
     if([point.x,point.y].some(value=>typeof value!=="number"||Math.abs(value)>100000))throw new Error(t("ui.declarative.error.invalid_point_geometry", {}, "Invalid point geometry"));
   }
   function checkElement(kind,item) {
-    const fields={pieces:["id","type","board","position","text","aria_label","asset","rotation","scale","opacity","z","face","move_targets","selected","hidden","draggable","actions","animation"],targets:["id","board","position","label","aria_label","color","hit_area"],labels:["id","text","x","y","color","font_size"],controls:["id","label","kind","value","min","max","step","options","disabled"],paths:["id","points","color","width"]};
+    const fields={pieces:["id","type","board","position","text","aria_label","asset","rotation","scale","opacity","z","face","move_targets","selected","hidden","draggable","actions","animation"],targets:["id","board","position","label","aria_label","color","hit_area","preview"],labels:["id","text","x","y","color","font_size"],controls:["id","label","kind","value","min","max","step","options","disabled"],paths:["id","points","color","width"]};
     const required={pieces:["id","type","board","position"],targets:["id","board","position"],labels:["id","text","x","y"],controls:["id","label","kind"],paths:["id","points"]};
     knownObject(item,fields[kind],required[kind]);
     for(const key of ["id","type","board","asset"])if(key in item&&!isId(item[key]))throw new Error(t("ui.declarative.error.invalid_ui_identifier", {}, "Invalid UI identifier"));
@@ -182,7 +182,7 @@
       else checkPoint(at);
     }
     if("move_targets" in item&&(!Array.isArray(item.move_targets)||item.move_targets.length>2048||item.move_targets.some(value=>!isId(value))||new Set(item.move_targets).size!==item.move_targets.length))throw new Error(t("ui.declarative.error.invalid_move_targets", {}, "Invalid move targets"));
-    if("actions" in item&&(!Array.isArray(item.actions)||item.actions.some(action=>!["tap","move","rotate","scale"].includes(action))||new Set(item.actions).size!==item.actions.length||item.actions.includes("move")&&!item.move_targets?.length))throw new Error(t("ui.declarative.error.invalid_move_targets", {}, "Invalid move targets"));
+    if("actions" in item&&(!Array.isArray(item.actions)||item.actions.some(action=>!["tap","move","rotate","flip","scale"].includes(action))||new Set(item.actions).size!==item.actions.length||item.actions.includes("move")&&!item.move_targets?.length))throw new Error(t("ui.declarative.error.invalid_move_targets", {}, "Invalid move targets"));
     if("animation" in item){
       knownObject(item.animation,["kind","key"],["kind","key"]);
       if(item.animation.kind!=="roll")throw new Error(t("ui.declarative.error.invalid_ui_object_fields", {}, "Invalid UI object fields"));
@@ -192,6 +192,21 @@
       knownObject(item.hit_area,["x","y","width","height"],["x","y","width","height"]);
       for(const key of ["x","y"])if(typeof item.hit_area[key]!=="number"||Math.abs(item.hit_area[key])>100000)throw new Error(t("ui.declarative.error.invalid_numeric_geometry", {}, "Invalid numeric geometry"));
       for(const key of ["width","height"])if(typeof item.hit_area[key]!=="number"||item.hit_area[key]<=0||item.hit_area[key]>100000)throw new Error(t("ui.declarative.error.invalid_positive_geometry", {}, "Invalid positive geometry"));
+    }
+    if("preview" in item){
+      // Ghost cells drawn while a destination is hovered, focused, dragged over
+      // or armed by a first touch. Presentation only; the server still decides.
+      if(!Array.isArray(item.preview)||!item.preview.length||item.preview.length>64)throw new Error(t("ui.declarative.error.invalid_target_preview", {}, "Invalid target preview"));
+      for(const cell of item.preview){
+        knownObject(cell,["position","color","asset","rotation","text"],["position"]);
+        knownObject(cell.position,["cell","x","y"]);
+        if("cell" in cell.position){if(!isId(cell.position.cell)||"x" in cell.position||"y" in cell.position)throw new Error(t("ui.declarative.error.invalid_cell_position", {}, "Invalid cell position"));}
+        else checkPoint(cell.position);
+        if("color" in cell&&!/^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$/.test(cell.color))throw new Error(t("ui.declarative.error.invalid_display_color", {}, "Invalid display color"));
+        if("asset" in cell&&!isId(cell.asset))throw new Error(t("ui.declarative.error.invalid_ui_identifier", {}, "Invalid UI identifier"));
+        if("rotation" in cell&&(typeof cell.rotation!=="number"||Math.abs(cell.rotation)>100000))throw new Error(t("ui.declarative.error.invalid_numeric_geometry", {}, "Invalid numeric geometry"));
+        if("text" in cell&&(typeof cell.text!=="string"||Array.from(cell.text).length>40))throw new Error(t("ui.declarative.error.invalid_display_text", {}, "Invalid display text"));
+      }
     }
     if(kind==="paths"){
       if(!Array.isArray(item.points)||item.points.length<2||item.points.length>4096)throw new Error(t("ui.declarative.error.invalid_path_points", {}, "Invalid path points"));
@@ -225,6 +240,10 @@
         if (key === "pieces" || key === "targets") position(spec, item);
         if (key === "pieces" && !Object.hasOwn(spec.piece_types, item.type)) throw new Error(t("ui.declarative.error.unknown_piece_type", {}, "Unknown piece type"));
         if (item.asset && !Object.hasOwn(spec.assets || {}, item.asset)) throw new Error(t("ui.declarative.error.unknown_asset", {}, "Unknown asset"));
+        for (const cell of key === "targets" ? item.preview || [] : []) {
+          position(spec, {board:item.board, position:cell.position});
+          if (cell.asset && !Object.hasOwn(spec.assets || {}, cell.asset)) throw new Error(t("ui.declarative.error.unknown_asset", {}, "Unknown asset"));
+        }
       }
     }
     const targets = new Set((scene.targets || []).map(target => target.id));
@@ -236,12 +255,13 @@
   function pieceActions(piece) {
     if(piece.hidden)return [];
     const actions=piece.actions===undefined?["tap"]:piece.actions;
-    return ["tap","move","rotate","scale"].filter(action=>actions.includes(action)||action==="move"&&piece.move_targets?.length);
+    return ["tap","move","rotate","flip","scale"].filter(action=>actions.includes(action)||action==="move"&&piece.move_targets?.length);
   }
   function actionLabel(action) {
     if(action==="tap")return t("ui.declarative.hints.tap", {}, "Click");
     if(action==="move")return t("ui.declarative.hints.move", {}, "Move");
     if(action==="rotate")return t("ui.declarative.hints.rotate", {}, "Rotate");
+    if(action==="flip")return t("ui.declarative.hints.flip", {}, "Flip");
     return t("ui.declarative.hints.scale", {}, "Resize");
   }
   function contentBounds(spec, scene = {}) {
@@ -283,15 +303,19 @@
     const stage = svg("svg", {viewBox: `0 0 ${spec.viewport.width} ${spec.viewport.height}`, role: "group", tabindex: 0, "aria-label": t("ui.declarative.board_aria", {}, "Game board"), class: "declarative-stage"});
     // The board takes the available panel in both dimensions. SVG's meet
     // scaling preserves its geometry without an intrinsic-height overflow.
-    stage.setAttribute("aria-keyshortcuts", "+ - 0 ArrowLeft ArrowRight ArrowUp ArrowDown Home End");
+    stage.setAttribute("aria-keyshortcuts", "+ - 0 ArrowLeft ArrowRight ArrowUp ArrowDown Home End R Shift+R F");
     const pieceTools=document.createElement("div");pieceTools.className="declarative-piece-actions";pieceTools.hidden=true;
     const controls = document.createElement("div"); controls.className = "declarative-controls";
     const sceneStatus=document.createElement("p");sceneStatus.className="declarative-scene-status";sceneStatus.setAttribute("role","status");sceneStatus.setAttribute("aria-live","polite");sceneStatus.hidden=true;
+    const previewStatus=document.createElement("p");previewStatus.className="declarative-preview-status";previewStatus.setAttribute("role","status");previewStatus.setAttribute("aria-live","polite");previewStatus.hidden=true;
     const errorBox = document.createElement("p"); errorBox.className = "declarative-error"; errorBox.setAttribute("role", "alert"); errorBox.hidden = true;
-    container.append(stage, pieceTools, controls, sceneStatus, errorBox);
+    container.append(stage, pieceTools, previewStatus, controls, sceneStatus, errorBox);
     const engine = createEngine(container);
     let latest = null, localState = null, revision = 0, renderedRevision = -1, destroyed = false, moveSent = false, selected = null, dragging = null, nativeDragging = null, currentScene = null, suppressClick = false;
     let lastStateMoveCount = null, lastStateWasReplay = false, dragPreview = null;
+    // Placement previews are host-only presentation. A first touch tap on a
+    // destination with a preview arms it; the second tap places the piece.
+    let previewLayer = null, previewTarget = null, armedTarget = null, targetPointerType = null;
     // The camera belongs to the host. It never reaches the reducer or make_move,
     // and survives complete scene snapshots, including replay and turn changes.
     let cameraBounds=callbacks.immersive?contentBounds(spec):{x:0,y:0,...spec.viewport};
@@ -447,12 +471,57 @@
       if(valid)dragPreview={id:drag.id,transform:drag.body.getAttribute("transform")};
       resetDrag(Boolean(valid));
       if(valid){event.preventDefault();dispatch({type:"drop",id:drag.id,piece_id:drag.id,target_id:target});}
-      selected=null;updateHints();
+      selected=null;disarm();clearPreview();updateHints();
     }
-    function cancelPointer(event){if(cameraPointerEnd(event))return;if(!dragging||nativeDragging||event.pointerId!==dragging.pointerId)return;resetDrag();selected=null;updateHints();}
+    function cancelPointer(event){if(cameraPointerEnd(event))return;if(!dragging||nativeDragging||event.pointerId!==dragging.pointerId)return;resetDrag();selected=null;clearPreview();updateHints();}
     global.addEventListener("pointerup",finishPointer);
     global.addEventListener("pointercancel",cancelPointer);
-    container.addEventListener("keydown",event=>{if(event.key==="Escape"){resetDrag();nativeDragging=null;selected=null;updateHints();}});
+    // While a piece is dragged, preview the legal destination under the pointer.
+    function previewUnderPointer(event){
+      if(!dragging||nativeDragging||event.pointerId!==dragging.pointerId||cameraGesture||!dragging.moved)return;
+      const id=dropTarget(dragging,event);
+      if(id)showPreview(id);else clearPreview();
+    }
+    global.addEventListener("pointermove",previewUnderPointer);
+    container.addEventListener("keydown",event=>{if(event.key==="Escape"){resetDrag();nativeDragging=null;selected=null;disarm();clearPreview();updateHints();}});
+    // R / Shift+R rotate and F flips the selected piece, like its tool buttons.
+    // Pointer selection need not move focus, so also listen while the page
+    // body has focus; never while typing in a field or outside this game.
+    function toolKeys(event){
+      if(destroyed||event.ctrlKey||event.metaKey||event.altKey||event.target.closest?.("input,select,textarea"))return;
+      if(event.target!==document.body&&!container.contains(event.target))return;
+      const key=event.key.toLowerCase(),piece=selectedPiece();
+      if(!piece||!canAct()||(key!=="r"&&key!=="f"))return;
+      const actions=pieceActions(piece);
+      if(key==="r"&&actions.includes("rotate")){event.preventDefault();dispatch({type:"rotate",id:piece.id,delta:event.shiftKey?-90:90});}
+      else if(key==="f"&&actions.includes("flip")){event.preventDefault();dispatch({type:"flip",id:piece.id});}
+    }
+    global.addEventListener("keydown",toolKeys);
+    function previewSize(board){return board.kind==="grid"?{width:board.width/board.columns,height:board.height/board.rows}:{width:44,height:44};}
+    function clearPreview(){
+      previewTarget=null;previewLayer?.replaceChildren();
+      for(const node of stage.querySelectorAll(".declarative-target.previewing"))node.classList.remove("previewing");
+    }
+    function showPreview(id){
+      const target=currentScene?.targets?.find(item=>item.id===id);
+      if(!previewLayer||!target?.preview?.length||!canAct()){clearPreview();return;}
+      if(previewTarget===id)return;
+      clearPreview();previewTarget=id;
+      for(const cell of target.preview){
+        const point=position(spec,{board:target.board,position:cell.position}),{width,height}=previewSize(point.board);
+        const node=svg("g",{class:"declarative-preview-cell",transform:`translate(${point.x} ${point.y}) rotate(${num(cell.rotation)})`});
+        node.append(svg("rect",{x:-width/2+1,y:-height/2+1,width:width-2,height:height-2,rx:4,fill:cell.color||target.color||"#b8ef5b"}));
+        const uri=assetURI(spec.assets?.[cell.asset]);
+        if(uri)node.append(svg("image",{href:uri,x:-width/2+1,y:-height/2+1,width:width-2,height:height-2,preserveAspectRatio:"xMidYMid meet"}));
+        if(cell.text)node.append(svg("text",{"text-anchor":"middle","dominant-baseline":"central",fill:"#102330","font-size":Math.min(width,height)*.42,"font-weight":700},cell.text));
+        previewLayer.append(node);
+      }
+      for(const node of stage.querySelectorAll(".declarative-target"))node.classList.toggle("previewing",node.dataset.uiId===id);
+    }
+    function disarm(){
+      armedTarget=null;previewStatus.hidden=true;previewStatus.textContent="";
+      for(const node of stage.querySelectorAll(".declarative-target.armed"))node.classList.remove("armed");
+    }
     let queue = Promise.resolve();
     function error(error) { if (destroyed) return; resetDrag();errorBox.textContent = error.message; errorBox.hidden = false; callbacks.onError?.(error); }
     function canAct() { return latest && renderedRevision===revision && latest.status === "ongoing" && latest.acting_for_player_index !== null && latest.acting_for_player_index !== undefined && !latest.replay && !moveSent; }
@@ -461,6 +530,7 @@
     function updateHints() {
       const active=canAct(),piece=selectedPiece();
       if(!piece)selected=null;
+      if(!active){clearPreview();disarm();}
       const destinations=active&&pieceActions(piece||{actions:[]}).includes("move")?new Set(piece.move_targets):null;
       stage.classList.toggle("show-action-hints",Boolean(active));
       stage.classList.toggle("show-drop-hints",Boolean(destinations));
@@ -474,6 +544,8 @@
         const allowed=active&&(!destinations||destinations.has(node.dataset.uiId));
         node.dataset.dropState=!active?"inactive":destinations?(allowed?"allowed":"unavailable"):"placement";
         node.setAttribute("aria-disabled",String(!allowed));node.setAttribute("tabindex",allowed?"0":"-1");
+        if(!allowed&&armedTarget===node.dataset.uiId)disarm();
+        if(!allowed&&previewTarget===node.dataset.uiId)clearPreview();
       }
       for(const wrapper of controls.querySelectorAll(".declarative-control")){
         const node=wrapper.querySelector("button,input,select");
@@ -482,15 +554,34 @@
         wrapper.classList.toggle("actionable",Boolean(node&&!node.disabled));
       }
       pieceTools.replaceChildren();
+      // The toolbar is shown whenever any actionable piece offers rotate, flip
+      // or resize, with the same buttons, so selecting a piece (or starting to
+      // drag it) never changes the layout under the player's finger.
+      const toolActions=["rotate","flip","scale"];
+      const offered=new Set(active?(currentScene?.pieces||[]).flatMap(item=>pieceActions(item).filter(action=>toolActions.includes(action))):[]);
       const actions=active&&piece?pieceActions(piece):[];
-      pieceTools.hidden=!actions.some(action=>action==="rotate"||action==="scale");
+      pieceTools.hidden=!offered.size;
       if(!pieceTools.hidden){
-        const caption=document.createElement("span");caption.textContent=t("ui.declarative.hints.selected_piece", {}, "Selected piece")+": "+pieceName(piece);pieceTools.append(caption);
-        const addTool=(action,label,event)=>{const button=document.createElement("button");button.type="button";button.dataset.pieceAction=action;button.dataset.pieceId=piece.id;button.textContent=label;button.addEventListener("click",()=>{if(canAct()&&selectedPiece()?.id===piece.id)dispatch(event);});pieceTools.append(button);};
-        if(actions.includes("rotate"))addTool("rotate",t("ui.declarative.hints.rotate_piece", {piece:pieceName(piece)}, "Rotate {piece}"),{type:"rotate",id:piece.id,delta:90});
-        if(actions.includes("scale")){
-          addTool("grow",t("ui.declarative.hints.grow_piece", {piece:pieceName(piece)}, "Enlarge {piece}"),{type:"scale",id:piece.id,factor:1.1});
-          addTool("shrink",t("ui.declarative.hints.shrink_piece", {piece:pieceName(piece)}, "Shrink {piece}"),{type:"scale",id:piece.id,factor:1/1.1});
+        const caption=document.createElement("span");caption.className="declarative-piece-actions-caption";
+        caption.textContent=piece&&actions.some(action=>toolActions.includes(action))?t("ui.declarative.hints.selected_piece", {}, "Selected piece")+": "+pieceName(piece):t("ui.declarative.hints.select_piece_for_tools", {}, "Select a piece to use these tools");
+        pieceTools.append(caption);
+        // Rotate/flip buttons show a symbol and a short verb so all of them fit
+        // on a phone; the full localized name stays the accessible name.
+        const addTool=(action,needs,label,event,icon,keys,short)=>{const button=document.createElement("button");button.type="button";button.dataset.pieceAction=action;
+          const enabled=Boolean(piece)&&actions.includes(needs);
+          if(enabled)button.dataset.pieceId=piece.id;else{button.disabled=true;label=short||label;}
+          if(icon){const symbol=document.createElement("span");symbol.className="declarative-tool-icon";symbol.setAttribute("aria-hidden","true");symbol.textContent=icon;button.append(symbol," ",short);button.setAttribute("aria-label",label);button.title=label;}else button.textContent=label;
+          if(keys)button.setAttribute("aria-keyshortcuts",keys);
+          button.addEventListener("click",()=>{if(enabled&&canAct()&&selectedPiece()?.id===piece.id)dispatch(event);});pieceTools.append(button);};
+        const name=piece?pieceName(piece):"";
+        if(offered.has("rotate")){
+          addTool("rotate_counterclockwise","rotate",t("ui.declarative.hints.rotate_piece_counterclockwise", {piece:name}, "Rotate {piece} counterclockwise"),{type:"rotate",id:piece?.id,delta:-90},"↺","Shift+R",t("ui.declarative.hints.rotate", {}, "Rotate"));
+          addTool("rotate","rotate",t("ui.declarative.hints.rotate_piece", {piece:name}, "Rotate {piece}"),{type:"rotate",id:piece?.id,delta:90},"↻","R",t("ui.declarative.hints.rotate", {}, "Rotate"));
+        }
+        if(offered.has("flip"))addTool("flip","flip",t("ui.declarative.hints.flip_piece", {piece:name}, "Flip {piece}"),{type:"flip",id:piece?.id},"⇋","F",t("ui.declarative.hints.flip", {}, "Flip"));
+        if(offered.has("scale")){
+          addTool("grow","scale",t("ui.declarative.hints.grow_piece", {piece:name}, "Enlarge {piece}"),{type:"scale",id:piece?.id,factor:1.1});
+          addTool("shrink","scale",t("ui.declarative.hints.shrink_piece", {piece:name}, "Shrink {piece}"),{type:"scale",id:piece?.id,factor:1/1.1});
         }
       }
     }
@@ -555,7 +646,24 @@
         if(target.hit_area)node.append(svg("rect",{class:"declarative-target-hit",...target.hit_area,fill:"transparent"}));
         node.append(svg("rect",{class:"declarative-target-area",x:-width/2,y:-height/2,width,height,rx:5,fill:target.color || "#b8ef5b",stroke:"#c9ff63","stroke-width":2}));
         if (target.label) node.append(svg("text",{"text-anchor":"middle","dominant-baseline":"central",class:"declarative-location-label",fill:"#d7f6ab","font-size":14},target.label));
+        if(target.preview?.length){
+          node.dataset.preview="true";
+          node.addEventListener("pointerdown",event=>{targetPointerType=event.pointerType;});
+          node.addEventListener("pointerenter",event=>{if(event.pointerType!=="touch"&&node.dataset.dropState!=="unavailable")showPreview(target.id);});
+          node.addEventListener("pointerleave",event=>{if(event.pointerType!=="touch"&&previewTarget===target.id&&armedTarget!==target.id)clearPreview();});
+          node.addEventListener("focus",()=>{if(node.dataset.dropState!=="unavailable")showPreview(target.id);});
+          node.addEventListener("blur",()=>{if(previewTarget===target.id&&armedTarget!==target.id)clearPreview();});
+          node.addEventListener("dragover",()=>{if(node.dataset.dropState==="allowed")showPreview(target.id);});
+        }
         activate(node,target.id,target.aria_label||target.label,()=> {
+          // Touch has no hover: the first tap shows where the piece would go.
+          const touch=targetPointerType==="touch";targetPointerType=null;
+          if(target.preview?.length&&touch&&armedTarget!==target.id){
+            disarm();armedTarget=target.id;node.classList.add("armed");showPreview(target.id);
+            previewStatus.textContent=t("ui.declarative.hints.tap_again_to_place", {}, "Tap the same spot again to place it there.");previewStatus.hidden=false;
+            return;
+          }
+          disarm();clearPreview();
           const piece = selectedPiece();
           if(pieceActions(piece||{actions:[]}).includes("move")){
             if(piece.move_targets.includes(target.id)){dispatch({type:"drop",id:piece.id,piece_id:piece.id,target_id:target.id});selected=null;updateHints();}
@@ -590,7 +698,7 @@
           actions.forEach((action,index)=>{
             const badge=svg("g",{transform:`translate(${index*22} 0)`,"data-action-hint":action});
             badge.append(svg("rect",{x:0,y:-8,width:20,height:18,rx:5}));
-            badge.append(svg("text",{x:10,y:1,"text-anchor":"middle","dominant-baseline":"central","font-size":14},({tap:"↖",move:"↔",rotate:"↻",scale:"↗"})[action]));
+            badge.append(svg("text",{x:10,y:1,"text-anchor":"middle","dominant-baseline":"central","font-size":14},({tap:"↖",move:"↔",rotate:"↻",flip:"⇋",scale:"↗"})[action]));
             badges.append(badge);
           });visual.append(badges);
           activate(node,piece.id,summary,()=>{selected=piece.id;updateHints();if(actions.includes("tap"))dispatch({type:"tap",id:piece.id});});
@@ -617,7 +725,14 @@
           }
         }
       }
-      stage.append(targetLayer);
+      // Ghost cells sit above the pieces and below the destinations, so a
+      // preview never intercepts the tap that confirms the placement.
+      const keepPreview=previewTarget,keepArmed=armedTarget;
+      previewLayer=svg("g",{class:"declarative-preview","aria-hidden":"true"});previewLayer.style.pointerEvents="none";
+      stage.append(previewLayer,targetLayer);
+      previewTarget=null;armedTarget=keepArmed;
+      if(keepPreview&&scene.targets?.some(target=>target.id===keepPreview&&target.preview?.length))showPreview(keepPreview);else disarm();
+      if(armedTarget)for(const node of stage.querySelectorAll(".declarative-target"))node.classList.toggle("armed",node.dataset.uiId===armedTarget);
       const externalLabels=[];
       for(const label of scene.labels || []){
         if(callbacks.immersive&&!spec.boards.some(board=>label.x>=num(board.x)&&label.x<num(board.x)+board.width&&label.y>=num(board.y)&&label.y<num(board.y)+board.height)){externalLabels.push(label.text);continue;}
@@ -690,7 +805,7 @@
         resetDrag();latest=clone(message);revision++;moveSent=false;selected=null;nativeDragging=null;updateHints();const atRevision=revision;
         queue=queue.then(()=>reduce(latest,atRevision,options)).catch(error);return queue;
       },
-      destroy(){resetDrag();destroyed=true;revision++;touches.clear();cameraGesture=null;cameraObserver?.disconnect();global.removeEventListener("resize",scheduleCamera);if(cameraFrame!==null)global.cancelAnimationFrame(cameraFrame);for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();global.removeEventListener("pointermove",cameraPointerMove);global.removeEventListener("pointermove",movePointer);global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game","declarative-immersive");},
+      destroy(){resetDrag();destroyed=true;revision++;touches.clear();cameraGesture=null;cameraObserver?.disconnect();global.removeEventListener("resize",scheduleCamera);if(cameraFrame!==null)global.cancelAnimationFrame(cameraFrame);for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();global.removeEventListener("pointermove",cameraPointerMove);global.removeEventListener("pointermove",previewUnderPointer);global.removeEventListener("keydown",toolKeys);global.removeEventListener("pointermove",movePointer);global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game","declarative-immersive");},
       dispatch,
     };
   }
@@ -698,10 +813,10 @@
     const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
     const data=value=>JSON.stringify(canonical(value)).replace(/</g,"\\u003c");
     return '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<link rel="stylesheet" href="/static/declarative-ui.css?v=12"><div id="declarative-game"></div>' +
+      '<link rel="stylesheet" href="/static/declarative-ui.css?v=13"><div id="declarative-game"></div>' +
       '<script type="application/json" id="i18n-strings">'+data(spec.strings || {})+'<'+'/script>' +
       '<script type="application/json" id="declarative-spec">'+data(spec)+'<'+'/script>' +
-      '<script src="/static/declarative-ui.js?v=12"><'+'/script><script>' +
+      '<script src="/static/declarative-ui.js?v=13"><'+'/script><script>' +
       'const host=DeclarativeUI.mount(document.getElementById("declarative-game"),' +
       'JSON.parse(document.getElementById("declarative-spec").textContent),' +
       '{onMove:move=>parent.postMessage({type:"make_move",move},"*"),' +
