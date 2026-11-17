@@ -497,9 +497,9 @@
   "ui.stakes.preview_wallet": "{amount} jetons par personne · {pot} jetons dans une cagnotte à {players} joueurs · Portefeuille : {balance} jetons",
   "ui.stakes.preview_wallet_gems": "{amount} gemmes par personne · {pot} gemmes dans une cagnotte à {players} joueurs · Portefeuille : {balance} gemmes",
   "ui.stakes.help": "Recevez 1 000 jetons une seule fois lors de votre première connexion vérifiée. Jouer des parties ne rapporte pas de jetons gratuits. La mise est prélevée à la création ou à l’entrée dans le salon. Seuls les joueurs humains peuvent miser.",
-  "ui.stakes.help_gems": "Recevez 1 000 gemmes une seule fois lors de votre première connexion vérifiée. Jouer des parties ne rapporte pas de gemmes gratuits. La mise est prélevée à la création ou à l’entrée dans le salon. Seuls les joueurs humains peuvent miser.",
+  "ui.stakes.help_gems": "Recevez 1 000 gemmes une seule fois lors de votre première connexion vérifiée. Jouer des parties ne rapporte pas de gemmes gratuites. La mise est prélevée à la création ou à l’entrée dans le salon. Seuls les joueurs humains peuvent miser.",
   "ui.portal.wallet_hint": "{balance} jetons virtuels · Bonus unique de 1 000 jetons à la première connexion vérifiée",
-  "ui.portal.wallet_hint_gems": "{balance} gemmes virtuels · Bonus unique de 1 000 gemmes à la première connexion vérifiée",
+  "ui.portal.wallet_hint_gems": "{balance} gemmes virtuelles · Bonus unique de 1 000 gemmes à la première connexion vérifiée",
   "ui.portal.computers_title": "Jouer contre des ordinateurs",
   "ui.portal.computers_text": "Lancez une partie sur le serveur avec un ordinateur à chaque autre place. Les parties contre ordinateurs sont à un seul joueur : vos amis ne peuvent pas les rejoindre.",
   "ui.portal.computers_button": "Jouer contre des ordinateurs ↗",
@@ -906,7 +906,7 @@
   "ui.quickplay.retry": "Veuillez réessayer.",
   "ui.quickplay.guest": "Jouer en tant qu’invité",
   "ui.quickplay.existing": "Connectez-vous ou créez un compte",
-  "ui.quickplay.later": "Les invités ne reçoivent pas le bonus de bienvenue. Associez ensuite une connexion vérifiée pour recevoir vos 1 000 jetons uniques.",
+  "ui.quickplay.later": "Les invités ne reçoivent pas le bonus de bienvenue. Associez ensuite une connexion vérifiée pour recevoir votre bonus unique de 1 000 jetons.",
   "ui.quickplay.join": "Rejoindre cette partie",
   "ui.quickplay.signin": "Se connecter à BuildPlay",
   "ui.quickplay.invited_game": "Vous êtes invité à jouer à {game}.",
@@ -944,5 +944,5 @@
   "ui.declarative.zoom.down": "Déplacer vers le bas",
   "ui.declarative.zoom.right": "Déplacer vers la droite",
   "ui.auth.verified_bonus": "Recevez 1 000 jetons une seule fois lors de votre première connexion vérifiée. Utilisez Google ou validez un code reçu par e-mail ou téléphone. Les invités ne reçoivent pas ce bonus de bienvenue.",
-  "ui.auth.guest_bonus_note": "Jouez en invité sans bonus de bienvenue. Associez ensuite une connexion vérifiée pour recevoir vos 1 000 jetons uniques."
+  "ui.auth.guest_bonus_note": "Jouez en invité sans bonus de bienvenue. Associez ensuite une connexion vérifiée pour recevoir votre bonus unique de 1 000 jetons."
 }
