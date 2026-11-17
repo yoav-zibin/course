@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {test,expect,type Page} from '@playwright/test';
-import {revealDeclarativeTarget} from './declarative-camera';
+import {backgammonAction} from './backgammon-helpers';
 
 declare const offline:any;
 declare const state:any;
@@ -11,6 +11,14 @@ const example=JSON.parse(fs.readFileSync(path.join(__dirname,'../games/declarati
 const game={...example,id:'device-only-backgammon-storage-game',version:1,renderer_type:'declarative',game_schemas:{state:example.unit_tests.state_schema,view:example.unit_tests.view_schema,move:example.unit_tests.move_schema},code:''};
 
 async function savedMatch(page:Page){return page.evaluate(()=>JSON.parse(JSON.stringify(state.match)));}
+
+async function savedRecordSize(page:Page){
+  return page.evaluate(()=>{
+    const o=offline,match=o.read().local[state.match.id];
+    return {characters:localStorage.getItem(o.localKey(match.id))!.length,
+      undo_snapshots:match.logicState.undo_stack.length,move_count:match.move_count};
+  });
+}
 
 async function fillRecoverableCaches(page:Page){
   return page.evaluate(()=>{
@@ -32,17 +40,35 @@ async function fillRecoverableCaches(page:Page){
 }
 
 async function checkerMove(page:Page){
-  const before=await savedMatch(page);
-  if(before.state.needRoll){await page.locator('#game-box [data-ui-id="die_0"]').click();await expect.poll(async()=>(await savedMatch(page)).move_count).toBeGreaterThan(before.move_count);}
+  // Preserve the real setup/opening flow while saturating storage; a new
+  // game requires two separate opening rolls, with genuine ties rerolled.
+  for(let step=0;step<30;step++){
+    const before=await savedMatch(page);
+    if(before.state.configured!==false&&!before.state.needRoll)break;
+    await backgammonAction(page);
+    await expect.poll(async()=>(await savedMatch(page)).move_count,{timeout:30000}).toBeGreaterThan(before.move_count);
+  }
   const rolled=await savedMatch(page);
-  const piece=page.locator('#game-box .declarative-piece.actionable[data-actions~="move"]').first();await expect(piece).toBeVisible();await revealDeclarativeTarget(page,piece);await piece.locator(':scope > g[opacity]').click();
-  const target=page.locator('#game-box .declarative-target[data-drop-state="allowed"]').first();await expect(target).toBeVisible();await revealDeclarativeTarget(page,target);await target.click();
-  await expect.poll(async()=>(await savedMatch(page)).move_count).toBeGreaterThan(rolled.move_count);
+  expect(rolled.state.needRoll).toBe(false);
+  await backgammonAction(page);
+  await expect.poll(async()=>(await savedMatch(page)).move_count,{timeout:30000}).toBeGreaterThan(rolled.move_count);
   await expect(page.locator('#game-box .declarative-error:visible')).toHaveCount(0);
   return savedMatch(page);
 }
 
+async function finishCurrentTurn(page:Page){
+  for(let step=0;step<4;step++){
+    const before=await savedMatch(page);
+    if(before.state.needRoll)return before;
+    await backgammonAction(page);
+    await expect.poll(async()=>(await savedMatch(page)).move_count,{timeout:30000}).toBeGreaterThan(before.move_count);
+  }
+  const finished=await savedMatch(page);expect(finished.state.needRoll).toBe(true);
+  return finished;
+}
+
 test('a full browser automatically reclaims old caches so Backgammon saves without losing queued work',async({page,context},testInfo)=>{
+  test.setTimeout(120000);
   const errors:string[]=[],writes:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   await context.route('**/*',route=>{const req=route.request(),url=new URL(req.url());if(req.method()!=='GET'||!['127.0.0.1','localhost'].includes(url.hostname)){if(req.method()!=='GET'&&url.pathname!=='/client-errors')writes.push(req.method()+' '+url.pathname);return route.abort();}return route.continue();});
   await page.addInitScript(({game,accountId})=>{
@@ -64,7 +90,13 @@ test('a full browser automatically reclaims old caches so Backgammon saves witho
   await page.locator('#practice').click();await expect(page.locator('#game-box .declarative-stage')).toBeVisible();
   await expect(page.locator('#create-message')).not.toContainText('storage is full');
   expect(await page.evaluate(key=>localStorage.getItem(key),firstPressure.oldest)).toBeNull();expect(await page.evaluate(key=>localStorage.getItem(key),firstPressure.newest)).not.toBeNull();
-  const moved=await checkerMove(page);expect(moved.localMode).toBe('pass');expect(moved.id).toMatch(/^local-/);expect(moved.move_count).toBeGreaterThanOrEqual(2);
+  const firstMove=await checkerMove(page);expect(firstMove.localMode).toBe('pass');expect(firstMove.id).toMatch(/^local-/);expect(firstMove.move_count).toBeGreaterThanOrEqual(2);
+  const beforeFinishingTurn=await savedRecordSize(page);
+  // Completing a turn clears undo snapshots and can shrink the saved record.
+  // Start the second pressure phase at a turn boundary so the next genuine
+  // roll/checker sequence grows history and actually needs quota recovery.
+  const moved=await finishCurrentTurn(page),beforeSecondPressure=await savedRecordSize(page);
+  expect(beforeSecondPressure.undo_snapshots).toBe(0);
   // Saturate again before reload: a failed write probe must not replace a
   // readable, full Storage object with an empty in-memory account store.
   const secondPressure=await fillRecoverableCaches(page);expect(secondPressure.full).toBe(true);
@@ -72,10 +104,12 @@ test('a full browser automatically reclaims old caches so Backgammon saves witho
   const restored=await savedMatch(page);expect(restored.id).toBe(moved.id);expect(restored.move_count).toBe(moved.move_count);expect(restored.state).toEqual(moved.state);
   const pending=await page.evaluate(()=>{const o=offline;return{queue:o.read().queues['retained-online'],memory:Boolean(o.storage.__portalMemoryFallback)};});expect(pending.queue).toHaveLength(1);expect(pending.memory).toBe(false);
   await checkerMove(page);
+  const afterSecondPressure=await savedRecordSize(page);
+  expect(afterSecondPressure.characters).toBeGreaterThan(beforeSecondPressure.characters);
   const retained=await page.evaluate(()=>{const o=offline;return{account:localStorage.getItem('game-platform.accounts.v1'),queue:localStorage.getItem(o.queueKey('retained-online')),snapshot:localStorage.getItem(o.responseKey('/matches/retained-online')),draft:localStorage.getItem('unrelated-builder-draft')};});expect(retained).toEqual(original);
   expect(await page.evaluate(key=>localStorage.getItem(key),secondPressure.oldest)).toBeNull();expect(await page.evaluate(key=>localStorage.getItem(key),secondPressure.newest)).not.toBeNull();
   expect(errors).toEqual([]);expect(writes).toEqual([]);
-  const screenshot=await page.screenshot({fullPage:true}),evidence={firstPressure,secondPressure,saved_moves:(await savedMatch(page)).move_count,preserved:['credentials','queued move','queued snapshot','unrelated draft'],page_errors:errors,server_writes:writes};
+  const screenshot=await page.screenshot({fullPage:true}),evidence={firstPressure,secondPressure,beforeFinishingTurn,beforeSecondPressure,afterSecondPressure,saved_moves:(await savedMatch(page)).move_count,preserved:['credentials','queued move','queued snapshot','unrelated draft'],page_errors:errors,server_writes:writes};
   await testInfo.attach('backgammon-after-automatic-storage-recovery',{body:screenshot,contentType:'image/png'});
   await testInfo.attach('storage-pressure-evidence',{body:JSON.stringify(evidence),contentType:'application/json'});
   if(process.env.DECLARATIVE_STORAGE_EVIDENCE_DIR){

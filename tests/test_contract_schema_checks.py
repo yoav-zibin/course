@@ -117,3 +117,28 @@ def test_view_or_move_named_state_field_is_not_a_match_result(function):
     who = None if function == 'viewFor' else 'human'
     assert ContractLogic(source, contract, game_schemas=runtime).call(
         function, {'n': 0}, who, ctx=CTX) == {'state': 'a label'}
+
+
+@pytest.mark.parametrize('passed', [False, True])
+def test_import_walks_allow_complete_board_games_without_relaxing_failure_checks(monkeypatch, passed):
+    from game_platform import game_checks
+    from game_platform.game_testing import GameTestReport
+    from game_platform.models import GameRules
+
+    calls = []
+    report = GameTestReport(passed=passed, walks_completed=1, moves_made=350, too_slow=False)
+
+    def run(server, **options):
+        calls.append((server, options))
+        return report
+
+    monkeypatch.setattr(game_checks, 'test_server_code', run)
+    rules = GameRules(allowed_player_counts=(2,), allows_leave_mid_match=False, allows_join_mid_match=False)
+    result = game_checks.random_walks('', SOURCE, {'tests': CONTRACT}, rules)
+    assert result['passed'] is passed
+    assert '1 walks, 350 moves' in result['details']
+    assert calls == [(SOURCE, {
+        'game_schemas': {name: CONTRACT[name + '_schema'] for name in ('state', 'move', 'view')},
+        'rules': rules, 'contract': CONTRACT, 'budget_seconds': 8,
+        'first_walk_budget_seconds': 30, 'max_walks': 1000,
+    })]

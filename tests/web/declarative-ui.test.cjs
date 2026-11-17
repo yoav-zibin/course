@@ -76,6 +76,19 @@ test('renderer rejects explosive grids, non-finite geometry and unapproved image
   assert.equal(api.assetURI({uri:'data:image/png;base64,aGVsbG8='}),'data:image/png;base64,aGVsbG8=');
 });
 
+test('viewport camera preference accepts booleans and preserves the enabled default',()=>{
+  const original=sample();assert.equal(api.validateSpec(original),original);
+  assert.equal(Object.hasOwn(original.viewport,'camera_enabled'),false);
+  for(const camera_enabled of [true,false]){
+    const spec=sample();spec.viewport.camera_enabled=camera_enabled;
+    assert.equal(api.validateSpec(spec).viewport.camera_enabled,camera_enabled);
+  }
+  for(const camera_enabled of [null,0,1,'false',{},[]]){
+    const spec=sample();spec.viewport.camera_enabled=camera_enabled;
+    assert.throws(()=>api.validateSpec(spec),/Invalid viewport/);
+  }
+});
+
 test('compatibility clients escape script terminators and contain platform code only',()=>{
   const spec=sample();spec.strings={title:'</script><img src=x onerror=alert(1)>'};
   const source=api.clientDocument(spec);
@@ -147,4 +160,23 @@ test('camera margins expose every edge at overview, fitted and magnified zoom wi
       assert.ok(overlapY>=Math.min(limits.height,board.height)*.8);
     }
   }
+});
+
+
+test('motion policy rejects unbounded timing and executable easing while retaining portable defaults',()=>{
+  const cases=JSON.parse(fs.readFileSync(path.join(__dirname,'../fixtures/declarative/motion-cases.json'),'utf8'));
+  for(const {value,valid} of cases){
+    const spec={...sample(),motion:value};
+    if(valid)assert.equal(api.validateSpec(spec),spec);
+    else assert.throws(()=>api.validateSpec(spec));
+  }
+});
+
+test('destination artwork references and round action outlines retain the strict portable boundary',()=>{
+  const spec=sample();spec.assets={hint:{uri:'https://example.org/hint.png'}};
+  for(const action_outline of ['rect','ellipse','none'])assert.doesNotThrow(()=>api.validateSpec({...spec,piece_types:{token:{shape:'image',action_outline}}}));
+  assert.throws(()=>api.validateSpec({...spec,piece_types:{token:{shape:'image',action_outline:'script'}}}));
+  const target={id:'hint',board:'main',position:{cell:'0'},asset:'hint'};
+  assert.doesNotThrow(()=>api.validateScene(spec,{targets:[target]}));
+  assert.throws(()=>api.validateScene(spec,{targets:[{...target,asset:'missing'}]}));
 });

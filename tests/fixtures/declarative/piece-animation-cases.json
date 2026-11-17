@@ -1,18 +1,223 @@
 [
-  {"value":{"kind":"roll","key":"turn-12:seat_0.dice"},"valid":true},
-  {"value":{"kind":"roll","key":"a"},"valid":true},
-  {"value":null,"valid":false},
-  {"value":[],"valid":false},
-  {"value":"roll","valid":false},
-  {"value":{},"valid":false},
-  {"value":{"kind":"roll"},"valid":false},
-  {"value":{"key":"turn-12"},"valid":false},
-  {"value":{"kind":"spin","key":"turn-12"},"valid":false},
-  {"value":{"kind":"roll","key":""},"valid":false},
-  {"value":{"kind":"roll","key":"two words"},"valid":false},
-  {"value":{"kind":"roll","key":"roll/12"},"valid":false},
-  {"value":{"kind":"roll","key":"🎲"},"valid":false},
-  {"value":{"kind":"roll","key":12},"valid":false},
-  {"value":{"kind":"roll","key":null},"valid":false},
-  {"value":{"kind":"roll","key":"turn-12","duration":600},"valid":false}
+  {
+    "value": {
+      "kind": "roll",
+      "key": "turn-12:seat_0.dice"
+    },
+    "valid": true
+  },
+  {
+    "value": {
+      "kind": "roll",
+      "key": "a"
+    },
+    "valid": true
+  },
+  {
+    "value": null,
+    "valid": false
+  },
+  {
+    "value": [],
+    "valid": false
+  },
+  {
+    "value": "roll",
+    "valid": false
+  },
+  {
+    "value": {},
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "roll"
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "key": "turn-12"
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "spin",
+      "key": "turn-12"
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "roll",
+      "key": ""
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "roll",
+      "key": "two words"
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "roll",
+      "key": "roll/12"
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "roll",
+      "key": "\ud83c\udfb2"
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "roll",
+      "key": 12
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "roll",
+      "key": null
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "roll",
+      "key": "turn-12",
+      "duration": 600
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "move",
+      "key": "capture-12",
+      "duration_ms": 400,
+      "delay_ms": 400
+    },
+    "valid": true
+  },
+  {
+    "value": {
+      "kind": "roll",
+      "key": "roll-12",
+      "duration_ms": 500
+    },
+    "valid": true
+  },
+  {
+    "value": {
+      "kind": "move",
+      "key": "x",
+      "duration_ms": true
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "move",
+      "key": "x",
+      "duration_ms": -1
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "move",
+      "key": "x",
+      "duration_ms": 5001
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "move",
+      "key": "x",
+      "duration_ms": 0.5
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "move",
+      "key": "x",
+      "duration_ms": "400"
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "move",
+      "key": "x",
+      "duration_ms": null
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "move",
+      "key": "x",
+      "delay_ms": true
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "move",
+      "key": "x",
+      "delay_ms": -1
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "move",
+      "key": "x",
+      "delay_ms": 5001
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "move",
+      "key": "x",
+      "delay_ms": 0.5
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "move",
+      "key": "x",
+      "delay_ms": "400"
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "move",
+      "key": "x",
+      "delay_ms": null
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "kind": "notice",
+      "key": "opening-2",
+      "duration_ms": 2000,
+      "delay_ms": 1000
+    },
+    "valid": true
+  }
 ]

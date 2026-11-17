@@ -1,7 +1,7 @@
 [
   {
     "name": "Combined four ones",
-    "description": "Move 15 checkers home and bear them off. Roll two dice; doubles give four moves. Enter captured checkers from the bar first. A point with two opposing checkers is blocked; a lone checker is hit. Use the maximum possible dice, and the higher die if only one can be used. Bear off only when all your checkers are home. This uses the ordinary platform Backgammon rules, including its finite-match safeguard: after 120 turns or 300 actions, the player with more checkers off wins; ties favor player one.",
+    "description": "Each player rolls one opening die; reroll ties. The higher roll starts using both dice. Move all 15 checkers home and bear them off; doubles give four moves. Enter captured checkers from the bar first. Two opposing checkers block a point; a lone checker is hit. Use the maximum possible dice and the higher die if only one is usable. Undo a move only while your turn is unfinished. Choose a match goal of 1, 3, 5, 7, 11 or 15 points. A gammon scores double and a backgammon triple. If enabled, offer the doubling cube before rolling; the opponent may take or drop. The cube changes match points, never the platform token pot. First to the chosen goal wins.",
     "kind": "intermediate",
     "ctx": {
       "players": [
@@ -103,7 +103,24 @@
       "needRoll": false,
       "winner": null,
       "n": 0,
-      "last_roll": null
+      "last_roll": null,
+      "opening": false,
+      "opening_roll": null,
+      "undo_stack": [],
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null
     },
     "view_of_mover": {
       "owner": [
@@ -204,7 +221,25 @@
           "from": 9,
           "to": 5
         }
-      ]
+      ],
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "can_undo": false,
+      "can_double": false
     },
     "view_of_other": {
       "owner": [
@@ -283,29 +318,27 @@
       "needRoll": false,
       "winner": null,
       "n": 0,
-      "legalMoves": [
-        {
-          "from": 9,
-          "to": 8,
-          "die": 1,
-          "idx": 0
-        }
-      ],
       "last_roll": null,
-      "combinedMoves": [
-        {
-          "from": 9,
-          "to": 7
-        },
-        {
-          "from": 9,
-          "to": 6
-        },
-        {
-          "from": 9,
-          "to": 5
-        }
-      ]
+      "legalMoves": [],
+      "combinedMoves": [],
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "can_undo": false,
+      "can_double": false
     },
     "player_id": "u1",
     "other_player_id": null,
@@ -381,7 +414,24 @@
       "needRoll": true,
       "winner": null,
       "n": 1,
-      "last_roll": null
+      "last_roll": null,
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "undo_stack": []
     },
     "expected_turn": [
       "u2"
@@ -453,9 +503,27 @@
       "needRoll": true,
       "winner": null,
       "n": 1,
-      "legalMoves": [],
       "last_roll": null,
-      "combinedMoves": []
+      "legalMoves": [],
+      "combinedMoves": [],
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "can_undo": false,
+      "can_double": true
     },
     "expected_view_of_other": {
       "owner": [
@@ -524,32 +592,50 @@
       "needRoll": true,
       "winner": null,
       "n": 1,
-      "legalMoves": [],
       "last_roll": null,
-      "combinedMoves": []
+      "legalMoves": [],
+      "combinedMoves": [],
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "can_undo": false,
+      "can_double": true
     },
     "images": [
       {
         "caption": "Before: mover",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"140\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"5\" fill=\"#51230c\"/><rect x=\"16\" y=\"16\" width=\"640\" height=\"408\" fill=\"#dc9e47\"/><rect x=\"316\" y=\"10\" width=\"40\" height=\"420\" fill=\"#51230c\"/><path d=\"M612 422H660L636 261Z\" fill=\"#b56828\"/><path d=\"M560 422H608L584 261Z\" fill=\"#63240e\"/><path d=\"M508 422H556L532 261Z\" fill=\"#b56828\"/><path d=\"M456 422H504L480 261Z\" fill=\"#63240e\"/><path d=\"M404 422H452L428 261Z\" fill=\"#b56828\"/><path d=\"M352 422H400L376 261Z\" fill=\"#63240e\"/><path d=\"M272 422H320L296 261Z\" fill=\"#b56828\"/><path d=\"M220 422H268L244 261Z\" fill=\"#63240e\"/><path d=\"M168 422H216L192 261Z\" fill=\"#b56828\"/><path d=\"M116 422H164L140 261Z\" fill=\"#63240e\"/><path d=\"M64 422H112L88 261Z\" fill=\"#b56828\"/><path d=\"M12 422H60L36 261Z\" fill=\"#63240e\"/><path d=\"M12 18H60L36 179Z\" fill=\"#b56828\"/><path d=\"M64 18H112L88 179Z\" fill=\"#63240e\"/><path d=\"M116 18H164L140 179Z\" fill=\"#b56828\"/><path d=\"M168 18H216L192 179Z\" fill=\"#63240e\"/><path d=\"M220 18H268L244 179Z\" fill=\"#b56828\"/><path d=\"M272 18H320L296 179Z\" fill=\"#63240e\"/><path d=\"M352 18H400L376 179Z\" fill=\"#b56828\"/><path d=\"M404 18H452L428 179Z\" fill=\"#63240e\"/><path d=\"M456 18H504L480 179Z\" fill=\"#b56828\"/><path d=\"M508 18H556L532 179Z\" fill=\"#63240e\"/><path d=\"M560 18H608L584 179Z\" fill=\"#b56828\"/><path d=\"M612 18H660L636 179Z\" fill=\"#63240e\"/><defs><radialGradient id=\"preview_checker_0\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#f35b41\"/><stop offset=\".65\" stop-color=\"#bc1d0e\"/><stop offset=\"1\" stop-color=\"#6c0d04\"/></radialGradient><radialGradient id=\"preview_checker_1\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#ffffff\"/><stop offset=\".65\" stop-color=\"#eee8d5\"/><stop offset=\"1\" stop-color=\"#b6a98c\"/></radialGradient></defs><circle cx=\"140\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_0)\" stroke=\"#301507\"/><circle cx=\"140\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#fb9a75\"/><circle cx=\"636\" cy=\"32\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"32\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"63\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"63\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"94\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"94\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"125\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"125\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"156\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"156\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/></svg>"
       },
       {
         "caption": "Before: spectator",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"140\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"5\" fill=\"#51230c\"/><rect x=\"16\" y=\"16\" width=\"640\" height=\"408\" fill=\"#dc9e47\"/><rect x=\"316\" y=\"10\" width=\"40\" height=\"420\" fill=\"#51230c\"/><path d=\"M612 422H660L636 261Z\" fill=\"#b56828\"/><path d=\"M560 422H608L584 261Z\" fill=\"#63240e\"/><path d=\"M508 422H556L532 261Z\" fill=\"#b56828\"/><path d=\"M456 422H504L480 261Z\" fill=\"#63240e\"/><path d=\"M404 422H452L428 261Z\" fill=\"#b56828\"/><path d=\"M352 422H400L376 261Z\" fill=\"#63240e\"/><path d=\"M272 422H320L296 261Z\" fill=\"#b56828\"/><path d=\"M220 422H268L244 261Z\" fill=\"#63240e\"/><path d=\"M168 422H216L192 261Z\" fill=\"#b56828\"/><path d=\"M116 422H164L140 261Z\" fill=\"#63240e\"/><path d=\"M64 422H112L88 261Z\" fill=\"#b56828\"/><path d=\"M12 422H60L36 261Z\" fill=\"#63240e\"/><path d=\"M12 18H60L36 179Z\" fill=\"#b56828\"/><path d=\"M64 18H112L88 179Z\" fill=\"#63240e\"/><path d=\"M116 18H164L140 179Z\" fill=\"#b56828\"/><path d=\"M168 18H216L192 179Z\" fill=\"#63240e\"/><path d=\"M220 18H268L244 179Z\" fill=\"#b56828\"/><path d=\"M272 18H320L296 179Z\" fill=\"#63240e\"/><path d=\"M352 18H400L376 179Z\" fill=\"#b56828\"/><path d=\"M404 18H452L428 179Z\" fill=\"#63240e\"/><path d=\"M456 18H504L480 179Z\" fill=\"#b56828\"/><path d=\"M508 18H556L532 179Z\" fill=\"#63240e\"/><path d=\"M560 18H608L584 179Z\" fill=\"#b56828\"/><path d=\"M612 18H660L636 179Z\" fill=\"#63240e\"/><defs><radialGradient id=\"preview_checker_0\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#f35b41\"/><stop offset=\".65\" stop-color=\"#bc1d0e\"/><stop offset=\"1\" stop-color=\"#6c0d04\"/></radialGradient><radialGradient id=\"preview_checker_1\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#ffffff\"/><stop offset=\".65\" stop-color=\"#eee8d5\"/><stop offset=\"1\" stop-color=\"#b6a98c\"/></radialGradient></defs><circle cx=\"140\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_0)\" stroke=\"#301507\"/><circle cx=\"140\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#fb9a75\"/><circle cx=\"636\" cy=\"32\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"32\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"63\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"63\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"94\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"94\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"125\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"125\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"156\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"156\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/></svg>"
       },
       {
         "caption": "After: mover",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"376\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"5\" fill=\"#51230c\"/><rect x=\"16\" y=\"16\" width=\"640\" height=\"408\" fill=\"#dc9e47\"/><rect x=\"316\" y=\"10\" width=\"40\" height=\"420\" fill=\"#51230c\"/><path d=\"M612 422H660L636 261Z\" fill=\"#b56828\"/><path d=\"M560 422H608L584 261Z\" fill=\"#63240e\"/><path d=\"M508 422H556L532 261Z\" fill=\"#b56828\"/><path d=\"M456 422H504L480 261Z\" fill=\"#63240e\"/><path d=\"M404 422H452L428 261Z\" fill=\"#b56828\"/><path d=\"M352 422H400L376 261Z\" fill=\"#63240e\"/><path d=\"M272 422H320L296 261Z\" fill=\"#b56828\"/><path d=\"M220 422H268L244 261Z\" fill=\"#63240e\"/><path d=\"M168 422H216L192 261Z\" fill=\"#b56828\"/><path d=\"M116 422H164L140 261Z\" fill=\"#63240e\"/><path d=\"M64 422H112L88 261Z\" fill=\"#b56828\"/><path d=\"M12 422H60L36 261Z\" fill=\"#63240e\"/><path d=\"M12 18H60L36 179Z\" fill=\"#b56828\"/><path d=\"M64 18H112L88 179Z\" fill=\"#63240e\"/><path d=\"M116 18H164L140 179Z\" fill=\"#b56828\"/><path d=\"M168 18H216L192 179Z\" fill=\"#63240e\"/><path d=\"M220 18H268L244 179Z\" fill=\"#b56828\"/><path d=\"M272 18H320L296 179Z\" fill=\"#63240e\"/><path d=\"M352 18H400L376 179Z\" fill=\"#b56828\"/><path d=\"M404 18H452L428 179Z\" fill=\"#63240e\"/><path d=\"M456 18H504L480 179Z\" fill=\"#b56828\"/><path d=\"M508 18H556L532 179Z\" fill=\"#63240e\"/><path d=\"M560 18H608L584 179Z\" fill=\"#b56828\"/><path d=\"M612 18H660L636 179Z\" fill=\"#63240e\"/><defs><radialGradient id=\"preview_checker_0\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#f35b41\"/><stop offset=\".65\" stop-color=\"#bc1d0e\"/><stop offset=\"1\" stop-color=\"#6c0d04\"/></radialGradient><radialGradient id=\"preview_checker_1\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#ffffff\"/><stop offset=\".65\" stop-color=\"#eee8d5\"/><stop offset=\"1\" stop-color=\"#b6a98c\"/></radialGradient></defs><circle cx=\"376\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_0)\" stroke=\"#301507\"/><circle cx=\"376\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#fb9a75\"/><circle cx=\"636\" cy=\"32\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"32\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"63\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"63\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"94\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"94\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"125\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"125\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"156\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"156\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/></svg>"
       },
       {
         "caption": "After: spectator",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"376\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"5\" fill=\"#51230c\"/><rect x=\"16\" y=\"16\" width=\"640\" height=\"408\" fill=\"#dc9e47\"/><rect x=\"316\" y=\"10\" width=\"40\" height=\"420\" fill=\"#51230c\"/><path d=\"M612 422H660L636 261Z\" fill=\"#b56828\"/><path d=\"M560 422H608L584 261Z\" fill=\"#63240e\"/><path d=\"M508 422H556L532 261Z\" fill=\"#b56828\"/><path d=\"M456 422H504L480 261Z\" fill=\"#63240e\"/><path d=\"M404 422H452L428 261Z\" fill=\"#b56828\"/><path d=\"M352 422H400L376 261Z\" fill=\"#63240e\"/><path d=\"M272 422H320L296 261Z\" fill=\"#b56828\"/><path d=\"M220 422H268L244 261Z\" fill=\"#63240e\"/><path d=\"M168 422H216L192 261Z\" fill=\"#b56828\"/><path d=\"M116 422H164L140 261Z\" fill=\"#63240e\"/><path d=\"M64 422H112L88 261Z\" fill=\"#b56828\"/><path d=\"M12 422H60L36 261Z\" fill=\"#63240e\"/><path d=\"M12 18H60L36 179Z\" fill=\"#b56828\"/><path d=\"M64 18H112L88 179Z\" fill=\"#63240e\"/><path d=\"M116 18H164L140 179Z\" fill=\"#b56828\"/><path d=\"M168 18H216L192 179Z\" fill=\"#63240e\"/><path d=\"M220 18H268L244 179Z\" fill=\"#b56828\"/><path d=\"M272 18H320L296 179Z\" fill=\"#63240e\"/><path d=\"M352 18H400L376 179Z\" fill=\"#b56828\"/><path d=\"M404 18H452L428 179Z\" fill=\"#63240e\"/><path d=\"M456 18H504L480 179Z\" fill=\"#b56828\"/><path d=\"M508 18H556L532 179Z\" fill=\"#63240e\"/><path d=\"M560 18H608L584 179Z\" fill=\"#b56828\"/><path d=\"M612 18H660L636 179Z\" fill=\"#63240e\"/><defs><radialGradient id=\"preview_checker_0\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#f35b41\"/><stop offset=\".65\" stop-color=\"#bc1d0e\"/><stop offset=\"1\" stop-color=\"#6c0d04\"/></radialGradient><radialGradient id=\"preview_checker_1\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#ffffff\"/><stop offset=\".65\" stop-color=\"#eee8d5\"/><stop offset=\"1\" stop-color=\"#b6a98c\"/></radialGradient></defs><circle cx=\"376\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_0)\" stroke=\"#301507\"/><circle cx=\"376\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#fb9a75\"/><circle cx=\"636\" cy=\"32\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"32\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"63\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"63\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"94\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"94\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"125\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"125\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"156\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"156\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/></svg>"
       }
     ]
   },
   {
     "name": "Combined one and four",
-    "description": "Move 15 checkers home and bear them off. Roll two dice; doubles give four moves. Enter captured checkers from the bar first. A point with two opposing checkers is blocked; a lone checker is hit. Use the maximum possible dice, and the higher die if only one can be used. Bear off only when all your checkers are home. This uses the ordinary platform Backgammon rules, including its finite-match safeguard: after 120 turns or 300 actions, the player with more checkers off wins; ties favor player one.",
+    "description": "Each player rolls one opening die; reroll ties. The higher roll starts using both dice. Move all 15 checkers home and bear them off; doubles give four moves. Enter captured checkers from the bar first. Two opposing checkers block a point; a lone checker is hit. Use the maximum possible dice and the higher die if only one is usable. Undo a move only while your turn is unfinished. Choose a match goal of 1, 3, 5, 7, 11 or 15 points. A gammon scores double and a backgammon triple. If enabled, offer the doubling cube before rolling; the opponent may take or drop. The cube changes match points, never the platform token pot. First to the chosen goal wins.",
     "kind": "intermediate",
     "ctx": {
       "players": [
@@ -647,7 +733,24 @@
       "needRoll": false,
       "winner": null,
       "n": 0,
-      "last_roll": null
+      "last_roll": null,
+      "opening": false,
+      "opening_roll": null,
+      "undo_stack": [],
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null
     },
     "view_of_mover": {
       "owner": [
@@ -742,7 +845,25 @@
           "from": 9,
           "to": 4
         }
-      ]
+      ],
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "can_undo": false,
+      "can_double": false
     },
     "view_of_other": {
       "owner": [
@@ -817,27 +938,27 @@
       "needRoll": false,
       "winner": null,
       "n": 0,
-      "legalMoves": [
-        {
-          "from": 9,
-          "to": 8,
-          "die": 1,
-          "idx": 0
-        },
-        {
-          "from": 9,
-          "to": 5,
-          "die": 4,
-          "idx": 1
-        }
-      ],
       "last_roll": null,
-      "combinedMoves": [
-        {
-          "from": 9,
-          "to": 4
-        }
-      ]
+      "legalMoves": [],
+      "combinedMoves": [],
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "can_undo": false,
+      "can_double": false
     },
     "player_id": "u1",
     "other_player_id": null,
@@ -913,7 +1034,24 @@
       "needRoll": true,
       "winner": null,
       "n": 1,
-      "last_roll": null
+      "last_roll": null,
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "undo_stack": []
     },
     "expected_turn": [
       "u2"
@@ -985,9 +1123,27 @@
       "needRoll": true,
       "winner": null,
       "n": 1,
-      "legalMoves": [],
       "last_roll": null,
-      "combinedMoves": []
+      "legalMoves": [],
+      "combinedMoves": [],
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "can_undo": false,
+      "can_double": true
     },
     "expected_view_of_other": {
       "owner": [
@@ -1056,32 +1212,50 @@
       "needRoll": true,
       "winner": null,
       "n": 1,
-      "legalMoves": [],
       "last_roll": null,
-      "combinedMoves": []
+      "legalMoves": [],
+      "combinedMoves": [],
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "can_undo": false,
+      "can_double": true
     },
     "images": [
       {
         "caption": "Before: mover",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"140\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"5\" fill=\"#51230c\"/><rect x=\"16\" y=\"16\" width=\"640\" height=\"408\" fill=\"#dc9e47\"/><rect x=\"316\" y=\"10\" width=\"40\" height=\"420\" fill=\"#51230c\"/><path d=\"M612 422H660L636 261Z\" fill=\"#b56828\"/><path d=\"M560 422H608L584 261Z\" fill=\"#63240e\"/><path d=\"M508 422H556L532 261Z\" fill=\"#b56828\"/><path d=\"M456 422H504L480 261Z\" fill=\"#63240e\"/><path d=\"M404 422H452L428 261Z\" fill=\"#b56828\"/><path d=\"M352 422H400L376 261Z\" fill=\"#63240e\"/><path d=\"M272 422H320L296 261Z\" fill=\"#b56828\"/><path d=\"M220 422H268L244 261Z\" fill=\"#63240e\"/><path d=\"M168 422H216L192 261Z\" fill=\"#b56828\"/><path d=\"M116 422H164L140 261Z\" fill=\"#63240e\"/><path d=\"M64 422H112L88 261Z\" fill=\"#b56828\"/><path d=\"M12 422H60L36 261Z\" fill=\"#63240e\"/><path d=\"M12 18H60L36 179Z\" fill=\"#b56828\"/><path d=\"M64 18H112L88 179Z\" fill=\"#63240e\"/><path d=\"M116 18H164L140 179Z\" fill=\"#b56828\"/><path d=\"M168 18H216L192 179Z\" fill=\"#63240e\"/><path d=\"M220 18H268L244 179Z\" fill=\"#b56828\"/><path d=\"M272 18H320L296 179Z\" fill=\"#63240e\"/><path d=\"M352 18H400L376 179Z\" fill=\"#b56828\"/><path d=\"M404 18H452L428 179Z\" fill=\"#63240e\"/><path d=\"M456 18H504L480 179Z\" fill=\"#b56828\"/><path d=\"M508 18H556L532 179Z\" fill=\"#63240e\"/><path d=\"M560 18H608L584 179Z\" fill=\"#b56828\"/><path d=\"M612 18H660L636 179Z\" fill=\"#63240e\"/><defs><radialGradient id=\"preview_checker_0\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#f35b41\"/><stop offset=\".65\" stop-color=\"#bc1d0e\"/><stop offset=\"1\" stop-color=\"#6c0d04\"/></radialGradient><radialGradient id=\"preview_checker_1\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#ffffff\"/><stop offset=\".65\" stop-color=\"#eee8d5\"/><stop offset=\"1\" stop-color=\"#b6a98c\"/></radialGradient></defs><circle cx=\"140\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_0)\" stroke=\"#301507\"/><circle cx=\"140\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#fb9a75\"/><circle cx=\"636\" cy=\"32\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"32\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"63\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"63\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"94\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"94\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"125\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"125\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"156\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"156\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/></svg>"
       },
       {
         "caption": "Before: spectator",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"140\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"5\" fill=\"#51230c\"/><rect x=\"16\" y=\"16\" width=\"640\" height=\"408\" fill=\"#dc9e47\"/><rect x=\"316\" y=\"10\" width=\"40\" height=\"420\" fill=\"#51230c\"/><path d=\"M612 422H660L636 261Z\" fill=\"#b56828\"/><path d=\"M560 422H608L584 261Z\" fill=\"#63240e\"/><path d=\"M508 422H556L532 261Z\" fill=\"#b56828\"/><path d=\"M456 422H504L480 261Z\" fill=\"#63240e\"/><path d=\"M404 422H452L428 261Z\" fill=\"#b56828\"/><path d=\"M352 422H400L376 261Z\" fill=\"#63240e\"/><path d=\"M272 422H320L296 261Z\" fill=\"#b56828\"/><path d=\"M220 422H268L244 261Z\" fill=\"#63240e\"/><path d=\"M168 422H216L192 261Z\" fill=\"#b56828\"/><path d=\"M116 422H164L140 261Z\" fill=\"#63240e\"/><path d=\"M64 422H112L88 261Z\" fill=\"#b56828\"/><path d=\"M12 422H60L36 261Z\" fill=\"#63240e\"/><path d=\"M12 18H60L36 179Z\" fill=\"#b56828\"/><path d=\"M64 18H112L88 179Z\" fill=\"#63240e\"/><path d=\"M116 18H164L140 179Z\" fill=\"#b56828\"/><path d=\"M168 18H216L192 179Z\" fill=\"#63240e\"/><path d=\"M220 18H268L244 179Z\" fill=\"#b56828\"/><path d=\"M272 18H320L296 179Z\" fill=\"#63240e\"/><path d=\"M352 18H400L376 179Z\" fill=\"#b56828\"/><path d=\"M404 18H452L428 179Z\" fill=\"#63240e\"/><path d=\"M456 18H504L480 179Z\" fill=\"#b56828\"/><path d=\"M508 18H556L532 179Z\" fill=\"#63240e\"/><path d=\"M560 18H608L584 179Z\" fill=\"#b56828\"/><path d=\"M612 18H660L636 179Z\" fill=\"#63240e\"/><defs><radialGradient id=\"preview_checker_0\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#f35b41\"/><stop offset=\".65\" stop-color=\"#bc1d0e\"/><stop offset=\"1\" stop-color=\"#6c0d04\"/></radialGradient><radialGradient id=\"preview_checker_1\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#ffffff\"/><stop offset=\".65\" stop-color=\"#eee8d5\"/><stop offset=\"1\" stop-color=\"#b6a98c\"/></radialGradient></defs><circle cx=\"140\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_0)\" stroke=\"#301507\"/><circle cx=\"140\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#fb9a75\"/><circle cx=\"636\" cy=\"32\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"32\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"63\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"63\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"94\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"94\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"125\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"125\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"156\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"156\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/></svg>"
       },
       {
         "caption": "After: mover",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"428\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"5\" fill=\"#51230c\"/><rect x=\"16\" y=\"16\" width=\"640\" height=\"408\" fill=\"#dc9e47\"/><rect x=\"316\" y=\"10\" width=\"40\" height=\"420\" fill=\"#51230c\"/><path d=\"M612 422H660L636 261Z\" fill=\"#b56828\"/><path d=\"M560 422H608L584 261Z\" fill=\"#63240e\"/><path d=\"M508 422H556L532 261Z\" fill=\"#b56828\"/><path d=\"M456 422H504L480 261Z\" fill=\"#63240e\"/><path d=\"M404 422H452L428 261Z\" fill=\"#b56828\"/><path d=\"M352 422H400L376 261Z\" fill=\"#63240e\"/><path d=\"M272 422H320L296 261Z\" fill=\"#b56828\"/><path d=\"M220 422H268L244 261Z\" fill=\"#63240e\"/><path d=\"M168 422H216L192 261Z\" fill=\"#b56828\"/><path d=\"M116 422H164L140 261Z\" fill=\"#63240e\"/><path d=\"M64 422H112L88 261Z\" fill=\"#b56828\"/><path d=\"M12 422H60L36 261Z\" fill=\"#63240e\"/><path d=\"M12 18H60L36 179Z\" fill=\"#b56828\"/><path d=\"M64 18H112L88 179Z\" fill=\"#63240e\"/><path d=\"M116 18H164L140 179Z\" fill=\"#b56828\"/><path d=\"M168 18H216L192 179Z\" fill=\"#63240e\"/><path d=\"M220 18H268L244 179Z\" fill=\"#b56828\"/><path d=\"M272 18H320L296 179Z\" fill=\"#63240e\"/><path d=\"M352 18H400L376 179Z\" fill=\"#b56828\"/><path d=\"M404 18H452L428 179Z\" fill=\"#63240e\"/><path d=\"M456 18H504L480 179Z\" fill=\"#b56828\"/><path d=\"M508 18H556L532 179Z\" fill=\"#63240e\"/><path d=\"M560 18H608L584 179Z\" fill=\"#b56828\"/><path d=\"M612 18H660L636 179Z\" fill=\"#63240e\"/><defs><radialGradient id=\"preview_checker_0\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#f35b41\"/><stop offset=\".65\" stop-color=\"#bc1d0e\"/><stop offset=\"1\" stop-color=\"#6c0d04\"/></radialGradient><radialGradient id=\"preview_checker_1\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#ffffff\"/><stop offset=\".65\" stop-color=\"#eee8d5\"/><stop offset=\"1\" stop-color=\"#b6a98c\"/></radialGradient></defs><circle cx=\"428\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_0)\" stroke=\"#301507\"/><circle cx=\"428\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#fb9a75\"/><circle cx=\"636\" cy=\"32\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"32\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"63\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"63\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"94\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"94\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"125\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"125\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"156\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"156\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/></svg>"
       },
       {
         "caption": "After: spectator",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"428\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"5\" fill=\"#51230c\"/><rect x=\"16\" y=\"16\" width=\"640\" height=\"408\" fill=\"#dc9e47\"/><rect x=\"316\" y=\"10\" width=\"40\" height=\"420\" fill=\"#51230c\"/><path d=\"M612 422H660L636 261Z\" fill=\"#b56828\"/><path d=\"M560 422H608L584 261Z\" fill=\"#63240e\"/><path d=\"M508 422H556L532 261Z\" fill=\"#b56828\"/><path d=\"M456 422H504L480 261Z\" fill=\"#63240e\"/><path d=\"M404 422H452L428 261Z\" fill=\"#b56828\"/><path d=\"M352 422H400L376 261Z\" fill=\"#63240e\"/><path d=\"M272 422H320L296 261Z\" fill=\"#b56828\"/><path d=\"M220 422H268L244 261Z\" fill=\"#63240e\"/><path d=\"M168 422H216L192 261Z\" fill=\"#b56828\"/><path d=\"M116 422H164L140 261Z\" fill=\"#63240e\"/><path d=\"M64 422H112L88 261Z\" fill=\"#b56828\"/><path d=\"M12 422H60L36 261Z\" fill=\"#63240e\"/><path d=\"M12 18H60L36 179Z\" fill=\"#b56828\"/><path d=\"M64 18H112L88 179Z\" fill=\"#63240e\"/><path d=\"M116 18H164L140 179Z\" fill=\"#b56828\"/><path d=\"M168 18H216L192 179Z\" fill=\"#63240e\"/><path d=\"M220 18H268L244 179Z\" fill=\"#b56828\"/><path d=\"M272 18H320L296 179Z\" fill=\"#63240e\"/><path d=\"M352 18H400L376 179Z\" fill=\"#b56828\"/><path d=\"M404 18H452L428 179Z\" fill=\"#63240e\"/><path d=\"M456 18H504L480 179Z\" fill=\"#b56828\"/><path d=\"M508 18H556L532 179Z\" fill=\"#63240e\"/><path d=\"M560 18H608L584 179Z\" fill=\"#b56828\"/><path d=\"M612 18H660L636 179Z\" fill=\"#63240e\"/><defs><radialGradient id=\"preview_checker_0\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#f35b41\"/><stop offset=\".65\" stop-color=\"#bc1d0e\"/><stop offset=\"1\" stop-color=\"#6c0d04\"/></radialGradient><radialGradient id=\"preview_checker_1\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#ffffff\"/><stop offset=\".65\" stop-color=\"#eee8d5\"/><stop offset=\"1\" stop-color=\"#b6a98c\"/></radialGradient></defs><circle cx=\"428\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_0)\" stroke=\"#301507\"/><circle cx=\"428\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#fb9a75\"/><circle cx=\"636\" cy=\"32\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"32\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"63\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"63\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"94\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"94\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"125\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"125\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"156\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"156\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/></svg>"
       }
     ]
   },
   {
     "name": "Forced combined hit",
-    "description": "Move 15 checkers home and bear them off. Roll two dice; doubles give four moves. Enter captured checkers from the bar first. A point with two opposing checkers is blocked; a lone checker is hit. Use the maximum possible dice, and the higher die if only one can be used. Bear off only when all your checkers are home. This uses the ordinary platform Backgammon rules, including its finite-match safeguard: after 120 turns or 300 actions, the player with more checkers off wins; ties favor player one.",
+    "description": "Each player rolls one opening die; reroll ties. The higher roll starts using both dice. Move all 15 checkers home and bear them off; doubles give four moves. Enter captured checkers from the bar first. Two opposing checkers block a point; a lone checker is hit. Use the maximum possible dice and the higher die if only one is usable. Undo a move only while your turn is unfinished. Choose a match goal of 1, 3, 5, 7, 11 or 15 points. A gammon scores double and a backgammon triple. If enabled, offer the doubling cube before rolling; the opponent may take or drop. The cube changes match points, never the platform token pot. First to the chosen goal wins.",
     "kind": "intermediate",
     "ctx": {
       "players": [
@@ -1179,7 +1353,24 @@
       "needRoll": false,
       "winner": null,
       "n": 0,
-      "last_roll": null
+      "last_roll": null,
+      "opening": false,
+      "opening_roll": null,
+      "undo_stack": [],
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null
     },
     "view_of_mover": {
       "owner": [
@@ -1268,7 +1459,25 @@
           "from": 9,
           "to": 4
         }
-      ]
+      ],
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "can_undo": false,
+      "can_double": false
     },
     "view_of_other": {
       "owner": [
@@ -1343,21 +1552,27 @@
       "needRoll": false,
       "winner": null,
       "n": 0,
-      "legalMoves": [
-        {
-          "from": 9,
-          "to": 8,
-          "die": 1,
-          "idx": 0
-        }
-      ],
       "last_roll": null,
-      "combinedMoves": [
-        {
-          "from": 9,
-          "to": 4
-        }
-      ]
+      "legalMoves": [],
+      "combinedMoves": [],
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "can_undo": false,
+      "can_double": false
     },
     "player_id": "u1",
     "other_player_id": null,
@@ -1433,7 +1648,24 @@
       "needRoll": true,
       "winner": null,
       "n": 1,
-      "last_roll": null
+      "last_roll": null,
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "undo_stack": []
     },
     "expected_turn": [
       "u2"
@@ -1505,9 +1737,27 @@
       "needRoll": true,
       "winner": null,
       "n": 1,
-      "legalMoves": [],
       "last_roll": null,
-      "combinedMoves": []
+      "legalMoves": [],
+      "combinedMoves": [],
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "can_undo": false,
+      "can_double": true
     },
     "expected_view_of_other": {
       "owner": [
@@ -1576,32 +1826,50 @@
       "needRoll": true,
       "winner": null,
       "n": 1,
-      "legalMoves": [],
       "last_roll": null,
-      "combinedMoves": []
+      "legalMoves": [],
+      "combinedMoves": [],
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "can_undo": false,
+      "can_double": true
     },
     "images": [
       {
         "caption": "Before: mover",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"376\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"377\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"192\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"140\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"5\" fill=\"#51230c\"/><rect x=\"16\" y=\"16\" width=\"640\" height=\"408\" fill=\"#dc9e47\"/><rect x=\"316\" y=\"10\" width=\"40\" height=\"420\" fill=\"#51230c\"/><path d=\"M612 422H660L636 261Z\" fill=\"#b56828\"/><path d=\"M560 422H608L584 261Z\" fill=\"#63240e\"/><path d=\"M508 422H556L532 261Z\" fill=\"#b56828\"/><path d=\"M456 422H504L480 261Z\" fill=\"#63240e\"/><path d=\"M404 422H452L428 261Z\" fill=\"#b56828\"/><path d=\"M352 422H400L376 261Z\" fill=\"#63240e\"/><path d=\"M272 422H320L296 261Z\" fill=\"#b56828\"/><path d=\"M220 422H268L244 261Z\" fill=\"#63240e\"/><path d=\"M168 422H216L192 261Z\" fill=\"#b56828\"/><path d=\"M116 422H164L140 261Z\" fill=\"#63240e\"/><path d=\"M64 422H112L88 261Z\" fill=\"#b56828\"/><path d=\"M12 422H60L36 261Z\" fill=\"#63240e\"/><path d=\"M12 18H60L36 179Z\" fill=\"#b56828\"/><path d=\"M64 18H112L88 179Z\" fill=\"#63240e\"/><path d=\"M116 18H164L140 179Z\" fill=\"#b56828\"/><path d=\"M168 18H216L192 179Z\" fill=\"#63240e\"/><path d=\"M220 18H268L244 179Z\" fill=\"#b56828\"/><path d=\"M272 18H320L296 179Z\" fill=\"#63240e\"/><path d=\"M352 18H400L376 179Z\" fill=\"#b56828\"/><path d=\"M404 18H452L428 179Z\" fill=\"#63240e\"/><path d=\"M456 18H504L480 179Z\" fill=\"#b56828\"/><path d=\"M508 18H556L532 179Z\" fill=\"#63240e\"/><path d=\"M560 18H608L584 179Z\" fill=\"#b56828\"/><path d=\"M612 18H660L636 179Z\" fill=\"#63240e\"/><defs><radialGradient id=\"preview_checker_0\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#f35b41\"/><stop offset=\".65\" stop-color=\"#bc1d0e\"/><stop offset=\"1\" stop-color=\"#6c0d04\"/></radialGradient><radialGradient id=\"preview_checker_1\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#ffffff\"/><stop offset=\".65\" stop-color=\"#eee8d5\"/><stop offset=\"1\" stop-color=\"#b6a98c\"/></radialGradient></defs><circle cx=\"376\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"376\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"376\" cy=\"377\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"376\" cy=\"377\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"192\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"192\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"140\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_0)\" stroke=\"#301507\"/><circle cx=\"140\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#fb9a75\"/><circle cx=\"636\" cy=\"32\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"32\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"63\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"63\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"94\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"94\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"125\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"125\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"156\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"156\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/></svg>"
       },
       {
         "caption": "Before: spectator",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"376\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"377\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"192\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"140\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"5\" fill=\"#51230c\"/><rect x=\"16\" y=\"16\" width=\"640\" height=\"408\" fill=\"#dc9e47\"/><rect x=\"316\" y=\"10\" width=\"40\" height=\"420\" fill=\"#51230c\"/><path d=\"M612 422H660L636 261Z\" fill=\"#b56828\"/><path d=\"M560 422H608L584 261Z\" fill=\"#63240e\"/><path d=\"M508 422H556L532 261Z\" fill=\"#b56828\"/><path d=\"M456 422H504L480 261Z\" fill=\"#63240e\"/><path d=\"M404 422H452L428 261Z\" fill=\"#b56828\"/><path d=\"M352 422H400L376 261Z\" fill=\"#63240e\"/><path d=\"M272 422H320L296 261Z\" fill=\"#b56828\"/><path d=\"M220 422H268L244 261Z\" fill=\"#63240e\"/><path d=\"M168 422H216L192 261Z\" fill=\"#b56828\"/><path d=\"M116 422H164L140 261Z\" fill=\"#63240e\"/><path d=\"M64 422H112L88 261Z\" fill=\"#b56828\"/><path d=\"M12 422H60L36 261Z\" fill=\"#63240e\"/><path d=\"M12 18H60L36 179Z\" fill=\"#b56828\"/><path d=\"M64 18H112L88 179Z\" fill=\"#63240e\"/><path d=\"M116 18H164L140 179Z\" fill=\"#b56828\"/><path d=\"M168 18H216L192 179Z\" fill=\"#63240e\"/><path d=\"M220 18H268L244 179Z\" fill=\"#b56828\"/><path d=\"M272 18H320L296 179Z\" fill=\"#63240e\"/><path d=\"M352 18H400L376 179Z\" fill=\"#b56828\"/><path d=\"M404 18H452L428 179Z\" fill=\"#63240e\"/><path d=\"M456 18H504L480 179Z\" fill=\"#b56828\"/><path d=\"M508 18H556L532 179Z\" fill=\"#63240e\"/><path d=\"M560 18H608L584 179Z\" fill=\"#b56828\"/><path d=\"M612 18H660L636 179Z\" fill=\"#63240e\"/><defs><radialGradient id=\"preview_checker_0\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#f35b41\"/><stop offset=\".65\" stop-color=\"#bc1d0e\"/><stop offset=\"1\" stop-color=\"#6c0d04\"/></radialGradient><radialGradient id=\"preview_checker_1\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#ffffff\"/><stop offset=\".65\" stop-color=\"#eee8d5\"/><stop offset=\"1\" stop-color=\"#b6a98c\"/></radialGradient></defs><circle cx=\"376\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"376\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"376\" cy=\"377\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"376\" cy=\"377\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"192\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"192\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"140\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_0)\" stroke=\"#301507\"/><circle cx=\"140\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#fb9a75\"/><circle cx=\"636\" cy=\"32\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"32\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"63\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"63\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"94\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"94\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"125\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"125\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"156\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"156\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/></svg>"
       },
       {
         "caption": "After: mover",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"428\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"377\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"336\" cy=\"405\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"5\" fill=\"#51230c\"/><rect x=\"16\" y=\"16\" width=\"640\" height=\"408\" fill=\"#dc9e47\"/><rect x=\"316\" y=\"10\" width=\"40\" height=\"420\" fill=\"#51230c\"/><path d=\"M612 422H660L636 261Z\" fill=\"#b56828\"/><path d=\"M560 422H608L584 261Z\" fill=\"#63240e\"/><path d=\"M508 422H556L532 261Z\" fill=\"#b56828\"/><path d=\"M456 422H504L480 261Z\" fill=\"#63240e\"/><path d=\"M404 422H452L428 261Z\" fill=\"#b56828\"/><path d=\"M352 422H400L376 261Z\" fill=\"#63240e\"/><path d=\"M272 422H320L296 261Z\" fill=\"#b56828\"/><path d=\"M220 422H268L244 261Z\" fill=\"#63240e\"/><path d=\"M168 422H216L192 261Z\" fill=\"#b56828\"/><path d=\"M116 422H164L140 261Z\" fill=\"#63240e\"/><path d=\"M64 422H112L88 261Z\" fill=\"#b56828\"/><path d=\"M12 422H60L36 261Z\" fill=\"#63240e\"/><path d=\"M12 18H60L36 179Z\" fill=\"#b56828\"/><path d=\"M64 18H112L88 179Z\" fill=\"#63240e\"/><path d=\"M116 18H164L140 179Z\" fill=\"#b56828\"/><path d=\"M168 18H216L192 179Z\" fill=\"#63240e\"/><path d=\"M220 18H268L244 179Z\" fill=\"#b56828\"/><path d=\"M272 18H320L296 179Z\" fill=\"#63240e\"/><path d=\"M352 18H400L376 179Z\" fill=\"#b56828\"/><path d=\"M404 18H452L428 179Z\" fill=\"#63240e\"/><path d=\"M456 18H504L480 179Z\" fill=\"#b56828\"/><path d=\"M508 18H556L532 179Z\" fill=\"#63240e\"/><path d=\"M560 18H608L584 179Z\" fill=\"#b56828\"/><path d=\"M612 18H660L636 179Z\" fill=\"#63240e\"/><defs><radialGradient id=\"preview_checker_0\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#f35b41\"/><stop offset=\".65\" stop-color=\"#bc1d0e\"/><stop offset=\"1\" stop-color=\"#6c0d04\"/></radialGradient><radialGradient id=\"preview_checker_1\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#ffffff\"/><stop offset=\".65\" stop-color=\"#eee8d5\"/><stop offset=\"1\" stop-color=\"#b6a98c\"/></radialGradient></defs><circle cx=\"428\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_0)\" stroke=\"#301507\"/><circle cx=\"428\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#fb9a75\"/><circle cx=\"376\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"376\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"376\" cy=\"377\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"376\" cy=\"377\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"32\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"32\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"63\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"63\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"94\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"94\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"125\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"125\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"156\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"156\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"336\" cy=\"405\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"336\" cy=\"405\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/></svg>"
       },
       {
         "caption": "After: spectator",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"428\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"376\" cy=\"377\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"336\" cy=\"405\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"5\" fill=\"#51230c\"/><rect x=\"16\" y=\"16\" width=\"640\" height=\"408\" fill=\"#dc9e47\"/><rect x=\"316\" y=\"10\" width=\"40\" height=\"420\" fill=\"#51230c\"/><path d=\"M612 422H660L636 261Z\" fill=\"#b56828\"/><path d=\"M560 422H608L584 261Z\" fill=\"#63240e\"/><path d=\"M508 422H556L532 261Z\" fill=\"#b56828\"/><path d=\"M456 422H504L480 261Z\" fill=\"#63240e\"/><path d=\"M404 422H452L428 261Z\" fill=\"#b56828\"/><path d=\"M352 422H400L376 261Z\" fill=\"#63240e\"/><path d=\"M272 422H320L296 261Z\" fill=\"#b56828\"/><path d=\"M220 422H268L244 261Z\" fill=\"#63240e\"/><path d=\"M168 422H216L192 261Z\" fill=\"#b56828\"/><path d=\"M116 422H164L140 261Z\" fill=\"#63240e\"/><path d=\"M64 422H112L88 261Z\" fill=\"#b56828\"/><path d=\"M12 422H60L36 261Z\" fill=\"#63240e\"/><path d=\"M12 18H60L36 179Z\" fill=\"#b56828\"/><path d=\"M64 18H112L88 179Z\" fill=\"#63240e\"/><path d=\"M116 18H164L140 179Z\" fill=\"#b56828\"/><path d=\"M168 18H216L192 179Z\" fill=\"#63240e\"/><path d=\"M220 18H268L244 179Z\" fill=\"#b56828\"/><path d=\"M272 18H320L296 179Z\" fill=\"#63240e\"/><path d=\"M352 18H400L376 179Z\" fill=\"#b56828\"/><path d=\"M404 18H452L428 179Z\" fill=\"#63240e\"/><path d=\"M456 18H504L480 179Z\" fill=\"#b56828\"/><path d=\"M508 18H556L532 179Z\" fill=\"#63240e\"/><path d=\"M560 18H608L584 179Z\" fill=\"#b56828\"/><path d=\"M612 18H660L636 179Z\" fill=\"#63240e\"/><defs><radialGradient id=\"preview_checker_0\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#f35b41\"/><stop offset=\".65\" stop-color=\"#bc1d0e\"/><stop offset=\"1\" stop-color=\"#6c0d04\"/></radialGradient><radialGradient id=\"preview_checker_1\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#ffffff\"/><stop offset=\".65\" stop-color=\"#eee8d5\"/><stop offset=\"1\" stop-color=\"#b6a98c\"/></radialGradient></defs><circle cx=\"428\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_0)\" stroke=\"#301507\"/><circle cx=\"428\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#fb9a75\"/><circle cx=\"376\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"376\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"376\" cy=\"377\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"376\" cy=\"377\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"32\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"32\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"63\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"63\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"94\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"94\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"125\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"125\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"156\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"156\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"336\" cy=\"405\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"336\" cy=\"405\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/></svg>"
       }
     ]
   },
   {
     "name": "Ambiguous combined hit stays single",
-    "description": "Move 15 checkers home and bear them off. Roll two dice; doubles give four moves. Enter captured checkers from the bar first. A point with two opposing checkers is blocked; a lone checker is hit. Use the maximum possible dice, and the higher die if only one can be used. Bear off only when all your checkers are home. This uses the ordinary platform Backgammon rules, including its finite-match safeguard: after 120 turns or 300 actions, the player with more checkers off wins; ties favor player one.",
+    "description": "Each player rolls one opening die; reroll ties. The higher roll starts using both dice. Move all 15 checkers home and bear them off; doubles give four moves. Enter captured checkers from the bar first. Two opposing checkers block a point; a lone checker is hit. Use the maximum possible dice and the higher die if only one is usable. Undo a move only while your turn is unfinished. Choose a match goal of 1, 3, 5, 7, 11 or 15 points. A gammon scores double and a backgammon triple. If enabled, offer the doubling cube before rolling; the opponent may take or drop. The cube changes match points, never the platform token pot. First to the chosen goal wins.",
     "kind": "intermediate",
     "ctx": {
       "players": [
@@ -1699,7 +1967,24 @@
       "needRoll": false,
       "winner": null,
       "n": 0,
-      "last_roll": null
+      "last_roll": null,
+      "opening": false,
+      "opening_roll": null,
+      "undo_stack": [],
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null
     },
     "view_of_mover": {
       "owner": [
@@ -1789,7 +2074,25 @@
         }
       ],
       "last_roll": null,
-      "combinedMoves": []
+      "combinedMoves": [],
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "can_undo": false,
+      "can_double": false
     },
     "view_of_other": {
       "owner": [
@@ -1864,22 +2167,27 @@
       "needRoll": false,
       "winner": null,
       "n": 0,
-      "legalMoves": [
-        {
-          "from": 10,
-          "to": 9,
-          "die": 1,
-          "idx": 0
-        },
-        {
-          "from": 10,
-          "to": 6,
-          "die": 4,
-          "idx": 1
-        }
-      ],
       "last_roll": null,
-      "combinedMoves": []
+      "legalMoves": [],
+      "combinedMoves": [],
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "can_undo": false,
+      "can_double": false
     },
     "player_id": "u1",
     "other_player_id": null,
@@ -1959,7 +2267,26 @@
       "needRoll": false,
       "winner": null,
       "n": 0,
-      "last_roll": null
+      "last_roll": null,
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "undo_stack": [
+        "{\"owner\":[-1,-1,-1,-1,-1,-1,1,-1,-1,1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1],\"cnt\":[0,0,0,0,0,0,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,13],\"bar\":[0,0],\"off\":[14,0],\"cur\":0,\"dice\":[1,4],\"moves\":[1,4],\"needRoll\":false,\"winner\":null,\"n\":0,\"opening\":false,\"opening_roll\":null,\"cube\":{\"value\":1,\"owner\":null,\"offer\":null},\"configured\":true,\"difficulty\":1,\"cube_enabled\":true,\"goal\":5,\"scores\":[0,0],\"round_winner\":null,\"last_roll\":null}"
+      ]
     },
     "expected_turn": [
       "u1"
@@ -2044,7 +2371,25 @@
         }
       ],
       "last_roll": null,
-      "combinedMoves": []
+      "combinedMoves": [],
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "can_undo": true,
+      "can_double": false
     },
     "expected_view_of_other": {
       "owner": [
@@ -2117,33 +2462,44 @@
       "needRoll": false,
       "winner": null,
       "n": 0,
-      "legalMoves": [
-        {
-          "from": 9,
-          "to": 5,
-          "die": 4,
-          "idx": 0
-        }
-      ],
       "last_roll": null,
-      "combinedMoves": []
+      "legalMoves": [],
+      "combinedMoves": [],
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 5,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "can_undo": true,
+      "can_double": false
     },
     "images": [
       {
         "caption": "Before: mover",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"296\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"140\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"88\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"5\" fill=\"#51230c\"/><rect x=\"16\" y=\"16\" width=\"640\" height=\"408\" fill=\"#dc9e47\"/><rect x=\"316\" y=\"10\" width=\"40\" height=\"420\" fill=\"#51230c\"/><path d=\"M612 422H660L636 261Z\" fill=\"#b56828\"/><path d=\"M560 422H608L584 261Z\" fill=\"#63240e\"/><path d=\"M508 422H556L532 261Z\" fill=\"#b56828\"/><path d=\"M456 422H504L480 261Z\" fill=\"#63240e\"/><path d=\"M404 422H452L428 261Z\" fill=\"#b56828\"/><path d=\"M352 422H400L376 261Z\" fill=\"#63240e\"/><path d=\"M272 422H320L296 261Z\" fill=\"#b56828\"/><path d=\"M220 422H268L244 261Z\" fill=\"#63240e\"/><path d=\"M168 422H216L192 261Z\" fill=\"#b56828\"/><path d=\"M116 422H164L140 261Z\" fill=\"#63240e\"/><path d=\"M64 422H112L88 261Z\" fill=\"#b56828\"/><path d=\"M12 422H60L36 261Z\" fill=\"#63240e\"/><path d=\"M12 18H60L36 179Z\" fill=\"#b56828\"/><path d=\"M64 18H112L88 179Z\" fill=\"#63240e\"/><path d=\"M116 18H164L140 179Z\" fill=\"#b56828\"/><path d=\"M168 18H216L192 179Z\" fill=\"#63240e\"/><path d=\"M220 18H268L244 179Z\" fill=\"#b56828\"/><path d=\"M272 18H320L296 179Z\" fill=\"#63240e\"/><path d=\"M352 18H400L376 179Z\" fill=\"#b56828\"/><path d=\"M404 18H452L428 179Z\" fill=\"#63240e\"/><path d=\"M456 18H504L480 179Z\" fill=\"#b56828\"/><path d=\"M508 18H556L532 179Z\" fill=\"#63240e\"/><path d=\"M560 18H608L584 179Z\" fill=\"#b56828\"/><path d=\"M612 18H660L636 179Z\" fill=\"#63240e\"/><defs><radialGradient id=\"preview_checker_0\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#f35b41\"/><stop offset=\".65\" stop-color=\"#bc1d0e\"/><stop offset=\"1\" stop-color=\"#6c0d04\"/></radialGradient><radialGradient id=\"preview_checker_1\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#ffffff\"/><stop offset=\".65\" stop-color=\"#eee8d5\"/><stop offset=\"1\" stop-color=\"#b6a98c\"/></radialGradient></defs><circle cx=\"296\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"296\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"140\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"140\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"88\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_0)\" stroke=\"#301507\"/><circle cx=\"88\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#fb9a75\"/><circle cx=\"636\" cy=\"32\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"32\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"63\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"63\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"94\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"94\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"125\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"125\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"156\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"156\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/></svg>"
       },
       {
         "caption": "Before: spectator",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"296\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"140\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"88\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"5\" fill=\"#51230c\"/><rect x=\"16\" y=\"16\" width=\"640\" height=\"408\" fill=\"#dc9e47\"/><rect x=\"316\" y=\"10\" width=\"40\" height=\"420\" fill=\"#51230c\"/><path d=\"M612 422H660L636 261Z\" fill=\"#b56828\"/><path d=\"M560 422H608L584 261Z\" fill=\"#63240e\"/><path d=\"M508 422H556L532 261Z\" fill=\"#b56828\"/><path d=\"M456 422H504L480 261Z\" fill=\"#63240e\"/><path d=\"M404 422H452L428 261Z\" fill=\"#b56828\"/><path d=\"M352 422H400L376 261Z\" fill=\"#63240e\"/><path d=\"M272 422H320L296 261Z\" fill=\"#b56828\"/><path d=\"M220 422H268L244 261Z\" fill=\"#63240e\"/><path d=\"M168 422H216L192 261Z\" fill=\"#b56828\"/><path d=\"M116 422H164L140 261Z\" fill=\"#63240e\"/><path d=\"M64 422H112L88 261Z\" fill=\"#b56828\"/><path d=\"M12 422H60L36 261Z\" fill=\"#63240e\"/><path d=\"M12 18H60L36 179Z\" fill=\"#b56828\"/><path d=\"M64 18H112L88 179Z\" fill=\"#63240e\"/><path d=\"M116 18H164L140 179Z\" fill=\"#b56828\"/><path d=\"M168 18H216L192 179Z\" fill=\"#63240e\"/><path d=\"M220 18H268L244 179Z\" fill=\"#b56828\"/><path d=\"M272 18H320L296 179Z\" fill=\"#63240e\"/><path d=\"M352 18H400L376 179Z\" fill=\"#b56828\"/><path d=\"M404 18H452L428 179Z\" fill=\"#63240e\"/><path d=\"M456 18H504L480 179Z\" fill=\"#b56828\"/><path d=\"M508 18H556L532 179Z\" fill=\"#63240e\"/><path d=\"M560 18H608L584 179Z\" fill=\"#b56828\"/><path d=\"M612 18H660L636 179Z\" fill=\"#63240e\"/><defs><radialGradient id=\"preview_checker_0\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#f35b41\"/><stop offset=\".65\" stop-color=\"#bc1d0e\"/><stop offset=\"1\" stop-color=\"#6c0d04\"/></radialGradient><radialGradient id=\"preview_checker_1\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#ffffff\"/><stop offset=\".65\" stop-color=\"#eee8d5\"/><stop offset=\"1\" stop-color=\"#b6a98c\"/></radialGradient></defs><circle cx=\"296\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"296\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"140\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"140\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"88\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_0)\" stroke=\"#301507\"/><circle cx=\"88\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#fb9a75\"/><circle cx=\"636\" cy=\"32\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"32\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"63\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"63\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"94\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"94\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"125\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"125\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"156\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"156\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/></svg>"
       },
       {
         "caption": "After: mover",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"296\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"140\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"336\" cy=\"405\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"5\" fill=\"#51230c\"/><rect x=\"16\" y=\"16\" width=\"640\" height=\"408\" fill=\"#dc9e47\"/><rect x=\"316\" y=\"10\" width=\"40\" height=\"420\" fill=\"#51230c\"/><path d=\"M612 422H660L636 261Z\" fill=\"#b56828\"/><path d=\"M560 422H608L584 261Z\" fill=\"#63240e\"/><path d=\"M508 422H556L532 261Z\" fill=\"#b56828\"/><path d=\"M456 422H504L480 261Z\" fill=\"#63240e\"/><path d=\"M404 422H452L428 261Z\" fill=\"#b56828\"/><path d=\"M352 422H400L376 261Z\" fill=\"#63240e\"/><path d=\"M272 422H320L296 261Z\" fill=\"#b56828\"/><path d=\"M220 422H268L244 261Z\" fill=\"#63240e\"/><path d=\"M168 422H216L192 261Z\" fill=\"#b56828\"/><path d=\"M116 422H164L140 261Z\" fill=\"#63240e\"/><path d=\"M64 422H112L88 261Z\" fill=\"#b56828\"/><path d=\"M12 422H60L36 261Z\" fill=\"#63240e\"/><path d=\"M12 18H60L36 179Z\" fill=\"#b56828\"/><path d=\"M64 18H112L88 179Z\" fill=\"#63240e\"/><path d=\"M116 18H164L140 179Z\" fill=\"#b56828\"/><path d=\"M168 18H216L192 179Z\" fill=\"#63240e\"/><path d=\"M220 18H268L244 179Z\" fill=\"#b56828\"/><path d=\"M272 18H320L296 179Z\" fill=\"#63240e\"/><path d=\"M352 18H400L376 179Z\" fill=\"#b56828\"/><path d=\"M404 18H452L428 179Z\" fill=\"#63240e\"/><path d=\"M456 18H504L480 179Z\" fill=\"#b56828\"/><path d=\"M508 18H556L532 179Z\" fill=\"#63240e\"/><path d=\"M560 18H608L584 179Z\" fill=\"#b56828\"/><path d=\"M612 18H660L636 179Z\" fill=\"#63240e\"/><defs><radialGradient id=\"preview_checker_0\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#f35b41\"/><stop offset=\".65\" stop-color=\"#bc1d0e\"/><stop offset=\"1\" stop-color=\"#6c0d04\"/></radialGradient><radialGradient id=\"preview_checker_1\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#ffffff\"/><stop offset=\".65\" stop-color=\"#eee8d5\"/><stop offset=\"1\" stop-color=\"#b6a98c\"/></radialGradient></defs><circle cx=\"296\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"296\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"140\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_0)\" stroke=\"#301507\"/><circle cx=\"140\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#fb9a75\"/><circle cx=\"636\" cy=\"32\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"32\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"63\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"63\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"94\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"94\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"125\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"125\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"156\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"156\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"336\" cy=\"405\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"336\" cy=\"405\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/></svg>"
       },
       {
         "caption": "After: spectator",
-        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"10\" fill=\"#704528\"/><rect x=\"12\" y=\"12\" width=\"676\" height=\"416\" fill=\"#d2b17d\"/><rect x=\"316\" y=\"12\" width=\"40\" height=\"416\" fill=\"#704528\"/><path d=\"M612,422L660,422L636,250Z\" fill=\"#e8d5ab\"/><text x=\"636\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">1</text><path d=\"M560,422L608,422L584,250Z\" fill=\"#853f30\"/><text x=\"584\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">2</text><path d=\"M508,422L556,422L532,250Z\" fill=\"#e8d5ab\"/><text x=\"532\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">3</text><path d=\"M456,422L504,422L480,250Z\" fill=\"#853f30\"/><text x=\"480\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">4</text><path d=\"M404,422L452,422L428,250Z\" fill=\"#e8d5ab\"/><text x=\"428\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">5</text><path d=\"M352,422L400,422L376,250Z\" fill=\"#853f30\"/><text x=\"376\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">6</text><path d=\"M272,422L320,422L296,250Z\" fill=\"#e8d5ab\"/><text x=\"296\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">7</text><path d=\"M220,422L268,422L244,250Z\" fill=\"#853f30\"/><text x=\"244\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">8</text><path d=\"M168,422L216,422L192,250Z\" fill=\"#e8d5ab\"/><text x=\"192\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">9</text><path d=\"M116,422L164,422L140,250Z\" fill=\"#853f30\"/><text x=\"140\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">10</text><path d=\"M64,422L112,422L88,250Z\" fill=\"#e8d5ab\"/><text x=\"88\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">11</text><path d=\"M12,422L60,422L36,250Z\" fill=\"#853f30\"/><text x=\"36\" y=\"437\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">12</text><path d=\"M12,18L60,18L36,190Z\" fill=\"#e8d5ab\"/><text x=\"36\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">13</text><path d=\"M64,18L112,18L88,190Z\" fill=\"#853f30\"/><text x=\"88\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">14</text><path d=\"M116,18L164,18L140,190Z\" fill=\"#e8d5ab\"/><text x=\"140\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">15</text><path d=\"M168,18L216,18L192,190Z\" fill=\"#853f30\"/><text x=\"192\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">16</text><path d=\"M220,18L268,18L244,190Z\" fill=\"#e8d5ab\"/><text x=\"244\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">17</text><path d=\"M272,18L320,18L296,190Z\" fill=\"#853f30\"/><text x=\"296\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">18</text><path d=\"M352,18L400,18L376,190Z\" fill=\"#e8d5ab\"/><text x=\"376\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">19</text><path d=\"M404,18L452,18L428,190Z\" fill=\"#853f30\"/><text x=\"428\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">20</text><path d=\"M456,18L504,18L480,190Z\" fill=\"#e8d5ab\"/><text x=\"480\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">21</text><path d=\"M508,18L556,18L532,190Z\" fill=\"#853f30\"/><text x=\"532\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">22</text><path d=\"M560,18L608,18L584,190Z\" fill=\"#e8d5ab\"/><text x=\"584\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">23</text><path d=\"M612,18L660,18L636,190Z\" fill=\"#853f30\"/><text x=\"636\" y=\"10\" text-anchor=\"middle\" font-size=\"10\" fill=\"#fff4de\">24</text><circle cx=\"296\" cy=\"408\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"140\" cy=\"408\" r=\"18\" fill=\"#fff0cf\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"32\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"63\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"94\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"125\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"636\" cy=\"156\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/><circle cx=\"336\" cy=\"405\" r=\"18\" fill=\"#342924\" stroke=\"#865f38\"/></svg>"
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 700 440\"><rect width=\"700\" height=\"440\" rx=\"5\" fill=\"#51230c\"/><rect x=\"16\" y=\"16\" width=\"640\" height=\"408\" fill=\"#dc9e47\"/><rect x=\"316\" y=\"10\" width=\"40\" height=\"420\" fill=\"#51230c\"/><path d=\"M612 422H660L636 261Z\" fill=\"#b56828\"/><path d=\"M560 422H608L584 261Z\" fill=\"#63240e\"/><path d=\"M508 422H556L532 261Z\" fill=\"#b56828\"/><path d=\"M456 422H504L480 261Z\" fill=\"#63240e\"/><path d=\"M404 422H452L428 261Z\" fill=\"#b56828\"/><path d=\"M352 422H400L376 261Z\" fill=\"#63240e\"/><path d=\"M272 422H320L296 261Z\" fill=\"#b56828\"/><path d=\"M220 422H268L244 261Z\" fill=\"#63240e\"/><path d=\"M168 422H216L192 261Z\" fill=\"#b56828\"/><path d=\"M116 422H164L140 261Z\" fill=\"#63240e\"/><path d=\"M64 422H112L88 261Z\" fill=\"#b56828\"/><path d=\"M12 422H60L36 261Z\" fill=\"#63240e\"/><path d=\"M12 18H60L36 179Z\" fill=\"#b56828\"/><path d=\"M64 18H112L88 179Z\" fill=\"#63240e\"/><path d=\"M116 18H164L140 179Z\" fill=\"#b56828\"/><path d=\"M168 18H216L192 179Z\" fill=\"#63240e\"/><path d=\"M220 18H268L244 179Z\" fill=\"#b56828\"/><path d=\"M272 18H320L296 179Z\" fill=\"#63240e\"/><path d=\"M352 18H400L376 179Z\" fill=\"#b56828\"/><path d=\"M404 18H452L428 179Z\" fill=\"#63240e\"/><path d=\"M456 18H504L480 179Z\" fill=\"#b56828\"/><path d=\"M508 18H556L532 179Z\" fill=\"#63240e\"/><path d=\"M560 18H608L584 179Z\" fill=\"#b56828\"/><path d=\"M612 18H660L636 179Z\" fill=\"#63240e\"/><defs><radialGradient id=\"preview_checker_0\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#f35b41\"/><stop offset=\".65\" stop-color=\"#bc1d0e\"/><stop offset=\"1\" stop-color=\"#6c0d04\"/></radialGradient><radialGradient id=\"preview_checker_1\" cx=\".4\" cy=\".28\" r=\".75\"><stop stop-color=\"#ffffff\"/><stop offset=\".65\" stop-color=\"#eee8d5\"/><stop offset=\"1\" stop-color=\"#b6a98c\"/></radialGradient></defs><circle cx=\"296\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"296\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"140\" cy=\"408\" r=\"19\" fill=\"url(#preview_checker_0)\" stroke=\"#301507\"/><circle cx=\"140\" cy=\"408\" r=\"16\" fill=\"none\" stroke=\"#fb9a75\"/><circle cx=\"636\" cy=\"32\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"32\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"63\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"63\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"94\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"94\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"125\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"125\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"636\" cy=\"156\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"636\" cy=\"156\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/><circle cx=\"336\" cy=\"405\" r=\"19\" fill=\"url(#preview_checker_1)\" stroke=\"#301507\"/><circle cx=\"336\" cy=\"405\" r=\"16\" fill=\"none\" stroke=\"#ffffff\"/></svg>"
       }
     ]
   }

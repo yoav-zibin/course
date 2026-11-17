@@ -128,7 +128,8 @@ The package has these top-level fields:
 | Field | Purpose |
 | --- | --- |
 | `format`, `version` | Exactly `"buildplay-ui"` and `1`. Reject unsupported versions rather than guessing. |
-| `viewport` | Positive logical `width` and `height`; renderers scale this coordinate system to available space. |
+| `viewport` | Positive logical `width` and `height`; renderers scale this coordinate system to available space. Optional boolean `camera_enabled` defaults to `true`. Set it to `false` to keep the fitted board fixed. |
+| `motion` | Optional bounded movement/roll/announcement timing policy; may opt into physical own and pass-and-play moves. |
 | `boards` | One or more positioned surfaces: `grid`, `hex`, `graph`, `track`, `free` or `zone`. |
 | `piece_types` | Named reusable appearances: `circle`, `rect`, `card`, `dice`, `image` or `text`; dimensions, colors and optional front/back artwork. |
 | `assets` | Optional map of asset IDs to image descriptors. |
@@ -141,15 +142,19 @@ relative to their board and specify their center. Labels use viewport x/y at
 their top-left; paths use viewport coordinates. Rotation is clockwise degrees
 around the piece center. Uniform `scale` multiplies its dimensions.
 
-Keep the same piece ID when that physical piece moves. For multiplayer and
-computer matches, the portal animates opponent and computer moves over 1,440 ms.
+Keep the same piece ID when that physical piece moves. Without an explicit
+`motion` policy, for multiplayer and computer matches, the portal animates opponent and computer moves over 1,440 ms.
 The viewer's own moves update immediately, including pieces captured by that
 move. The host uses `state_changed.last_move_player_index`, rather than the next
 turn, to identify the actor. Unknown actors update immediately. If a snapshot
 combines an own move with computer replies, the portal first applies the last
 own position immediately using viewer-filtered history, then animates the
 opponent changes. Missing history or large gaps update immediately. Initial
-rendering, pass-and-play and reduced-motion preferences use immediate updates.
+rendering and reduced-motion preferences use immediate updates. Pass-and-play
+also updates immediately by default. A game with `motion.animate_own:true`
+uses its declared physical timings for local moves in both modes. For a game
+with a motion policy, coalesced accepted updates play individually in order
+instead of combining checker movement into one scene.
 History navigation currently updates immediately; the
 [requirements call for animated history review](declarative-game-requirements.md#5-show-what-happened-with-animations),
 including recorded own moves. A scene is
@@ -175,6 +180,13 @@ arrow keys to pan, and Home/End to reach the board's edges.
 Camera state survives scene changes, replay and viewport resizing, and resets
 when the host opens a new match. Camera gestures stay in the host and never
 emit `make_move`; two fingers cancel an unfinished piece gesture.
+
+For compact boards that already fit well, declare
+`"viewport": {"width": 800, "height": 600, "camera_enabled": false}`.
+This disables pinch/spread, mouse-wheel zoom, background pan and keyboard
+camera shortcuts. Automatic fitting and responsive resizing still apply, and
+ordinary piece taps and drags continue to work. Multiple fingers cancel an
+unfinished piece gesture without zooming, panning or submitting a move.
 
 A grid supplies `rows` and `columns`. Its implicit cell IDs are row-major
 decimal strings, starting at `"0"`; an 8-by-8 grid ends at `"63"`. Pieces and
@@ -216,6 +228,14 @@ front text and front-derived accessibility labels. Destinations require `id`, `b
 `position`, and can have a visible label. `move_targets` is a UI affordance,
 not server permission; `applyMove` must independently reject illegal moves.
 
+Piece types can declare `action_outline:"ellipse"` for round counters or
+`action_outline:"none"` for artwork already styled as a button. The default is
+`rect`; accessible roles and declared actions stay available in every case.
+
+Targets may declare an `asset` for an inert destination marker. Hosts fit it
+inside `hit_area` when supplied, otherwise the ordinary marker bounds. The
+plain-text label remains the accessible name. Missing asset references are rejected.
+
 Targets may declare `hit_area:{x,y,width,height}` in logical units relative to
 their center. Both offsets and positive dimensions are required; coordinates
 use the same ±100000 bounds as positions and dimensions are at most 100000.
@@ -226,14 +246,30 @@ legal or change a piece's movement permissions. Omit it for the default marker
 hit area; it is not a piece property.
 
 Pieces can attach `animation:{kind:"roll",key:"turn-12"}` to identify a visual
-roll event. Both fields are required when the object is present; no other
-fields are accepted. The key uses the same 1–80 character identifier alphabet
+roll event. Both fields are required when the object is present. Optional
+`duration_ms` and `delay_ms` are integer milliseconds from 0 to 5000.
+`kind:"move"` can provide those timings for a physical position transition.
+`kind:"notice"` shows a temporary text or artwork announcement for its duration
+after its delay; it blocks the next action until it finishes. Notices stay hidden
+on initial mounting and when reduced motion is enabled. The key uses the same 1–80 character identifier alphabet
 as piece IDs. Keep it stable while showing the same roll, including subsequent
 spent-die shading, so polling does not restart the effect. A new accepted roll
 gets a new key. The host chooses the brief visual effect and can suppress it
 for initial mounting, history or reduced-motion settings. This metadata neither
 changes the final die value nor grants an action, changes the board camera, or
-controls authoritative randomness. It carries no duration or executable code.
+controls authoritative randomness. It carries no executable code.
+
+Packages may set `motion:{move_ms,roll_ms,roll_settle_ms,turn_pause_ms,animate_own,easing}`.
+Each timing is an integer from 0 to 5000 milliseconds; `easing` is `ease-out` or
+`ease-in-out-quad`. Omitted timings retain host defaults. `animate_own:true`
+opts into physical animation for moves made on this device, including pass and
+play; ordinary games keep immediate own moves. `roll_settle_ms` keeps the roll
+readable before accepting another action. `turn_pause_ms` adds a pause after a
+turn change. Reduced motion and initial/reconnect snapshots bypass these delays.
+Hosts preserve each viewer-filtered accepted action when a computer finishes
+several steps between updates, and wait for its animations before drawing the
+next. Per-piece `kind:"move"` duration/delay can stagger a capture or shorten
+bearing off. These options never change server move legality or randomness.
 
 Pieces and destinations can supply `aria_label` independently of their visible
 `text` or `label`. Use a descriptive localized name containing the owner and

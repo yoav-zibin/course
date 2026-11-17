@@ -49,11 +49,11 @@ def random_walks(code, server, spec, rules):
         game_schemas=game_schemas,
         rules=rules,
         contract=test_schemas,
-        # 8 seconds: a many-player game (e.g. 6-player Yahtzee, 78 turns a
-        # match) needs several seconds for even one walk to finish; with 3
-        # the check failed such games as "too slow" before any walk could
-        # complete. Still bounded by the caller's subprocess timeout.
+        # Keep ordinary verification at 8s. A long first complete board game
+        # may use up to 30s, below the import subprocess's 200s timeout. Further
+        # walks retain the 8s deadline and all existing failure assertions.
         budget_seconds=8,
+        first_walk_budget_seconds=30,
         max_walks=1000,
     )
     return {'passed': report.passed, 'details': format_report(report)}

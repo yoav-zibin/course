@@ -23,12 +23,53 @@
           "type": "number",
           "exclusiveMinimum": 0,
           "maximum": 100000
+        },
+        "camera_enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether users can zoom or pan the board using pinch, wheel, background drag or keyboard camera shortcuts. False keeps the automatically fitted board fixed while preserving piece interactions. Two-finger gestures cancel unfinished piece interactions in either mode."
         }
       },
       "required": [
         "width",
         "height"
       ],
+      "additionalProperties": false
+    },
+    "motion": {
+      "type": "object",
+      "description": "Optional host animation policy in milliseconds. Defaults preserve ordinary immediate own moves. Timings never authorize or compute moves.",
+      "properties": {
+        "move_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5000
+        },
+        "roll_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5000
+        },
+        "roll_settle_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5000
+        },
+        "turn_pause_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5000
+        },
+        "animate_own": {
+          "type": "boolean"
+        },
+        "easing": {
+          "enum": [
+            "ease-out",
+            "ease-in-out-quad"
+          ]
+        }
+      },
       "additionalProperties": false
     },
     "assets": {
@@ -433,6 +474,19 @@
           "maxLength": 80,
           "pattern": "^[A-Za-z0-9_.:-]+$",
           "description": "Artwork for face=back. Front artwork and text must remain hidden when the piece is face down."
+        },
+        "action_outline": {
+          "enum": [
+            "rect",
+            "ellipse",
+            "none"
+          ],
+          "description": "Host action outline shape; none is appropriate for artwork already styled as a button. Does not change accessibility or legal actions."
+        },
+        "font_size": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100000
         }
       },
       "required": [
@@ -545,7 +599,21 @@
           "description": "Optional host-rendered visual event. Keep the key stable for the same event; a roll effect does not alter game state, grant actions, or determine dice values.",
           "properties": {
             "kind": {
-              "const": "roll"
+              "enum": [
+                "roll",
+                "move",
+                "notice"
+              ]
+            },
+            "duration_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5000
+            },
+            "delay_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5000
             },
             "key": {
               "type": "string",
@@ -571,15 +639,25 @@
       "allOf": [
         {
           "if": {
-            "required": ["actions"],
+            "required": [
+              "actions"
+            ],
             "properties": {
-              "actions": {"contains": {"const": "move"}}
+              "actions": {
+                "contains": {
+                  "const": "move"
+                }
+              }
             }
           },
           "then": {
-            "required": ["move_targets"],
+            "required": [
+              "move_targets"
+            ],
             "properties": {
-              "move_targets": {"minItems": 1}
+              "move_targets": {
+                "minItems": 1
+              }
             }
           }
         }
@@ -592,12 +670,33 @@
           "type": "object",
           "description": "Optional interaction rectangle in logical units relative to the target center. It expands declared tap/drop geometry without changing the visible marker or granting a move.",
           "properties": {
-            "x": {"type": "number", "minimum": -100000, "maximum": 100000},
-            "y": {"type": "number", "minimum": -100000, "maximum": 100000},
-            "width": {"type": "number", "exclusiveMinimum": 0, "maximum": 100000},
-            "height": {"type": "number", "exclusiveMinimum": 0, "maximum": 100000}
+            "x": {
+              "type": "number",
+              "minimum": -100000,
+              "maximum": 100000
+            },
+            "y": {
+              "type": "number",
+              "minimum": -100000,
+              "maximum": 100000
+            },
+            "width": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 100000
+            },
+            "height": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 100000
+            }
           },
-          "required": ["x", "y", "width", "height"],
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
           "additionalProperties": false
         },
         "id": {
@@ -633,7 +732,16 @@
           "description": "Ghost cells the host draws on this target's board while the destination is hovered, focused, dragged over or armed by a first touch tap (the second tap places). Presentation only: the server still validates the move.",
           "minItems": 1,
           "maxItems": 64,
-          "items": {"$ref": "#/$defs/preview_cell"}
+          "items": {
+            "$ref": "#/$defs/preview_cell"
+          }
+        },
+        "asset": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[A-Za-z0-9_.:-]+$",
+          "description": "Optional inert artwork for the destination marker, fitted into hit_area or the default marker bounds. Label remains the accessible name."
         }
       },
       "required": [
@@ -646,13 +754,32 @@
     "preview_cell": {
       "type": "object",
       "properties": {
-        "position": {"$ref": "#/$defs/position"},
-        "color": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"},
-        "asset": {"type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[A-Za-z0-9_.:-]+$"},
-        "rotation": {"type": "number", "minimum": -100000, "maximum": 100000},
-        "text": {"type": "string", "maxLength": 40}
+        "position": {
+          "$ref": "#/$defs/position"
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"
+        },
+        "asset": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "rotation": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 40
+        }
       },
-      "required": ["position"],
+      "required": [
+        "position"
+      ],
       "additionalProperties": false
     },
     "control": {
@@ -910,7 +1037,9 @@
           "description": "Requested relative clockwise rotation in degrees. The reducer applies or rejects it; the host never changes authoritative state.",
           "minimum": -360,
           "maximum": 360,
-          "not": {"const": 0}
+          "not": {
+            "const": 0
+          }
         },
         "factor": {
           "type": "number",
@@ -941,14 +1070,46 @@
           }
         },
         {
-          "if": {"properties": {"type": {"const": "rotate"}}},
-          "then": {"required": ["delta"]},
-          "else": {"not": {"required": ["delta"]}}
+          "if": {
+            "properties": {
+              "type": {
+                "const": "rotate"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "delta"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "delta"
+              ]
+            }
+          }
         },
         {
-          "if": {"properties": {"type": {"const": "scale"}}},
-          "then": {"required": ["factor"]},
-          "else": {"not": {"required": ["factor"]}}
+          "if": {
+            "properties": {
+              "type": {
+                "const": "scale"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "factor"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "factor"
+              ]
+            }
+          }
         }
       ]
     },
@@ -989,7 +1150,10 @@
         },
         "last_move_player_index": {
           "description": "Actor of the last accepted move, independent of whose turn is next. Unknown or no move is null. During live play, hosts animate only known opponent actors and the viewer's own moves update immediately. History review requirements call for animating recorded moves from every actor.",
-          "type": ["integer", "null"],
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 0,
           "maximum": 9
         },

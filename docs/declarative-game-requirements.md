@@ -99,8 +99,10 @@ a valid move; they do not have to reveal the best strategy.
   areas, touch input, a pointer and keyboard alternatives.
 - Zoom in, zoom out and panning must remain available throughout play and
   history review. Support pinch gestures on touch devices and accessible
-  controls on other devices. Rotation of the device must preserve the position
-  and a safe, understandable interaction state.
+  controls on other devices. A compact game may opt out with
+  `viewport.camera_enabled: false`; hosts must then retain the fitted board
+  and disable all camera inputs while preserving piece interactions. Rotation
+  of the device must preserve a safe, understandable interaction state.
 - Camera movement must never submit a move or change authoritative piece
   positions, rotation or scale. Starting a camera gesture must safely cancel
   an unfinished piece gesture.
@@ -127,13 +129,15 @@ a valid move; they do not have to reveal the best strategy.
 
 | Context | Required behavior |
 | --- | --- |
-| Your move during live play | Apply it immediately, including every object affected by your action. |
+| Your move during live play | Apply it immediately by default, including affected objects. A game that explicitly declares physical timing may animate local and pass-and-play moves at that timing. |
 | Another human's or a computer's move during live play | Animate the affected objects so you can see what that player did. This includes your piece being captured or displaced by their action. |
 | Match history review | Animate each recorded move when stepping or playing through history, including the reviewer's own recorded moves. Backward steps should visibly reverse the recorded changes. |
 
 Use the recorded actor and move history, not whose turn comes next, to decide
 what happened. A combined update containing your move and computer replies
-must place your move immediately before animating the computer changes.
+must preserve the accepted order. Default games place your move immediately
+before animating the computer changes; games with a physical timing policy
+play each accepted action in sequence.
 
 Animations must make the source, destination and effects understandable.
 Preserve object identity through moves, captures, dealing, stacking, rotation
@@ -185,7 +189,7 @@ Before accepting a game or host update, verify:
 - Phone, tablet and laptop layouts work in both orientations; rendered object
   and control sizes meet the minimum. Zoom, pan and orientation changes retain
   a usable view and never accidentally make a move.
-- Live own moves are immediate; human/computer opponent moves remain visible
+- Live own moves are immediate by default; games may explicitly opt into physical movement timing; human/computer opponent moves remain visible
   long enough to follow, including captures and combined updates.
 - Read-only history steps and playback animate all actors, explain what
   changed, and respect reduced motion. Live state and results remain intact.

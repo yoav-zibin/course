@@ -68,6 +68,23 @@ def test_schema_is_valid_and_reducer_returns_json_without_browser_apis():
     assert result["local_state"] == {"selected": "add"}
 
 
+@pytest.mark.parametrize("camera_enabled", [True, False])
+def test_viewport_camera_preference_is_portable_and_optional(camera_enabled):
+    original = spec()
+    assert "camera_enabled" not in validate_spec(original)["viewport"]
+    original["viewport"]["camera_enabled"] = camera_enabled
+    assert validate_spec(original)["viewport"]["camera_enabled"] is camera_enabled
+    assert DeclarativeLogic(original).reduce(state_changed())["scene"]["pieces"]
+
+
+@pytest.mark.parametrize("camera_enabled", [None, 0, 1, "false", {}, []])
+def test_viewport_camera_preference_requires_a_boolean(camera_enabled):
+    original = spec()
+    original["viewport"]["camera_enabled"] = camera_enabled
+    with pytest.raises(DeclarativeUIError, match="viewport.camera_enabled"):
+        validate_spec(original)
+
+
 def test_reducer_globals_cannot_retain_secret_or_interaction_state():
     ui = spec("let count=0; const gameUI={reduce(m,s){count++;return {scene:{},local_state:{count,previous:s}}}}")
     logic = DeclarativeLogic(ui)

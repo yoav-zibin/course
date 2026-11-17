@@ -54,3 +54,9 @@
 .declarative-piece-actions{flex:0 0 auto}
 .declarative-piece-actions .declarative-piece-actions-caption{flex:1 0 100%;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .declarative-piece-actions .declarative-tool-icon{font-size:20px;line-height:1;font-weight:700}
+
+.declarative-piece ellipse.declarative-piece-action-outline{stroke:#9dff00;stroke-width:3;stroke-dasharray:none}
+.declarative-target[data-drop-state=allowed] image.declarative-target-area{opacity:1;filter:none}
+/* Destination artwork never captures a checker tap; only the selected source's
+   declared legal hit rectangles take pointer input. */
+image.declarative-target-area{pointer-events:none}

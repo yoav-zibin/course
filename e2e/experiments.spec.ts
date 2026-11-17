@@ -3,15 +3,23 @@ import { createUser, loginAs, uniqueName } from './helpers';
 
 test('skin assignment is consistent across the portal and admin', async ({ page, request }) => {
   const user = await createUser(request, uniqueName('Skin'));
+  const assignmentResponse = await request.get('/users/me/experiments/skin', {
+    headers: {'X-User-Id': user.id, 'X-User-Password': user.password},
+  });
+  expect(assignmentResponse.ok()).toBeTruthy();
+  const {key: skin} = await assignmentResponse.json();
+  expect(skin).toMatch(/^(classic|aurora|sunset)$/);
   await loginAs(page, user);
 
   await page.goto('/static/portal.html');
   const root = page.locator('html');
-  await expect(root).toHaveAttribute('data-skin', /^(classic|aurora|sunset)$/);
-  const skin = await root.getAttribute('data-skin');
+  // First paint can show the cached/default skin before the idle refresh.
+  // Compare both pages only after the real server assignment is applied.
+  await expect(root).toHaveAttribute('data-skin', skin, {timeout: 15000});
 
   await page.goto('/static/admin.html');
-  await expect(root).toHaveAttribute('data-skin', skin!);
+  await expect(root).toHaveAttribute('data-skin', skin);
+
 });
 
 test('Party skin preview respects reduced motion', async ({ page, request }, testInfo) => {

@@ -244,6 +244,36 @@ def test_no_walk_completed_within_the_budget_is_reported_too_slow(monkeypatch):
     assert report.walks_completed == 0
 
 
+@pytest.mark.parametrize('walk_duration,expected_deadlines', [
+    (12, [30]), (2, [30, 8, 8, 8]),
+])
+def test_long_first_walk_allowance_does_not_extend_the_normal_deadline(monkeypatch, walk_duration, expected_deadlines):
+    now = [0.0]
+    deadlines = []
+    monkeypatch.setattr(game_testing.time, 'monotonic', lambda: now[0])
+
+    class Walk:
+        def __init__(self, logic, **options):
+            deadlines.append(options['deadline'])
+            self.failures = []
+            self.move_count = 200
+            self.states_seen = {'board'}
+            self.terminal_states = {'finished'}
+
+        def run(self, max_moves):
+            assert max_moves == 1000
+            now[0] += walk_duration
+            return True
+
+    monkeypatch.setattr(game_testing, '_Walk', Walk)
+    report = run_game_tests(GOOD_GAME, rules=RULES, run_seed=7, budget_seconds=8,
+                            first_walk_budget_seconds=30)
+    assert report.passed and not report.too_slow
+    assert deadlines == expected_deadlines
+    assert report.walks_completed == len(expected_deadlines)
+    assert report.moves_made == len(expected_deadlines) * 200
+
+
 def test_failed_seeds_are_replayed_first():
     report = run_game_tests(
         CRASH_GAME, rules=RULES, run_seed=7, regression_seeds=(424242,)

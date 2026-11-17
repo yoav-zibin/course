@@ -1,0 +1,239 @@
+[
+  {
+    "value": {},
+    "valid": true
+  },
+  {
+    "value": {
+      "move_ms": 800,
+      "roll_ms": 500,
+      "roll_settle_ms": 1000,
+      "turn_pause_ms": 500,
+      "animate_own": true,
+      "easing": "ease-in-out-quad"
+    },
+    "valid": true
+  },
+  {
+    "value": {
+      "move_ms": 0
+    },
+    "valid": true
+  },
+  {
+    "value": {
+      "move_ms": 5000
+    },
+    "valid": true
+  },
+  {
+    "value": {
+      "move_ms": -1
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "move_ms": 5001
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "move_ms": true
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "move_ms": 0.5
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "move_ms": "800"
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "move_ms": null
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "roll_ms": 0
+    },
+    "valid": true
+  },
+  {
+    "value": {
+      "roll_ms": 5000
+    },
+    "valid": true
+  },
+  {
+    "value": {
+      "roll_ms": -1
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "roll_ms": 5001
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "roll_ms": true
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "roll_ms": 0.5
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "roll_ms": "800"
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "roll_ms": null
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "roll_settle_ms": 0
+    },
+    "valid": true
+  },
+  {
+    "value": {
+      "roll_settle_ms": 5000
+    },
+    "valid": true
+  },
+  {
+    "value": {
+      "roll_settle_ms": -1
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "roll_settle_ms": 5001
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "roll_settle_ms": true
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "roll_settle_ms": 0.5
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "roll_settle_ms": "800"
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "roll_settle_ms": null
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "turn_pause_ms": 0
+    },
+    "valid": true
+  },
+  {
+    "value": {
+      "turn_pause_ms": 5000
+    },
+    "valid": true
+  },
+  {
+    "value": {
+      "turn_pause_ms": -1
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "turn_pause_ms": 5001
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "turn_pause_ms": true
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "turn_pause_ms": 0.5
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "turn_pause_ms": "800"
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "turn_pause_ms": null
+    },
+    "valid": false
+  },
+  {
+    "value": null,
+    "valid": false
+  },
+  {
+    "value": [],
+    "valid": false
+  },
+  {
+    "value": true,
+    "valid": false
+  },
+  {
+    "value": {
+      "animate_own": 1
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "easing": "ease-in"
+    },
+    "valid": false
+  },
+  {
+    "value": {
+      "unknown": 800
+    },
+    "valid": false
+  }
+]

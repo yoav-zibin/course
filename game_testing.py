@@ -132,6 +132,7 @@ def test_server_code(
     rules: GameRules,
     regression_seeds: tuple[int, ...] = (),
     budget_seconds: float = 10.0,
+    first_walk_budget_seconds: float | None = None,
     max_walks: int = 1000,
     max_moves_per_walk: int = 1000,
     run_seed: int | None = None,
@@ -156,7 +157,10 @@ def test_server_code(
             game_id=game_id,
         )
     master = random.Random(run_seed)
-    deadline = time.monotonic() + budget_seconds
+    started = time.monotonic()
+    deadline = started + budget_seconds
+    first_walk_deadline = max(deadline, started + first_walk_budget_seconds) \
+        if first_walk_budget_seconds is not None else deadline
     walk_seeds = [
         *regression_seeds,
         *(master.getrandbits(32) for _ in range(max_walks)),
@@ -175,7 +179,10 @@ def test_server_code(
             logic,
             rules=rules,
             seed=seed,
-            deadline=deadline,
+            # A long real game may finish its first complete walk within a
+            # separately bounded allowance. Further walks keep the ordinary
+            # total budget, so fast imports do not spend this extra time.
+            deadline=first_walk_deadline if walks_completed == 0 else deadline,
             sample_observer=sample_observer,
         )
         if walk.run(max_moves_per_walk):

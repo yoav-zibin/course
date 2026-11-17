@@ -50,6 +50,16 @@
     const cell = at.cell !== undefined ? boardCell(board, at.cell) : at;
     return {x: num(board.x) + num(cell.x), y: num(board.y) + num(cell.y), board};
   }
+  // Sample the same quadratic easing used by physical checker slides. Keeping
+  // this in the host lets portable games declare timing without running clocks.
+  function movementFrames(from,to,easing) {
+    if(easing!=="ease-in-out-quad")return [{transform:from},{transform:to}];
+    const a=new global.DOMMatrix(from),b=new global.DOMMatrix(to);
+    return Array.from({length:21},(_,i)=>{
+      const offset=i/20,p=offset<.5?2*offset*offset:1-Math.pow(-2*offset+2,2)/2;
+      return {offset,transform:`matrix(${["a","b","c","d","e","f"].map(key=>a[key]+(b[key]-a[key])*p).join(",")})`};
+    });
+  }
   // A fresh worker for every reduction prevents hidden mutable globals from
   // becoming state. Only local_state returned as JSON survives a call.
   function reducerWorker() {
@@ -144,9 +154,20 @@
   function validateSpec(spec) {
     finiteJSON(spec);
     if(!spec || spec.format!=="buildplay-ui" || spec.version!==1)throw new Error(t("ui.declarative.error.unsupported_declarative_ui_format", {}, "Unsupported declarative UI format"));
+    if(spec.motion!==undefined){
+      knownObject(spec.motion,["move_ms","roll_ms","roll_settle_ms","turn_pause_ms","animate_own","easing"]);
+      for(const key of ["move_ms","roll_ms","roll_settle_ms","turn_pause_ms"])if(key in spec.motion&&(!Number.isInteger(spec.motion[key])||spec.motion[key]<0||spec.motion[key]>5000))throw new Error(t("ui.declarative.error.invalid_numeric_geometry", {}, "Invalid numeric geometry"));
+      if("animate_own" in spec.motion&&typeof spec.motion.animate_own!=="boolean")throw new Error(t("ui.declarative.error.invalid_ui_flag", {}, "Invalid UI flag"));
+      if("easing" in spec.motion&&!["ease-out","ease-in-out-quad"].includes(spec.motion.easing))throw new Error(t("ui.declarative.error.invalid_ui_object_fields", {}, "Invalid UI object fields"));
+    }
     if(!spec.viewport || !(spec.viewport.width>0) || !(spec.viewport.height>0))throw new Error(t("ui.declarative.error.invalid_viewport", {}, "Invalid viewport"));
+    if(Object.hasOwn(spec.viewport,"camera_enabled")&&typeof spec.viewport.camera_enabled!=="boolean")throw new Error(t("ui.declarative.error.invalid_viewport", {}, "Invalid viewport"));
     if(!Array.isArray(spec.boards)||!spec.boards.length||spec.boards.length>32)throw new Error(t("ui.declarative.error.expected_1_32_boards", {}, "Expected 1–32 boards"));
     if(!spec.piece_types||typeof spec.piece_types!=="object"||Array.isArray(spec.piece_types))throw new Error(t("ui.declarative.error.expected_piece_types", {}, "Expected piece types"));
+    for(const type of Object.values(spec.piece_types)){
+      if(type.action_outline!==undefined&&!["rect","ellipse","none"].includes(type.action_outline))throw new Error(t("ui.declarative.error.invalid_ui_object_fields", {}, "Invalid UI object fields"));
+      if(type.font_size!==undefined&&(typeof type.font_size!=="number"||type.font_size<=0||type.font_size>100000))throw new Error(t("ui.declarative.error.invalid_positive_geometry", {}, "Invalid positive geometry"));
+    }
     if(typeof spec.ui_code!=="string"||spec.ui_code.length>200000)throw new Error(t("ui.declarative.error.invalid_presentation_source", {}, "Invalid presentation source"));
     for(const board of spec.boards){
       if(!(board.width>0)||!(board.height>0))throw new Error(t("ui.declarative.error.invalid_board_dimensions", {}, "Invalid board dimensions"));
@@ -165,7 +186,7 @@
     if([point.x,point.y].some(value=>typeof value!=="number"||Math.abs(value)>100000))throw new Error(t("ui.declarative.error.invalid_point_geometry", {}, "Invalid point geometry"));
   }
   function checkElement(kind,item) {
-    const fields={pieces:["id","type","board","position","text","aria_label","asset","rotation","scale","opacity","z","face","move_targets","selected","hidden","draggable","actions","animation"],targets:["id","board","position","label","aria_label","color","hit_area","preview"],labels:["id","text","x","y","color","font_size"],controls:["id","label","kind","value","min","max","step","options","disabled"],paths:["id","points","color","width"]};
+    const fields={pieces:["id","type","board","position","text","aria_label","asset","rotation","scale","opacity","z","face","move_targets","selected","hidden","draggable","actions","animation"],targets:["id","board","position","label","aria_label","color","asset","hit_area","preview"],labels:["id","text","x","y","color","font_size"],controls:["id","label","kind","value","min","max","step","options","disabled"],paths:["id","points","color","width"]};
     const required={pieces:["id","type","board","position"],targets:["id","board","position"],labels:["id","text","x","y"],controls:["id","label","kind"],paths:["id","points"]};
     knownObject(item,fields[kind],required[kind]);
     for(const key of ["id","type","board","asset"])if(key in item&&!isId(item[key]))throw new Error(t("ui.declarative.error.invalid_ui_identifier", {}, "Invalid UI identifier"));
@@ -184,9 +205,10 @@
     if("move_targets" in item&&(!Array.isArray(item.move_targets)||item.move_targets.length>2048||item.move_targets.some(value=>!isId(value))||new Set(item.move_targets).size!==item.move_targets.length))throw new Error(t("ui.declarative.error.invalid_move_targets", {}, "Invalid move targets"));
     if("actions" in item&&(!Array.isArray(item.actions)||item.actions.some(action=>!["tap","move","rotate","flip","scale"].includes(action))||new Set(item.actions).size!==item.actions.length||item.actions.includes("move")&&!item.move_targets?.length))throw new Error(t("ui.declarative.error.invalid_move_targets", {}, "Invalid move targets"));
     if("animation" in item){
-      knownObject(item.animation,["kind","key"],["kind","key"]);
-      if(item.animation.kind!=="roll")throw new Error(t("ui.declarative.error.invalid_ui_object_fields", {}, "Invalid UI object fields"));
+      knownObject(item.animation,["kind","key","duration_ms","delay_ms"],["kind","key"]);
+      if(!["roll","move","notice"].includes(item.animation.kind))throw new Error(t("ui.declarative.error.invalid_ui_object_fields", {}, "Invalid UI object fields"));
       if(!isId(item.animation.key))throw new Error(t("ui.declarative.error.invalid_ui_identifier", {}, "Invalid UI identifier"));
+      for(const key of ["duration_ms","delay_ms"])if(key in item.animation&&(!Number.isInteger(item.animation[key])||item.animation[key]<0||item.animation[key]>5000))throw new Error(t("ui.declarative.error.invalid_numeric_geometry", {}, "Invalid numeric geometry"));
     }
     if("hit_area" in item){
       knownObject(item.hit_area,["x","y","width","height"],["x","y","width","height"]);
@@ -297,13 +319,14 @@
   }
   function mount(container, rawSpec, callbacks = {}) {
     const spec = validateSpec(clone(rawSpec));
+    const cameraEnabled = spec.viewport.camera_enabled !== false;
     container.replaceChildren();
     container.classList.add("declarative-game");
     container.classList.toggle("declarative-immersive",Boolean(callbacks.immersive));
     const stage = svg("svg", {viewBox: `0 0 ${spec.viewport.width} ${spec.viewport.height}`, role: "group", tabindex: 0, "aria-label": t("ui.declarative.board_aria", {}, "Game board"), class: "declarative-stage"});
     // The board takes the available panel in both dimensions. SVG's meet
     // scaling preserves its geometry without an intrinsic-height overflow.
-    stage.setAttribute("aria-keyshortcuts", "+ - 0 ArrowLeft ArrowRight ArrowUp ArrowDown Home End R Shift+R F");
+    stage.setAttribute("aria-keyshortcuts", cameraEnabled ? "+ - 0 ArrowLeft ArrowRight ArrowUp ArrowDown Home End R Shift+R F" : "R Shift+R F");
     const pieceTools=document.createElement("div");pieceTools.className="declarative-piece-actions";pieceTools.hidden=true;
     const controls = document.createElement("div"); controls.className = "declarative-controls";
     const sceneStatus=document.createElement("p");sceneStatus.className="declarative-scene-status";sceneStatus.setAttribute("role","status");sceneStatus.setAttribute("aria-live","polite");sceneStatus.hidden=true;
@@ -313,7 +336,12 @@
     container.append(stage, pieceTools, previewStatus, controls, sceneStatus, errorBox);
     const engine = createEngine(container);
     let latest = null, localState = null, revision = 0, renderedRevision = -1, destroyed = false, moveSent = false, selected = null, dragging = null, nativeDragging = null, currentScene = null, suppressClick = false;
-    let lastStateMoveCount = null, lastStateWasReplay = false, dragPreview = null;
+    let lastStateMoveCount = null, lastStateWasReplay = false, lastStateTurn = null, lastRoundWinner = null, dragPreview = null;
+    let motionPending=false,motionTimer=null,motionRelease=null,motionReady=Promise.resolve();
+    function clearMotionHold(){
+      if(motionTimer!==null)global.clearTimeout(motionTimer);
+      motionTimer=null;motionPending=false;motionRelease?.();motionRelease=null;
+    }
     // Placement previews are host-only presentation. A first touch tap on a
     // destination with a preview arms it; the second tap places the piece.
     let previewLayer = null, previewTarget = null, armedTarget = null, targetPointerType = null;
@@ -325,6 +353,7 @@
     let cameraGesture=null,cameraClickUntil=0,cameraFrame=null;
     const pieceAnimations=new Set();
     function applyCamera() {
+      if(!cameraEnabled){camera.zoom=1;camera.x=cameraBounds.x;camera.y=cameraBounds.y;}
       const {width,height,minX,maxX,minY,maxY}=cameraLimits(cameraBounds,camera.zoom);
       camera.x=Math.max(minX,Math.min(maxX,num(camera.x)));
       camera.y=Math.max(minY,Math.min(maxY,num(camera.y)));
@@ -333,7 +362,7 @@
     }
     function panBy(dx,dy){camera.x+=dx*cameraBounds.width/camera.zoom*.1;camera.y+=dy*cameraBounds.height/camera.zoom*.1;applyCamera();}
     stage.addEventListener("keydown",event=>{
-      if(event.target!==stage)return;
+      if(!cameraEnabled||event.target!==stage)return;
       const directions={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
       if(directions[event.key]){event.preventDefault();panBy(...directions[event.key]);}
       else if(event.key==="+"||event.key==="="){event.preventDefault();zoomBy(1.25);}
@@ -363,6 +392,7 @@
     }
     function zoomBy(factor) {const bounds=stage.getBoundingClientRect();zoomAt(camera.zoom*factor,bounds.x+bounds.width/2,bounds.y+bounds.height/2);}
     stage.addEventListener("wheel",event=>{
+      if(!cameraEnabled)return;
       event.preventDefault();
       zoomAt(camera.zoom*Math.exp(-Math.max(-500,Math.min(500,event.deltaY))*.002),event.clientX,event.clientY);
     },{passive:false});
@@ -370,7 +400,7 @@
     function beginPinch() {
       const [a,b]=[...touches.entries()];if(!b)return;
       const x=(a[1].x+b[1].x)/2,y=(a[1].y+b[1].y)/2;
-      cameraGesture={kind:"pinch",ids:[a[0],b[0]],distance:Math.max(1,Math.hypot(a[1].x-b[1].x,a[1].y-b[1].y)),zoom:camera.zoom,anchor:boardPoint(x,y)};
+      cameraGesture={kind:cameraEnabled?"pinch":"blocked",ids:[a[0],b[0]],distance:Math.max(1,Math.hypot(a[1].x-b[1].x,a[1].y-b[1].y)),zoom:camera.zoom,anchor:boardPoint(x,y)};
       resetDrag();nativeDragging=null;selected=null;cameraClickUntil=Date.now()+450;updateHints();
     }
     function cameraPointerDown(event) {
@@ -378,7 +408,7 @@
       if(event.pointerType!=="touch"&&(event.button!==0||interactive))return;
       touches.set(event.pointerId,{x:event.clientX,y:event.clientY});
       if(touches.size>=2){beginPinch();event.preventDefault();event.stopPropagation();}
-      else if(!interactive){
+      else if(cameraEnabled&&!interactive){
         cameraGesture={kind:"pan",id:event.pointerId,point:boardPoint(event.clientX,event.clientY),start:{x:event.clientX,y:event.clientY},moved:false};
       }
       // Capturing only camera fingers keeps ordinary piece/native dragging intact.
@@ -388,6 +418,7 @@
       if(!touches.has(event.pointerId))return;
       touches.set(event.pointerId,{x:event.clientX,y:event.clientY});
       if(!cameraGesture)return;
+      if(cameraGesture.kind==="blocked"){event.preventDefault();return;}
       if(cameraGesture.kind==="pinch"){
         event.preventDefault();
         const [a,b]=cameraGesture.ids.map(id=>touches.get(id));if(!a||!b)return;
@@ -402,18 +433,23 @@
       if(!touches.has(event.pointerId))return false;
       if(cameraGesture?.kind==="pan"&&!cameraGesture.moved&&cameraGesture.id===event.pointerId&&event.type!=="pointercancel")cameraPointerMove(event);
       touches.delete(event.pointerId);if(!cameraGesture)return false;
-      const consumed=cameraGesture.kind==="pinch"||cameraGesture.moved;
+      const consumed=cameraGesture.kind==="pinch"||cameraGesture.kind==="blocked"||cameraGesture.moved;
       if(consumed){event.preventDefault();cameraClickUntil=Date.now()+450;}
       resetDrag();nativeDragging=null;selected=null;
       stage.classList.remove("camera-panning");
       if(touches.size>=2)beginPinch();
-      else if(touches.size===1){const [id,point]=[...touches.entries()][0];cameraGesture={kind:"pan",id,point:boardPoint(point.x,point.y),start:{...point},moved:consumed};if(consumed)stage.classList.add("camera-panning");}
+      else if(touches.size===1){const [id,point]=[...touches.entries()][0];cameraGesture={kind:cameraEnabled?"pan":"blocked",id,point:boardPoint(point.x,point.y),start:{...point},moved:consumed};if(consumed&&cameraEnabled)stage.classList.add("camera-panning");}
       else cameraGesture=null;
       updateHints();return consumed;
     }
     applyCamera();
     stage.addEventListener("pointerdown",cameraPointerDown,true);
     stage.addEventListener("click",event=>{if(cameraClickBlocked()){event.preventDefault();event.stopPropagation();}},true);
+    stage.addEventListener("click",event=>{
+      if(spec.motion&&!event.target.closest?.(".declarative-piece,.declarative-target")){
+        resetDrag();selected=null;disarm();clearPreview();updateHints();
+      }
+    });
     global.addEventListener("pointermove",cameraPointerMove,{passive:false});
     function resetDrag(keepPreview=false) {
       const drag=dragging;dragging=null;
@@ -525,7 +561,7 @@
     }
     let queue = Promise.resolve();
     function error(error) { if (destroyed) return; resetDrag();errorBox.textContent = error.message; errorBox.hidden = false; callbacks.onError?.(error); }
-    function canAct() { return latest && renderedRevision===revision && latest.status === "ongoing" && latest.acting_for_player_index !== null && latest.acting_for_player_index !== undefined && !latest.replay && !moveSent; }
+    function canAct() { return latest && renderedRevision===revision && latest.status === "ongoing" && latest.acting_for_player_index !== null && latest.acting_for_player_index !== undefined && !latest.replay && !moveSent && !motionPending; }
     function selectedPiece(){return currentScene?.pieces?.find(piece=>piece.id===selected&&!piece.hidden&&pieceActions(piece).length);}
     function pieceName(piece){return piece.face==="back"?t("ui.declarative.covered_piece", {}, "Covered piece"):piece.aria_label||piece.text||piece.id;}
     function updateHints() {
@@ -599,7 +635,7 @@
       node.addEventListener("click", () => { if (!suppressClick&&!cameraClickBlocked()&&enabled()) fn(); });
       node.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); if (enabled()) fn(); } });
     }
-    function draw(scene,animate=false,rollEffects=false) {
+    function draw(scene,animate=false,rollEffects=false,turnEnded=false) {
       const previousPieces=new Map((currentScene?.pieces||[]).map(piece=>[piece.id,piece]));
       const previousTransforms=new Map();
       if(animate&&!global.matchMedia?.("(prefers-reduced-motion: reduce)").matches){
@@ -609,6 +645,8 @@
         }
       }
       for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();
+      clearMotionHold();
+      let rolled=false;
       currentScene=scene;
       stage.setAttribute("aria-label", t("ui.declarative.board_aria", {}, "Game board"));
       const activeId = document.activeElement?.dataset?.uiId;
@@ -646,8 +684,11 @@
         const height = board.kind === "grid" ? board.height/board.rows : 44;
         const node = svg("g",{class:"declarative-target",transform:`translate(${point.x} ${point.y})`});
         if(target.hit_area)node.append(svg("rect",{class:"declarative-target-hit",...target.hit_area,fill:"transparent"}));
-        node.append(svg("rect",{class:"declarative-target-area",x:-width/2,y:-height/2,width,height,rx:5,fill:target.color || "#b8ef5b",stroke:"#c9ff63","stroke-width":2}));
-        if (target.label) node.append(svg("text",{"text-anchor":"middle","dominant-baseline":"central",class:"declarative-location-label",fill:"#d7f6ab","font-size":14},target.label));
+        const targetArt=assetURI(spec.assets?.[target.asset]);
+        if(targetArt&&!target.hit_area)node.append(svg("rect",{class:"declarative-target-hit",x:-width/2,y:-height/2,width,height,fill:"transparent"}));
+        if(targetArt)node.append(svg("image",{class:"declarative-target-area",href:targetArt,...(target.hit_area||{x:-width/2,y:-height/2,width,height})}));
+        else node.append(svg("rect",{class:"declarative-target-area",x:-width/2,y:-height/2,width,height,rx:5,fill:target.color || "#b8ef5b",stroke:"#c9ff63","stroke-width":2}));
+        if (target.label&&!targetArt) node.append(svg("text",{"text-anchor":"middle","dominant-baseline":"central",class:"declarative-location-label",fill:"#d7f6ab","font-size":14},target.label));
         if(target.preview?.length){
           node.dataset.preview="true";
           node.addEventListener("pointerdown",event=>{targetPointerType=event.pointerType;});
@@ -690,12 +731,13 @@
         const uri=assetURI(spec.assets?.[piece.face==="back" ? type.back_asset : piece.asset || type.asset]);
         if(uri)body.append(svg("image",{href:uri,x:-width/2,y:-height/2,width,height,preserveAspectRatio:"xMidYMid meet"}));
         const text=piece.face==="back"?"◆":piece.text;
-        if(text!==undefined)body.append(svg("text",{"text-anchor":"middle","dominant-baseline":"central",fill:type.text_color || (type.shape==="text"?"#ecf4fa":"#122735"),"font-size":Math.min(width*.5,height*.6,40),"font-weight":700},text));
-        if(piece.selected)visual.append(svg("rect",{x:-width/2-3,y:-height/2-3,width:width+6,height:height+6,rx:5,fill:"none",stroke:"#fff","stroke-width":3}));
+        if(text!==undefined)body.append(svg("text",{"text-anchor":"middle","dominant-baseline":"central",fill:type.text_color || (type.shape==="text"?"#ecf4fa":"#122735"),"font-size":type.font_size??Math.min(width*.5,height*.6,40),"font-weight":700},text));
+        const outline=(attrs={})=>type.action_outline==="ellipse"?svg("ellipse",{rx:width/2+4,ry:height/2+4,fill:"none",...attrs}):svg("rect",{x:-width/2-4,y:-height/2-4,width:width+8,height:height+8,rx:8,fill:"none",...attrs});
+        if(piece.selected)visual.append(outline({stroke:"#9dff00","stroke-width":4}));
         if(actions.length){
           const summary=t("ui.declarative.hints.piece_actions", {piece:pieceName(piece),actions:actions.map(actionLabel).join(", ")}, "{piece}: {actions}");
           node.append(svg("title",{},summary));
-          visual.append(svg("rect",{class:"declarative-piece-action-outline",x:-width/2-4,y:-height/2-4,width:width+8,height:height+8,rx:8,fill:"none","vector-effect":"non-scaling-stroke"}));
+          if(type.action_outline!=="none")visual.append(outline({class:"declarative-piece-action-outline","vector-effect":"non-scaling-stroke"}));
           const badges=svg("g",{class:"declarative-action-badges",transform:`translate(${-width/2} ${-height/2-13})`,"aria-hidden":"true"});
           actions.forEach((action,index)=>{
             const badge=svg("g",{transform:`translate(${index*22} 0)`,"data-action-hint":action});
@@ -715,14 +757,35 @@
           node.addEventListener("dragstart",event=>event.preventDefault());}
         stage.append(node);
         const previous=previousPieces.get(piece.id),from=previousTransforms.get(piece.id);
-        if(rollEffects&&piece.animation?.kind==="roll"&&previous&&previous.animation?.key!==piece.animation.key&&body.animate){
-          const animation=body.animate([{transform:"rotate(-28deg) scale(.8)",offset:0},{transform:"rotate(155deg) scale(1.12)",offset:.35},{transform:"rotate(310deg) scale(.92)",offset:.72},{transform:"rotate(360deg) scale(1)",offset:1}],{duration:650,easing:"ease-out"});
+        // Spending a die fades its accepted face into the gray used artwork.
+        // A new roll has a different event key and uses the tumble instead.
+        if(spec.motion&&(animate||rollEffects)&&piece.animation?.kind==="roll"&&
+            previous?.animation?.key===piece.animation.key&&previous.asset!==piece.asset){
+          const previousArt=assetURI(spec.assets?.[previous.asset]);
+          if(previousArt&&body.animate){
+            const oldFace=svg("image",{href:previousArt,x:-width/2,y:-height/2,width,height,"pointer-events":"none"});body.append(oldFace);
+            const animation=oldFace.animate([{opacity:1},{opacity:0}],{duration:200,easing:"linear",fill:"forwards"});
+            pieceAnimations.add(animation);animation.onfinish=()=>{pieceAnimations.delete(animation);oldFace.remove();};
+          }
+        }
+        if(piece.animation?.kind==="notice"){
+          body.style.opacity="0";
+          if((animate||rollEffects)&&previous?.animation?.key!==piece.animation.key&&body.animate){
+            const animation=body.animate([{opacity:0,offset:0},{opacity:1,offset:.04},{opacity:1,offset:.96},{opacity:0,offset:1}],{duration:piece.animation.duration_ms??2000,delay:piece.animation.delay_ms??0,fill:"both"});
+            pieceAnimations.add(animation);animation.onfinish=()=>pieceAnimations.delete(animation);
+          }
+        }
+        if(rollEffects&&piece.animation?.kind==="roll"&&previous?.animation?.key!==piece.animation.key&&body.animate){
+          rolled=true;
+          const animation=body.animate([{transform:"translate(-12px, -8px) rotate(-28deg) scale(.8)",offset:0},{transform:"translate(8px, 4px) rotate(155deg) scale(1.12)",offset:.35},{transform:"translate(-4px, -2px) rotate(310deg) scale(.92)",offset:.72},{transform:"rotate(360deg) scale(1)",offset:1}],{duration:piece.animation.duration_ms??spec.motion?.roll_ms??650,easing:"ease-out"});
           pieceAnimations.add(animation);animation.onfinish=()=>pieceAnimations.delete(animation);
         }
         if(previous&&from&&node.animate){
           const before=position(spec,previous);
           if(before.x!==point.x||before.y!==point.y||num(previous.rotation)!==num(piece.rotation)||num(previous.scale,1)!==num(piece.scale,1)){
-            const animation=node.animate([{transform:from},{transform:`translate(${point.x}px, ${point.y}px) rotate(${num(piece.rotation)}deg) scale(${num(piece.scale,1)})`}],{duration:1440,easing:"ease-out"});
+            const to=`translate(${point.x}px, ${point.y}px) rotate(${num(piece.rotation)}deg) scale(${num(piece.scale,1)})`;
+            const timing=piece.animation?.kind==="move"?piece.animation:{};
+            const animation=node.animate(movementFrames(from,to,spec.motion?.easing),{duration:timing.duration_ms??spec.motion?.move_ms??1440,delay:timing.delay_ms??0,fill:"backwards",easing:spec.motion?.easing==="ease-in-out-quad"?"linear":"ease-out"});
             pieceAnimations.add(animation);animation.onfinish=()=>pieceAnimations.delete(animation);
           }
         }
@@ -766,6 +829,20 @@
         node.dataset.uiId=control.id;node.disabled=Boolean(control.disabled)||!canAct();wrapper.classList.toggle("actionable",!node.disabled);wrapper.append(node);controls.append(wrapper);
       }
       if(callbacks.immersive)cameraBounds=contentBounds(spec,scene);
+      // Reducer-selected pieces (for example a legal move hint) use the same
+      // destination affordances as selection by pointer or keyboard.
+      if(!selected)selected=scene.pieces?.find(piece=>piece.selected&&pieceActions(piece).includes("move"))?.id??null;
+      // Games opting into physical timing keep a roll readable before the next
+      // action and give the outgoing turn a short pause. A repeated poll keeps
+      // the current clock; reconnects and reduced motion paint immediately.
+      if(spec.motion&&(animate||rollEffects)){
+        const longest=Math.max(0,...[...pieceAnimations].map(animation=>Number(animation.effect?.getComputedTiming().endTime)||0));
+        const hold=Math.max(longest,rolled?(spec.motion.roll_settle_ms??0):0)+(turnEnded?(spec.motion.turn_pause_ms??0):0);
+        if(hold>0){
+          motionPending=true;motionReady=new Promise(resolve=>{motionRelease=resolve;});
+          motionTimer=global.setTimeout(()=>{clearMotionHold();if(!destroyed)updateHints();},hold);
+        }
+      }
       fitScene();scheduleCamera();updateHints();
       if(activeId)for(const node of container.querySelectorAll("[data-ui-id]"))if(node.dataset.uiId===activeId){node.focus({preventScroll:true});break;}
       if(activePieceAction)for(const node of pieceTools.querySelectorAll("[data-piece-action]"))if(node.dataset.pieceAction===activePieceAction){node.focus({preventScroll:true});break;}
@@ -783,23 +860,27 @@
       errorBox.hidden=true;
       if(result.make_move!==undefined && message.type==="ui_event" && canAct()) {moveSent=true;callbacks.onMove?.(clone(result.make_move));}
       else if(message.type==="ui_event")resetDrag();
-      const motionEnabled=message.type==="state_changed"&&options.animate!==false&&callbacks.animate===true&&!latest?.replay&&!global.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      const motionEnabled=message.type==="state_changed"&&options.animate!==false&&(callbacks.animate===true||spec.motion?.animate_own===true)&&!latest?.replay&&!global.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
       const rollEffects=message.type==="state_changed"&&options.animate!==false&&!latest?.replay&&!lastStateWasReplay&&Number.isInteger(lastStateMoveCount)&&Number.isInteger(message.move_count)&&message.move_count>lastStateMoveCount&&!global.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
       // The actor belongs to the completed move, not the next turn. Missing
       // metadata snaps conservatively; an own move never animates captures either.
       const actor=message.last_move_player_index;
       const viewer=message.my_player_index;
       const knownOther=viewer===null||(Number.isInteger(viewer)&&viewer>=0&&viewer<10&&actor!==viewer);
-      const animate=motionEnabled&&!lastStateWasReplay&&Number.isInteger(lastStateMoveCount)&&Number.isInteger(message.move_count)&&message.move_count>lastStateMoveCount&&Number.isInteger(actor)&&actor>=0&&actor<10&&knownOther;
+      const view=message.view||message.state;
+      const newRound=lastRoundWinner!==null&&view?.round_winner===null;
+      const animate=motionEnabled&&!newRound&&!lastStateWasReplay&&Number.isInteger(lastStateMoveCount)&&Number.isInteger(message.move_count)&&message.move_count>lastStateMoveCount&&Number.isInteger(actor)&&actor>=0&&actor<10&&(knownOther||spec.motion?.animate_own===true);
       // Polls can arrive just after a move starts. Keep the existing elements
       // and their animation clocks when the authoritative scene is unchanged.
-      const preserveEffects=message.type==="state_changed"&&options.animate!==false&&!latest?.replay&&!global.matchMedia?.("(prefers-reduced-motion: reduce)").matches&&pieceAnimations.size>0;
+      const preserveEffects=message.type==="state_changed"&&options.animate!==false&&!latest?.replay&&!global.matchMedia?.("(prefers-reduced-motion: reduce)").matches&&(pieceAnimations.size>0||motionPending);
       if((motionEnabled||preserveEffects)&&currentScene&&JSON.stringify(scene)===JSON.stringify(currentScene)){
         stage.setAttribute("aria-busy",String(moveSent));updateHints();
-      }else draw(scene,animate,rollEffects);
+      }else draw(scene,animate,rollEffects,lastStateTurn!==null&&view?.n>lastStateTurn);
       if(message.type==="state_changed"){
         lastStateMoveCount=Number.isInteger(message.move_count)?message.move_count:null;
         lastStateWasReplay=Boolean(message.replay);
+        lastStateTurn=view?.n??null;
+        lastRoundWinner=view?.round_winner??null;
       }
       callbacks.onScene?.(clone(scene));
       return true;
@@ -810,18 +891,19 @@
         resetDrag();latest=clone(message);revision++;moveSent=false;selected=null;nativeDragging=null;updateHints();const atRevision=revision;
         queue=queue.then(()=>reduce(latest,atRevision,options)).catch(error);return queue;
       },
-      destroy(){resetDrag();destroyed=true;revision++;touches.clear();cameraGesture=null;cameraObserver?.disconnect();global.removeEventListener("resize",scheduleCamera);if(cameraFrame!==null)global.cancelAnimationFrame(cameraFrame);for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();global.removeEventListener("pointermove",cameraPointerMove);global.removeEventListener("pointermove",previewUnderPointer);global.removeEventListener("keydown",toolKeys);global.removeEventListener("pointermove",movePointer);global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game","declarative-immersive","declarative-has-previews");},
+      destroy(){resetDrag();clearMotionHold();destroyed=true;revision++;touches.clear();cameraGesture=null;cameraObserver?.disconnect();global.removeEventListener("resize",scheduleCamera);if(cameraFrame!==null)global.cancelAnimationFrame(cameraFrame);for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();global.removeEventListener("pointermove",cameraPointerMove);global.removeEventListener("pointermove",previewUnderPointer);global.removeEventListener("keydown",toolKeys);global.removeEventListener("pointermove",movePointer);global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game","declarative-immersive","declarative-has-previews");},
       dispatch,
+      async whenIdle(){await Promise.allSettled([motionReady,...[...pieceAnimations].map(animation=>animation.finished)]);},
     };
   }
   function clientDocument(spec) {
     const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
     const data=value=>JSON.stringify(canonical(value)).replace(/</g,"\\u003c");
     return '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<link rel="stylesheet" href="/static/declarative-ui.css?v=14"><div id="declarative-game"></div>' +
+      '<link rel="stylesheet" href="/static/declarative-ui.css?v=15"><div id="declarative-game"></div>' +
       '<script type="application/json" id="i18n-strings">'+data(spec.strings || {})+'<'+'/script>' +
       '<script type="application/json" id="declarative-spec">'+data(spec)+'<'+'/script>' +
-      '<script src="/static/declarative-ui.js?v=14"><'+'/script><script>' +
+      '<script src="/static/declarative-ui.js?v=15"><'+'/script><script>' +
       'const host=DeclarativeUI.mount(document.getElementById("declarative-game"),' +
       'JSON.parse(document.getElementById("declarative-spec").textContent),' +
       '{onMove:move=>parent.postMessage({type:"make_move",move},"*"),' +

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from game_platform.declarative_ui import (
-    DeclarativeLogic, DeclarativeUIError, validate_response,
+    DeclarativeLogic, DeclarativeUIError, validate_response, validate_spec,
 )
 from game_platform.tests.test_declarative_ui import spec, state_changed
 
@@ -118,3 +118,15 @@ def test_history_cannot_authorize_a_spectator_to_emit_a_move():
     with pytest.raises(DeclarativeUIError, match="current player"):
         DeclarativeLogic(spec(code)).reduce({"type": "ui_event", "state_changed": changed,
                                             "event": {"type": "tap", "id": "die"}})
+
+
+@pytest.mark.parametrize("case", json.loads((Path(__file__).with_name("fixtures") /
+                                             "declarative/motion-cases.json").read_text()))
+def test_motion_policy_matches_browser_boundary_cases(case):
+    ui = spec()
+    ui["motion"] = case["value"]
+    if case["valid"]:
+        assert validate_spec(ui) == ui
+    else:
+        with pytest.raises(DeclarativeUIError):
+            validate_spec(ui)

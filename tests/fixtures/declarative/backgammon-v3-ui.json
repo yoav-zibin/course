@@ -1,0 +1,325 @@
+{
+  "format": "buildplay-ui",
+  "version": 1,
+  "viewport": {
+    "width": 800,
+    "height": 600
+  },
+  "assets": {
+    "board_art": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA3MDAgNDQwIj48cmVjdCB3aWR0aD0iNzAwIiBoZWlnaHQ9IjQ0MCIgcng9IjEwIiBmaWxsPSIjNzA0NTI4Ii8+PHJlY3QgeD0iMTIiIHk9IjEyIiB3aWR0aD0iNjc2IiBoZWlnaHQ9IjQxNiIgZmlsbD0iI2QyYjE3ZCIvPjxyZWN0IHg9IjMxNiIgeT0iMTIiIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MTYiIGZpbGw9IiM3MDQ1MjgiLz48cGF0aCBkPSJNNjEyLDQyMkw2NjAsNDIyTDYzNiwyNTBaIiBmaWxsPSIjZThkNWFiIi8+PHRleHQgeD0iNjM2IiB5PSI0MzciIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtc2l6ZT0iMTAiIGZpbGw9IiNmZmY0ZGUiPjE8L3RleHQ+PHBhdGggZD0iTTU2MCw0MjJMNjA4LDQyMkw1ODQsMjUwWiIgZmlsbD0iIzg1M2YzMCIvPjx0ZXh0IHg9IjU4NCIgeT0iNDM3IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjEwIiBmaWxsPSIjZmZmNGRlIj4yPC90ZXh0PjxwYXRoIGQ9Ik01MDgsNDIyTDU1Niw0MjJMNTMyLDI1MFoiIGZpbGw9IiNlOGQ1YWIiLz48dGV4dCB4PSI1MzIiIHk9IjQzNyIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zaXplPSIxMCIgZmlsbD0iI2ZmZjRkZSI+MzwvdGV4dD48cGF0aCBkPSJNNDU2LDQyMkw1MDQsNDIyTDQ4MCwyNTBaIiBmaWxsPSIjODUzZjMwIi8+PHRleHQgeD0iNDgwIiB5PSI0MzciIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtc2l6ZT0iMTAiIGZpbGw9IiNmZmY0ZGUiPjQ8L3RleHQ+PHBhdGggZD0iTTQwNCw0MjJMNDUyLDQyMkw0MjgsMjUwWiIgZmlsbD0iI2U4ZDVhYiIvPjx0ZXh0IHg9IjQyOCIgeT0iNDM3IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjEwIiBmaWxsPSIjZmZmNGRlIj41PC90ZXh0PjxwYXRoIGQ9Ik0zNTIsNDIyTDQwMCw0MjJMMzc2LDI1MFoiIGZpbGw9IiM4NTNmMzAiLz48dGV4dCB4PSIzNzYiIHk9IjQzNyIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zaXplPSIxMCIgZmlsbD0iI2ZmZjRkZSI+NjwvdGV4dD48cGF0aCBkPSJNMjcyLDQyMkwzMjAsNDIyTDI5NiwyNTBaIiBmaWxsPSIjZThkNWFiIi8+PHRleHQgeD0iMjk2IiB5PSI0MzciIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtc2l6ZT0iMTAiIGZpbGw9IiNmZmY0ZGUiPjc8L3RleHQ+PHBhdGggZD0iTTIyMCw0MjJMMjY4LDQyMkwyNDQsMjUwWiIgZmlsbD0iIzg1M2YzMCIvPjx0ZXh0IHg9IjI0NCIgeT0iNDM3IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjEwIiBmaWxsPSIjZmZmNGRlIj44PC90ZXh0PjxwYXRoIGQ9Ik0xNjgsNDIyTDIxNiw0MjJMMTkyLDI1MFoiIGZpbGw9IiNlOGQ1YWIiLz48dGV4dCB4PSIxOTIiIHk9IjQzNyIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zaXplPSIxMCIgZmlsbD0iI2ZmZjRkZSI+OTwvdGV4dD48cGF0aCBkPSJNMTE2LDQyMkwxNjQsNDIyTDE0MCwyNTBaIiBmaWxsPSIjODUzZjMwIi8+PHRleHQgeD0iMTQwIiB5PSI0MzciIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtc2l6ZT0iMTAiIGZpbGw9IiNmZmY0ZGUiPjEwPC90ZXh0PjxwYXRoIGQ9Ik02NCw0MjJMMTEyLDQyMkw4OCwyNTBaIiBmaWxsPSIjZThkNWFiIi8+PHRleHQgeD0iODgiIHk9IjQzNyIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zaXplPSIxMCIgZmlsbD0iI2ZmZjRkZSI+MTE8L3RleHQ+PHBhdGggZD0iTTEyLDQyMkw2MCw0MjJMMzYsMjUwWiIgZmlsbD0iIzg1M2YzMCIvPjx0ZXh0IHg9IjM2IiB5PSI0MzciIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtc2l6ZT0iMTAiIGZpbGw9IiNmZmY0ZGUiPjEyPC90ZXh0PjxwYXRoIGQ9Ik0xMiwxOEw2MCwxOEwzNiwxOTBaIiBmaWxsPSIjZThkNWFiIi8+PHRleHQgeD0iMzYiIHk9IjEwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjEwIiBmaWxsPSIjZmZmNGRlIj4xMzwvdGV4dD48cGF0aCBkPSJNNjQsMThMMTEyLDE4TDg4LDE5MFoiIGZpbGw9IiM4NTNmMzAiLz48dGV4dCB4PSI4OCIgeT0iMTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtc2l6ZT0iMTAiIGZpbGw9IiNmZmY0ZGUiPjE0PC90ZXh0PjxwYXRoIGQ9Ik0xMTYsMThMMTY0LDE4TDE0MCwxOTBaIiBmaWxsPSIjZThkNWFiIi8+PHRleHQgeD0iMTQwIiB5PSIxMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zaXplPSIxMCIgZmlsbD0iI2ZmZjRkZSI+MTU8L3RleHQ+PHBhdGggZD0iTTE2OCwxOEwyMTYsMThMMTkyLDE5MFoiIGZpbGw9IiM4NTNmMzAiLz48dGV4dCB4PSIxOTIiIHk9IjEwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjEwIiBmaWxsPSIjZmZmNGRlIj4xNjwvdGV4dD48cGF0aCBkPSJNMjIwLDE4TDI2OCwxOEwyNDQsMTkwWiIgZmlsbD0iI2U4ZDVhYiIvPjx0ZXh0IHg9IjI0NCIgeT0iMTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtc2l6ZT0iMTAiIGZpbGw9IiNmZmY0ZGUiPjE3PC90ZXh0PjxwYXRoIGQ9Ik0yNzIsMThMMzIwLDE4TDI5NiwxOTBaIiBmaWxsPSIjODUzZjMwIi8+PHRleHQgeD0iMjk2IiB5PSIxMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zaXplPSIxMCIgZmlsbD0iI2ZmZjRkZSI+MTg8L3RleHQ+PHBhdGggZD0iTTM1MiwxOEw0MDAsMThMMzc2LDE5MFoiIGZpbGw9IiNlOGQ1YWIiLz48dGV4dCB4PSIzNzYiIHk9IjEwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjEwIiBmaWxsPSIjZmZmNGRlIj4xOTwvdGV4dD48cGF0aCBkPSJNNDA0LDE4TDQ1MiwxOEw0MjgsMTkwWiIgZmlsbD0iIzg1M2YzMCIvPjx0ZXh0IHg9IjQyOCIgeT0iMTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtc2l6ZT0iMTAiIGZpbGw9IiNmZmY0ZGUiPjIwPC90ZXh0PjxwYXRoIGQ9Ik00NTYsMThMNTA0LDE4TDQ4MCwxOTBaIiBmaWxsPSIjZThkNWFiIi8+PHRleHQgeD0iNDgwIiB5PSIxMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zaXplPSIxMCIgZmlsbD0iI2ZmZjRkZSI+MjE8L3RleHQ+PHBhdGggZD0iTTUwOCwxOEw1NTYsMThMNTMyLDE5MFoiIGZpbGw9IiM4NTNmMzAiLz48dGV4dCB4PSI1MzIiIHk9IjEwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjEwIiBmaWxsPSIjZmZmNGRlIj4yMjwvdGV4dD48cGF0aCBkPSJNNTYwLDE4TDYwOCwxOEw1ODQsMTkwWiIgZmlsbD0iI2U4ZDVhYiIvPjx0ZXh0IHg9IjU4NCIgeT0iMTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtc2l6ZT0iMTAiIGZpbGw9IiNmZmY0ZGUiPjIzPC90ZXh0PjxwYXRoIGQ9Ik02MTIsMThMNjYwLDE4TDYzNiwxOTBaIiBmaWxsPSIjODUzZjMwIi8+PHRleHQgeD0iNjM2IiB5PSIxMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zaXplPSIxMCIgZmlsbD0iI2ZmZjRkZSI+MjQ8L3RleHQ+PC9zdmc+",
+      "media_type": "image/svg+xml"
+    },
+    "die_0_used_0": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48dGV4dCB4PSIzMiIgeT0iMzQiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJjZW50cmFsIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIzOCIgZm9udC13ZWlnaHQ9IjcwMCIgZmlsbD0iIzZlNTEzNSI+PzwvdGV4dD48L3N2Zz4=",
+      "media_type": "image/svg+xml"
+    },
+    "die_0_used_1": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48dGV4dCB4PSIzMiIgeT0iMzQiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJjZW50cmFsIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIzOCIgZm9udC13ZWlnaHQ9IjcwMCIgZmlsbD0iIzZlNTEzNSI+PzwvdGV4dD48cmVjdCB4PSIwIiB5PSIwIiB3aWR0aD0iMzIiIGhlaWdodD0iNjQiIGZpbGw9IiM2NDcxN2IiIG9wYWNpdHk9Ii43MiIgY2xpcC1wYXRoPSJ1cmwoI2ZhY2UpIi8+PC9zdmc+",
+      "media_type": "image/svg+xml"
+    },
+    "die_0_used_2": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48dGV4dCB4PSIzMiIgeT0iMzQiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJjZW50cmFsIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIzOCIgZm9udC13ZWlnaHQ9IjcwMCIgZmlsbD0iIzZlNTEzNSI+PzwvdGV4dD48cmVjdCB4PSIwIiB5PSIwIiB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIGZpbGw9IiM2NDcxN2IiIG9wYWNpdHk9Ii43MiIgY2xpcC1wYXRoPSJ1cmwoI2ZhY2UpIi8+PC9zdmc+",
+      "media_type": "image/svg+xml"
+    },
+    "die_1_used_0": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzMiIgY3k9IjMyIiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PC9zdmc+",
+      "media_type": "image/svg+xml"
+    },
+    "die_1_used_1": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzMiIgY3k9IjMyIiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PHJlY3QgeD0iMCIgeT0iMCIgd2lkdGg9IjMyIiBoZWlnaHQ9IjY0IiBmaWxsPSIjNjQ3MTdiIiBvcGFjaXR5PSIuNzIiIGNsaXAtcGF0aD0idXJsKCNmYWNlKSIvPjwvc3ZnPg==",
+      "media_type": "image/svg+xml"
+    },
+    "die_1_used_2": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzMiIgY3k9IjMyIiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PHJlY3QgeD0iMCIgeT0iMCIgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSIjNjQ3MTdiIiBvcGFjaXR5PSIuNzIiIGNsaXAtcGF0aD0idXJsKCNmYWNlKSIvPjwvc3ZnPg==",
+      "media_type": "image/svg+xml"
+    },
+    "die_2_used_0": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxNyIgY3k9IjE3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iNDciIGN5PSI0NyIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjwvc3ZnPg==",
+      "media_type": "image/svg+xml"
+    },
+    "die_2_used_1": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxNyIgY3k9IjE3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iNDciIGN5PSI0NyIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIzMiIgaGVpZ2h0PSI2NCIgZmlsbD0iIzY0NzE3YiIgb3BhY2l0eT0iLjcyIiBjbGlwLXBhdGg9InVybCgjZmFjZSkiLz48L3N2Zz4=",
+      "media_type": "image/svg+xml"
+    },
+    "die_2_used_2": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxNyIgY3k9IjE3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iNDciIGN5PSI0NyIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgZmlsbD0iIzY0NzE3YiIgb3BhY2l0eT0iLjcyIiBjbGlwLXBhdGg9InVybCgjZmFjZSkiLz48L3N2Zz4=",
+      "media_type": "image/svg+xml"
+    },
+    "die_3_used_0": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxNyIgY3k9IjE3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjxjaXJjbGUgY3g9IjQ3IiBjeT0iNDciIHI9IjUiIGZpbGw9IiMzNDI5MjQiLz48L3N2Zz4=",
+      "media_type": "image/svg+xml"
+    },
+    "die_3_used_1": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxNyIgY3k9IjE3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjxjaXJjbGUgY3g9IjQ3IiBjeT0iNDciIHI9IjUiIGZpbGw9IiMzNDI5MjQiLz48cmVjdCB4PSIwIiB5PSIwIiB3aWR0aD0iMzIiIGhlaWdodD0iNjQiIGZpbGw9IiM2NDcxN2IiIG9wYWNpdHk9Ii43MiIgY2xpcC1wYXRoPSJ1cmwoI2ZhY2UpIi8+PC9zdmc+",
+      "media_type": "image/svg+xml"
+    },
+    "die_3_used_2": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxNyIgY3k9IjE3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjxjaXJjbGUgY3g9IjQ3IiBjeT0iNDciIHI9IjUiIGZpbGw9IiMzNDI5MjQiLz48cmVjdCB4PSIwIiB5PSIwIiB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIGZpbGw9IiM2NDcxN2IiIG9wYWNpdHk9Ii43MiIgY2xpcC1wYXRoPSJ1cmwoI2ZhY2UpIi8+PC9zdmc+",
+      "media_type": "image/svg+xml"
+    },
+    "die_4_used_0": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxNyIgY3k9IjE3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iNDciIGN5PSIxNyIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjxjaXJjbGUgY3g9IjE3IiBjeT0iNDciIHI9IjUiIGZpbGw9IiMzNDI5MjQiLz48Y2lyY2xlIGN4PSI0NyIgY3k9IjQ3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PC9zdmc+",
+      "media_type": "image/svg+xml"
+    },
+    "die_4_used_1": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxNyIgY3k9IjE3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iNDciIGN5PSIxNyIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjxjaXJjbGUgY3g9IjE3IiBjeT0iNDciIHI9IjUiIGZpbGw9IiMzNDI5MjQiLz48Y2lyY2xlIGN4PSI0NyIgY3k9IjQ3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PHJlY3QgeD0iMCIgeT0iMCIgd2lkdGg9IjMyIiBoZWlnaHQ9IjY0IiBmaWxsPSIjNjQ3MTdiIiBvcGFjaXR5PSIuNzIiIGNsaXAtcGF0aD0idXJsKCNmYWNlKSIvPjwvc3ZnPg==",
+      "media_type": "image/svg+xml"
+    },
+    "die_4_used_2": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxNyIgY3k9IjE3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iNDciIGN5PSIxNyIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjxjaXJjbGUgY3g9IjE3IiBjeT0iNDciIHI9IjUiIGZpbGw9IiMzNDI5MjQiLz48Y2lyY2xlIGN4PSI0NyIgY3k9IjQ3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PHJlY3QgeD0iMCIgeT0iMCIgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSIjNjQ3MTdiIiBvcGFjaXR5PSIuNzIiIGNsaXAtcGF0aD0idXJsKCNmYWNlKSIvPjwvc3ZnPg==",
+      "media_type": "image/svg+xml"
+    },
+    "die_5_used_0": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxNyIgY3k9IjE3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iNDciIGN5PSIxNyIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjxjaXJjbGUgY3g9IjMyIiBjeT0iMzIiIHI9IjUiIGZpbGw9IiMzNDI5MjQiLz48Y2lyY2xlIGN4PSIxNyIgY3k9IjQ3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iNDciIGN5PSI0NyIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjwvc3ZnPg==",
+      "media_type": "image/svg+xml"
+    },
+    "die_5_used_1": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxNyIgY3k9IjE3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iNDciIGN5PSIxNyIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjxjaXJjbGUgY3g9IjMyIiBjeT0iMzIiIHI9IjUiIGZpbGw9IiMzNDI5MjQiLz48Y2lyY2xlIGN4PSIxNyIgY3k9IjQ3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iNDciIGN5PSI0NyIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIzMiIgaGVpZ2h0PSI2NCIgZmlsbD0iIzY0NzE3YiIgb3BhY2l0eT0iLjcyIiBjbGlwLXBhdGg9InVybCgjZmFjZSkiLz48L3N2Zz4=",
+      "media_type": "image/svg+xml"
+    },
+    "die_5_used_2": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxNyIgY3k9IjE3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iNDciIGN5PSIxNyIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjxjaXJjbGUgY3g9IjMyIiBjeT0iMzIiIHI9IjUiIGZpbGw9IiMzNDI5MjQiLz48Y2lyY2xlIGN4PSIxNyIgY3k9IjQ3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iNDciIGN5PSI0NyIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgZmlsbD0iIzY0NzE3YiIgb3BhY2l0eT0iLjcyIiBjbGlwLXBhdGg9InVybCgjZmFjZSkiLz48L3N2Zz4=",
+      "media_type": "image/svg+xml"
+    },
+    "die_6_used_0": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxNyIgY3k9IjE3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iNDciIGN5PSIxNyIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjxjaXJjbGUgY3g9IjE3IiBjeT0iMzIiIHI9IjUiIGZpbGw9IiMzNDI5MjQiLz48Y2lyY2xlIGN4PSI0NyIgY3k9IjMyIiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iMTciIGN5PSI0NyIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjxjaXJjbGUgY3g9IjQ3IiBjeT0iNDciIHI9IjUiIGZpbGw9IiMzNDI5MjQiLz48L3N2Zz4=",
+      "media_type": "image/svg+xml"
+    },
+    "die_6_used_1": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxNyIgY3k9IjE3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iNDciIGN5PSIxNyIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjxjaXJjbGUgY3g9IjE3IiBjeT0iMzIiIHI9IjUiIGZpbGw9IiMzNDI5MjQiLz48Y2lyY2xlIGN4PSI0NyIgY3k9IjMyIiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iMTciIGN5PSI0NyIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjxjaXJjbGUgY3g9IjQ3IiBjeT0iNDciIHI9IjUiIGZpbGw9IiMzNDI5MjQiLz48cmVjdCB4PSIwIiB5PSIwIiB3aWR0aD0iMzIiIGhlaWdodD0iNjQiIGZpbGw9IiM2NDcxN2IiIG9wYWNpdHk9Ii43MiIgY2xpcC1wYXRoPSJ1cmwoI2ZhY2UpIi8+PC9zdmc+",
+      "media_type": "image/svg+xml"
+    },
+    "die_6_used_2": {
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGNsaXBQYXRoIGlkPSJmYWNlIj48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNjIiIGhlaWdodD0iNjIiIHJ4PSI4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjYyIiBoZWlnaHQ9IjYyIiByeD0iOCIgZmlsbD0iI2ZmZjllYyIgc3Ryb2tlPSIjNmU1MTM1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxNyIgY3k9IjE3IiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iNDciIGN5PSIxNyIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjxjaXJjbGUgY3g9IjE3IiBjeT0iMzIiIHI9IjUiIGZpbGw9IiMzNDI5MjQiLz48Y2lyY2xlIGN4PSI0NyIgY3k9IjMyIiByPSI1IiBmaWxsPSIjMzQyOTI0Ii8+PGNpcmNsZSBjeD0iMTciIGN5PSI0NyIgcj0iNSIgZmlsbD0iIzM0MjkyNCIvPjxjaXJjbGUgY3g9IjQ3IiBjeT0iNDciIHI9IjUiIGZpbGw9IiMzNDI5MjQiLz48cmVjdCB4PSIwIiB5PSIwIiB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIGZpbGw9IiM2NDcxN2IiIG9wYWNpdHk9Ii43MiIgY2xpcC1wYXRoPSJ1cmwoI2ZhY2UpIi8+PC9zdmc+",
+      "media_type": "image/svg+xml"
+    }
+  },
+  "boards": [
+    {
+      "id": "main",
+      "kind": "graph",
+      "x": 20,
+      "y": 105,
+      "width": 700,
+      "height": 440,
+      "color": "#704528",
+      "line_color": "#704528",
+      "background_asset": "board_art",
+      "cells": [
+        {
+          "id": "0",
+          "x": 636,
+          "y": 237,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "1",
+          "x": 584,
+          "y": 237,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "2",
+          "x": 532,
+          "y": 237,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "3",
+          "x": 480,
+          "y": 237,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "4",
+          "x": 428,
+          "y": 237,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "5",
+          "x": 376,
+          "y": 237,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "6",
+          "x": 296,
+          "y": 237,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "7",
+          "x": 244,
+          "y": 237,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "8",
+          "x": 192,
+          "y": 237,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "9",
+          "x": 140,
+          "y": 237,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "10",
+          "x": 88,
+          "y": 237,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "11",
+          "x": 36,
+          "y": 237,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "12",
+          "x": 36,
+          "y": 203,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "13",
+          "x": 88,
+          "y": 203,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "14",
+          "x": 140,
+          "y": 203,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "15",
+          "x": 192,
+          "y": 203,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "16",
+          "x": 244,
+          "y": 203,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "17",
+          "x": 296,
+          "y": 203,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "18",
+          "x": 376,
+          "y": 203,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "19",
+          "x": 428,
+          "y": 203,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "20",
+          "x": 480,
+          "y": 203,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "21",
+          "x": 532,
+          "y": 203,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "22",
+          "x": 584,
+          "y": 203,
+          "color": "#d2b17d"
+        },
+        {
+          "id": "23",
+          "x": 636,
+          "y": 203,
+          "color": "#d2b17d"
+        }
+      ]
+    },
+    {
+      "id": "off",
+      "kind": "zone",
+      "x": 736,
+      "y": 105,
+      "width": 48,
+      "height": 440,
+      "color": "#46321f",
+      "line_color": "#d2b17d"
+    }
+  ],
+  "piece_types": {
+    "p0": {
+      "shape": "circle",
+      "width": 38,
+      "height": 38,
+      "color": "#fff0cf",
+      "text_color": "#3b291e",
+      "border_color": "#865f38"
+    },
+    "p1": {
+      "shape": "circle",
+      "width": 38,
+      "height": 38,
+      "color": "#342924",
+      "text_color": "#fff0cf",
+      "border_color": "#c49d66"
+    },
+    "die": {
+      "shape": "image",
+      "width": 64,
+      "height": 64
+    }
+  },
+  "strings": {
+    "title": "Backgammon (Declarative)",
+    "player": "Player {n}",
+    "winner": "{name} wins",
+    "roll_turn": "{name}: roll the dice",
+    "move_turn": "{name}: move a highlighted checker",
+    "roll": "Roll dice",
+    "die_roll": "Die {n}: roll dice",
+    "die_ready": "Die {n}: waiting to roll",
+    "die_value": "Die {n}: {value}",
+    "die_used": "Die {n}: {value}, used",
+    "die_half_used": "Die {n}: {value}, one of two moves used",
+    "die_unknown": "Die {n}: previous value unknown",
+    "moves_remaining": "Moves remaining: {count}",
+    "pass": "Pass",
+    "point": "Point {n}",
+    "bear_off": "Bear off",
+    "bar": "Bar",
+    "off": "Off",
+    "off_count": "Borne off: {a} / {b}",
+    "white": "White: toward point 1",
+    "black": "Black: toward point 24",
+    "server_unknown_player": "unknown player",
+    "server_game_over": "game over",
+    "server_not_your_turn": "not your turn",
+    "server_already_rolled": "already rolled",
+    "server_roll_first": "roll first",
+    "server_moves_available": "moves available",
+    "server_no_moves": "no moves",
+    "server_bad_from": "bad from",
+    "server_bad_to": "bad to",
+    "server_illegal_move": "illegal move",
+    "server_unknown_move": "unknown move"
+  },
+  "ui_code": "const SOURCE_STRINGS={\"title\": \"Backgammon (Declarative)\", \"player\": \"Player {n}\", \"winner\": \"{name} wins\", \"roll_turn\": \"{name}: roll the dice\", \"move_turn\": \"{name}: move a highlighted checker\", \"roll\": \"Roll dice\", \"die_roll\": \"Die {n}: roll dice\", \"die_ready\": \"Die {n}: waiting to roll\", \"die_value\": \"Die {n}: {value}\", \"die_used\": \"Die {n}: {value}, used\", \"die_half_used\": \"Die {n}: {value}, one of two moves used\", \"die_unknown\": \"Die {n}: previous value unknown\", \"moves_remaining\": \"Moves remaining: {count}\", \"pass\": \"Pass\", \"point\": \"Point {n}\", \"bear_off\": \"Bear off\", \"bar\": \"Bar\", \"off\": \"Off\", \"off_count\": \"Borne off: {a} / {b}\", \"white\": \"White: toward point 1\", \"black\": \"Black: toward point 24\", \"server_unknown_player\": \"unknown player\", \"server_game_over\": \"game over\", \"server_not_your_turn\": \"not your turn\", \"server_already_rolled\": \"already rolled\", \"server_roll_first\": \"roll first\", \"server_moves_available\": \"moves available\", \"server_no_moves\": \"no moves\", \"server_bad_from\": \"bad from\", \"server_bad_to\": \"bad to\", \"server_illegal_move\": \"illegal move\", \"server_unknown_move\": \"unknown move\"};\n// Presentation only. legalMoves and optional combinedMoves come from authority.\n// Native hosts select a movable checker, then emit drop(piece_id,target_id).\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state;\n    const strings = Object.assign({}, SOURCE_STRINGS, m.strings || {});\n    const t = (key, args = {}) => (strings[key] || key).replace(/\\{(\\w+)\\}/g,\n      (_, key) => String(args[key] === undefined ? '' : args[key]));\n    const active = m.status === 'ongoing' && !m.replay && s.winner === null &&\n      m.acting_for_player_index === s.cur;\n    // The authority separately declares safe multi-die destinations. Older\n    // pinned rules omit them and continue to offer their ordinary single moves.\n    const legal = active && !s.needRoll ?\n      (s.legalMoves || []).concat(s.combinedMoves || []) : [];\n    const pieces = [], targets = [], controls = [], sources = {};\n    // Identity is a presentation concern. Reconcile counts against the previous\n    // scene so a moved, captured or borne-off checker keeps its ID for animation.\n    // This never determines a move or edits the authoritative game state.\n    const locations = Array.from({length: 24}, (_, i) => String(i)).concat(['bar', 'off']);\n    const stacks = [{}, {}];\n    for (let seat = 0; seat < 2; seat++) {\n      const previous = localState && localState.stacks && localState.stacks[seat] || {};\n      const used = new Set(), displaced = [];\n      const desired = at => at === 'bar' ? s.bar[seat] : at === 'off' ? s.off[seat] :\n        s.owner[Number(at)] === seat ? s.cnt[Number(at)] : 0;\n      for (const at of locations) {\n        const ids = Array.isArray(previous[at]) ? previous[at].filter(id => {\n          const valid = typeof id === 'string' && new RegExp('^checker_' + seat + '_([0-9]|1[0-4])$').test(id) && !used.has(id);\n          if (valid) used.add(id);\n          return valid;\n        }) : [];\n        stacks[seat][at] = ids.slice(0, desired(at));\n        displaced.push(...ids.slice(desired(at)).reverse());\n      }\n      for (let i = 0; i < 15; i++) {\n        const id = 'checker_' + seat + '_' + i;\n        if (!used.has(id)) displaced.push(id);\n      }\n      for (const at of locations) while (stacks[seat][at].length < desired(at))\n        stacks[seat][at].push(displaced.shift());\n    }\n    const pointX = n => {\n      const col = n < 12 ? 11 - n : n - 12;\n      return 36 + col * 52 + (col >= 6 ? 28 : 0);\n    };\n    const destinationId = to => 'to_' + to;\n    const legalFrom = from => legal.filter(move => move.from === from);\n    const uniqueTargets = options => [...new Set(options.map(move => destinationId(move.to)))];\n    const addStack = (seat, from, count, x, y, direction, board = 'main', depth = 146) => {\n      const step = Math.min(32, depth / Math.max(4, count - 1));\n      for (let i = 0; i < count; i++) {\n        const id = stacks[seat][String(from)][i];\n        const available = seat === s.cur && i === count - 1 ? legalFrom(from) : [];\n        const destinations = uniqueTargets(available);\n        pieces.push({id, type: 'p' + seat, board,\n          position: {x, y: y + direction * i * step}, z: i,\n          text: count > 5 && i === count - 1 ? String(count) : '',\n          actions: destinations.length ? ['move'] : [],\n          ...(destinations.length ? {draggable: true, move_targets: destinations} : {})});\n        if (destinations.length) sources[id] = from;\n      }\n    };\n    for (let point = 0; point < 24; point++) {\n      if (s.cnt[point] > 0) addStack(s.owner[point], point, s.cnt[point],\n        pointX(point), point < 12 ? 410 : 30, point < 12 ? -1 : 1);\n    }\n    // Every checker remains represented, including captured and borne-off ones.\n    addStack(0, 'bar', s.bar[0], 336, 30, 1, 'main', 100);\n    addStack(1, 'bar', s.bar[1], 336, 410, -1, 'main', 100);\n    addStack(0, 'off', s.off[0], 24, 405, -1, 'off');\n    addStack(1, 'off', s.off[1], 24, 35, 1, 'off');\n    const seen = {};\n    for (const move of legal) {\n      const id = destinationId(move.to);\n      if (seen[id]) continue;\n      seen[id] = true;\n      targets.push({id, board: move.to === 'off' ? 'off' : 'main',\n        position: move.to === 'off' ? {x: 24, y: s.cur === 0 ? 235 : 205} :\n          {x: pointX(move.to), y: move.to < 12 ? 237 : 203},\n        hit_area: move.to === 'off'\n          ? {x: -24, y: s.cur === 0 ? -15 : -205, width: 48, height: 220}\n          : {x: -24, y: move.to < 12 ? -20 : -200, width: 48, height: 220},\n        label: move.to === 'off' ? t('bear_off') : t('point', {n: move.to + 1})});\n    }\n    if (active && !s.needRoll && !legal.length)\n      controls.push({id: 'pass', kind: 'button', label: t('pass')});\n    // The ordinary authority removes each used value from both dice and moves.\n    // Keep the original physical pair only as presentation memory for this turn.\n    const remaining = s.moves || s.dice || [];\n    const previousRoll = localState && localState.roll;\n    const turn = s.n || 0;\n    const isFace = value => Number.isInteger(value) && value >= 1 && value <= 6;\n    const validMemory = previousRoll && Array.isArray(previousRoll.values) && previousRoll.values.length === 2 &&\n      previousRoll.values.every(value => value === null || isFace(value)) &&\n      typeof previousRoll.double === 'boolean' && typeof previousRoll.known === 'boolean' &&\n      Number.isInteger(previousRoll.cur) && Number.isInteger(previousRoll.turn);\n    const wantedTurn = s.needRoll ? turn - 1 : turn;\n    const finished = m.status === 'over' || s.winner !== null;\n    const belongsToRoll = candidate => candidate && (finished ? candidate.turn <= turn :\n      candidate.turn === wantedTurn && (s.needRoll || candidate.cur === s.cur));\n    const observedRoll = (view, moveCount) => {\n      const values = view && (view.moves || view.dice);\n      if (!view || view.needRoll || !Array.isArray(values) || values.length < 2 || values.length > 4 ||\n          !values.every(isFace) || values.length > 2 && !values.every(value => value === values[0])) return null;\n      return {cur: view.cur, turn: view.n || 0, values: values.slice(0, 2),\n        double: values[0] === values[1], known: true, move_count: moveCount};\n    };\n    // New matches retain the accepted roll in their public server view. Older\n    // pinned rules instead recover original faces from bounded filtered history.\n    const last = s.last_roll;\n    let recordedRoll = last && Number.isInteger(last.seat) && Number.isInteger(last.turn) &&\n      Array.isArray(last.values) && last.values.length === 2 && last.values.every(isFace) &&\n      Number.isInteger(last.move_count) && (!Number.isInteger(m.move_count) || last.move_count <= m.move_count)\n      ? {cur: last.seat, turn: last.turn, values: last.values.slice(),\n        double: last.values[0] === last.values[1], known: true, move_count: last.move_count} : null;\n    if (!belongsToRoll(recordedRoll)) recordedRoll = null;\n    let historicalRoll = null;\n    const history = Array.isArray(m.presentation_history) ? m.presentation_history.slice(-12) : [];\n    for (const item of history) {\n      if (!item || !Number.isInteger(item.move_count) || item.move_count < 0 ||\n          Number.isInteger(m.move_count) && item.move_count > m.move_count) continue;\n      const candidate = observedRoll(item.view, item.move_count);\n      if (belongsToRoll(candidate) && (!historicalRoll || candidate.turn > historicalRoll.turn ||\n          candidate.turn === historicalRoll.turn && candidate.move_count < historicalRoll.move_count))\n        historicalRoll = candidate;\n    }\n    let roll = null;\n    if (s.needRoll || finished) {\n      // Keep the last known pair until a new accepted roll replaces it. A past\n      // turn guard prevents replay from borrowing faces from its own future.\n      roll = recordedRoll || historicalRoll ||\n        (validMemory && previousRoll.known && (previousRoll.turn < turn || finished && previousRoll.turn === turn) ? previousRoll : null);\n    } else {\n      roll = recordedRoll || historicalRoll ||\n        (validMemory && previousRoll.cur === s.cur && previousRoll.turn === turn ? previousRoll : null) ||\n        observedRoll(s, m.move_count);\n      if (!roll) {\n        // An arbitrary mid-turn replay/remount may have no original roll. Show\n        // the known remaining value and a neutral face instead of inventing one.\n        roll = {cur: s.cur, turn, values: [remaining[0] || null, null], double: false, known: false};\n      }\n    }\n    const unused = remaining.slice();\n    const dice = [];\n    for (let i = 0; i < 2; i++) {\n      const value = roll && roll.values[i];\n      let used = 0;\n      if (roll && roll.known) {\n        if (roll.double) used = Math.max(0, Math.min(2, 4 - remaining.length - i * 2));\n        else {\n          const index = unused.indexOf(value);\n          if (index < 0) used = 2;\n          else unused.splice(index, 1);\n        }\n      }\n      const canRoll = active && s.needRoll;\n      const label = s.needRoll ? t(canRoll ? 'die_roll' : 'die_ready', {n: i + 1}) :\n        value === null || value === undefined ? t('die_unknown', {n: i + 1}) :\n          t(used === 2 ? 'die_used' : used === 1 ? 'die_half_used' : 'die_value', {n: i + 1, value});\n      dice.push({id: 'die_' + i, type: 'die', board: 'main',\n        position: {x: 336, y: 180 + i * 80}, z: 100,\n        asset: 'die_' + (value || 0) + '_used_' + used,\n        aria_label: label,\n        ...(roll && roll.known ? {animation: {kind: 'roll', key: 'roll:' + roll.cur + ':' + roll.turn}} : {}),\n        actions: canRoll ? ['tap'] : []});\n    }\n    pieces.push(...dice);\n    const players = m.players || [];\n    const name = seat => players[seat] && players[seat].name || t('player', {n: seat + 1});\n    const labels = [\n      {id: 'title', text: t('title'), x: 20, y: 14, font_size: 26},\n      {id: 'turn', text: s.winner !== null ? t('winner', {name: name(s.winner)}) :\n        t(s.needRoll ? 'roll_turn' : 'move_turn', {name: name(s.cur)}), x: 20, y: 50, font_size: 18},\n      ...(!s.needRoll ? [{id: 'moves_remaining', text: t('moves_remaining', {count: remaining.length}),\n        x: 20, y: 77, font_size: 15}] : []),\n      {id: 'off_score', text: t('off_count', {a: s.off[0], b: s.off[1]}), x: 475, y: 57, font_size: 16},\n      {id: 'white_label', text: t('white'), x: 20, y: 560, font_size: 16},\n      {id: 'black_label', text: t('black'), x: 410, y: 560, font_size: 16},\n      {id: 'bar_label', text: t('bar'), x: 342, y: 83, font_size: 14},\n      {id: 'off_label', text: t('off'), x: 742, y: 83, font_size: 14}\n    ];\n    const out = {scene: {pieces, targets, controls, labels}, local_state: {stacks, roll}};\n    if (message.type === 'ui_event' && active) {\n      const e = message.event;\n      if (e.type === 'tap' && s.needRoll && dice.some(die => die.id === e.id))\n        out.make_move = {action: 'roll'};\n      if (e.type === 'tap' && controls.some(control => control.id === e.id))\n        out.make_move = {action: e.id};\n      if (e.type === 'drop' && Object.prototype.hasOwnProperty.call(sources, e.piece_id || e.id)) {\n        const from = sources[e.piece_id || e.id];\n        const option = legal.find(move => move.from === from && destinationId(move.to) === e.target_id);\n        if (option) out.make_move = {action: 'move', from: option.from, to: option.to};\n      }\n    }\n    return out;\n  }\n};\n"
+}

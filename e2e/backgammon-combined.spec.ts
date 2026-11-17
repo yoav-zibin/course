@@ -19,7 +19,10 @@ async function mountVector(page: Page, name: string, legacy = false) {
     box.id = 'combined-board'; box.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#102330';
     document.body.append(box);
     const view = structuredClone(vector.view_of_mover);
-    if (legacy) { delete view.last_roll; delete view.combinedMoves; }
+    if (legacy) {
+      for(const key of ['last_roll','combinedMoves','configured','opening','opening_roll','can_undo','cube','can_double',
+        'difficulty','goal','scores','round_winner','cube_enabled']) delete view[key];
+    }
     w.combinedCommands = [];
     w.combinedMessage = {type: 'state_changed', view, state: view, status: 'ongoing',
       move_count: vector.ctx.move_count, my_player_index: seat, acting_for_player_index: seat,
@@ -62,7 +65,7 @@ for (const name of ['Combined one and four', 'Forced combined hit']) {
     await checker.locator('g[opacity]').first().click();
     const target = page.locator(`#combined-board .declarative-target[data-ui-id="to_${vector.move.to}"]`);
     await expect(target).toHaveAttribute('data-drop-state', 'allowed');
-    await target.locator('.declarative-target-area').click();
+    await target.click();
     await expectCommand(page, vector);
     await acceptVector(page, vector, seat);
     const assets = await page.evaluate(() => (window as any).combinedScene.pieces.filter((piece: any) => piece.type === 'die').map((piece: any) => piece.asset));
@@ -81,7 +84,7 @@ test('four ones offer two, three and four steps and a native drag spends all fou
   await checker.locator('g[opacity]').first().click();
   const target = page.locator(`#combined-board .declarative-target[data-ui-id="to_${vector.move.to}"]`);
   const from = (await checker.locator('g[opacity]').first().boundingBox())!;
-  const to = (await target.locator('.declarative-target-area').boundingBox())!;
+  const to = (await target.boundingBox())!;
   const start = {x: from.x + from.width / 2, y: from.y + from.height / 2};
   const end = {x: to.x + to.width / 2, y: to.y + to.height / 2};
   const halfway = {x: (start.x + end.x) / 2, y: (start.y + end.y) / 2};
@@ -102,7 +105,7 @@ test('four ones offer two, three and four steps and a native drag spends all fou
   await expectCommand(page, vector);
   await acceptVector(page, vector, seat);
   expect(await page.evaluate(() => (window as any).combinedScene.pieces.filter((piece: any) => piece.type === 'die').map((piece: any) => piece.asset)))
-    .toEqual(['die_1_used_2', 'die_1_used_2']);
+    .toEqual(Array(4).fill('die_1_used_2'));
   await expect(page.locator('#combined-board .declarative-piece.dragging')).toHaveCount(0);
 });
 
@@ -114,7 +117,7 @@ test('different intermediate hits suppress the summed destination while preservi
   await expect(page.locator(`#combined-board [data-ui-id="to_${destination}"]`)).toHaveCount(0);
   const checker = await offeredChecker(page, vector.move.to);
   await checker.locator('g[opacity]').first().click();
-  await page.locator(`#combined-board [data-ui-id="to_${vector.move.to}"] .declarative-target-area`).click();
+  await page.locator(`#combined-board [data-ui-id="to_${vector.move.to}"]`).click();
   await expectCommand(page, vector);
 });
 
@@ -125,4 +128,24 @@ test('a pinned view without combined-move metadata offers only its canonical sin
   const targets = await page.locator('#combined-board .declarative-target').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-ui-id')));
   expect(targets.sort()).toEqual([...new Set(vector.view_of_mover.legalMoves.map((move: any) => `to_${move.to}`))].sort());
   expect(targets).not.toContain(`to_${vector.move.to}`);
+});
+
+test('a blank board click cancels checker selection while the fitted camera stays fixed',async({page})=>{
+  const {vector}=await mountVector(page,'Combined one and four');
+  const checker=await offeredChecker(page,vector.move.to);
+  const stage=page.locator('#combined-board .declarative-stage');
+  const camera=await stage.getAttribute('viewBox');
+  await checker.locator('g[opacity]').first().click();
+  await expect(stage).toHaveClass(/show-drop-hints/);
+  const blank=await stage.evaluate(node=>{
+    const point=new DOMPoint(356,325).matrixTransform((node as SVGSVGElement).getScreenCTM()!);
+    return {x:point.x,y:point.y};
+  });
+  await page.mouse.click(blank.x,blank.y);
+  await expect(stage).not.toHaveClass(/show-drop-hints/);
+  expect(await stage.getAttribute('viewBox')).toBe(camera);
+  expect(await page.evaluate(()=>(window as any).combinedCommands)).toEqual([]);
+  await checker.locator('g[opacity]').first().click();
+  await page.locator(`#combined-board .declarative-target[data-ui-id="to_${vector.move.to}"]`).click();
+  await expectCommand(page,vector);
 });

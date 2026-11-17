@@ -41,7 +41,7 @@ test('the exact original Backgammon package receives the reviewed presentation w
   assert.equal(input.version, 1);
   assert.equal(input.server_code, rules);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0][0], '/static/backgammon-declarative-ui.json?v=2');
+  assert.equal(calls[0][0], '/static/backgammon-declarative-ui.json?v=3');
   assert.equal(calls[0][1].credentials, 'omit');
 });
 
@@ -132,4 +132,14 @@ test('concurrent matches share one validated fetch and receive independent prese
   assert.deepEqual(clone(b), repaired());
   assert.deepEqual(clone(await forGame(game())), repaired());
   assert.equal(calls.length, 1);
+});
+
+
+test('the reviewed third presentation upgrades without replacing its roll and compound authority',async()=>{
+ const input=game();input.version=3;
+ input.declarative_ui=JSON.parse(fs.readFileSync(path.join(root,'tests/fixtures/declarative/backgammon-v3-ui.json'),'utf8'));
+ input.server_code=[rules,fs.readFileSync(path.join(root,'games/declarative/backgammon-roll-history.js'),'utf8'),fs.readFileSync(path.join(root,'games/declarative/backgammon-combined-moves.js'),'utf8')].join('\n');
+ const before=JSON.stringify(input),{forGame,calls}=setup();
+ assert.deepEqual(clone(await forGame(freeze(input))),repaired());
+ assert.equal(JSON.stringify(input),before);assert.equal(calls.length,1);
 });

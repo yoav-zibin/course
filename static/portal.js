@@ -248,9 +248,12 @@ const state = {
 const frame = {
   declarative: null,
   lastMessage: null,
+  motion: null,
+  delivery: null,
   load(spec, options = {}) {
     this.unload();
     if (!spec) throw new Error(I18n.t("ui.portal.legacy_game_retired", {}, "This legacy game is no longer available in the portal."));
+    this.motion = spec.motion ?? null;
     this.declarative = DeclarativeUI.mount($("game-box"), spec, {
         animate: options.animate === true,
         immersive: true,
@@ -271,6 +274,7 @@ const frame = {
   unload() {
     if (this.declarative) { this.declarative.destroy(); this.declarative = null; }
     this.lastMessage = null;
+    this.motion = null;
     $("game-box").replaceChildren();
   },
 };
@@ -2184,6 +2188,20 @@ async function declarativeTransition(match, message) {
     if (!moves) return {animate: false};
     const observations = presentationObservations(moves, message.move_count);
     const result = {presentation_history: observations};
+    if (frame.motion) {
+      // Preserve each accepted opponent action when a fast computer completes
+      // several moves between polls. These are viewer-filtered server states,
+      // never board positions reconstructed by the presentation reducer.
+      return {...result, steps: moves.slice(0, -1).map((move, index) => {
+        const count=previous.move_count+index+1;
+        return {...message,state:move.new_state,view:move.new_state,
+          turn_of_player_indices:move.next_turn_player_indices,
+          acting_for_player_index:null,
+          status:move.next_turn_player_indices===null?"over":"ongoing",
+          move_count:count,last_move_player_index:move.player_index,
+          presentation_history:presentationObservations(moves.slice(0,index+1),count)};
+      })};
+    }
     if (!Number.isInteger(message.last_move_player_index) || message.last_move_player_index < 0 || message.last_move_player_index > 9 ||
         message.last_move_player_index === message.my_player_index) return {...result, animate: false};
     if (message.my_player_index === null) return result;
@@ -2216,7 +2234,7 @@ async function reviewedDeclarativePresentation(game) {
   // cached game records, their versions, and the move path stay pinned.
   if (!spec || game.id !== "5f5293c3-2a3a-4eec-b631-9debf59be0ca") return spec;
   try {
-    await loadPortalScript("/static/declarative-presentation.js?v=3");
+    await loadPortalScript("/static/declarative-presentation.js?v=4");
     return await window.DeclarativePresentation.forGame(game);
   } catch {
     return spec;
@@ -2295,25 +2313,52 @@ async function syncGame() {
   Object.assign(message, texts);
   const json = JSON.stringify(message);
   if (json !== state.lastSent) {
-    const transition = await declarativeTransition(match, message);
-    if (!stillCurrent() || state.loaded !== key || json === state.lastSent) return;
-    if (transition.presentation_history?.length) message.presentation_history = transition.presentation_history;
-    if (transition.baseline) {
-      if (frame.lastMessage !== transition.previous) transition.animate = false;
-      else {
-        const applied = await frame.send(transition.baseline, {animate: false});
-        if (!stillCurrent() || state.loaded !== key) return;
-        if (!applied) transition.animate = false;
+    let delivery=null,releaseDelivery=null;
+    if(frame.motion){
+      if(frame.delivery){
+        await frame.delivery;
+        if(stillCurrent()&&state.loaded===key)return syncGame();
+        return;
       }
+      delivery=new Promise(resolve=>{releaseDelivery=resolve;});
+      frame.delivery=delivery;
     }
-    // Only deduplicate the final board once its send starts. A poll can cancel
-    // the baseline above while leaving exactly the same board to send next.
-    state.lastSent = json;
-    let applied = false;
     try {
-      applied = await frame.send(message, {animate: transition.animate});
+      if(frame.motion) {
+        await frame.declarative.whenIdle();
+        if(!stillCurrent()||state.loaded!==key||json===state.lastSent)return;
+      }
+      const transition = await declarativeTransition(match, message);
+      if (!stillCurrent() || state.loaded !== key || json === state.lastSent) return;
+      if (transition.presentation_history?.length) message.presentation_history = transition.presentation_history;
+      if(transition.steps?.length){
+        const host=frame.declarative;
+        for(const step of transition.steps){
+          if(!stillCurrent()||frame.declarative!==host)return;
+          await frame.send(step);
+          await host.whenIdle();
+        }
+        if(!stillCurrent()||frame.declarative!==host)return;
+      }
+      if (transition.baseline) {
+        if (frame.lastMessage !== transition.previous) transition.animate = false;
+        else {
+          const applied = await frame.send(transition.baseline, {animate: false});
+          if (!stillCurrent() || state.loaded !== key) return;
+          if (!applied) transition.animate = false;
+        }
+      }
+      // Only deduplicate the final board once its send starts. A poll can cancel
+      // the baseline above while leaving exactly the same board to send next.
+      state.lastSent = json;
+      let applied = false;
+      try {
+        applied = await frame.send(message, {animate: transition.animate});
+      } finally {
+        if (!applied && state.lastSent === json) state.lastSent = null;
+      }
     } finally {
-      if (!applied && state.lastSent === json) state.lastSent = null;
+      if(releaseDelivery){if(frame.delivery===delivery)frame.delivery=null;releaseDelivery();}
     }
   }
 }

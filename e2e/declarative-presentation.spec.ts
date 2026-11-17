@@ -1,4 +1,5 @@
 import {zoomDeclarativeBoard} from './declarative-camera';
+import {ordinaryBackgammonView} from './backgammon-helpers';
 import fs from 'node:fs';
 import path from 'node:path';
 import {test, expect} from '@playwright/test';
@@ -24,19 +25,18 @@ test('an existing Backgammon version gets fitted clickable dice without changing
       players:[{player_index:0,name:'Alice'}, {player_index:1,name:'Bob'}],
       my_player_index:view.cur, acting_for_player_index:view.cur, turn_of_player_indices:[view.cur], move_count:0});
     return {unchanged:before === JSON.stringify(game), viewport:spec.viewport};
-  }, {original, rules, view:body.unit_tests.cases[0].view_of_mover});
+  }, {original, rules, view:ordinaryBackgammonView(body.unit_tests.cases[0].view_of_mover)});
   expect(repaired.unchanged).toBe(true);
   const host = page.locator('#legacy-backgammon');
   await expect(host.locator('[data-ui-id^="die_"]')).toHaveCount(2);
-  await expect(host.locator('.declarative-controls button')).toHaveCount(0);
+  await expect(host.locator('.declarative-piece[data-ui-id="roll"]')).toHaveClass(/actionable/);
   const stage = host.locator('.declarative-stage');
   await expect(stage).toHaveAttribute('viewBox', `0 0 ${repaired.viewport.width} ${repaired.viewport.height}`);
   await zoomDeclarativeBoard(host.locator('.declarative-stage'),'out');
-  expect(await stage.evaluate((node:SVGSVGElement) => node.viewBox.baseVal.width)).toBeGreaterThan(repaired.viewport.width);
+  expect(await stage.getAttribute('viewBox')).toBe(`0 0 ${repaired.viewport.width} ${repaired.viewport.height}`);
   await zoomDeclarativeBoard(host.locator('.declarative-stage'),'reset');
   const die = host.locator('[data-ui-id="die_0"]');
   await expect(die).toHaveClass(/actionable/);
-  await expect(die.locator('.declarative-piece-action-outline')).toBeVisible();
   await die.click();
   await expect.poll(() => page.evaluate(() => (window as any).legacyMoves)).toEqual([{action:'roll'}]);
   await host.screenshot({path:testInfo.outputPath('existing-backgammon-dice.png')});

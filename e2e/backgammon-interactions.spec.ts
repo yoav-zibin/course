@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {expect, test, type APIRequestContext, type Page} from '@playwright/test';
 import {createUser, loginAs, uniqueName} from './helpers';
+import {backgammonAction,clickBackgammonTarget,ordinaryBackgammonView,spentDice} from './backgammon-helpers';
 
 declare const state: any;
 declare function pollActiveMatch(): Promise<void>;
@@ -47,19 +48,9 @@ async function diceFaces(page: Page) {
 }
 
 async function playNext(page: Page, matchId: string) {
-  const host = page.locator('#game-box');
-  await expect.poll(async () => await host.locator('.declarative-piece.actionable').count() +
-    await host.locator('.declarative-control.actionable button').count()).toBeGreaterThan(0);
   const response = page.waitForResponse(response => response.request().method() === 'POST' &&
     new URL(response.url()).pathname === `/matches/${matchId}/moves`);
-  const pass = host.locator('.declarative-control.actionable button');
-  if (await pass.count()) await pass.first().click();
-  else {
-    const piece = host.locator('.declarative-piece.actionable').first();
-    const move = (await piece.getAttribute('data-actions'))?.includes('move');
-    await piece.locator('g[opacity]').first().click();
-    if (move) await host.locator('.declarative-target[data-drop-state="allowed"]').first().click();
-  }
+  await backgammonAction(page);
   const accepted = await response;
   expect(accepted.ok(), await accepted.text()).toBeTruthy();
   return accepted.json();
@@ -75,8 +66,15 @@ test('a complete computer turn between polls keeps its rolled faces, ready highl
   await observeRolls(page); await loginAs(page, user);
   await page.goto(`/static/portal.html#match=${match.id}`);
   const dice = page.locator('#game-box .declarative-piece[data-ui-id^="die_"]');
-  await expect(dice.filter({has: page.locator('.declarative-piece-action-outline')})).toHaveCount(2);
-  await expect(page.locator('#game-box .declarative-piece.actionable[data-ui-id^="die_"]')).toHaveCount(2);
+  await playNext(page,match.id); // Goal-one setup through the real UI.
+  for(let attempt=0;attempt<15;attempt++) {
+    await expect.poll(()=>page.evaluate(()=>state.match.turn_of_player_indices?.[0]===0),{timeout:30000}).toBe(true);
+    if(await page.evaluate(()=>!state.match.state.opening))break;
+    const accepted=await playNext(page,match.id); // Each tied opening asks both sides to roll again.
+    await expect.poll(()=>page.evaluate(count=>state.match.move_count>count,accepted.move_count),{timeout:30000}).toBe(true);
+  }
+  expect(await page.evaluate(()=>state.match.state.opening)).toBe(false);
+  await expect(page.locator('#game-box .declarative-piece.actionable[data-ui-id="roll"], #game-box .declarative-piece.actionable[data-actions="move"]')).not.toHaveCount(0,{timeout:30000});
 
   // Keep all browser polls pending. The real authority and its computer worker
   // still run; this observer receives only the completed computer turn later.
@@ -102,24 +100,24 @@ test('a complete computer turn between polls keeps its rolled faces, ready highl
     await expect.poll(async () => {
       current = await (await request.get(`/matches/${match.id}`, {headers: auth(user)})).json();
       return current.move_count > ownCount && current.turn_of_player_indices?.[0] === 0 && current.state.needRoll;
-    }, {timeout: 20000}).toBe(true);
+    }, {timeout: 30000}).toBe(true);
     const history = await (await request.get(`/matches/${match.id}/moves`, {headers: auth(user)})).json();
     const roll = history.find((move: any) => move.move_number > ownCount && move.player_index === 1 &&
       (move.new_state.last_roll?.seat === 1 || !move.new_state.needRoll && move.new_state.moves.length >= 2));
     expect(roll, 'the real filtered history contains the computer roll').toBeTruthy();
     const values = roll.new_state.last_roll?.values || roll.new_state.moves.slice(0, 2);
     release();
-    await expect.poll(() => page.evaluate(() => state.match.move_count)).toBe(current.move_count);
-    await expect.poll(() => diceFaces(page)).toEqual(values.map((value: number) => `die_${value}_used_2`));
-    await expect(page.locator('#game-box .declarative-piece.actionable[data-ui-id^="die_"]')).toHaveCount(2);
-    await expect.poll(() => page.evaluate(() => (window as any).rollAnimations.length)).toBeGreaterThan(beforeComputerAnimations);
+    await expect.poll(() => page.evaluate(() => state.match.move_count),{timeout:30000}).toBe(current.move_count);
+    await expect.poll(() => diceFaces(page), {timeout: 30000}).toEqual(spentDice(values));
+    await expect(page.locator('#game-box .declarative-piece.actionable[data-ui-id^="die_"]')).toHaveCount(spentDice(values).length);
+    await expect.poll(() => page.evaluate(() => (window as any).rollAnimations.length),{timeout:30000}).toBeGreaterThan(beforeComputerAnimations);
     const animationCount = await page.evaluate(() => (window as any).rollAnimations.length);
     await page.evaluate(async () => { await pollActiveMatch(); await pollActiveMatch(); });
     expect(await page.evaluate(() => (window as any).rollAnimations.length)).toBe(animationCount);
     await testInfo.attach('computer-dice-ready', {body: await page.screenshot(), contentType: 'image/png'});
     await page.reload();
-    await expect.poll(() => diceFaces(page)).toEqual(values.map((value: number) => `die_${value}_used_2`));
-    await expect(page.locator('#game-box .declarative-piece.actionable[data-ui-id^="die_"]')).toHaveCount(2);
+    await expect.poll(() => diceFaces(page), {timeout: 30000}).toEqual(spentDice(values));
+    await expect(page.locator('#game-box .declarative-piece.actionable[data-ui-id^="die_"]')).toHaveCount(spentDice(values).length);
     const pinned = await (await request.get(`/games/${game.id}/versions/${match.game_version}`)).json();
     expect(pinned.version).toBe(match.game_version);
     expect(pinned.server_code).toBe(payload().server_code);
@@ -133,10 +131,17 @@ test('native checker dragging follows the pointer, invalid drops revert, and tap
   await page.locator('#practice').click();
   const host = page.locator('#game-box'), stage = host.locator('.declarative-stage');
   await expect(stage).toBeVisible();
-  await host.locator('[data-ui-id="die_0"] g[opacity]').first().click();
-  await expect.poll(() => page.evaluate(() => state.match.move_count)).toBe(1);
+  // Complete setup and each human opening roll on the shared device.
+  for(let step=0;step<15;step++) {
+    const view=await page.evaluate(()=>state.match.state);
+    if(view.configured&&!view.opening)break;
+    const before=await page.evaluate(()=>state.match.move_count);
+    await backgammonAction(page);
+    await expect.poll(()=>page.evaluate(()=>state.match.move_count),{timeout:30000}).toBeGreaterThan(before);
+  }
+  const initialCount=await page.evaluate(()=>state.match.move_count);
   let checker = host.locator('.declarative-piece.actionable[data-actions="move"]').first();
-  await expect(checker).toBeVisible();
+  await expect(checker).toBeVisible({timeout:30000});
   checker = host.locator(`.declarative-piece[data-ui-id="${await checker.getAttribute('data-ui-id')}"]`);
   await checker.locator('g[opacity]').first().click();
   const target = host.locator('.declarative-target[data-drop-state="allowed"]').first();
@@ -161,27 +166,34 @@ test('native checker dragging follows the pointer, invalid drops revert, and tap
     return Math.hypot(bounds.x + bounds.width / 2 - middle.x, bounds.y + bounds.height / 2 - middle.y);
   }).toBeLessThan(3);
   expect(await stage.getAttribute('viewBox')).toBe(camera);
-  expect(await page.evaluate(() => state.match.move_count)).toBe(1);
+  expect(await page.evaluate(() => state.match.move_count)).toBe(initialCount);
   await pointer('move', end); await pointer('up', end);
-  await expect.poll(() => page.evaluate(() => state.match.move_count)).toBe(2);
+  await expect.poll(() => page.evaluate(() => state.match.move_count),{timeout:30000}).toBe(initialCount+1);
   await expect(host.locator('.declarative-piece.dragging')).toHaveCount(0);
 
   // Continue on the next offered checker. An ordinary tap is still sufficient
   // for selecting a piece and a destination; dragging is optional.
+  await expect.poll(async()=>await host.locator('.declarative-piece.actionable[data-actions="move"]').count()+
+    await host.locator('.declarative-piece.actionable[data-ui-id="roll"]').count()).toBeGreaterThan(0);
+  if(await host.locator('.declarative-piece.actionable[data-ui-id="roll"]').count()) {
+    const count=await page.evaluate(()=>state.match.move_count);
+    await backgammonAction(page);await expect.poll(()=>page.evaluate(()=>state.match.move_count),{timeout:30000}).toBeGreaterThan(count);
+  }
+  const nextCount=await page.evaluate(()=>state.match.move_count);
   let next = host.locator('.declarative-piece.actionable[data-actions="move"]').first();
-  await expect(next).toBeVisible();
+  await expect(next).toBeVisible({timeout:30000});
   next = host.locator(`.declarative-piece[data-ui-id="${await next.getAttribute('data-ui-id')}"]`);
   const nextBody = next.locator('g[opacity]').first();
   const saved = (await nextBody.boundingBox())!, source = {x: saved.x + saved.width / 2, y: saved.y + saved.height / 2};
   await pointer('down', source); await pointer('move', {x: 5, y: 5}); await pointer('up', {x: 5, y: 5});
   await expect(host.locator('.declarative-piece.dragging')).toHaveCount(0);
-  expect(await page.evaluate(() => state.match.move_count)).toBe(2);
+  expect(await page.evaluate(() => state.match.move_count)).toBe(nextCount);
   const restored = (await nextBody.boundingBox())!;
   expect(restored.x).toBeCloseTo(saved.x, 0); expect(restored.y).toBeCloseTo(saved.y, 0);
   const nextTarget = host.locator('.declarative-target[data-drop-state="allowed"]').first();
-  if (touch) { await nextBody.tap(); await nextTarget.tap(); }
-  else { await nextBody.click(); await nextTarget.click(); }
-  await expect.poll(() => page.evaluate(() => state.match.move_count)).toBe(3);
+  if (touch) await nextBody.tap();else await nextBody.click();
+  await clickBackgammonTarget(nextTarget,Boolean(touch));
+  await expect.poll(() => page.evaluate(() => state.match.move_count),{timeout:30000}).toBe(nextCount+1);
   await expect(host.locator('.declarative-error:visible')).toHaveCount(0);
 });
 
@@ -189,11 +201,9 @@ for (const version of [1, 2]) test(`pinned Backgammon v${version} recovers spent
   const original = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../tests/fixtures/declarative/backgammon-v${version}-ui.json`), 'utf8'));
   const rules = fs.readFileSync(path.resolve(__dirname, '../games/declarative/backgammon.server.js'), 'utf8');
   const example = payload().unit_tests.cases[0];
-  const rolled = structuredClone(example.expected_view_of_mover);
-  delete rolled.last_roll;
-  delete rolled.combinedMoves;
-  const values = rolled.moves.slice(0, 2), count = 1 + rolled.moves.length;
-  const ready = {...rolled, cur: 1 - rolled.cur, n: rolled.n + 1, needRoll: true, dice: [], moves: []};
+  const rolled = {...ordinaryBackgammonView(example.view_of_mover),cur:0,n:0,needRoll:false,dice:[2,5],moves:[2,5]};
+  const values = rolled.moves.slice(), count = 3;
+  const ready = {...rolled, cur: 1, n: 1, needRoll: true, dice: [], moves: []};
   await page.goto('/static/declarative-test.html');
   await page.addScriptTag({url: '/static/declarative-presentation.js'});
   const result = await page.evaluate(async ({original, rules, rolled, ready, count, version}) => {
@@ -210,7 +220,7 @@ for (const version of [1, 2]) test(`pinned Backgammon v${version} recovers spent
     return {unchanged: JSON.stringify(game) === before, assets: w.pinnedDice};
   }, {original, rules, rolled, ready, count, version});
   expect(result.unchanged).toBe(true);
-  expect(result.assets).toEqual(values.map((value: number) => `die_${value}_used_2`));
+  expect(result.assets).toEqual(spentDice(values));
   await expect(page.locator('#pinned-dice .declarative-piece.actionable[data-ui-id^="die_"]')).toHaveCount(2);
   // A backward replay must not borrow the current pair from local memory or
   // observations that belong to a later move in this match.

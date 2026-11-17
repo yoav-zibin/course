@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {test,expect,type APIRequestContext,type Page} from '@playwright/test';
 import {createUser,loginAs,uniqueName} from './helpers';
-import {revealDeclarativeTarget} from './declarative-camera';
+import {backgammonAction,ordinaryBackgammonView} from './backgammon-helpers';
 
 declare const state:any;
 declare const offline:any;
@@ -30,31 +30,14 @@ async function nextAction(page:Page,expectedMoveCount?:number){
   await expect(page.locator('#game-box .declarative-error:visible')).toHaveCount(0);
   // A committed parent response can precede the reducer's rendered snapshot.
   const expected=expectedMoveCount??await page.evaluate(()=>state.match.move_count);
-  await expect.poll(()=>page.evaluate(count=>(window as any).backgammonRendered.some((message:any)=>message.host_id===(window as any).backgammonActiveHostId&&message.move_count===count),expected)).toBe(true);
-  const signature=()=>stage.evaluate(node=>JSON.stringify([
-    Array.from(node.querySelectorAll('.declarative-piece')).map(piece=>[piece.getAttribute('data-ui-id'),piece.getAttribute('transform'),piece.textContent]),
-    Array.from(node.querySelectorAll(':scope > text')).map(label=>label.textContent),
-  ]));
-  const before=await signature();
-  await expect.poll(async()=>await page.locator('#game-box .declarative-control.actionable button:enabled').count()+await page.locator('#game-box .declarative-piece.actionable').count(),{timeout:20000}).toBeGreaterThan(0);
-  const button=page.locator('#game-box .declarative-control.actionable button:enabled').first();
-  if(await button.count())await button.click();
-  else{
-    const checker=page.locator('#game-box .declarative-piece.actionable').first();
-    const action=await checker.getAttribute('data-actions');
-    await revealDeclarativeTarget(page,checker);await checker.locator(':scope > g[opacity]').click();
-    if(action==='move'){
-      await expect(stage).toHaveClass(/show-drop-hints/);
-      const target=page.locator('#game-box .declarative-target[data-drop-state="allowed"]').first();
-      await expect(target).toBeVisible();await revealDeclarativeTarget(page,target);await target.click();
-    }
-  }
-  // Local QuickJS moves do not have an HTTP response to await. Wait for the
-  // actual new scene before choosing the next action from its DOM.
-  await expect.poll(signature,{timeout:20000}).not.toBe(before);
+  await expect.poll(()=>page.evaluate(count=>(window as any).backgammonRendered.some((message:any)=>message.host_id===(window as any).backgammonActiveHostId&&message.move_count===count),expected),{timeout:30000}).toBe(true);
+  await backgammonAction(page);
+  // A tied opening can change only the roll key. Wait for accepted authority
+  // progress instead of treating a visually identical pair as a failed move.
+  await expect.poll(()=>page.evaluate(()=>state.match.move_count),{timeout:30000}).toBeGreaterThan(expected);
 }
 
-test('two central dice roll by pointer and keyboard and show doubles usage',async({page},testInfo)=>{
+test('physical dice roll by pointer and keyboard, then four dice show doubles usage',async({page},testInfo)=>{
   const payload=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../games/declarative/backgammon.json'),'utf8'));
   await page.goto('/static/declarative-test.html');
   await page.emulateMedia({reducedMotion:'reduce'});
@@ -67,14 +50,13 @@ test('two central dice roll by pointer and keyboard and show doubles usage',asyn
       players:[{player_index:0,name:'Alice',kind:'human'},{player_index:1,name:'Bob',kind:'human'}]};
     w.diceHost=w.DeclarativeUI.mount(box,spec,{onMove:(move:any)=>w.diceMoves.push(move),onScene:(scene:any)=>w.diceScene=scene});
     await w.diceHost.send(w.diceMessage);
-  },{spec:payload.declarative_ui,view:payload.unit_tests.cases[0].view_of_mover});
+  },{spec:payload.declarative_ui,view:ordinaryBackgammonView(payload.unit_tests.cases[0].view_of_mover)});
   const host=page.locator('#dice-test'),dice=host.locator('.declarative-piece[data-ui-id^="die_"]');
   await expect(dice).toHaveCount(2);
   await expect(host.locator('.declarative-control [data-ui-id="roll"]')).toHaveCount(0);
   for(const die of await dice.all()){
     await expect(die).toHaveAttribute('data-actions','tap');
     await expect(die).toHaveClass(/actionable/);
-    await expect(die.locator('.declarative-piece-action-outline')).toHaveCSS('visibility','visible');
   }
   await dice.first().locator(':scope > g[opacity]').click();
   await expect.poll(()=>page.evaluate(()=>(window as any).diceMoves)).toEqual([{action:'roll'}]);
@@ -86,13 +68,13 @@ test('two central dice roll by pointer and keyboard and show doubles usage',asyn
   for(let used=0;used<4;used++){
     await page.evaluate(async used=>{
       const w=window as any,remaining=Array(4-used).fill(3);
-      const view={...w.diceMessage.view,needRoll:false,dice:remaining,moves:remaining,legalMoves:[]};
+      const view={...w.diceMessage.view,opening:false,opening_roll:null,needRoll:false,dice:remaining,moves:remaining,legalMoves:[]};
       await w.diceHost.send({...w.diceMessage,view,state:view,move_count:used+1});
     },used);
-    await expect(dice).toHaveCount(2);
+    await expect(dice).toHaveCount(4);
     await expect(host.locator('.declarative-piece[data-ui-id^="die_"].actionable')).toHaveCount(0);
     expect(await page.evaluate(()=>(window as any).diceScene.pieces.filter((piece:any)=>piece.type==='die').map((piece:any)=>piece.asset)))
-      .toEqual([`die_3_used_${Math.min(used,2)}`,`die_3_used_${Math.max(0,used-2)}`]);
+      .toEqual(Array.from({length:4},(_,i)=>`die_3_used_${i<used?2:0}`));
     if(used===1||used===3)await host.screenshot({path:testInfo.outputPath(`doubles-${used}-used.png`)});
   }
   // A passive die cannot submit another roll while checker moves are pending.
@@ -103,15 +85,15 @@ test('two central dice roll by pointer and keyboard and show doubles usage',asyn
   // the completed physical pair until the next player actually rolls again.
   await page.evaluate(async()=>{
     const w=window as any;
-    const view={...w.diceMessage.view,needRoll:true,dice:[],moves:[],legalMoves:[],
+    const view={...w.diceMessage.view,opening:false,opening_roll:null,needRoll:true,dice:[],moves:[],legalMoves:[],
       cur:1-w.diceMessage.view.cur,n:(w.diceMessage.view.n||0)+1};
     w.diceNextMessage={...w.diceMessage,view,state:view,my_player_index:view.cur,
       acting_for_player_index:view.cur,turn_of_player_indices:[view.cur],move_count:5};
     await w.diceHost.send(w.diceNextMessage);
   });
   expect(await page.evaluate(()=>(window as any).diceScene.pieces.filter((piece:any)=>piece.type==='die').map((piece:any)=>piece.asset)))
-    .toEqual(['die_3_used_2','die_3_used_2']);
-  await expect(host.locator('.declarative-piece[data-ui-id^="die_"].actionable')).toHaveCount(2);
+    .toEqual(Array(4).fill('die_3_used_2'));
+  await expect(host.locator('.declarative-piece[data-ui-id^="die_"].actionable')).toHaveCount(4);
   await host.screenshot({path:testInfo.outputPath('doubles-4-used.png')});
   await dice.first().locator(':scope > g[opacity]').click();
   await expect.poll(()=>page.evaluate(()=>(window as any).diceMoves)).toHaveLength(3);
@@ -159,16 +141,21 @@ async function countAnimations(page:Page){
   });
 }
 
-async function expectOwnMoveImmediate(page:Page,moveCount:number,seat:number){
+async function expectOwnMoveAtReferenceSpeed(page:Page,moveCount:number,seat:number,checkerMove:boolean){
   // Wait for the actual reducer/host completion; the HTTP response alone does
   // not prove the accepted state has been drawn yet.
-  await expect.poll(()=>page.evaluate(count=>(window as any).backgammonRendered.some((message:any)=>message.host_id===(window as any).backgammonActiveHostId&&message.move_count===count),moveCount)).toBe(true);
+  await expect.poll(()=>page.evaluate(count=>(window as any).backgammonRendered.some((message:any)=>message.host_id===(window as any).backgammonActiveHostId&&message.move_count===count),moveCount),{timeout:30000}).toBe(true);
   const observed=await page.evaluate(({count,seat})=>({messages:(window as any).backgammonRendered.filter((message:any)=>message.host_id===(window as any).backgammonActiveHostId&&message.move_count===count&&message.viewer===seat),animated:(window as any).backgammonAnimationRecords.filter((item:any)=>item.host_id===(window as any).backgammonActiveHostId&&item.move_count===count)}),{count:moveCount,seat});
-  expect(observed.messages.length).toBeGreaterThan(0);expect(observed.messages.every((message:any)=>message.actor===seat)).toBe(true);expect(observed.animated).toEqual([]);
+  expect(observed.messages.length).toBeGreaterThan(0);expect(observed.messages.every((message:any)=>message.actor===seat)).toBe(true);
+  const checkerAnimations=observed.animated.filter((item:any)=>item.id?.startsWith('checker_'));
+  if(checkerMove){
+    expect(checkerAnimations.length).toBeGreaterThan(0);
+    expect(checkerAnimations.every((item:any)=>[400,800].includes(item.duration))).toBe(true);
+  }else expect(checkerAnimations).toEqual([]);
 }
 
 test('Backgammon appears in the ordinary catalog and finishes a two-player portal match',async({browser,request},testInfo)=>{
-  test.setTimeout(720000);
+  test.setTimeout(1080000);
   const game=await backgammon(request);
   const alice=await createUser(request,uniqueName('Backgammon Alice'));
   const bob=await createUser(request,uniqueName('Backgammon Bob'));
@@ -197,19 +184,19 @@ test('Backgammon appears in the ordinary catalog and finishes a two-player porta
     }
     let current=await(await request.get(`/matches/${created.id}`,{headers:auth(alice)})).json();
     let moves=0,ownTurnEndingCheckerMoves=0;
-    while(current.status==='ongoing'&&moves<305){
+    while(current.status==='ongoing'&&moves<1000){
       const seat=current.turn_of_player_indices[0],page=pages[seat];
       const response=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`/matches/${created.id}/moves`);
       await nextAction(page,current.move_count);const result=await response;expect(result.ok(),await result.text()).toBeTruthy();
       current=await result.json();moves++;
-      expect(current.last_move_player_index).toBe(seat);await expectOwnMoveImmediate(page,current.move_count,seat);
+      expect(current.last_move_player_index).toBe(seat);await expectOwnMoveAtReferenceSpeed(page,current.move_count,seat,result.request().postDataJSON()?.move?.action==='move');
       if(result.request().postDataJSON()?.move?.action==='move'&&current.status==='ongoing'&&!current.turn_of_player_indices.includes(seat))ownTurnEndingCheckerMoves++;
       if(moves===2)await testInfo.attach('backgammon-legal-move',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
     }
     expect(current.status).toBe('over');expect(moves).toBeGreaterThan(2);expect(ownTurnEndingCheckerMoves).toBeGreaterThan(0);
     for(const [seat,page] of pages.entries()){
-      await expect.poll(()=>page.evaluate(otherSeat=>(window as any).backgammonAnimationRecords.some((item:any)=>item.actor===otherSeat),1-seat)).toBe(true);
-      expect(await page.evaluate(()=>(window as any).backgammonAnimationRecords.every((item:any)=>Number.isInteger(item.actor)&&item.actor!==item.viewer))).toBe(true);
+      await expect.poll(()=>page.evaluate(otherSeat=>(window as any).backgammonAnimationRecords.some((item:any)=>item.actor===otherSeat),1-seat),{timeout:30000}).toBe(true);
+      expect(await page.evaluate(()=>(window as any).backgammonAnimationRecords.filter((item:any)=>item.id?.startsWith('checker_')).every((item:any)=>Number.isInteger(item.actor)&&[400,800].includes(item.duration)))).toBe(true);
     }
     await expect(pages[0].locator('#game-box .actionable')).toHaveCount(0);
     await testInfo.attach('backgammon-finished',{body:await pages[0].screenshot({fullPage:true}),contentType:'image/png'});
@@ -218,7 +205,7 @@ test('Backgammon appears in the ordinary catalog and finishes a two-player porta
   }finally{for(const context of contexts)await context.close();}
 });
 
-test('Backgammon pass-and-play is immediate and computer play uses the ordinary server match',async({page,request},testInfo)=>{
+test('Backgammon pass-and-play animates at reference speed and computer play uses the ordinary server match',async({page,request},testInfo)=>{
   test.setTimeout(120000);
   const game=await backgammon(request),user=await createUser(request,uniqueName('Backgammon modes'));
   await countAnimations(page);await loginAs(page,user);await page.goto(`/static/portal.html#game=${game.id}`);
@@ -226,9 +213,12 @@ test('Backgammon pass-and-play is immediate and computer play uses the ordinary 
   page.on('request',request=>{if(request.method()!=='GET'&&new URL(request.url()).pathname.startsWith('/matches'))writes.push(request.url());});
   await page.locator('#practice').click();
   await expect(page.locator('#game-box .declarative-stage')).toBeVisible();
-  for(let i=0;i<5;i++)await nextAction(page);
+  for(let i=0;i<18;i++){
+    await nextAction(page);
+    if(i>=4&&await page.evaluate(()=>(window as any).backgammonAnimationRecords.some((item:any)=>item.id?.startsWith('checker_')&&item.duration===800)))break;
+  }
   expect(writes).toEqual([]);
-  expect(await page.evaluate(()=>(window as any).backgammonAnimations.length)).toBe(0);
+  expect(await page.evaluate(()=>(window as any).backgammonAnimationRecords.some((item:any)=>item.id?.startsWith('checker_')&&item.duration===800))).toBe(true);
   await page.locator('#match-menu-toggle').click();await page.locator('#match-controls-toggle').click();await page.locator('#history-back').click();
   await expect(page.locator('#game-box .actionable')).toHaveCount(0);
   await page.locator('#history-live').click();
@@ -240,19 +230,19 @@ test('Backgammon pass-and-play is immediate and computer play uses the ordinary 
   await expect(page.locator('#game-box .declarative-stage')).toBeVisible();
   for(let i=0;i<8;i++){
     const moving=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`/matches/${match.id}/moves`);
-    await nextAction(page);const accepted=await moving;expect(accepted.ok()).toBeTruthy();const result=await accepted.json();expect(result.last_move_player_index).toBe(0);await expectOwnMoveImmediate(page,result.move_count,0);
+    await nextAction(page);const accepted=await moving;expect(accepted.ok()).toBeTruthy();const result=await accepted.json();expect(result.last_move_player_index).toBe(0);await expectOwnMoveAtReferenceSpeed(page,result.move_count,0,accepted.request().postDataJSON()?.move?.action==='move');
   }
   const current=await(await request.get(`/matches/${match.id}`,{headers:auth(user)})).json();
   expect(current.players.filter((player:any)=>player.kind==='computer')).toHaveLength(1);
   expect(current.move_count).toBeGreaterThanOrEqual(8);
-  await expect.poll(()=>page.evaluate(()=>(window as any).backgammonAnimationRecords.filter((item:any)=>item.actor_kind==='computer'&&item.actor!==item.viewer).length)).toBeGreaterThan(0);
-  expect(await page.evaluate(()=>(window as any).backgammonAnimationRecords.every((item:any)=>Number.isInteger(item.actor)&&item.actor!==item.viewer))).toBe(true);
+  await expect.poll(()=>page.evaluate(()=>(window as any).backgammonAnimationRecords.filter((item:any)=>item.actor_kind==='computer'&&item.actor!==item.viewer).length),{timeout:30000}).toBeGreaterThan(0);
+  expect(await page.evaluate(()=>(window as any).backgammonAnimationRecords.filter((item:any)=>item.id?.startsWith('checker_')).every((item:any)=>Number.isInteger(item.actor)&&[400,800].includes(item.duration)))).toBe(true);
   await expect(page.locator('#game-box .declarative-error:visible')).toHaveCount(0);
   await testInfo.attach('backgammon-computer',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
 });
 
 
-test('a device computer reply snaps the accepted own baseline before animating the combined opponent snapshot',async({page,request},testInfo)=>{
+test('a device computer reply plays every accepted own and opponent step at reference speed',async({page,request},testInfo)=>{
   test.setTimeout(120000);
   const game=await backgammon(request),full=await(await request.get(`/games/${game.id}/versions/${game.version}`)).json(),user=await createUser(request,uniqueName('Backgammon device actors'));
   await countAnimations(page);await loginAs(page,user);await page.goto(`/static/portal.html#game=${game.id}`);
@@ -260,20 +250,25 @@ test('a device computer reply snaps the accepted own baseline before animating t
   await page.evaluate(async game=>{const match=await offline.practice(game,'computer',2);selectMatch(match.id);},full);
   await expect(page.locator('#game-box .declarative-stage')).toBeVisible();
   let mixed:any=null;
-  for(let i=0;i<12&&!mixed;i++){
+  for(let i=0;i<24&&!mixed;i++){
     const before=await page.evaluate(()=>({count:state.match.move_count,rendered:(window as any).backgammonRendered.length,checker:!state.match.state.needRoll}));
     await nextAction(page);
     const after=await page.evaluate(()=>state.match.move_count);
-    await expect.poll(()=>page.evaluate(count=>(window as any).backgammonRendered.some((message:any)=>message.host_id===(window as any).backgammonActiveHostId&&message.move_count===count),after)).toBe(true);
+    await expect.poll(()=>page.evaluate(count=>(window as any).backgammonRendered.some((message:any)=>message.host_id===(window as any).backgammonActiveHostId&&message.move_count===count),after),{timeout:30000}).toBe(true);
     if(before.checker&&after>before.count+1){
       mixed=await page.evaluate(({start,before,after})=>({before,after,renders:(window as any).backgammonRendered.slice(start).filter((message:any)=>message.host_id===(window as any).backgammonActiveHostId),animations:(window as any).backgammonAnimationRecords.filter((item:any)=>item.host_id===(window as any).backgammonActiveHostId&&item.move_count>before)}),{start:before.rendered,before:before.count,after});
     }
   }
   expect(mixed).not.toBeNull();
-  const baseline=mixed.renders.findIndex((message:any)=>message.move_count===mixed.before+1&&message.actor===0&&message.animate_override===false),opponent=mixed.renders.findIndex((message:any)=>message.move_count===mixed.after&&message.actor===1);
-  expect(baseline).toBeGreaterThanOrEqual(0);expect(opponent).toBeGreaterThan(baseline);
-  expect(mixed.animations.some((item:any)=>item.actor===1&&item.actor_kind==='computer'&&item.duration===1440)).toBe(true);
-  expect(mixed.animations.every((item:any)=>item.actor!==item.viewer)).toBe(true);
+  const own=mixed.renders.findIndex((message:any)=>message.move_count===mixed.before+1&&message.actor===0),
+    opponent=mixed.renders.findIndex((message:any)=>message.move_count===mixed.after&&message.actor===1);
+  expect(own).toBeGreaterThanOrEqual(0);expect(opponent).toBeGreaterThan(own);
+  const counts=[...new Set(mixed.renders.map((message:any)=>message.move_count))];
+  for(let count=mixed.before+1;count<=mixed.after;count++)expect(counts).toContain(count);
+  expect(mixed.renders.every((message:any)=>message.animate_override!==false)).toBe(true);
+  expect(mixed.animations.some((item:any)=>item.actor===0&&item.id?.startsWith('checker_')&&[400,800].includes(item.duration))).toBe(true);
+  expect(mixed.animations.some((item:any)=>item.actor===1&&item.actor_kind==='computer'&&item.id?.startsWith('checker_')&&[400,800].includes(item.duration))).toBe(true);
+  expect(mixed.animations.filter((item:any)=>item.id?.startsWith('checker_')).every((item:any)=>[400,800].includes(item.duration))).toBe(true);
   expect(writes).toEqual([]);await expect(page.locator('#game-box .declarative-error:visible')).toHaveCount(0);
   await testInfo.attach('device-computer-mixed-actor-evidence',{body:JSON.stringify(mixed),contentType:'application/json'});
 });

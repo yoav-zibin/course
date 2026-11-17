@@ -36,6 +36,9 @@ def context():
 
 def setup_board(logic, ctx, own, enemy, dice, bar=0):
     state = logic.call('newMatch', ctx=ctx, seed=7)['state']
+    # These vectors exercise the unchanged canonical rules, outside the opening.
+    for field in ('opening', 'opening_roll', 'undo_stack', 'cube', 'configured', 'difficulty', 'cube_enabled', 'goal', 'scores', 'round_winner'):
+        state.pop(field, None)
     state.update(owner=[-1] * 24, cnt=[0] * 24, bar=[bar, 0],
                  off=[15 - sum(own.values()) - bar, 15 - sum(enemy.values())],
                  cur=0, dice=dice, moves=dice, needRoll=False)
@@ -66,7 +69,8 @@ def test_complete_package_wraps_ordinary_authority_with_roll_history_and_combine
     canonical = (ROOT / 'games/declarative/backgammon.server.js').read_text()
     wrapper = (ROOT / 'games/declarative/backgammon-roll-history.js').read_text()
     compound = (ROOT / 'games/declarative/backgammon-combined-moves.js').read_text()
-    assert body.server_code == canonical + '\n' + wrapper + '\n' + compound
+    standard = (ROOT / 'games/declarative/backgammon-opening-undo.js').read_text()
+    assert body.server_code == canonical + '\n' + wrapper + '\n' + compound + '\n' + standard
     assert hashlib.sha256(canonical.encode()).hexdigest() == SOURCE_SHA256
     assert body.game_schemas() == source_schemas()
     prepared = prepare(body)
@@ -80,7 +84,7 @@ def test_complete_package_wraps_ordinary_authority_with_roll_history_and_combine
     assert [case['name'] for case in combined_cases] == [
         'Combined four ones', 'Combined one and four', 'Forced combined hit', 'Ambiguous combined hit stays single']
     assert all(case['passed'] for case in verify_examples(body.server_code, {**body.unit_tests, 'cases': combined_cases}))
-    assert len(body.declarative_ui['boards'][0]['cells']) == 24
+    assert len(next(board for board in body.declarative_ui['boards'] if board['id'] == 'main')['cells']) == 24
     assert body.declarative_ui == json.loads((ROOT / 'static/backgammon-declarative-ui.json').read_text())
 
 
@@ -110,11 +114,14 @@ def test_two_central_dice_replace_the_roll_button_and_only_offer_legal_rolls(bod
     ui = DeclarativeLogic(body.declarative_ui)
     ctx = context()
     result = rules.call('newMatch', ctx=ctx, seed=7)
+    result = rules.call('applyMove', result['state'], 'a',
+                        {'action': 'configure', 'difficulty': 1, 'goal': 5, 'cube_enabled': True}, ctx=ctx, seed=7)
+    ctx['move_count'] = 1
     viewer = result['turn'][0]
     changed = message(rules, result, ctx, viewer)
     frame = ui.reduce(changed)
     assert [piece['id'] for piece in dice(frame)] == ['die_0', 'die_1']
-    assert [piece['position'] for piece in dice(frame)] == [{'x': 336, 'y': 180}, {'x': 336, 'y': 260}]
+    assert [piece['position'] for piece in dice(frame)] == [{'x': 452, 'y': 220}, {'x': 530, 'y': 220}]
     assert all(piece['asset'] == 'die_0_used_0' and piece['actions'] == ['tap'] for piece in dice(frame))
     assert not frame['scene']['controls']
     for piece in dice(frame):
@@ -128,7 +135,7 @@ def test_two_central_dice_replace_the_roll_button_and_only_offer_legal_rolls(bod
             assert 'make_move' not in ui.reduce({**event, 'state_changed': passive}, frame['local_state'])
 
 
-def test_doubles_spend_one_half_die_per_authoritative_move(body):
+def test_doubles_show_four_dice_and_gray_one_per_authoritative_move(body):
     rules = GameLogic(body.server_code, game_schemas=body.game_schemas())
     ui = DeclarativeLogic(body.declarative_ui)
     ctx = context()
@@ -147,8 +154,7 @@ def test_doubles_spend_one_half_die_per_authoritative_move(body):
         ctx['move_count'] = used + 1
         changed = message(rules, result, ctx, 'a')
         frame = ui.reduce(changed, local)
-        assert [piece['asset'] for piece in dice(frame)] == [
-            f'die_{value}_used_{min(used, 2)}', f'die_{value}_used_{max(0, used - 2)}']
+        assert [piece['asset'] for piece in dice(frame)] == [f'die_{value}_used_{2 if index < used else 0}' for index in range(4)]
         assert all(piece['actions'] == [] for piece in dice(frame))
         assert next(label['text'] for label in frame['scene']['labels'] if label['id'] == 'moves_remaining') == f'Moves remaining: {4 - used}'
         assert 'make_move' not in ui.reduce({'type': 'ui_event', 'event': {'type': 'tap', 'id': 'die_0'}, 'state_changed': changed}, frame['local_state'])
@@ -164,7 +170,7 @@ def test_doubles_spend_one_half_die_per_authoritative_move(body):
     fresh = rules.call('applyMove', result['state'], 'b', {'action': 'roll'}, ctx={**ctx, 'move_count': 5}, seed=13)
     assert not fresh['state']['needRoll']
     fresh_frame = ui.reduce(message(rules, fresh, {**ctx, 'move_count': 6}, 'b'), next_frame['local_state'])
-    assert [piece['asset'] for piece in dice(fresh_frame)] == [f'die_{die}_used_0' for die in fresh['state']['dice'][:2]]
+    assert [piece['asset'] for piece in dice(fresh_frame)] == [f'die_{die}_used_0' for die in fresh['state']['dice']]
     assert fresh_frame['local_state']['roll']['cur'] == 1
     assert fresh_frame['local_state']['roll']['turn'] == 1
     earlier = ui.reduce({**message(rules, {'state': state, 'turn': ['a']}, ctx, 'a'), 'replay': True}, fresh_frame['local_state'])
@@ -345,7 +351,7 @@ def test_legal_drop_hit_areas_cover_point_triangles_and_the_off_tray(body):
     for own, enemy, dice_values, point, expected in [
         ({20: 15}, {0: 15}, [1, 2], 'to_19', {'x': -24, 'y': -200, 'width': 48, 'height': 220}),
         ({6: 1}, {5: 1, 23: 14}, [1], 'to_5', {'x': -24, 'y': -20, 'width': 48, 'height': 220}),
-        ({0: 1, 1: 1}, {20: 15}, [1, 2], 'to_off', {'x': -24, 'y': -15, 'width': 48, 'height': 220}),
+        ({0: 1, 1: 1}, {20: 15}, [1, 2], 'to_off', {'x': -32, 'y': -15, 'width': 64, 'height': 190}),
     ]:
         state = setup_board(rules, ctx, own, enemy, dice_values)
         scene = ui.reduce(message(rules, {'state': state, 'turn': ['a']}, ctx, 'a'))['scene']
@@ -362,7 +368,13 @@ def test_same_full_match_through_regular_rules_and_declarative_events(body, seed
     ui = DeclarativeLogic(body.declarative_ui)
     ctx = context()
     result = rules.call('newMatch', ctx=ctx, seed=seed)
+    # The differential test covers the retained canonical turn rules. Standard
+    # opening initiative and modern turn metadata have their own authority tests.
+    for field in ('opening', 'opening_roll', 'undo_stack', 'cube', 'configured', 'difficulty', 'cube_enabled', 'goal', 'scores', 'round_winner'):
+        result['state'].pop(field, None)
     regular = ordinary.call('newMatch', ctx=ctx, seed=seed)
+    result['state']['cur'] = regular['state']['cur']
+    result['turn'] = regular['turn']
     local = None
     for step in range(320):
         assert without_roll_metadata(result) == regular
@@ -371,7 +383,7 @@ def test_same_full_match_through_regular_rules_and_declarative_events(body, seed
         changed = message(rules, result, ctx, viewer)
         frame = ui.reduce(changed, local)
         assert 'make_move' not in frame
-        checkers = [piece for piece in frame['scene']['pieces'] if piece['type'] in ('p0', 'p1')]
+        checkers = [piece for piece in frame['scene']['pieces'] if piece['id'].startswith('checker_')]
         assert len(checkers) == 30 and len({piece['id'] for piece in checkers}) == 30
         for passive in (message(rules, result, ctx, None), {**changed, 'replay': True}):
             passive_frame = ui.reduce(passive, frame['local_state'])
@@ -404,7 +416,7 @@ def test_bar_entry_higher_die_and_maximum_dice_come_from_server(body):
     changed = message(rules, {'state': bar, 'turn': ['a']}, ctx, 'a')
     assert changed['view']['legalMoves'] == [{'from': 'bar', 'to': 22, 'die': 2, 'idx': 1}]
     frame = ui.reduce(changed)
-    actionable = [piece for piece in frame['scene']['pieces'] if piece['actions']]
+    actionable = [piece for piece in frame['scene']['pieces'] if piece['actions'] == ['move']]
     assert len(actionable) == 1 and actionable[0]['move_targets'] == ['to_22']
     assert [target['id'] for target in frame['scene']['targets']] == ['to_22']
     for invalid in ({'action': 'move', 'from': 'bar', 'to': 23}, {'action': 'pass'}):
@@ -466,7 +478,8 @@ def test_standard_import_catalog_pinned_match_and_cheat_rejections(payload):
     current = [alice, bob][before['state']['cur']]
     other = bob if current == alice else alice
 
-    def rejected(move, who=current):
+    def rejected(move, who=None):
+        who = who or current
         snapshot = api.ok('GET', f'/matches/{match_id}', as_user=alice)
         response = api.request('POST', f'/matches/{match_id}/moves', as_user=who, json={'move': move})
         assert response.status_code in (400, 403, 409, 422), response.text
@@ -479,8 +492,23 @@ def test_standard_import_catalog_pinned_match_and_cheat_rejections(payload):
                    {'action': 'roll', 'last_roll': {'seat': 0, 'turn': 0, 'values': [6, 6], 'move_count': 1}},
                    {'action': 'roll', 'payouts': {alice: 100000}}, {'action': 'move', 'from': 1, 'to': 'off', 'die': 6}):
         rejected(forged)
+    setup = api.ok('POST', f'/matches/{match_id}/moves', as_user=current,
+                   json={'move': {'action': 'configure', 'difficulty': 1, 'goal': 1, 'cube_enabled': True}})
+    assert setup['move_count'] == before['move_count'] + 1
     rolled = api.ok('POST', f'/matches/{match_id}/moves', as_user=current, json={'move': {'action': 'roll'}})
-    assert rolled['move_count'] == before['move_count'] + 1
+    assert rolled['move_count'] == setup['move_count'] + 1
+    # Equal opening dice reroll; the higher seat plays the original non-double
+    # pair even when the player who clicked Roll is the other seat.
+    for _ in range(10):
+        if not rolled['state'].get('opening'):
+            break
+        current = [alice, bob][rolled['state']['cur']]
+        rolled = api.ok('POST', f'/matches/{match_id}/moves', as_user=current, json={'move': {'action': 'roll'}})
+    assert not rolled['state'].get('opening')
+    current = [alice, bob][rolled['state']['cur']]
+    # The last opening response belongs to the player who rolled, which may
+    # be the lower seat. Obtain legal destinations as the actual starting seat.
+    rolled = api.ok('GET', f'/matches/{match_id}', as_user=current)
     view = rolled['state']
     assert len(view['dice']) in (2, 4) and all(1 <= die <= 6 for die in view['dice'])
     rejected({'action': 'roll'})

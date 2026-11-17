@@ -3,22 +3,73 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {revealDeclarativeTarget, zoomDeclarativeBoard} from './declarative-camera';
 
-async function mountBoard(page:Page,animate=true){
+async function mountBoard(page:Page,animate=true,cameraEnabled?:boolean){
   // Fixed world-coordinate camera oracles below use a whole-board fitted view.
   // Responsive native gestures are covered by Backgammon and the separate
   // dense-scene viewport matrix.
   await page.setViewportSize({width:1280,height:900});
   await page.goto('/static/declarative-test.html');
-  await page.evaluate(async animate=>{
+  await page.evaluate(async({animate,cameraEnabled})=>{
+    // The fixture fills the page; the authoring form underneath must not widen
+    // a mobile layout viewport and rescale CDP's physical touch coordinates.
+    (document.querySelector('main') as HTMLElement).style.display='none';
     const box=document.createElement('div');box.id='zoom-test';box.style.cssText='position:fixed;inset:0;z-index:9999;background:#102330';document.body.append(box);
     const spec={format:'buildplay-ui',version:1,viewport:{width:600,height:420},boards:[{id:'table',kind:'zone',x:0,y:0,width:600,height:420}],piece_types:{token:{shape:'circle',color:'#a7f070',width:50,height:50}},ui_code:`const gameUI={reduce(message){const s=message.type==='ui_event'?message.state_changed:message;const e=message.event;return {scene:{pieces:[{id:'checker',type:'token',board:'table',position:{x:s.view.x||220,y:210},text:'P',actions:['move'],move_targets:['home']}],targets:[{id:'home',board:'table',position:{x:380,y:210},label:'Home'}],labels:[{id:'event',x:20,y:20,text:e?e.type:'state'}]},...(e?.type==='drop'?{make_move:{to:e.target_id}}:{})};}};`};
+    if(cameraEnabled!==undefined)(spec.viewport as any).camera_enabled=cameraEnabled;
     const w=window as any;w.zoomMoves=[];w.zoomScenes=0;w.zoomSpec=spec;w.zoomMessage={type:'state_changed',view:{x:220},state:{},status:'ongoing',players:[{player_index:0,kind:'human'},{player_index:1,kind:'human'}],my_player_index:0,acting_for_player_index:0,turn_of_player_indices:[0],last_move_player_index:null,move_count:0};
     w.zoomHost=w.DeclarativeUI.mount(box,spec,{animate,onMove:(move:any)=>w.zoomMoves.push(move),onScene:()=>w.zoomScenes++});await w.zoomHost.send(w.zoomMessage);
-  },animate);
+  },{animate,cameraEnabled});
 }
 async function camera(page:Page){return page.locator('#zoom-test .declarative-stage').evaluate((node:SVGSVGElement)=>({x:node.viewBox.baseVal.x,y:node.viewBox.baseVal.y,width:node.viewBox.baseVal.width,height:node.viewBox.baseVal.height}));}
 async function screenPoint(page:Page,x:number,y:number){return page.locator('#zoom-test .declarative-stage').evaluate((node:SVGSVGElement,point)=>{const p=node.createSVGPoint();p.x=point.x;p.y=point.y;const result=p.matrixTransform(node.getScreenCTM()!);return {x:result.x,y:result.y};},{x,y});}
 async function boardPoint(page:Page,x:number,y:number){return page.locator('#zoom-test .declarative-stage').evaluate((node:SVGSVGElement,point)=>{const p=node.createSVGPoint();p.x=point.x;p.y=point.y;const result=p.matrixTransform(node.getScreenCTM()!.inverse());return {x:result.x,y:result.y};},{x,y});}
+
+test('a fixed camera ignores wheel, keyboard, pan and pinch while preserving deliberate piece moves',async({page})=>{
+  await mountBoard(page,false,false);
+  const stage=page.locator('#zoom-test .declarative-stage'),checker=page.locator('#zoom-test [data-ui-id="checker"]');
+  const baseline=await camera(page);
+  expect((await stage.getAttribute('aria-keyshortcuts'))?.split(' ')).toEqual(['R','Shift+R','F']);
+  await stage.focus();
+  for(const key of ['+','-','0','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'])await stage.press(key);
+  const background=await screenPoint(page,300,100);
+  await page.mouse.move(background.x,background.y);await page.mouse.wheel(0,-300);
+  await page.mouse.down();await page.mouse.move(background.x+80,background.y+30);await page.mouse.up();
+  expect(await camera(page)).toEqual(baseline);
+  const session=await page.context().newCDPSession(page);
+  await session.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:5});
+  const touch=(id:number,p:{x:number,y:number})=>({id,...p,radiusX:1,radiusY:1,force:1});
+  const left=await screenPoint(page,250,100),right=await screenPoint(page,350,100);
+  await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(1,left),touch(2,right)]});
+  await session.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[touch(1,{x:left.x-60,y:left.y}),touch(2,{x:right.x+60,y:right.y})]});
+  await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(3,background)]});
+  await session.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[touch(3,{x:background.x+80,y:background.y+30})]});
+  await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  expect(await camera(page)).toEqual(baseline);
+  expect(await page.evaluate(()=>(window as any).zoomMoves)).toEqual([]);
+  expect(await page.evaluate(()=>(window as any).zoomScenes)).toBe(1);
+  // A second finger cancels an in-progress checker drag even with a fixed board.
+  const from=await screenPoint(page,220,210),home=await screenPoint(page,380,210);
+  await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(4,from)]});
+  await session.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[touch(4,{x:from.x+15,y:from.y})]});
+  await expect(checker).toHaveClass(/dragging/);
+  await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(4,{x:from.x+15,y:from.y}),touch(5,background)]});
+  await expect(checker).not.toHaveClass(/dragging/);
+  await session.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[touch(4,home),touch(5,background)]});
+  await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  expect(await camera(page)).toEqual(baseline);
+  expect(await page.evaluate(()=>(window as any).zoomMoves)).toEqual([]);
+  // Resizing retains a fitted board; single-finger legal dragging still works.
+  await page.setViewportSize({width:390,height:844});
+  expect(await camera(page)).toEqual(baseline);
+  await page.waitForTimeout(500);
+  const resizedFrom=await screenPoint(page,220,210),resizedHome=await screenPoint(page,380,210);
+  await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(6,resizedFrom)]});
+  await session.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[touch(6,resizedHome)]});
+  await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await expect.poll(()=>page.evaluate(()=>(window as any).zoomMoves)).toEqual([{to:'home'}]);
+  expect(await camera(page)).toEqual(baseline);
+});
 
 test('background taps and small pointer jitter allow the next intentional mouse or touch move immediately',async({page})=>{
   await mountBoard(page,false);
@@ -271,9 +322,10 @@ test('only opponent and computer actors animate; own accepted moves, replay and 
   expect(await page.evaluate(()=>(window as any).zoomMoves)).toEqual([]);
 });
 
-test('Backgammon legal drops work when pinched on phone and tablet, and opponent checkers animate',async({page},testInfo)=>{
+test('Backgammon stays fitted after pinch on phone and tablet, legal drops work and opponent checkers animate',async({page},testInfo)=>{
   if(testInfo.project.name==='chromium')await page.setViewportSize({width:820,height:1180});
   const example=JSON.parse(fs.readFileSync(path.join(__dirname,'../games/declarative/backgammon.json'),'utf8'));
+  expect(example.declarative_ui.viewport.camera_enabled).toBe(false);
   // Reuse the package's ordinary-server test vector and its filtered views.
   const step=example.unit_tests.cases.find((item:any)=>item.name==='Hit a blot');
   expect(step).toBeTruthy();
@@ -282,6 +334,7 @@ test('Backgammon legal drops work when pinched on phone and tablet, and opponent
   const before=message(step.view_of_mover,step.ctx.move_count),after=message(step.expected_view_of_mover,step.ctx.move_count+1,seat,seat);
   await page.goto('/static/declarative-test.html');
   await page.evaluate(async({spec,before,after})=>{
+    (document.querySelector('main') as HTMLElement).style.display='none';
     const box=document.createElement('div');box.id='zoom-test';box.style.cssText='position:fixed;inset:0;z-index:9999;background:#102330';document.body.append(box);
     const w=window as any;w.bgSpec=spec;w.bgBefore=before;w.bgAfter=after;w.bgMoves=[];
     w.bgHost=w.DeclarativeUI.mount(box,spec,{animate:true,onScene:(scene:any)=>w.bgScene=scene,onMove:(move:any)=>w.bgMoves.push(move)});await w.bgHost.send(before);
@@ -295,18 +348,27 @@ test('Backgammon legal drops work when pinched on phone and tablet, and opponent
   await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(1,left.x,left.y),touch(2,right.x,right.y)]});
   await session.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[touch(1,center.x-(right.x-left.x)*.75,center.y),touch(2,center.x+(right.x-left.x)*.75,center.y)]});
   await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-  expect((await camera(page)).width).toBeCloseTo(baseline.width/1.5,0);
+  expect(await camera(page)).toEqual(baseline);
+  expect(await page.evaluate(()=>(window as any).bgMoves)).toEqual([]);
   const targetId='to_'+step.move.to;
   const pieceId=await page.evaluate(targetId=>(window as any).bgScene.pieces.find((piece:any)=>piece.move_targets?.includes(targetId)).id,targetId);
   const piece=page.locator(`#zoom-test [data-ui-id="${pieceId}"]`),target=page.locator(`#zoom-test [data-ui-id="${targetId}"]`);
   await revealDeclarativeTarget(page,piece);await revealDeclarativeTarget(page,target);
-  // The small final camera correction must leave both endpoints reachable.
+  // The fixed fitted board keeps both endpoints reachable.
   await revealDeclarativeTarget(page,piece);
   const from=(await piece.locator(':scope > g[opacity]').boundingBox())!,to=(await target.locator('.declarative-target-area').boundingBox())!;
   const nativeHit=await piece.evaluate((node,point)=>document.elementFromPoint(point.x,point.y)?.closest('[data-ui-id]')?.getAttribute('data-ui-id'),{x:from.x+from.width/2,y:from.y+from.height/2});
   await testInfo.attach('native-drag-geometry',{body:JSON.stringify({pieceId,from,to,nativeHit,camera:await camera(page),stage:await page.locator('#zoom-test .declarative-stage').boundingBox()}),contentType:'application/json'});
   await testInfo.attach('native-drag-before',{body:await page.screenshot(),contentType:'image/png'});
   expect(nativeHit).toBe(pieceId);
+  // With the camera fixed, an illegal checker drag still cancels without
+  // shifting the board or submitting a move.
+  const illegal=await screenPoint(page,20,14);
+  await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(30,from.x+from.width/2,from.y+from.height/2)]});
+  await session.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[touch(30,illegal.x,illegal.y)]});
+  await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  expect(await page.evaluate(()=>(window as any).bgMoves)).toEqual([]);
+  expect(await camera(page)).toEqual(baseline);
   await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(3,from.x+from.width/2,from.y+from.height/2)]});
   await expect(target).toHaveAttribute('data-drop-state','allowed');
   await session.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[touch(3,to.x+to.width/2,to.y+to.height/2)]});
@@ -314,15 +376,19 @@ test('Backgammon legal drops work when pinched on phone and tablet, and opponent
   await expect.poll(()=>page.evaluate(()=>(window as any).bgMoves)).toEqual([step.move]);
   const fittedCamera=await camera(page);
   await page.evaluate(async()=>{const w=window as any;await w.bgHost.send(w.bgAfter);});
-  // The accepted move belongs to this viewer, so it settles immediately.
-  expect(await piece.evaluate(node=>node.getAnimations().length)).toBe(0);
+  // This package explicitly opts into the reference's physical timing for
+  // accepted own moves, including local pass-and-play checkers.
+  expect(await piece.evaluate(node=>node.getAnimations().length)).toBe(1);
+  expect(await piece.evaluate(node=>node.getAnimations()[0].effect!.getTiming().duration)).toBe(800);
   expect(await camera(page)).toEqual(fittedCamera);
+  await page.evaluate(async()=>{await (window as any).bgHost.whenIdle();});
   // Watch the same authoritative move as the opponent, with no actionable pieces.
   await page.evaluate(async()=>{const w=window as any;w.bgHost.destroy();w.bgHost=w.DeclarativeUI.mount(document.getElementById('zoom-test'),w.bgSpec,{animate:true,onMove:(move:any)=>w.bgMoves.push(move)});await w.bgHost.send({...w.bgBefore,my_player_index:1-w.bgBefore.my_player_index,acting_for_player_index:null});});
   await zoomDeclarativeBoard(page.locator('#zoom-test .declarative-stage'),'in');
+  expect(await camera(page)).toEqual(baseline);
   await page.evaluate(async()=>{const w=window as any;await w.bgHost.send({...w.bgAfter,my_player_index:1-w.bgAfter.my_player_index,acting_for_player_index:null});});
   expect(await piece.evaluate(node=>node.getAnimations().length)).toBe(1);
-  expect(await piece.evaluate(node=>node.getAnimations()[0].effect!.getTiming().duration)).toBe(1440);
+  expect(await piece.evaluate(node=>node.getAnimations()[0].effect!.getTiming().duration)).toBe(800);
   await expect(page.locator('#zoom-test .declarative-piece.actionable')).toHaveCount(0);
   await expect.poll(()=>piece.evaluate(node=>node.getAnimations().length)).toBe(0);
   expect(await page.evaluate(()=>(window as any).bgMoves)).toEqual([step.move]);
@@ -333,9 +399,11 @@ test('Backgammon legal drops work when pinched on phone and tablet, and opponent
     // A hit can also displace the other player's checker; the move actor still
     // determines whether both displaced pieces should animate.
     await page.evaluate(async({before,after})=>{const w=window as any;w.bgHost.destroy();w.bgHost=w.DeclarativeUI.mount(document.getElementById('zoom-test'),w.bgSpec,{animate:true});await w.bgHost.send(before);await w.bgHost.send(after);},{before:message(vector.view_of_mover,vector.ctx.move_count,actor),after:message(vector.expected_view_of_mover,vector.ctx.move_count+1,actor,actor)});
-    // Target-hint opacity has a separate 120ms CSS transition; count physical
-    // checker motion, which must remain immediate for the accepted own move.
-    expect(await page.locator('#zoom-test .declarative-piece').evaluateAll(nodes=>nodes.flatMap(node=>node.getAnimations()).length)).toBe(0);
+    // Target hints have separate CSS effects; inspect physical checker motion.
+    const ownTimings=await page.locator('#zoom-test .declarative-piece[data-ui-id^="checker_"]').evaluateAll(nodes=>nodes.flatMap(node=>node.getAnimations().map(animation=>animation.effect!.getTiming().duration)));
+    expect(ownTimings.length).toBeGreaterThanOrEqual(vector.name==='Hit a blot'?2:1);
+    expect(ownTimings.every(duration=>duration===400||duration===800)).toBe(true);
+    await page.evaluate(async()=>{await (window as any).bgHost.whenIdle();});
     const beforeVector=message(vector.view_of_mover,vector.ctx.move_count,viewer),afterVector=message(vector.expected_view_of_mover,vector.ctx.move_count+1,viewer,actor);
     await page.evaluate(async({before,after})=>{const w=window as any;w.bgHost.destroy();w.bgHost=w.DeclarativeUI.mount(document.getElementById('zoom-test'),w.bgSpec,{animate:true,onScene:(scene:any)=>w.bgScene=scene});await w.bgHost.send(before);w.bgAfter=after;w.bgIds=w.bgScene.pieces.filter((piece:any)=>piece.id.startsWith('checker_')).map((piece:any)=>piece.id).sort();},{before:beforeVector,after:afterVector});
     await zoomDeclarativeBoard(page.locator('#zoom-test .declarative-stage'),'in');
