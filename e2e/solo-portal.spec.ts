@@ -1,32 +1,38 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 import { createUser, loginAs, mockBatch, uniqueName } from './helpers';
 
-const catalog = JSON.parse(fs.readFileSync(path.join(__dirname,
-  '../tests/fixtures/leave_contract/catalog.json'), 'utf8'));
-
-// Use the unchanged published solo games, with the same schemas as the server
-// contract fixtures. All moves in these tests stay in local practice storage.
-function soloGame(name: string) {
-  const entry = catalog.find((game: any) => game.name === name);
-  return {
-    ...entry, description: `${name} solo puzzle`, owner_user_id: 'solo-fixture-owner',
-    published: true, renderer_type: 'html',
-    code: fs.readFileSync(path.join(__dirname, `../games/community/${entry.id}.original.html`), 'utf8'),
-    server_code: fs.readFileSync(path.join(__dirname, '..', entry.server), 'utf8'),
-    created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
-  };
-}
-
-const star = soloGame('Star Count');
-const hanoi = soloGame('Tower of Hanoi');
-const multiplayer = { ...star, id: 'multiplayer-setup-fixture', name: 'Multiplayer setup', description: 'A game for two people', allowed_player_counts: [2] };
+// A declarative solo fixture exercises portal setup, replay and local controls.
+const star = {
+  id:'declarative-solo-counter',name:'Solo Counter',version:1,
+  description:'Reach five points',owner_user_id:'solo-fixture-owner',
+  allowed_player_counts:[1],published:true,renderer_type:'declarative',code:'',
+  server_code:`const game={
+    newMatch(ctx){return {state:{count:0},turn:[ctx.players[0].id]};},
+    applyMove(state,id,move,ctx){const count=state.count+1;return {state:{count},turn:count===5?null:[id]};},
+    viewFor(state){return state;},computerMove(){return {add:true};}
+  };`,
+  game_schemas:{state:{type:'object'},view:{type:'object'},move:{type:'object'}},
+  declarative_ui:{format:'buildplay-ui',version:1,viewport:{width:400,height:300},
+    boards:[{id:'main',kind:'zone',x:0,y:0,width:400,height:300}],piece_types:{token:{shape:'circle'}},
+    strings:{add:'Add point'},
+    ui_code:`const gameUI={reduce(message){
+      const m=message.type==='ui_event'?message.state_changed:message;
+      const count=(m.view||m.state).count;
+      const active=m.status==='ongoing'&&!m.replay;
+      const out={scene:{labels:[{id:'count',text:count===5?'You reached 5 points!':'Count: '+count+' of 5',x:20,y:40}],
+        controls:active?[{id:'add',kind:'button',label:'Add point'}]:[]}};
+      if(message.type==='ui_event'&&message.event.id==='add'&&active)out.make_move={add:true};
+      return out;
+    }};`,
+  },
+  created_at:'2026-01-01T00:00:00Z',updated_at:'2026-01-01T00:00:00Z',
+};
+const multiplayer = { ...star, id:'multiplayer-setup-fixture', name:'Multiplayer setup', allowed_player_counts:[2] };
 
 async function prepare(page: Page, request: APIRequestContext) {
   const user = await createUser(request, uniqueName('Solo player'));
   await loginAs(page, user);
-  const games = [star, hanoi, multiplayer];
+  const games = [star, multiplayer];
   const mocks: Record<string, unknown> = { '/games': games, '/games/popular': [], '/users/me/recent-games': [] };
   for (const game of games) {
     mocks[`/games/${game.id}`] = game;
@@ -101,11 +107,11 @@ test('solo Play again attempts to start immediately and keeps Start available af
   await page.getByRole('button', {name: 'Start game', exact: true}).click();
   await expect(page.locator('#match-status')).toHaveClass('badge ongoing');
   await expect(page.locator('#waiting')).toBeHidden();
-  await expect(page.frameLocator('#game-box iframe').locator('#status')).toContainText('Count: 0 of 5');
+  await expect(page.locator('#game-box .declarative-stage > text')).toContainText('Count: 0 of 5');
   expect(calls).toEqual(['rematch', 'start', 'start']);
 });
 
-for (const game of [star, hanoi]) {
+for (const game of [star]) {
   test(`${game.name} local solo play finishes, replays and starts again through portal controls`, async ({page, request}) => {
     await prepare(page, request);
     const errors: string[] = [];
@@ -116,24 +122,11 @@ for (const game of [star, hanoi]) {
     });
     await page.goto(`/static/portal.html#game=${game.id}`);
     await page.locator('#practice').click();
-    const frame = page.frameLocator('#game-box iframe');
-    if (game.name === 'Star Count') {
-      await expect(frame.locator('#status')).toContainText('Count: 0 of 5');
-      for (let count = 1; count <= 5; count++) {
-        await frame.locator('#add').click();
-        await expect(frame.locator('#status')).toContainText(count === 5 ? 'You reached 5 stars!' : `Count: ${count} of 5`);
-      }
-    } else {
-      await expect(frame.locator('#status')).toContainText('pick disk count');
-      await frame.locator('#setup button[data-d="3"]').click();
-      await expect(frame.locator('#pegs .peg')).toHaveCount(3);
-      const solution = [[0,2], [0,1], [2,1], [0,2], [1,0], [1,2], [0,2]];
-      for (const [index, [from,to]] of solution.entries()) {
-        await frame.locator('#pegs .peg').nth(from).click();
-        await frame.locator('#pegs .peg').nth(to).click();
-        await expect(frame.locator('#moves')).toHaveText(String(index + 1));
-      }
-      await expect(frame.locator('#status')).toContainText('Solved in 7 moves!');
+    const frame = page.locator('#game-box');
+    await expect(frame.locator('.declarative-stage > text')).toContainText('Count: 0 of 5');
+    for (let count=1;count<=5;count++) {
+      await frame.locator('[data-ui-id=add]').click();
+      await expect(frame.locator('.declarative-stage > text')).toContainText(count===5?'You reached 5 points!':`Count: ${count} of 5`);
     }
     await expect(page.locator('#match-status')).toHaveClass('badge over');
     await expect(page.locator('#match-play-notice')).toHaveText('Match finished');
@@ -149,7 +142,7 @@ for (const game of [star, hanoi]) {
     await page.getByRole('button', {name: 'Start a new practice', exact: true}).click();
     await expect(page).not.toHaveURL(finishedUrl);
     await expect(page.locator('#match-status')).toHaveClass('badge ongoing');
-    await expect(frame.locator('#status')).toContainText(game.name === 'Star Count' ? 'Count: 0 of 5' : 'pick disk count');
+    await expect(frame.locator('.declarative-stage > text')).toContainText('Count: 0 of 5');
     if (await page.locator('#match-controls-toggle').getAttribute('aria-expanded') !== 'true')
       await page.locator('#match-controls-toggle').click();
     await page.getByRole('button', {name: 'End practice', exact: true}).click();

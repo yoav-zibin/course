@@ -195,6 +195,11 @@ class Game:
     # Current game-wide visibility, applied to every version read from the store.
     published: bool = True
 
+    @property
+    def is_declarative(self) -> bool:
+        """Whether this stored version has the portable presentation contract."""
+        return isinstance((self.import_package or {}).get("declarative_ui"), dict)
+
 
 # The import package keys for the resubmission secret. Packages written
 # before the hash-only change carry the secret itself under

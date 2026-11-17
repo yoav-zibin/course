@@ -25,6 +25,18 @@ from game_platform.models import (
 from game_platform.query_store import QueryStore
 
 
+def synthetic_presentation():
+    """Inert portable presentation for capacity fixtures, without HTML clients."""
+    return {
+        "format": "buildplay-ui", "version": 1,
+        "viewport": {"width": 300, "height": 300},
+        "boards": [{"id": "main", "kind": "grid", "x": 0, "y": 0,
+                    "width": 300, "height": 300, "rows": 1, "columns": 1}],
+        "piece_types": {"token": {"shape": "circle"}}, "strings": {},
+        "ui_code": "const gameUI={reduce(){return {scene:{}};}};",
+    }
+
+
 
 def documents(collection, *, after=None, page_size=100):
     while True:
@@ -100,7 +112,8 @@ def seed(store, *, run_id, users, games, matches, moves_per_match, max_writes):
                         allows_leave_mid_match=False,
                         allows_join_mid_match=False,
                     ),
-                    code="<div>Synthetic fixture</div>",
+                    code="",
+                    import_package={"declarative_ui": synthetic_presentation()},
                     created_at=base,
                     updated_at=base,
                 )

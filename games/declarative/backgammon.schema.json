@@ -1,0 +1,206 @@
+{
+  "state": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "bar": {
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "cnt": {
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "cur": {
+        "type": [
+          "null",
+          "number"
+        ]
+      },
+      "dice": {
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "moves": {
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "n": {
+        "type": [
+          "null",
+          "number"
+        ]
+      },
+      "needRoll": {
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "off": {
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "owner": {
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "winner": {
+        "type": [
+          "null",
+          "number"
+        ]
+      }
+    },
+    "additionalProperties": true
+  },
+  "move": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "oneOf": [
+      {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "roll",
+              "pass"
+            ]
+          }
+        }
+      },
+      {
+        "type": "object",
+        "required": [
+          "action",
+          "from",
+          "to"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "move"
+          },
+          "from": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 23
+              },
+              {
+                "const": "bar"
+              }
+            ]
+          },
+          "to": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 23
+              },
+              {
+                "const": "off"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "view": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "bar": {
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "cnt": {
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "cur": {
+        "type": [
+          "null",
+          "number"
+        ]
+      },
+      "dice": {
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "legalMoves": {
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "moves": {
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "n": {
+        "type": [
+          "null",
+          "number"
+        ]
+      },
+      "needRoll": {
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "off": {
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "owner": {
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "winner": {
+        "type": [
+          "null",
+          "number"
+        ]
+      }
+    },
+    "additionalProperties": true
+  }
+}

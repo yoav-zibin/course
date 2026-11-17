@@ -96,9 +96,6 @@
     "browse.js": 3,
     "console.js": 20,
     "feedback.js": 18,
-    "stats.js": 77,
-    "game-test.html": 109,
-    "game-test.js": 88,
-    "game-test-host.js": 9
+    "stats.js": 77
   }
 }

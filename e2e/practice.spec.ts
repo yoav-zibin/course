@@ -52,29 +52,29 @@ test('local pass-and-play practice works after disconnect and reload, with no ma
   await page.getByRole('option',{name:new RegExp(name)}).click();
   await expect(page.locator('#practice')).toBeEnabled();
   await page.locator('#practice').click();
-  const board=page.frameLocator('#game-box iframe').locator('#board button');
+  const board=page.locator('#game-box .declarative-target');
   await expect(board).toHaveCount(9);
   // Pass-and-play: the two seats alternate on this device, so each mark is
   // placed by its own click (there is no computer reply to wait for).
   await board.first().click();
-  await expect(board.filter({hasText:'X'})).toHaveCount(1);
-  await expect(board.filter({hasText:'O'})).toHaveCount(0);
-  await board.filter({hasText:/^$/}).first().click();
-  await expect(board.filter({hasText:'O'})).toHaveCount(1);
+  await expect(page.locator('#game-box .declarative-piece').filter({hasText:'X'})).toHaveCount(1);
+  await expect(page.locator('#game-box .declarative-piece').filter({hasText:'O'})).toHaveCount(0);
+  await board.first().click();
+  await expect(page.locator('#game-box .declarative-piece').filter({hasText:'O'})).toHaveCount(1);
   await page.evaluate(()=>navigator.serviceWorker.ready.then(()=>undefined));
   await expect.poll(()=>page.evaluate(()=>Boolean(navigator.serviceWorker.controller))).toBe(true);
   await context.setOffline(true);
   await page.reload();
-  await expect(board.filter({hasText:'X'})).toHaveCount(1);
-  await expect(board.filter({hasText:'O'})).toHaveCount(1);
-  await board.filter({hasText:/^$/}).first().click();
-  await expect(board.filter({hasText:'X'})).toHaveCount(2);
-  await board.filter({hasText:/^$/}).first().click();
-  await expect(board.filter({hasText:'O'})).toHaveCount(2);
+  await expect(page.locator('#game-box .declarative-piece').filter({hasText:'X'})).toHaveCount(1);
+  await expect(page.locator('#game-box .declarative-piece').filter({hasText:'O'})).toHaveCount(1);
+  await board.first().click();
+  await expect(page.locator('#game-box .declarative-piece').filter({hasText:'X'})).toHaveCount(2);
+  await board.first().click();
+  await expect(page.locator('#game-box .declarative-piece').filter({hasText:'O'})).toHaveCount(2);
   await page.locator('#match-controls-toggle').click();
   await page.locator('#history-back').click();
   await expect(page.locator('#history-position')).toContainText('read only');
-  await expect(page.frameLocator('#game-box iframe').locator('#board button:enabled')).toHaveCount(0);
+  await expect(page.locator('#game-box .declarative-target[aria-disabled=false]')).toHaveCount(0);
   await page.locator('#history-live').click();
   await expect(page.locator('#history-position')).toContainText('Live');
   await context.setOffline(false);
@@ -93,12 +93,12 @@ test('pass-and-play starts from a #game= link without searching, downloading the
   // not a trip through the online flow before pass-and-play can start.
   await expect(page.locator('#practice-offline-note')).toContainText('downloads first');
   await page.locator('#practice').click();
-  const board=page.frameLocator('#game-box iframe').locator('#board button');
+  const board=page.locator('#game-box .declarative-target');
   await expect(board).toHaveCount(9);
   await board.first().click();
-  await expect(board.filter({hasText:'X'})).toHaveCount(1);
-  await board.filter({hasText:/^$/}).first().click();
-  await expect(board.filter({hasText:'O'})).toHaveCount(1);
+  await expect(page.locator('#game-box .declarative-piece').filter({hasText:'X'})).toHaveCount(1);
+  await board.first().click();
+  await expect(page.locator('#game-box .declarative-piece').filter({hasText:'O'})).toHaveCount(1);
 });
 
 test('a logged-out visitor to a game link is sent to log in and returns to the game', async ({page,request})=>{
@@ -117,10 +117,10 @@ test('a logged-out visitor to a game link is sent to log in and returns to the g
   await expect(page).toHaveURL(new RegExp(`#game=${game}$`));
   await expect(page.locator('#practice')).toBeEnabled();
   await page.locator('#practice').click();
-  const board=page.frameLocator('#game-box iframe').locator('#board button');
+  const board=page.locator('#game-box .declarative-target');
   await expect(board).toHaveCount(9);
   await board.first().click();
-  await expect(board.filter({hasText:'X'})).toHaveCount(1);
+  await expect(page.locator('#game-box .declarative-piece').filter({hasText:'X'})).toHaveCount(1);
 });
 
 test('local rules have no portal storage or network access, and a looping game times out',async({page,request})=>{
@@ -152,13 +152,13 @@ test('saved local practice can move while storage metadata is unresponsive',asyn
   await page.getByRole('combobox',{name:'Search games'}).fill(name);
   await page.getByRole('option',{name:new RegExp(name)}).click();
   await page.locator('#practice').click();
-  const board=page.frameLocator('#game-box iframe').locator('#board button');
+  const board=page.locator('#game-box .declarative-target');
   await expect(board).toHaveCount(9);
   await page.route('**/storage/capabilities',()=>new Promise(()=>{}));
   await page.reload();
   await expect(board).toHaveCount(9);
   await board.first().click();
-  await expect(board.filter({hasText:'X'})).toHaveCount(1);
-  await board.filter({hasText:/^$/}).first().click();
-  await expect(board.filter({hasText:'O'})).toHaveCount(1);
+  await expect(page.locator('#game-box .declarative-piece').filter({hasText:'X'})).toHaveCount(1);
+  await board.first().click();
+  await expect(page.locator('#game-box .declarative-piece').filter({hasText:'O'})).toHaveCount(1);
 });

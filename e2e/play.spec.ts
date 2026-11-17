@@ -17,11 +17,11 @@ test.describe('Choosing and playing a game (logged in, real server)', () => {
       await button.click();
       expect((await creation).postDataJSON()).toEqual({game_id: game, num_computer_opponents: 1, bet_per_player: 0});
       await expect(page.locator('#match-toolbar-title')).toContainText(name);
-      const board = page.frameLocator('#game-box iframe').locator('#board button');
+      const board = page.locator('#game-box .declarative-target');
       await expect(board).toHaveCount(9);
       await board.first().click();
-      await expect(board.first()).toHaveText('X');
-      await expect(board.filter({hasText: 'O'})).toHaveCount(1, {timeout: 15_000});
+      await expect(page.locator('#game-box [data-ui-id=piece_0]')).toHaveText('X');
+      await expect(page.locator('#game-box .declarative-piece').filter({hasText: 'O'})).toHaveCount(1, {timeout: 15_000});
     });
   }
 
@@ -41,13 +41,13 @@ test.describe('Choosing and playing a game (logged in, real server)', () => {
     await page.getByRole('button', { name: /Play with computers/ }).click();
     await expect(page.locator('#match')).toBeVisible();
 
-    const board = page.frameLocator('#game-box iframe').locator('#board button');
+    const board = page.locator('#game-box .declarative-target');
     await expect(board).toHaveCount(9);
     await board.first().click();
-    await expect(board.first()).toHaveText('X');
+    await expect(page.locator('#game-box [data-ui-id=piece_0]')).toHaveText('X');
     // The server moves the computer itself: its O appears without
     // anyone acting on its behalf.
-    await expect(board.filter({ hasText: 'O' })).toHaveCount(1, { timeout: 15_000 });
+    await expect(page.locator('#game-box .declarative-piece').filter({ hasText: 'O' })).toHaveCount(1, { timeout: 15_000 });
   });
 
   test('create an online match and see it listed', async ({ page, request }) => {

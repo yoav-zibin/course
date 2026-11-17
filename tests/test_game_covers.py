@@ -28,7 +28,7 @@ def create_cover(api):
     game_id = api.new_game(owner=owner, allowed_player_counts=[2])
     store = api.platform._store
     game = store.get_game_version(game_id, 1)
-    store.put_game_version(replace(game, import_package={"images": [{"caption": "Cover", "svg": SVG}]}))
+    store.put_game_version(replace(game, import_package={**game.import_package, "images": [{"caption": "Cover", "svg": SVG}]}))
     return owner, game_id, f"/games/{game_id}/versions/1/cover"
 
 
@@ -112,8 +112,8 @@ def test_missing_or_invalid_cover_is_never_cached(cover_api):
     _, game_id, url = create_cover(api)
     store = api.platform._store
     game = store.get_game_version(game_id, 1)
-    for package, status in [(None, 404), ({"images": [{"caption": "Bad", "svg": '<svg><script/></svg>'}]}, 400)]:
-        store.put_game_version(replace(game, import_package=package))
+    for images, status in [(None, 404), ([{"caption": "Bad", "svg": '<svg><script/></svg>'}], 400)]:
+        store.put_game_version(replace(game, import_package={**game.import_package, "images": images}))
         response = api.request("GET", url)
         assert response.status_code == status
         assert response.headers["cache-control"] == "private, no-store"
@@ -128,7 +128,7 @@ def test_new_versions_have_distinct_urls_and_validators(cover_api):
     before = api.request("GET", old_url)
     store = api.platform._store
     game = store.get_game_version(game_id, 1)
-    store.add_game_version(replace(game, version=2, import_package={
+    store.add_game_version(replace(game, version=2, import_package={**game.import_package,
         "images": [{"caption": "New cover", "svg": SVG.replace("blue", "red")}]}))
     after = api.request("GET", f"/games/{game_id}/versions/2/cover")
     assert after.status_code == 200

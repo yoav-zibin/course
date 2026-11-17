@@ -51,6 +51,44 @@ function normalizeState(data) {
   out.selectedId = out.selectedId ?? null;
   out.cacheAccess = out.cacheAccess && typeof out.cacheAccess === "object" ? out.cacheAccess : {};
   out.cacheClock = Number.isSafeInteger(out.cacheClock) ? out.cacheClock : 0;
+  // Retire downloaded HTML clients and their pinned local matches on upgrade.
+  // Declarative packages stay available offline under their original versions.
+  const retired = new Set();
+  for (const [path, game] of Object.entries(out.responses)) {
+    if (/^\/games\/[^/]+\/versions\/\d+$/.test(path) && game && !game.declarative_ui &&
+        (game.renderer_type === "html" || game.code || game.server_code)) {
+      const [, id, version] = /^\/games\/([^/]+)\/versions\/(\d+)$/.exec(path);
+      retired.add(`${id}@${version}`);
+      delete out.responses[path];
+    }
+  }
+  const retiredMatch = match => match && retired.has(`${match.game_id}@${match.game_version}`);
+  const retiredGame = game => game?.renderer_type === "html";
+  const retiredIds = new Set(Object.values(out.local).filter(retiredMatch).map(match => match.id));
+  for (const value of Object.values(out.responses)) {
+    const matches = Array.isArray(value) ? value : Array.isArray(value?.items) ? value.items : [value];
+    for (const match of matches) if (retiredMatch(match)) retiredIds.add(match.id);
+  }
+  for (const [id, match] of Object.entries(out.local)) if (retiredMatch(match)) {
+    retiredIds.add(id);
+    delete out.local[id];
+  }
+  for (const [path, value] of Object.entries(out.responses)) {
+    if (Array.isArray(value)) out.responses[path] = value.filter(item => !retiredMatch(item) && !retiredGame(item));
+    else if (Array.isArray(value?.items)) out.responses[path] = {...value,items:value.items.filter(item => !retiredMatch(item) && !retiredGame(item))};
+    else if (retiredMatch(value)) {
+      delete out.responses[path];
+    }
+  }
+  for (const entry of [...out.archives, ...out.archivedMatches])
+    if (retiredMatch(entry.match)) retiredIds.add(entry.id);
+  for (const id of retiredIds) {
+    delete out.queues[id];
+    delete out.conflicts[id];
+    if (out.selectedId === id) out.selectedId = null;
+  }
+  out.archives = out.archives.filter(entry => !retiredIds.has(entry.id));
+  out.archivedMatches = out.archivedMatches.filter(entry => !retiredIds.has(entry.id));
   return out;
 }
 
@@ -288,7 +326,7 @@ class PortalOffline {
       const data = this.readSplit();
       if (this.storageDenied)
         this.notice = I18n.t("ui.offline.storage_unavailable", {}, "Device storage unavailable; online play still works.");
-      return data;
+      return normalizeState(data);
     } catch (error) {
       // Denied reads or a corrupt legacy blob: the portal still boots and
       // plays online; nothing on this device is trusted.
@@ -1098,6 +1136,8 @@ class PortalOffline {
     this.writeBestEffort(d);
   }
   async practice(game, mode = "computer", playerCount = undefined) {
+    if (!game?.declarative_ui)
+      throw new Error(I18n.t("ui.portal.legacy_game_retired", {}, "This legacy game is no longer available in the portal."));
     const user = this.user();
     if (!user)
       throw new Error(I18n.t("ui.offline.err_login_first", {}, "Log in online once before starting offline practice."));

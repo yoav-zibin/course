@@ -66,7 +66,7 @@ def test_rematch_reuses_game_version_and_accepting_players_join_open_lobby(
         "PATCH",
         f"/games/{game_id}",
         as_user=alice,
-        json={"code": "<div>version 2</div>"},
+        json={"description": "Published version 2"},
     )
     api.move(match_id, as_user=alice, next_turn=None, state={"winner": 0})
 

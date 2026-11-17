@@ -92,7 +92,6 @@ function setupPortal(hash = '', archetype = '') {
     history: {replaceState(s, t, url) { if (url != null) fakeLocation.hash = String(url).startsWith('#') ? String(url) : ''; },
       pushState() {}},
     Auth: {current: () => ({id: 'owner'})}, I18n: require('./i18n-stub.cjs'),
-    GameFrame: class { load() {} unload() {} send() {} },
     apiRequest: async () => {}, formatTime: () => '', shortId: (x) => x,
     showPageError() {}, el: (tag, attrs = {}, ...children) => ({...attrs, children})});
   vm.runInContext(portalJs.replace(/main\(\);\s*$/, ''), ctx);

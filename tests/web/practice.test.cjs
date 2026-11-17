@@ -23,8 +23,8 @@ function setup(gameName='tictactoe',mode='computer') {
  vm.runInContext(fs.readFileSync(path.join(root,'static/portal-offline.js'),'utf8')+';globalThis.Offline=PortalOffline;',ctx);
  const storage={getItem:k=>writes.get(k),setItem:(k,v)=>writes.set(k,v)};
  const offline=new ctx.Offline(storage,()=>{requests++;throw new Error('network forbidden');},()=>({id:'alice'}),()=>false);
- const game={id:gameName,version:2,allowed_player_counts:gameName==='poker'?[2,3,4,5,6]:[2],
-  code:'<html>v2 client</html>',server_code:fs.readFileSync(path.join(root,`games/${gameName}.server.js`),'utf8')};
+ const payload=JSON.parse(fs.readFileSync(path.join(root,`games/declarative/${gameName}.json`),'utf8'));
+ const game={...payload,id:gameName,version:2};
  return {offline,game,mode,storage,get requests(){return requests;}};
 }
 test('v2 computer practice initializes, rejects illegal moves atomically, and survives offline reload',async()=>{
@@ -32,21 +32,21 @@ test('v2 computer practice initializes, rejects illegal moves atomically, and su
  assert.equal(m.state.board.length,9);assert.equal(m.token_pot,0);
  assert.equal(m.last_move_player_index,null);
  m=await t.offline.practiceMove(m,{cell:0});
- assert.equal(m.move_count,2);assert.equal(m.state.board.filter(Boolean).length,2);
+ assert.equal(m.move_count,2);assert.equal(m.state.board.filter(x=>x!==-1).length,2);
  assert.equal(m.turn_of_player_indices[0],0);
  assert.deepEqual(Array.from(m.moves,move=>move.player_index),[0,1]);
  assert.equal(m.last_move_player_index,1);
  const saved=JSON.stringify(t.offline.read().local);
- await assert.rejects(t.offline.practiceMove(m,{cell:0}),/taken/);
+ await assert.rejects(t.offline.practiceMove(m,{cell:0}),/Illegal move/);
  // An illegal move must not change the saved practice match. (Cache
  // recency may still advance: reading the game rules touches it.)
  assert.equal(JSON.stringify(t.offline.read().local),saved);
  const restored=new t.offline.constructor(t.storage,()=>{throw new Error('network');},()=>({id:'alice'}),()=>false);
  m=await restored.get(`/matches/${m.id}`);
- const cell=m.state.board.findIndex(x=>!x);
+ const cell=m.state.board.findIndex(x=>x===-1);
  m=await restored.practiceMove(m,{cell});
  const history=await restored.get(`/matches/${m.id}/history`);
- assert.equal(history.initial_state.board.filter(Boolean).length,0);
+ assert.equal(history.initial_state.board.filter(x=>x!==-1).length,0);
  assert.equal(history.moves.length,m.move_count);
  assert.deepEqual(Array.from(history.moves,move=>move.player_index),[0,1,0,1]);
  assert.equal(t.requests,0);
@@ -60,21 +60,29 @@ test('pass-and-play v2 reaches a win with no computer or network moves',async()=
  assert.equal(m.last_move_player_index,0);
  await assert.rejects(t.offline.practiceMove(m,{cell:8}),/changed/);
 });
-test('poker practice keeps full rules state separate from the human view and runs its computer',async()=>{
- const t=setup('poker');let m=await t.offline.practice(t.game);
- assert.notDeepEqual(m.logicState,m.state);
- assert.equal(m.players[1].kind,'computer');assert.equal(m.token_pot,0);
- // Folding is a legal human action; all subsequent computer decisions stay local.
- m=await t.offline.practiceMove(m,{type:'fold'});
- assert.ok(m.move_count>=1);assert.equal(t.requests,0);
-});
 test('online match ids are never accepted by the local rules runner',async()=>{
  const t=setup();await assert.rejects(t.offline.practiceMove({id:'online-match'},{}),/Only device practice/);
 });
-test('v1 practice still starts with browser-owned state',async()=>{
- const t=setup();delete t.game.server_code;
- const m=await t.offline.practice(t.game);assert.equal(m.state,null);assert.equal(m.move_count,0);
- assert.equal(m.last_move_player_index,null);
+test('HTML practice is rejected and downloaded HTML matches are retired',async()=>{
+ const t=setup();
+ const html={...t.game,renderer_type:'html',code:'<html>legacy</html>'};delete html.declarative_ui;
+ await assert.rejects(t.offline.practice(html),/legacy game/);
+ const data=t.offline.read();
+ data.responses['/games/tictactoe/versions/2']=html;
+ data.local['local-html']={id:'local-html',game_id:'tictactoe',game_version:2};
+ data.responses['/matches']=[data.local['local-html']];
+ data.responses['/v2/matches?limit=50']={items:[data.local['local-html']],next_cursor:'continue'};
+ data.queues['local-html']=[{move:{cell:1}}];
+ data.conflicts['local-html']={reason:'retired'};
+ data.archivedMatches=[{id:'archived-html',match:{game_id:'tictactoe',game_version:2}}];
+ t.offline.write(data);
+ assert.equal(t.offline.read().local['local-html'],undefined);
+ assert.equal(t.offline.cached('/games/tictactoe/versions/2'),undefined);
+ assert.equal(t.offline.read().responses['/matches'].length,0);
+ assert.equal(t.offline.read().responses['/v2/matches?limit=50'].items.length,0);
+ assert.equal(t.offline.read().queues['local-html'],undefined);
+ assert.equal(t.offline.read().conflicts['local-html'],undefined);
+ assert.equal(t.offline.read().archivedMatches.length,0);
 });
 test('local history records the human and every actor in a multi-computer reply chain',async()=>{
  const t=setup();

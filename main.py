@@ -159,6 +159,12 @@ def main() -> None:
             translation_daily_character_limit=config.translation.daily_character_limit,
             require_game_strings=config.translation.require_strings,
         )
+        # Retire old matches before HTTP requests or workers can execute them.
+        from game_platform.legacy_games import retire_html_matches
+
+        retirement = retire_html_matches(platform)
+        if retirement["matches_deleted"]:
+            logger.info("Retired %d HTML-game matches", retirement["matches_deleted"])
         if args.purge_example_data:
             purge_example_data(platform)
             return

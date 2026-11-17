@@ -8,6 +8,8 @@ seeds of failing walks are stored on the game and replayed first next
 time, as regression seeds.
 """
 
+import pytest
+
 import game_platform.game_testing as game_testing
 from game_platform.tests.helpers import run_unrestricted_server_code as _test_server_code
 from game_platform.models import GameRules
@@ -261,11 +263,14 @@ def test_updating_a_game_to_broken_server_code_is_refused(api: Api):
          "code": "<div></div>", "server_code": GOOD_GAME},
         owner,
     )
-    response = api.request(
-        "PATCH", f"/games/{game['id']}", as_user=owner,
-        json={"server_code": CRASH_GAME},
-    )
-    assert response.status_code == 400
-    assert "failed its tests" in response.json()["detail"]
+    from game_platform.service import InvalidRequestError
+    original = api.platform._store.get_game(game['id'])
+    with pytest.raises(InvalidRequestError, match="failed its tests"):
+        api.platform.import_agent_game(
+            caller_id=owner, existing_game_id=original.id, name=original.name,
+            description=original.description, rules=original.rules,
+            code=original.code, server_code=CRASH_GAME,
+            game_schemas=original.game_schemas, import_package=original.import_package,
+        )
     # The published version is unchanged.
     assert api.ok("GET", f"/games/{game['id']}")["version"] == 1

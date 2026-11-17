@@ -1,3 +1,4 @@
+from game_platform.tests.helpers import TEST_DECLARATIVE_UI
 import datetime as dt
 
 from game_platform.models import GameRules
@@ -42,6 +43,7 @@ def test_signup_experiment_events_do_not_consume_generated_ids() -> None:
         code="",
         server_code=ECHO_SERVER_CODE,
         game_schemas=TEST_GAME_SCHEMAS,
+        import_package={"declarative_ui": TEST_DECLARATIVE_UI},
     )
 
     assert game.id == "game-1"
@@ -72,6 +74,7 @@ def test_match_start_tracking_uses_match_timestamp_without_advancing_clock() -> 
         code="",
         server_code=ECHO_SERVER_CODE,
         game_schemas=TEST_GAME_SCHEMAS,
+        import_package={"declarative_ui": TEST_DECLARATIVE_UI},
     )
     match = platform.create_match(
         caller_id=user.id, game_id=game.id, num_computer_opponents=0

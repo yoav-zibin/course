@@ -147,11 +147,11 @@ def test_spec_topology_references_and_version_are_strict():
     with pytest.raises(DeclarativeUIError, match="links"): validate_spec(ui)
 
 
-def test_declarative_import_generates_host_without_changing_html_payload_identity():
+def test_declarative_import_generates_host_and_rejects_html_payloads():
     original = payload()
-    legacy = GameImport.model_validate(original)
-    assert "declarative_ui" not in legacy.model_dump()
-    assert legacy.client_code == original["client_code"]
+    del original["declarative_ui"]
+    with pytest.raises(ValidationError):
+        GameImport.model_validate(original)
     body = GameImport.model_validate(declarative_payload())
     assert body.client_code == client_document(body.declarative_ui)
     assert embedded_spec(body.client_code) == body.declarative_ui

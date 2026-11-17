@@ -83,9 +83,7 @@ def strings(index=0):
 
 
 def source_schemas():
-    catalog = json.loads((ROOT / 'tests/fixtures/leave_contract/catalog.json').read_text())
-    source = next(game for game in catalog if game['id'] == SOURCE_ID)
-    schemas = copy.deepcopy(source['game_schemas'])
+    schemas = json.loads((DEST / 'backgammon.schema.json').read_text())
     # The old inferred contract omitted "off" and admitted arbitrary fields.
     # Describe exactly the authority's three move shapes, including bearing off;
     # clients cannot submit state/dice overrides. Server bytes remain identical.
@@ -184,7 +182,7 @@ def illustration(view, caption):
 
 
 def package():
-    code = (ROOT / 'games/audit-batch3/backgammon.server.js').read_text()
+    code = (ROOT / 'games/declarative/backgammon.server.js').read_text()
     if hashlib.sha256(code.encode()).hexdigest() != SOURCE_SHA256:
         raise RuntimeError('Ordinary Backgammon authority changed; audit source identity before rebuilding')
     schemas = source_schemas()

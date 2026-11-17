@@ -855,7 +855,7 @@
   "ui.declarative.latest_scene": "JSON لأحدث مشهد",
   "ui.declarative.live_preview": "معاينة مباشرة",
   "ui.declarative.ui_messages": "رسائل الواجهة",
-  "ui.declarative.introduction": "افحص عقد المشاهد الأصلية باستخدام رسائل JSON. تعرض ساحة التجربة المظهر فقط. استخدم مسار الاختبار المسجل للتحقق من القواعد وإنهاء المباريات وإرسال لعبة كاملة.",
+  "ui.declarative.introduction": "افحص عقد المشهد الأصلي باستخدام رسائل JSON. تتيح ساحة التجربة هذه معاينة العرض فقط. استخدم واجهة REST API التصريحية للتحقق من حزمة لعبة كاملة وإرسالها.",
   "ui.declarative.moves_hint": "تظهر الحركات هنا في رسائل make_move. لا تطبقها ساحة التجربة على أي مباراة.",
   "ui.declarative.player_one": "اللاعب 1",
   "ui.declarative.player_two": "اللاعب 2",
@@ -948,5 +948,10 @@
   "ui.portal.sync_review": "تحتاج المزامنة إلى مراجعة — افتح عناصر التحكم",
   "ui.portal.offline_practice": "دون اتصال · اللعب على هذا الجهاز",
   "ui.portal.offline_moves": "دون اتصال · تُحفظ الحركات على هذا الجهاز",
-  "ui.match.share_match": "مشاركة المباراة"
+  "ui.match.share_match": "مشاركة المباراة",
+  "ui.portal.legacy_game_retired": "لم تعد هذه اللعبة القديمة متاحة في البوابة.",
+  "error.html_games_read_only": "ألعاب HTML للقراءة فقط؛ أرسل حزمة declarative_ui",
+  "error.legacy_game_not_found": "اللعبة القديمة غير موجودة",
+  "error.html_matches_retired": "لم تعد ألعاب HTML تدعم المباريات",
+  "error.page_limit_invalid": "يجب أن يكون الحد بين 1 و100"
 }

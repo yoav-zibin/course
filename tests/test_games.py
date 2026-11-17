@@ -1,6 +1,7 @@
 from typing import Any
+from dataclasses import replace
 
-from game_platform.tests.helpers import Api, ECHO_SERVER_CODE, TEST_GAME_SCHEMAS, error, validation_errors
+from game_platform.tests.helpers import Api, ECHO_SERVER_CODE, TEST_GAME_SCHEMAS, TEST_DECLARATIVE_UI, error, validation_errors
 
 POKER: dict[str, Any] = {
     "name": "Poker",
@@ -40,7 +41,8 @@ def test_create_and_get_a_game(api: Api) -> None:
         "published": True,
         "supports_local_practice": True,
         "cover_url": "",
-        "renderer_type": "html",
+        "renderer_type": "declarative",
+        "declarative_ui": TEST_DECLARATIVE_UI,
     }
     assert api.ok("GET", f"/games/{game['id']}") == game
 
@@ -94,7 +96,7 @@ def test_update_creates_a_new_version_changing_only_the_given_fields(
         "PATCH",
         f"/games/{before['id']}",
         as_user=alice,
-        json={"name": "Poker 2", "allowed_player_counts": [4, 2]},
+        json={"name": "Poker 2", "description": "Updated rules description"},
     )
     changed = {
         key: (before[key], after[key]) for key in before if before[key] != after[key]
@@ -102,7 +104,7 @@ def test_update_creates_a_new_version_changing_only_the_given_fields(
     assert changed == {
         "version": (1, 2),
         "name": ("Poker", "Poker 2"),
-        "allowed_player_counts": ([2, 3, 6], [2, 4]),
+        "description": ("Texas hold'em", "Updated rules description"),
         "updated_at": ("2026-01-01T00:02:00Z", "2026-01-01T00:03:00Z"),
     }
     # The game resolves to its latest version, and every version stays available.
@@ -179,11 +181,13 @@ def test_matches_follow_the_game_version_they_were_created_with(api: Api) -> Non
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game_id = api.new_game(owner=alice, allowed_player_counts=[2, 3])
     old_match_id = api.new_match(owner=alice, game_id=game_id, joiners=[bob])
-    api.ok(
-        "PATCH",
-        f"/games/{game_id}",
-        as_user=alice,
-        json={"allowed_player_counts": [3], "code": "<div>v2</div>"},
+    original = api.platform._store.get_game(game_id)
+    api.platform.import_agent_game(
+        caller_id=alice, existing_game_id=game_id, name=original.name,
+        description=original.description,
+        rules=replace(original.rules, allowed_player_counts=(3,)),
+        code=original.code, server_code=original.server_code,
+        game_schemas=original.game_schemas, import_package=original.import_package,
     )
     new_match_id = api.new_match(owner=alice, game_id=game_id, joiners=[bob])
 

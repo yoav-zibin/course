@@ -1,6 +1,6 @@
 "use strict";
 
-// Presentation only: never moves/reloads the iframe or changes a match's state.
+// Presentation only: keeps the game renderer mounted or changes a match's state.
 window.PortalMatchLayout = (() => {
   const $ = id => document.getElementById(id);
   const landscape = window.matchMedia(
@@ -35,7 +35,7 @@ window.PortalMatchLayout = (() => {
     document.body.classList.toggle("match-page", active);
     document.body.classList.toggle("match-focus", focused);
     document.body.classList.toggle("match-lobby", active && waiting);
-    // Fade the toolbar after the layout switches; never transform/reload the game iframe.
+    // Fade the toolbar after the layout switches; keep the game renderer mounted.
     if (focusChanged && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       const toolbar = $("match-focus-toggle").parentElement;
       toolbar?.getAnimations?.().forEach(animation => animation.cancel());

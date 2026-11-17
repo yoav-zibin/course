@@ -64,7 +64,7 @@ def test_legacy_game_metadata_still_converts_import_artifacts():
     ref = store.ref('games', game_id)
     raw = store.raw_get(ref)
     record = json.loads(raw['json'])
-    assert record.get('import_package') is None
+    record['import_package'] = None  # An old record predates imported declarative packages.
     record['builder_workflow'] = {'artifacts': {'logic': {'value': {'text': 'Legacy rules'}}}}
     store.raw_put(ref, {**raw, 'json': json.dumps(record)})
     assert store.get_game_without_code(game_id).import_package['rules_text'] == 'Legacy rules'

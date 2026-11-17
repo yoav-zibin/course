@@ -1,3 +1,4 @@
+from game_platform.tests.helpers import TEST_DECLARATIVE_UI
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -75,6 +76,7 @@ def test_links_use_the_configured_public_address() -> None:
             code="",
             server_code=ECHO_SERVER_CODE,
             game_schemas=TEST_GAME_SCHEMAS,
+            import_package={"declarative_ui": TEST_DECLARATIVE_UI},
         )
     ).model_dump(mode="json")
     match = client.post("/matches", headers=headers, json={"game_id": game["id"]}).json()

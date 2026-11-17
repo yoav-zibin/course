@@ -24,7 +24,9 @@ still reports a failed save rather than discarding progress.
   frozen clock, and `estimateWinChance`. A parity test guards this contract.
 - Rules execute in a Worker inside an opaque-origin sandbox, with network access
   blocked by CSP and a parent-controlled timeout. No account password is passed
-  to game code. The UI still runs in its existing separate sandboxed iframe.
+  to game code. Declarative presentation reduces view messages in isolation, and
+  the trusted renderer draws the returned scene. Cached HTML games, local matches
+  and queued moves are removed from the portal cache.
 - Full rules state stays in device storage; the UI receives the appropriate
   `viewFor` output. State, turn, initial position, and move history survive reload.
 - Against-computer practice advances computer turns locally. Pass-and-play uses

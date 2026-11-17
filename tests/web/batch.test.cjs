@@ -64,11 +64,6 @@ function setup(fetchStub) {
         return false;
       },
     },
-    GameFrame: class {
-      load() {}
-      unload() {}
-      send() {}
-    },
     PushNotifications: { setup: () => {}, toggle: () => {} },
     ApiError: class ApiError extends Error {
       constructor(status, detail) {

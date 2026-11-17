@@ -65,7 +65,7 @@ test('Escape closes only the login dialog before reaching match controls', async
   expect((await request.post(`/matches/${match.id}/start`, {headers, data: {}})).ok()).toBeTruthy();
   await loginAs(page, user);
   await page.goto(`/static/portal.html?skin=classic#match=${match.id}`);
-  await expect(page.frameLocator('#game-box iframe').locator('#board button')).toHaveCount(9);
+  await expect(page.locator('#game-box .declarative-stage')).toBeVisible();
   const controls = page.locator('#match-controls-toggle');
   if (await controls.getAttribute('aria-expanded') !== 'true') await controls.click();
   await page.evaluate('Auth.openDialog()');

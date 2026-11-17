@@ -10,7 +10,7 @@ import random
 from dataclasses import replace
 
 from game_platform.scaling_service import ScalablePlatform
-from game_platform.scaling_tools import seed
+from game_platform.scaling_tools import seed, synthetic_presentation
 
 LOGIC = """
 const game = {
@@ -86,6 +86,7 @@ def generate(store, *, run_id, users, games, matches, max_writes):
                 replace(
                     game,
                     server_code=LOGIC,
+                    import_package={"declarative_ui": synthetic_presentation()},
                     rules=replace(game.rules, allowed_player_counts=(1, 2, 3, 4)),
                     game_schemas=GAME_SCHEMAS,
                 )

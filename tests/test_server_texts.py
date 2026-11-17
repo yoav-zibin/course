@@ -2,15 +2,16 @@
 (game_messages.py, docs/game-translation.md "Texts the server writes")."""
 
 import json
-import sys
 from pathlib import Path
+import copy
 from typing import Any
 
 import pytest
 
 from game_platform import game_messages, game_server_texts, game_text
 from game_platform.service import GameMessageError
-from game_platform.tests.helpers import Api
+from game_platform.tests.helpers import Api, TEST_DECLARATIVE_UI
+from game_platform.declarative_ui import client_document
 from game_platform.translation import FakeTranslator, TranslationError, TranslationService
 
 GAMES_DIR = Path(__file__).parent.parent / "games"
@@ -124,37 +125,6 @@ def test_the_reader_finds_literals_templates_concatenations_and_conditionals() -
     assert [(source, "variable" in reason) for _, source, reason in result.unreadable] == [("err", True)]
 
 
-def test_the_tool_adds_templates_once_and_leaves_the_rest_of_the_page_alone(tmp_path: Path) -> None:
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location("extract_server_texts", GAMES_DIR.parent / "tools" / "extract_server_texts.py")
-    assert spec and spec.loader
-    tool = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = tool
-    spec.loader.exec_module(tool)
-    page = (
-        '<html><script type="application/json" id="i18n-strings">\n{\n  "title": "Cards",\n  "wins": "{name} wins!"\n}\n</script>'
-        "<script>t('title')</script></html>"
-    )
-    (tmp_path / "cards.html").write_text(page, encoding="utf-8")
-    (tmp_path / "cards.server.js").write_text(SERVER, encoding="utf-8")
-    game = tool.Game("cards.html", tmp_path / "cards.html", tmp_path / "cards.server.js")
-    review, skipped = tool.process([game], write=True)
-    assert skipped == {}
-    assert any("NOT READ" in line and "`err`" in line for line in review)
-    written = (tmp_path / "cards.html").read_text(encoding="utf-8")
-    table = game_text.extract_strings(written)
-    assert table is not None and table["title"] == "Cards" and table["wins"] == "{name} wins!"
-    assert table["server_game_over"] == "game over"
-    assert table["server_need_more_cards"] == "need {p1} more cards"
-    assert written.endswith("<script>t('title')</script></html>")
-    # a second run adds nothing
-    tool.process([game], write=True)
-    assert (tmp_path / "cards.html").read_text(encoding="utf-8") == written
-    # and the table now covers the server code, which the checker confirms
-    assert game_text.server_text_problems(table, SERVER) == []
-
-
 # The checker for new games
 
 
@@ -185,22 +155,14 @@ def test_the_instructions_to_the_agent_explain_server_texts_with_an_example() ->
     assert "InvalidMove" in rules
 
 
-def test_every_repository_game_covers_the_texts_its_server_writes() -> None:
-    """The tables were filled by tools/extract_server_texts.py: a text the reader finds in a
-    server file has a template (a new text in the code without one shows here)."""
-    checked = 0
-    for page in [*GAMES_DIR.glob("*.html"), *GAMES_DIR.glob("*/*.html")]:
-        if page.name.endswith(".original.html"):
-            continue
-        server = page.with_name(page.stem + ".server.js")
-        if not server.exists():
-            server = page.with_name(page.stem + ".original.server.js")
-        table = game_text.extract_strings(page.read_text(encoding="utf-8"))
-        if not server.exists() or table is None:
-            continue
-        checked += 1
-        assert game_text.server_text_problems(table, server.read_text(encoding="utf-8")) == [], page.name
-    assert checked >= 50
+def test_every_declarative_game_covers_the_texts_its_server_writes() -> None:
+    from game_platform.declarative_ui import EXAMPLE_IDS
+    packages = [GAMES_DIR / "declarative" / f"{game_id}.json" for game_id in EXAMPLE_IDS]
+    assert len(packages) >= 11
+    for path in packages:
+        body = json.loads(path.read_text(encoding="utf-8"))
+        assert game_text.server_text_problems(body["declarative_ui"].get("strings", {}),
+                                               body["server_code"]) == [], path.name
 
 
 # The platform: the response of a rejected move
@@ -212,11 +174,10 @@ class TranslatingApi(Api):
         self.platform._translation = TranslationService(self.platform._store, translator, clock=self.platform._clock)
 
 
-GAME_PAGE = (
-    '<script type="application/json" id="i18n-strings">'
-    + json.dumps({"your_turn": "Your turn", **{k: v for k, v in TABLE.items() if k.startswith("server_") and k != "server_any"}})
-    + "</script><script>t('your_turn')</script>"
-)
+GAME_SPEC = copy.deepcopy(TEST_DECLARATIVE_UI)
+GAME_SPEC['strings'] = {"your_turn": "Your turn", **{k: v for k, v in TABLE.items()
+                                                     if k.startswith("server_") and k != "server_any"}}
+GAME_PAGE = client_document(GAME_SPEC)
 
 
 def make_game(api: TranslatingApi) -> Any:
@@ -225,7 +186,8 @@ def make_game(api: TranslatingApi) -> Any:
     owner = api.new_user("owner")
     game = api.create_game({
         "name": "Cards", "description": "d", "allowed_player_counts": [2],
-        "allows_leave_mid_match": False, "allows_join_mid_match": False, "code": GAME_PAGE,
+        "allows_leave_mid_match": False, "allows_join_mid_match": False,
+        "code": GAME_PAGE, "declarative_ui": GAME_SPEC,
     }, owner)
     api.game = api.platform.get_game_version(game["id"], 1, caller_id=owner)  # type: ignore[attr-defined]
     return api.game  # type: ignore[attr-defined]
@@ -324,11 +286,13 @@ def test_a_failing_translator_still_answers_400_with_the_english_text() -> None:
 def test_a_rejected_move_of_tictactoe_is_answered_in_the_viewers_language() -> None:
     api = TranslatingApi(FakeTranslator())
     owner, guest = api.new_user("owner"), api.new_user("guest")
+    body = json.loads((GAMES_DIR / "declarative" / "tictactoe.json").read_text())
     game = api.create_game({
-        "name": "Tic-tac-toe", "allowed_player_counts": [2],
-        "code": (GAMES_DIR / "tictactoe.html").read_text(encoding="utf-8"),
-        "server_code": (GAMES_DIR / "tictactoe.server.js").read_text(encoding="utf-8"),
-        "game_schemas": json.loads((GAMES_DIR / "tictactoe.schema.json").read_text(encoding="utf-8")),
+        "name": body["name"], "allowed_player_counts": body["allowed_player_counts"],
+        "code": client_document(body["declarative_ui"]),
+        "declarative_ui": body["declarative_ui"],
+        "server_code": body["server_code"],
+        "game_schemas": {key: body["unit_tests"][key + "_schema"] for key in ("state", "move", "view")},
     }, owner)
     match = api.ok("POST", "/matches", as_user=owner, json={"game_id": game["id"], "num_computer_opponents": 0})
     api.ok("POST", f"/matches/{match['id']}/join", as_user=guest)
@@ -344,8 +308,8 @@ def test_a_rejected_move_of_tictactoe_is_answered_in_the_viewers_language() -> N
 
     response = post_move("es")
     assert response.status_code == 400
-    assert response.json()["detail"] == "[es] that cell is taken"
+    assert response.json()["detail"] == "[es] Illegal move"
     assert response.json()["code"] == "game_message"
-    assert response.json()["message_key"] == "server_that_cell_is_taken"
+    assert response.json()["message_key"] == "server_invalid"
     in_english = post_move()
-    assert in_english.json()["detail"] == "that cell is taken"
+    assert in_english.json()["detail"] == "Illegal move"

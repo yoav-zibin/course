@@ -53,6 +53,8 @@ from game_platform.schemas import (
     ExperimentVariantCreate,
     GameOut,
     GameSummaryOut,
+    LegacyGameOut,
+    LegacyGameDetailOut,
     GameUpdate,
     GoogleLogin,
     HealthOut,
@@ -792,6 +794,62 @@ def email_verify(
 # there is no direct create endpoint).
 
 
+@router.get("/legacy/games")
+def list_legacy_games(
+    platform: Platform,
+    owner_user_id: str | None = None,
+    q: str = "",
+    limit: int = 50,
+    cursor: str | None = None,
+) -> dict[str, object]:
+    """Read-only HTML archive. Follow next_cursor even after an empty page."""
+    if not 1 <= limit <= 100:
+        raise InvalidRequestError("limit must be between 1 and 100")
+    store = platform._store
+    words = q.casefold().split()
+    scope = ["legacy-html", owner_user_id, words]
+    if getattr(store, "scalable", False):
+        filters = [("deleted", "==", False), ("published", "==", True)]
+        if owner_user_id is not None:
+            filters.append(("owner_user_id", "==", owner_user_id))
+        try:
+            result = store.page("games", filters=filters, limit=limit,
+                                cursor=cursor, scope=scope)
+        except ValueError as exc:
+            raise InvalidRequestError(str(exc)) from exc
+        games, next_cursor = result.items, result.next_cursor
+    else:
+        from game_platform.paging import decode_cursor, encode_cursor
+
+        try:
+            after = decode_cursor(scope, cursor)
+        except ValueError as exc:
+            raise InvalidRequestError(str(exc)) from exc
+        games = sorted((game for game in store.list_games(owner_user_id=owner_user_id)
+                        if game.id > (after or "")), key=lambda game: game.id)
+        next_cursor = encode_cursor(scope, games[limit - 1].id) if len(games) > limit else None
+        games = games[:limit]
+    return {
+        "items": [GameSummaryOut.of(game) for game in games
+                  if not game.is_declarative
+                  and all(word in f"{game.name} {game.description}".casefold() for word in words)],
+        "next_cursor": next_cursor,
+    }
+
+
+@router.get("/legacy/games/{game_id}")
+def get_legacy_game(
+    platform: Platform, game_id: str, caller_id: OptionalCallerId, response: Response
+) -> LegacyGameDetailOut:
+    """All retained HTML versions and artifacts for migration; no submission secrets."""
+    versions = platform.get_legacy_game_versions(game_id, caller_id=caller_id)
+    response.headers["Cache-Control"] = "private, no-store"
+    return LegacyGameDetailOut(
+        **LegacyGameOut.of(versions[-1]).model_dump(),
+        versions=[LegacyGameOut.of(game) for game in versions],
+    )
+
+
 @router.get("/games")
 def list_games(
     platform: Platform,
@@ -1498,14 +1556,6 @@ def portal(request: Request) -> RedirectResponse:
     return RedirectResponse("/static/portal.html" + query, status_code=307)
 
 
-@debug_router.get("/game-test")
-def game_test() -> FileResponse:
-    # Static page for game authors to test a game before submitting it.
-    # It runs the platform's checks and a local player in the browser; it
-    # needs no server state, so it is not password-gated (like /portal).
-    return FileResponse(_STATIC_DIR / "game-test.html")
-
-
 @debug_router.get("/r/{code}")
 def short_invite_link(code: str) -> RedirectResponse:
     """Short invite links: /r/<referral code> opens the portal crediting that user.
@@ -2055,7 +2105,7 @@ async def _revalidate_pages(
         # The cover endpoint explicitly chooses public caching or private
         # no-store after checking visibility. Other game data stays private.
         return response
-    if request.url.path.startswith(("/games/", "/matches/", "/users/me/")):
+    if request.url.path.startswith(("/games/", "/legacy/", "/matches/", "/users/me/")):
         response.headers["Cache-Control"] = "private, no-store"
     elif request.method == "GET" and not response.headers.get(
         "content-type", ""

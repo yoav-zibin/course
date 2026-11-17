@@ -18,6 +18,14 @@ from game_platform.store import Store
 from game_platform.game_logic import GameLogic
 
 TEST_GAME_SCHEMAS = {"state": True, "move": True, "view": True}
+TEST_DECLARATIVE_UI = {
+    "format": "buildplay-ui", "version": 1,
+    "viewport": {"width": 300, "height": 300},
+    "boards": [{"id": "main", "kind": "grid", "x": 0, "y": 0,
+                "width": 300, "height": 300, "rows": 1, "columns": 1}],
+    "piece_types": {"token": {"shape": "circle"}}, "strings": {},
+    "ui_code": "const gameUI = {reduce() {return {scene: {}};}};",
+}
 
 # A pass-through game for platform-mechanics tests: the mover names the
 # resulting state and the next turn (by seat index), and the game applies
@@ -211,6 +219,7 @@ class Api:
             code=code,
             server_code=server_code,
             game_schemas=game_schemas,
+            import_package={"declarative_ui": body.get("declarative_ui", TEST_DECLARATIVE_UI)},
         )
         return GameOut.of(game).model_dump(mode="json")
 
@@ -234,6 +243,7 @@ class Api:
             code="<div>poker</div>",
             server_code=ECHO_SERVER_CODE,
             game_schemas=TEST_GAME_SCHEMAS,
+            import_package={"declarative_ui": TEST_DECLARATIVE_UI},
         )
         return game.id
 

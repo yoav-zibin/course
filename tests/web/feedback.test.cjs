@@ -83,8 +83,7 @@ function setupPortal(me) {
     navigator:{onLine:true},localStorage:{},PortalOffline:class {async api(){return {};}read(){return {};}write(){}},
     document:{getElementById:node,body:{classList:{toggle(){}}}},window:{addEventListener(){}},
     location:{hash:'',search:'',assign(){}},history:{replaceState(){}},
-    Auth:{current:()=>me},I18n,GameFrame:class{load(){}unload(){}send(){}},
-    apiRequest:async()=>({}),formatTime:()=>'',shortId:x=>x,showPageError(){},el:(tag,attrs={},...children)=>({...attrs,children})});
+    Auth:{current:()=>me},I18n,apiRequest:async()=>({}),formatTime:()=>'',shortId:x=>x,showPageError(){},el:(tag,attrs={},...children)=>({...attrs,children})});
   vm.runInContext(read('portal.js').replace(/main\(\);\s*$/,''),ctx);
   const run=code=>vm.runInContext(code,ctx);
   run('refresh=async()=>{}');

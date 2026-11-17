@@ -855,7 +855,7 @@
   "ui.declarative.latest_scene": "最新场景 JSON",
   "ui.declarative.live_preview": "实时预览",
   "ui.declarative.ui_messages": "界面消息",
-  "ui.declarative.introduction": "通过 JSON 消息查看原生场景契约。本试验场仅预览呈现效果。请使用有记录的测试流程来验证规则、完成对局并提交完整游戏。",
+  "ui.declarative.introduction": "通过 JSON 消息查看原生场景协议。此演练区仅预览展示效果。请使用声明式 REST API 验证并提交完整的游戏包。",
   "ui.declarative.moves_hint": "移动会以 make_move 消息显示在此处。试验场不会将这些移动应用于对局。",
   "ui.declarative.player_one": "玩家 1",
   "ui.declarative.player_two": "玩家 2",
@@ -948,5 +948,10 @@
   "ui.portal.sync_review": "同步需要检查 — 请打开控制面板",
   "ui.portal.offline_practice": "离线 · 正在此设备上游戏",
   "ui.portal.offline_moves": "离线 · 操作保存在此设备上",
-  "ui.match.share_match": "分享对局"
+  "ui.match.share_match": "分享对局",
+  "ui.portal.legacy_game_retired": "这款旧版游戏已无法在门户中使用。",
+  "error.html_games_read_only": "HTML 游戏为只读；请提交 declarative_ui 游戏包",
+  "error.legacy_game_not_found": "未找到旧版游戏",
+  "error.html_matches_retired": "HTML 游戏不再支持对局",
+  "error.page_limit_invalid": "上限必须介于 1 到 100 之间"
 }

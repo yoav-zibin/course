@@ -478,9 +478,9 @@ class GameSummaryOut(BaseModel):
             updated_at=game.updated_at,
             deleted=game.deleted,
             published=game.published,
-            supports_local_practice=True,
-            cover_url=f"/games/{game.id}/versions/{game.version}/cover" if (game.import_package or {}).get("images") else "",
-            renderer_type="declarative" if (game.import_package or {}).get("declarative_ui") else "html",
+            supports_local_practice=game.is_declarative,
+            cover_url=f"/games/{game.id}/versions/{game.version}/cover" if game.is_declarative and (game.import_package or {}).get("images") else "",
+            renderer_type="declarative" if game.is_declarative else "html",
         )
 
 
@@ -511,6 +511,26 @@ class GameOut(GameSummaryOut):
             server_code=game.server_code,
             declarative_ui=(game.import_package or {}).get("declarative_ui"),
         )
+
+
+class LegacyGameOut(GameOut):
+    """A retained HTML version with every migration artifact, excluding credentials."""
+
+    import_package: dict[str, JsonValue] | None = None
+
+    @classmethod
+    def of(cls, game: Game) -> "LegacyGameOut":
+        from game_platform.models import with_package_secret_hash
+
+        return cls(
+            **GameOut.of(game).model_dump(),
+            import_package=(with_package_secret_hash(game.import_package, None)
+                            if game.import_package is not None else None),
+        )
+
+
+class LegacyGameDetailOut(LegacyGameOut):
+    versions: list[LegacyGameOut]
 
 
 class FeedbackCreate(_Request):

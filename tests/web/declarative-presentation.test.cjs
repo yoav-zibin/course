@@ -8,7 +8,7 @@ const {webcrypto, createHash} = require('node:crypto');
 const root = path.join(__dirname, '../..');
 const source = fs.readFileSync(path.join(root, 'static/declarative-presentation.js'), 'utf8');
 const legacy = JSON.parse(fs.readFileSync(path.join(root, 'tests/fixtures/declarative/backgammon-v1-ui.json'), 'utf8'));
-const rules = fs.readFileSync(path.join(root, 'games/audit-batch3/backgammon.server.js'), 'utf8');
+const rules = fs.readFileSync(path.join(root, 'games/declarative/backgammon.server.js'), 'utf8');
 const repaired = () => JSON.parse(fs.readFileSync(path.join(root, 'static/backgammon-declarative-ui.json'), 'utf8'));
 const clone = value => JSON.parse(JSON.stringify(value));
 const game = () => ({id: '5f5293c3-2a3a-4eec-b631-9debf59be0ca', version: 1,

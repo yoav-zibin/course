@@ -1,6 +1,6 @@
 // Portal: list your matches, create, join, start, leave and delete them, and play them.
 
-// HTML games use a sandbox; declarative games render platform-owned scene nodes.
+// Games render platform-owned declarative scene nodes.
 // The page polls the server and
 // sends the game state_changed whenever the match changes.
 // Identity comes from Auth (the account menu); data comes from the public and
@@ -220,7 +220,7 @@ const state = {
   pendingInvite: null, // a match invite token from #invite=, until it is accepted or dismissed
   match: null, // the selected match, from GET /matches/{id}
   armed: null, // an action waiting for a confirming second click
-  loaded: null, // "match_id@game_id@version" loaded in the iframe
+  loaded: null, // "match_id@game_id@version" loaded in the renderer
   lastSent: null, // the last state_changed sent, as JSON
   moveInFlight: false,
   refreshing: false,
@@ -244,34 +244,22 @@ const state = {
     new URLSearchParams(location.hash.slice(1)).get("game"),
 };
 
-const htmlFrame = new GameFrame(
-  $("game-box"),
-  (move) => onMakeMove(move),
-  // A game that posts anything but make_move is misbehaving, but that is the
-  // game's bug, not the player's: log it for debugging and stay silent in
-  // the UI instead of flashing an error the player cannot act on.
-  (problem) => console.error(problem),
-);
-
-
-// Both presentation formats share the authoritative move path, version pinning,
-// replay and device practice. Declarative UI never receives platform credentials.
+// Declarative presentation shares the authoritative move path and pinned version.
 const frame = {
   declarative: null,
   lastMessage: null,
-  load(code, spec, options = {}) {
+  load(spec, options = {}) {
     this.unload();
-    if (spec) {
-      this.declarative = DeclarativeUI.mount($("game-box"), spec, {
+    if (!spec) throw new Error(I18n.t("ui.portal.legacy_game_retired", {}, "This legacy game is no longer available in the portal."));
+    this.declarative = DeclarativeUI.mount($("game-box"), spec, {
         animate: options.animate === true,
         onMove: move => onMakeMove({move}),
         onError: error => console.error(I18n.t("ui.declarative.error_prefix", {}, "Declarative game UI:"), error),
       });
-    } else htmlFrame.load(code);
   },
   async send(message, options = {}) {
     const host = this.declarative;
-    if (!host) return htmlFrame.send(message);
+    if (!host) return false;
     const applied = await host.send(message, options);
     if (applied === true && this.declarative === host) this.lastMessage = {
       move_count: message.move_count, replay: message.replay,
@@ -282,7 +270,7 @@ const frame = {
   unload() {
     if (this.declarative) { this.declarative.destroy(); this.declarative = null; }
     this.lastMessage = null;
-    htmlFrame.unload();
+    $("game-box").replaceChildren();
   },
 };
 
@@ -694,7 +682,7 @@ async function ensureDetails() {
     (async () => {
       if (!state.match) return;
       const key = `${state.match.game_id}@${state.match.game_version}`;
-      if (state.gameCache.get(key)?.code) return;
+      if (state.gameCache.get(key)?.declarative_ui) return;
       try {
         await fetchGameVersion(state.match.game_id, state.match.game_version);
       } catch {
@@ -705,7 +693,7 @@ async function ensureDetails() {
     (async () => {
       if (!detailGame) return;
       const key=`${detailGame.id}@${detailGame.version}`;
-      if (state.gameCache.get(key)?.code) return;
+      if (state.gameCache.get(key)?.declarative_ui) return;
       try {
         await fetchGameVersion(detailGame.id,detailGame.version);
       } catch {
@@ -898,7 +886,7 @@ async function refreshLocked() {
     // A page may omit the game currently on screen. Keep the previous
     // selection usable until its detail arrives instead of publishing a
     // temporary catalog that makes an enabled Create button reject it.
-    let nextGames = games;
+    let nextGames = games.filter(game => game.renderer_type !== "html");
     const detailGameId = state.detailGameId;
     if (detailGameId && !games.some(game=>game.id===detailGameId)) {
       try {
@@ -907,7 +895,7 @@ async function refreshLocked() {
       } catch (error) { if(error.status!==404) throw error; }
     }
     if (user?.id !== me()?.id) return;
-    state.games = nextGames;
+    state.games = nextGames.filter(game => game.renderer_type !== "html");
     state.myMatches = myMatches;
     state.openMatches = openMatches;
     if (recentGamesDue && recentGamesRequestVersion === state.recentGamesRequestVersion && user?.id === me()?.id) {
@@ -1229,14 +1217,9 @@ function libraryGames() {
   ];
 }
 
-// Keep the renderer visible even when the translated name omits its suffix.
-// The legacy suffix also recognizes saved games and invite views from older APIs.
 function displayGameName(game) {
   if (isRandomGame(game)) return I18n.t("ui.games.random_name", {}, game.name);
-  const suffix = /\s*(?:\(Declarative\)|·\s*Declarative)\s*$/i;
-  const shown = I18n.gameName(game.id, game.name);
-  const declarative = game.renderer_type === "declarative" || game.declarative_ui || suffix.test(game.name);
-  return declarative ? `${shown.replace(suffix, "").trim()} (Declarative)` : shown;
+  return I18n.gameName(game.id, game.name);
 }
 
 function displayGameDescription(game) {
@@ -1765,8 +1748,8 @@ function renderMatch() {
     else if (match.resumeTurn) actions.push(actionButton(I18n.t("ui.match.resume_practice", {}, "Resume practice"),async()=>{offline.resumePractice(match.id);state.lastSent=null;}));
     secondaryActions.push(actionButton(I18n.t("ui.match.remove_practice", {}, "Remove practice from list"),async()=>{await portalRequest("DELETE",`/matches/${match.id}`);selectMatch(null);},{danger:true,confirm:I18n.t("ui.match.remove_practice_confirm", {}, "Archive this practice and remove it from your list?")}));
   }
-  // Both API versions can practice on-device, without tokens or server writes.
-  if (game?.code)
+  // Pinned declarative rules and presentation support another on-device practice.
+  if (game?.declarative_ui && game.server_code)
     secondaryActions.push(
       actionButton(I18n.t("ui.match.new_practice", {}, "Start a new practice"), async () => {
         // A local match's new practice mirrors its own mode and size; from a
@@ -2065,13 +2048,12 @@ function render() {
   renderHistory();
 }
 
-// The game iframe
+// The declarative game renderer
 
-async function gameCode(match) {
+async function gamePresentation(match) {
   const key = `${match.game_id}@${match.game_version}`;
-  let game = state.gameCache.get(key);
-  if (!game?.code) game = await fetchGameVersion(match.game_id, match.game_version);
-  return game.code;
+  const cached = state.gameCache.get(key);
+  return cached?.declarative_ui ? cached : fetchGameVersion(match.game_id, match.game_version);
 }
 
 async function browseHistory(direction) {
@@ -2208,16 +2190,13 @@ async function syncGame() {
   const context = contextSnapshot();
   const stillCurrent = () => contextSnapshot() === context;
   if (state.loaded !== key) {
-    const code = await gameCode(match);
-    if (!stillCurrent()) return;
-    const themedCode = await withPortalSkinAdapter(match.game_id, code);
+    const fullGame = await gamePresentation(match);
     if (!stillCurrent()) return;
     if (state.loaded !== key) {
-      const fullGame = state.gameCache.get(`${match.game_id}@${match.game_version}`);
       const presentation = await reviewedDeclarativePresentation(fullGame);
       if (!stillCurrent()) return;
       if (state.loaded !== key) {
-        frame.load(themedCode, presentation, {animate: match.localMode !== "pass"});
+        frame.load(presentation, {animate: match.localMode !== "pass"});
         state.loaded = key;
         state.lastSent = null;
       }
@@ -2254,7 +2233,6 @@ async function syncGame() {
   });
   message.token_pot = view.token_pot ?? 0;
   message.last_move_player_index = replay ? null : (match.last_move_player_index ?? null);
-  if (PORTAL_SKINNED_GAME_IDS.has(match.game_id)) message.skin_palette = portalGameSkinPalette();
   // Let game UIs distinguish a historical snapshot from a live opponent turn.
   message.replay = replay ? { index: replay.index, total: match.move_count } : null;
   // The viewer's language and, for a game with a string table, its texts in that language.
@@ -2276,84 +2254,6 @@ async function syncGame() {
     }
     await frame.send(message, {animate: transition.animate});
   }
-}
-
-// These five standalone games cannot read the portal stylesheet from their
-// sandboxed iframe. Send the active palette through the existing game channel.
-const PORTAL_SKINNED_GAME_IDS = new Set([
-  "c9bc5420-b2da-4ab0-a10d-9491ccd0f2fe", // Rock Paper Scissors
-  "d7f3d174-0ce3-4ec8-bdbd-5c0e7e08dae6", // Pass the Pigs
-  "41b88e29-3402-4a1c-920d-8429c7b880e5", // Tsoro Yematatu
-  "dad2260d-cc40-47e0-be43-e51539df694f", // Teeko
-  "7a5bb515-d3b3-4330-bdad-45e652a6be9b", // Bầu cua cá cọp
-]);
-
-function portalGameSkinPalette() {
-  const root = getComputedStyle(document.documentElement);
-  const value = (name, fallback) => root.getPropertyValue(name).trim() || fallback;
-  return {
-    scheme: root.colorScheme === "light" ? "light" : "dark",
-    background: value("--color-bg-0", "#10141f"),
-    panel: value("--color-bg-1", "#171c2a"),
-    raised: value("--color-bg-2", "#1c2233"),
-    hover: value("--color-bg-3", "#26304a"),
-    text: value("--color-text-primary", "#eef0f5"),
-    muted: value("--color-text-tertiary", "#9aa3b8"),
-    border: value("--color-border-2", "#343e55"),
-    accent: value("--color-accent", "#c6f432"),
-    accentHover: value("--color-accent-hover", "#d4f75c"),
-    focus: value("--color-focus-ring", "#c6f432"),
-  };
-}
-
-let portalGameSkinCssPromise = null;
-
-function loadPortalGameSkinCss() {
-  if (!portalGameSkinCssPromise) {
-    portalGameSkinCssPromise = fetch("/static/portal-game-skin.css?v=1", {cache: "force-cache"})
-      .then(response => {
-        if (!response.ok) throw new Error(String(response.status));
-        return response.text();
-      });
-  }
-  return portalGameSkinCssPromise;
-}
-
-async function withPortalSkinAdapter(gameId, code) {
-  if (!PORTAL_SKINNED_GAME_IDS.has(gameId)) return code;
-  let cssText;
-  try {
-    cssText = await loadPortalGameSkinCss();
-  } catch {
-    return code;
-  }
-  const adapter = function installPortalSkinAdapter(cssText) {
-    const style = document.createElement("style");
-    style.textContent = cssText;
-    document.head.append(style);
-    const vars = {
-      scheme: "--portal-skin-scheme", background: "--portal-skin-background",
-      panel: "--portal-skin-panel", raised: "--portal-skin-raised", hover: "--portal-skin-hover",
-      text: "--portal-skin-text", muted: "--portal-skin-muted", border: "--portal-skin-border",
-      accent: "--portal-skin-accent", accentHover: "--portal-skin-accent-hover", focus: "--portal-skin-focus",
-    };
-    window.addEventListener("message", event => {
-      if (event.source !== parent || event.data?.type !== "state_changed" || !event.data.skin_palette) return;
-      const palette = event.data.skin_palette;
-      for (const [key, property] of Object.entries(vars)) {
-        const color = palette[key];
-        if (key === "scheme") {
-          document.documentElement.style.setProperty(property, color === "light" ? "light" : "dark");
-        } else if (typeof color === "string" && color.length <= 64 && CSS.supports("color", color)) {
-          document.documentElement.style.setProperty(property, color);
-        }
-      }
-    });
-  };
-  const cssArgument = JSON.stringify(cssText).replace(/</g, "\\u003c");
-  const script = "<scr" + "ipt>(" + adapter.toString() + ")(" + cssArgument + ")" + "</scr" + "ipt>";
-  const bodyEnd = code.toLowerCase().lastIndexOf("</body>");
-  return bodyEnd < 0 ? `${code}${script}` : code.slice(0, bodyEnd) + script + code.slice(bodyEnd);
 }
 
 async function onMakeMove(move) {
@@ -2621,7 +2521,7 @@ async function playWithAllComputers(quickGame) {
   $("create-message").className="message";
   try {
     const cachedGame=gameOf(game.id,game.version);
-    const full=cachedGame?.code ? cachedGame : await fetchGameVersion(game.id,game.version);
+    const full=cachedGame?.declarative_ui ? cachedGame : await fetchGameVersion(game.id,game.version);
     if (!full.server_code) throw new Error(I18n.t("ui.portal.computers_server_only", {}, "Play with computers is available for server-side games."));
     match=await portalRequest("POST","/matches",{user,body:{game_id:game.id,num_computer_opponents:playerCount-1,bet_per_player:0}});
     match=await portalRequest("POST",`/matches/${match.id}/start`,{user,body:{first_turn_player_indices:[0]}});

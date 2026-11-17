@@ -25,6 +25,7 @@ from game_platform.config import load_config
 from game_platform.models import Game, GameRules, User
 from game_platform.query_store import QueryStore
 from game_platform.scaling_service import ScalablePlatform
+from game_platform.declarative_ui import client_document
 from google.cloud import firestore
 
 
@@ -60,16 +61,19 @@ def copy_catalog(store, *, run_id, copies, now):
                 updated_at=now,
             )
         )
-    base = Path(__file__).parent / "games"
+    base = Path(__file__).parent / "games" / "declarative"
     result = []
-    for name, counts in (("tictactoe", (2,)), ("poker", tuple(range(2, 11)))):
-        client, server = (
-            (base / (name + ".html")).read_text(encoding="utf-8"),
-            (base / (name + ".server.js")).read_text(encoding="utf-8"),
-        )
-        schemas = json.loads(
-            (base / (name + ".schema.json")).read_text(encoding="utf-8")
-        )
+    for name in ("tictactoe", "nim"):
+        source = json.loads((base / (name + ".json")).read_text(encoding="utf-8"))
+        client, server = client_document(source["declarative_ui"]), source["server_code"]
+        schemas = {key: source["unit_tests"][key + "_schema"]
+                   for key in ("state", "move", "view")}
+        package = {
+            "declarative_ui": source["declarative_ui"], "unit_tests": source["unit_tests"],
+            "rules_text": source["rules"], "ui_text": source["ui_instructions"],
+            "tutorial": source["tutorial"], "images": source["images"],
+            "translations": source["translations"],
+        }
         digest = hashlib.sha256(
             (client + server + json.dumps(schemas, sort_keys=True)).encode()
         ).hexdigest()
@@ -85,18 +89,20 @@ def copy_catalog(store, *, run_id, copies, now):
                         name=f"Portal copy {name} {i}",
                         description="Duplicate of the shipped game; no AI generation",
                         rules=GameRules(
-                            allowed_player_counts=counts,
-                            allows_leave_mid_match=name == "poker",
-                            allows_join_mid_match=name == "poker",
+                            allowed_player_counts=tuple(source["allowed_player_counts"]),
+                            allows_leave_mid_match=source.get("allows_leave_mid_match", False),
+                            allows_join_mid_match=source.get("allows_join_mid_match", False),
                         ),
                         code=client,
                         server_code=server,
                         game_schemas=schemas,
+                        import_package=package,
                         created_at=now,
                         updated_at=now,
                     )
                 )
-            elif existing.code != client or existing.server_code != server:
+            elif (existing.code != client or existing.server_code != server
+                  or not existing.is_declarative):
                 raise ValueError(
                     "catalog run already exists with different game source"
                 )

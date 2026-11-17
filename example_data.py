@@ -18,6 +18,7 @@ from typing import Any, Final
 
 from game_platform.json_file_store import write_snapshot
 from game_platform.models import GameRules
+from game_platform.agent_import import GameImport
 from game_platform.service import GamePlatform
 from game_platform.store import InMemoryStore, Snapshot
 
@@ -65,15 +66,12 @@ def build(operations: Iterable[Mapping[str, Any]]) -> Snapshot:
         store=store,
         clock=_Clock(),
         new_id=ids,
+        new_seed=lambda: 0x5EED,
         new_password=passwords,
         new_referral_code=lambda: next(codes),
         # Computer opponents move synchronously, so the generated file is
         # the same on every run (no timers racing the operations).
         computer_move_delay_seconds=0,
-        # The scripted scenario (and the committed snapshot) predate secret
-        # match seeds: its poker plays were authored against decks dealt
-        # from the old id-derived seeds, so reproduce that scheme here.
-        legacy_match_seeds=True,
     )
     for number, operation in enumerate(operations, start=1):
         try:
@@ -105,32 +103,18 @@ def _apply(
         platform.create_user(display_name=operation["display_name"], picture_url="/static/avatars/users/puppy/puppy-natural-classic-open.png")
     elif kind == "create_game":
         ids.push(operation["id"])
+        body = GameImport.model_validate_json(
+            (GAMES_DIR / operation["package_file"]).read_text(encoding="utf-8")
+        )
         platform.create_game(
-            caller_id=operation["as"],
-            name=operation["name"],
-            description=operation["description"],
-            rules=GameRules(
-                allowed_player_counts=tuple(operation["allowed_player_counts"]),
-                allows_leave_mid_match=operation["allows_leave_mid_match"],
-                allows_join_mid_match=operation["allows_join_mid_match"],
-            ),
-            code=(GAMES_DIR / operation["code_file"]).read_text(encoding="utf-8"),
-            server_code=(
-                (GAMES_DIR / operation["server_code_file"]).read_text(
-                    encoding="utf-8"
-                )
-                if operation.get("server_code_file")
-                else None
-            ),
-            game_schemas=(
-                json.loads(
-                    (GAMES_DIR / operation["schema_file"]).read_text(
-                        encoding="utf-8"
-                    )
-                )
-                if operation.get("schema_file")
-                else None
-            ),
+            caller_id=operation["as"], name=body.name, description=body.description,
+            rules=body.game_rules(), code=body.client_code,
+            server_code=body.server_code, game_schemas=body.game_schemas(),
+            import_package={"declarative_ui": body.declarative_ui,
+                            "tutorial": body.tutorial, "images": body.images,
+                            "unit_tests": body.unit_tests,
+                            "rules_text": body.rules, "ui_text": body.ui_instructions,
+                            "translations": {locale: value.model_dump() for locale, value in body.translations.items()}},
             _check_strings=False,
         )
     elif kind == "update_game":

@@ -855,7 +855,7 @@
   "ui.declarative.latest_scene": "Latest scene JSON",
   "ui.declarative.live_preview": "Live preview",
   "ui.declarative.ui_messages": "Messages from the UI",
-  "ui.declarative.introduction": "Inspect the native scene contract with JSON messages. This playground previews presentation only. Use the recorded test flow to verify rules, finish matches, and submit a complete game.",
+  "ui.declarative.introduction": "Inspect the native scene contract with JSON messages. This playground previews presentation only. Use the declarative REST API to validate and submit a complete game package.",
   "ui.declarative.moves_hint": "Moves appear here as make_move messages. The playground does not apply them to a match.",
   "ui.declarative.player_one": "Player 1",
   "ui.declarative.player_two": "Player 2",
@@ -948,5 +948,10 @@
   "ui.portal.sync_review": "Sync needs review — open Controls",
   "ui.portal.offline_practice": "Offline · playing on this device",
   "ui.portal.offline_moves": "Offline · moves save on this device",
-  "ui.match.share_match": "Share match"
+  "ui.match.share_match": "Share match",
+  "ui.portal.legacy_game_retired": "This legacy game is no longer available in the portal.",
+  "error.html_games_read_only": "HTML games are read-only; submit a declarative_ui package",
+  "error.legacy_game_not_found": "legacy game not found",
+  "error.html_matches_retired": "HTML games no longer support matches",
+  "error.page_limit_invalid": "limit must be between 1 and 100"
 }

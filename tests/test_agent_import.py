@@ -11,7 +11,7 @@ def translations_for(body):
     tell a supplied translation from a machine one."""
     from game_platform.game_tutorial import vocabulary
     from game_platform.game_text import extract_strings
-    table = extract_strings(body['client_code']) or {}
+    table = (body.get('declarative_ui') or {}).get('strings') or extract_strings(body.get('client_code', '')) or {}
     tutorial_vocab = vocabulary(body['tutorial']['html'])
     out = {}
     for locale in LANGUAGES:
@@ -36,6 +36,10 @@ def payload():
     import json
     from pathlib import Path
     body = json.loads((Path(__file__).resolve().parent.parent / 'examples' / 'agent-game.json').read_text())
+    from game_platform.declarative_ui import client_document
+    body['client_code'] = client_document(body['declarative_ui'])
+    from game_platform.declarative_ui import client_document
+    body['client_code'] = client_document(body['declarative_ui'])
     body['translations'] = translations_for(body)
     return body
 
@@ -139,7 +143,9 @@ def test_resubmission_may_redesign_the_state_shape(api):
         .replace('{n}', '{m}')
         .replace('{n:state.m}', '{m:state.m}')
     )
-    updated['client_code'] = updated['client_code'].replace('.n', '.m')
+    updated['declarative_ui']['ui_code'] = updated['declarative_ui']['ui_code'].replace('.n', '.m')
+    from game_platform.declarative_ui import client_document
+    updated['client_code'] = client_document(updated['declarative_ui'])
     updated['unit_tests'] = rename(updated['unit_tests'])
     updated['translations'] = translations_for(updated)
     second = api.ok('POST', '/games', as_user=owner, json=updated)
@@ -233,11 +239,22 @@ def test_reject_invalid_or_spoofed_fields_without_writes(api, field, value):
     assert_no_games(api)
 
 
-def test_a_game_still_needs_client_code(api):
-    owner = api.new_user('Owner'); body = payload()
-    del body['client_code']
-    assert api.request('POST', '/games', as_user=owner, json=body).status_code == 422
+def test_html_game_submissions_are_rejected(api):
+    body = payload()
+    del body['declarative_ui']
+    body['client_code'] = '<html><body>Legacy game</body></html>'
+    for endpoint in ('/games', '/games/declarative'):
+        response = api.request('POST', endpoint, json=body)
+        assert response.status_code == 422, response.text
     assert_no_games(api)
+
+
+def test_declarative_submission_generates_client_code(api):
+    body = payload()
+    del body['client_code']
+    response = api.request('POST', '/games', json=body)
+    assert response.status_code == 201, response.text
+    assert response.json()['renderer_type'] == 'declarative'
 
 
 @pytest.mark.parametrize('mutation', ['missing_translations', 'missing_locale',

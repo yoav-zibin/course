@@ -5,7 +5,6 @@
   "allowed_player_counts": [
     1
   ],
-  "client_code": "<!doctype html><html><head><style>body{font:20px sans-serif;background:#eef2ff;color:#182140;padding:24px}button{min-width:100px;min-height:48px}h1{font-size:28px}</style></head><body><h1 id=\"title\"></h1><p id=\"number\">0</p><button id=\"add\"></button><script type=\"application/json\" id=\"i18n-strings\">{\"title\":\"Count to three\",\"add\":\"Add one\",\"server_add_one\":\"Add one\"}</script><script>// Translation helper (docs/game-translation.md). Needs the i18n-strings block before it.\nconst SOURCE_STRINGS = JSON.parse(document.getElementById(\"i18n-strings\").textContent);\nlet strings = SOURCE_STRINGS;\n\n// The text for a key in the viewer's language, with {name}-style placeholders filled in.\nfunction t(key, params) {\n  const text = strings[key] ?? SOURCE_STRINGS[key] ?? key;\n  return text.replace(/\\{(\\w+)\\}/g, (match, name) => (params && name in params ? params[name] : match));\n}\n\n// Call this first in the state_changed handler, before drawing anything: the platform sends\n// the viewer's translations (message.strings), language and writing direction with it.\nfunction applyLocale(message) {\n  if (message.strings) strings = { ...SOURCE_STRINGS, ...message.strings };\n  if (message.locale) document.documentElement.lang = message.locale;\n  if (message.direction) document.documentElement.dir = message.direction;\n}\n\nlet m;add.onclick=()=>parent.postMessage({type:'make_move',move:{add:1}},'*');window.addEventListener('message',e=>{if(e.data.type==='state_changed'){m=e.data;applyLocale(m);document.getElementById('title').textContent=t('title');add.textContent=t('add');number.textContent=(m.view||m.state).n;add.disabled=m.status==='over'||m.my_player_index===null;}});parent.postMessage({type:'ready'},'*');</script></body></html>",
   "server_code": "const game={newMatch(ctx){return {state:{n:0},turn:[ctx.players[0].id]};},applyMove(state,id,move,ctx){if(move.add!==1)throw new InvalidMove('Add one');const n=state.n+1;return n>=3?{state:{n},turn:null,payouts:Object.fromEntries(ctx.players.filter(p=>p.kind==='human').map(p=>[p.id,ctx.pot]))}:{state:{n},turn:[ctx.players[0].id]};},viewFor(state,id,ctx){return {n:state.n};},computerMove(){return {add:1}},randomMove(){return {add:1}}};",
   "rules": "One player adds one each turn, starting at zero. End at three. No stakes, joining or leaving.",
   "ui_instructions": "A count and Add one button; readable on phones. Use a calm blue theme.",
@@ -371,5 +370,34 @@
         "server_add_one": "أضف واحدًا"
       }
     }
+  },
+  "declarative_ui": {
+    "format": "buildplay-ui",
+    "version": 1,
+    "viewport": {
+      "width": 400,
+      "height": 400
+    },
+    "boards": [
+      {
+        "id": "table",
+        "kind": "zone",
+        "x": 0,
+        "y": 0,
+        "width": 400,
+        "height": 400
+      }
+    ],
+    "piece_types": {
+      "token": {
+        "shape": "circle"
+      }
+    },
+    "strings": {
+      "title": "Count to three",
+      "add": "Add one",
+      "server_add_one": "Add one"
+    },
+    "ui_code": "const gameUI = {reduce(message, localState) {\n const m = message.type === 'ui_event' ? message.state_changed : message;\n const s = m.view || m.state;\n const strings = Object.assign({title:'Count to three',add:'Add one'},m.strings||{});\n const active = m.status === 'ongoing' && m.acting_for_player_index !== null && m.acting_for_player_index !== undefined && !m.replay;\n const result = {scene:{labels:[{id:'title',text:strings.title,x:24,y:24,font_size:28},{id:'count',text:String(s.n),x:24,y:90,font_size:30}],controls:active?[{id:'add',kind:'button',label:strings.add}]:[]}};\n if (message.type === 'ui_event' && message.event.id === 'add' && active) result.make_move={add:1};\n return result;\n}};"
   }
 }

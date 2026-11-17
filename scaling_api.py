@@ -60,7 +60,7 @@ def install(app, *, debug_tools):
             store, "games", filters=filters, limit=limit, cursor=cursor, scope="public"
         )
         return {
-            "items": [GameSummaryOut.of(x) for x in result.items],
+            "items": [GameSummaryOut.of(x) for x in result.items if x.is_declarative],
             "next_cursor": result.next_cursor,
         }
 
@@ -80,7 +80,7 @@ def install(app, *, debug_tools):
             scope=caller_id,
         )
         return {
-            "items": [GameSummaryOut.of(x) for x in result.items],
+            "items": [GameSummaryOut.of(x) for x in result.items if x.is_declarative],
             "next_cursor": result.next_cursor,
         }
 
@@ -164,6 +164,7 @@ def install(app, *, debug_tools):
             game = store._decode("games", store.raw_get(ref), ref, detail=False)
             if (
                 game
+                and game.is_declarative
                 and not game.deleted
                 and (game.published or game.owner_user_id == caller_id)
             ):
@@ -203,8 +204,10 @@ def install(app, *, debug_tools):
         for match in result.items:
             if match.num_computer_opponents:
                 continue
-            game = store.raw_get(store.ref("games", match.game_id))
-            if game and game.get("published") and not game.get("deleted"):
+            game = store.get_game_without_code(match.game_id)
+            pinned = store.get_game_version_without_code(match.game_id, match.game_version)
+            if (game and game.is_declarative and game.published and not game.deleted
+                    and pinned and pinned.is_declarative):
                 items.append(_match_out(platform, match))
         return {"items": items, "next_cursor": result.next_cursor}
 
@@ -224,8 +227,9 @@ def install(app, *, debug_tools):
             filters.append(("status", "==", status))
         if game_id:
             filters.append(("game_id", "==", game_id))
+        store = store_of(platform)
         result = page(
-            store_of(platform),
+            store,
             "matches",
             filters=filters,
             limit=limit,
@@ -233,7 +237,11 @@ def install(app, *, debug_tools):
             scope=caller_id,
         )
         return {
-            "items": [_match_out(platform, x, caller_id) for x in result.items],
+            "items": [
+                _match_out(platform, x, caller_id) for x in result.items
+                if (game := store.get_game_version_without_code(x.game_id, x.game_version))
+                and game.is_declarative
+            ],
             "next_cursor": result.next_cursor,
         }
 

@@ -234,8 +234,8 @@ class Generator:
             try:
                 self._screens.mkdir(parents=True, exist_ok=True)
                 path = self._screens / f"{int(time.time() * 1000)}-couldnt-move.png"
-                frame = page.locator("#game-box iframe.game-frame").first
-                target = frame if await frame.count() else page  # the game, else the whole page
+                board = page.locator("#game-box .declarative-stage").first
+                target = board if await board.count() else page  # the game, else the whole page
                 await asyncio.wait_for(target.screenshot(path=str(path)), 5)
                 shot = path.name
             except Exception:

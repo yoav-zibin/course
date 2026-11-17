@@ -1,5 +1,6 @@
 """Feedback: users' bugs, suggestions and reports of problems, about users, games,
 matches or the platform."""
+from game_platform.tests.helpers import TEST_DECLARATIVE_UI
 
 import datetime as dt
 import json
@@ -43,6 +44,7 @@ def world(clock=None, store=None):
         code="<div>duel</div>",
         server_code=ECHO_SERVER_CODE,
         game_schemas=TEST_GAME_SCHEMAS,
+        import_package={"declarative_ui": TEST_DECLARATIVE_UI},
     ).id
     return platform, ann, bob, game
 

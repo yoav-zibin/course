@@ -70,34 +70,33 @@ def test_create_game_with_client_and_server_code(api: Api):
     assert api.ok("GET", f"/games/{game['id']}") == game
 
 
-def test_patch_server_code_and_client_code(api: Api):
+def test_complete_package_replaces_server_code_and_metadata_patch_preserves_it(api: Api):
     owner = api.new_user("owner")
     game = _create_game(api, owner, client_code=None, code=CLIENT_CODE)
-    assert game["server_code"] == SERVER_CODE
-
-    changed = api.ok(
+    partial = api.request(
         "PATCH", f"/games/{game['id']}", as_user=owner,
         json={"server_code": SERVER_CODE_V2},
     )
-    assert changed["version"] == 2
-    assert changed["server_code"] == SERVER_CODE_V2
-
-    # A patch that doesn't mention server_code leaves it alone.
+    assert partial.status_code == 400
+    assert "POST /games/declarative" in partial.json()["detail"]
+    original = api.platform._store.get_game(game['id'])
+    changed = api.platform.import_agent_game(
+        caller_id=owner, existing_game_id=original.id, name=original.name,
+        description=original.description, rules=original.rules,
+        code=original.code, server_code=SERVER_CODE_V2,
+        game_schemas=original.game_schemas, import_package=original.import_package,
+    )
+    assert changed.version == 2 and changed.server_code == SERVER_CODE_V2
     redescribed = api.ok(
         "PATCH", f"/games/{game['id']}", as_user=owner,
         json={"description": "A new description"},
     )
     assert redescribed["version"] == 3
     assert redescribed["server_code"] == SERVER_CODE_V2
-
-    new_client = api.ok(
+    assert api.request(
         "PATCH", f"/games/{game['id']}", as_user=owner,
         json={"client_code": "<div>new</div>"},
-    )
-    assert new_client["version"] == 4
-    assert new_client["code"] == "<div>new</div>"
-    assert new_client["client_code"] == "<div>new</div>"
-    assert new_client["server_code"] == SERVER_CODE_V2
+    ).status_code == 400
 
 
 def test_match_max_loss_and_player_ids(api: Api):

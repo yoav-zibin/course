@@ -13,7 +13,7 @@ function quotaStorage() {
   setItem(key,value){
    const next=new Map(map);next.set(key,String(value));
    if([...next.values()].reduce((sum,item)=>sum+item.length,0)>storage.limit)
-    throw Object.assign(new Error('quota exceeded'),{name:'QuotaExceededError',code:22});
+    throw Object.assign(new Error('quota exceeded'),{name:'QuotaExceededError',declarative_ui:{},code:22});
    map.set(key,String(value));
   },
  };
@@ -34,7 +34,7 @@ function recency(storage,instance,entries) {
 test('quota recovery physically removes response pieces missing from a stale manifest',()=>{
  const storage=quotaStorage(),o=offline(storage);
  const orphan=o.responseKey('/unindexed-game');
- storage.setItem(orphan,JSON.stringify({code:'x'.repeat(4000)}));
+ storage.setItem(orphan,JSON.stringify({declarative_ui:{},code:'x'.repeat(4000)}));
  assert.ok(!JSON.parse(storage.getItem(o.metaKey())).responses.includes('/unindexed-game'));
  assert.ok(o.read().responses['/unindexed-game']); // scan recovered the piece
  const before=storage.storedBytes();storage.limit=before+100;
@@ -49,8 +49,8 @@ test('cross-account quota recovery preserves pending snapshots and practice rule
  const data=bob.read();
  const pending={...match,id:'bobs-match',game_id:'online-backgammon',game_version:7};
  data.responses['/matches/bobs-match']=pending;
- data.responses['/games/backgammon/versions/1']={code:'board',server_code:'authority'};
- data.responses['/games/online-backgammon/versions/7']={code:'online board',server_code:'pinned online authority'};
+ data.responses['/games/backgammon/versions/1']={declarative_ui:{},code:'board',declarative_ui:{},server_code:'authority'};
+ data.responses['/games/online-backgammon/versions/7']={declarative_ui:{},code:'online board',declarative_ui:{},server_code:'pinned online authority'};
  data.responses['/old-recoverable']='x'.repeat(4000);
  data.queues['bobs-match']=[{body:move,baseState:pending.state,baseTurn:[0]}];
  data.local['local-bob']={id:'local-bob',game_id:'backgammon',game_version:1,
@@ -114,7 +114,7 @@ test('a quota-exceeded startup probe keeps existing durable device storage acces
  original.enqueue(match,move);
  const d=original.read();
  d.local['local-a']={id:'local-a',game_id:'game',game_version:1,moves:[{new_state:{n:1}}]};
- d.responses['/games/game/versions/1']={server_code:'authority',code:'board'};
+ d.responses['/games/game/versions/1']={declarative_ui:{},server_code:'authority',declarative_ui:{},code:'board'};
  d.archivedMatches=[{id:'historic',moves:[move]}];original.write(d);
  storage.limit=storage.storedBytes();
  const restored=new Offline(storage,undefined,()=>({id:'alice'}),()=>false);
@@ -130,7 +130,7 @@ for(const account of ['alice','bob']) {
   const storage=quotaStorage(),legacyKey=`game-platform.portal.v1.${account}`;
   const legacy={responses:{'/recoverable-old':'x'.repeat(4000),
    '/matches/held':{...match,id:'held'},
-   '/games/game/versions/1':{code:'board',server_code:'authority'},
+   '/games/game/versions/1':{declarative_ui:{},code:'board',declarative_ui:{},server_code:'authority'},
   },queues:{held:[{body:move,baseState:match.state,baseTurn:[0]}]},
   conflicts:{held:{message:'preserve this conflict',remote:match}},
   local:{'local-held':{id:'local-held',game_id:'game',game_version:1,moves:[{new_state:{n:1}}]}},
@@ -160,7 +160,7 @@ test('insufficient reclaimable space never deletes durable records or authentica
  const storage=quotaStorage(),o=offline(storage);
  const d=o.read();
  d.local['local-held']={id:'local-held',game_id:'game',game_version:1,moves:[{new_state:{n:1}}]};
- d.responses['/games/game/versions/1']={server_code:'authority',code:'x'.repeat(2000)};
+ d.responses['/games/game/versions/1']={declarative_ui:{},server_code:'authority',declarative_ui:{},code:'x'.repeat(2000)};
  d.archives=[{id:'branch',moves:[move]}];d.archivedMatches=[{id:'historic',moves:[move]}];o.write(d);
  storage.setItem('game-platform.auth.v1',JSON.stringify({password:'private credential'}));
  const protectedKeys=[o.localKey('local-held'),o.responseKey('/games/game/versions/1'),

@@ -131,6 +131,7 @@ class ScalablePlatform(GamePlatform):
                 if (
                     existing
                     and existing.status == "waiting_for_players"
+                    and self._match_is_declarative(existing)
                     and not existing.num_computer_opponents
                     and existing.seat_of(caller_id) is not None
                 ):
@@ -234,6 +235,7 @@ class ScalablePlatform(GamePlatform):
             game
             for game in games
             if game
+            and game.is_declarative
             and not game.deleted
             and (game.published or game.owner_user_id == user.id)
         ]
@@ -489,6 +491,11 @@ class ScalablePlatform(GamePlatform):
         # One durable job per match. Revision fencing prevents an old job from
         # taking a turn after a human has already changed the match.
         game = self._store.get_game_version(match.game_id, match.game_version)
+        if game is None or not game.is_declarative:
+            ref = self._store.ref("jobs", match.id)
+            if self._store.raw_get(ref):
+                self._store.raw_put(ref, None)
+            return
         computer = (
             game
             and game.server_code
@@ -686,8 +693,11 @@ class ScalablePlatform(GamePlatform):
                         self._store.ref("matches", job["match_id"])
                     )
                     if row and row.get("revision") == job["revision"]:
-                        match = self._get_match(job["match_id"])
-                        if match.status == "ongoing":
+                        match = self._store.get_match(job["match_id"])
+                        game = self._store.get_game_version_without_code(
+                            match.game_id, match.game_version
+                        ) if match else None
+                        if match and game and game.is_declarative and match.status == "ongoing":
                             self._run_computer_moves(match.id)
                     final = self._store.raw_get(doc.reference)
                     if final and final.get("lease") == token:

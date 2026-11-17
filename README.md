@@ -38,7 +38,7 @@ Your own moves update immediately.
 Backgammon shares the regular game's authoritative rules JavaScript.
 
 - **Game**: a playable rules package with authoritative QuickJS `server_code`
-  and either a declarative UI package or sandboxed HTML client.
+  and a declarative UI package.
 - **Match**: playing a game with a set of players (humans and computer opponents).
 - **Move**: a turn that replaces the match's opaque JSON state and either passes the turn
   to a set of players (any of whom may move next) or ends the match.
@@ -976,12 +976,14 @@ renders these games with platform-owned boards, pieces and controls; native
 apps can run the same reducer in QuickJS and implement native scene rendering.
 Its JSON `make_move` output uses the normal authoritative move API.
 
-For HTML games, `code` is a complete HTML document. The portal runs it in an
-iframe with `sandbox="allow-scripts"`: its scripts run, but in an isolated origin, so a
-game cannot read the platform's cookies, storage, or API credentials. It can still
-make anonymous requests to public endpoints; the sandbox is not a network firewall.
-The page and the game
-talk only through `postMessage`, with two messages.
+HTML games are retained as a read-only migration archive. `GET /legacy/games`
+returns `{items,next_cursor}`; follow the cursor even after an empty page.
+`GET /legacy/games/{id}` returns the complete retained HTML source, rules,
+schemas, import artifacts and HTML version history, excluding submission secrets.
+Ordinary game APIs and the portal return declarative games only. HTML matches,
+move histories and invitations are removed at startup; held stakes are refunded.
+New HTML submissions, matches and rematches are rejected. See
+[the retirement notes](docs/html-game-retirement.md).
 
 Every game has `server_code` (the server-side Game API, specified in
 `docs/server-side-game-api.md`): plain JavaScript the server runs authoritatively —
@@ -1076,38 +1078,19 @@ computers moved by the server, token payouts). In short:
 
 ### Example games
 
-The `games/` directory holds the example data's games. Each is a pair of files: an
-HTML client that only renders its view and sends moves, and a `.server.js` with the
-game's logic, which the server runs (the server-side Game API):
-
-- `tictactoe.html` + `tictactoe.server.js`: 2 players; the computer plays perfectly
-  (minimax).
-- `poker.html` + `poker.server.js`: no-limit Texas hold'em for 2 to 8 players: 1000
-  chips each, blinds 10/20 doubling every 10 hands, side pots, and a simple computer
-  strategy. Cards are drawn with Unicode suits. The last player with chips wins.
-  Hole cards and the deck never leave the server.
-- `debug.html` + `debug.server.js`: for testing the platform. It shows the last
-  `state_changed` message and a log of messages, and lets you send any move; the
-  server code applies it as the next state, as the client used to.
+The `games/declarative/` directory contains eleven complete portable packages,
+including Tic-tac-toe, Nim, Memory and Backgammon. Each includes authoritative
+rules, its presentation package, schemas, translations, tutorial and examples.
 
 ## Example data
 
-`data.example.json` is a data file with:
-
-- 8 users, `user1` to `user8`, whose passwords are their names;
-- 3 games by `user1`: Tic-tac-toe (2 players; no leaving or joining), Poker (2 to 8
-  players; leaving and joining allowed; version 2 after a description change) and the
-  Debug game (2 to 10 players);
-- 23 matches covering: waiting for players (alone, or ready to start with computers),
-  ongoing (between humans, against computers, poker heads-up, with 4
-  players on the flop, a full table of 8), players who left (replaced by a computer, or
-  ending the match), players who joined mid-match (a new seat, or taking over a
-  computer), matches on the old version of a game, and over (won, drawn, lost to the
-  computer, hidden by a player).
+`data.example.json` contains eight test users (`user1` through `user8`, with
+matching passwords), declarative Tic-tac-toe and Nim, and six waiting, ongoing,
+won and drawn matches. Keep these fixtures confined to local test databases.
 
 The matches are listed in `tests/test_example_data.py`. To change them, edit
 `example_data/operations.json` — for the built-in games the moves are the games'
-own moves (`{cell}` for tic-tac-toe, poker actions, debug state moves), played by
+own moves (`{cell}` for Tic-tac-toe and `{take}` for Nim), played by
 the server code — and regenerate from the directory above `game_platform`:
 
 ```bash
@@ -1269,35 +1252,14 @@ Undo / Redo, responsive/phone/tablet preview widths, and an expandable JSON stat
 inspector. Undo pauses playback so computers cannot immediately overwrite it.
 Making a new move after undo clears the redo branch. Restart resets the session.
 
-### The game-test page
+### Declarative authoring and recorded tests
 
-`/game-test` is a static page for game authors (see GAME_DEVELOPMENT_GUIDE.md
-section 9). The author stores the full submission payload (name, secret,
-description, both code fields, the three JSON schemas, unit-test cases,
-rules/UI text, tutorial, images and translations) with a REST call
-(`POST /game-test/submissions`, which runs the full submission verification
-before storing) and follows a linear
-five-step flow: (1) the payload is stored on the server and the page loads
-it back by secret (`GET /game-test/submission`), (2) the server runs
-its server-code tests and records the run's metadata, (3) pass-and-play
-matches are played to the end — one per allowed player count — and each is
-verified by replaying its states and moves on the server, (4) matches
-against the computer are played from the seats that matter (the smallest
-player count from its first and last seat, plus the largest count from its
-last seat), and (5) the per-count set is played multiplayer, one frame per
-player, and verified the same way; screen sizes and orientations are
-covered once across steps 3–5 together, with step 5 adding matches for any
-the run has not shown yet. Every step leaves rows in the `game_test_traces` collection
-(`game_traces.py`), keyed by the submission secret's hash: a submission row,
-a server-check row, one move row per played move (creation time, an md5 of
-the state, view and move, and the UI configuration), and one row per verified
-match. POST /games checks those traces before accepting a game: the last
-step 1 payload must be identical to the submitted one and steps 2–5 must be
-complete. The page also keeps its local pre-checks (the same five import
-checks, run in the browser) and free play — pass-and-play, against computers,
-or multiplayer with a chosen seat or as a spectator — with back/forward
-stepping through the match history and a log of every `state_changed` /
-`make_move` exchange.
+Use `/static/declarative-test.html` for scene previews and
+`POST /games/declarative/validate` for bounded presentation probes. The HTML
+submission page has been removed. The `/game-test/*` REST endpoints continue
+to record submissions, server checks and verified play traces for declarative
+publication. `tools/publish_declarative_games.py` exercises the complete flow.
+See [the import API](docs/agent-game-import.md) for the test gate and payload.
 
 ## UI tests and CI/CD
 

@@ -163,7 +163,7 @@ test("a full cache of server answers is pruned so a move is still saved", () => 
   const storage = totalQuotaStorage(1_000_000);
   const o = new Offline(storage, undefined, () => ({ id: "alice", password: "t" }), () => false);
   o.save("/matches/match", base);
-  for (let i = 0; i < 20; i++) o.save(`/games/g${i}/versions/1`, { code: "x".repeat(4000) });
+  for (let i = 0; i < 20; i++) o.save(`/games/g${i}/versions/1`, { declarative_ui:{},code: "x".repeat(4000) });
   assert.ok(storage.storedBytes() > 80000);
   storage.setLimit(storage.storedBytes() + 100);
   const shown = o.enqueue(base, body);
@@ -199,7 +199,7 @@ test("clear cache preserves queued and local practice dependencies", () => {
   const { o } = setup();
   const data = o.read();
   data.local["local-1"] = {game_id: "g", game_version: 2};
-  data.responses["/games/g/versions/2"] = {code: "game"};
+  data.responses["/games/g/versions/2"] = {declarative_ui:{},code: "game"};
   data.responses["/other"] = "discard";
   data.archives = [{moves: [body]}];
   o.write(data);
@@ -423,7 +423,7 @@ test("a corrupt cached response only loses that response", () => {
 });
 test("a legacy single-JSON blob migrates to per-key pieces and keeps the backup", () => {
   const legacy = {
-    responses: { "/matches/match": base, "/games/g/versions/1": { code: "x" } },
+    responses: { "/matches/match": base, "/games/g/versions/1": { declarative_ui:{},code: "x" } },
     queues: { match: [{ body }] },
     conflicts: {},
     local: {},
@@ -577,7 +577,7 @@ test("writeCache swallows a denied-storage error instead of failing the page", (
 });
 test("a forced get downloads data that was never saved, ignoring the retry backoff", async () => {
   let calls = 0;
-  const { o, setOnline } = setup(async () => { calls++; return { id: "g", server_code: "rules" }; });
+  const { o, setOnline } = setup(async () => { calls++; return { id: "g", declarative_ui:{},server_code: "rules" }; });
   setOnline(true);
   o.retryAfter = Date.now() + 60000;
   // Inside the backoff a plain get serves only the saved copy: there is none.
@@ -593,7 +593,7 @@ test("a forced get downloads data that was never saved, ignoring the retry backo
 test("a forced get while offline serves the saved copy and flags a never-saved one", async () => {
   let calls = 0;
   const { o } = setup(async () => { calls++; return {}; });
-  o.save("/games/g/versions/1", { id: "g", server_code: "rules" });
+  o.save("/games/g/versions/1", { id: "g", declarative_ui:{},server_code: "rules" });
   // setup() starts offline: the saved copy is used, the network untouched.
   assert.equal((await o.get("/games/g/versions/1", { force: true })).server_code, "rules");
   assert.equal(calls, 0);
@@ -605,7 +605,7 @@ test("a forced get while offline serves the saved copy and flags a never-saved o
 });
 test("a forced get whose download fails falls back to the saved copy", async () => {
   const { o, setOnline } = setup(async () => { throw new TypeError("connection reset"); });
-  o.save("/games/g/versions/1", { id: "g", server_code: "rules" });
+  o.save("/games/g/versions/1", { id: "g", declarative_ui:{},server_code: "rules" });
   setOnline(true);
   assert.equal((await o.get("/games/g/versions/1", { force: true })).server_code, "rules");
 });
@@ -613,7 +613,7 @@ test("a move is saved by reclaiming other accounts' cached answers when the devi
   const storage = totalQuotaStorage(1_000_000);
   storage.keys = () => [...storage.map.keys()]; // like a real Storage object
   const bob = new Offline(storage, undefined, () => ({ id: "bob", password: "t" }), () => false);
-  for (let i = 0; i < 20; i++) bob.save(`/games/g${i}/versions/1`, { code: "x".repeat(4000) });
+  for (let i = 0; i < 20; i++) bob.save(`/games/g${i}/versions/1`, { declarative_ui:{},code: "x".repeat(4000) });
   const bobsMatch = { ...base, id: "bobs" };
   bob.save("/matches/bobs", bobsMatch);
   bob.enqueue(bobsMatch, body);

@@ -43,7 +43,7 @@ def test_the_example_data_covers_many_match_states() -> None:
     assert users == {f"user{n}": f"user{n}" for n in range(1, 9)}
     assert [(game.id, game.version) for game in snapshot.game_versions] == [
         ("tictactoe", 1),
-        ("poker", 1),
+        ("nim", 1),
     ]
 
     def seats(match: Match) -> str:
@@ -68,31 +68,14 @@ def test_the_example_data_covers_many_match_states() -> None:
     ]
     assert overview == [
         ("ttt-ongoing", "ongoing", None, [1], "user1 user2"),
-        ("ttt-vs-computer", "ongoing", None, [0], "user3 cpu"),
-        ("ttt-computer-to-move", "ongoing", None, [0], "user6 cpu"),
         ("ttt-x-won", "over", "finished", None, "user2 user4"),
         ("ttt-draw", "over", "finished", None, "user5 user6"),
-        ("ttt-computer-won", "over", "finished", None, "user7 cpu"),
-        ("ttt-player-left", "over", "player_left", None, "user1 user3"),
+        ("nim-ongoing", "ongoing", None, [0], "user3 user7"),
         ("ttt-waiting", "waiting_for_players", None, None, "user4"),
         ("ttt-ready", "waiting_for_players", None, None, "user8 cpu"),
-        ("poker-heads-up", "ongoing", None, [0], "user1 user2"),
-        ("poker-four-on-the-flop", "ongoing", None, [3], "user3 user4 user5 user6"),
-        (
-            "poker-full-table",
-            "ongoing",
-            None,
-            [1],
-            "user1 user2 user3 user4 user5 user6 user7 user8",
-        ),
-        ("poker-player-left", "over", "player_left", None, "user6 user7 user8"),
-        ("poker-player-joined", "ongoing", None, [1], "user2 user3 user4"),
-        ("poker-solo-computers", "ongoing", None, [0], "user5 cpu cpu"),
-        ("poker-over", "over", "finished", None, "user2 cpu"),
-        ("poker-last-human-left", "over", "player_left", None, "user4 cpu"),
-        ("poker-ready", "waiting_for_players", None, None, "user5 user6"),
-        ("poker-open", "waiting_for_players", None, None, "user7"),
     ]
+    assert all(game.is_declarative for game in snapshot.game_versions)
+
 
 
 def test_the_server_can_use_the_example_data(tmp_path: Path) -> None:
@@ -112,4 +95,4 @@ def test_the_server_can_use_the_example_data(tmp_path: Path) -> None:
     )
     store.close()
     assert response.status_code == 201
-    assert response.json()["state"]["board"][1] == "O"
+    assert response.json()["state"]["board"][1] == 1

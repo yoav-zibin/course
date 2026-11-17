@@ -62,7 +62,7 @@ def emitted_move(ui, frame, changed, move):
 
 
 def test_complete_package_uses_exact_ordinary_authority(body):
-    canonical = (ROOT / 'games/audit-batch3/backgammon.server.js').read_text()
+    canonical = (ROOT / 'games/declarative/backgammon.server.js').read_text()
     assert body.server_code == canonical
     assert hashlib.sha256(body.server_code.encode()).hexdigest() == SOURCE_SHA256
     assert body.game_schemas() == source_schemas()
@@ -163,7 +163,7 @@ def test_ordinary_used_die_keeps_its_face_and_midturn_mount_does_not_invent_a_ro
 @pytest.mark.parametrize('seed', [7, 31])
 def test_same_full_match_through_regular_rules_and_declarative_events(body, seed):
     rules = GameLogic(body.server_code, game_schemas=body.game_schemas())
-    ordinary = GameLogic((ROOT / 'games/audit-batch3/backgammon.server.js').read_text(), game_schemas=body.game_schemas())
+    ordinary = GameLogic((ROOT / 'games/declarative/backgammon.server.js').read_text(), game_schemas=body.game_schemas())
     ui = DeclarativeLogic(body.declarative_ui)
     ctx = context()
     result = rules.call('newMatch', ctx=ctx, seed=seed)

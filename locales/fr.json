@@ -855,7 +855,7 @@
   "ui.declarative.latest_scene": "JSON de la dernière scène",
   "ui.declarative.live_preview": "Aperçu en direct",
   "ui.declarative.ui_messages": "Messages de l’interface",
-  "ui.declarative.introduction": "Inspectez le contrat des scènes natives à l’aide de messages JSON. Ce bac à sable affiche uniquement la présentation. Utilisez le parcours de test enregistré pour vérifier les règles, terminer des parties et soumettre un jeu complet.",
+  "ui.declarative.introduction": "Inspectez le contrat de scène natif à l’aide de messages JSON. Cet espace de test affiche uniquement la présentation. Utilisez l’API REST déclarative pour valider et soumettre un jeu complet.",
   "ui.declarative.moves_hint": "Les coups apparaissent ici sous forme de messages make_move. Le bac à sable ne les applique pas à une partie.",
   "ui.declarative.player_one": "Joueur 1",
   "ui.declarative.player_two": "Joueur 2",
@@ -948,5 +948,10 @@
   "ui.portal.sync_review": "Vérifiez la synchronisation dans les commandes",
   "ui.portal.offline_practice": "Hors ligne · partie sur cet appareil",
   "ui.portal.offline_moves": "Hors ligne · les coups sont enregistrés sur cet appareil",
-  "ui.match.share_match": "Partager la partie"
+  "ui.match.share_match": "Partager la partie",
+  "ui.portal.legacy_game_retired": "Cet ancien jeu n’est plus disponible sur le portail.",
+  "error.html_games_read_only": "Les jeux HTML sont en lecture seule ; envoyez un package declarative_ui",
+  "error.legacy_game_not_found": "ancien jeu introuvable",
+  "error.html_matches_retired": "Les jeux HTML ne permettent plus de créer des parties",
+  "error.page_limit_invalid": "la limite doit être comprise entre 1 et 100"
 }

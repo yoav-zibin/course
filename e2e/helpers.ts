@@ -1,11 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
-export const TICTACTOE = fs.readFileSync(path.resolve(__dirname, '../games/tictactoe.html'), 'utf8');
-export const TICTACTOE_SERVER = fs.readFileSync(path.resolve(__dirname, '../games/tictactoe.server.js'), 'utf8');
-export const TICTACTOE_SCHEMAS = JSON.parse(
-  fs.readFileSync(path.resolve(__dirname, '../games/tictactoe.schema.json'), 'utf8'),
+export const DECLARATIVE_TICTACTOE = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, '../games/declarative/tictactoe.json'), 'utf8'),
 );
 
 export interface Account { id: string; display_name: string; password: string }
@@ -15,13 +13,6 @@ export async function createUser(request: APIRequestContext, name: string): Prom
   const res = await request.post('/users', { data: { display_name: name } });
   expect(res.ok()).toBeTruthy();
   return res.json();
-}
-
-/** The client string table embedded in the tic-tac-toe HTML (i18n-strings block). */
-function clientStrings(): Record<string, string> {
-  const m = TICTACTOE.match(/<script[^>]*id="i18n-strings"[^>]*>([\s\S]*?)<\/script>/);
-  if (!m) throw new Error('tictactoe.html has no i18n-strings block');
-  return JSON.parse(m[1]);
 }
 
 const COVER_SVG =
@@ -70,7 +61,7 @@ export interface ImportGameOptions {
   allowedPlayerCounts: number[];
   allowsLeaveMidMatch?: boolean;
   allowsJoinMidMatch?: boolean;
-  clientCode: string;
+  declarativeUI: Record<string, unknown>;
   serverCode: string;
   rules: string;
   uiInstructions: string;
@@ -82,8 +73,7 @@ export interface ImportGameOptions {
   cases: unknown[];
 }
 
-/** Publishes a game owned by [owner] through POST /games (the only way to
- * create a game — there is no POST /games). Builds the full import payload: schemas +
+/** Publishes a declarative game owned by [owner]. Builds the full import payload: schemas +
  * unit-test cases + tutorial + images + translations for all 7 non-English languages
  * (prefixed with the locale tag, the same trick the Python agent-import tests use). */
 export async function importGame(
@@ -91,6 +81,7 @@ export async function importGame(
   owner: Account,
   opts: ImportGameOptions,
 ): Promise<string> {
+  test.setTimeout(Math.max(test.info().timeout, 120_000));
   const translations: Record<string, unknown> = {};
   for (const loc of ['es', 'fr', 'de', 'pt', 'zh', 'hi', 'ar']) {
     const tag = `[${loc}] `;
@@ -109,7 +100,7 @@ export async function importGame(
     allowed_player_counts: opts.allowedPlayerCounts,
     allows_leave_mid_match: opts.allowsLeaveMidMatch ?? false,
     allows_join_mid_match: opts.allowsJoinMidMatch ?? false,
-    client_code: opts.clientCode,
+    declarative_ui: opts.declarativeUI,
     server_code: opts.serverCode,
     rules: opts.rules,
     ui_instructions: opts.uiInstructions,
@@ -131,14 +122,14 @@ export async function importGame(
   };
   // The server validates at most two uploads at once and answers 429 "Validation
   // capacity is busy" with a Retry-After; parallel workers hit that, so wait and retry.
-  let res = await request.post('/games', {
+  let res = await request.post('/games/declarative', {
     headers: { 'X-User-Id': owner.id, 'X-User-Password': owner.password },
     data,
   });
   for (let attempt = 0; res.status() === 429 && attempt < 20; attempt++) {
     const seconds = Number(res.headers()['retry-after']) || 2;
     await new Promise((resolve) => setTimeout(resolve, Math.min(seconds, 3) * 1000 * (0.5 + Math.random())));
-    res = await request.post('/games', {
+    res = await request.post('/games/declarative', {
       headers: { 'X-User-Id': owner.id, 'X-User-Password': owner.password },
       data,
     });
@@ -147,89 +138,22 @@ export async function importGame(
   return (await res.json()).id;
 }
 
-/** Publishes the real (server-side) tic-tac-toe game owned by [owner]. Returns its id. */
+/** Publishes a real declarative tic-tac-toe game through the normal validators. */
 export async function createGame(request: APIRequestContext, owner: Account, name: string): Promise<string> {
-  const rules =
-    'Two players take turns placing X and O on a 3x3 board. ' +
-    'The first to get three marks in a row wins. If the board fills with no winner, the match is a draw.';
-  const ui =
-    'A 3x3 grid of tappable cells and a status line. Use a calm blue theme, readable on phones.';
-  const tutorialText = 'Take turns placing X and O. Get three in a row to win.';
-  const tutorialHtml =
-    '<meta name="viewport" content="width=device-width">' +
-    '<h1>How to play</h1><p>Take turns placing X and O. Get three in a row to win.</p>';
-  const tutorialVocab = ['How to play', tutorialText];
-  const strings = clientStrings();
-  const empty = ['', '', '', '', '', '', '', '', ''];
-  const cases = [
-    {
-      name: 'Initial move',
-      description: 'Alice places X in the center.',
-      kind: 'initial',
-      ctx: testCtx(1),
-      state: { board: empty, winner: null, draw: false },
-      view_of_mover: viewOf(empty),
-      view_of_other: viewOf(empty),
-      player_id: 'u1',
-      other_player_id: 'u2',
-      move: { cell: 4 },
-      expected_state: { board: ['', '', '', '', 'X', '', '', '', ''], winner: null, draw: false },
-      expected_turn: ['u2'],
-      expected_view_of_mover: viewOf(['', '', '', '', 'X', '', '', '', '']),
-      expected_view_of_other: viewOf(['', '', '', '', 'X', '', '', '', '']),
-      images: caseImages('Initial move'),
-    },
-    {
-      name: 'Intermediate move',
-      description: 'Bob places O in the bottom-right corner.',
-      kind: 'intermediate',
-      ctx: testCtx(2),
-      state: { board: ['X', 'X', '', '', 'O', '', '', '', ''], winner: null, draw: false },
-      view_of_mover: viewOf(['X', 'X', '', '', 'O', '', '', '', '']),
-      view_of_other: viewOf(['X', 'X', '', '', 'O', '', '', '', '']),
-      player_id: 'u2',
-      other_player_id: 'u1',
-      move: { cell: 8 },
-      expected_state: { board: ['X', 'X', '', '', 'O', '', '', '', 'O'], winner: null, draw: false },
-      expected_turn: ['u1'],
-      expected_view_of_mover: viewOf(['X', 'X', '', '', 'O', '', '', '', 'O']),
-      expected_view_of_other: viewOf(['X', 'X', '', '', 'O', '', '', '', 'O']),
-      images: caseImages('Intermediate move'),
-    },
-    {
-      name: 'Terminal move',
-      description: 'Alice completes the top row and wins.',
-      kind: 'terminal',
-      ctx: testCtx(3),
-      state: { board: ['X', 'X', '', 'O', 'O', '', '', '', ''], winner: null, draw: false },
-      view_of_mover: viewOf(['X', 'X', '', 'O', 'O', '', '', '', '']),
-      view_of_other: viewOf(['X', 'X', '', 'O', 'O', '', '', '', '']),
-      player_id: 'u1',
-      other_player_id: 'u2',
-      move: { cell: 2 },
-      expected_state: { board: ['X', 'X', 'X', 'O', 'O', '', '', '', ''], winner: 0, draw: false },
-      expected_turn: null,
-      expected_view_of_mover: viewOf(['X', 'X', 'X', 'O', 'O', '', '', '', ''], 0),
-      expected_view_of_other: viewOf(['X', 'X', 'X', 'O', 'O', '', '', '', ''], 0),
-      expected_payouts: { u1: 0, u2: 0 },
-      images: caseImages('Terminal move'),
-    },
-  ];
-  return importGame(request, owner, {
-    name,
-    description: 'UI test game',
-    allowedPlayerCounts: [2],
-    clientCode: TICTACTOE,
-    serverCode: TICTACTOE_SERVER,
-    rules,
-    uiInstructions: ui,
-    tutorialText,
-    tutorialHtml,
-    tutorialVocab,
-    clientStrings: strings,
-    schemas: TICTACTOE_SCHEMAS,
-    cases,
-  });
+  // Complete declaration validation may queue behind another browser worker.
+  test.setTimeout(Math.max(test.info().timeout, 120_000));
+  const payload = structuredClone(DECLARATIVE_TICTACTOE);
+  payload.name = name;
+  payload.description = 'UI test game';
+  payload.game_addition_request_id_and_secret = uniqueName('declarative-ui-test-secret');
+  const headers = { 'X-User-Id': owner.id, 'X-User-Password': owner.password };
+  let response = await request.post('/games/declarative', {headers, data:payload, timeout:210000});
+  for (let attempt=0; response.status()===429 && attempt<20; attempt++) {
+    await new Promise(resolve=>setTimeout(resolve, 1000 + Math.random()*1500));
+    response = await request.post('/games/declarative', {headers, data:payload, timeout:210000});
+  }
+  expect(response.ok(), await response.text()).toBeTruthy();
+  return (await response.json()).id;
 }
 
 /** Pretends the browser already logged in as [user], as the site itself stores it. */

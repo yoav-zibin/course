@@ -168,8 +168,7 @@ function setupPortal(request) {
     navigator:{onLine:true},localStorage:{},PortalOffline:class {api(...args){return request(...args);}read(){return {};}write(){}},
     document:{getElementById:node,body:{dataset:{},classList:{toggle(){}}},documentElement:{dataset:{}},querySelector(){return null;},querySelectorAll(){return [];}},window,
     location:fakeLocation,history:{replaceState(s,title,url){setUrl(url);},pushState(s,title,url){setUrl(url);}},
-    Auth:{current:()=>({id:'owner'})},I18n,GameFrame:class{load(){}unload(){}send(){}},
-    apiRequest:request,formatTime:()=>'',shortId:x=>x,showPageError(){},el:(tag,attrs={},...children)=>({...attrs,children})});
+    Auth:{current:()=>({id:'owner'})},I18n,apiRequest:request,formatTime:()=>'',shortId:x=>x,showPageError(){},el:(tag,attrs={},...children)=>({...attrs,children})});
   vm.runInContext(read('portal-speed.js'),ctx);
   vm.runInContext(read('portal.js').replace(/main\(\);\s*$/,''),ctx);
   const run=code=>vm.runInContext(code,ctx);

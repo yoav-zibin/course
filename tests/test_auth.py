@@ -1,4 +1,5 @@
 """Tests for third-party login, login codes, and account merging."""
+from game_platform.tests.helpers import TEST_DECLARATIVE_UI
 
 import datetime as dt
 
@@ -553,6 +554,7 @@ def test_merge_works_through_the_file_backed_store(tmp_path: Path) -> None:
             code="<div/>",
             server_code=ECHO_SERVER_CODE,
             game_schemas=TEST_GAME_SCHEMAS,
+            import_package={"declarative_ui": TEST_DECLARATIVE_UI},
         )
         merged = platform.merge_users(
             caller_id=ann.id, from_user_id=ann.id, into_user_id=bob.id,

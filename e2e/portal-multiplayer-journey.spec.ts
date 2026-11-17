@@ -43,22 +43,22 @@ test('friends create, share, join, play, rematch and leave through the portal', 
     await expect(a.locator('.invite-action')).toHaveText('Share match');
     await testInfo.attach('multiplayer-lobby', { body: await a.screenshot(), contentType: 'image/png' });
     await a.getByRole('button', { name: 'Start game', exact: true }).click();
-    const boardA = a.frameLocator('#game-box iframe').locator('#board button');
-    const boardB = b.frameLocator('#game-box iframe').locator('#board button');
-    await expect(boardA).toHaveCount(9);
-    await expect(boardB).toHaveCount(9);
+    const boardA = a.locator('#game-box .declarative-stage');
+    const boardB = b.locator('#game-box .declarative-stage');
+    await expect(boardA).toBeVisible();
+    await expect(boardB).toBeVisible();
 
     await watching.goto(`/static/portal.html#match=${matchId}`);
-    const publicBoard = watching.frameLocator('#game-box iframe').locator('#board button');
-    await expect(publicBoard).toHaveCount(9);
-    await expect(publicBoard.filter({ hasNotText: /X|O/ }).first()).toBeDisabled();
+    const publicBoard = watching.locator('#game-box .declarative-stage');
+    await expect(publicBoard).toBeVisible();
+    await expect(publicBoard.locator('.actionable')).toHaveCount(0);
     for (const [board, cell, mark] of [
       [boardA, 0, 'X'], [boardB, 3, 'O'], [boardA, 1, 'X'],
       [boardB, 4, 'O'], [boardA, 2, 'X'],
     ] as const) {
-      await expect(board.nth(cell)).toBeEnabled();
-      await board.nth(cell).click();
-      await expect(publicBoard.nth(cell)).toHaveText(mark);
+      await expect(board.locator(`[data-ui-id=cell_${cell}]`)).toBeVisible();
+      await board.locator(`[data-ui-id=cell_${cell}]`).click();
+      await expect(publicBoard.locator(`[data-ui-id=piece_${cell}]`)).toHaveText(mark);
     }
     await expect(a.locator('#match-result')).toHaveText('You won');
     await expect(b.locator('#match-result')).toBeVisible();
@@ -68,7 +68,7 @@ test('friends create, share, join, play, rematch and leave through the portal', 
     await b.getByRole('button', { name: 'Join rematch', exact: true }).click();
     await expect(a.getByRole('button', { name: 'Start game', exact: true })).toBeEnabled();
     await a.getByRole('button', { name: 'Start game', exact: true }).click();
-    await expect(boardB).toHaveCount(9);
+    await expect(boardB).toBeVisible();
     await b.getByRole('button', { name: 'Controls', exact: true }).click();
     b.once('dialog', async dialog => {
       expect(dialog.message()).toContain('leave?');
@@ -92,7 +92,7 @@ test('one click exits the focus selected by a skin or portal layout', async ({ p
   await page.setViewportSize({ width: 1440, height: 900 });
   for (const variant of [{ skin: 'immersive', archetype: '' }, { skin: 'classic', archetype: 'focus' }]) {
     await page.goto(`/static/portal.html?skin=${variant.skin}#match=${match.id}`);
-    await expect(page.frameLocator('#game-box iframe').locator('#board button')).toHaveCount(9);
+    await expect(page.locator('#game-box .declarative-stage')).toBeVisible();
     await expect(page.locator('.invite-action')).toHaveText('Share match');
     if (variant.archetype) await page.evaluate(archetype => {
       document.documentElement.dataset.portalArchetype = archetype;

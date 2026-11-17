@@ -40,13 +40,13 @@ test('two players in separate browsers: join an online match and see each other\
     const page = await context.newPage();
     await loginAs(page, user);
     await page.goto(`/static/portal.html#match=${match.id}`);
-    return { context, page, board: page.frameLocator('#game-box iframe').locator('#board button') };
+    return { context, page, board: page.locator('#game-box .declarative-stage') };
   };
   const a = await open(alice);
   const b = await open(bob);
 
-  await expect(a.board).toHaveCount(9);
-  await expect(b.board).toHaveCount(9);
+  await expect(a.board).toBeVisible();
+  await expect(b.board).toBeVisible();
 
   // Hold Bob's next catalog refresh open. His active match must still receive
   // Alice's move without waiting for that unrelated request to finish. The
@@ -62,9 +62,9 @@ test('two players in separate browsers: join an online match and see each other\
     await route.continue().catch(() => {});
   });
   await started;
-  await a.board.nth(4).click();
-  await expect(a.board.nth(4)).toHaveText(/X|O/);
-  await expect(b.board.nth(4)).toHaveText(/X|O/, { timeout: 5_000 });
+  await a.board.locator('[data-ui-id=cell_4]').click();
+  await expect(a.board.locator('[data-ui-id=piece_4]')).toHaveText(/X|O/);
+  await expect(b.board.locator('[data-ui-id=piece_4]')).toHaveText(/X|O/, { timeout: 5_000 });
   releaseCatalog();
 
   await a.context.close();

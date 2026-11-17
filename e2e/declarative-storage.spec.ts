@@ -8,9 +8,7 @@ declare const state:any;
 
 const accountId='device-only-backgammon-storage-test';
 const example=JSON.parse(fs.readFileSync(path.join(__dirname,'../games/declarative/backgammon.json'),'utf8'));
-const ordinaryCatalog=JSON.parse(fs.readFileSync(path.join(__dirname,'../tests/fixtures/leave_contract/catalog.json'),'utf8'));
-const ordinary=ordinaryCatalog.find((game:any)=>game.id==='20a83777-0f59-4105-a09e-0267b9c15e40');
-const game={...example,id:'device-only-backgammon-storage-game',version:1,renderer_type:'declarative',game_schemas:ordinary.game_schemas,code:''};
+const game={...example,id:'device-only-backgammon-storage-game',version:1,renderer_type:'declarative',game_schemas:{state:example.unit_tests.state_schema,view:example.unit_tests.view_schema,move:example.unit_tests.move_schema},code:''};
 
 async function savedMatch(page:Page){return page.evaluate(()=>JSON.parse(JSON.stringify(state.match)));}
 

@@ -115,28 +115,17 @@ test('declarative browser engine isolates secrets, rejects loops and keeps text 
   expect(result.inert).toBe('<img src=x onerror=alert(1)>');expect(result.images).toBe(0);
 });
 
-test('declarative authoring page plays the compatibility host and filters hidden state',async({page})=>{
-  test.setTimeout(60000);
-  await page.goto('/game-test');
-  await expect(page.locator('#declarative-example option')).toHaveCount(12);
-  await page.locator('#declarative-example').selectOption('/games/declarative/examples/tictactoe');
-  await page.locator('#load-declarative-example').click();
-  await expect(page.locator('#declarative-spec')).toHaveValue(/buildplay-ui/);
-  await page.locator('#new-match').click();
-  const host=page.frameLocator('#game-box > iframe');
-  await expect(host.locator('.declarative-target')).toHaveCount(9);
-  await host.locator('[data-ui-id="cell_0"]').click();
-  await expect(host.locator('[data-ui-id="piece_0"]')).toContainText('X');
-  await expect.poll(async()=>JSON.parse(await page.locator('#state-out').inputValue()).board[0]).toBe(0);
-  await page.locator('#declarative-example').selectOption('/games/declarative/examples/memory');
-  await page.locator('#load-declarative-example').click();
-  await expect(page.locator('#game-name')).toHaveValue('Memory pairs (Declarative)');
-  const spec=JSON.parse(await page.locator('#declarative-spec').inputValue());
-  spec.ui_code='const gameUI={reduce(message){const m=message.type==="ui_event"?message.state_changed:message;return {scene:{labels:[{id:"privacy",text:JSON.stringify(m.state.board),x:20,y:20}]}}}};';
-  await page.locator('#declarative-spec').fill(JSON.stringify(spec));
-  await page.locator('#new-match').click();
-  await expect(host.locator('text')).toHaveCount(1);
-  await expect(host.locator('text')).toHaveText(JSON.stringify(Array(16).fill(-1)));
+test('declarative playground loads examples with viewer-filtered state',async({page})=>{
+  await page.goto('/static/declarative-test.html');
+  await expect(page.locator('#example option')).toHaveCount(12);
+  await page.locator('#example').selectOption('/games/declarative/examples/tictactoe');
+  await page.locator('#load-example').click();
+  await expect(page.locator('#spec')).toHaveValue(/buildplay-ui/);
+  await expect(page.locator('#preview .declarative-target')).toHaveCount(9);
+  await page.locator('#example').selectOption('/games/declarative/examples/memory');
+  await page.locator('#load-example').click();
+  await expect.poll(async()=>JSON.parse(await page.locator('#message').inputValue()).state.board).toEqual(Array(16).fill(-1));
+  await expect(page.locator('#preview .declarative-piece')).toHaveCount(16);
 });
 
 test('declarative local practice survives reload, replay and an offline move',async({page,request,context},testInfo)=>{

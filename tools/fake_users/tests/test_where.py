@@ -112,7 +112,7 @@ def test_the_generator_screenshots_the_game_and_links_the_match(tmp_path):
     page = FakePage()
     asyncio.run(g.couldnt_move(FakeUser(page), TICTACTOE))
     (what, path), = page.shots
-    assert what == "game"  # the game's frame, not the whole page
+    assert what == "game"  # the declarative board
     row, = g.stats.snapshot()["last_errors"]
     assert row["kind"] == "couldnt_move" and row["user"] == "Chloe" and row["game"] == "Tic-tac-toe v1"
     assert row["match_url"] == "http://127.0.0.1:8000/portal#match=m1"
@@ -120,7 +120,7 @@ def test_the_generator_screenshots_the_game_and_links_the_match(tmp_path):
     assert g.stats.snapshot()["games"][0]["couldnt_move"] == 1
 
 
-def test_without_a_game_frame_the_whole_page_is_shot(tmp_path):
+def test_without_a_declarative_board_the_whole_page_is_shot(tmp_path):
     g = generator(tmp_path)
     page = FakePage(has_game=False)
     asyncio.run(g.couldnt_move(FakeUser(page), POKER))

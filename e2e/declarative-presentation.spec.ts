@@ -4,7 +4,7 @@ import {test, expect} from '@playwright/test';
 
 test('an existing Backgammon version gets fitted clickable dice without changing its pinned package', async ({page}, testInfo) => {
   const original = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../tests/fixtures/declarative/backgammon-v1-ui.json'), 'utf8'));
-  const rules = fs.readFileSync(path.resolve(__dirname, '../games/audit-batch3/backgammon.server.js'), 'utf8');
+  const rules = fs.readFileSync(path.resolve(__dirname, '../games/declarative/backgammon.server.js'), 'utf8');
   const body = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../games/declarative/backgammon.json'), 'utf8'));
   await page.goto('/static/declarative-test.html');
   await page.addScriptTag({url:'/static/declarative-presentation.js?v=2'});

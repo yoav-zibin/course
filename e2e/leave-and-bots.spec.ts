@@ -1,5 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { createUser, createGame, importGame, loginAs, uniqueName, testCtx, caseImages } from './helpers';
 
@@ -80,18 +78,17 @@ test('leave dialog quotes the game payout and ends without a replacement bot', a
     }
   };`;
   // Exercise the normal publication gate, including required translatable text.
-  const helper = fs.readFileSync(path.resolve(__dirname, '../game_i18n_helper.js'), 'utf8');
-  const client = `<script type="application/json" id="i18n-strings">{"cash":"Cash out"}</script>
-    <p id="cash"></p><script>${helper}
-    function render(message){applyLocale(message);document.getElementById('cash').textContent=t('cash');}
-    render({});window.addEventListener('message',event=>{if(event.data.type==='state_changed')render(event.data)});
-    parent.postMessage({type:'ready'},'*');</script>`;
+  const declarativeUI = {
+    format:'buildplay-ui',version:1,viewport:{width:400,height:300},boards:[{id:'main',kind:'zone',x:0,y:0,width:400,height:300}],piece_types:{token:{shape:'circle'}},
+    strings:{cash:'Cash out'},
+    ui_code:'const gameUI={reduce(message){const m=message.type==="ui_event"?message.state_changed:message;return {scene:{labels:[{id:"cash",text:m.strings.cash,x:20,y:30}]}}}};',
+  };
   const game = await importGame(request, alice, {
     name: uniqueName('Cash out'),
     description: 'Cash out to end the match',
     allowedPlayerCounts: [2],
     allowsLeaveMidMatch: true,
-    clientCode: client,
+    declarativeUI,
     serverCode: source,
     rules: 'Press Cash out to end the match. Leaving pays the leaver 3 tokens.',
     uiInstructions: 'A cash-out button. Use a calm blue theme, readable on phones.',

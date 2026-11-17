@@ -38,7 +38,7 @@ see [GAME_DEVELOPMENT_GUIDE.md](GAME_DEVELOPMENT_GUIDE.md).
   automated checks: hand-written unit cases, JSON-Schema validation of
   states/moves/views, and random walks (up to 1,000 walks of up to 1,000
   moves) with per-call time and memory budgets — plus a recorded,
-  server-verified test flow on the /game-test page (see §7).
+  server-verified test flow through the `/game-test/*` REST endpoints (see §7).
 - **Stakes.** Games may be played for virtual tokens: players stake into
   a pot and the game's payouts divide it. A user's first completed verified
   login (Google, email code or phone code) grants 1,000 tokens once. Guest
@@ -132,8 +132,8 @@ see [GAME_DEVELOPMENT_GUIDE.md](GAME_DEVELOPMENT_GUIDE.md).
 ## 7. Publishing games
 
 - Games are published through **POST /games** (see
-  docs/agent-game-import.md): one call carries the server code, client
-  code, schemas, unit cases and all translations. Resubmitting with the
+  docs/agent-game-import.md): one call carries the server code, declarative UI
+  package, schemas, unit cases and all translations. Resubmitting with the
   game's secret updates it to a new version; only the secret's hash is
   stored server-side.
 - Publication is gated by the **five-step game-test flow**: store the
@@ -144,6 +144,10 @@ see [GAME_DEVELOPMENT_GUIDE.md](GAME_DEVELOPMENT_GUIDE.md).
 - **Game proposals:** a player who misses a game can propose it from the
   Portal's game-selection page; AI agents review proposals and create
   the game within 24 hours (see docs/game-proposals.md).
+
+HTML games are retained only in the read-only `/legacy/games` archive for
+future migration. The Portal and ordinary APIs expose declarative games only;
+HTML matches and their histories are removed, and new ones are rejected.
 
 ## 8. Online platform
 

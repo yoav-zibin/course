@@ -1,6 +1,7 @@
 """Real Firestore emulator tests; never connect to a production database."""
 
 import os
+import json
 import uuid
 from dataclasses import replace
 from unittest.mock import patch
@@ -464,9 +465,7 @@ def test_quickjs_computer_turn_survives_restart_and_duplicate_job(store):
 
     api = api_for(store)
     owner = api.new_user("owner")
-    source = (Path(__file__).parent.parent / "games" / "tictactoe.server.js").read_text(
-        encoding="utf-8"
-    )
+    source = json.loads((Path(__file__).parent.parent / "games" / "declarative" / "tictactoe.json").read_text())["server_code"]
     game = api.create_game(
         {
             "name": "Tic tac toe",
@@ -511,7 +510,7 @@ def test_quickjs_computer_turn_survives_restart_and_duplicate_job(store):
         assert time.monotonic() < deadline
         time.sleep(0.05)
         after = store.get_match(match["id"])
-    assert after.state["board"][0] == "X"
+    assert after.state["board"][0] == 0
     restarted.run_due_jobs()
     assert len(store.get_match(match["id"]).moves) == 2
 
@@ -1134,15 +1133,15 @@ def test_portal_catalog_copies_existing_sources_without_regeneration(store):
     counts = store.counts()
     assert copy_catalog(store, run_id="copies", copies=2, now=clock()) == catalog
     assert store.counts() == counts
-    base = Path(__file__).parents[1] / "games"
+    from game_platform.declarative_ui import client_document
+
+    base = Path(__file__).parents[1] / "games" / "declarative"
     for item in catalog:
         game = store.get_game(item["id"])
-        assert game.code == (base / (item["kind"] + ".html")).read_text(
-            encoding="utf-8"
-        )
-        assert game.server_code == (base / (item["kind"] + ".server.js")).read_text(
-            encoding="utf-8"
-        )
+        source = json.loads((base / (item["kind"] + ".json")).read_text())
+        assert game.code == client_document(source["declarative_ui"])
+        assert game.server_code == source["server_code"]
+        assert game.is_declarative
 
 
 def test_campaign_signup_metadata_is_queryable_for_match_attribution(store):

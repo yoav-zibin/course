@@ -80,11 +80,11 @@ lobby can't take computers, so a host whose lobby nobody joins deletes it.
 A new fake user arrives at the portal logged out, so the portal sends them to its welcome
 page; they continue as a guest there and come back.
 
-## How fake users play any game
+## How fake users play declarative games
 
-When the portal says it's this fake user's turn, they click random visible, enabled things
-inside the game's frame (mostly buttons, also cells, cards and canvases), and watch the
-portal's own view of the match for a new move. After `move_tries` clicks without one, they
+When the portal says it's this fake user's turn, they click visible, enabled declarative
+actions: board targets, scene buttons, or a movable piece followed by an allowed destination.
+They watch the portal's own view of the match for a new move. After `move_tries` clicks without one, they
 count "couldn't move" and leave. They never type and never click outside the game, except the
 portal's own controls.
 

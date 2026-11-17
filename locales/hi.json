@@ -855,7 +855,7 @@
   "ui.declarative.latest_scene": "नवीनतम दृश्य का JSON",
   "ui.declarative.live_preview": "लाइव पूर्वावलोकन",
   "ui.declarative.ui_messages": "इंटरफ़ेस के संदेश",
-  "ui.declarative.introduction": "JSON संदेशों से मूल ऐप के दृश्य अनुबंध की जाँच करें। यह प्रयोगशाला केवल प्रस्तुति का पूर्वावलोकन करती है। नियमों की जाँच करने, मैच पूरे करने और पूरा गेम जमा करने के लिए रिकॉर्ड किए गए परीक्षण क्रम का उपयोग करें।",
+  "ui.declarative.introduction": "JSON संदेशों से नेटिव दृश्य के अनुबंध को देखें। यह प्रयोगस्थल केवल प्रस्तुति का पूर्वावलोकन दिखाता है। पूरे गेम पैकेज की जाँच करने और उसे जमा करने के लिए घोषणात्मक REST API का उपयोग करें।",
   "ui.declarative.moves_hint": "चालें यहाँ make_move संदेशों के रूप में दिखती हैं। प्रयोगशाला इन्हें किसी मैच पर लागू नहीं करती।",
   "ui.declarative.player_one": "खिलाड़ी 1",
   "ui.declarative.player_two": "खिलाड़ी 2",
@@ -948,5 +948,10 @@
   "ui.portal.sync_review": "सिंक की समीक्षा करें — कंट्रोल खोलें",
   "ui.portal.offline_practice": "ऑफ़लाइन · इस डिवाइस पर खेल रहे हैं",
   "ui.portal.offline_moves": "ऑफ़लाइन · चालें इस डिवाइस पर सेव होती हैं",
-  "ui.match.share_match": "मैच शेयर करें"
+  "ui.match.share_match": "मैच शेयर करें",
+  "ui.portal.legacy_game_retired": "यह पुराना गेम अब पोर्टल पर उपलब्ध नहीं है।",
+  "error.html_games_read_only": "HTML गेम केवल पढ़े जा सकते हैं; declarative_ui पैकेज सबमिट करें",
+  "error.legacy_game_not_found": "पुराना गेम नहीं मिला",
+  "error.html_matches_retired": "HTML गेम में अब मैच नहीं खेले जा सकते",
+  "error.page_limit_invalid": "सीमा 1 से 100 के बीच होनी चाहिए"
 }

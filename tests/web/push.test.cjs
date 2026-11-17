@@ -141,11 +141,6 @@ function setup({
     location: { hash: "" },
     history: { replaceState() {} },
     Auth: { current: () => ({ id: "owner", password: "pw" }), renderMenu() {} },
-    GameFrame: class {
-      load() {}
-      unload() {}
-      send() {}
-    },
     apiRequest: fetch,
     formatTime: () => "",
     shortId: (x) => x,

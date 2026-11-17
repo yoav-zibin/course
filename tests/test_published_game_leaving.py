@@ -1,8 +1,4 @@
-"""The shared leave API against all 50 published games read on 2026-11-06.
-
-No production writes or model calls: real published code and schemas run in a
-fresh in-memory platform, including Poker's old pinned scalar-payout version.
-"""
+"""The shared leave API against every published declarative example."""
 
 import datetime as dt
 import json
@@ -11,26 +7,27 @@ from pathlib import Path
 
 import pytest
 
+from game_platform.agent_import import GameImport
 from game_platform.models import Game, GameRules
 
 ROOT = Path(__file__).resolve().parents[1]
-CATALOG = json.loads((ROOT / "tests/fixtures/leave_contract/catalog.json").read_text(encoding="utf-8"))
+CATALOG = [json.loads(path.read_text()) for path in sorted((ROOT / "games/declarative").glob("*.json")) if not path.name.endswith(".schema.json")]
 NOW = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
 
 
 @pytest.mark.parametrize("entry", CATALOG, ids=[g["name"] for g in CATALOG])
 @pytest.mark.parametrize("mode", ["direct", "preview", "solo"])
 def test_every_published_game_leaves_through_the_shared_api(api, entry, mode):
+    body = GameImport.model_validate(entry)
     count = (min if mode == "direct" else max)(entry["allowed_player_counts"])
     human_count = 1 if mode == "solo" else count
     users = [api.new_user(f"player-{i}", tokens=0 if mode == "solo" else 10) for i in range(human_count)]
     game = Game(
-        id=entry["id"], version=entry["version"], name=entry["name"],
+        id=entry["name"], version=1, name=entry["name"],
         owner_user_id=users[0], description="Published leave regression fixture",
-        rules=GameRules(**{k: tuple(entry[k]) if k == "allowed_player_counts" else entry[k]
-                           for k in ("allowed_player_counts", "allows_leave_mid_match", "allows_join_mid_match")}),
-        code="<div></div>", server_code=(ROOT / entry["server"]).read_text(encoding="utf-8"),
-        game_schemas=entry["game_schemas"], created_at=NOW, updated_at=NOW,
+        rules=body.game_rules(), code=body.client_code, server_code=body.server_code,
+        game_schemas=body.game_schemas(), import_package={"declarative_ui":body.declarative_ui},
+        created_at=NOW, updated_at=NOW,
     )
     # Seed a published version without rewriting it or re-running its publish gate.
     for version in range(1, game.version + 1):

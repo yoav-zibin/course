@@ -23,8 +23,7 @@ for cloud builds. The Linux VM itself cannot run Xcode or the iOS Simulator.
 | `frontends/ios-game-portal/` — BuildPlayFun iOS | Portal apps | `BuildPlayFun-ios-simulator` |
 
 These are the repository's only two native applications. The temporary Android
-and iOS samples and the paused legacy iOS Builder app have been removed. The
-legacy Builder folder retains standalone game examples, without an app project.
+and iOS samples and the paused legacy iOS Builder app have been removed. Its standalone HTML game examples have also been retired.
 
 BuildPlayFun iOS also has an opt-in TestFlight job in the same workflow. It requires
 an owned App Store Connect bundle ID in `IOS_PORTAL_BUNDLE_ID`, valid team

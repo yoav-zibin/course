@@ -465,7 +465,6 @@ class GamePlatform:
         bundle_wait_seconds: float = 3.0,
         bundle_games_ttl_seconds: float = 10.0,
         require_game_strings: bool = False,
-        legacy_match_seeds: bool = False,
     ) -> None:
         self._store: Store = store if store is not None else InMemoryStore()
         missing_game_schemas = sorted(
@@ -516,12 +515,6 @@ class GamePlatform:
         self._new_invite_token = new_invite_token
         self._new_referral_code = new_referral_code
         self._new_seed = new_seed
-        # Example-data generation only: reproduce the pre-fix seed scheme
-        # (seed derived from the match id, legacy derivation, no rekey), so
-        # the generator's scripted scenario and committed snapshot — whose
-        # poker operations were authored against the old decks — stay
-        # byte-identical. Never set in production: those seeds are public.
-        self._legacy_match_seeds = legacy_match_seeds
         self._push_notifier = (
             push_notifier if push_notifier is not None else LogPushNotifier()
         )
@@ -1845,7 +1838,8 @@ class GamePlatform:
                 match
                 for match in map(
                     self._enforce_clock,
-                    sorted(matches, key=lambda item: (item.created_at, item.id)),
+                    (match for match in sorted(matches, key=lambda item: (item.created_at, item.id))
+                     if self._match_is_declarative(match)),
                 )
                 if not match.private
                 and not match.num_computer_opponents
@@ -1892,6 +1886,8 @@ class GamePlatform:
         import_package: dict[str, JsonValue] | None = None,
         _check_strings: bool = True,
     ) -> Game:
+        if not isinstance((import_package or {}).get("declarative_ui"), dict):
+            raise InvalidRequestError("HTML games are read-only; submit a declarative_ui package")
         server_code = server_code or None
         if _check_strings:
             self._require_translatable(code, server_code)
@@ -2027,6 +2023,23 @@ class GamePlatform:
             game = self._store.get_game(game_id)
             return game if game is not None and not game.deleted else None
 
+    def get_legacy_game_versions(
+        self, game_id: str, *, caller_id: str | None = None
+    ) -> list[Game]:
+        """Retained HTML versions for migration, including a migrated game's history."""
+        with self._lock:
+            current = self._get_game(game_id)
+            if not current.published and caller_id != current.owner_user_id:
+                raise NotFoundError("game not found")
+            versions = [
+                game for version in range(1, current.version + 1)
+                if (game := self._store.get_game_version(game_id, version)) is not None
+                and not game.is_declarative
+            ]
+            if not versions:
+                raise NotFoundError("legacy game not found")
+            return versions
+
     def get_game(
         self, game_id: str, *, caller_id: str | None = None, include_code: bool = True,
     ) -> Game:
@@ -2036,7 +2049,7 @@ class GamePlatform:
 
         def read() -> Game:
             game = reader(game_id)
-            if game is None:
+            if game is None or not game.is_declarative:
                 raise NotFoundError('game not found')
             if not game.published and caller_id != game.owner_user_id:
                 raise NotFoundError("game not found")
@@ -2060,7 +2073,7 @@ class GamePlatform:
 
         def read() -> Game:
             game = reader(game_id, version)
-            if game is None:
+            if game is None or not game.is_declarative:
                 raise NotFoundError("game version not found")
             if not game.published and caller_id != game.owner_user_id:
                 if caller_id is None or not (self._store.has_game_membership(caller_id, game_id, version)
@@ -2233,7 +2246,8 @@ class GamePlatform:
         # Games without their code where the store can: the code is only needed for the
         # string table, which is remembered per version.
         lister = getattr(self._store, "list_games_without_code", None) or self._store.list_games
-        games = self._plain_read(lambda: lister(owner_user_id=None))
+        games = [game for game in self._plain_read(lambda: lister(owner_user_id=None))
+                 if game.is_declarative]
         self._bundle_games = (now + self._bundle_games_ttl_seconds, games)
         return games
 
@@ -2361,6 +2375,8 @@ class GamePlatform:
         # happens by submitting the game again through POST /games.
         with self._lock:
             game = self._get_owned_game(caller_id=caller_id, game_id=game_id)
+            if not game.is_declarative:
+                raise InvalidRequestError("HTML games are read-only; submit a declarative_ui package")
             if game.deleted:
                 raise NotFoundError("game not found")
             self._store.set_game_published(game_id, False)
@@ -2377,7 +2393,7 @@ class GamePlatform:
             reader = getattr(self._store, 'list_games_without_code', reader)
         games = self._plain_read(lambda: reader(owner_user_id=owner_user_id))
         return [game for game in games
-                if all(word in f'{game.name} {game.description}'.casefold() for word in words)]
+                if game.is_declarative and all(word in f'{game.name} {game.description}'.casefold() for word in words)]
 
     def list_popular_games(self, *, limit: int = 8) -> list[Game]:
         """Returns the highest player-match totals from the persistent ranking."""
@@ -2397,7 +2413,7 @@ class GamePlatform:
             games = []
             for game_id, _score in rankings:
                 game = read_game(game_id)
-                if game is not None and game.published and not game.deleted:
+                if game is not None and game.is_declarative and game.published and not game.deleted:
                     games.append(game)
             return games
 
@@ -2502,6 +2518,8 @@ class GamePlatform:
                 server_code=server_code_value,
                 game_schemas=game_schemas_value,
             )
+            if not updated.is_declarative:
+                raise InvalidRequestError("HTML games are read-only; submit a declarative_ui package")
             if updated.game_schemas is None:
                 raise InvalidRequestError(
                     "a game with server code needs its game_schemas; give them when updating the game"
@@ -2555,7 +2573,9 @@ class GamePlatform:
 
     def delete_game(self, *, caller_id: str, game_id: str) -> None:
         with self._lock:
-            self._get_owned_game(caller_id=caller_id, game_id=game_id)
+            game = self._get_owned_game(caller_id=caller_id, game_id=game_id)
+            if not game.is_declarative:
+                raise InvalidRequestError("HTML games are read-only; submit a declarative_ui package")
             self._store.delete_game(game_id)
 
     # Matches
@@ -2609,19 +2629,13 @@ class GamePlatform:
     ) -> Match:
         """Stores a new waiting match of [game] owned (and first seated) by [caller_id].
         The caller holds the lock and has checked the game."""
+        if not game.is_declarative:
+            raise InvalidRequestError("HTML games no longer support matches")
         now = self._clock()
         match_id = self._new_id()
-        if self._legacy_match_seeds:
-            seed = int.from_bytes(
-                hashlib.sha256(match_id.encode()).digest()[:4], "big"
-            )
-            seed_version = 1
-        else:
-            # A random server-side secret (see _call_seed): never sent to
-            # clients, and knowing the match id reveals nothing about it,
-            # so nobody can predict the match's random outcomes.
-            seed = self._new_seed()
-            seed_version = 3
+        # The seed is a per-match server secret and never sent to clients.
+        seed = self._new_seed()
+        seed_version = 3
         match = Match(
             id=match_id,
             game_id=game.id,
@@ -2677,7 +2691,9 @@ class GamePlatform:
             return [
                 match
                 for match in map(
-                    self._enforce_clock, self._store.list_matches_involving(caller_id)
+                    self._enforce_clock,
+                    (match for match in self._store.list_matches_involving(caller_id)
+                     if self._match_is_declarative(match))
                 )
                 if caller_id not in match.hidden_for_user_ids
                 and (status is None or match.status == status)
@@ -2724,6 +2740,8 @@ class GamePlatform:
     def _join(self, match: Match, *, caller_id: str) -> Match:
         """Seats [caller_id] in [match], whatever its privacy; quick matches start
         once they have all their players. The caller holds the lock."""
+        if not self._match_is_declarative(match):
+            raise NotFoundError("match not found")
         if match.seat_of(caller_id) is not None:
             raise ConflictError("you are already a player in this match")
         if caller_id in match.removed_user_ids:
@@ -2846,7 +2864,8 @@ class GamePlatform:
             game_version = self._store.get_game_version(
                 match.game_id, match.game_version
             )
-            if game.deleted or not game.published or game_version is None:
+            if (game.deleted or not game.published or game_version is None
+                    or not game_version.is_declarative):
                 raise ConflictError("this game is no longer available for rematches")
 
             solo_bot_rematch = (
@@ -3108,7 +3127,7 @@ class GamePlatform:
         previously dealt legacy deck. Called before a match's
         state-changing logic calls; the caller saves the returned match,
         so the rekey persists."""
-        if self._legacy_match_seeds or match.seed_version >= 3:
+        if match.seed_version >= 3:
             return match
         return replace(match, seed=self._new_seed(), seed_version=3)
 
@@ -3121,7 +3140,7 @@ class GamePlatform:
         return int.from_bytes(digest, "big")
 
     def _logic_seed(self, match: Match, function: str) -> int:
-        if self._legacy_match_seeds or function == "applyMove":
+        if function == "applyMove":
             return self._call_seed(match)
         if function == "newMatch":
             return self._call_seed_at(match, -1)
@@ -3419,7 +3438,6 @@ class GamePlatform:
                 "newMatch",
                 ctx=self._game_ctx(funded_view),
                 # Initialization must not reveal/reuse the first move's RNG.
-                # The fixture generator alone preserves its historical stream.
                 seed=self._logic_seed(match, "newMatch"),
                 now=self._clock(),
             )
@@ -3455,6 +3473,7 @@ class GamePlatform:
         game = self._store.get_game_version(match.game_id, match.game_version)
         if (
             game is None
+            or not game.is_declarative
             or not game.server_code
             or match.status != "ongoing"
             or len(match.active_human_user_ids) != 1
@@ -3492,6 +3511,8 @@ class GamePlatform:
         logic fails is recorded and the match is left as it was."""
         with self._lock:
             match = self._store.get_match(match_id)
+            if match is not None and not self._match_is_declarative(match):
+                return
             if match is not None:
                 match = self._enforce_clock(match)
                 match = self._rekey_seed(match)
@@ -3637,9 +3658,8 @@ class GamePlatform:
         if match.state is None:
             return None
         game = self._store.get_game_version(match.game_id, match.game_version)
-        if game is None:
-            # No game record (or no state yet): show nothing. Never fall
-            # back to the full state.
+        if game is None or not game.is_declarative:
+            # Retired HTML games and missing records never execute a view.
             return None
         if not game.server_code:
             # No server code, no view (every game has server code; this
@@ -4127,6 +4147,7 @@ class GamePlatform:
                 match
                 for match in self._store.list_matches_by_status("waiting_for_players")
                 if match.game_id == game.id
+                and self._match_is_declarative(match)
                 and match.matchmaking_player_count == target
                 and match.status == "waiting_for_players"
                 and not match.private
@@ -4369,7 +4390,7 @@ class GamePlatform:
             return [
                 game
                 for game in games
-                if game is not None and game.published and not game.deleted
+                if game is not None and game.is_declarative and game.published and not game.deleted
             ]
         return self._plain_read(read)
 
@@ -4392,6 +4413,7 @@ class GamePlatform:
             game
             for game in games
             if game is not None
+            and game.is_declarative
             and not game.deleted
             and (game.published or game.owner_user_id == user.id)
         ]
@@ -5030,7 +5052,8 @@ class GamePlatform:
 
     def admin_delete_game(self, game_id: str) -> None:
         with self._lock:
-            self._get_live_game(game_id)
+            if self._get_game(game_id).deleted:
+                raise ConflictError("the game has been deleted")
             for match in self._store.list_matches_for_game(game_id):
                 self._delete_match_and_invites(match.id)
             self._store.delete_game(game_id)
@@ -5061,18 +5084,27 @@ class GamePlatform:
         game = self._get_game(game_id)
         if game.deleted:
             raise ConflictError("the game has been deleted")
+        if not game.is_declarative:
+            raise NotFoundError("game not found")
         return game
 
     def _get_owned_game(self, *, caller_id: str, game_id: str) -> Game:
         game = self._get_game(game_id)
         if game.owner_user_id != caller_id:
             raise ForbiddenError("only the game's creator can change it")
-        return self._get_live_game(game_id)
+        if game.deleted:
+            raise ConflictError("the game has been deleted")
+        return game
+
+    def _match_is_declarative(self, match: Match) -> bool:
+        reader = getattr(self._store, "get_game_version_without_code", self._store.get_game_version)
+        game = reader(match.game_id, match.game_version)
+        return game is not None and game.is_declarative
 
     def _get_match(self, match_id: str) -> Match:
         """The match, with any speed-match timeout applied. The caller holds the lock."""
         match = self._store.get_match(match_id)
-        if match is None:
+        if match is None or not self._match_is_declarative(match):
             raise NotFoundError("match not found")
         return self._enforce_clock(match)
 

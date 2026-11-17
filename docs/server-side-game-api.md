@@ -9,7 +9,7 @@ result contract; bots are single-player only.
 
 | Concern | The contract |
 |---|---|
-| Game code | `client_code` (HTML, iframe) + `server_code` (JavaScript, run in QuickJS) — every game has both |
+| Game code | `declarative_ui` (portable presentation) + `server_code` (JavaScript, run in QuickJS) |
 | Players | Id strings: a human's user id, `computer-1`, `computer-2`, … |
 | Initial state | The server calls `newMatch` at start |
 | A move | Client sends a small game-defined `move`; the server calls `applyMove` |
@@ -129,10 +129,12 @@ const game = {
   estimates are divided by the walks actually attempted, including unfinished
   walks as losses. The budget does not depend on machine speed or elapsed time.
 
-## Client code (iframe protocol v2)
+## Declarative presentation messages
 
-The client is still an HTML page in an iframe (`sandbox="allow-scripts"`)
-exchanging the same two messages, but it no longer computes states:
+The platform passes view messages to the declarative reducer and submits its
+JSON move intents to the authoritative server. The browser renders the resulting
+scene with platform-owned pieces and controls. Legacy HTML games are archived
+and cannot create matches.
 
 ```jsonc
 // state_changed: platform to game
@@ -172,7 +174,7 @@ viewer's seat as seat indices (`turn_of_player_indices`, `my_player_index`,
 
 | Endpoint | Behavior |
 |---|---|
-| `POST /games` | Creates and publishes a complete game in one call (the agent import): `client_code`, `server_code`, `game_schemas` (in `unit_tests`), translations and images are all supplied in the body; the server runs the tests first and inserts nothing if they fail. `PATCH /games/{id}` updates a game and re-tests any new server code (or its rules) first, refusing the update if the tests fail |
+| `POST /games` | Creates and publishes a complete game in one call (the agent import): `declarative_ui`, `server_code`, schemas (in `unit_tests`), translations and images are all supplied in the body; the server runs the tests first and inserts nothing if they fail. `PATCH /games/{id}` edits name/description only; submit a complete tested declarative package to change behavior |
 | `POST /matches` | `{game_id, num_computer_opponents, private?, max_loss}` |
 | `POST /matches/{id}/join`, `POST /invites/{token}/accept` | Take a seat and deduct the stake (409 if the balance is too low); mid-match the server calls `playerJoined` |
 | `POST /matches/{id}/leave` | Before the start, a refund; mid-match, `playerLeft` |

@@ -13,8 +13,8 @@ the game supplies no HTML, DOM operations or WebView UI.
 
 The portal includes the browser renderer for this contract. A native client
 still needs to implement the renderer and host bridge described below; this
-format alone is not a shipped SwiftUI/UIKit renderer. Existing HTML games keep
-their existing interface.
+format alone is not a shipped SwiftUI/UIKit renderer. Existing HTML games are retained only in the read-only
+[legacy archive](html-game-retirement.md) until migration.
 
 The authoritative contract is
 [`schemas/declarative-ui.schema.json`](../schemas/declarative-ui.schema.json),
@@ -36,14 +36,13 @@ optional join/leave handlers. It validates moves, produces state, filters each
 viewer's information, decides whose turn it is, and settles the game. Its
 schemas, tests and deterministic execution requirements still apply.
 
-Declarative games are ordinary published `Game` records. They appear in the
-same `/games` catalog, paginated lists, search, invitations and version-pinned
-matches as HTML games. `renderer_type: "declarative"` selects the presentation
-host, and the portal appends **(Declarative)** to the localized name. They use
-the same create/join/start/move/history/computer-opponent endpoints and server
-validation. Sending a forged scene, local state, dice or illegal move cannot
-replace server state. Offline practice runs locally, just like HTML practice;
-multiplayer and online computer matches remain server authoritative.
+Declarative games are the portal's playable `Game` records. They appear in the
+`/games` catalog, paginated lists, search, invitations and version-pinned matches.
+`renderer_type: "declarative"` identifies their presentation package. The portal
+shows the stored localized name. Their create/join/start/move/history APIs retain
+server validation. Sending a forged scene, local state, dice or illegal move
+cannot replace server state. Offline practice runs locally; multiplayer and
+online computer matches remain server authoritative.
 
 The Backgammon package uses the exact rules JavaScript of the regular audited
 Backgammon game. Its strict move schema describes roll, pass and moves from a
@@ -379,17 +378,11 @@ responses return 422; a full validation queue returns 429 with `Retry-After`.
 platform-generated `client_code` compatibility host for existing test tools.
 Native clients use the package directly and do not need this HTML.
 
-Complete the normal five-step `/game-test` workflow for the exact final
-payload. Its input form has a **Declarative UI package** field; paste the
-`declarative_ui` object there. The platform supplies the client host, while the
-existing server tests, allowed player counts, pass-and-play, multiplayer,
-computer opponents, screen sizes and orientation evidence still apply.
-Step 1 records and validates the full submission; changing the package or
-code afterwards requires a fresh test flow. Test the actual UI, hidden-player
-views, spectator/out-of-turn behavior, legal destinations, replay and error
-recovery as well as the server's rules.
-
-Submit the complete request to `POST /games/declarative` or `POST /games`:
+Complete the recorded test flow for the exact final payload through the
+`/game-test/*` REST endpoints. The removed HTML authoring page is no longer
+available. `tools/publish_declarative_games.py` records and verifies complete
+traces before submission; the scene playground supports visual review.
+Submit the resulting complete package to `POST /games/declarative`:
 
 ```text
 {
@@ -409,7 +402,7 @@ Submit the complete request to `POST /games/declarative` or `POST /games`:
 ```
 
 Omit `client_code`: the platform derives it. `/games/declarative` requires the
-declarative package; `/games` also accepts the existing HTML form. Authentication,
+declarative package; `/games` accepts the same declarative form; HTML submissions are rejected. Authentication,
 ownership, idempotent updates, translations in all supported languages,
 tutorials, cover/supporting images, JSON schemas, approved examples,
 determinism/random-walk checks and recorded test gates are the same as for

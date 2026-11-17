@@ -855,7 +855,7 @@
   "ui.declarative.latest_scene": "JSON der neuesten Szene",
   "ui.declarative.live_preview": "Live-Vorschau",
   "ui.declarative.ui_messages": "Nachrichten der Benutzeroberfläche",
-  "ui.declarative.introduction": "Prüfe den Vertrag für native Szenen mit JSON-Nachrichten. Diese Testumgebung zeigt nur die Darstellung. Verwende den aufgezeichneten Testablauf, um Regeln zu prüfen, Partien zu beenden und ein vollständiges Spiel einzureichen.",
+  "ui.declarative.introduction": "Untersuche den nativen Szenenvertrag anhand von JSON-Nachrichten. Diese Testumgebung zeigt nur die Darstellung. Verwende die deklarative REST-API, um ein vollständiges Spielpaket zu prüfen und einzureichen.",
   "ui.declarative.moves_hint": "Züge erscheinen hier als make_move-Nachrichten. Die Testumgebung wendet sie nicht auf eine Partie an.",
   "ui.declarative.player_one": "Spieler 1",
   "ui.declarative.player_two": "Spieler 2",
@@ -948,5 +948,10 @@
   "ui.portal.sync_review": "Synchronisierung prüfen — Steuerung öffnen",
   "ui.portal.offline_practice": "Offline · Spiel auf diesem Gerät",
   "ui.portal.offline_moves": "Offline · Züge werden auf diesem Gerät gespeichert",
-  "ui.match.share_match": "Match teilen"
+  "ui.match.share_match": "Match teilen",
+  "ui.portal.legacy_game_retired": "Dieses ältere Spiel ist im Portal nicht mehr verfügbar.",
+  "error.html_games_read_only": "HTML-Spiele sind schreibgeschützt; reiche ein declarative_ui-Paket ein",
+  "error.legacy_game_not_found": "altes Spiel nicht gefunden",
+  "error.html_matches_retired": "HTML-Spiele unterstützen keine Partien mehr",
+  "error.page_limit_invalid": "das Limit muss zwischen 1 und 100 liegen"
 }

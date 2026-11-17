@@ -2,9 +2,9 @@
 matches are read, listed or moved in — and, on the scalable backend, by a
 durable deadline job the background worker runs (test_query_store.py covers
 that path). The tests set the clock by hand; nothing waits for real."""
+from game_platform.tests.helpers import TEST_DECLARATIVE_UI
 
 import datetime as dt
-import json
 import threading
 from collections.abc import Sequence
 from dataclasses import replace
@@ -106,6 +106,7 @@ class World:
             code="<div>duel</div>",
             server_code=DUEL_SERVER_CODE,
             game_schemas=TEST_GAME_SCHEMAS,
+            import_package={"declarative_ui": TEST_DECLARATIVE_UI},
         ).id
 
     def match(
@@ -292,19 +293,17 @@ def test_a_v2_timeout_ends_without_running_a_computer() -> None:
     match, the server must move the computer — in v1 a human's browser
     did it, so the takeover path never scheduled a move and the match
     stalled on the computer's turn (found by e2e/speed.spec.ts)."""
-    from pathlib import Path
-
+    from game_platform.declarative_ui import client_document
     from game_platform.store import InMemoryStore
 
-    games = Path(__file__).parent.parent / "games"
     clock = ManualClock()
     platform = GamePlatform(
         store=InMemoryStore(), clock=clock, computer_move_delay_seconds=0
     )
     ann = platform.create_user(display_name="ann").id
     bob = platform.create_user(display_name="bob").id
-    # The debug game, whose computer move (a pass) is instant: this test
-    # is about the scheduling, not about any game's thinking time.
+    # The declarative fixture's computer move is instant; this test concerns
+    # scheduling rather than game-specific thinking time.
     game = platform.create_game(
         caller_id=ann,
         name="Debug",
@@ -314,9 +313,10 @@ def test_a_v2_timeout_ends_without_running_a_computer() -> None:
             allows_leave_mid_match=True,
             allows_join_mid_match=True,
         ),
-        code=(games / "debug.html").read_text(),
-        server_code=(games / "debug.server.js").read_text(),
-        game_schemas=json.loads((games / "debug.schema.json").read_text()),
+        code=client_document(TEST_DECLARATIVE_UI),
+        server_code=DUEL_SERVER_CODE,
+        game_schemas=TEST_GAME_SCHEMAS,
+        import_package={"declarative_ui": TEST_DECLARATIVE_UI},
     )
     match = platform.create_match(
         caller_id=ann, game_id=game.id, num_computer_opponents=0, turn_seconds=60
@@ -329,7 +329,7 @@ def test_a_v2_timeout_ends_without_running_a_computer() -> None:
     assert after.status == "over" and after.end_reason == "timed_out"
     assert after.turn_of_player_indices is None
     assert len(after.moves) == 0
-    assert after.state == {"counter": 0, "note": ""}
+    assert after.state == {"n": 0}
 
 
 def test_every_human_with_the_turn_times_out() -> None:

@@ -58,11 +58,11 @@ test.describe('Layout at different screen sizes', () => {
     // Start a server match through the dedicated computer-play option.
     await page.getByRole('button', { name: /Play with computers/ }).click();
 
-    const frame = page.locator('#game-box iframe');
-    const board = page.frameLocator('#game-box iframe').locator('#board button');
+    const frame = page.locator('#game-box .declarative-stage');
+    const board = page.locator('#game-box .declarative-target');
     await expect(board).toHaveCount(9);
     await board.first().click();
-    await expect(board.first()).toHaveText('X');
+    await expect(page.locator('#game-box [data-ui-id=piece_0]')).toHaveText('X');
 
     for (const [w, h] of [[844, 390], [390, 844], [1280, 800]]) {
       await page.setViewportSize({ width: w, height: h });
@@ -71,7 +71,7 @@ test.describe('Layout at different screen sizes', () => {
       expect(box!.width).toBeGreaterThan(250);
       expect(box!.width).toBeLessThanOrEqual(w);
       // The move already made is kept; the page is not reloaded.
-      await expect(board.first()).toHaveText('X');
+      await expect(page.locator('#game-box [data-ui-id=piece_0]')).toHaveText('X');
     }
   });
 });

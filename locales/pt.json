@@ -855,7 +855,7 @@
   "ui.declarative.latest_scene": "JSON da cena mais recente",
   "ui.declarative.live_preview": "Prévia ao vivo",
   "ui.declarative.ui_messages": "Mensagens da interface",
-  "ui.declarative.introduction": "Inspecione o contrato de cenas nativas com mensagens JSON. Este ambiente mostra apenas a apresentação. Use o fluxo de testes registrado para verificar as regras, terminar partidas e enviar um jogo completo.",
+  "ui.declarative.introduction": "Inspecione o contrato de cena nativa com mensagens JSON. Este ambiente permite apenas pré-visualizar a apresentação. Use a API REST declarativa para validar e enviar um pacote de jogo completo.",
   "ui.declarative.moves_hint": "Os movimentos aparecem aqui como mensagens make_move. O ambiente de testes não os aplica a uma partida.",
   "ui.declarative.player_one": "Jogador 1",
   "ui.declarative.player_two": "Jogador 2",
@@ -948,5 +948,10 @@
   "ui.portal.sync_review": "Revise a sincronização nos controles",
   "ui.portal.offline_practice": "Offline · jogando neste dispositivo",
   "ui.portal.offline_moves": "Offline · as jogadas são salvas neste dispositivo",
-  "ui.match.share_match": "Compartilhar partida"
+  "ui.match.share_match": "Compartilhar partida",
+  "ui.portal.legacy_game_retired": "Este jogo antigo já não está disponível no portal.",
+  "error.html_games_read_only": "Os jogos HTML são somente leitura; envie um pacote declarative_ui",
+  "error.legacy_game_not_found": "jogo antigo não encontrado",
+  "error.html_matches_retired": "Os jogos HTML não permitem mais partidas",
+  "error.page_limit_invalid": "o limite deve estar entre 1 e 100"
 }

@@ -109,15 +109,15 @@ try {
             const player=state.players[state.turn_of_player_indices[0]];
             const p=users.findIndex(user=>user.id===player.user_id);
             if(p<0) return false;
-            const board=pages[p].frameLocator('#game-box iframe').locator('#board button');
-            if(await board.count()!==9) return false;
-            const filled=await board.evaluateAll(buttons=>buttons.filter(button=>button.textContent.trim()).length);
-            if(filled<state.move_count) return false;
-            if(await pages[p].frameLocator('#game-box iframe').locator('#board button:enabled').count()) {active=pages[p];return true;}
+            const stage=pages[p].locator('#game-box .declarative-stage');
+            if(!await stage.isVisible()) return false;
+            if(await stage.locator('.declarative-piece').count()<state.move_count) return false;
+            const board=stage.locator('.declarative-target[aria-disabled="false"]');
+            if(await board.count()) {active=pages[p];return true;}
             return false;
           },{timeout:20000}).toBe(true);
           if(!active) {state.status='over';break;}
-          const board=active.frameLocator('#game-box iframe').locator('#board button:enabled');
+          const board=active.locator('#game-box .declarative-target[aria-disabled="false"]');
           const index=Math.floor(random()*await board.count());
           const moved=active.waitForResponse(r=>new URL(r.url()).pathname===`/matches/${match.id}/moves`&&r.request().method()==='POST');
           moved.catch(()=>{});

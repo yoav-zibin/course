@@ -1,3 +1,4 @@
+import json
 import time
 from pathlib import Path
 
@@ -67,10 +68,15 @@ def test_popularity_survives_a_snapshot_restart_and_match_deletion(tmp_path):
 
 def test_server_computer_match_adds_all_players_exactly_once(api):
     owner = api.new_user("computer player")
-    source = Path(__file__).resolve().parent.parent / "games" / "tictactoe.server.js"
+    from game_platform.declarative_ui import client_document
+
+    source = Path(__file__).resolve().parent.parent / "games" / "declarative" / "tictactoe.json"
+    body = json.loads(source.read_text())
     game = api.create_game({
-        "name": "Computer popularity", "code": "<main>game</main>",
-        "allowed_player_counts": [2], "server_code": source.read_text(),
+        "name": "Computer popularity", "code": client_document(body["declarative_ui"]),
+        "declarative_ui": body["declarative_ui"],
+        "allowed_player_counts": [2], "server_code": body["server_code"],
+        "game_schemas": {key: body["unit_tests"][key + "_schema"] for key in ("state", "move", "view")},
     }, owner)["id"]
     match = api.new_match(owner=owner, game_id=game, num_computer_opponents=1, start=True)
     assert api.ok("GET", f"/games/{game}/popularity")["score"] == 2

@@ -41,10 +41,9 @@ an unauthenticated `GET /games/schema`.
 Required fields:
 
 - `name`, `description`, `allowed_player_counts` (unique integers 1–10).
-- Either `client_code` (complete iframe HTML following the v2 message and
-  translation contracts) or `declarative_ui` (portable package following
-  `schemas/declarative-ui.schema.json`). Omit `client_code` for declarative
-  imports; the platform generates its compatibility host.
+- `declarative_ui`: a portable package following
+  `schemas/declarative-ui.schema.json`. Omit `client_code`; the platform generates
+  its compatibility host. HTML game submissions are rejected.
 - `server_code`: deterministic QuickJS JavaScript implementing the platform game API.
 - `rules`, `ui_instructions`: substantive specifications.
 - `tutorial`: `{text, html}`, with a responsive viewport; interactive tutorials
@@ -59,7 +58,7 @@ Required fields:
   `pt`, `zh`, `hi`, `ar`). Each entry has `display_name`, `short_description`,
   `game_logic_rules`, `game_ui_rules`, `tutorial_strings` (every tutorial string
   mapped to its translation) and `client_strings` (every key of the game's
-  `i18n-strings` table mapped to its translation). Translations must keep every
+  declarative `strings` map mapped to its translation). Translations must keep every
   `{placeholder}`. The source language's entry is synthesized server-side, so the
   published game carries translations for all 8 languages. The supplied
   translations are also stored as the portal bundle's translations, so the game's
@@ -261,7 +260,7 @@ print(published['id'], published['version'])
 4. Write independent rule assertions and illegal-move/privacy tests, plus the
    required initial/intermediate/terminal examples. Generated replay snapshots
    alone do not establish rule correctness. Run random walks to completion and
-   local UI checks using `/game-test` across supported player modes, phone, tablet
+   local UI checks using `/static/declarative-test.html` across supported player modes, phone, tablet
    and laptop sizes, in portrait and landscape. Enter both game files, select
    each supported player count in turn, and play several randomly chosen matches
    to completion in each scenario. Check clickable targets are at least
