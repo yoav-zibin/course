@@ -2173,6 +2173,20 @@ async function declarativeTransition(match, message) {
   }
 }
 
+async function reviewedDeclarativePresentation(game) {
+  const spec = game?.declarative_ui;
+  // This reviewed visual repair also serves existing Backgammon matches.
+  // The adapter checks exact original presentation and authoritative rules;
+  // cached game records, their versions, and the move path stay pinned.
+  if (!spec || game.id !== "5f5293c3-2a3a-4eec-b631-9debf59be0ca") return spec;
+  try {
+    await loadPortalScript("/static/declarative-presentation.js?v=1");
+    return await window.DeclarativePresentation.forGame(game);
+  } catch {
+    return spec;
+  }
+}
+
 async function syncGame() {
   const match = state.match;
   if (!match || match.status === "waiting_for_players") {
@@ -2200,9 +2214,13 @@ async function syncGame() {
     if (!stillCurrent()) return;
     if (state.loaded !== key) {
       const fullGame = state.gameCache.get(`${match.game_id}@${match.game_version}`);
-      frame.load(themedCode, fullGame?.declarative_ui, {animate: match.localMode !== "pass"});
-      state.loaded = key;
-      state.lastSent = null;
+      const presentation = await reviewedDeclarativePresentation(fullGame);
+      if (!stillCurrent()) return;
+      if (state.loaded !== key) {
+        frame.load(themedCode, presentation, {animate: match.localMode !== "pass"});
+        state.loaded = key;
+        state.lastSent = null;
+      }
     }
   }
   const user = me();

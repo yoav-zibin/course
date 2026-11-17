@@ -670,6 +670,19 @@ for(const [change,mutation] of [
   await t.run('syncGame()');
   assert.equal(t.run('sent.length'),1);
  });
+
+ test(`a delayed presentation repair cannot replace a changed ${change} context`,async()=>{
+  const t=gameSyncSetup();
+  t.run('reviewedDeclarativePresentation=()=>new Promise(resolve=>{globalThis.releasePresentation=resolve})');
+  const pending=t.run('syncGame()');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(t.run('typeof releasePresentation'),'function');
+  t.run(mutation);
+  t.run('releasePresentation({version:1})');
+  await pending;
+  assert.equal(t.run('loads.length'),0);
+  assert.equal(t.run('sent.length'),0);
+ });
 }
 
 test('identical polls share a downloaded game without remounting its camera',async()=>{

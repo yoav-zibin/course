@@ -45,8 +45,11 @@ def setup_board(logic, ctx, own, enemy, dice, bar=0):
 
 
 def emitted_move(ui, frame, changed, move):
-    if move['action'] in ('roll', 'pass'):
-        event = {'type': 'tap', 'id': move['action']}
+    if move['action'] == 'roll':
+        die = next(piece for piece in frame['scene']['pieces'] if piece['type'] == 'die' and piece['actions'] == ['tap'])
+        event = {'type': 'tap', 'id': die['id']}
+    elif move['action'] == 'pass':
+        event = {'type': 'tap', 'id': 'pass'}
     else:
         target = 'to_' + str(move['to'])
         # Pick the offered checker by its source position in local presentation
@@ -68,6 +71,93 @@ def test_complete_package_uses_exact_ordinary_authority(body):
     assert all(value['display_name'].endswith(' (Declarative)') for value in prepared['translations'].values())
     assert all(case['passed'] for case in verify_examples(body.server_code, body.unit_tests))
     assert len(body.declarative_ui['boards'][0]['cells']) == 24
+    assert body.declarative_ui == json.loads((ROOT / 'static/backgammon-declarative-ui.json').read_text())
+
+
+def dice(frame):
+    return [piece for piece in frame['scene']['pieces'] if piece['type'] == 'die']
+
+
+def test_two_central_dice_replace_the_roll_button_and_only_offer_legal_rolls(body):
+    rules = GameLogic(body.server_code, game_schemas=body.game_schemas())
+    ui = DeclarativeLogic(body.declarative_ui)
+    ctx = context()
+    result = rules.call('newMatch', ctx=ctx, seed=7)
+    viewer = result['turn'][0]
+    changed = message(rules, result, ctx, viewer)
+    frame = ui.reduce(changed)
+    assert [piece['id'] for piece in dice(frame)] == ['die_0', 'die_1']
+    assert [piece['position'] for piece in dice(frame)] == [{'x': 336, 'y': 180}, {'x': 336, 'y': 260}]
+    assert all(piece['asset'] == 'die_0_used_0' and piece['actions'] == ['tap'] for piece in dice(frame))
+    assert not frame['scene']['controls']
+    for piece in dice(frame):
+        event = {'type': 'ui_event', 'event': {'type': 'tap', 'id': piece['id']}, 'state_changed': changed}
+        assert ui.reduce(event, frame['local_state'])['make_move'] == {'action': 'roll'}
+        for passive in (message(rules, result, ctx, None), {**changed, 'replay': True},
+                        {**changed, 'acting_for_player_index': None}):
+            passive_frame = ui.reduce(passive, frame['local_state'])
+            assert len(dice(passive_frame)) == 2
+            assert all(piece['actions'] == [] for piece in dice(passive_frame))
+            assert 'make_move' not in ui.reduce({**event, 'state_changed': passive}, frame['local_state'])
+
+
+def test_doubles_spend_one_half_die_per_authoritative_move(body):
+    rules = GameLogic(body.server_code, game_schemas=body.game_schemas())
+    ui = DeclarativeLogic(body.declarative_ui)
+    ctx = context()
+    state = setup_board(rules, ctx, {20: 15}, {0: 15}, [])
+    state['needRoll'] = True
+    initial = ui.reduce(message(rules, {'state': state, 'turn': ['a']}, ctx, 'a'))
+    for seed in range(1, 101):
+        result = rules.call('applyMove', state, 'a', {'action': 'roll'}, ctx=ctx, seed=seed)
+        if len(result['state']['moves']) == 4:
+            break
+    else:
+        pytest.fail('No deterministic doubles roll found')
+    value = result['state']['moves'][0]
+    local = initial['local_state']
+    for used in range(4):
+        ctx['move_count'] = used + 1
+        changed = message(rules, result, ctx, 'a')
+        frame = ui.reduce(changed, local)
+        assert [piece['asset'] for piece in dice(frame)] == [
+            f'die_{value}_used_{min(used, 2)}', f'die_{value}_used_{max(0, used - 2)}']
+        assert all(piece['actions'] == [] for piece in dice(frame))
+        assert next(label['text'] for label in frame['scene']['labels'] if label['id'] == 'moves_remaining') == f'Moves remaining: {4 - used}'
+        assert 'make_move' not in ui.reduce({'type': 'ui_event', 'event': {'type': 'tap', 'id': 'die_0'}, 'state_changed': changed}, frame['local_state'])
+        move = rules.call('computerMove', result['state'], 'a', ctx=ctx, seed=seed)
+        local = emitted_move(ui, frame, changed, move)['local_state']
+        result = rules.call('applyMove', result['state'], 'a', move, ctx=ctx, seed=seed)
+    assert result['state']['needRoll'] and result['state']['cur'] == 1
+    next_frame = ui.reduce(message(rules, result, {**ctx, 'move_count': 5}, 'b'), local)
+    assert all(piece['asset'] == f'die_{value}_used_2' and piece['actions'] == ['tap'] for piece in dice(next_frame))
+    assert next_frame['local_state']['roll']['cur'] == 0
+    assert next_frame['local_state']['roll']['turn'] == 0
+    # A fresh next-turn roll replaces the retained pair and starts unspent.
+    fresh = rules.call('applyMove', result['state'], 'b', {'action': 'roll'}, ctx={**ctx, 'move_count': 5}, seed=13)
+    assert not fresh['state']['needRoll']
+    fresh_frame = ui.reduce(message(rules, fresh, {**ctx, 'move_count': 6}, 'b'), next_frame['local_state'])
+    assert [piece['asset'] for piece in dice(fresh_frame)] == [f'die_{die}_used_0' for die in fresh['state']['dice'][:2]]
+    assert fresh_frame['local_state']['roll']['cur'] == 1
+    assert fresh_frame['local_state']['roll']['turn'] == 1
+    earlier = ui.reduce({**message(rules, {'state': state, 'turn': ['a']}, ctx, 'a'), 'replay': True}, fresh_frame['local_state'])
+    assert all(piece['asset'] == 'die_0_used_0' and piece['actions'] == [] for piece in dice(earlier))
+
+
+def test_ordinary_used_die_keeps_its_face_and_midturn_mount_does_not_invent_a_roll(body):
+    rules = GameLogic(body.server_code, game_schemas=body.game_schemas())
+    ui = DeclarativeLogic(body.declarative_ui)
+    ctx = context()
+    state = setup_board(rules, ctx, {20: 15}, {0: 15}, [1, 2])
+    changed = message(rules, {'state': state, 'turn': ['a']}, ctx, 'a')
+    frame = ui.reduce(changed)
+    result = rules.call('applyMove', state, 'a', {'action': 'move', 'from': 20, 'to': 19}, ctx=ctx, seed=7)
+    changed = message(rules, result, {**ctx, 'move_count': 1}, 'a')
+    after = ui.reduce(changed, frame['local_state'])
+    assert [piece['asset'] for piece in dice(after)] == ['die_1_used_2', 'die_2_used_0']
+    fresh = ui.reduce(changed)
+    assert [piece['asset'] for piece in dice(fresh)] == ['die_2_used_0', 'die_0_used_0']
+    assert 'unknown' in dice(fresh)[1]['aria_label']
 
 
 @pytest.mark.parametrize('seed', [7, 31])

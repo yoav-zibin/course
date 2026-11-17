@@ -41,16 +41,93 @@ async function nextAction(page:Page,expectedMoveCount?:number){
   if(await button.count())await button.click();
   else{
     const checker=page.locator('#game-box .declarative-piece.actionable').first();
-    await expect(checker).toHaveAttribute('data-actions','move');
+    const action=await checker.getAttribute('data-actions');
     await revealDeclarativeTarget(page,checker);await checker.locator(':scope > g[opacity]').click();
-    await expect(stage).toHaveClass(/show-drop-hints/);
-    const target=page.locator('#game-box .declarative-target[data-drop-state="allowed"]').first();
-    await expect(target).toBeVisible();await revealDeclarativeTarget(page,target);await target.click();
+    if(action==='move'){
+      await expect(stage).toHaveClass(/show-drop-hints/);
+      const target=page.locator('#game-box .declarative-target[data-drop-state="allowed"]').first();
+      await expect(target).toBeVisible();await revealDeclarativeTarget(page,target);await target.click();
+    }
   }
   // Local QuickJS moves do not have an HTTP response to await. Wait for the
   // actual new scene before choosing the next action from its DOM.
   await expect.poll(signature,{timeout:20000}).not.toBe(before);
 }
+
+test('two central dice roll by pointer and keyboard and show doubles usage',async({page},testInfo)=>{
+  const payload=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../games/declarative/backgammon.json'),'utf8'));
+  await page.goto('/static/declarative-test.html');
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.evaluate(async({spec,view})=>{
+    const box=document.createElement('div');box.id='dice-test';
+    box.style.cssText='position:fixed;inset:0;z-index:9999;background:#102330';document.body.append(box);
+    const w=window as any;w.diceMoves=[];w.diceSpec=spec;
+    w.diceMessage={type:'state_changed',status:'ongoing',view,state:view,my_player_index:view.cur,
+      acting_for_player_index:view.cur,turn_of_player_indices:[view.cur],move_count:0,
+      players:[{player_index:0,name:'Alice',kind:'human'},{player_index:1,name:'Bob',kind:'human'}]};
+    w.diceHost=w.DeclarativeUI.mount(box,spec,{onMove:(move:any)=>w.diceMoves.push(move),onScene:(scene:any)=>w.diceScene=scene});
+    await w.diceHost.send(w.diceMessage);
+  },{spec:payload.declarative_ui,view:payload.unit_tests.cases[0].view_of_mover});
+  const host=page.locator('#dice-test'),dice=host.locator('.declarative-piece[data-ui-id^="die_"]');
+  await expect(dice).toHaveCount(2);
+  await expect(host.locator('.declarative-control [data-ui-id="roll"]')).toHaveCount(0);
+  for(const die of await dice.all()){
+    await expect(die).toHaveAttribute('data-actions','tap');
+    await expect(die).toHaveClass(/actionable/);
+    await expect(die.locator('.declarative-piece-action-outline')).toHaveCSS('visibility','visible');
+  }
+  await dice.first().locator(':scope > g[opacity]').click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).diceMoves)).toEqual([{action:'roll'}]);
+  // A host accepts one move per snapshot. Reset the fixture before proving
+  // the independent keyboard path, just as a fresh server snapshot does.
+  await page.evaluate(async()=>{const w=window as any;await w.diceHost.send(w.diceMessage);});
+  await dice.last().focus();await dice.last().press('Enter');
+  await expect.poll(()=>page.evaluate(()=>(window as any).diceMoves)).toEqual([{action:'roll'},{action:'roll'}]);
+  for(let used=0;used<4;used++){
+    await page.evaluate(async used=>{
+      const w=window as any,remaining=Array(4-used).fill(3);
+      const view={...w.diceMessage.view,needRoll:false,dice:remaining,moves:remaining,legalMoves:[]};
+      await w.diceHost.send({...w.diceMessage,view,state:view,move_count:used+1});
+    },used);
+    await expect(dice).toHaveCount(2);
+    await expect(host.locator('.declarative-piece[data-ui-id^="die_"].actionable')).toHaveCount(0);
+    expect(await page.evaluate(()=>(window as any).diceScene.pieces.filter((piece:any)=>piece.type==='die').map((piece:any)=>piece.asset)))
+      .toEqual([`die_3_used_${Math.min(used,2)}`,`die_3_used_${Math.max(0,used-2)}`]);
+    if(used===1||used===3)await host.screenshot({path:testInfo.outputPath(`doubles-${used}-used.png`)});
+  }
+  // A passive die cannot submit another roll while checker moves are pending.
+  await dice.first().locator(':scope > g[opacity]').click();
+  expect(await page.evaluate(()=>(window as any).diceMoves)).toHaveLength(2);
+  // The fourth move advances the turn and clears authoritative dice. Preserve
+  // the completed physical pair until the next player actually rolls again.
+  await page.evaluate(async()=>{
+    const w=window as any;
+    const view={...w.diceMessage.view,needRoll:true,dice:[],moves:[],legalMoves:[],
+      cur:1-w.diceMessage.view.cur,n:(w.diceMessage.view.n||0)+1};
+    w.diceNextMessage={...w.diceMessage,view,state:view,my_player_index:view.cur,
+      acting_for_player_index:view.cur,turn_of_player_indices:[view.cur],move_count:5};
+    await w.diceHost.send(w.diceNextMessage);
+  });
+  expect(await page.evaluate(()=>(window as any).diceScene.pieces.filter((piece:any)=>piece.type==='die').map((piece:any)=>piece.asset)))
+    .toEqual(['die_3_used_2','die_3_used_2']);
+  await expect(host.locator('.declarative-piece[data-ui-id^="die_"].actionable')).toHaveCount(2);
+  await host.screenshot({path:testInfo.outputPath('doubles-4-used.png')});
+  await dice.first().locator(':scope > g[opacity]').click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).diceMoves)).toHaveLength(3);
+  await page.evaluate(async()=>{
+    const w=window as any,view={...w.diceNextMessage.view,needRoll:false,dice:[2,5],moves:[2,5]};
+    await w.diceHost.send({...w.diceNextMessage,view,state:view,move_count:6});
+  });
+  expect(await page.evaluate(()=>(window as any).diceScene.pieces.filter((piece:any)=>piece.type==='die').map((piece:any)=>piece.asset)))
+    .toEqual(['die_2_used_0','die_5_used_0']);
+  await page.evaluate(async()=>{
+    const w=window as any;await w.diceHost.send({...w.diceMessage,move_count:5,replay:{index:0,total:5}});
+  });
+  await expect(dice).toHaveCount(2);
+  await expect(host.locator('.declarative-piece.actionable')).toHaveCount(0);
+  expect(await page.evaluate(()=>(window as any).diceScene.pieces.filter((piece:any)=>piece.type==='die').map((piece:any)=>piece.asset)))
+    .toEqual(['die_0_used_0','die_0_used_0']);
+});
 
 async function countAnimations(page:Page){
   await page.addInitScript(()=>{

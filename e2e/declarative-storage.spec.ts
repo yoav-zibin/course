@@ -35,7 +35,7 @@ async function fillRecoverableCaches(page:Page){
 
 async function checkerMove(page:Page){
   const before=await savedMatch(page);
-  if(before.state.needRoll){await page.locator('#game-box [data-ui-id="roll"]').click();await expect.poll(async()=>(await savedMatch(page)).move_count).toBeGreaterThan(before.move_count);}
+  if(before.state.needRoll){await page.locator('#game-box [data-ui-id="die_0"]').click();await expect.poll(async()=>(await savedMatch(page)).move_count).toBeGreaterThan(before.move_count);}
   const rolled=await savedMatch(page);
   const piece=page.locator('#game-box .declarative-piece.actionable[data-actions~="move"]').first();await expect(piece).toBeVisible();await revealDeclarativeTarget(page,piece);await piece.locator(':scope > g[opacity]').click();
   const target=page.locator('#game-box .declarative-target[data-drop-state="allowed"]').first();await expect(target).toBeVisible();await revealDeclarativeTarget(page,target);await target.click();

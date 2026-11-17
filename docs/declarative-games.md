@@ -146,18 +146,17 @@ logic. For games whose server stores counts rather than individual pieces,
 presentation `local_state` can reconcile identities, as Backgammon does for
 moves, captures, bar entry and bearing off.
 
-The portal camera starts at a readable view: visible piece bodies and targets
-stay at least 32 CSS pixels in both dimensions, and scene text at least 16 CSS
-pixels, after actual screen scaling. A dense board opens a focused, pannable
-view instead of shrinking its artwork to fit. Two-finger pinch/spread and zoom
-buttons allow up to four times this readable baseline; zooming out stops there.
+The portal camera starts with the complete declared viewport fitted into the
+board panel at **100%**, including dense boards. Zoom buttons and two-finger
+pinch/spread allow **25%–400%** of this whole-board fit. Below 100%, the board
+is centered in the additional space. Use magnification for a closer view of
+small pieces, dice and labels; the host does not force a cropped camera view.
 Drag the board background, use the arrow buttons, or focus the board and press
-the arrow keys to reach the rest of the board. Reset view restores the baseline
-and first actionable piece. Camera state survives scene changes and replay,
-adapts to viewport resizing, and resets when the host opens a new match. Camera gestures stay in
-the host and never emit `make_move`; two fingers cancel an unfinished piece
-gesture. Native renderers can provide equivalent camera controls independently
-of the game spec.
+the arrow keys to pan when magnified. Reset view restores the whole board at
+100%. Camera state survives scene changes, replay and viewport resizing, and
+resets when the host opens a new match. Camera gestures stay in the host and
+never emit `make_move`; two fingers cancel an unfinished piece gesture. Native
+renderers can provide equivalent camera controls independently of the game spec.
 
 A grid supplies `rows` and `columns`. Its implicit cell IDs are row-major
 decimal strings, starting at `"0"`; an 8-by-8 grid ends at `"63"`. Pieces and
@@ -435,6 +434,14 @@ substitute the latest presentation for a match pinned to older rules. The
 portal selects its declarative renderer automatically when the full game
 contains the package; ordinary online play and the existing move APIs are
 shared with other games.
+
+The portal also has a narrowly reviewed visual repair for the original
+Backgammon presentation. It requires the exact published game ID, original
+package fingerprint and authoritative rules fingerprint before loading the
+corrected dice presentation. The stored game/version, rules, move schemas,
+history and cached game package stay unchanged. A missing or invalid repair
+asset leaves the original presentation in place. New publications use the
+complete updated package through the ordinary import flow below.
 
 Update declarative code, schemas or player/turn rules by resubmitting the full
 tested package through `POST /games/declarative` (or `POST /games`). Partial

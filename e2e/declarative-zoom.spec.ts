@@ -4,9 +4,9 @@ import path from 'node:path';
 import {revealDeclarativeTarget} from './declarative-camera';
 
 async function mountBoard(page:Page,animate=true){
-  // Fixed world-coordinate camera oracles below use a board that fits without
-  // a readability crop. Responsive native gestures are covered by Backgammon
-  // and the separate readable-scene viewport matrix.
+  // Fixed world-coordinate camera oracles below use a whole-board fitted view.
+  // Responsive native gestures are covered by Backgammon and the separate
+  // dense-scene viewport matrix.
   await page.setViewportSize({width:1280,height:900});
   await page.goto('/static/declarative-test.html');
   await page.evaluate(async animate=>{
@@ -57,7 +57,16 @@ test('pinch zoom stays anchored, pans, preserves state and still drops the legal
   expect(await page.evaluate(()=>(window as any).zoomMoves)).toEqual([]);
   // Pinch inward reduces magnification; the fit button restores the whole board.
   await page.locator('#zoom-test [data-camera-action="reset"]').click();
+  await expect(page.locator('#zoom-test [data-camera-action="out"]')).toBeEnabled();
+  await page.locator('#zoom-test [data-camera-action="out"]').click();
+  await expect(page.locator('#zoom-test .declarative-zoom-level')).toHaveText('Zoom: 80%');
+  expect(await camera(page)).toEqual({x:-75,y:-52.5,width:750,height:525});
+  for(let i=0;i<8;i++)if(await page.locator('#zoom-test [data-camera-action="out"]').isEnabled())await page.locator('#zoom-test [data-camera-action="out"]').click();
   await expect(page.locator('#zoom-test [data-camera-action="out"]')).toBeDisabled();
+  await expect(page.locator('#zoom-test .declarative-zoom-level')).toHaveText('Zoom: 25%');
+  expect(await camera(page)).toEqual({x:-900,y:-630,width:2400,height:1680});
+  await page.locator('#zoom-test [data-camera-action="reset"]').click();
+  expect(await camera(page)).toEqual({x:0,y:0,width:600,height:420});
   for(let i=0;i<8;i++)if(await page.locator('#zoom-test [data-camera-action="in"]').isEnabled())await page.locator('#zoom-test [data-camera-action="in"]').click();
   await expect(page.locator('#zoom-test [data-camera-action="in"]')).toBeDisabled();expect((await camera(page)).width).toBeCloseTo(150);
   await page.locator('#zoom-test [data-camera-action="reset"]').click();
@@ -152,6 +161,8 @@ test('Backgammon legal drops work when pinched on phone and tablet, and opponent
   },{spec:example.declarative_ui,before,after});
   const session=await page.context().newCDPSession(page);await session.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:5});
   const baseline=await camera(page),cx=baseline.x+baseline.width/2,cy=baseline.y+baseline.height/2;
+  expect(baseline).toEqual({x:0,y:0,width:example.declarative_ui.viewport.width,height:example.declarative_ui.viewport.height});
+  await testInfo.attach('backgammon-default-whole-board',{body:await page.locator('#zoom-test').screenshot(),contentType:'image/png'});
   const center=await screenPoint(page,cx,cy),left=await screenPoint(page,cx-50,cy),right=await screenPoint(page,cx+50,cy);
   const touch=(id:number,x:number,y:number)=>({id,x,y,radiusX:1,radiusY:1,force:1});
   await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(1,left.x,left.y),touch(2,right.x,right.y)]});

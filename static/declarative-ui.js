@@ -267,18 +267,23 @@
     // The camera belongs to the host. It never reaches the reducer or make_move,
     // and survives complete scene snapshots, including replay and turn changes.
     const camera={x:0,y:0,zoom:1},touches=new Map();
-    let cameraGesture=null,cameraClickUntil=0,minimumZoom=1,minimumScale=0,cameraFrame=null,firstScene=true;
+    const minimumZoom=.25,maximumZoom=4;
+    let cameraGesture=null,cameraClickUntil=0,cameraFrame=null;
     const pieceAnimations=new Set();
     function applyCamera() {
       const width=spec.viewport.width/camera.zoom,height=spec.viewport.height/camera.zoom;
-      camera.x=Math.max(0,Math.min(spec.viewport.width-width,num(camera.x)));
-      camera.y=Math.max(0,Math.min(spec.viewport.height-height,num(camera.y)));
+      // Below the fitted view, center the complete board in the extra space.
+      // Above it, clamp panning to the board's actual edges.
+      const minX=Math.min(0,(spec.viewport.width-width)/2),maxX=Math.max(minX,spec.viewport.width-width);
+      const minY=Math.min(0,(spec.viewport.height-height)/2),maxY=Math.max(minY,spec.viewport.height-height);
+      camera.x=Math.max(minX,Math.min(maxX,num(camera.x)));
+      camera.y=Math.max(minY,Math.min(maxY,num(camera.y)));
       stage.setAttribute("viewBox",`${camera.x} ${camera.y} ${width} ${height}`);
       stage.classList.toggle("zoomed",camera.zoom>1);
-      zoomOut.disabled=camera.zoom<=minimumZoom+1e-9;zoomIn.disabled=camera.zoom>=minimumZoom*4-1e-9;
+      zoomOut.disabled=camera.zoom<=minimumZoom+1e-9;zoomIn.disabled=camera.zoom>=maximumZoom-1e-9;
       zoomReset.disabled=camera.zoom===1&&camera.x===0&&camera.y===0;
-      for(const [button,dx,dy] of panButtons)button.disabled=dx<0?camera.x<=0:dx>0?camera.x>=spec.viewport.width-width-1e-9:dy<0?camera.y<=0:camera.y>=spec.viewport.height-height-1e-9;
-      zoomLevel.textContent=t("ui.declarative.zoom.level", {percent:Math.round(camera.zoom/minimumZoom*100)}, "Zoom: {percent}%");
+      for(const [button,dx,dy] of panButtons)button.disabled=dx<0?camera.x<=minX+1e-9:dx>0?camera.x>=maxX-1e-9:dy<0?camera.y<=minY+1e-9:camera.y>=maxY-1e-9;
+      zoomLevel.textContent=t("ui.declarative.zoom.level", {percent:Math.round(camera.zoom*100)}, "Zoom: {percent}%");
     }
     function panBy(dx,dy){camera.x+=dx*spec.viewport.width/camera.zoom*.1;camera.y+=dy*spec.viewport.height/camera.zoom*.1;applyCamera();}
     stage.addEventListener("keydown",event=>{
@@ -288,42 +293,12 @@
       else if(event.key==="Home"){event.preventDefault();camera.x=0;camera.y=0;applyCamera();}
       else if(event.key==="End"){event.preventDefault();camera.x=spec.viewport.width;camera.y=spec.viewport.height;applyCamera();}
     });
-    // A whole-board fit is not a usable minimum on a dense board. Measure the
-    // actual screen transform (including ancestor scaling), then keep visible
-    // piece artwork/targets >=32 CSS px and text >=16px. Never enlarge only an
-    // invisible hit box. The camera can reach the rest of the board by panning.
-    function fitReadableScene(){
-      if(destroyed||!currentScene)return;
-      let required=minimumScale;
-      const size=(width,height,scale=1)=>{required=Math.max(required,32/(width*scale),32/(height*scale));};
-      const text=(font,scale=1)=>{required=Math.max(required,16/(font*scale));};
-      for(const piece of currentScene.pieces||[]){
-        if(piece.hidden)continue;
-        const type=spec.piece_types[piece.type],board=position(spec,piece).board;
-        const width=num(type.width,board.kind==="grid"?board.width/board.columns*.76:42),height=num(type.height,board.kind==="grid"?board.height/board.rows*.76:width),scale=num(piece.scale,1);
-        size(width,height,scale);
-        if(piece.text!==undefined||piece.face==="back")text(Math.min(width*.5,height*.6,40),scale);
-        if(pieceActions(piece).length)text(14,scale);
-      }
-      for(const target of currentScene.targets||[]){const board=position(spec,target).board;size(board.kind==="grid"?board.width/board.columns:44,board.kind==="grid"?board.height/board.rows:44);if(target.label)text(14);}
-      for(const label of currentScene.labels||[])if(label.text)text(num(label.font_size,18));
-      for(const board of spec.boards)for(const cell of board.cells||[])if(cell.label)text(12);
-      const matrix=stage.getScreenCTM(),fit=matrix?Math.min(Math.hypot(matrix.a,matrix.b),Math.hypot(matrix.c,matrix.d))/camera.zoom:0;
-      if(!(fit>0)||!Number.isFinite(required)||!Number.isFinite(required/fit))return;
-      minimumScale=required;const next=Math.max(1,required/fit);
-      if(Math.abs(next-minimumZoom)>1e-7){
-        const center={x:camera.x+spec.viewport.width/camera.zoom/2,y:camera.y+spec.viewport.height/camera.zoom/2},relative=camera.zoom/minimumZoom;
-        minimumZoom=next;camera.zoom=minimumZoom*Math.max(1,Math.min(4,relative));
-        camera.x=center.x-spec.viewport.width/camera.zoom/2;camera.y=center.y-spec.viewport.height/camera.zoom/2;applyCamera();
-      }
-      if(firstScene&&((currentScene.pieces||[]).some(piece=>!piece.hidden)||(currentScene.targets||[]).length)){firstScene=false;resetCamera();}
-    }
-    function resetCamera(){
-      camera.zoom=minimumZoom;camera.x=0;camera.y=0;
-      if(minimumZoom>1){const first=(currentScene?.pieces||[]).find(piece=>!piece.hidden&&pieceActions(piece).length)||(currentScene?.targets||[])[0];if(first){const point=position(spec,first);camera.x=point.x-spec.viewport.width/camera.zoom/2;camera.y=point.y-spec.viewport.height/camera.zoom/2;}}
-      applyCamera();
-    }
-    function scheduleCamera(){if(cameraFrame===null)cameraFrame=global.requestAnimationFrame(()=>{cameraFrame=null;fitReadableScene();});}
+    // 100% is the complete declared viewport. Keep this overview on first
+    // load instead of cropping dense boards to enforce a fixed artwork size.
+    // Users can magnify the same scene for precision without changing game state.
+    function fitScene(){if(!destroyed)applyCamera();}
+    function resetCamera(){camera.zoom=1;camera.x=0;camera.y=0;applyCamera();}
+    function scheduleCamera(){if(cameraFrame===null)cameraFrame=global.requestAnimationFrame(()=>{cameraFrame=null;fitScene();});}
     const cameraObserver=typeof ResizeObserver!=="undefined"?new ResizeObserver(scheduleCamera):null;
     cameraObserver?.observe(stage);global.addEventListener("resize",scheduleCamera);
     function boardPoint(x,y) {
@@ -334,7 +309,7 @@
     function zoomAt(zoom,x,y,anchor=boardPoint(x,y)) {
       if(!Number.isFinite(zoom))return;
       const current=boardPoint(x,y),fx=(current.x-camera.x)/(spec.viewport.width/camera.zoom),fy=(current.y-camera.y)/(spec.viewport.height/camera.zoom);
-      camera.zoom=Math.max(minimumZoom,Math.min(minimumZoom*4,zoom));
+      camera.zoom=Math.max(minimumZoom,Math.min(maximumZoom,zoom));
       camera.x=anchor.x-fx*spec.viewport.width/camera.zoom;camera.y=anchor.y-fy*spec.viewport.height/camera.zoom;applyCamera();
     }
     function zoomBy(factor) {const bounds=stage.getBoundingClientRect();zoomAt(camera.zoom*factor,bounds.x+bounds.width/2,bounds.y+bounds.height/2);}
@@ -579,7 +554,7 @@
         }
         node.dataset.uiId=control.id;node.disabled=Boolean(control.disabled)||!canAct();wrapper.classList.toggle("actionable",!node.disabled);wrapper.append(node);controls.append(wrapper);
       }
-      fitReadableScene();scheduleCamera();updateHints();
+      fitScene();scheduleCamera();updateHints();
       if(activeId)for(const node of container.querySelectorAll("[data-ui-id]"))if(node.dataset.uiId===activeId){node.focus({preventScroll:true});break;}
       if(activePieceAction)for(const node of pieceTools.querySelectorAll("[data-piece-action]"))if(node.dataset.pieceAction===activePieceAction){node.focus({preventScroll:true});break;}
     }

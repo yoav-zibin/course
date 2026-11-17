@@ -18,11 +18,21 @@ or 300 actions: more borne-off checkers wins, with ties favoring player one.
 The declarative presentation preserves this existing behavior.
 
 `backgammon.ui.js` only projects the server-filtered view into a scene. The
-scene has 24 board points, an embedded SVG board asset, a bar, an off tray,
-30 checker pieces and the remaining dice. The top checker of a legal source
+scene has 24 board points, embedded SVG board and dice assets, a bar, an off tray,
+30 checker pieces and two physical dice in the center of the board. Tap either
+highlighted die to roll; the server still chooses the result. Before the first
+roll, the dice show neutral faces. A used ordinary die turns gray. Doubles keep two
+dice and gray one half per move, showing all four uses without adding dice.
+The completed pair stays fully gray until the next roll, including the fourth
+doubles move. The next player can click those highlighted dice to roll again.
+The remaining-move count is also shown as text and each die has a translated
+accessible label. Spectators, replay and finished games cannot roll.
+
+The top checker of a legal source
 has `actions: ["move"]`; its `move_targets` contains only destinations
 offered for that source by `view.legalMoves`. All other pieces explicitly
-have `actions: []`. Spectators, replay and finished games are passive.
+have `actions: []`, except the two dice have `actions: ["tap"]` when rolling
+is legal. Spectators, replay and finished games are passive.
 
 After selecting or beginning to drag a checker, the host highlights that
 checker's permitted drop destinations. A drop event looks like:
@@ -38,8 +48,11 @@ The reducer emits a normal server move:
 ```
 
 Checker IDs remain stable across normal moves, hits, bar re-entry and bearing
-off. The reducer stores only display identities in `local_state.stacks`,
+off. The reducer stores display identities in `local_state.stacks`,
 reconciling them against new server counts; it does not compute legality.
+`local_state.roll` preserves the original pair while the authority removes used
+dice. A mid-turn remount with no roll history shows only known values and a
+neutral face for an unknown die, together with the authoritative moves remaining.
 Native hosts retain this local presentation state between reducer calls.
 This lets the portal animate a checker between positions in multiplayer
 and computer games. Pass-and-play updates immediately. Pinch zoom belongs
@@ -51,6 +64,10 @@ Rebuild from the package parent:
 python -m game_platform.tools.build_declarative_backgammon
 python -m pytest game_platform/tests/test_declarative_backgammon.py
 ```
+
+The builder also writes `static/backgammon-declarative-ui.json`, the same
+portable presentation used to repair the original published Backgammon UI
+without editing its pinned server rules or match state.
 
 The import includes eight-language text, a cover, tutorials, and six actual
 QuickJS examples: initial, intermediate, terminal, hitting a blot, bar

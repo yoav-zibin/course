@@ -104,19 +104,21 @@ a valid move; they do not have to reveal the best strategy.
 - Camera movement must never submit a move or change authoritative piece
   positions, rotation or scale. Starting a camera gesture must safely cancel
   an unfinished piece gesture.
-- Playable pieces, cards, dice, tokens, counters, drop targets and interactive controls
-  must be **at least 32×32 rendered pixels in both dimensions**—strictly above
-  30×30. Use CSS pixels in the browser and equivalent logical screen units
-  such as native points/dp. Prefer **44×44 or larger** for touch targets.
+- In a magnified view for precise play, pieces, cards, dice, tokens, counters
+  and drop targets should be **at least 32×32 rendered pixels in both
+  dimensions**. Use CSS pixels in the browser and equivalent logical screen
+  units such as native points/dp. Prefer **44×44 or larger** for touch targets.
+  Camera and other fixed interface controls must remain usable at every zoom.
 - Measure after viewport fitting and display scaling, not just the dimensions
   written in the JSON spec. Visible objects must be recognizable as well as
   touchable; an oversized invisible hitbox alone does not make tiny artwork
   readable. Text, numbers, suits and ownership indicators must also be legible.
-- A dense board must use panning, reflow, separate hand/tray areas or a focused
-  view rather than shrinking every object below the minimum to fit the board.
-  The default playable view must meet the size requirement. Zooming out must
-  preserve usable interaction targets or disable interaction with undersized
-  objects and provide an obvious return to a readable view before playing them.
+- Start with the entire declared board viewport fitted into its panel at
+  **100%**, including dense boards. Permit zooming below 100% for an overview,
+  and zooming in and panning for precise play; do not force a cropped minimum
+  view to meet an artwork-size target. Objects may appear smaller in the fit
+  overview. Keep action highlights available and make the zoom controls
+  obvious so players can magnify small pieces and labels when needed.
 - Zoom, replay, rotation/resize and confirmation controls must meet the same
   size requirement. Avoid overlapping or ambiguous hit areas. Hints and object
   identity must remain visible and distinguishable across supported themes.

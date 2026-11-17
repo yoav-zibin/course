@@ -34,14 +34,14 @@ RULES = [
     'أوصل 15 حجرًا إلى بيتك ثم أخرجها. ارم نردين؛ المتساويان يمنحان أربع نقلات. أعد أحجار الحاجز أولًا. حجران للخصم يسدان النقطة، والحجر المنفرد يُضرب. استخدم أكبر عدد ممكن من النرد، والأكبر إذا أمكن استعمال واحد فقط. أخرج الأحجار بعد دخولها كلها البيت. قواعد المنصة العادية: بعد 120 دورًا أو 300 حركة يفوز الأكثر إخراجًا؛ التعادل للأول.',
 ]
 UI_RULES = [
-    'Roll, then select a highlighted checker and a highlighted destination, or drag it there. Only the top movable checker is highlighted. The bar and off tray are shown beside the 24 points. Pinch to zoom in or out. Moves animate in online and computer games; pass-and-play keeps changes immediate.',
-    'Lanza y selecciona una ficha resaltada y un destino resaltado, o arrástrala allí. Solo se resalta la ficha superior que puede moverse. La barra y la bandeja están junto a las 24 puntas. Pellizca para ampliar o reducir. Las jugadas se animan en línea y contra el ordenador; en el mismo dispositivo son inmediatas.',
-    'Lancez puis choisissez un pion surligné et une destination surlignée, ou glissez-le. Seul le pion supérieur mobile est surligné. Barre et sortie sont près des 24 flèches. Pincez pour zoomer. Les coups sont animés en ligne et contre l’ordinateur ; le jeu à tour de rôle sur un appareil est immédiat.',
-    'Würfle, wähle einen markierten Stein und ein markiertes Ziel oder ziehe ihn dorthin. Nur der oberste bewegliche Stein ist markiert. Bar und Ablage stehen neben den 24 Spitzen. Mit zwei Fingern zoomen. Online- und Computerzüge werden animiert; am selben Gerät erfolgen sie sofort.',
-    'Lance e selecione uma peça destacada e um destino destacado, ou arraste-a. Só a peça superior móvel fica destacada. Barra e saída aparecem junto às 24 pontas. Faça pinça para ampliar ou reduzir. Jogadas online e contra computador são animadas; no mesmo aparelho são imediatas.',
-    '掷骰后选择高亮棋子和高亮目标，或拖动棋子。仅可移动的顶层棋子高亮。24个尖点旁显示中栏和移出盘。双指捏合缩放。在线和电脑对局显示移动动画，同机轮流对局即时更新。',
-    'पासा फेंकें, फिर चमकती गोटी और लक्ष्य चुनें या वहाँ खींचें। केवल ऊपर की चलने योग्य गोटी चमकती है। 24 बिंदुओं के पास बार और निकासी ट्रे हैं। दो उँगलियों से ज़ूम करें। ऑनलाइन और कंप्यूटर चालें चलती दिखेंगी; एक उपकरण पर बारी-बारी खेल तुरंत बदलेगा।',
-    'ارم ثم اختر حجرًا مميزًا ووجهة مميزة أو اسحبه إليها. يُميز الحجر العلوي القابل للنقل فقط. يظهر الحاجز وصينية الخروج بجانب النقاط الـ24. اقرص بإصبعين للتكبير والتصغير. تتحرك الأحجار بصريًا عبر الإنترنت وضد الكمبيوتر؛ اللعب بالتناوب على الجهاز فوري.',
+    'Tap either highlighted die in the center to roll. Used dice turn gray; doubles gray one half per move. Then select a highlighted checker and a highlighted destination, or drag it there. Only the top movable checker is highlighted. The bar and off tray are shown beside the 24 points. Pinch to zoom in or out. Moves animate in online and computer games; pass-and-play keeps changes immediate.',
+    'Toca un dado resaltado del centro para lanzar. Los dados usados se vuelven grises; los dobles atenúan una mitad por movimiento. Después selecciona una ficha resaltada y un destino resaltado, o arrástrala allí. Solo se resalta la ficha superior que puede moverse. La barra y la bandeja están junto a las 24 puntas. Pellizca para ampliar o reducir. Las jugadas se animan en línea y contra el ordenador; en el mismo dispositivo son inmediatas.',
+    'Touchez un dé surligné au centre pour lancer. Les dés utilisés deviennent gris ; un double grise une moitié par déplacement. Puis choisissez un pion surligné et une destination surlignée, ou glissez-le. Seul le pion supérieur mobile est surligné. Barre et sortie sont près des 24 flèches. Pincez pour zoomer. Les coups sont animés en ligne et contre l’ordinateur ; le jeu à tour de rôle sur un appareil est immédiat.',
+    'Tippe zum Würfeln auf einen markierten Würfel in der Mitte. Verbrauchte Würfel werden grau; beim Pasch wird pro Zug eine Hälfte grau. Wähle dann einen markierten Stein und ein markiertes Ziel oder ziehe ihn dorthin. Nur der oberste bewegliche Stein ist markiert. Bar und Ablage stehen neben den 24 Spitzen. Mit zwei Fingern zoomen. Online- und Computerzüge werden animiert; am selben Gerät erfolgen sie sofort.',
+    'Toque em um dado destacado no centro para lançar. Dados usados ficam cinza; duplas ficam meio cinza por movimento. Depois selecione uma peça destacada e um destino destacado, ou arraste-a. Só a peça superior móvel fica destacada. Barra e saída aparecem junto às 24 pontas. Faça pinça para ampliar ou reduzir. Jogadas online e contra computador são animadas; no mesmo aparelho são imediatas.',
+    '点击中央高亮骰子来掷骰。已使用的骰子变灰；双骰每走一步将一半变灰。然后选择高亮棋子和高亮目标，或拖动棋子。仅可移动的顶层棋子高亮。24个尖点旁显示中栏和移出盘。双指捏合缩放。在线和电脑对局显示移动动画，同机轮流对局即时更新。',
+    'फेंकने के लिए बीच के किसी चमकते पासे को छुएँ। इस्तेमाल हुए पासे धूसर होते हैं; समान अंकों पर हर चाल के बाद आधा पासा धूसर होता है। फिर चमकती गोटी और लक्ष्य चुनें या वहाँ खींचें। केवल ऊपर की चलने योग्य गोटी चमकती है। 24 बिंदुओं के पास बार और निकासी ट्रे हैं। दो उँगलियों से ज़ूम करें। ऑनलाइन और कंप्यूटर चालें चलती दिखेंगी; एक उपकरण पर बारी-बारी खेल तुरंत बदलेगा।',
+    'المس أحد النردين المميزين في الوسط للرمي. يصير النرد المستعمل رماديًا؛ وعند التساوي يُظلل نصف نرد لكل نقلة. ثم اختر حجرًا مميزًا ووجهة مميزة أو اسحبه إليها. يُميز الحجر العلوي القابل للنقل فقط. يظهر الحاجز وصينية الخروج بجانب النقاط الـ24. اقرص بإصبعين للتكبير والتصغير. تتحرك الأحجار بصريًا عبر الإنترنت وضد الكمبيوتر؛ اللعب بالتناوب على الجهاز فوري.',
 ]
 TEXTS = {
     'player': ['Player {n}', 'Jugador {n}', 'Joueur {n}', 'Spieler {n}', 'Jogador {n}', '玩家{n}', 'खिलाड़ी {n}', 'اللاعب {n}'],
@@ -49,6 +49,13 @@ TEXTS = {
     'roll_turn': ['{name}: roll the dice', '{name}: lanza los dados', '{name} : lancez les dés', '{name}: würfeln', '{name}: lance os dados', '{name}：掷骰', '{name}: पासे फेंकें', '{name}: ارم النرد'],
     'move_turn': ['{name}: move a highlighted checker', '{name}: mueve una ficha resaltada', '{name} : déplacez un pion surligné', '{name}: markierten Stein bewegen', '{name}: mova uma peça destacada', '{name}：移动高亮棋子', '{name}: चमकती गोटी चलें', '{name}: انقل حجرًا مميزًا'],
     'roll': ['Roll dice', 'Lanzar dados', 'Lancer les dés', 'Würfeln', 'Lançar dados', '掷骰', 'पासे फेंकें', 'ارم النرد'],
+    'die_roll': ['Die {n}: roll dice', 'Dado {n}: lanzar dados', 'Dé {n} : lancer les dés', 'Würfel {n}: würfeln', 'Dado {n}: lançar dados', '骰子{n}：掷骰', 'पासा {n}: पासे फेंकें', 'النرد {n}: ارم النرد'],
+    'die_ready': ['Die {n}: waiting to roll', 'Dado {n}: esperando lanzamiento', 'Dé {n} : en attente du lancer', 'Würfel {n}: wartet auf Wurf', 'Dado {n}: aguardando lançamento', '骰子{n}：等待掷骰', 'पासा {n}: फेंकने की प्रतीक्षा', 'النرد {n}: بانتظار الرمية'],
+    'die_value': ['Die {n}: {value}', 'Dado {n}: {value}', 'Dé {n} : {value}', 'Würfel {n}: {value}', 'Dado {n}: {value}', '骰子{n}：{value}', 'पासा {n}: {value}', 'النرد {n}: {value}'],
+    'die_used': ['Die {n}: {value}, used', 'Dado {n}: {value}, usado', 'Dé {n} : {value}, utilisé', 'Würfel {n}: {value}, verbraucht', 'Dado {n}: {value}, usado', '骰子{n}：{value}，已使用', 'पासा {n}: {value}, इस्तेमाल हुआ', 'النرد {n}: {value}، مستعمل'],
+    'die_half_used': ['Die {n}: {value}, one of two moves used', 'Dado {n}: {value}, uno de dos movimientos usado', 'Dé {n} : {value}, un déplacement sur deux utilisé', 'Würfel {n}: {value}, einer von zwei Zügen verbraucht', 'Dado {n}: {value}, um de dois movimentos usado', '骰子{n}：{value}，已使用两步中的一步', 'पासा {n}: {value}, दो में से एक चाल इस्तेमाल हुई', 'النرد {n}: {value}، استُعملت نقلة من نقلتين'],
+    'die_unknown': ['Die {n}: previous value unknown', 'Dado {n}: valor anterior desconocido', 'Dé {n} : valeur précédente inconnue', 'Würfel {n}: vorheriger Wert unbekannt', 'Dado {n}: valor anterior desconhecido', '骰子{n}：先前点数未知', 'पासा {n}: पिछला अंक अज्ञात', 'النرد {n}: القيمة السابقة غير معروفة'],
+    'moves_remaining': ['Moves remaining: {count}', 'Movimientos restantes: {count}', 'Déplacements restants : {count}', 'Verbleibende Züge: {count}', 'Movimentos restantes: {count}', '剩余步数：{count}', 'शेष चालें: {count}', 'النقلات المتبقية: {count}'],
     'pass': ['Pass', 'Pasar', 'Passer', 'Passen', 'Passar', '跳过', 'बारी छोड़ें', 'مرر'],
     'point': ['Point {n}', 'Punta {n}', 'Flèche {n}', 'Spitze {n}', 'Ponta {n}', '点{n}', 'बिंदु {n}', 'النقطة {n}'],
     'bear_off': ['Bear off', 'Retirar', 'Sortir', 'Auswürfeln', 'Retirar', '移出', 'बाहर निकालें', 'أخرج'],
@@ -114,10 +121,39 @@ def board_svg():
     return ''.join(parts)
 
 
+def die_svg(value, used=0):
+    """A physical die; doubles spend one half for each of their four moves."""
+    positions = {
+        1: [(32, 32)], 2: [(17, 17), (47, 47)],
+        3: [(17, 17), (32, 32), (47, 47)],
+        4: [(17, 17), (47, 17), (17, 47), (47, 47)],
+        5: [(17, 17), (47, 17), (32, 32), (17, 47), (47, 47)],
+        6: [(17, 17), (47, 17), (17, 32), (47, 32), (17, 47), (47, 47)],
+    }
+    parts = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">',
+             '<defs><clipPath id="face"><rect x="1" y="1" width="62" height="62" rx="8"/></clipPath></defs>',
+             '<rect x="1" y="1" width="62" height="62" rx="8" fill="#fff9ec" stroke="#6e5135" stroke-width="2"/>']
+    if value:
+        parts.extend(f'<circle cx="{x}" cy="{y}" r="5" fill="#342924"/>' for x, y in positions[value])
+    else:
+        parts.append('<text x="32" y="34" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="38" font-weight="700" fill="#6e5135">?</text>')
+    if used:
+        parts.append(f'<rect x="0" y="0" width="{32 if used == 1 else 64}" height="64" fill="#64717b" opacity=".72" clip-path="url(#face)"/>')
+    parts.append('</svg>')
+    return ''.join(parts)
+
+
 def specification():
     artwork = board_svg()
+    assets = {'board_art': {'uri': 'data:image/svg+xml;base64,' + base64.b64encode(artwork.encode()).decode(), 'media_type': 'image/svg+xml'}}
+    for value in range(7):
+        for used in range(3):
+            assets[f'die_{value}_used_{used}'] = {
+                'uri': 'data:image/svg+xml;base64,' + base64.b64encode(die_svg(value, used).encode()).decode(),
+                'media_type': 'image/svg+xml',
+            }
     return {'format': 'buildplay-ui', 'version': 1, 'viewport': {'width': 800, 'height': 600},
-            'assets': {'board_art': {'uri': 'data:image/svg+xml;base64,' + base64.b64encode(artwork.encode()).decode(), 'media_type': 'image/svg+xml'}},
+            'assets': assets,
             'boards': [
                 {'id': 'main', 'kind': 'graph', 'x': 20, 'y': 105, 'width': 700, 'height': 440,
                  'color': '#704528', 'line_color': '#704528', 'background_asset': 'board_art',
@@ -128,7 +164,7 @@ def specification():
             'piece_types': {
                 'p0': {'shape': 'circle', 'width': 38, 'height': 38, 'color': '#fff0cf', 'text_color': '#3b291e', 'border_color': '#865f38'},
                 'p1': {'shape': 'circle', 'width': 38, 'height': 38, 'color': '#342924', 'text_color': '#fff0cf', 'border_color': '#c49d66'},
-                'die': {'shape': 'dice', 'width': 42, 'height': 42, 'color': '#fff9ec', 'text_color': '#342924'}},
+                'die': {'shape': 'image', 'width': 64, 'height': 64}},
             'strings': strings(), 'ui_code': 'const SOURCE_STRINGS=' + json.dumps(strings(), ensure_ascii=False) + ';\n' + (DEST / 'backgammon.ui.js').read_text()}
 
 
@@ -218,6 +254,8 @@ def main():
     payload = package()
     target = DEST / 'backgammon.json'
     target.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n')
+    (ROOT / 'static' / 'backgammon-declarative-ui.json').write_text(
+        json.dumps(payload['declarative_ui'], ensure_ascii=False, indent=2) + '\n')
     print(f'{target.name}: {len(json.dumps(payload).encode())} bytes; authority SHA256 {SOURCE_SHA256}')
 
 

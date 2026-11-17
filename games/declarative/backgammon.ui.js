@@ -44,8 +44,8 @@ const gameUI = {
     const destinationId = to => 'to_' + to;
     const legalFrom = from => legal.filter(move => move.from === from);
     const uniqueTargets = options => [...new Set(options.map(move => destinationId(move.to)))];
-    const addStack = (seat, from, count, x, y, direction, board = 'main') => {
-      const step = Math.min(32, 146 / Math.max(4, count - 1));
+    const addStack = (seat, from, count, x, y, direction, board = 'main', depth = 146) => {
+      const step = Math.min(32, depth / Math.max(4, count - 1));
       for (let i = 0; i < count; i++) {
         const id = stacks[seat][String(from)][i];
         const available = seat === s.cur && i === count - 1 ? legalFrom(from) : [];
@@ -63,8 +63,8 @@ const gameUI = {
         pointX(point), point < 12 ? 410 : 30, point < 12 ? -1 : 1);
     }
     // Every checker remains represented, including captured and borne-off ones.
-    addStack(0, 'bar', s.bar[0], 336, 35, 1);
-    addStack(1, 'bar', s.bar[1], 336, 405, -1);
+    addStack(0, 'bar', s.bar[0], 336, 30, 1, 'main', 100);
+    addStack(1, 'bar', s.bar[1], 336, 410, -1, 'main', 100);
     addStack(0, 'off', s.off[0], 24, 405, -1, 'off');
     addStack(1, 'off', s.off[1], 24, 35, 1, 'off');
     const seen = {};
@@ -77,28 +77,77 @@ const gameUI = {
           {x: pointX(move.to), y: move.to < 12 ? 237 : 203},
         label: move.to === 'off' ? t('bear_off') : t('point', {n: move.to + 1})});
     }
-    if (active) {
-      if (s.needRoll) controls.push({id: 'roll', kind: 'button', label: t('roll')});
-      else if (!legal.length) controls.push({id: 'pass', kind: 'button', label: t('pass')});
+    if (active && !s.needRoll && !legal.length)
+      controls.push({id: 'pass', kind: 'button', label: t('pass')});
+    // The ordinary authority removes each used value from both dice and moves.
+    // Keep the original physical pair only as presentation memory for this turn.
+    const remaining = s.moves || s.dice || [];
+    const previousRoll = localState && localState.roll;
+    let roll = null;
+    if (s.needRoll) {
+      // The server clears dice at the turn boundary. Keep the completed pair
+      // visibly spent until the next roll, without relabeling its turn identity.
+      if (previousRoll && previousRoll.known && previousRoll.turn + 1 === (s.n || 0) && Array.isArray(previousRoll.values) &&
+          previousRoll.values.length === 2 && previousRoll.values.every(value => Number.isInteger(value) && value >= 1 && value <= 6))
+        roll = previousRoll;
+    } else {
+      if (previousRoll && previousRoll.cur === s.cur && previousRoll.turn === (s.n || 0) &&
+          Array.isArray(previousRoll.values) && previousRoll.values.length === 2 &&
+          previousRoll.values.every(value => value === null || Number.isInteger(value) && value >= 1 && value <= 6) &&
+          typeof previousRoll.double === 'boolean' && typeof previousRoll.known === 'boolean')
+        roll = previousRoll;
+      else if (remaining.length >= 2) {
+        const double = remaining.every(value => value === remaining[0]);
+        roll = {cur: s.cur, turn: s.n || 0, values: remaining.slice(0, 2), double, known: true};
+      } else {
+        // An arbitrary mid-turn replay/remount may have no original roll. Show
+        // the known remaining value and a neutral face instead of inventing one.
+        roll = {cur: s.cur, turn: s.n || 0, values: [remaining[0] || null, null], double: false, known: false};
+      }
     }
-    for (let i = 0; i < s.dice.length; i++) pieces.push({id: 'die_' + i, type: 'die',
-      board: 'main', position: {x: 248 + i * 54, y: 220},
-      text: String(s.dice[i]), actions: []});
+    const unused = remaining.slice();
+    const dice = [];
+    for (let i = 0; i < 2; i++) {
+      const value = roll && roll.values[i];
+      let used = 0;
+      if (roll && roll.known) {
+        if (roll.double) used = Math.max(0, Math.min(2, 4 - remaining.length - i * 2));
+        else {
+          const index = unused.indexOf(value);
+          if (index < 0) used = 2;
+          else unused.splice(index, 1);
+        }
+      }
+      const canRoll = active && s.needRoll;
+      const label = s.needRoll ? t(canRoll ? 'die_roll' : 'die_ready', {n: i + 1}) :
+        value === null || value === undefined ? t('die_unknown', {n: i + 1}) :
+          t(used === 2 ? 'die_used' : used === 1 ? 'die_half_used' : 'die_value', {n: i + 1, value});
+      dice.push({id: 'die_' + i, type: 'die', board: 'main',
+        position: {x: 336, y: 180 + i * 80}, z: 100,
+        asset: 'die_' + (value || 0) + '_used_' + used,
+        aria_label: label,
+        actions: canRoll ? ['tap'] : []});
+    }
+    pieces.push(...dice);
     const players = m.players || [];
     const name = seat => players[seat] && players[seat].name || t('player', {n: seat + 1});
     const labels = [
       {id: 'title', text: t('title'), x: 20, y: 14, font_size: 26},
       {id: 'turn', text: s.winner !== null ? t('winner', {name: name(s.winner)}) :
         t(s.needRoll ? 'roll_turn' : 'move_turn', {name: name(s.cur)}), x: 20, y: 50, font_size: 18},
+      ...(!s.needRoll ? [{id: 'moves_remaining', text: t('moves_remaining', {count: remaining.length}),
+        x: 20, y: 77, font_size: 15}] : []),
       {id: 'off_score', text: t('off_count', {a: s.off[0], b: s.off[1]}), x: 475, y: 57, font_size: 16},
       {id: 'white_label', text: t('white'), x: 20, y: 560, font_size: 16},
       {id: 'black_label', text: t('black'), x: 410, y: 560, font_size: 16},
       {id: 'bar_label', text: t('bar'), x: 342, y: 83, font_size: 14},
       {id: 'off_label', text: t('off'), x: 742, y: 83, font_size: 14}
     ];
-    const out = {scene: {pieces, targets, controls, labels}, local_state: {stacks}};
+    const out = {scene: {pieces, targets, controls, labels}, local_state: {stacks, roll}};
     if (message.type === 'ui_event' && active) {
       const e = message.event;
+      if (e.type === 'tap' && s.needRoll && dice.some(die => die.id === e.id))
+        out.make_move = {action: 'roll'};
       if (e.type === 'tap' && controls.some(control => control.id === e.id))
         out.make_move = {action: e.id};
       if (e.type === 'drop' && Object.prototype.hasOwnProperty.call(sources, e.piece_id || e.id)) {
