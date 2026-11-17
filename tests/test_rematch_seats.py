@@ -72,7 +72,7 @@ def test_seats_beyond_the_held_ones_stay_open_to_anyone() -> None:
 
 def test_a_rematch_does_not_carry_the_stake_over() -> None:
     api = Api()
-    alice, bob = api.new_user("alice"), api.new_user("bob")
+    alice, bob = api.new_user("alice", tokens=10), api.new_user("bob", tokens=10)
     game_id = api.new_game(owner=alice, allowed_player_counts=(2,))
     match = api.ok(
         "POST", "/matches", as_user=alice, json={"game_id": game_id, "bet_per_player": 5}

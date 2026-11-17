@@ -153,6 +153,16 @@ $ curl -X PATCH localhost:8000/users/34ae6a77-... \
     -H 'Content-Type: application/json' -d '{"display_name": "Alice"}'
 ```
 
+#### Token wallets
+
+A completed Google login or successful email/phone code verification grants
+1,000 tokens once per user, including when a guest links their first verified
+login. Repeat logins and additional linked methods do not grant another bonus.
+Existing verified accounts receive the bonus on their next verified login.
+Guest login and entering or completing matches grant no tokens; paid matches
+use the player's existing wallet. Account merges preserve balances and bonus
+eligibility history.
+
 #### How passwords are generated
 
 Users don't choose passwords. The server generates each one with Python's

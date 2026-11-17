@@ -1541,9 +1541,12 @@ class GamePlatform:
         different user, the two accounts merge, and the one with the stronger
         login method survives (google > phone > email > guest). The provider's
         name and email are refreshed on login; the assigned animal avatar persists. [invited_by_user_id] is recorded only when this creates a new user.
+        The first successful verified login credits a one-time 1,000-token bonus.
         Returns (user, merged_from_user_id).
         """
         with self._lock:
+            if as_user_id is not None:
+                as_user_id = self._resolve_replaced(self._require_user(as_user_id)).id
             user = self._find_by_linked_account(kind, identifier)
             if user is not None:
                 user = self._resolve_replaced(user)
@@ -1552,18 +1555,16 @@ class GamePlatform:
                     kind=kind, identifier=identifier, linked_at=self._clock()
                 )
                 if as_user_id is None:
-                    return (
-                        self.create_user(
-                            display_name=_clean_display_name(display_name),
-                            email=email.strip(),
-                            picture_url=picture_url.strip(),
-                            linked_accounts=(linked,),
-                            invited_by_user_id=invited_by_user_id,
-                            invite_token=invite_token,
-                            campaign_code=campaign_code,
-                        ),
-                        None,
+                    user = self.create_user(
+                        display_name=_clean_display_name(display_name),
+                        email=email.strip(),
+                        picture_url=picture_url.strip(),
+                        linked_accounts=(linked,),
+                        invited_by_user_id=invited_by_user_id,
+                        invite_token=invite_token,
+                        campaign_code=campaign_code,
                     )
+                    return self._grant_verified_login_bonus(user), None
                 owner = self._require_user(as_user_id)
                 owner = replace(
                     owner,
@@ -1571,7 +1572,7 @@ class GamePlatform:
                     updated_at=self._clock(),
                 )
                 self._store.put_user(owner)
-                return owner, None
+                return self._grant_verified_login_bonus(owner), None
             if as_user_id is None or as_user_id == user.id:
                 refreshed = _refresh_profile_from_provider(
                     user,
@@ -1582,13 +1583,31 @@ class GamePlatform:
                 if refreshed is not user:
                     refreshed = replace(refreshed, updated_at=self._clock())
                     self._store.put_user(refreshed)
-                return refreshed, None
+                return self._grant_verified_login_bonus(refreshed), None
             target = self._require_user(as_user_id)
             source, into = self._merge_pair(
                 user, target, prefer_first_as_source=True
             )
             merged_from = source.id
-            return self._merge_locked(source=source, into=into), merged_from
+            merged = self._merge_locked(source=source, into=into)
+            return self._grant_verified_login_bonus(merged), merged_from
+
+    def _grant_verified_login_bonus(self, user: User) -> User:
+        """Called only after verified login, with the operation lock held.
+
+        The marker and balance are saved together; query mode commits them in
+        the same transaction as identity linking and verification consumption.
+        """
+        if user.verified_login_bonus_granted:
+            return user
+        user = replace(
+            user,
+            token_balance=user.token_balance + 1000,
+            verified_login_bonus_granted=True,
+            updated_at=self._clock(),
+        )
+        self._store.put_user(user)
+        return user
 
     def merge_users(
         self,
@@ -1769,7 +1788,10 @@ class GamePlatform:
             into,
             linked_accounts=(*into.linked_accounts, *moved),
             token_balance=into.token_balance + source.token_balance,
-            # Neither account may claim today's grant a second time after merging.
+            verified_login_bonus_granted=(
+                into.verified_login_bonus_granted or source.verified_login_bonus_granted
+            ),
+            # Retain historical grant dates for existing records and clients.
             last_token_grant_day=max(
                 (day for day in (into.last_token_grant_day, source.last_token_grant_day) if day),
                 default=None,
@@ -2869,31 +2891,24 @@ class GamePlatform:
             return rematch
 
     def _check_can_stake(self, user_id: str, amount: int) -> None:
-        """Raises unless [user_id] can stake [amount] tokens, counting the
-        daily grant they would receive (see [_deduct_stake])."""
+        """Raises unless [user_id] already has [amount] tokens to stake."""
         user = self._store.get_user(user_id)
         if user is None:
             raise NotFoundError("player not found")
-        day = self._clock().astimezone(dt.timezone.utc).date().isoformat()
-        grant = 10 if user.last_token_grant_day != day else 0
-        if user.token_balance + grant < amount:
+        if user.token_balance < amount:
             raise ConflictError("a player has insufficient tokens")
 
     def _deduct_stake(self, user_id: str, amount: int) -> None:
-        """Takes [amount] tokens from a player entering a paid match: the
-        daily grant is applied first, then the stake is deducted."""
+        """Takes [amount] tokens from a player entering a paid match."""
         user = self._store.get_user(user_id)
         if user is None:
             raise NotFoundError("player not found")
-        day = self._clock().astimezone(dt.timezone.utc).date().isoformat()
-        grant = 10 if user.last_token_grant_day != day else 0
-        if user.token_balance + grant < amount:
+        if user.token_balance < amount:
             raise ConflictError("a player has insufficient tokens")
         self._store.put_user(
             replace(
                 user,
-                token_balance=user.token_balance + grant - amount,
-                last_token_grant_day=day if grant else user.last_token_grant_day,
+                token_balance=user.token_balance - amount,
             )
         )
 

@@ -23,7 +23,7 @@ NOW = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
 def test_every_published_game_leaves_through_the_shared_api(api, entry, mode):
     count = (min if mode == "direct" else max)(entry["allowed_player_counts"])
     human_count = 1 if mode == "solo" else count
-    users = [api.new_user(f"player-{i}") for i in range(human_count)]
+    users = [api.new_user(f"player-{i}", tokens=0 if mode == "solo" else 10) for i in range(human_count)]
     game = Game(
         id=entry["id"], version=entry["version"], name=entry["name"],
         owner_user_id=users[0], description="Published leave regression fixture",
@@ -84,7 +84,7 @@ def test_every_published_game_leaves_through_the_shared_api(api, entry, mode):
 def test_fallback_quotes_remainder_and_accepts_pre_release_previews(api, old_preview):
     from game_platform.tests.test_server_leaving import NO_PLAYER_LEFT_GAME, _create_game, _paid_match
 
-    alice, bob = api.new_user("alice"), api.new_user("bob")
+    alice, bob = api.new_user("alice", tokens=10), api.new_user("bob", tokens=10)
     mid = _paid_match(api, alice, _create_game(api, alice, NO_PLAYER_LEFT_GAME), bob)
     store = api.platform._store
     # An ongoing move can pay part of the pot, leaving an odd remainder.

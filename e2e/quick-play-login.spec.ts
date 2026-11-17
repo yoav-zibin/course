@@ -25,7 +25,7 @@ test('phone verification supports changing destination, resending, and returning
   await page.route('**/auth/phone/start',r=>r.fulfill({json:{verification_id:'v'+(++sends),expires_in_seconds:600}}));
   await page.route('**/auth/phone/verify',r=>r.fulfill({json:{user_id:'demo',password:'mock',display_name:'Demo',linked_accounts:[]}}));
   await page.goto('/?login=quick-play&next='+encodeURIComponent('/static/portal.html#match=test'));
-  await page.getByText('Sign in to an existing account').click();
+  await page.getByText('Sign in or create an account').click();
   await expect(page.getByText('Continue with Google')).toHaveCount(0);
   await page.getByText('Continue with phone').click();
   await page.getByLabel('Phone number').fill('+15551234567');
@@ -56,7 +56,7 @@ test('changing language preserves a pending verification code', async ({page}) =
   await page.route('**/auth/config', r => r.fulfill({json: {phone_login_enabled: true}}));
   await page.route('**/auth/phone/start', r => r.fulfill({json: {verification_id: 'local', expires_in_seconds: 600}}));
   await page.goto('/?login=quick-play');
-  await page.getByText('Sign in to an existing account').click();
+  await page.getByText('Sign in or create an account').click();
   await page.getByText('Continue with phone').click();
   await page.getByLabel('Phone number').fill('+15551234567');
   await page.getByText('Text me a code').click();

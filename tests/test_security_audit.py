@@ -56,7 +56,7 @@ def test_runtime_game_errors_do_not_echo_private_state(api):
 
 @pytest.mark.parametrize("phase", ["start", "join"])
 def test_game_lifecycle_payouts_are_applied_exactly_once(api, phase):
-    alice, bob, carol = [api.new_user(n) for n in ["alice", "bob", "carol"]]
+    alice, bob, carol = [api.new_user(n, tokens=10) for n in ["alice", "bob", "carol"]]
     code = COUNTER_GAME
     if phase == "start":
         code = code.replace('turn: [ctx.players[0].id]', 'turn: null, payouts: {[ctx.players[0].id]: ctx.pot}')

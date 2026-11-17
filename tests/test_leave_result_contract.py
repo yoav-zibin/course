@@ -16,7 +16,7 @@ END_GAME = LEAVE_GAME.replace(
 
 
 def test_leave_uses_game_distribution_and_pays_exactly_once(api):
-    alice, bob = api.new_user("alice"), api.new_user("bob")
+    alice, bob = api.new_user("alice", tokens=10), api.new_user("bob", tokens=10)
     game = _create_game(api, alice, END_GAME)
     match_id = _paid_match(api, alice, game, bob)
     preview = api.ok("POST", f"/matches/{match_id}/maybeLeave", as_user=bob)
@@ -38,7 +38,7 @@ def test_leave_uses_game_distribution_and_pays_exactly_once(api):
 @pytest.mark.parametrize("payouts", ["{}", "{[playerId]: ctx.pot + 1}",
     "{[playerId]: -1}", "{[playerId]: true}", "{outsider: ctx.pot}", "null"])
 def test_invalid_leave_result_does_not_change_match_or_balances(api, payouts):
-    alice, bob = api.new_user("alice"), api.new_user("bob")
+    alice, bob = api.new_user("alice", tokens=10), api.new_user("bob", tokens=10)
     code = END_GAME.replace("{[playerId]: 3, [others[0]]: ctx.pot - 3}", payouts)
     match_id = _paid_match(api, alice, _create_game(api, alice, code), bob)
     before = api.ok("GET", f"/matches/{match_id}", as_user=alice)
@@ -50,7 +50,7 @@ def test_invalid_leave_result_does_not_change_match_or_balances(api, payouts):
 
 
 def test_continuing_leave_keeps_indices_and_cannot_be_played_by_leaver(api):
-    users = [api.new_user(str(i)) for i in range(3)]
+    users = [api.new_user(str(i), tokens=10) for i in range(3)]
     code = LEAVE_GAME.replace("const ids = ctx.players.map(p => p.id);",
                              "const ids = ctx.players.filter(p => p.active !== false).map(p => p.id);")
     code = code.replace("return {state: state, turn: [others[0]], payout: Math.floor(ctx.pot / 2)};",
@@ -101,7 +101,7 @@ def test_legacy_mixed_match_ends_and_refunds_once(api):
     from dataclasses import replace
     from game_platform.models import Seat
 
-    alice, bob = api.new_user("alice"), api.new_user("bob")
+    alice, bob = api.new_user("alice", tokens=10), api.new_user("bob", tokens=10)
     mid = _paid_match(api, alice, _create_game(api, alice, END_GAME), bob)
     store = api.client.app.state.platform._store
     old = store.get_match(mid)

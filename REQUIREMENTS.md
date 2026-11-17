@@ -40,7 +40,9 @@ see [GAME_DEVELOPMENT_GUIDE.md](GAME_DEVELOPMENT_GUIDE.md).
   moves) with per-call time and memory budgets — plus a recorded,
   server-verified test flow on the /game-test page (see §7).
 - **Stakes.** Games may be played for virtual tokens: players stake into
-  a pot and the game's payouts divide it. A published game's versions are
+  a pot and the game's payouts divide it. A user's first completed verified
+  login (Google, email code or phone code) grants 1,000 tokens once. Guest
+  login and playing matches do not grant tokens. A published game's versions are
   kept; a match always finishes on the version it started with.
 
 ## 2. Required features (course list)

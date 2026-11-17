@@ -272,7 +272,7 @@ def test_computer_moves_first_when_it_has_the_first_turn(api: Api):
 
 
 def test_paid_match_pays_the_pot_to_the_winner(api: Api):
-    alice, bob = api.new_user("alice"), api.new_user("bob")
+    alice, bob = api.new_user("alice", tokens=10), api.new_user("bob", tokens=10)
     game_id = _create_game(api, alice)
     match_id = _start(api, alice, game_id, joiner=bob, max_loss=10)
 
@@ -282,7 +282,7 @@ def test_paid_match_pays_the_pot_to_the_winner(api: Api):
     match = api.ok("GET", f"/matches/{match_id}", as_user=alice)
     assert match["status"] == "over"
     assert match["token_payouts"] == {"0": 20}
-    # Alice staked 10 (of her daily grant) and won the 20 pot; Bob lost his 10.
+    # Alice staked her 10-token wallet and won the 20 pot; Bob lost his 10.
     assert api.ok("GET", f"/users/{alice}", as_user=alice)["token_balance"] == 20
     assert api.ok("GET", f"/users/{bob}", as_user=bob)["token_balance"] == 0
 

@@ -20,9 +20,14 @@ test('multiplayer lobby offers no computer opponents', async ({page, request}) =
   expect(denied.status()).toBe(409);
 });
 
-test('leave dialog quotes the game payout and ends without a replacement bot', async ({page,request}) => {
-  const alice = await createUser(request, uniqueName('Alice'));
-  const bob = await createUser(request, uniqueName('Bob'));
+test('leave dialog quotes the game payout and ends without a replacement bot', async ({page,request}, testInfo) => {
+  // Explicit wallets seeded by start-server.py; playing grants no free tokens.
+  const fundedAccount = (name: string) => ({
+    id: `paid-${testInfo.project.name}-${testInfo.retry}-${name.toLowerCase()}`,
+    display_name: name, password: 'paid-match-test-wallet',
+  });
+  const alice = fundedAccount('Alice');
+  const bob = fundedAccount('Bob');
   const auth = (u: typeof alice) => ({'X-User-Id':u.id,'X-User-Password':u.password});
   const source = `function settle(ctx, winnerId) {
     if (ctx.pot === 0) return {};

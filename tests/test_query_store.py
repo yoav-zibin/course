@@ -572,8 +572,8 @@ def test_speed_match_deadline_job_ends_the_match_without_a_read(store):
     api.client.app.state.platform = ScalablePlatform(
         store=store, computer_move_delay_seconds=0, clock=clock
     )
-    alice = api.new_user("alice")
-    bob = api.new_user("bob")
+    alice = api.new_user("alice", tokens=10)
+    bob = api.new_user("bob", tokens=10)
     game_id = api.new_game(owner=alice, allowed_player_counts=(2,))
     match = api.ok(
         "POST",
@@ -679,7 +679,7 @@ def test_payout_ledger_and_lost_response_retry_are_atomic(store):
     from game_platform.tests.test_server_matches import _create_game, _start, _move
 
     api = api_for(store)
-    alice, bob = api.new_user("alice"), api.new_user("bob")
+    alice, bob = api.new_user("alice", tokens=10), api.new_user("bob", tokens=10)
     match = _start(api, alice, _create_game(api, alice), joiner=bob, max_loss=10)
     for user, add in [(alice, 3), (bob, 3), (alice, 1), (bob, 1)]:
         assert _move(api, match, as_user=user, add=add).status_code == 201

@@ -37,8 +37,8 @@ def run(project, database):
     store = QueryStore.initialize(client, namespace="scaling_v1")
     api = api_for(store)
     alice, bob = (
-        api.new_user("Cloud synthetic Alice"),
-        api.new_user("Cloud synthetic Bob"),
+        api.new_user("Cloud synthetic Alice", tokens=10),
+        api.new_user("Cloud synthetic Bob", tokens=10),
     )
     game = _create_game(api, alice)
     match = _start(api, alice, game, joiner=bob, max_loss=10)

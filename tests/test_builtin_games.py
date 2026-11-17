@@ -252,7 +252,7 @@ def test_poker_cannot_fold_when_checking_is_free():
 
 
 def test_poker_player_left_pays_their_chip_share(api: Api):
-    owner, second, third = (api.new_user(name) for name in ("owner", "second", "third"))
+    owner, second, third = (api.new_user(name, tokens=10) for name in ("owner", "second", "third"))
     game = _create_game(
         api, owner, "poker", allowed_player_counts=[2, 3, 4],
         allows_leave_mid_match=True, allows_join_mid_match=True,

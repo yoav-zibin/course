@@ -2,6 +2,7 @@
 
 import datetime as dt
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from typing import Any
 
 import httpx
@@ -174,10 +175,16 @@ class Api:
         assert response.is_success, (response.status_code, response.text)
         return None if response.status_code == 204 else response.json()
 
-    def new_user(self, name: str) -> str:
+    def new_user(self, name: str, *, tokens: int = 0) -> str:
+        """Create a guest, optionally with an explicitly funded test wallet."""
         user = self.ok("POST", "/users", json={"display_name": name})
         self._names_by_user_id[user["id"]] = name
         self.passwords_by_user_id[user["id"]] = user["password"]
+        if tokens:
+            store = self.client.app.state.platform._store
+            stored = store.get_user(user["id"])
+            assert stored is not None
+            store.put_user(replace(stored, token_balance=tokens))
         return user["id"]
 
     def create_game(self, body: dict, owner: str) -> dict:

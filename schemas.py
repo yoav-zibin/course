@@ -163,7 +163,7 @@ class UserOut(BaseModel):
     replaced_user_ids: list[str] = []
     created_at: dt.datetime
     updated_at: dt.datetime
-    # The user's token wallet and the day of its last daily grant. Private: only in
+    # The user's token wallet and legacy daily-grant date. Private: only in
     # responses about the caller's own account; None for other users.
     token_balance: int | None = None
     last_token_grant_day: str | None = None

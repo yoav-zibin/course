@@ -57,7 +57,7 @@ The checker does not compare historical authors to current seat owners, since jo
 ## Confirmed defects and fixes
 
 1. **Timeout viewer access lost after account merge.** A timed-out player remains a viewer through `Match.timeouts`. Merging their account previously left the old user in those entries. The survivor did not inherit that participation. Merge now rewrites timeout ownership together with seats and move authors.
-2. **Tokens stranded on a replaced account.** A source with 23 tokens merged into a target with 17 previously left the target with 17 and the inaccessible source with 23. Merge now transfers all 40 to the survivor and zeroes the source. It retains the latest daily-grant date, so merging cannot reset today's grant eligibility; merging through an alias does not duplicate balances.
+2. **Tokens stranded on a replaced account.** A source with 23 tokens merged into a target with 17 previously left the target with 17 and the inaccessible source with 23. Merge now transfers all 40 to the survivor and zeroes the source. It preserves the one-time verified-login bonus marker and retains the historical daily-grant date for compatibility; merging through an alias does not duplicate balances or reset bonus eligibility.
 
 These repairs apply to new merges, not historical corrupted records. Existing data needs a separately reviewed migration after a validation report.
 

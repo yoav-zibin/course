@@ -7,6 +7,7 @@ import datetime as dt
 import json
 import threading
 from collections.abc import Sequence
+from dataclasses import replace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -351,6 +352,9 @@ def test_the_match_ends_when_leaving_is_not_allowed() -> None:
 
 def test_the_match_ends_in_a_paid_match() -> None:
     world = World()
+    for uid in (world.ann, world.bob, world.cy):
+        user = world.platform._store.get_user(uid)
+        world.platform._store.put_user(replace(user, token_balance=10))
     match = world.platform.create_match(
         caller_id=world.ann, game_id=world.game, num_computer_opponents=0, bet_per_player=1, turn_seconds=60
     )
@@ -369,6 +373,9 @@ def _balances(world: World) -> dict[str, int]:
 
 def test_a_timeout_pays_the_pot_to_the_players_without_the_turn() -> None:
     world = World()
+    for uid in (world.ann, world.bob, world.cy):
+        user = world.platform._store.get_user(uid)
+        world.platform._store.put_user(replace(user, token_balance=10))
     match = world.platform.create_match(
         caller_id=world.ann, game_id=world.game, num_computer_opponents=0, bet_per_player=2, turn_seconds=60
     )
@@ -392,6 +399,9 @@ def test_a_timeout_refunds_evenly_when_everyone_held_the_turn() -> None:
     from dataclasses import replace as _replace
 
     world = World()
+    for uid in (world.ann, world.bob, world.cy):
+        user = world.platform._store.get_user(uid)
+        world.platform._store.put_user(replace(user, token_balance=10))
     match = world.platform.create_match(
         caller_id=world.ann, game_id=world.game, num_computer_opponents=0, bet_per_player=2, turn_seconds=60
     )

@@ -11,7 +11,7 @@
     option.dataset.i18n = "ui.quickplay.standard";
     option.textContent = I18n.t("ui.quickplay.standard", {}, "Use standard login");
     const script = document.createElement("script");
-    script.src = "/static/quick-play-login.js?v=3";
+    script.src = "/static/quick-play-login.js?v=4";
     script.onerror = () => location.replace(option.href);
     I18n.ready.then(() => document.head.appendChild(script));
     return;

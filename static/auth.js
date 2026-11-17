@@ -312,7 +312,9 @@ const Auth = (() => {
     dialog.root.onclick = (event) => {
       if (event.target === dialog.root) closeDialog();
     };
-    box.append(close, title, dialog.message);
+    box.append(close, title,
+      el("p", { class: "muted", textContent: I18n.t("ui.auth.verified_bonus", {}, "Get 1,000 tokens once with your first verified login. Use Google or verify a code sent to your email or phone. Guests receive no welcome bonus.") }),
+      dialog.message);
     if (mode === "link") {
       box.append(
         el("p", { class: "muted", textContent: I18n.t("ui.auth.merge_note", {}, "If this login belongs to another of your accounts, that account is merged into this one.") })
@@ -463,7 +465,8 @@ const Auth = (() => {
     };
     return el("div", { class: "auth-method" },
       el("label", { class: "inline" }, `${I18n.t("ui.auth.guest", {}, "Guest")} `, input),
-      button
+      button,
+      el("p", { class: "muted", textContent: I18n.t("ui.auth.guest_bonus_note", {}, "Play as a guest without a welcome bonus. Link a verified login later to receive your one-time 1,000 tokens.") })
     );
   }
 

@@ -101,10 +101,10 @@ def test_patch_server_code_and_client_code(api: Api):
 
 
 def test_match_max_loss_and_player_ids(api: Api):
-    owner = api.new_user("owner")
+    owner = api.new_user("owner", tokens=10)
     game = _create_game(api, owner)
     # The stake is taken when the match is created (Phase 4), so it must
-    # fit the owner's balance: a fresh owner has their 10-token grant.
+    # fit the owner's pre-funded 10-token wallet.
     match = api.ok(
         "POST", "/matches", as_user=owner,
         json={"game_id": game["id"], "max_loss": 10},

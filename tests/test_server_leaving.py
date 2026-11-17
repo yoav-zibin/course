@@ -109,7 +109,7 @@ def _balance(api: Api, user_id: str) -> int:
 
 
 def test_stakes_are_taken_at_join_and_refunded_in_the_waiting_room(api: Api):
-    alice, bob = api.new_user("alice"), api.new_user("bob")
+    alice, bob = api.new_user("alice", tokens=10), api.new_user("bob", tokens=10)
     game_id = _create_game(api, alice)
 
     match = api.ok(
@@ -117,7 +117,7 @@ def test_stakes_are_taken_at_join_and_refunded_in_the_waiting_room(api: Api):
         json={"game_id": game_id, "max_loss": 10},
     )
     match_id = match["id"]
-    # Creating the match staked Alice (her 10-token daily grant covered it).
+    # Creating the match staked Alice from her existing 10-token wallet.
     assert match["token_pot"] == 10
     assert _balance(api, alice) == 0
 
@@ -138,13 +138,13 @@ def test_stakes_are_taken_at_join_and_refunded_in_the_waiting_room(api: Api):
 
 def test_joining_a_paid_match_without_the_tokens_is_a_409(api: Api):
     alice, carol, dave = (
-        api.new_user("alice"),
-        api.new_user("carol"),
-        api.new_user("dave"),
+        api.new_user("alice", tokens=10),
+        api.new_user("carol", tokens=10),
+        api.new_user("dave", tokens=10),
     )
     game_id = _create_game(api, alice)
 
-    # Carol's daily grant is gone (she staked it on her own match), so
+    # Carol's wallet is empty (she staked it on her own match), so
     # she cannot stake a second one.
     api.ok(
         "POST", "/matches", as_user=carol,
@@ -163,7 +163,7 @@ def test_joining_a_paid_match_without_the_tokens_is_a_409(api: Api):
 
 
 def test_maybe_leave_previews_the_payout_and_changes_nothing(api: Api):
-    alice, bob = api.new_user("alice"), api.new_user("bob")
+    alice, bob = api.new_user("alice", tokens=10), api.new_user("bob", tokens=10)
     game_id = _create_game(api, alice)
     match_id = _paid_match(api, alice, game_id, bob)
     assert _move(api, match_id, as_user=alice, add=2).status_code == 201
@@ -185,7 +185,7 @@ def test_maybe_leave_previews_the_payout_and_changes_nothing(api: Api):
 
 
 def test_confirming_a_leave_applies_the_preview_and_settles_the_pot(api: Api):
-    alice, bob = api.new_user("alice"), api.new_user("bob")
+    alice, bob = api.new_user("alice", tokens=10), api.new_user("bob", tokens=10)
     game_id = _create_game(api, alice)
     match_id = _paid_match(api, alice, game_id, bob)
     assert _move(api, match_id, as_user=alice, add=2).status_code == 201
@@ -204,7 +204,7 @@ def test_confirming_a_leave_applies_the_preview_and_settles_the_pot(api: Api):
 
 
 def test_a_move_aborts_a_pending_leave(api: Api):
-    alice, bob = api.new_user("alice"), api.new_user("bob")
+    alice, bob = api.new_user("alice", tokens=10), api.new_user("bob", tokens=10)
     game_id = _create_game(api, alice)
     match_id = _paid_match(api, alice, game_id, bob)
     api.ok("POST", f"/matches/{match_id}/maybeLeave", as_user=bob)
@@ -220,7 +220,7 @@ def test_a_move_aborts_a_pending_leave(api: Api):
 
 
 def test_leaving_directly_applies_player_left_without_a_preview(api: Api):
-    alice, bob = api.new_user("alice"), api.new_user("bob")
+    alice, bob = api.new_user("alice", tokens=10), api.new_user("bob", tokens=10)
     game_id = _create_game(api, alice)
     match_id = _paid_match(api, alice, game_id, bob)
 
@@ -246,7 +246,7 @@ def test_the_last_human_leaving_ends_the_match(api: Api):
 
 
 def test_a_game_without_player_left_splits_the_pot_and_ends(api: Api):
-    alice, bob = api.new_user("alice"), api.new_user("bob")
+    alice, bob = api.new_user("alice", tokens=10), api.new_user("bob", tokens=10)
     game_id = _create_game(api, alice, server_code=NO_PLAYER_LEFT_GAME)
     match_id = _paid_match(api, alice, game_id, bob)
 
@@ -260,7 +260,7 @@ def test_a_game_without_player_left_splits_the_pot_and_ends(api: Api):
 
 
 def test_maybe_leave_previews_the_equal_split_without_player_left(api: Api):
-    alice, bob = api.new_user("alice"), api.new_user("bob")
+    alice, bob = api.new_user("alice", tokens=10), api.new_user("bob", tokens=10)
     game_id = _create_game(api, alice, server_code=NO_PLAYER_LEFT_GAME)
     match_id = _paid_match(api, alice, game_id, bob)
 
@@ -273,7 +273,7 @@ def test_maybe_leave_previews_the_equal_split_without_player_left(api: Api):
 
 
 def test_estimate_win_chance_prices_the_leavers_payout(api: Api):
-    alice, bob = api.new_user("alice"), api.new_user("bob")
+    alice, bob = api.new_user("alice", tokens=10), api.new_user("bob", tokens=10)
     game_id = _create_game(api, alice, server_code=ESTIMATE_GAME)
     match_id = _paid_match(api, alice, game_id, bob)
     # Race to 10: after 3 + 3 + 3 the count is 9 and any next move wins.

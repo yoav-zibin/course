@@ -20,8 +20,8 @@ def balance(api: Api, user_id: str) -> int:
 
 def paid_match(api: Api, *, turn_seconds: int | None = None) -> tuple[str, str, str]:
     """A started match between two players staking STAKE each. Both start with
-    the 10-token daily grant, so each holds 10 - STAKE once it starts."""
-    alice, bob = api.new_user("alice"), api.new_user("bob")
+    a 10-token wallet, so each holds 10 - STAKE once it starts."""
+    alice, bob = api.new_user("alice", tokens=10), api.new_user("bob", tokens=10)
     game_id = api.new_game(owner=alice, allowed_player_counts=(2,))
     match = api.ok(
         "POST",

@@ -96,6 +96,12 @@ class User:
     # Defaults to empty so older account records load unchanged.
     recent_game_ids: tuple[str, ...] = ()
     token_balance: int = 0
+    # Awarded only after a successful Google, phone or email login. Persisted
+    # separately from the balance so spending tokens cannot reset eligibility.
+    # Older accounts receive the bonus on their next verified login.
+    verified_login_bonus_granted: bool = False
+    # Historical daily match grants are no longer issued; retain the date so
+    # existing stored records and clients remain compatible.
     last_token_grant_day: str | None = None
     created_at: dt.datetime
     updated_at: dt.datetime

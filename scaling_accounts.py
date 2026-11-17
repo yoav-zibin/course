@@ -453,6 +453,9 @@ def _merge_finalize(store, job):
     into = replace(
         into,
         token_balance=into.token_balance + source.token_balance,
+        verified_login_bonus_granted=(
+            into.verified_login_bonus_granted or source.verified_login_bonus_granted
+        ),
         last_token_grant_day=max(
             filter(None, (into.last_token_grant_day, source.last_token_grant_day)),
             default=None,

@@ -340,7 +340,7 @@ function syncPortalCurrencyLabels() {
 }
 function syncWalletTitle() {
   const wallet = $("token-wallet");
-  if (wallet) wallet.title = portalCurrencyText("ui.portal.wallet_hint", {balance:I18n.number(walletBalance ?? 0)}, "{balance} virtual tokens · +10 daily allowance on your first paid match entry");
+  if (wallet) wallet.title = portalCurrencyText("ui.portal.wallet_hint", {balance:I18n.number(walletBalance ?? 0)}, "{balance} virtual tokens · One-time 1,000-token bonus for your first verified login");
 }
 function updateStakePreview() {
   const select = $("match-stake"), preview = $("stake-preview"), panel = $("token-stake-panel");
