@@ -428,7 +428,7 @@ def test_push_test_notifies_the_callers_subscriptions() -> None:
     _subscribe_ok(api, alice, "https://push.example.com/s/alice")
     assert api.request("POST", "/push/test", as_user=alice).status_code == 202
     (message,) = _messages_to(notifier, alice)
-    assert message.body == "Test notification from the game platform"
+    assert message.body == "Test notification from BuildPlay"
     assert message.url == "/static/portal.html"
 
 

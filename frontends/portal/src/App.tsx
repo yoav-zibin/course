@@ -140,7 +140,7 @@ function PortalApp() {
             : screen==='local' ? <LocalMatches />
             : screen==='invites' ? <Invitations />
             : <Settings layout={layout} setLayout={next=>{setLayout(next); void AsyncStorage.setItem('buildplay.navigation.v2',next);}} />}
-          <Row style={s.footer}><Copy small muted>BuildPlay.fun</Copy><Button secondary compact onPress={()=>setFeedback(true)}>{t('ui.feedback.general','Feedback')}</Button><Button secondary compact onPress={()=>navigate('settings')}>{t('ui.preferences.title','Preferences')}</Button><Button secondary compact onPress={()=>Linking.openURL(`${p.baseUrl}/static/privacy.html`)}>{t('ui.privacy.title','Privacy')}</Button><Copy small muted>{p.network ? copyText("● Online") : copyText("○ Offline")}</Copy></Row>
+          <Row style={s.footer}><Copy small muted>BuildPlay</Copy><Button secondary compact onPress={()=>setFeedback(true)}>{t('ui.feedback.general','Feedback')}</Button><Button secondary compact onPress={()=>navigate('settings')}>{t('ui.preferences.title','Preferences')}</Button><Button secondary compact onPress={()=>Linking.openURL(`${p.baseUrl}/static/privacy.html`)}>{t('ui.privacy.title','Privacy')}</Button><Copy small muted>{p.network ? copyText("● Online") : copyText("○ Offline")}</Copy></Row>
         </ScrollView>
       </View>
       <AccountDialog visible={account} onClose={()=>setAccount(false)} />

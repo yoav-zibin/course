@@ -359,7 +359,7 @@ function linkTopbarBrandToPortal() {
       href: heading.closest(".topbar")?.dataset?.appHomeHref || "/",
       "aria-label": heading.closest(".topbar")?.dataset?.appBrand
         ? `${heading.closest(".topbar").dataset.appBrand} home`
-        : I18n.t("ui.portal.home_aria", {}, "Game platform home"),
+        : I18n.t("ui.portal.home_aria", {}, "BuildPlay home"),
       "data-i18n-aria-label": heading.closest(".topbar")?.dataset?.appBrand ? null : "ui.portal.home_aria",
       title: I18n.t("ui.common.back_to_games", {}, "Back to games"),
       "data-i18n-title": "ui.common.back_to_games",

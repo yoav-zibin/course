@@ -2209,7 +2209,7 @@ def create_app(
     # Windows registry associations can otherwise break service-worker loading.
     mimetypes.init()
     mimetypes.add_type("text/javascript", ".js")
-    app = FastAPI(title="Game platform")
+    app = FastAPI(title="BuildPlay")
     # Allow REST API requests from other domains (browser cross-origin requests).
     # Auth uses per-request headers, not cookies, so a wildcard origin is safe here.
     if cors_allow_origins:

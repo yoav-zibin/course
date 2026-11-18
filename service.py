@@ -4474,7 +4474,7 @@ class GamePlatform:
                 [
                     PushMessage(
                         subscription=subscription,
-                        title="Game platform",
+                        title="BuildPlay",
                         body=i18n.translate("notify.test", locale),
                         url="/static/portal.html",
                         tag="test",
