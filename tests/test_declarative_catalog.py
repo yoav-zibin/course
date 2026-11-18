@@ -87,11 +87,13 @@ def test_html_games_are_archived_and_only_declarative_games_use_portal_apis(quer
     assert api.request("PATCH", f"/games/{html.id}", as_user=owner,
                        json={"name": "Updated HTML",
                              "game_addition_request_id_and_secret": TEST_GAME_SECRET}).status_code == 400
-    api.client.app.state.master_password = None
     assert api.request("POST", "/matchmaking/quick-match", as_user=owner,
                        json={"game_id": html.id}).status_code == 404
+    # Supply the independent write capability so these requests reach the
+    # legacy game's read-only validation instead of failing authentication.
     assert api.request("POST", f"/games/{html.id}/unpublish", as_user=owner).status_code == 400
     assert api.request("DELETE", f"/games/{html.id}", as_user=owner).status_code == 400
+    api.client.app.state.master_password = None
     assert api.request("PUT", f"/users/me/saved-games/{html.id}", as_user=owner).status_code == 404
     assert api.request("POST", f"/users/me/recent-games/{html.id}", as_user=owner).status_code == 404
     if query_mode:

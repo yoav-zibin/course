@@ -22,7 +22,17 @@ def test_unpublish_hides_public_routes_and_keeps_owner_library(api: Api):
     assert api.ok('GET', f'/games/{game}', as_user=owner) == hidden
     assert api.request('POST', '/matches', as_user=owner, json={'game_id':game}).status_code == 404
     # An owner's login alone does not authorize game-content updates.
-    assert api.request('PATCH', f'/games/{game}', as_user=owner, json={'name':'private'}).status_code == 422
+    assert api.client.patch(f'/games/{game}', headers={
+        'X-User-Id': owner, 'X-User-Password': api.passwords_by_user_id[owner],
+    }, json={'name':'private'}).status_code == 422
+    # The helper supplies the configured master capability for owned games;
+    # an authenticated metadata-only patch republishes without replacing code.
+    updated = api.request('PATCH', f'/games/{game}', as_user=owner, json={'name':'private'})
+    assert updated.status_code == 200, updated.text
+    assert updated.json()['name'] == 'private'
+    assert updated.json()['version'] == before['version'] + 1
+    assert updated.json()['code'] == before['code']
+    assert updated.json()['published'] is True
 
 
 def test_existing_participants_keep_playing_but_outsiders_cannot_read_or_join(api: Api):
