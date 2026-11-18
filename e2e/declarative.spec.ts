@@ -4,6 +4,8 @@ import { test, expect } from '@playwright/test';
 import { createUser, loginAs, uniqueName } from './helpers';
 import {revealDeclarativeTarget} from './declarative-camera';
 
+declare const frame:any;
+
 const kinds=['tictactoe','connect4','reversi','nim','mancala','gomoku','hex','domineering','memory','pig'];
 const auth=(user:any)=>({'X-User-Id':user.id,'X-User-Password':user.password});
 
@@ -61,7 +63,14 @@ for(const [index,kind] of kinds.entries())test(`declarative ${kind}: submit and 
         else move=pairs.find((option:any)=>pairs.some((other:any)=>other.cell!==option.cell&&publicMemory.get(other.cell)===publicMemory.get(option.cell))) || options.find((option:any)=>!publicMemory.has(option.cell)) || move;
       }
       const id=Object.keys(move).map(key=>`${key}_${move[key]}`).join('_');
-      const target=page.locator(`#game-box [data-ui-id="${id}"]`);
+      // The response/poll can precede delivery to the acting native scene.
+      // Wait for that board and its motion to finish before choosing a control.
+      await expect.poll(()=>page.evaluate(({count,seat})=>frame.lastMessage?.move_count===count&&frame.lastMessage?.my_player_index===seat,{count:current.move_count,seat})).toBe(true);
+      await page.evaluate(()=>frame.declarative.whenIdle());
+      // Cards and Mancala pits expose the action on the physical piece above
+      // the matching target. Click the control a player actually sees.
+      const actionId=kind==='mancala'?`stonepit_${move.pit}`:kind==='memory'?`card_${move.cell}`:id;
+      const target=page.locator(`#game-box [data-ui-id="${actionId}"]`);
       await expect(target).toBeVisible();
       await expect(target).not.toHaveAttribute('aria-disabled','true');
       if(count===0){
@@ -80,6 +89,8 @@ for(const [index,kind] of kinds.entries())test(`declarative ${kind}: submit and 
       if(await target.evaluate(node=>Boolean(node.closest('svg.declarative-stage'))))await revealDeclarativeTarget(page,target);
       await target.click();
       const result=await response;expect(result.ok(),await result.text()).toBeTruthy();
+      expect(result.request().postDataJSON().move).toEqual(move);
+      expect((await result.json()).move_count).toBe(current.move_count+1);
     }
     expect(current?.status,`${kind} should finish via portal controls within 350 moves`).toBe('over');
     expect(count).toBeGreaterThan(0);
