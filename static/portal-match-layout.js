@@ -19,7 +19,7 @@ window.PortalMatchLayout = (() => {
     const account = $("account-menu");
     if (!account?.parentNode) return;
     if (!accountHome) {
-      accountHome = document.createComment("Account menu home");
+      accountHome = document.createComment("");
       account.before(accountHome);
     }
     const toolbar = $("match-toolbar-title").parentElement;
