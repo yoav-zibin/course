@@ -542,7 +542,14 @@
     function cancelPointer(event){if(cameraPointerEnd(event))return;if(!dragging||nativeDragging||event.pointerId!==dragging.pointerId)return;resetDrag();selected=null;clearPreview();updateHints();}
     global.addEventListener("pointerup",finishPointer);
     global.addEventListener("pointercancel",cancelPointer);
-    container.addEventListener("keydown",event=>{if(event.key==="Escape"){resetDrag();nativeDragging=null;selected=null;disarm();clearPreview();updateHints();}});
+    // Piece taps need not move focus from Portal controls (or the page body).
+    // Escape cancels this board even there, without consuming the host's own
+    // menu/overlay shortcut. Capture also covers overlays that stop bubbling.
+    function cancelSelection(event){
+      if(destroyed||event.key!=="Escape")return;
+      pointerSequence++;resetDrag();nativeDragging=null;selected=null;disarm();clearPreview();updateHints();
+    }
+    global.addEventListener("keydown",cancelSelection,true);
     // R / Shift+R rotate and F flips the selected piece, like its tool buttons.
     // Pointer selection need not move focus, so also listen while the page
     // body has focus; never while typing in a field or outside this game.
@@ -937,7 +944,7 @@
         resetDrag();latest=clone(message);revision++;moveSent=false;selected=null;nativeDragging=null;updateHints();const atRevision=revision;
         queue=queue.then(()=>reduce(latest,atRevision,options)).catch(error);return queue;
       },
-      destroy(){resetDrag();clearMotionHold();destroyed=true;revision++;touches.clear();cameraGesture=null;cameraObserver?.disconnect();global.removeEventListener("resize",scheduleCamera);if(cameraFrame!==null)global.cancelAnimationFrame(cameraFrame);for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();global.removeEventListener("pointermove",cameraPointerMove);global.removeEventListener("pointerdown",pointerStarted,true);global.removeEventListener("keydown",toolKeys);global.removeEventListener("pointermove",movePointer);global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game","declarative-immersive","declarative-has-previews");},
+      destroy(){resetDrag();clearMotionHold();destroyed=true;revision++;touches.clear();cameraGesture=null;cameraObserver?.disconnect();global.removeEventListener("resize",scheduleCamera);if(cameraFrame!==null)global.cancelAnimationFrame(cameraFrame);for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();global.removeEventListener("pointermove",cameraPointerMove);global.removeEventListener("pointerdown",pointerStarted,true);global.removeEventListener("keydown",cancelSelection,true);global.removeEventListener("keydown",toolKeys);global.removeEventListener("pointermove",movePointer);global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game","declarative-immersive","declarative-has-previews");},
       dispatch,
       async whenIdle(){await Promise.allSettled([motionReady,...[...pieceAnimations].map(animation=>animation.finished)]);},
     };
@@ -946,10 +953,10 @@
     const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
     const data=value=>JSON.stringify(canonical(value)).replace(/</g,"\\u003c");
     return '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<link rel="stylesheet" href="/static/declarative-ui.css?v=19"><div id="declarative-game"></div>' +
+      '<link rel="stylesheet" href="/static/declarative-ui.css?v=20"><div id="declarative-game"></div>' +
       '<script type="application/json" id="i18n-strings">'+data(spec.strings || {})+'<'+'/script>' +
       '<script type="application/json" id="declarative-spec">'+data(spec)+'<'+'/script>' +
-      '<script src="/static/declarative-ui.js?v=19"><'+'/script><script>' +
+      '<script src="/static/declarative-ui.js?v=20"><'+'/script><script>' +
       'const host=DeclarativeUI.mount(document.getElementById("declarative-game"),' +
       'JSON.parse(document.getElementById("declarative-spec").textContent),' +
       '{onMove:move=>parent.postMessage({type:"make_move",move},"*"),' +

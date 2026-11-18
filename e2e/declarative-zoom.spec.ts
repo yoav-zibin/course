@@ -24,6 +24,29 @@ async function camera(page:Page){return page.locator('#zoom-test .declarative-st
 async function screenPoint(page:Page,x:number,y:number){return page.locator('#zoom-test .declarative-stage').evaluate((node:SVGSVGElement,point)=>{const p=node.createSVGPoint();p.x=point.x;p.y=point.y;const result=p.matrixTransform(node.getScreenCTM()!);return {x:result.x,y:result.y};},{x,y});}
 async function boardPoint(page:Page,x:number,y:number){return page.locator('#zoom-test .declarative-stage').evaluate((node:SVGSVGElement,point)=>{const p=node.createSVGPoint();p.x=point.x;p.y=point.y;const result=p.matrixTransform(node.getScreenCTM()!.inverse());return {x:result.x,y:result.y};},{x,y});}
 
+test('Escape cancels a selected piece while a control outside the board has focus',async({page})=>{
+  await mountBoard(page,false);
+  await page.evaluate(()=>{
+    const button=document.createElement('button');button.id='outside-controls';button.textContent='Portal controls';
+    button.style.cssText='position:fixed;top:0;right:0;z-index:10000';document.body.append(button);
+    (window as any).escapeHostEvents=0;
+    document.addEventListener('keydown',event=>{if(event.key==='Escape')(window as any).escapeHostEvents++;});
+  });
+  const checker=page.locator('#zoom-test [data-ui-id="checker"]'),home=page.locator('#zoom-test [data-ui-id="home"]');
+  await checker.click();await expect(checker).toHaveClass(/hint-selected/);
+  await page.locator('#outside-controls').click();await expect(page.locator('#outside-controls')).toBeFocused();
+  await page.keyboard.press('Escape');
+  expect(await page.evaluate(()=>(window as any).escapeHostEvents)).toBe(1);
+  await expect(checker).not.toHaveClass(/hint-selected/);
+  await expect(home).toHaveAttribute('data-drop-state','placement');
+  await home.click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).zoomScenes)).toBe(2);
+  expect(await page.evaluate(()=>(window as any).zoomMoves)).toEqual([]);
+  // Cancellation must not disable the next deliberate source/destination move.
+  await checker.click();await home.click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).zoomMoves)).toEqual([{to:'home'}]);
+});
+
 test('a fixed camera ignores wheel, keyboard, pan and pinch while preserving deliberate piece moves',async({page})=>{
   await mountBoard(page,false,false);
   const stage=page.locator('#zoom-test .declarative-stage'),checker=page.locator('#zoom-test [data-ui-id="checker"]');
