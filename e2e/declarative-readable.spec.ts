@@ -96,12 +96,11 @@ test('keyboard camera controls reach the last piece without submitting a move',a
   await test.info().attach('readable-landscape',{body:await page.locator('#readable-test').screenshot(),contentType:'image/png'});
 });
 
-test('Neon phone landscape keeps a nonzero main pane before chat',async({page})=>{
+test('phone landscape keeps a usable scrolling main pane',async({page})=>{
   await page.setViewportSize({width:844,height:390});await page.goto('/static/declarative-test.html');
-  await page.addStyleTag({url:'/static/portal.css'});await page.addStyleTag({url:'/static/experiments.css'});
+  await page.addStyleTag({url:'/static/portal.css'});
   await page.evaluate(()=>{
-    document.documentElement.dataset.skin='neon';
-    document.body.innerHTML='<header style="height:68px;flex:none">Portal</header><div class="app portal-shell"><main class="work portal-main"><button id="native-board">Native board</button><div style="height:600px;flex:none">Board content</div></main><aside class="community-chat"><h2>Chat Preview</h2></aside></div>';
+    document.body.innerHTML='<header style="height:68px;flex:none">Portal</header><div class="app portal-shell"><main class="work portal-main"><button id="native-board">Native board</button><div style="height:600px;flex:none">Board content</div></main></div>';
   });
   const main=page.locator('.portal-main');
   expect((await main.boundingBox())!.height).toBeGreaterThanOrEqual(180);

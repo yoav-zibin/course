@@ -50,7 +50,6 @@ from game_platform.schemas import (
     AuthResponse,
     EmailStart,
     ExperimentActiveUpdate,
-    ExperimentVariantCreate,
     GameOut,
     GameSummaryOut,
     LegacyGameOut,
@@ -76,7 +75,6 @@ from game_platform.schemas import (
     PushConfigOut,
     PushSubscribe,
     PushSubscriptionOut,
-    SkinAssignmentOut,
     QuickMatchRequest,
     ReferralsOut,
     TranslationOut,
@@ -90,7 +88,6 @@ from game_platform.schemas import (
 )
 from game_platform.service import (
     CAMPAIGN_EXPERIMENT_ID,
-    SKIN_EXPERIMENT_ID,
     VERIFICATION_TTL_SECONDS,
     ConflictError,
     ForbiddenError,
@@ -528,18 +525,6 @@ def record_recent_game(
         GameSummaryOut.of(game)
         for game in platform.record_recent_game(caller_id=caller_id, game_id=game_id)
     ]
-
-
-@router.get("/users/me/experiments/skin")
-def user_skin_assignment(
-    platform: Platform, caller_id: CallerId
-) -> SkinAssignmentOut | None:
-    variant = platform.assign_skin(user_id=caller_id)
-    if variant is None:
-        return None
-    return SkinAssignmentOut(
-        variant_id=variant.id, name=variant.name, key=variant.key
-    )
 
 
 @router.put("/users/me/saved-games/{game_id}")
@@ -1743,24 +1728,6 @@ def admin_set_campaign_spend(
         "name": variant.name,
         "budget_usd": variant.budget_usd,
         "spend_usd": variant.spend_usd,
-    }
-
-
-@debug_router.post(
-    "/admin/experiments/skin-variants",
-    dependencies=[MasterPassword],
-    status_code=HTTPStatus.CREATED,
-)
-def admin_create_skin_variant(
-    platform: Platform, body: ExperimentVariantCreate
-) -> dict[str, JsonValue]:
-    _, variant = platform.add_experiment_variant(
-        experiment_id=SKIN_EXPERIMENT_ID, name=body.name, key=body.key
-    )
-    return {
-        "variant_id": variant.id,
-        "name": variant.name,
-        "key": variant.key,
     }
 
 

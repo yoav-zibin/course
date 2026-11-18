@@ -19,7 +19,7 @@ test('friends create, share, join, play, rematch and leave through the portal', 
       configurable: true,
       value: { writeText: async (link: string) => { (window as any).sharedMatchLink = link; } },
     }));
-    await a.goto(`/static/portal.html?skin=classic#game=${game}`);
+    await a.goto(`/static/portal.html#game=${game}`);
     await a.locator('#create').click();
     await expect(a.locator('#waiting')).toContainText('Invite others to join');
     await expect(a.getByRole('button', { name: 'Start game', exact: true })).toBeDisabled();
@@ -82,7 +82,7 @@ test('friends create, share, join, play, rematch and leave through the portal', 
   }
 });
 
-test('the corner menu reveals navigation across skins and layouts without remounting the board', async ({ page, request }) => {
+test('the corner menu reveals navigation across layouts without remounting the board', async ({ page, request }) => {
   const owner = await createUser(request, uniqueName('Focus host'));
   const game = await createGame(request, uniqueName('Focus duel'));
   const headers = { 'X-User-Id': owner.id, 'X-User-Password': owner.password };
@@ -90,14 +90,10 @@ test('the corner menu reveals navigation across skins and layouts without remoun
   expect((await request.post(`/matches/${match.id}/start`, { headers, data: {} })).ok()).toBeTruthy();
   await loginAs(page, owner);
   await page.setViewportSize({ width: 1440, height: 900 });
-  for (const variant of [{ skin: 'immersive', archetype: '' }, { skin: 'classic', archetype: 'focus' }]) {
-    await page.goto(`/static/portal.html?skin=${variant.skin}#match=${match.id}`);
+  for (const layout of ['top', 'left', 'hamburger']) {
+    await page.goto(`/static/portal.html?layout=${layout}#match=${match.id}`);
     await expect(page.locator('#game-box .declarative-stage')).toBeVisible();
     await expect(page.locator('.invite-action')).toHaveText('Share match');
-    if (variant.archetype) await page.evaluate(archetype => {
-      document.documentElement.dataset.portalArchetype = archetype;
-      document.dispatchEvent(new Event('portal-skin-change'));
-    }, variant.archetype);
     await expect(page.locator('body')).toHaveClass(/match-focus/);
     await expect(page.locator('body')).toHaveClass(/match-immersive/);
     await expect(page.locator('#match-focus-toggle')).toBeHidden();

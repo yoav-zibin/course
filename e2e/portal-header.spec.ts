@@ -29,7 +29,7 @@ test('wallet appears before the profile response and refreshes its balance later
     await route.fulfill({ response, json: body });
   });
 
-  await page.goto('/static/portal.html?skin=sunset', { waitUntil: 'domcontentloaded' });
+  await page.goto('/static/portal.html', { waitUntil: 'domcontentloaded' });
   const wallet = page.locator('#token-wallet');
   try {
     await profileRequested.promise;
@@ -66,29 +66,27 @@ test('wallet appears before the profile response and refreshes its balance later
 test('mobile match and focus layouts retain their header visibility rules', async ({ page, request }) => {
   await loginAs(page, await createUser(request, uniqueName('Match header')));
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const skin of ['classic', 'sunset', 'neon', 'arcade', 'immersive']) {
-    await page.goto(`/static/portal.html?skin=${skin}`);
-    await page.addScriptTag({url: '/static/portal-match-layout.js'});
-    // Exercise the real layout controller and styles without creating a match.
-    const views = await page.evaluate(() => {
-      const layout = (window as any).PortalMatchLayout;
-      layout.init(() => {});
-      const header = document.querySelector('.topbar[data-app-page="portal"]')!;
-      layout.update({id: 'header-layout-fixture', status: 'waiting_for_players'});
-      const lobby = getComputedStyle(header).display;
-      layout.update({id: 'header-layout-fixture', status: 'ongoing'});
-      const match = getComputedStyle(header).display;
-      if (!document.body.classList.contains('match-focus'))
-        document.getElementById('match-focus-toggle')!.click();
-      const focused = getComputedStyle(header).display;
-      layout.update(null);
-      return {lobby, match, focused, catalog: getComputedStyle(header).display};
-    });
-    expect(views.lobby, `${skin} lobby`).toBe('none');
-    expect(views.match, `${skin} match`).toBe(skin === 'immersive' ? 'flex' : 'none');
-    expect(views.focused, `${skin} focus`).toBe(skin === 'immersive' ? 'flex' : 'none');
-    expect(views.catalog, `${skin} catalog`).toBe('grid');
-  }
+  await page.goto('/static/portal.html');
+  await page.addScriptTag({url: '/static/portal-match-layout.js'});
+  // Exercise the real layout controller and styles without creating a match.
+  const views = await page.evaluate(() => {
+    const layout = (window as any).PortalMatchLayout;
+    layout.init(() => {});
+    const header = document.querySelector('.topbar[data-app-page="portal"]')!;
+    layout.update({id: 'header-layout-fixture', status: 'waiting_for_players'});
+    const lobby = getComputedStyle(header).display;
+    layout.update({id: 'header-layout-fixture', status: 'ongoing'});
+    const match = getComputedStyle(header).display;
+    if (!document.body.classList.contains('match-focus'))
+      document.getElementById('match-focus-toggle')!.click();
+    const focused = getComputedStyle(header).display;
+    layout.update(null);
+    return {lobby, match, focused, catalog: getComputedStyle(header).display};
+  });
+  expect(views.lobby, 'lobby').toBe('none');
+  expect(views.match, 'match').toBe('none');
+  expect(views.focused, 'focus').toBe('none');
+  expect(views.catalog, 'catalog').not.toBe('none');
 });
 
 test('phone header keeps brand, wallet, and account on one row', async ({ page, request }, testInfo) => {
@@ -100,15 +98,15 @@ test('phone header keeps brand, wallet, and account on one row', async ({ page, 
   await mockBatch(page, request, { [`/users/${user.id}`]: { ...profile, token_balance: 12345 } });
   await page.emulateMedia({ reducedMotion: 'reduce' });
 
-  for (const [width, skin] of [[360, 'classic'], [390, 'sunset'], [412, 'neon'], [390, 'arcade']] as const) {
+  for (const width of [360, 390, 412]) {
     await page.setViewportSize({ width, height: 844 });
-    await page.goto(`/static/portal.html?skin=${skin}`);
+    await page.goto('/static/portal.html');
     const header = page.locator('.topbar[data-app-page="portal"]');
     const account = header.locator('.auth-menu-button');
     await expect(header.locator('#token-balance')).toHaveText('12345');
     await expect(account).toHaveAccessibleName(user.display_name);
     const controls = header.locator('.sidebar-toggle:visible, .app-home-link:visible, #token-wallet:visible, .auth-menu-button:visible');
-    await expect(controls).toHaveCount(skin === 'neon' || skin === 'arcade' ? 3 : 4);
+    await expect(controls).toHaveCount(3);
     const positions = await controls.evaluateAll(elements => elements.map(element => {
       const bounds = element.getBoundingClientRect();
       return {
@@ -117,7 +115,7 @@ test('phone header keeps brand, wallet, and account on one row', async ({ page, 
       };
     }));
     expect(Math.max(...positions.map(item => item.center)) - Math.min(...positions.map(item => item.center)),
-      `${width}px ${skin}: primary controls must share one header row`).toBeLessThanOrEqual(2);
+      `${width}px: primary controls must share one header row`).toBeLessThanOrEqual(2);
     for (const position of positions) {
       expect(position.left).toBeGreaterThanOrEqual(0);
       expect(position.right).toBeLessThanOrEqual(width);
@@ -131,6 +129,6 @@ test('phone header keeps brand, wallet, and account on one row', async ({ page, 
     await expect(header.locator('.auth-menu-panel')).toBeVisible();
     await expect(header.locator('.auth-menu-heading')).toContainText(user.display_name);
     await account.click();
-    await page.screenshot({ path: testInfo.outputPath(`header-${width}-${skin}.png`) });
+    await page.screenshot({ path: testInfo.outputPath(`header-${width}.png`) });
   }
 });

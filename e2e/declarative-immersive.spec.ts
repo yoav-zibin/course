@@ -67,61 +67,55 @@ test('Portal Backgammon fills portrait and short landscape with only the board a
   await expect(page.locator('#match-toolbar-title')).toBeEmpty();
   await expect(page.locator('#match-menu-toggle')).toBeVisible();
 
-  for (const skin of ['classic', 'sunset', 'arcade', 'immersive']) {
-    await page.evaluate(skin => {
-      document.documentElement.dataset.skin = skin;
-      document.dispatchEvent(new CustomEvent('portal-skin-change', {detail: {key: skin}}));
-    }, skin);
-    for (const viewport of [{width: 1024, height: 430}, {width: 390, height: 844}]) {
-      await page.setViewportSize(viewport);
-      await expect(page.locator('body > .topbar')).toBeHidden();
-      await expect(page.locator('.portal-sidebar')).toBeHidden();
-      await expect(page.locator('.match-toolbar')).toBeHidden();
-      await testInfo.attach(`board-only-${skin}-${viewport.width}x${viewport.height}`, {
-        body: await page.screenshot({path: testInfo.outputPath(`board-only-${skin}-${viewport.width}x${viewport.height}.png`)}),
-        contentType: 'image/png',
-      });
-      // The fixed presentation includes felt, player cards and tools around
-      // the wooden board. Verify its complete 800×600 scene fills the panel,
-      // while both corners of the wooden board and bear-off tray remain visible.
-      try {
-        await expect.poll(async () => {
-          const sceneTop = await screenPoint(page, 0, 0);
-          const sceneBottom = await screenPoint(page, 800, 600);
-          const top = await screenPoint(page, 20, 105);
-          const bottom = await screenPoint(page, 784, 545);
-          return sceneTop.x >= -1 && sceneTop.y >= -1 &&
-            sceneBottom.x <= viewport.width + 1 && sceneBottom.y <= viewport.height + 1 &&
-            top.x >= -1 && top.y >= -1 &&
-            bottom.x <= viewport.width + 1 && bottom.y <= viewport.height + 1 &&
-            Math.max((sceneBottom.x - sceneTop.x) / viewport.width,
-              (sceneBottom.y - sceneTop.y) / viewport.height) > .98;
-        }, `${skin} ${viewport.width}x${viewport.height}: full board must fit and fill the available screen`).toBe(true);
-      } catch (error) {
-        const layout = await page.evaluate(() => Array.from(document.querySelectorAll('body,.portal-shell,.portal-main,#match,#game-box,.declarative-stage')).map(node => {
-          const element = node as HTMLElement, style = getComputedStyle(element), rect = element.getBoundingClientRect();
-          return {selector: element.id || element.getAttribute('class') || element.tagName,
-            rect: {x:rect.x,y:rect.y,width:rect.width,height:rect.height},
-            height:style.height,minHeight:style.minHeight,flex:style.flex,
-            overflow:style.overflow,padding:style.padding,border:style.border,
-            gap:style.gap,gridTemplateRows:style.gridTemplateRows,
-            before:getComputedStyle(element,'::before').content,
-            after:getComputedStyle(element,'::after').content};
-        }));
-        fs.writeFileSync(testInfo.outputPath(`layout-${skin}-${viewport.width}x${viewport.height}.json`),JSON.stringify(layout,null,2));
-        throw error;
-      }
-      const top = await screenPoint(page, 20, 105);
-      const bottom = await screenPoint(page, 784, 545);
-      const sceneTop = await screenPoint(page, 0, 0);
-      const sceneBottom = await screenPoint(page, 800, 600);
-      expect(top.x).toBeGreaterThanOrEqual(-1);
-      expect(top.y).toBeGreaterThanOrEqual(-1);
-      expect(bottom.x).toBeLessThanOrEqual(viewport.width + 1);
-      expect(bottom.y).toBeLessThanOrEqual(viewport.height + 1);
-      expect(Math.max((sceneBottom.x - sceneTop.x) / viewport.width,
-        (sceneBottom.y - sceneTop.y) / viewport.height)).toBeGreaterThan(.98);
+  for (const viewport of [{width: 1024, height: 430}, {width: 390, height: 844}]) {
+    await page.setViewportSize(viewport);
+    await expect(page.locator('body > .topbar')).toBeHidden();
+    await expect(page.locator('.portal-sidebar')).toBeHidden();
+    await expect(page.locator('.match-toolbar')).toBeHidden();
+    await testInfo.attach(`board-only-${viewport.width}x${viewport.height}`, {
+      body: await page.screenshot({path: testInfo.outputPath(`board-only-${viewport.width}x${viewport.height}.png`)}),
+      contentType: 'image/png',
+    });
+    // The fixed presentation includes felt, player cards and tools around
+    // the wooden board. Verify its complete 800×600 scene fills the panel,
+    // while both corners of the wooden board and bear-off tray remain visible.
+    try {
+      await expect.poll(async () => {
+        const sceneTop = await screenPoint(page, 0, 0);
+        const sceneBottom = await screenPoint(page, 800, 600);
+        const top = await screenPoint(page, 20, 105);
+        const bottom = await screenPoint(page, 784, 545);
+        return sceneTop.x >= -1 && sceneTop.y >= -1 &&
+          sceneBottom.x <= viewport.width + 1 && sceneBottom.y <= viewport.height + 1 &&
+          top.x >= -1 && top.y >= -1 &&
+          bottom.x <= viewport.width + 1 && bottom.y <= viewport.height + 1 &&
+          Math.max((sceneBottom.x - sceneTop.x) / viewport.width,
+            (sceneBottom.y - sceneTop.y) / viewport.height) > .98;
+      }, `${viewport.width}x${viewport.height}: full board must fit and fill the available screen`).toBe(true);
+    } catch (error) {
+      const layout = await page.evaluate(() => Array.from(document.querySelectorAll('body,.portal-shell,.portal-main,#match,#game-box,.declarative-stage')).map(node => {
+        const element = node as HTMLElement, style = getComputedStyle(element), rect = element.getBoundingClientRect();
+        return {selector: element.id || element.getAttribute('class') || element.tagName,
+          rect: {x:rect.x,y:rect.y,width:rect.width,height:rect.height},
+          height:style.height,minHeight:style.minHeight,flex:style.flex,
+          overflow:style.overflow,padding:style.padding,border:style.border,
+          gap:style.gap,gridTemplateRows:style.gridTemplateRows,
+          before:getComputedStyle(element,'::before').content,
+          after:getComputedStyle(element,'::after').content};
+      }));
+      fs.writeFileSync(testInfo.outputPath(`layout-${viewport.width}x${viewport.height}.json`),JSON.stringify(layout,null,2));
+      throw error;
     }
+    const top = await screenPoint(page, 20, 105);
+    const bottom = await screenPoint(page, 784, 545);
+    const sceneTop = await screenPoint(page, 0, 0);
+    const sceneBottom = await screenPoint(page, 800, 600);
+    expect(top.x).toBeGreaterThanOrEqual(-1);
+    expect(top.y).toBeGreaterThanOrEqual(-1);
+    expect(bottom.x).toBeLessThanOrEqual(viewport.width + 1);
+    expect(bottom.y).toBeLessThanOrEqual(viewport.height + 1);
+    expect(Math.max((sceneBottom.x - sceneTop.x) / viewport.width,
+      (sceneBottom.y - sceneTop.y) / viewport.height)).toBeGreaterThan(.98);
   }
 
   const before = await camera(page);

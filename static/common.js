@@ -320,21 +320,21 @@ function statusClass(status) {
 }
 
 /** Common app navigation; page-specific wallet/notification controls stay in place. */
-function syncPortalPreviewLinks() {
+function syncPortalNavigationLinks() {
   const source = new URLSearchParams(location.search);
-  const previewKeys = ['skin', 'layout'];
+  const navigationKeys = ['layout'];
   document.querySelectorAll(
     '.topbar[data-app-page] .app-home-link, .app-brand[href]',
   ).forEach(link => {
     const target = new URL(link.getAttribute('href') || '/', location.href);
-    for (const key of previewKeys) {
+    for (const key of navigationKeys) {
       target.searchParams.delete(key);
       if (source.has(key)) target.searchParams.set(key, source.get(key));
     }
     link.href = target.pathname + target.search + target.hash;
   });
 }
-window.syncPortalPreviewLinks = syncPortalPreviewLinks;
+window.syncPortalNavigationLinks = syncPortalNavigationLinks;
 function setUpAppTopbar() {
   const bar = document.querySelector?.('.topbar[data-app-page]');
   const current = bar?.dataset?.appPage;
@@ -346,7 +346,7 @@ function setUpAppTopbar() {
   } else {
     brand.setAttribute('data-i18n', 'ui.app_name');
   }
-  syncPortalPreviewLinks();
+  syncPortalNavigationLinks();
 }
 
 /** Treat the platform name in every page header as a home link. */
@@ -385,7 +385,7 @@ function setUpSidebarDrawer() {
   const backdrop=el('button',{type:'button',class:'sidebar-backdrop',tabIndex:-1,onclick:()=>setOpen(false)});
   document.body.append(backdrop);
   function render() {
-    // Top navigation has no drawer. Clear its state when a layout or skin
+    // Top navigation has no drawer. Clear its state when a layout
     // switch hides it, including the modal state that makes the main inert.
     if (document.documentElement?.dataset.portalNavigation === 'modern') opened=false;
     const visible=opened||pinned();
@@ -452,7 +452,6 @@ function setUpSidebarDrawer() {
   });
   wide.addEventListener('change',()=>{render();if(opened && !wide.matches)close.focus();});
   document.addEventListener('portal-layout-change',render);
-  document.addEventListener('portal-skin-change',render);
   setOpen(false);
 }
 if (document.readyState==='complete'||document.readyState==='interactive') setUpSidebarDrawer();

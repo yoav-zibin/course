@@ -1,44 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createUser, E2E_ADMIN_HEADERS, loginAs, uniqueName } from './helpers';
-
-test('skin assignment is consistent across the portal and admin', async ({ page, request }) => {
-  const user = await createUser(request, uniqueName('Skin'));
-  const assignmentResponse = await request.get('/users/me/experiments/skin', {
-    headers: {'X-User-Id': user.id, 'X-User-Password': user.password},
-  });
-  expect(assignmentResponse.ok()).toBeTruthy();
-  const {key: skin} = await assignmentResponse.json();
-  expect(skin).toMatch(/^(classic|aurora|sunset)$/);
-  await loginAs(page, user);
-
-  await page.goto('/static/portal.html');
-  const root = page.locator('html');
-  // First paint can show the cached/default skin before the idle refresh.
-  // Compare both pages only after the real server assignment is applied.
-  await expect(root).toHaveAttribute('data-skin', skin, {timeout: 15000});
-
-  await page.setExtraHTTPHeaders(E2E_ADMIN_HEADERS);
-  await page.goto('/static/admin.html');
-  await expect(root).toHaveAttribute('data-skin', skin);
-
-});
-
-test('Party skin preview respects reduced motion', async ({ page, request }, testInfo) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await loginAs(page, await createUser(request, uniqueName('Party motion')));
-  await page.goto('/static/portal.html?skin=party');
-  await expect(page.locator('html')).toHaveAttribute('data-skin', 'party');
-  const wallet = page.locator('#token-wallet');
-  await expect(wallet).toBeVisible();
-  await wallet.screenshot({ path: testInfo.outputPath('party-wallet.png') });
-  const animations = () => page.evaluate(() => [
-    getComputedStyle(document.body).animationName,
-    getComputedStyle(document.querySelector('.portal-shell')!).animationName,
-  ]);
-  await expect.poll(animations).toEqual(['none', 'none']);
-  await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await expect.poll(animations).toEqual(['party-lights', 'party-lights']);
-});
+import { E2E_ADMIN_HEADERS, uniqueName } from './helpers';
 
 test('campaign link redirects to the portal and remembers its code', async ({ page }) => {
   await page.goto('/c/students-a');
@@ -57,25 +18,15 @@ test('campaign link redirects to the portal and remembers its code', async ({ pa
     .toBe('students-a');
 });
 
-test('experiment dashboard explains creation and supports deleting variants', async ({
+test('campaign dashboard explains creation and supports deleting campaign variants', async ({
   page,
   request,
 }) => {
-  const skinName = uniqueName('Temporary skin');
-  const skinKey = uniqueName('temporary-skin')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .slice(0, 50);
   const campaignName = uniqueName('Temporary campaign');
   const campaignKey = uniqueName('temporary-campaign')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .slice(0, 50);
-  const skinResponse = await request.post('/admin/experiments/skin-variants', {
-    headers: E2E_ADMIN_HEADERS,
-    data: { name: skinName, key: skinKey },
-  });
-  expect(skinResponse.status()).toBe(201);
   const campaignResponse = await request.post(
     '/admin/experiments/campaign-links',
     { headers: E2E_ADMIN_HEADERS, data: { name: campaignName, key: campaignKey } },
@@ -84,14 +35,9 @@ test('experiment dashboard explains creation and supports deleting variants', as
 
   await page.setExtraHTTPHeaders(E2E_ADMIN_HEADERS);
   await page.goto('/static/stats.html');
-  const skinPanel = page
-    .locator('.experiment-panel')
-    .filter({ hasText: 'UI skin experiment' });
   const campaignPanel = page
     .locator('.experiment-panel')
     .filter({ hasText: 'Advertisement campaigns' });
-  await expect(skinPanel).toContainText(skinName);
-  await expect(skinPanel).not.toContainText(/cost|budget/i);
   await expect(campaignPanel).toContainText(campaignName);
   await expect(campaignPanel).not.toContainText(/actual spend|cost/i);
 
@@ -99,14 +45,6 @@ test('experiment dashboard explains creation and supports deleting variants', as
     .getByText('Step-by-step: create and use a campaign link')
     .click();
   await expect(page.getByText(/Copy the generated link/)).toBeVisible();
-  await page.getByText('Step-by-step: prepare and add a UI skin').click();
-  await expect(
-    page.getByText(/does not create, upload, or deploy the design/),
-  ).toBeVisible();
-
-  page.once('dialog', (dialog) => dialog.accept());
-  await skinPanel.getByRole('button', { name: `Delete ${skinName}` }).click();
-  await expect(skinPanel.getByText(skinName)).toHaveCount(0);
 
   page.once('dialog', (dialog) => dialog.accept());
   await campaignPanel

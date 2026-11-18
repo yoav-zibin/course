@@ -1065,12 +1065,6 @@ class ExperimentVariantOut(BaseModel):
     key: str
 
 
-class SkinAssignmentOut(BaseModel):
-    variant_id: str
-    name: str
-    key: str
-
-
 class HealthOut(BaseModel):
     """For uptime checks and load balancers: 200 with "ok", or 503 with "degraded"."""
 

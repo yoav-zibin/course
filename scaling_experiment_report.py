@@ -42,7 +42,7 @@ def _unique(store, ref, row, metric, user_id):
 
 
 def rebuild(store, *, run_id, max_records=100):
-    from game_platform.service import CAMPAIGN_EXPERIMENT_ID, SKIN_EXPERIMENT_ID
+    from game_platform.service import CAMPAIGN_EXPERIMENT_ID
 
     if not run_id or not 1 <= max_records <= 1000:
         raise ValueError("a run ID and record budget of 1..1000 are required")
@@ -64,7 +64,7 @@ def rebuild(store, *, run_id, max_records=100):
                     break
                 doc = docs[0]
                 row = store._decode(kind, doc.to_dict(), doc.reference)
-                if row is not None:
+                if row is not None and row.experiment_id == CAMPAIGN_EXPERIMENT_ID:
                     if kind == "experiment_assignments":
                         user = store.get_user(row.user_id)
                         if user and not user.replaced_by_user_id:
@@ -97,7 +97,7 @@ def rebuild(store, *, run_id, max_records=100):
             for kind in ("experiment_assignments", "experiment_events")
         )
         if complete:
-            for experiment_id in (SKIN_EXPERIMENT_ID, CAMPAIGN_EXPERIMENT_ID):
+            for experiment_id in (CAMPAIGN_EXPERIMENT_ID,):
                 experiment = store._get("experiments", experiment_id)
                 if experiment is not None:
                     store.raw_put(
@@ -124,7 +124,7 @@ def rebuild(store, *, run_id, max_records=100):
 
 
 def current(store):
-    from game_platform.service import CAMPAIGN_EXPERIMENT_ID, SKIN_EXPERIMENT_ID
+    from game_platform.service import CAMPAIGN_EXPERIMENT_ID
 
     pointer = store.raw_get(store.collection("meta").document("experiment_dashboard"))
     if not pointer:
@@ -139,7 +139,6 @@ def current(store):
         "configuration_consistency": "live",
     }
     for name, experiment_id in (
-        ("skin_experiment", SKIN_EXPERIMENT_ID),
         ("campaign_experiment", CAMPAIGN_EXPERIMENT_ID),
     ):
         # Metrics stay anchored to the published snapshot, while controls must

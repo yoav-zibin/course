@@ -48,22 +48,16 @@ test.describe('Portal', () => {
     }
   });
 
-  test('stake labels follow the language and skin after switching either', async ({ page, request }) => {
+  test('stake labels translate while keeping the actual token currency', async ({ page, request }) => {
     await login(page, request);
-    await page.goto('/static/portal.html?skin=arcade');
+    await page.goto('/static/portal.html');
     await page.evaluate("I18n.choose('es')");
-    await expect(page.locator('#match-stake option[value="1"]')).toHaveText('1 gema');
-    await expect(page.locator('#stake-help')).toContainText('Recibe 1000 gemas una sola vez con tu primer inicio de sesión verificado.');
-    await expect(page.locator('#stake-preview')).toContainText('gemas');
-    await page.locator('#account-menu .auth-menu-button').click();
-    await page.selectOption('#portal-skin-picker', 'classic');
     await expect(page.locator('#match-stake option[value="1"]')).toHaveText('1 ficha');
     await expect(page.locator('#stake-help')).toContainText('Recibe 1000 fichas una sola vez con tu primer inicio de sesión verificado.');
+    await expect(page.locator('#stake-preview')).toContainText('fichas');
     await page.evaluate("I18n.choose('fr')");
     await expect(page.locator('#match-stake option[value="1"]')).toHaveText('1 jeton');
-    await page.selectOption('#portal-skin-picker', 'neon');
-    await expect(page.locator('#match-stake option[value="1"]')).toHaveText('1 gemme');
-    await expect(page.locator('#stake-help')).toContainText('Recevez 1 000 gemmes une seule fois lors de votre première connexion vérifiée.');
+    await expect(page.locator('#stake-help')).toContainText('Recevez 1 000 jetons une seule fois lors de votre première connexion vérifiée.');
   });
 
   test('match groups start empty', async ({ page, request }) => {

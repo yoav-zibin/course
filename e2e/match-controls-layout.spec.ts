@@ -12,14 +12,13 @@ test('board-only navigation leaves Controls and tutorial reachable in every loca
   await page.setViewportSize({width:390,height:844});
   await page.goto('/static/declarative-test.html');
   await page.evaluate(()=>document.head.querySelectorAll('style').forEach(node=>node.remove()));
-  for(const url of ['/static/portal.css','/static/experiments.css','/static/portal-match-layout.css'])await page.addStyleTag({url});
+  for(const url of ['/static/portal.css','/static/portal-match-layout.css'])await page.addStyleTag({url});
   await page.evaluate(html=>{
     const parsed=new DOMParser().parseFromString(html,'text/html');
     const match=document.importNode(parsed.getElementById('match')!,true) as HTMLElement;
     match.hidden=false;
     const shell=document.createElement('div');shell.className='app portal-shell';
     const main=document.createElement('main');main.className='work portal-main';main.append(match);shell.append(main);document.body.replaceChildren(shell);
-    document.documentElement.dataset.skin='classic';
     const sidebar=document.createElement('button');sidebar.type='button';sidebar.className='sidebar-toggle';sidebar.setAttribute('aria-label','Open sidebar');sidebar.textContent='☰';match.querySelector('.match-toolbar')!.prepend(sidebar);
     const clock=document.getElementById('match-clock')!;clock.hidden=false;clock.textContent='59:59';
     document.getElementById('how-to-play')!.hidden=false;

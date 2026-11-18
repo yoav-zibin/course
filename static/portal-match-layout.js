@@ -26,12 +26,7 @@ window.PortalMatchLayout = (() => {
     const active = Boolean(match);
     const waiting = match?.status === "waiting_for_players";
     const boardOnly = active && !waiting && match.boardOnly === true;
-    const immersive = document.documentElement?.dataset?.skin === "immersive";
-    // Focus is match-first too: auto-focus a live match on any screen, like
-    // immersive. (The generic body.match-focus CSS already hides the topbar
-    // and sidebar for every skin; no rule moves here.)
-    const focusArchetype = document.documentElement?.dataset?.portalArchetype === "focus";
-    const focused = boardOnly || (active && !waiting && (manualFocus ?? (landscape.matches || immersive || focusArchetype)));
+    const focused = boardOnly || (active && !waiting && (manualFocus ?? landscape.matches));
     const focusChanged = active && document.body.classList.contains("match-page") &&
       document.body.classList.contains("match-focus") !== focused;
     document.body.classList.toggle("match-page", active);
@@ -107,13 +102,11 @@ window.PortalMatchLayout = (() => {
       render();
     });
     $("match-focus-toggle").addEventListener("click", () => {
-      // The initial focus state can come from the skin or the selected portal
-      // layout as well as the screen orientation. Toggle what is shown.
+      // Toggle the actual state, including automatic landscape focus.
       manualFocus = !document.body.classList.contains("match-focus");
       render();
     });
     document.addEventListener("i18n-changed", render);
-    document.addEventListener("portal-skin-change", render);
     document.addEventListener("keydown", event => {
       if (event.key !== "Escape" || !match) return;
       if (match.boardOnly) {

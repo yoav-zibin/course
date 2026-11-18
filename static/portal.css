@@ -1,4 +1,4 @@
-/* The builder's navy, lime, pink and cyan palette, below the shared top bar. */
+/* Standard portal layout, catalog, match controls and navigation. */
 .portal-shell {
   --color-bg-0:#10141f; --color-bg-1:#171c2a; --color-bg-2:#1c2233; --color-bg-3:#26304a;
   --color-text-primary:#eef0f5; --color-text-secondary:#c9cfdc; --color-text-tertiary:#a5aec2;
@@ -323,9 +323,6 @@
 
 #account-menu .auth-avatar { width:36px; height:36px; flex-shrink:0; }
 
-/* Leaderboard column labels keep their catalog casing in the HTML; show them in capitals / lower case here. */
-.leaderboard-list header span { text-transform: uppercase; }
-.podium-metric { text-transform: lowercase; }
 
 /* Keep the primary controls together while navigation can use its own row. */
 @media (max-width:720px) {
@@ -436,4 +433,529 @@
   background:var(--color-bg-3);
   color:var(--color-text-primary);
   font-weight:700;
+}
+
+/* Standard blue catalog, navigation and match surfaces. */
+.portal-layout-picker { display: inline-flex; align-items: center; gap: 6px; color: var(--color-text-tertiary); white-space: nowrap; }
+.portal-layout-picker select { min-height: 36px; max-width: 140px; padding: 6px 9px; color: var(--color-text-primary); background: var(--color-bg-0); border: 1px solid var(--color-border-3); border-radius: var(--radius-sm); }
+:root .portal-shell .play-option-icon,
+:root .portal-shell .practice-option .play-option-icon,
+:root .portal-shell .computer-match-option .play-option-icon { background: var(--color-bg-3); color: var(--color-accent); }
+:root .portal-shell .play-option-heading h3 { color: var(--color-text-primary); }
+:root .portal-shell .play-option-heading p,
+:root .portal-shell .play-option .computer-setting,
+:root .portal-shell .practice-controls label,
+:root .portal-shell .play-option .play-option-note,
+:root .portal-shell .play-option #create-hint,
+:root .portal-shell .offline-controls { color: var(--color-text-secondary); }
+:root .portal-shell .play-option #practice { background: var(--color-bg-3); border-color: var(--color-border-3); color: var(--color-text-primary); }
+:root .portal-shell .play-option #practice:hover:not(:disabled) { background: var(--color-bg-4); border-color: var(--color-border-4); }
+:root .portal-shell .token-stake-panel,
+:root .portal-shell .match-currency.token-summary { background: linear-gradient(135deg,var(--color-bg-1),var(--color-bg-2)); border-color: var(--color-border-3); color: var(--color-text-primary); box-shadow: rgba(0, 0, 0, 0.12) 0px 6px 20px; }
+:root .portal-shell .token-stake-icon,
+:root .portal-shell .token-summary-icon { background: var(--color-bg-3); border-color: var(--color-border-3); color: var(--color-accent); }
+:root .portal-shell .token-stake-heading strong { color: var(--color-text-primary); }
+:root .portal-shell .token-stake-heading > div > span,
+:root .portal-shell .token-stake-panel .stake-help,
+:root .portal-shell .token-summary-values span,
+:root .portal-shell .token-summary-note,
+:root .portal-shell .token-summary-payout > span,
+:root .portal-shell .token-summary-payout > small { color: var(--color-text-secondary); }
+:root .portal-shell .token-stake-panel .stake-select { color: var(--color-text-secondary); }
+:root .portal-shell .token-stake-panel .stake-select select { background: var(--color-bg-0); border-color: var(--color-border-3); color: var(--color-text-primary); }
+:root .portal-shell .stake-preview,
+:root .portal-shell .token-summary-values > div,
+:root .portal-shell .token-summary-payout,
+:root .portal-shell .paid-lobby-hint { background: var(--color-bg-2); border-color: var(--color-border-2); color: var(--color-text-primary); }
+:root .portal-shell .token-summary-values strong,
+:root .portal-shell .token-summary.is-paid .token-summary-values strong,
+:root .portal-shell .token-summary-payout > strong { color: var(--color-accent); }
+:root .portal-shell .popular-games-scroll-button { background: var(--color-bg-1); border-color: var(--color-border-3); color: var(--color-text-primary); }
+:root .portal-shell .popular-games-scroll-button:hover:not(:disabled) { background: var(--color-bg-3); border-color: var(--color-border-4); }
+:root .portal-shell .speed-choice { color: var(--color-text-secondary); }
+:root .portal-shell .match-clock { background: var(--color-bg-3); color: var(--color-text-primary); border: 1px solid var(--color-border-2); }
+:root .portal-shell .match-play-notice { background: var(--color-bg-2); color: var(--color-text-secondary); }
+:root .portal-shell .match-play-notice.error { background: color-mix(in srgb,var(--color-error) 12%,var(--color-bg-1)); color: var(--color-error); }
+@media (min-width: 900px) {
+:root[data-portal-layout="left"] .topbar .sidebar-toggle,
+:root[data-portal-layout="left"] .portal-sidebar .sidebar-close { display: none; }
+}
+@media (max-width: 900px) {
+.topbar[data-app-page="portal"] { flex-wrap: wrap; gap: var(--space-sm); }
+.topbar[data-app-page="portal"] nav { order: 10; flex: 1 0 100%; min-width: 0px; overflow-x: auto; }
+.portal-layout-picker > span { display: none; }
+.portal-layout-picker select { max-width: 120px; padding-inline: 6px; }
+}
+@media (max-width: 640px) {
+.portal-layout-picker select { max-width: 98px; padding-inline: 6px; }
+}
+:root[data-portal-layout="top"] .topbar[data-app-page="portal"] nav { display: flex; }
+:root body { background: rgb(9, 13, 23); }
+:root .topbar[data-app-page="portal"] { min-height: 68px; padding: 10px clamp(16px, 3vw, 40px); gap: 16px; background: rgba(13, 18, 30, 0.96); border-bottom: 1px solid rgb(32, 44, 68); box-shadow: rgba(5, 8, 17, 0.333) 0px 8px 26px; backdrop-filter: blur(14px); }
+:root .topbar[data-app-page="portal"] h1 { font-weight: 800; letter-spacing: -0.6px; }
+:root .topbar[data-app-page="portal"] h1::before { content: "✦"; margin-right: 9px; color: rgb(118, 160, 255); }
+:root .portal-shell { --color-bg-0: #090d17; --color-bg-1: #101726; --color-bg-2: #162139; --color-bg-3: #213252; --color-text-primary: #f5f7ff; --color-text-secondary: #c8d3e8; --color-text-tertiary: #91a4c6; --color-border-1: #1c2940; --color-border-2: #283a5a; --color-border-3: #3c527a; --color-accent: #4e7cff; --color-accent-hover: #78a0ff; --color-focus-ring: #8bb6ff; background: rgb(9, 13, 23); color: rgb(245, 247, 255); grid-template-columns: minmax(0px, 1fr); }
+:root .portal-sidebar { padding: 22px 17px; gap: 13px; background: linear-gradient(rgb(16, 23, 38), rgb(13, 19, 32) 72%); border-right: 1px solid rgb(32, 45, 69); }
+:root .portal-sidebar .app-brand { min-height: 44px; gap: 11px; font-size: 17px; font-weight: 800; letter-spacing: -0.4px; }
+:root .portal-sidebar .app-brand-mark { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 12px; background: linear-gradient(145deg, rgb(98, 146, 255), rgb(66, 100, 222)); box-shadow: rgba(65, 108, 232, 0.4) 0px 7px 22px; color: rgb(255, 255, 255); font-size: 22px; }
+:root #show-creator { min-height: 48px; margin: 5px 0px 9px; border-radius: 12px; color: white; background: linear-gradient(110deg, rgb(81, 126, 255), rgb(117, 89, 237)); border: 1px solid rgb(130, 161, 255); box-shadow: rgba(75, 110, 255, 0.26) 0px 8px 22px; }
+:root .match-group { border-bottom-color: rgb(32, 43, 64); }
+:root .match-group > summary { min-height: 48px; padding: 12px 4px; color: rgb(203, 213, 233); font-size: 12px; letter-spacing: 0.2px; }
+:root .match-group > summary::before { color: rgb(117, 138, 175); }
+:root .group-count { color: rgb(173, 190, 220); background: rgb(27, 41, 65); border-radius: 999px; padding-inline: 8px; }
+:root #group-turn > summary { color: rgb(114, 237, 193); }
+:root #group-turn .group-count { color: rgb(114, 237, 193); background: rgb(22, 55, 47); }
+:root .open-group > summary { color: rgb(136, 177, 255); }
+:root .portal-sidebar .list-item { border-radius: 10px; }
+:root .portal-sidebar .list-item[aria-selected="true"] { background: rgb(25, 40, 69); border-left-color: rgb(102, 146, 255); }
+:root .portal-main { padding: clamp(18px, 3vw, 42px) clamp(18px, 4vw, 64px) 60px; gap: 20px; }
+:root .match-creator { width: 100%; max-width: 1420px; margin: 0px auto; border: 0px; border-radius: 0px; background: transparent; box-shadow: none; }
+:root .match-creator > summary { display: none; }
+:root .creator-content { padding: 0px; }
+:root .creator-description { display: none; }
+:root .portal-shell .popular-games-section { margin-bottom: 27px; padding: 21px; border: 1px solid rgb(37, 53, 80); border-radius: 17px; background: linear-gradient(130deg, rgb(18, 29, 48), rgb(16, 24, 39)); }
+:root .popular-eyebrow { color: rgb(120, 160, 255); }
+:root .popular-games-heading h2 { color: rgb(244, 246, 255); font-size: 23px; }
+:root .portal-shell .popular-game-card { border-color: rgb(42, 60, 91); border-radius: 13px; background: rgb(12, 20, 34); }
+:root .portal-shell .popular-game-card:hover { border-color: rgb(117, 155, 255); transform: translateY(-4px); box-shadow: rgba(5, 10, 22, 0.5) 0px 13px 30px; }
+:root .popular-game-open { color: rgb(131, 168, 255); }
+:root .portal-shell .library-toolbar button { border: 1px solid rgb(44, 62, 94); background: rgb(16, 24, 39); color: rgb(185, 199, 223); }
+:root .portal-shell .library-toolbar button:hover { border-color: rgb(113, 143, 203); color: rgb(255, 255, 255); }
+:root .portal-shell .library-toolbar button[aria-pressed="true"] { color: rgb(255, 255, 255); background: rgb(49, 79, 147); border-color: rgb(102, 141, 255); }
+:root .library-count { margin: 18px 0px 14px; color: rgb(150, 168, 199); }
+:root .game-library-grid { gap: 17px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 238px), 1fr)); }
+:root .portal-shell .library-card { border-color: rgb(39, 57, 87); border-radius: 15px; background: rgb(17, 26, 42); box-shadow: rgba(3, 7, 17, 0.208) 0px 10px 25px; transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s; }
+:root .portal-shell .library-card:hover { border-color: rgb(117, 154, 255); background: rgb(23, 35, 58); transform: translateY(-4px); box-shadow: rgba(3, 7, 17, 0.44) 0px 18px 35px; }
+:root .portal-shell .library-card[aria-pressed="true"] { border-color: rgb(120, 160, 255); box-shadow: rgba(120, 160, 255, 0.333) 0px 0px 0px 2px, rgba(3, 7, 17, 0.44) 0px 12px 28px; }
+:root .library-art { min-height: 150px; background: radial-gradient(circle at 72% 35%,hsl(var(--art-hue) 85% 65% / .72),transparent 49%),linear-gradient(145deg,hsl(var(--art-hue) 65% 37%),#13182c 76%); }
+:root .library-art::before { border-color: rgba(255, 255, 255, 0.27); transform: rotate(22deg); }
+:root .library-monogram { color: rgb(255, 255, 255); font-size: 59px; text-shadow: rgba(0, 0, 0, 0.533) 0px 5px 24px; }
+:root .library-art-label { color: rgb(228, 234, 255); text-shadow: rgb(0, 0, 0) 0px 2px 6px; }
+:root .library-copy { padding: 15px 16px 17px; gap: 9px; }
+:root .library-mode { padding: 4px 8px; border: 1px solid rgb(58, 82, 125); border-radius: 999px; background: rgb(25, 41, 68); color: rgb(169, 194, 255); font-size: 9px; font-weight: 700; }
+:root .library-title { color: rgb(243, 246, 255); font-size: 18px; font-weight: 800; letter-spacing: -0.25px; }
+:root .library-description { color: rgb(154, 171, 200); }
+:root .library-select { display: flex; align-items: center; gap: 7px; padding-top: 5px; color: rgb(144, 175, 255); font-size: 11px; font-weight: 800; }
+:root .library-select::after { content: "→"; font-size: 15px; transition: transform 0.15s; }
+:root .library-card:hover .library-select::after { transform: translateX(4px); }
+:root .portal-shell button.primary { color: rgb(255, 255, 255); background: linear-gradient(110deg, rgb(79, 124, 255), rgb(104, 91, 232)); border-color: rgb(122, 152, 255); }
+:root .portal-shell button.primary:hover:not(:disabled) { background: linear-gradient(110deg, rgb(103, 144, 255), rgb(123, 108, 241)); }
+:root .portal-shell input,
+:root .portal-shell select { background: rgb(11, 18, 32); border-color: rgb(52, 73, 104); color: rgb(239, 243, 255); }
+:root .portal-shell input:focus,
+:root .portal-shell select:focus { border-color: rgb(125, 160, 255); box-shadow: rgba(98, 138, 255, 0.15) 0px 0px 0px 3px; }
+:root #game-search { min-height: 54px; border-radius: 12px; background: rgb(14, 22, 38); }
+:root #browse-games { border-color: rgb(73, 102, 164); color: rgb(183, 203, 255); border-radius: 11px; }
+:root .game-label { color: rgb(213, 222, 240); letter-spacing: 0.2px; }
+:root .game-proposal { border-color: rgb(42, 60, 91); border-radius: 15px; background: rgb(16, 24, 39); }
+:root .game-proposal p,
+:root .library-empty { color: rgb(154, 171, 200); }
+:root .portal-shell button:focus-visible,
+:root .portal-shell summary:focus-visible,
+:root .portal-shell .library-card:focus-visible { outline: rgb(154, 187, 255) solid 3px; outline-offset: 3px; }
+@media (max-width: 860px) {
+:root .portal-shell { grid-template-columns: minmax(0px, 1fr); grid-template-rows: minmax(0px, 1fr); }
+}
+@media (max-width: 600px) {
+:root .topbar[data-app-page="portal"] { min-width: 0px; }
+:root .portal-main { padding: 14px 12px 34px; }
+:root .portal-shell .popular-games-section { padding: 15px; }
+:root .game-library-grid { grid-template-columns: repeat(2, minmax(0px, 1fr)); gap: 10px; }
+:root .library-art { min-height: 96px; }
+:root .library-copy { padding: 11px; gap: 7px; }
+:root .library-title { font-size: 15px; }
+:root .library-description { font-size: 11px; }
+:root .library-select { font-size: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+:root .portal-shell .library-card,
+:root .library-select::after { transition: none; }
+}
+:root:not([data-portal-navigation="modern"]) .topbar[data-app-page="portal"] .portal-nav { display: none !important; }
+:root[data-portal-navigation="modern"] .topbar[data-app-page="portal"] .sidebar-toggle { display: none !important; }
+:root[data-portal-navigation="modern"] .portal-shell > .portal-sidebar { display: none !important; }
+:root[data-portal-navigation="legacy"] .portal-shell > .portal-sidebar .app-brand { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-bottom: 8px; color: var(--color-text-primary); font-size: 18px; font-weight: 850; text-decoration: none; }
+:root[data-portal-navigation="legacy"] .portal-shell > .portal-sidebar .app-brand-mark { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: var(--color-bg-3); color: var(--color-accent); font-size: 22px; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation { display: flex; flex: 1 1 0%; flex-direction: column; gap: 14px; min-height: 0px; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .matches-board-group { display: block; margin: 0px; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation #my-matches > h3 { margin: 0px 0px 4px; color: var(--color-text-primary); font-size: 17px; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-group > summary { min-height: 47px; font-size: 13px; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-group > div { max-height: 32dvh; overflow: auto; overscroll-behavior: contain; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-list-card { display: grid; grid-template-columns: 38px minmax(0px, 1fr); align-items: center; gap: 9px; box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0px; padding: 8px; overflow: hidden; text-align: left; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-card-art { display: grid; width: 38px; height: 38px; aspect-ratio: 1 / 1; place-items: center; overflow: hidden; border-radius: 9px; background: var(--color-bg-3); }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-card-art img { display: block; width: 100%; height: 100%; object-fit: cover; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-card-monogram { font-size: 16px; font-weight: 850; line-height: 1; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-card-copy { display: grid; grid-template-columns: minmax(0px, 1fr); gap: 4px; min-width: 0px; overflow: hidden; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-card-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0px; overflow: hidden; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-card-title { flex: 0 1 auto; min-width: 0px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-card-title-row .badge { max-width: 100%; font-size: 9px; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-card-players { display: block; min-width: 0px; overflow: hidden; color: var(--color-text-tertiary); font-size: 10px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .match-card-moves { color: var(--color-text-tertiary); font-size: 9px; line-height: 1.25; }
+:root[data-portal-navigation="legacy"] #legacy-match-navigation .open-matches-board { padding-top: 8px; border-top: 2px solid var(--color-border-3); }
+:root[data-portal-navigation="legacy"] .matches-screen-groups.matches-unified-board { display: none !important; }
+:root .token-token-icon { display: inline; }
+:root .topbar[data-app-page="portal"] { overflow: visible; z-index: 20; }
+:root .topbar[data-app-page="portal"] .app-home-link { min-width: max-content; color: rgb(245, 247, 255); }
+:root .topbar[data-app-page="portal"] h1 { font-size: 18px; font-weight: 900; letter-spacing: -0.5px; }
+:root .topbar[data-app-page="portal"] h1::before { content: "✦"; margin-right: 9px; color: rgb(120, 160, 255); }
+:root .portal-nav { display: flex; align-items: center; gap: 4px; margin-left: clamp(12px, 2vw, 32px); }
+:root .portal-nav-link { display: inline-flex; align-items: center; gap: 9px; min-height: 42px; padding: 0px 13px; border: 1px solid transparent; border-radius: 10px; color: rgb(196, 208, 230); background: transparent; text-decoration: none; font: 700 13px var(--font-sans); white-space: nowrap; cursor: pointer; list-style: none; }
+:root .portal-nav-link:hover,
+:root .portal-nav-link.is-active { color: rgb(255, 255, 255); background: rgb(26, 39, 64); border-color: rgb(41, 61, 96); }
+:root .nav-count { display: grid; place-items: center; min-width: 20px; height: 20px; padding: 0px 5px; border-radius: 999px; background: rgb(36, 57, 94); color: rgb(197, 213, 255); font: 700 10px var(--font-mono); }
+:root .matches-panel .match-group { border-bottom: 1px solid rgb(36, 51, 77); }
+:root .matches-panel .match-group > summary { min-height: 42px; padding: 9px 4px; }
+:root .matches-panel .match-group > div { max-height: 220px; overflow: auto; }
+:root .matches-panel .list-item { width: 100%; color: rgb(215, 225, 244); text-align: left; background: transparent; border: 1px solid transparent; }
+:root .matches-panel .list-item:hover { background: rgb(25, 39, 65); border-color: rgb(48, 70, 108); }
+:root .portal-nav a:focus-visible,
+:root .portal-nav summary:focus-visible { outline: rgb(154, 187, 255) solid 2px; outline-offset: 3px; }
+@media (max-width: 1200px) {
+:root .topbar[data-app-page="portal"] { flex-wrap: wrap; gap: 7px 10px; padding: 8px 12px; }
+:root .topbar[data-app-page="portal"] .portal-nav { order: 5; flex: 1 0 100%; margin: 0px; }
+:root .topbar[data-app-page="portal"] .spacer { display: none; }
+:root .portal-main { padding: 20px; }
+}
+@media (max-width: 900px) {
+:root .portal-nav-link { min-height: 38px; padding: 0px 10px; }
+}
+@media (max-width: 600px) {
+:root .topbar[data-app-page="portal"] { gap: 6px 8px; padding: 6px 8px; }
+:root .topbar[data-app-page="portal"] h1 { font-size: 14px; }
+:root .topbar .token-wallet { display: none !important; }
+:root #account-menu { max-width: 98px; }
+:root #account-menu .auth-menu-button { max-width: 98px; min-height: 38px; padding: 4px 7px; overflow: hidden; text-overflow: ellipsis; }
+:root #account-menu .auth-avatar { width: 27px; height: 27px; }
+:root .portal-main { padding: 13px 12px 28px; }
+:root .portal-nav { gap: 1px; }
+:root .portal-nav-link { padding: 0px 9px; font-size: 11px; }
+}
+:root .topbar[data-app-page="portal"] { gap: 12px; }
+:root .portal-nav { margin-left: clamp(8px, 1vw, 18px); }
+:root .portal-nav-link { min-height: 42px; padding: 0px 14px; color: rgb(199, 212, 236); text-decoration: none; border: 1px solid transparent; border-radius: 11px; font-weight: 800; white-space: nowrap; }
+:root .portal-nav-link:hover,
+:root .portal-nav-link.is-active { color: rgb(255, 255, 255); background: rgb(26, 39, 64); border-color: rgb(49, 74, 114); box-shadow: rgba(255, 255, 255, 0.043) 0px 1px inset; }
+:root .topbar[data-app-page="portal"] .spacer { flex: 1 1 0px; min-width: 8px; }
+:root .token-wallet { min-height: 48px; padding: 7px 17px 7px 8px; border-color: rgb(120, 150, 74); background: linear-gradient(130deg, rgb(51, 76, 39), rgb(27, 45, 43)); box-shadow: rgba(196, 255, 106, 0.09) 0px 0px 0px 1px, rgba(167, 238, 74, 0.22) 0px 0px 24px; transition: transform 0.18s, box-shadow 0.18s; }
+:root .token-wallet:hover { transform: scale(1.05); box-shadow: rgba(215, 255, 148, 0.24) 0px 0px 0px 1px, rgba(167, 238, 74, 0.384) 0px 0px 30px; }
+:root .token-wallet-coin { width: 35px; height: 35px; color: rgb(251, 255, 217); background: linear-gradient(145deg, rgb(145, 201, 62), rgb(66, 110, 50)); box-shadow: rgba(200, 255, 109, 0.5) 0px 0px 15px; }
+:root .token-wallet-number strong { font-size: 21px; }
+:root #account-menu .auth-menu-button { min-height: 50px; gap: 10px; padding: 5px 14px 5px 7px; border: 1px solid rgb(85, 111, 160); border-radius: 15px; background: linear-gradient(135deg, rgb(27, 41, 68), rgb(21, 28, 48)); color: rgb(246, 248, 255); font-size: 14px; font-weight: 900; box-shadow: rgba(138, 169, 255, 0.086) 0px 0px 0px 1px, rgba(7, 11, 22, 0.5) 0px 8px 22px; transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s; }
+:root #account-menu .auth-menu-button:hover,
+:root #account-menu .auth-menu-button[aria-expanded="true"] { transform: translateY(-1px); border-color: rgb(154, 180, 255); box-shadow: rgba(144, 172, 255, 0.333) 0px 0px 0px 1px, rgba(105, 138, 255, 0.36) 0px 0px 26px; }
+:root #account-menu .auth-avatar { width: 38px; height: 38px; margin: 0px; border: 2px solid rgb(155, 192, 255); box-shadow: rgba(100, 138, 255, 0.22) 0px 0px 0px 3px, rgba(100, 138, 255, 0.57) 0px 0px 20px; }
+:root #account-menu .auth-menu-panel { width: min(330px, -24px + 100vw); max-height: min(78dvh, 720px); overflow: auto; padding: 14px; border-color: rgb(64, 91, 136); border-radius: 17px; background: rgb(17, 26, 43); box-shadow: rgba(3, 7, 18, 0.863) 0px 22px 58px, rgba(94, 131, 216, 0.18) 0px 0px 26px; }
+:root #account-menu .auth-menu-heading { color: rgb(242, 245, 255); font-weight: 800; }
+:root #account-menu .auth-menu-heading:first-child { display: grid; grid-template-columns: 48px minmax(0px, 1fr); align-items: center; column-gap: 12px; min-height: 56px; padding: 5px 8px 8px; line-height: 1.3; overflow-wrap: anywhere; }
+:root #account-menu .auth-menu-heading:first-child .auth-avatar { display: block; width: 44px; height: 44px; margin: 0px; transform: scale(1.04); }
+:root #account-menu .auth-menu-panel button,
+:root #account-menu .auth-menu-panel a { color: rgb(213, 225, 247); }
+:root #account-menu .auth-menu-panel button:hover,
+:root #account-menu .auth-menu-panel a:hover { background: rgb(26, 41, 67); color: rgb(255, 255, 255); }
+:root #account-menu .portal-admin-link { display: flex; align-items: center; min-height: 36px; margin: 0px 0px 8px; padding: 0px 10px; border: 1px solid rgb(44, 66, 101); border-radius: 9px; background: rgb(21, 33, 56); color: rgb(213, 225, 247); font-size: 12px; font-weight: 800; text-decoration: none; }
+:root #account-menu .portal-admin-link:hover { border-color: rgb(120, 152, 232); background: rgb(26, 41, 67); color: rgb(255, 255, 255); }
+:root .portal-profile-options { margin-top: 9px; padding-top: 11px; border-top: 1px solid rgb(42, 61, 93); }
+:root .portal-profile-options > h3 { margin: 0px 0px 8px 7px; color: rgb(133, 168, 255); font-size: 9px; font-weight: 900; letter-spacing: 1.7px; text-transform: uppercase; }
+:root #portal-more-options { display: flex; flex-direction: column; gap: 7px; }
+:root #portal-more-options[hidden] { display: none !important; }
+:root #portal-more-options .offline-controls { padding: 8px; border: 1px solid rgb(38, 55, 84); border-radius: 11px; background: rgb(12, 20, 34); }
+:root #portal-more-options > details { padding: 9px 8px; border: 1px solid rgb(38, 55, 84); border-radius: 10px; background: rgb(12, 20, 34); color: rgb(213, 225, 247); }
+:root #portal-more-options > details > summary { cursor: pointer; font-weight: 800; }
+:root .portal-screen { width: 100%; max-width: 1420px; min-height: calc(100dvh - 170px); margin: 0px auto; }
+:root .portal-screen[hidden] { display: none !important; }
+:root .portal-screen-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin: 0px 0px 24px; padding: 26px 29px; border: 1px solid rgb(44, 65, 101); border-radius: 18px; background: radial-gradient(at 88% 10%, rgba(56, 76, 140, 0.5), transparent 42%), linear-gradient(125deg, rgb(21, 35, 61), rgb(17, 24, 39)); box-shadow: rgba(2, 7, 19, 0.47) 0px 14px 42px; }
+:root .portal-screen-heading h2 { margin: 0px; color: rgb(248, 249, 255); font-size: clamp(32px, 4vw, 48px); font-weight: 900; letter-spacing: -1.6px; }
+:root .portal-screen-heading p:last-child { margin: 9px 0px 0px; color: rgb(174, 189, 219); font-size: 13px; }
+:root .matches-screen-groups { display: grid; grid-template-columns: repeat(2, minmax(0px, 1fr)); align-items: start; gap: 18px; }
+:root .matches-board-group { min-width: 0px; padding: 18px 21px; border: 1px solid rgb(38, 57, 87); border-radius: 16px; background: linear-gradient(145deg, rgb(18, 28, 45), rgb(15, 22, 35)); box-shadow: rgba(2, 6, 17, 0.333) 0px 14px 38px; }
+:root .matches-board-group > h3 { margin: 0px 0px 8px; color: rgb(242, 245, 255); font-size: 15px; }
+:root .matches-board-group .match-group > div { max-height: 38dvh; overflow: auto; }
+:root .matches-board-group .list-item { border-radius: 11px; }
+:root .open-matches-board .match-group { border: 0px; }
+:root .open-matches-board .match-group > summary { padding-top: 0px; font-size: 15px; }
+:root body[data-portal-view="games"] #placeholder { display: none !important; }
+:root body[data-portal-view="games"] .portal-main { padding-top: 28px; }
+:root body[data-portal-view="matches"] .match-creator,
+:root body[data-portal-view="matches"] #game-detail-page,
+:root body[data-portal-view="matches"] #placeholder { display: none !important; }
+:root body[data-portal-view="matches"] #match:not([hidden]) { display: flex; }
+:root body[data-portal-view="matches"] #matches-screen:not([hidden]) { display: block; }
+:root .portal-shell .library-card { border-color: rgb(98, 127, 206); box-shadow: rgba(88, 123, 219, 0.32) 0px 0px 0px 1px, rgba(77, 117, 230, 0.227) 0px 0px 23px, rgba(3, 7, 17, 0.5) 0px 12px 29px; }
+:root .portal-shell .library-card:hover { border-color: rgb(156, 181, 255); box-shadow: rgba(142, 168, 255, 0.51) 0px 0px 0px 2px, rgba(108, 140, 255, 0.54) 0px 0px 34px, rgba(3, 7, 17, 0.66) 0px 18px 39px; }
+:root .portal-shell .library-card[aria-pressed="true"] { box-shadow: rgb(145, 173, 255) 0px 0px 0px 2px, rgba(105, 139, 255, 0.61) 0px 0px 34px; }
+@media (max-width: 1200px) {
+:root .topbar[data-app-page="portal"] { gap: 8px 11px; }
+:root .topbar[data-app-page="portal"] .portal-nav { order: 5; flex: 1 0 100%; margin: 0px; }
+:root .topbar[data-app-page="portal"] .spacer { display: none; }
+}
+@media (max-width: 860px) {
+:root .matches-screen-groups { grid-template-columns: minmax(0px, 1fr); }
+:root .portal-screen { min-height: 0px; }
+}
+@media (max-width: 600px) {
+:root .topbar[data-app-page="portal"] { gap: 6px 8px; padding: 7px 9px; }
+:root .topbar[data-app-page="portal"] h1 { font-size: 14px; }
+:root .topbar .token-wallet { min-height: 38px; padding: 4px 9px 4px 5px; display: inline-flex !important; }
+:root .topbar .token-wallet-coin { width: 28px; height: 28px; }
+:root #account-menu .auth-menu-button { min-height: 40px; gap: 7px; padding: 4px 9px 4px 5px; font-size: 11px; }
+:root #account-menu .auth-avatar { width: 30px; height: 30px; }
+:root .portal-nav { gap: 2px; }
+:root .portal-nav-link { min-height: 37px; padding: 0px 10px; font-size: 11px; }
+:root .portal-screen-heading { align-items: flex-start; flex-direction: column; padding: 20px 17px; }
+}
+:root .topbar[data-app-page="portal"] { min-height: 68px; flex-wrap: nowrap; gap: clamp(8px, 1.15vw, 16px); padding: 8px clamp(16px, 2vw, 30px); }
+:root .topbar[data-app-page="portal"] .app-home-link { min-height: 46px; display: inline-flex; align-items: center; color: rgb(246, 248, 255); text-decoration: none; }
+:root .topbar[data-app-page="portal"] h1 { font-size: 22px; font-weight: 950; letter-spacing: -1.1px; background: linear-gradient(100deg, rgb(247, 249, 255) 0%, rgb(219, 231, 255) 62%, rgb(135, 173, 255) 100%) text; color: transparent; }
+:root .topbar[data-app-page="portal"] h1::before { content: none; }
+:root .portal-nav { flex: 0 0 auto; gap: 5px; margin: 0px; }
+:root .portal-nav-link { display: inline-flex; height: 44px; min-height: 44px; align-items: center; justify-content: center; padding: 0px 17px; border-radius: 10px; font-size: 13px; }
+:root .portal-nav-link.is-active { background: rgb(22, 40, 64); border-color: transparent; color: rgb(112, 173, 255); box-shadow: none; }
+:root .nav-count { width: 19px; min-width: 19px; height: 19px; padding: 0px; }
+:root .topbar[data-app-page="portal"] .spacer { display: block; flex: 1 1 12px; }
+:root .topbar .token-wallet { display: inline-flex; height: 44px; min-height: 44px; align-items: center; gap: 8px; padding: 0px 4px; border: 0px; border-radius: 0px; background: transparent; box-shadow: none; color: rgb(231, 237, 249); }
+:root .topbar .token-wallet:hover { transform: scale(1.04); background: transparent; box-shadow: none; }
+:root .topbar .token-wallet-coin { width: 28px; height: 28px; border: 0px; background: transparent; color: rgb(169, 219, 89); font-size: 27px; text-shadow: rgba(169, 219, 89, 0.733) 0px 0px 13px; }
+:root .token-wallet-copy { flex-direction: row; align-items: baseline; gap: 5px; }
+:root .token-wallet-label { position: absolute; width: 1px; height: 1px; padding: 0px; margin: -1px; overflow: hidden; clip: rect(0px, 0px, 0px, 0px); white-space: nowrap; border: 0px; }
+:root .token-wallet-number { display: flex; align-items: baseline; gap: 4px; color: rgb(197, 208, 228); font-size: 11px; }
+:root .token-wallet-number strong { color: rgb(246, 249, 255); font-size: 21px; font-weight: 900; }
+:root #account-menu .auth-menu-button { height: 44px; min-height: 44px; gap: 9px; padding: 2px 5px; border: 0px; border-radius: 0px; background: transparent; box-shadow: none; color: rgb(244, 247, 255); font-size: 13px; font-weight: 900; }
+:root #account-menu .auth-menu-button:hover { transform: none; border: 0px; background: transparent; box-shadow: none; color: rgb(159, 192, 255); }
+:root #account-menu .auth-avatar { width: 35px; height: 35px; border: 2px solid rgb(142, 178, 255); box-shadow: rgba(101, 139, 255, 0.18) 0px 0px 0px 2px, rgba(112, 148, 255, 0.467) 0px 0px 18px; }
+:root #account-menu .auth-menu-panel { width: min(340px, -20px + 100vw); }
+:root .portal-profile-options { margin-top: 10px; padding-top: 12px; border-top: 1px solid rgb(42, 61, 93); }
+:root #portal-more-options { gap: 8px; }
+:root .portal-profile-preferences { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; padding: 0px 7px 11px; border-bottom: 1px solid rgb(38, 55, 84); }
+:root .portal-profile-preferences h4 { margin: 0px; color: rgb(133, 168, 255); font-size: 9px; font-weight: 900; letter-spacing: 1.6px; text-transform: uppercase; }
+:root .portal-profile-preferences .language-picker { display: flex; min-height: 40px; align-items: center; justify-content: space-between; gap: 12px; color: rgb(186, 201, 226); font-size: 12px; }
+:root .portal-profile-preferences .language-picker select { width: 176px; max-width: 58%; min-height: 36px; background: rgb(11, 19, 32); border-color: rgb(52, 73, 104); color: rgb(239, 243, 255); }
+:root .portal-profile-preferences .language-picker > span { color: rgb(145, 172, 218); }
+:root #portal-language-slot { display: flex; flex-direction: column; }
+:root .matches-screen-groups .lobby-group-heading { min-height: 61px; padding: 0px 2px 5px; }
+:root .matches-screen-groups .lobby-group-heading p { margin: 0px; color: rgb(149, 168, 200); font-size: 11px; line-height: 1.5; }
+:root .matches-screen-groups .open-group > summary { color: rgb(139, 180, 255); }
+@media (max-width: 1200px) {
+:root .topbar[data-app-page="portal"] { flex-wrap: nowrap; gap: 8px; padding-inline: 16px; }
+:root .topbar[data-app-page="portal"] .portal-nav { order: 0; flex: 0 0 auto; margin: 0px; }
+:root .topbar[data-app-page="portal"] .spacer { display: block; flex: 1 1 8px; }
+}
+@media (max-width: 760px) {
+:root .topbar[data-app-page="portal"] { min-height: unset; flex-wrap: wrap; gap: 6px 10px; padding: 8px 11px; }
+:root .topbar[data-app-page="portal"] .app-home-link { min-height: 40px; }
+:root .topbar[data-app-page="portal"] h1 { font-size: 19px; }
+:root .topbar[data-app-page="portal"] .portal-nav { order: 5; flex: 1 0 100%; margin: 0px; }
+:root .portal-nav-link { height: 39px; min-height: 39px; padding-inline: 12px; }
+:root .topbar[data-app-page="portal"] .spacer { display: none; }
+:root .topbar .token-wallet { margin-left: auto; }
+:root .game-proposal form { grid-template-columns: minmax(0px, 1fr); }
+}
+:root .matches-screen .matches-page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin: 0px 0px 24px; padding: 8px 3px 19px; border-width: 0px 0px 1px; border-style: none none solid; border-color: currentcolor currentcolor rgb(38, 54, 80); border-image: none; border-radius: 0px; background: transparent; box-shadow: none; }
+:root .matches-screen .matches-page-heading h2 { margin: 0px; color: rgb(247, 248, 255); font-size: clamp(27px, 3vw, 38px); font-weight: 950; letter-spacing: -1.2px; }
+:root .matches-screen .matches-page-heading p:last-child { margin: 8px 0px 0px; color: rgb(174, 189, 219); font-size: 12px; }
+:root .topbar .token-wallet-coin { display: grid; place-items: center; color: #a9db59; text-shadow: 0 0 13px #a9db59bb; }
+:root .auth-avatar { object-fit: cover; transform: scale(1.25); }
+:root body { height: auto; min-height: 100dvh; overflow: hidden auto; }
+:root .portal-shell { flex: 0 0 auto; height: auto; min-height: calc(100dvh - 68px); overflow: visible; align-items: stretch; }
+:root .portal-main { height: auto; min-height: calc(100dvh - 68px); overflow: visible; }
+:root .matches-screen-groups.matches-unified-board { display: flex; flex-direction: column; align-items: stretch; gap: 0px; padding: 18px 21px; border: 1px solid rgb(38, 57, 87); border-radius: 16px; background: linear-gradient(145deg, rgb(18, 28, 45), rgb(15, 22, 35)); box-shadow: rgba(2, 6, 17, 0.333) 0px 14px 38px; }
+:root .matches-unified-board .matches-board-group { padding: 0px; border: 0px; border-radius: 0px; background: transparent; box-shadow: none; }
+:root .matches-unified-board .open-matches-board { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgb(38, 54, 80); }
+:root .matches-screen-groups .lobby-group-heading { display: none; }
+@media (max-width: 860px) {
+:root .portal-shell { grid-template-columns: minmax(0px, 1fr); grid-template-rows: auto; }
+:root .portal-main { min-height: 0px; }
+}
+@media (max-width: 600px) {
+:root .matches-screen-groups.matches-unified-board { padding: 14px; }
+}
+@media (max-width: 760px) {
+:root .matches-screen .matches-page-heading { align-items: flex-start; }
+}
+:root .popular-games-empty { margin: 10px 0px 0px; padding: 28px 16px; border: 1px dashed rgb(53, 74, 112); border-radius: 12px; color: rgb(154, 171, 200); font-size: 12px; text-align: center; background: rgb(13, 21, 35); }
+:root .topbar[data-app-page="portal"] { position: sticky; top: 0px; z-index: 100; }
+:root body { scrollbar-width: thin; scrollbar-color: rgb(82, 106, 150) rgb(17, 24, 39); }
+:root::-webkit-scrollbar { width: 8px; }
+:root::-webkit-scrollbar-track { background: rgb(16, 24, 39); }
+:root::-webkit-scrollbar-thumb { border: 2px solid rgb(16, 24, 39); border-radius: 999px; background: rgb(82, 106, 150); }
+:root body::-webkit-scrollbar { width: 8px; }
+:root body::-webkit-scrollbar-track { background: rgb(16, 24, 39); }
+:root body::-webkit-scrollbar-thumb { border: 2px solid rgb(16, 24, 39); border-radius: 999px; background: rgb(82, 106, 150); }
+:root #my-matches > .match-group:last-of-type { border-bottom: 0px; }
+:root .matches-unified-board .open-matches-board { margin-top: 4px; padding-top: 13px; border-top: 2px solid rgb(60, 82, 122); }
+:root .matches-unified-board > #my-matches > h3 { margin: 0px 0px 8px; font-size: 19px; letter-spacing: -0.35px; }
+:root .matches-unified-board .open-matches-board .open-group > summary { min-height: 42px; padding-inline: 4px; font-size: 16px; font-weight: 900; }
+:root .topbar .token-wallet-coin { width: 32px; height: 32px; border: 0px; border-radius: 0px; box-shadow: none; background: transparent !important; }
+:root .matches-page-heading { padding-top: 8px; }
+@media (max-width: 760px) {
+:root .topbar[data-app-page="portal"] .portal-nav { display: flex; width: 100%; justify-content: stretch; gap: 5px; }
+:root .topbar[data-app-page="portal"] .portal-nav-link { flex: 1 1 0px; min-width: 0px; }
+}
+:root .portal-profile-preferences { align-items: stretch; }
+:root .portal-profile-preferences .portal-layout-picker { display: grid; grid-template-columns: 78px minmax(0px, 1fr); min-height: 42px; align-items: center; gap: 10px; width: 100%; white-space: normal; }
+:root .portal-profile-preferences .portal-layout-picker select { width: 100%; max-width: none; min-width: 0px; box-sizing: border-box; }
+:root #portal-language-slot { display: grid; grid-template-columns: 78px minmax(0px, 1fr); align-items: center; gap: 10px; width: 100%; min-height: 42px; }
+:root .portal-language-label { color: rgb(186, 201, 226); font-size: 12px; }
+:root #portal-language-slot .language-picker { display: block; width: 100%; min-width: 0px; }
+:root #portal-language-slot .language-picker > span { display: none; }
+:root #portal-language-slot .language-picker select { display: block; width: 100%; max-width: none; min-height: 36px; box-sizing: border-box; background: rgb(11, 19, 32); border-color: rgb(52, 73, 104); color: rgb(239, 243, 255); }
+:root .game-detail-page { width: 100%; max-width: 1420px; padding: 28px; border-width: 3px 1px 1px; border-style: solid; border-color: rgb(93, 145, 248) rgb(45, 69, 107) rgb(45, 69, 107); border-image: none; border-radius: 18px; background: linear-gradient(145deg, rgb(17, 27, 45), rgb(13, 20, 33) 72%); box-shadow: rgba(2, 7, 19, 0.55) 0px 18px 50px; }
+:root .game-detail-mode #game-detail-content { max-width: none; }
+:root .game-detail-page .back-to-games { display: inline-flex; align-items: center; min-height: 38px; margin: 0px 0px 18px; padding: 0px 12px; border: 1px solid rgb(43, 65, 99); border-radius: 10px; background: rgb(17, 28, 46); color: rgb(141, 201, 255); font-weight: 800; }
+:root .game-detail-page .selected-game-card { margin: 0px 0px 20px; border-color: rgb(49, 82, 118); border-radius: 15px; background: radial-gradient(at 8% 50%, rgba(36, 86, 134, 0.333), transparent 43%), linear-gradient(120deg, rgb(20, 40, 58), rgb(23, 38, 59)); box-shadow: rgba(255, 255, 255, 0.043) 0px 1px inset; }
+:root .game-detail-page .game-symbol { background: linear-gradient(145deg, rgb(118, 207, 255), rgb(66, 148, 255)); box-shadow: rgba(76, 169, 255, 0.31) 0px 0px 24px; }
+:root .game-detail-page .game-popularity-debug { color: rgb(145, 168, 204); }
+:root .game-detail-page .play-option { gap: 16px; padding: 20px; border-color: rgb(42, 61, 94); border-radius: 15px; background: linear-gradient(160deg, rgb(20, 30, 48), rgb(16, 24, 39)); box-shadow: rgba(3, 9, 20, 0.267) 0px 10px 28px, rgba(255, 255, 255, 0.03) 0px 1px inset; }
+:root .game-detail-page .play-option:hover { border-color: rgb(66, 102, 155); }
+:root .game-detail-page .play-option-heading { align-items: center; margin-bottom: 2px; }
+:root .game-detail-page .play-option-icon { width: 42px; height: 42px; border: 1px solid rgb(60, 93, 138); border-radius: 12px; background: rgb(27, 49, 81); color: rgb(118, 169, 255); }
+:root .game-detail-page .practice-option .play-option-icon { background: rgb(37, 38, 74); color: rgb(181, 164, 255); }
+:root .game-detail-page .computer-match-option .play-option-icon { background: rgb(23, 51, 68); color: rgb(104, 212, 255); }
+:root .game-detail-page .play-option-heading h3 { font-size: 18px; }
+:root .game-detail-page .play-option-heading p { font-size: 13px; }
+:root .game-detail-page .play-option .create-controls,
+:root .game-detail-page .play-option .practice-controls,
+:root .game-detail-page .play-option .computer-match-controls { gap: 12px; }
+:root .game-detail-page .play-option #create,
+:root .game-detail-page .play-option #practice,
+:root .game-detail-page .play-option #play-computers { min-height: 48px; border: 1px solid rgb(102, 143, 240); border-radius: 11px; background: linear-gradient(110deg, rgb(71, 123, 240), rgb(102, 85, 220)); color: rgb(255, 255, 255); box-shadow: rgba(67, 107, 232, 0.2) 0px 7px 22px; }
+:root .game-detail-page .play-option #create:hover:not(:disabled),
+:root .game-detail-page .play-option #practice:hover:not(:disabled),
+:root .game-detail-page .play-option #play-computers:hover:not(:disabled) { border-color: rgb(169, 192, 255); filter: brightness(1.1); }
+:root .game-detail-page .play-option .play-option-note,
+:root .game-detail-page .play-option #create-hint { margin-top: 0px; font-size: 12px; }
+:root .game-detail-page .token-stake-panel { border-color: rgb(64, 90, 138); border-radius: 14px; background: linear-gradient(150deg, rgb(24, 37, 61), rgb(18, 27, 43)); box-shadow: none; }
+:root .game-detail-page .token-stake-panel .token-stake-heading { margin-bottom: 12px; }
+:root .game-detail-page .token-stake-panel .token-stake-icon { color: rgb(187, 168, 255); }
+:root .game-detail-page .token-stake-panel .stake-help { margin-bottom: 0px; }
+:root .portal-shell .match-stage { border-width: 3px 1px 1px; border-style: solid; border-color: rgb(91, 143, 240) rgb(48, 74, 115) rgb(48, 74, 115); border-image: none; border-radius: 16px; background: linear-gradient(145deg, rgb(18, 28, 45), rgb(13, 20, 33)); box-shadow: rgba(2, 7, 19, 0.533) 0px 18px 48px; }
+:root body.match-page .match-stage { border-width: 3px 1px 1px; border-style: solid; border-color: rgb(91, 143, 240) rgb(48, 74, 115) rgb(48, 74, 115); border-image: none; border-radius: 15px; padding: 8px; }
+:root .match-toolbar { min-height: 48px; gap: 10px; padding: 2px 4px 8px; border-bottom: 1px solid rgb(38, 58, 89); }
+:root .match-toolbar h2 { color: rgb(234, 241, 255); font-size: 15px; font-weight: 850; }
+:root .portal-shell .match-toolbar button { min-height: 38px; padding: 7px 13px; border: 1px solid rgb(52, 79, 120); border-radius: 10px; background: rgb(21, 35, 58); color: rgb(220, 232, 255); font-size: 12px; font-weight: 800; transition: border-color 0.16s, background 0.16s, box-shadow 0.16s; }
+:root .portal-shell .match-toolbar button:hover { border-color: rgb(123, 168, 255); background: rgb(27, 49, 81); box-shadow: rgba(93, 145, 248, 0.2) 0px 0px 18px; }
+:root .portal-shell #match-focus-toggle[aria-pressed="true"] { border-color: rgb(127, 165, 255); background: rgb(40, 69, 123); color: rgb(255, 255, 255); }
+:root body.match-page .match-tools,
+:root .portal-shell .match-tools { padding: 18px; border: 1px solid rgb(56, 84, 127); border-radius: 15px; background: linear-gradient(150deg, rgb(18, 30, 49), rgb(12, 20, 34)); box-shadow: rgba(2, 7, 19, 0.79) 0px 20px 48px, rgba(134, 170, 255, 0.05) 0px 0px 0px 1px; }
+:root .match-tools .match-header { padding: 0px 0px 13px; border-bottom: 1px solid rgb(39, 59, 89); }
+:root .match-tools .match-header h2 { color: rgb(241, 245, 255); font-size: 17px; }
+:root .match-tools #match-meta { color: rgb(146, 166, 201); font-size: 10px; }
+:root .match-tools .match-currency { border-color: rgb(55, 79, 123); background: linear-gradient(125deg, rgb(23, 41, 68), rgb(17, 29, 48)); color: rgb(220, 233, 255); }
+:root .match-tools .match-currency strong { color: rgb(134, 173, 255); }
+:root .match-tools #seats { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0px; }
+:root .match-tools .seat-chip { border-color: rgb(48, 72, 109); border-radius: 999px; background: rgb(22, 36, 58); color: rgb(220, 231, 251); }
+:root .match-tools .seat-chip.turn { border-color: rgb(82, 127, 195); background: rgb(26, 49, 80); color: rgb(159, 196, 255); }
+:root .match-tools #actions { gap: 8px; }
+:root .portal-shell .match-tools button { min-height: 38px; border: 1px solid rgb(52, 79, 120); border-radius: 10px; background: rgb(21, 35, 58); color: rgb(220, 232, 255); font-size: 12px; font-weight: 800; }
+:root .portal-shell .match-tools button:hover:not(:disabled) { border-color: rgb(123, 168, 255); background: rgb(27, 49, 81); }
+:root .portal-shell .match-tools button.primary { border-color: rgb(102, 143, 240); background: linear-gradient(110deg, rgb(71, 123, 240), rgb(102, 85, 220)); color: rgb(255, 255, 255); }
+:root .match-tools #how-to-play { margin: 12px 0px; padding: 11px 12px; border: 1px solid rgb(42, 63, 96); border-radius: 11px; background: rgb(16, 26, 42); color: rgb(220, 231, 251); }
+:root .match-tools #how-to-play > summary { cursor: pointer; color: rgb(169, 196, 255); font-size: 12px; font-weight: 850; }
+:root .match-tools #match-result { margin: 12px 0px; border-radius: 11px; font-size: 14px; }
+:root .match-tools .waiting-note { margin-top: 12px; padding: 13px 15px; border: 1px solid rgb(64, 92, 134); border-radius: 11px; background: rgb(21, 36, 58); color: rgb(201, 220, 255); font-size: 12px; }
+:root .portal-shell .match-tools .result-win { border-color: rgb(84, 117, 181); background: rgb(26, 43, 73); color: rgb(183, 206, 255); }
+:root .portal-shell .match-tools .result-loss { border-color: rgb(112, 81, 113); background: rgb(43, 32, 56); color: rgb(224, 194, 242); }
+:root .portal-shell .match-tools .result-draw { border-color: rgb(58, 102, 135); background: rgb(20, 43, 64); color: rgb(158, 218, 255); }
+:root .portal-shell .frame-box { border: 1px solid rgb(48, 74, 115); border-radius: 11px; background: rgb(11, 18, 32); box-shadow: rgba(123, 168, 255, 0.07) 0px 0px 0px 1px, rgba(2, 7, 19, 0.333) 0px 12px 30px; }
+:root body.match-page .frame-box { border: 1px solid rgb(48, 74, 115); }
+@media (max-width: 760px) {
+:root .game-detail-page { padding: 16px; border-radius: 14px; }
+:root .game-detail-page .selected-game-card { align-items: flex-start; padding: 16px; }
+:root .game-detail-page .play-options { grid-template-columns: minmax(0px, 1fr); gap: 12px; }
+:root .game-detail-page .play-option { padding: 16px; }
+:root body.match-page .match-stage { border-width: 1px 0px 0px; border-style: solid none none; border-color: rgb(48, 74, 115) currentcolor currentcolor; border-image: none; border-radius: 0px; }
+:root body.match-page .match-toolbar { border-bottom: 1px solid rgb(38, 58, 89); }
+:root body.match-page .match-tools { padding: 14px; }
+}
+:root .portal-shell .popular-game-card { transform: none; transition: border-color 0.18s, box-shadow 0.18s, background-color 0.18s; }
+:root .portal-shell .popular-game-card:hover,
+:root .portal-shell .popular-game-card:focus-visible { transform: none; border-color: rgb(134, 173, 255); box-shadow: rgba(100, 143, 255, 0.333) 0px 0px 0px 1px, rgba(2, 8, 23, 0.5) 0px 8px 22px; }
+:root .portal-shell .popular-game-card:active { transform: none; }
+:root .portal-shell .popular-game-art,
+:root .portal-shell .popular-game-monogram { transition: filter 0.2s, color 0.2s; }
+:root .portal-shell .popular-game-card:hover .popular-game-art { filter: brightness(1.08); }
+:root .portal-shell .library-card { transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s; }
+:root .portal-shell .library-card:hover { transform: none; }
+:root .portal-shell .library-select::after { transition: transform 0.2s; }
+:root .portal-shell .match-tools #match-sounds { display: inline-flex; align-items: center; gap: 9px; min-width: 112px; min-height: 40px; padding: 8px 12px; border-color: rgb(54, 82, 124); background: rgb(20, 34, 58); color: rgb(220, 232, 255); }
+:root .portal-shell .match-tools #match-sounds::before { content: "♫"; display: grid; width: 22px; height: 22px; place-items: center; border-radius: 7px; background: rgb(34, 58, 96); color: rgb(145, 181, 255); font-size: 13px; }
+:root .portal-shell .match-tools #match-sounds[aria-pressed="true"]::before { content: "♪"; background: rgb(27, 73, 63); color: rgb(125, 240, 202); }
+:root .portal-shell .match-tools #actions { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin: 12px 0px 14px; }
+:root .portal-shell .match-tools #actions button { min-height: 40px; padding: 8px 14px; border-radius: 10px; background: linear-gradient(rgb(24, 40, 66), rgb(20, 33, 55)); transition: background 0.18s, border-color 0.18s, box-shadow 0.18s, translate 0.18s; }
+:root .portal-shell .match-tools #actions button:hover:not(:disabled) { translate: 0px -1px; box-shadow: rgba(5, 11, 24, 0.5) 0px 6px 16px; }
+:root .portal-shell .match-tools #actions button.primary { background: linear-gradient(115deg, rgb(77, 127, 240), rgb(103, 88, 223)); box-shadow: rgba(84, 120, 237, 0.23) 0px 5px 18px; }
+:root .portal-shell .match-tools #actions .invite-action { display: inline-flex; align-items: center; gap: 8px; border-color: rgb(69, 105, 157); background: linear-gradient(rgb(29, 49, 80), rgb(22, 36, 59)); color: rgb(225, 235, 255); }
+:root .portal-shell .match-tools #actions .invite-action::before { content: "↗"; color: rgb(145, 182, 255); font-size: 14px; }
+:root .portal-shell .match-tools #actions .match-more > summary { width: 40px; height: 40px; border-color: rgb(52, 79, 120); border-radius: 10px; background: rgb(20, 33, 55); color: rgb(201, 217, 244); transition: background 0.18s, border-color 0.18s, box-shadow 0.18s; }
+:root .portal-shell .match-tools #actions .match-more > summary:hover { border-color: rgb(123, 168, 255); background: rgb(32, 54, 87); box-shadow: rgba(93, 145, 248, 0.2) 0px 0px 16px; }
+:root body.match-lobby .portal-shell .match-stage { border-color: rgb(91, 143, 240) rgb(48, 74, 115) rgb(48, 74, 115); }
+:root body.match-lobby .portal-shell .match-tools { display: grid; grid-template-columns: minmax(0px, 1fr); gap: 12px; padding: 18px; border: 1px solid rgb(48, 74, 115); border-radius: 14px; background: linear-gradient(145deg, rgb(18, 30, 49), rgb(13, 23, 39)); }
+:root body.match-lobby .portal-shell .match-tools .match-header { padding-bottom: 12px; }
+:root body.match-lobby .portal-shell .match-tools #seats { margin: 0px; }
+:root body.match-lobby .portal-shell .match-tools #match-sounds { justify-self: start; }
+:root body.match-lobby .portal-shell .match-tools #actions { margin: 0px; }
+:root body.match-lobby .portal-shell .match-tools .waiting-note { margin: 0px; }
+:root .portal-shell .match-tools #match-history { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+:root .portal-shell .match-tools #history-position { flex: 1 1 100px; color: rgb(158, 177, 209); font-size: 11px; }
+:root body.match-focus .portal-shell { grid-template-columns: minmax(0px, 1fr); }
+:root .portal-shell .game-detail-page,
+:root .portal-shell .match-stage,
+:root .portal-shell .match-tools { transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s; }
+@media (prefers-reduced-motion: reduce) {
+:root .portal-shell .popular-game-card,
+:root .portal-shell .popular-game-art,
+:root .portal-shell .popular-game-monogram,
+:root .portal-shell .library-card,
+:root .portal-shell .match-tools button { transition: none !important; }
+:root .portal-shell .popular-games-row { scroll-behavior: auto; }
+}
+:root .game-detail-page .play-option-icon svg { display: block; width: 24px; height: 24px; fill: none; stroke: currentcolor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+:root .game-detail-page .computer-match-illustration { overflow: hidden; }
+:root .game-detail-page .computer-match-illustration img { display: block; width: 40px; height: 40px; object-fit: contain; filter: drop-shadow(rgba(49, 207, 255, 0.333) 0px 4px 12px); }
+:root .game-detail-page .token-stake-icon { font-size: 23px; line-height: 1; filter: drop-shadow(rgba(180, 140, 255, 0.4) 0px 0px 9px); }
+:root .game-detail-page .token-stake-heading strong { color: rgb(227, 216, 255); }
+:root .matches-board-group .match-group > div { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); align-content: start; gap: 12px; max-height: 44dvh; padding: 3px 2px 8px; overflow: auto; }
+:root .matches-board-group .match-list-card { display: flex; min-width: 0px; flex-direction: column; align-items: stretch; gap: 0px; padding: 0px; overflow: hidden; border: 1px solid rgb(43, 62, 96); border-radius: 13px; background: linear-gradient(155deg, rgb(20, 31, 50), rgb(14, 23, 38)); color: rgb(229, 237, 255); text-align: left; transition: border-color 0.18s, box-shadow 0.18s, background 0.18s; }
+:root .matches-board-group .match-list-card:hover { border-color: rgb(115, 152, 235); background: linear-gradient(155deg, rgb(25, 41, 68), rgb(17, 29, 48)); box-shadow: rgba(2, 8, 23, 0.44) 0px 8px 22px; }
+:root .matches-board-group .match-list-card[aria-selected="true"] { border-color: rgb(130, 159, 255); box-shadow: rgba(101, 139, 255, 0.44) 0px 0px 0px 1px, rgba(83, 125, 226, 0.2) 0px 0px 20px; }
+:root .match-card-art { position: relative; display: grid; width: 100%; aspect-ratio: 16 / 9; place-items: center; overflow: hidden; background: radial-gradient(circle at 80% 18%,hsl(var(--art-hue) 75% 68% / .55),transparent 52%),linear-gradient(135deg,hsl(var(--art-hue) 48% 27%),#101827); }
+:root .match-card-art::after { position: absolute; inset: 0px; content: ""; background: linear-gradient(transparent 50%, rgba(8, 17, 29, 0.733)); }
+:root .match-card-art img { width: 100%; height: 100%; object-fit: cover; }
+:root .match-card-monogram { color: rgb(245, 248, 255); font-size: 37px; font-weight: 950; letter-spacing: -2px; text-shadow: rgba(2, 7, 19, 0.61) 0px 4px 18px; }
+:root .match-card-copy { display: flex; min-width: 0px; flex-direction: column; gap: 9px; padding: 13px; }
+:root .match-card-title-row { display: flex; min-width: 0px; align-items: center; flex-wrap: wrap; gap: 5px; }
+:root .match-card-title { flex: 1 1 auto; min-width: 0px; overflow-wrap: anywhere; color: rgb(242, 246, 255); font-size: 14px; font-weight: 900; }
+:root .match-card-title-row .badge { font-size: 9px; }
+:root .match-card-players { display: -webkit-box; min-height: 30px; overflow: hidden; color: rgb(174, 191, 219); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+:root .match-card-moves { color: rgb(127, 151, 189); font-size: 10px; font-weight: 800; letter-spacing: 0.2px; }
+:root .matches-board-group .empty-note { grid-column: 1 / -1; margin: 0px; padding: 12px 4px; }
+@media (prefers-reduced-motion: reduce) {
+:root .matches-board-group .match-list-card { transition: none; }
+}
+:root .portal-shell .game-library-grid.is-list { grid-template-columns: minmax(0px, 1fr); gap: 10px; }
+:root .portal-shell .game-library-grid.is-list .library-card { display: flex; flex-direction: row; align-items: stretch; min-height: 132px; border-radius: 12px; box-shadow: none; }
+:root .portal-shell .game-library-grid.is-list .library-art { width: clamp(112px, 19vw, 184px); min-height: 132px; flex: 0 0 clamp(112px, 19vw, 184px); aspect-ratio: auto; }
+:root .portal-shell .game-library-grid.is-list .library-copy { display: grid; grid-template-columns: minmax(0px, 1fr) auto; grid-template-rows: auto auto minmax(0px, 1fr) auto; align-content: center; align-items: start; gap: 5px 16px; padding: 15px 18px; }
+:root .portal-shell .game-library-grid.is-list .library-mode { grid-area: 1 / 1; }
+:root .portal-shell .game-library-grid.is-list .library-title { grid-area: 2 / 1; }
+:root .portal-shell .game-library-grid.is-list .library-description { grid-area: 3 / 1; align-self: start; }
+:root .portal-shell .game-library-grid.is-list .library-select { grid-area: 1 / 2 / 5; align-self: center; margin: 0px; white-space: nowrap; }
+@media (max-width: 600px) {
+:root .portal-shell .game-library-grid.is-list .library-card { min-height: 104px; }
+:root .portal-shell .game-library-grid.is-list .library-art { width: 92px; min-height: 104px; flex-basis: 92px; }
+:root .portal-shell .game-library-grid.is-list .library-copy { grid-template-columns: minmax(0px, 1fr); padding: 10px 12px; row-gap: 4px; }
+:root .portal-shell .game-library-grid.is-list .library-title { font-size: 14px; }
+:root .portal-shell .game-library-grid.is-list .library-description { display: none; }
+:root .portal-shell .game-library-grid.is-list .library-select { grid-area: 4 / 1; padding-top: 3px; }
+}
+
+/* Cover images share the same sizing rules as generated artwork. */
+.library-art { object-fit:cover; }
+/* Keep navigation and actual wallet controls aligned on phones. */
+@media(max-width:720px) {
+  html:root[data-portal-navigation="modern"] .topbar[data-app-page="portal"][data-app-brand] {
+    grid-template-columns:minmax(0,1fr) auto 44px;
+  }
+  html:root[data-portal-navigation="modern"] .topbar[data-app-page="portal"][data-app-brand] > .app-home-link { grid-column:1; }
+  html:root[data-portal-navigation="modern"] .topbar[data-app-page="portal"][data-app-brand] .token-wallet { grid-column:2; }
+  html:root[data-portal-navigation="modern"] .topbar[data-app-page="portal"][data-app-brand] #account-menu { grid-column:3; }
 }

@@ -1513,11 +1513,7 @@ test('the stake preview sizes the pot by the smallest multiplayer count',()=>{
   assert.equal(preview(),'10 tokens per person · 20 tokens in a 2-player pot · Wallet: 25 tokens');
 });
 
-test('gem wording keeps the invite amount placeholder and switches back to tokens',()=>{
+test('currency formatting preserves the real token amount and unit',()=>{
   const {run}=setup();
-  run('document.documentElement.dataset.portalCurrency="gems"');
-  assert.equal(run('portalCurrencyText("ui.invite.stake",{tokens:5},"This match stakes {tokens} tokens per player.")'),'This match stakes 5 gems per player.');
-  assert.equal(run('portalCurrencyAmount(10)'),'10 gems');
-  run('document.documentElement.dataset.portalCurrency="tokens"');
-  assert.equal(run('portalCurrencyAmount(10)'),'10 tokens');
+  assert.equal(run('tokenAmount(10)'),'10 tokens');
 });

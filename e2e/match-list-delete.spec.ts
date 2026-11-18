@@ -19,7 +19,7 @@ test('a failed list deletion stays visible through polling and can be retried', 
     return route.continue();
   });
   await loginAs(page, owner);
-  await page.goto('/static/portal.html?skin=lobby#matches');
+  await page.goto('/static/portal.html#matches');
   await page.locator('#group-waiting > summary').click();
   const row = page.locator('#list-waiting .match-list-row').filter({hasText:name});
   const remove = row.getByRole('button', {name:'Delete match', exact:true});

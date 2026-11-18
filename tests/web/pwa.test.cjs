@@ -45,7 +45,7 @@ test('game detail pages (portal.html?game=<id>) open from the saved portal offli
   context.caches={open:async()=>({match:async key=>{asked.push(key);return saved;}})};
   context.fetch=()=>{throw Error('offline')};
   let response;
-  handlers.fetch({request:{method:'GET',url:'https://example.test/static/portal.html?game=g1&skin=party'},respondWith:p=>response=p});
+  handlers.fetch({request:{method:'GET',url:'https://example.test/static/portal.html?game=g1&layout=left'},respondWith:p=>response=p});
   assert.ok(response,'the worker answers the game page');
   assert.equal(await response,saved);
   assert.deepEqual(asked,['/static/portal.html']);

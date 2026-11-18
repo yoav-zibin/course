@@ -205,6 +205,6 @@ def test_online_random_stream_matches_cryptography_across_blocks():
 
 
 def test_portal_canonicalizes_before_rendering_and_preserves_query(api):
-    response = api.client.get('/portal?skin=classic&game=example', follow_redirects=False)
+    response = api.client.get('/portal?game=example', follow_redirects=False)
     assert response.status_code == 307
-    assert response.headers['location'] == '/static/portal.html?skin=classic&game=example'
+    assert response.headers['location'] == '/static/portal.html?game=example'

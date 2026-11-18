@@ -3,7 +3,7 @@
   scrollbar-width: thin;
   font-variant-numeric: tabular-nums;
 
-  --font-sans: "Inter", sans-serif;
+  --font-sans: Inter,"Trebuchet MS",sans-serif;
   --font-mono: ui-monospace, "DejaVu Sans Mono", monospace;
   --font-size-xs: 12px;
   --font-size-sm: 13px;
@@ -15,32 +15,32 @@
   --space-lg: 16px;
   --space-xl: 24px;
 
-  --radius-sm: 4px;
-  --radius-md: 6px;
+  --radius-sm: 9px;
+  --radius-md: 16px;
 
-  --color-bg-0: lch(3% 1 260);
-  --color-bg-1: lch(12% 1.5 280);
-  --color-bg-2: lch(15% 1.5 280);
-  --color-bg-3: lch(20% 1.5 280);
-  --color-bg-4: lch(25% 1.5 280);
+  --color-bg-0: #090d17;
+  --color-bg-1: #111827;
+  --color-bg-2: #19243a;
+  --color-bg-3: #243554;
+  --color-bg-4: #31466c;
 
-  --color-text-primary: lch(97.5% 0.5 240);
-  --color-text-secondary: lch(86% 4 250);
-  --color-text-tertiary: lch(61% 4 260);
-  --color-text-quaternary: lch(44% 3 260);
+  --color-text-primary: #f5f7ff;
+  --color-text-secondary: #c8d3e8;
+  --color-text-tertiary: #91a4c6;
+  --color-text-quaternary: #7183a5;
 
-  --color-border-1: lch(16% 2 260);
-  --color-border-2: lch(23% 1.5 280);
-  --color-border-3: lch(30% 1.5 280);
-  --color-border-4: lch(40% 1.5 280);
+  --color-border-1: #1c2940;
+  --color-border-2: #283a5a;
+  --color-border-3: #3c527a;
+  --color-border-4: #6884b5;
 
-  --color-accent: lch(48% 55 280);
-  --color-accent-hover: lch(62% 50 275);
-  --color-focus-ring: lch(62% 50 275);
+  --color-accent: #4e7cff;
+  --color-accent-hover: #78a0ff;
+  --color-focus-ring: #8bb6ff;
 
-  --color-ok: lch(72% 60 145);
-  --color-warn: lch(80% 70 80);
-  --color-error: lch(62% 70 30);
+  --color-ok: #65e5b2;
+  --color-warn: #ffc76e;
+  --color-error: #ff8297;
 
   --shadow-1: 0.5px 1px 1px lch(0% 0 0 / 0.35);
   --shadow-3:

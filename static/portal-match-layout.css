@@ -76,7 +76,6 @@ html:root body.match-page.match-immersive .portal-shell { flex:1; height:100%; m
 html:root body.match-page.match-immersive .portal-main { height:100%; min-height:0; padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); overflow:hidden; }
 html:root body.match-page.match-immersive .match-stage { padding:0; gap:0; border:0; border-radius:0; }
 html:root body.match-page.match-immersive .frame-box { height:0; min-height:0; padding:0; border:0; border-radius:0; }
-html:root body.match-page.match-immersive #community-chat,
 html:root body.match-page.match-immersive #match-toolbar-title { display:none!important; }
 body.match-immersive .match-toolbar { display:none; }
 body.match-immersive.match-menu-open .match-toolbar {

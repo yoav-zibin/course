@@ -28,7 +28,6 @@ from game_platform import game_messages, game_text, i18n, observability
 from game_platform.avatars import user_avatar, USER_AVATARS, computer_avatar
 from game_platform.models import (
     Experiment,
-    ExperimentAssignment,
     ExperimentEvent,
     ExperimentEventKind,
     ExperimentVariant,
@@ -264,14 +263,8 @@ PLAYER_LEFT_TIME_LIMIT_SECONDS: Final = 2.0
 # How many failed random-walk test seeds are kept per game and replayed
 # first on the next test run (regression seeds, Phase 5).
 MAX_STORED_TEST_SEEDS: Final = 20
-SKIN_EXPERIMENT_ID: Final = "ui-skins"
 CAMPAIGN_EXPERIMENT_ID: Final = "ad-campaigns"
 RETURNING_WINDOW: Final = dt.timedelta(days=7)
-PILOT_SKINS: Final = (
-    ExperimentVariant(id="skin-classic", name="Classic", key="classic"),
-    ExperimentVariant(id="skin-aurora", name="Aurora", key="aurora"),
-    ExperimentVariant(id="skin-sunset", name="Sunset", key="sunset"),
-)
 PILOT_CAMPAIGNS: Final = (
     ExperimentVariant(
         id="campaign-students-a",
@@ -550,24 +543,11 @@ class GamePlatform:
         self._user_ids_by_code: dict[str, str] = {}
         self._give_missing_referral_codes()
 
-    def _ensure_pilot_experiments(
+    def _ensure_campaign_experiment(
         self, *, created_at: dt.datetime | None = None
     ) -> None:
         with self._lock:
             existing = {experiment.id for experiment in self._store.list_experiments()}
-            if SKIN_EXPERIMENT_ID not in existing:
-                now = created_at or self._clock()
-                self._store.put_experiment(
-                    Experiment(
-                        id=SKIN_EXPERIMENT_ID,
-                        name="UI skin pilot",
-                        kind="skin",
-                        active=True,
-                        variants=PILOT_SKINS,
-                        created_at=now,
-                        updated_at=now,
-                    )
-                )
             if CAMPAIGN_EXPERIMENT_ID not in existing:
                 now = created_at or self._clock()
                 self._store.put_experiment(
@@ -583,12 +563,12 @@ class GamePlatform:
                 )
 
     def _active_experiment(self, experiment_id: str) -> Experiment:
-        self._ensure_pilot_experiments()
+        self._ensure_campaign_experiment()
         experiment = next(
             (
                 experiment
                 for experiment in self._store.list_experiments()
-                if experiment.id == experiment_id
+                if experiment.id == experiment_id and experiment.kind == "campaign"
             ),
             None,
         )
@@ -597,9 +577,12 @@ class GamePlatform:
         return experiment
 
     def list_experiments(self) -> list[Experiment]:
-        self._ensure_pilot_experiments()
+        self._ensure_campaign_experiment()
         with self._lock:
-            return self._store.list_experiments()
+            return [
+                experiment for experiment in self._store.list_experiments()
+                if experiment.kind == "campaign"
+            ]
 
     def set_experiment_active(self, *, experiment_id: str, active: bool) -> Experiment:
         with self._lock:
@@ -713,34 +696,6 @@ class GamePlatform:
                 ):
                     self._store.delete_experiment_event(event.id)
 
-    def assign_skin(
-        self, *, user_id: str, assigned_at: dt.datetime | None = None
-    ) -> ExperimentVariant | None:
-        with self._lock:
-            self._ensure_pilot_experiments(created_at=assigned_at)
-            experiment = self._active_experiment(SKIN_EXPERIMENT_ID)
-            if not experiment.active or not experiment.variants:
-                return None
-            assignment = self._store.get_experiment_assignment(
-                user_id=user_id, experiment_id=experiment.id
-            )
-            by_id = {variant.id: variant for variant in experiment.variants}
-            if assignment is not None and assignment.variant_id in by_id:
-                return by_id[assignment.variant_id]
-            digest = hashlib.sha256(user_id.encode("utf-8")).digest()
-            variant = experiment.variants[
-                int.from_bytes(digest[:8], "big") % len(experiment.variants)
-            ]
-            self._store.put_experiment_assignment(
-                ExperimentAssignment(
-                    user_id=user_id,
-                    experiment_id=experiment.id,
-                    variant_id=variant.id,
-                    assigned_at=assigned_at or self._clock(),
-                )
-            )
-            return variant
-
     def _record_experiment_event(
         self,
         *,
@@ -831,17 +786,7 @@ class GamePlatform:
         occurred_at: dt.datetime | None = None,
     ) -> None:
         with self._lock:
-            self._ensure_pilot_experiments(created_at=occurred_at)
-            variant = self.assign_skin(user_id=user_id, assigned_at=occurred_at)
-            experiment = self._active_experiment(SKIN_EXPERIMENT_ID)
-            if variant is not None:
-                self._record_experiment_event(
-                    experiment_id=experiment.id,
-                    variant_id=variant.id,
-                    kind="signup",
-                    user_id=user_id,
-                    occurred_at=occurred_at,
-                )
+            self._ensure_campaign_experiment(created_at=occurred_at)
             if campaign_code:
                 campaign = next(
                     (
@@ -871,36 +816,9 @@ class GamePlatform:
     def record_match_start(
         self, *, user_id: str, match_id: str, occurred_at: dt.datetime
     ) -> None:
-        self._ensure_pilot_experiments(created_at=occurred_at)
+        self._ensure_campaign_experiment(created_at=occurred_at)
         with self._lock:
             experiments = self._store.list_experiments()
-            skin = next(
-                (experiment for experiment in experiments if experiment.id == SKIN_EXPERIMENT_ID),
-                None,
-            )
-            if skin is not None and skin.active:
-                assignment = self._store.get_experiment_assignment(
-                    user_id=user_id, experiment_id=skin.id
-                )
-                skin_variant = (
-                    next(
-                        (variant for variant in skin.variants if assignment.variant_id == variant.id),
-                        None,
-                    )
-                    if assignment is not None
-                    else self.assign_skin(
-                        user_id=user_id, assigned_at=occurred_at
-                    )
-                )
-                if skin_variant is not None:
-                    self._record_experiment_event(
-                        experiment_id=skin.id,
-                        variant_id=skin_variant.id,
-                        kind="match_start",
-                        user_id=user_id,
-                        match_id=match_id,
-                        occurred_at=occurred_at,
-                    )
             campaign = next(
                 (experiment for experiment in experiments if experiment.id == CAMPAIGN_EXPERIMENT_ID),
                 None,
@@ -936,49 +854,24 @@ class GamePlatform:
                     match_id=match_id,
                     occurred_at=occurred_at,
                 )
-            signup_experiments = [
-                experiment
-                for experiment in (skin, campaign)
-                if experiment is not None
-            ]
-            for experiment in signup_experiments:
-                if not experiment.active:
-                    continue
-                signup_events = [
+            if campaign is not None and campaign.active:
+                returning_signups = [
                     event
-                    for event in events
-                    if event.experiment_id == experiment.id
-                    and event.kind == "signup"
-                    and event.user_id in survivor_ids
-                    and event.occurred_at + RETURNING_WINDOW <= occurred_at
+                    for event in campaign_signups
+                    if event.occurred_at + RETURNING_WINDOW <= occurred_at
                     and event.occurred_at + RETURNING_WINDOW * 2 > occurred_at
                 ]
-                if signup_events:
-                    assignment = self._store.get_experiment_assignment(
-                        user_id=user_id, experiment_id=experiment.id
-                    )
-                    if experiment.id == CAMPAIGN_EXPERIMENT_ID:
-                        variant_id = (
-                            campaign_signup.variant_id
-                            if campaign_signup is not None
-                            else signup_events[0].variant_id
-                        )
-                    else:
-                        variant_id = (
-                            assignment.variant_id
-                            if assignment is not None
-                            else signup_events[0].variant_id
-                        )
+                if returning_signups:
                     self._record_experiment_event(
-                        experiment_id=experiment.id,
-                        variant_id=variant_id,
+                        experiment_id=campaign.id,
+                        variant_id=campaign_signup.variant_id,
                         kind="returning_active",
                         user_id=user_id,
                         occurred_at=occurred_at,
                     )
 
     def experiment_stats(self) -> dict[str, JsonValue]:
-        self._ensure_pilot_experiments()
+        self._ensure_campaign_experiment()
         with self._lock:
             experiments = self._store.list_experiments()
             assignments = self._store.list_experiment_assignments()
@@ -1083,18 +976,6 @@ class GamePlatform:
 
         return {
             "generated_at": now.isoformat(),
-            "skin_experiment": {
-                "id": SKIN_EXPERIMENT_ID,
-                "name": next(
-                    (item.name for item in experiments if item.id == SKIN_EXPERIMENT_ID),
-                    "UI skin pilot",
-                ),
-                "active": next(
-                    (item.active for item in experiments if item.id == SKIN_EXPERIMENT_ID),
-                    False,
-                ),
-                "variants": report(SKIN_EXPERIMENT_ID),
-            },
             "campaign_experiment": {
                 "id": CAMPAIGN_EXPERIMENT_ID,
                 "name": next(

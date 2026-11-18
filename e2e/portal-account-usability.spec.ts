@@ -64,7 +64,7 @@ test('Escape closes only the login dialog before reaching match controls', async
   const match = await (await request.post('/matches', {headers, data: {game_id: game, num_computer_opponents: 1}})).json();
   expect((await request.post(`/matches/${match.id}/start`, {headers, data: {}})).ok()).toBeTruthy();
   await loginAs(page, user);
-  await page.goto(`/static/portal.html?skin=classic#match=${match.id}`);
+  await page.goto(`/static/portal.html#match=${match.id}`);
   await expect(page.locator('#game-box .declarative-stage')).toBeVisible();
   const controls = page.locator('#match-controls-toggle');
   await openMatchControls(page);
@@ -182,7 +182,7 @@ test('Arabic phone preferences fit the viewport and wrap a long account name', a
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const user = await createUser(request, uniqueName('لاعب تجريبي باسم طويل للغاية لاختبار جميع خيارات الحساب على الهاتف'));
   await loginAs(page, user);
-  await page.goto('/static/portal.html?skin=classic');
+  await page.goto('/static/portal.html');
   const menu = page.locator('.auth-menu-panel');
   await page.locator('.auth-menu-button').click();
   await page.locator('#language-picker').selectOption('ar');
@@ -196,9 +196,7 @@ test('Arabic phone preferences fit the viewport and wrap a long account name', a
     expect(await menu.evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
   };
   await checkFit();
-  await page.locator('#portal-skin-picker').selectOption('sunset');
   await page.locator('#portal-layout-picker').selectOption('top');
-  await expect(page.locator('#portal-skin-picker')).toHaveValue('sunset');
   await expect(page.locator('#portal-layout-picker')).toHaveValue('top');
   await checkFit();
   await page.locator('#language-picker').selectOption('en');

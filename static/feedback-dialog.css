@@ -1,14 +1,11 @@
 /* Feedback: the small, out-of-the-way entry points and the feedback dialog.
-   Colors and fonts come from the skin tokens (common.css, experiments.css), so the dialog
-   matches whichever skin the page has. The dialog is added to <body>, outside
+   Colors and fonts come from the shared tokens in common.css.
+   The dialog is added to <body>, outside
    .portal-shell, so it sets its own button colors from the same tokens. */
 :root { --feedback-on-accent: var(--color-text-primary, #eef0f5); }
-:root[data-skin="aurora"] { --feedback-on-accent: #071b22; }
-:root[data-skin="sunset"] { --feedback-on-accent: #fffaf6; }
-:root[data-skin="immersive"] { --feedback-on-accent: #100c1d; }
 
 /* "⚑ Report" on a seat: the seat chip's own text color (its background changes with the
-   turn and the skin). */
+   turn). */
 .feedback-report { margin-left:6px; padding:2px 8px; min-height:28px; border:1px solid transparent; border-radius:999px;
   background:none; box-shadow:none; color:inherit; opacity:.85; font-size:12px; cursor:pointer; white-space:nowrap; }
 .feedback-report:hover, .feedback-report:focus-visible { background:none; border-color:currentColor; opacity:1; }

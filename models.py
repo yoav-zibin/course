@@ -21,7 +21,9 @@ EndReason = Literal["finished", "player_left", "timed_out", "solo_computers_only
 
 
 LinkedAccountKind = Literal["google", "phone", "email"]
-ExperimentKind = Literal["skin", "campaign"]
+# Historical experiment kinds remain readable in persisted snapshots.
+# Active experiment workflows accept campaign records only.
+ExperimentKind = str
 ExperimentEventKind = Literal[
     "click", "signup", "match_start", "returning_active"
 ]

@@ -13,7 +13,7 @@ test('a persistent private invite survives polling and reload, and a new guest j
   }));
   let invitations = 0;
   page.on('request', req => { if (req.method() === 'POST' && /\/matches\/[^/]+\/invites$/.test(new URL(req.url()).pathname)) invitations++; });
-  await page.goto(`/static/portal.html?skin=classic#game=${game}`);
+  await page.goto(`/static/portal.html#game=${game}`);
   await page.locator('#create-private').click();
   const input = page.locator('#lobby-invite-link');
   await expect(input).toHaveValue(/#invite=/);

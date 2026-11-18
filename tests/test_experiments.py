@@ -6,30 +6,34 @@ from fastapi.testclient import TestClient
 
 from game_platform.api import create_app
 from game_platform.json_file_store import JsonFileStore
-from game_platform.models import ExperimentAssignment
+from game_platform.models import Experiment, ExperimentAssignment, ExperimentEvent, ExperimentVariant
 from game_platform.service import GamePlatform
 from game_platform.tests.helpers import Api, ECHO_SERVER_CODE, TEST_GAME_SCHEMAS
 
 
-def test_skin_assignment_is_stable_and_hashes_across_variants() -> None:
+def test_accounts_do_not_create_ui_experiments_or_assignments() -> None:
     api = Api()
     user_id = api.new_user("alice")
-
-    first = api.ok("GET", "/users/me/experiments/skin", as_user=user_id)
-    assert api.ok("GET", "/users/me/experiments/skin", as_user=user_id) == first
-
     platform = api.client.app.state.platform
-    assignments = {
-        platform.assign_skin(user_id=f"synthetic-user-{index}").key
-        for index in range(100)
-    }
-    assert assignments == {"classic", "aurora", "sunset"}
+    assert [item.id for item in platform.list_experiments()] == ["ad-campaigns"]
+    assert platform._store.list_experiment_assignments() == []
+    assert platform._store.list_experiment_events() == []
+    assert set(platform.experiment_stats()) == {"generated_at", "campaign_experiment"}
+    assert api.request("GET", "/users/me/experiments/skin", as_user=user_id).status_code == 404
+    assert api.request(
+        "POST", "/admin/experiments/skin-variants",
+        json={"name": "Retired", "key": "retired"},
+    ).status_code == 405
+    schema = api.client.app.openapi()
+    assert not any("skin" in route for route in schema["paths"])
+    assert "SkinAssignmentOut" not in schema["components"]["schemas"]
 
 
 def test_signup_experiment_events_do_not_consume_generated_ids() -> None:
     ids = iter(("user-1", "game-1"))
     platform = GamePlatform(new_id=lambda: next(ids))
-    user = platform.create_user(display_name="alice")
+    user = platform.create_user(display_name="alice", campaign_code="students-a")
+    assert len(platform._store.list_experiment_events()) == 1
 
     game = platform.create_game(
 
@@ -61,7 +65,7 @@ def test_match_start_tracking_uses_match_timestamp_without_advancing_clock() -> 
 
     ids = iter(("user-1", "game-1", "match-1"))
     platform = GamePlatform(clock=clock, new_id=lambda: next(ids))
-    user = platform.create_user(display_name="alice")
+    user = platform.create_user(display_name="alice", campaign_code="students-a")
     game = platform.create_game(
 
         name="game",
@@ -91,42 +95,49 @@ def test_match_start_tracking_uses_match_timestamp_without_advancing_clock() -> 
     assert platform._store.get_user(user.id).updated_at == started.updated_at
 
 
-def test_skin_assignment_merge_keeps_survivor_then_inherits_source() -> None:
-    api = Api()
-    target = api.new_user("target")
-    source = api.new_user("source")
-    platform = api.client.app.state.platform
-    target_variant = platform.assign_skin(user_id=target)
-    source_variant = platform.assign_skin(user_id=source)
-    assert target_variant is not None and source_variant is not None
+def test_retired_experiment_data_loads_safely_and_stays_inert(tmp_path) -> None:
+    path = tmp_path / "historical.json"
+    store = JsonFileStore(path)
+    api = Api(store=store)
+    user_id = api.new_user("existing account")
+    now = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+    variant = ExperimentVariant(id="old-variant", name="Historical", key="historical")
+    historical = Experiment(
+        id="ui-skins", kind="skin", name="Retired experiment", active=True,
+        variants=(variant,), created_at=now, updated_at=now,
+    )
+    assignment = ExperimentAssignment(
+        user_id=user_id, experiment_id=historical.id, variant_id=variant.id,
+        assigned_at=now,
+    )
+    event = ExperimentEvent(
+        id="historical-signup", experiment_id=historical.id, variant_id=variant.id,
+        kind="signup", user_id=user_id, occurred_at=now,
+    )
+    store.put_experiment(historical)
+    store.put_experiment_assignment(assignment)
+    store.put_experiment_event(event)
+    store.close()
 
-    api.ok(
-        "POST",
-        f"/users/{source}/merge",
-        as_user=source,
-        json={"into_user_id": target, "into_password": api.passwords_by_user_id[target]},
+    restarted = JsonFileStore(path)
+    restarted_api = Api(store=restarted)
+    platform = restarted_api.client.app.state.platform
+    platform.record_new_user(user_id=user_id, campaign_code=None, occurred_at=now)
+    platform.record_match_start(
+        user_id=user_id, match_id="later-match", occurred_at=now + dt.timedelta(days=8),
     )
-    assert (
-        api.ok("GET", "/users/me/experiments/skin", as_user=source)["key"]
-        == target_variant.key
-    )
-
-    inherited_source = api.new_user("inherited source")
-    inherited_target = api.new_user("inherited target")
-    inherited_variant = platform.assign_skin(user_id=inherited_source)
-    platform._store.delete_experiment_assignment(
-        user_id=inherited_target, experiment_id="ui-skins"
-    )
-    api.ok(
-        "POST",
-        f"/users/{inherited_source}/merge",
-        as_user=inherited_source,
-        json={"into_user_id": inherited_target, "into_password": api.passwords_by_user_id[inherited_target]},
-    )
-    assert (
-        api.ok("GET", "/users/me/experiments/skin", as_user=inherited_source)["key"]
-        == inherited_variant.key
-    )
+    assert [item.id for item in platform.list_experiments()] == ["ad-campaigns"]
+    assert set(platform.experiment_stats()) == {"generated_at", "campaign_experiment"}
+    assert next(item for item in restarted.list_experiments() if item.id == historical.id) == historical
+    assert restarted.list_experiment_assignments() == [assignment]
+    assert restarted.list_experiment_events() == [event]
+    assert restarted_api.request(
+        "PATCH", "/admin/experiments/ui-skins", json={"active": False},
+    ).status_code == 404
+    assert restarted_api.request(
+        "DELETE", "/admin/experiments/ui-skins/variants/old-variant",
+    ).status_code == 404
+    restarted.close()
 
 
 def test_campaign_funnel_and_seven_day_returning_users() -> None:
@@ -178,7 +189,7 @@ def test_campaign_funnel_and_seven_day_returning_users() -> None:
     assert campaign["return_rate"] == 100
 
 
-def test_admin_can_create_campaign_and_skin_variants() -> None:
+def test_admin_can_create_campaign_variants() -> None:
     api = Api()
     campaign = api.ok(
         "POST",
@@ -198,79 +209,36 @@ def test_admin_can_create_campaign_and_skin_variants() -> None:
         f"/admin/experiments/campaign-links/{campaign['variant_id']}",
         json={"spend_usd": 101},
     ).status_code == 422
-    skin = api.ok(
-        "POST",
-        "/admin/experiments/skin-variants",
-        json={"name": "Student skin", "key": "student-skin"},
-    )
-    assert skin["key"] == "student-skin"
 
 
 def test_admin_can_delete_variants_and_their_experiment_data() -> None:
     api = Api()
     platform = api.client.app.state.platform
-    user_id = api.new_user("assigned skin user")
+    user_id = api.new_user("campaign user")
     experiment, variant = platform.add_experiment_variant(
-        experiment_id="ui-skins", name="Temporary skin", key="temporary-skin"
+        experiment_id="ad-campaigns", name="Temporary campaign", key="temporary-campaign",
+        budget_usd=100,
     )
     platform._store.put_experiment_assignment(
         ExperimentAssignment(
-            user_id=user_id,
-            experiment_id=experiment.id,
-            variant_id=variant.id,
+            user_id=user_id, experiment_id=experiment.id, variant_id=variant.id,
             assigned_at=dt.datetime.now(dt.timezone.utc),
         )
     )
-    platform._record_experiment_event(
-        experiment_id=experiment.id,
-        variant_id=variant.id,
-        kind="signup",
-        user_id=user_id,
-    )
-    campaign = api.ok(
-        "POST",
-        "/admin/experiments/campaign-links",
-        json={"name": "Temporary campaign", "key": "temporary-campaign"},
-    )
+    platform.record_new_user(user_id=user_id, campaign_code=variant.key)
     api.client.get("/c/temporary-campaign")
-
-    skin_delete = api.request(
-        "DELETE",
-        f"/admin/experiments/{experiment.id}/variants/{variant.id}",
-    )
-    assert skin_delete.status_code == 204
-    assert (
-        platform._store.get_experiment_assignment(
-            user_id=user_id, experiment_id=experiment.id
-        )
-        is None
-    )
+    route = f"/admin/experiments/{experiment.id}/variants/{variant.id}"
+    assert api.request("DELETE", route).status_code == 204
+    assert platform._store.get_experiment_assignment(
+        user_id=user_id, experiment_id=experiment.id,
+    ) is None
     assert not any(
-        event.experiment_id == experiment.id and event.variant_id == variant.id
+        event.variant_id == variant.id
         for event in platform._store.list_experiment_events()
     )
-
-    campaign_delete = api.request(
-        "DELETE",
-        f"/admin/experiments/ad-campaigns/variants/{campaign['variant_id']}",
-    )
-    assert campaign_delete.status_code == 204
     campaign_stats = api.ok("GET", "/admin/experiments")["campaign_experiment"]
-    assert all(
-        item["variant_id"] != campaign["variant_id"]
-        for item in campaign_stats["variants"]
-    )
-    assert not any(
-        event.variant_id == campaign["variant_id"]
-        for event in platform._store.list_experiment_events()
-    )
-    assert (
-        api.request(
-            "DELETE",
-            f"/admin/experiments/{experiment.id}/variants/{variant.id}",
-        ).status_code
-        == 404
-    )
+    assert all(item["variant_id"] != variant.id for item in campaign_stats["variants"])
+    assert api.request("DELETE", route).status_code == 404
 
 
 def test_experiment_records_survive_json_store_restart(tmp_path) -> None:
@@ -334,9 +302,9 @@ def test_experiment_admin_endpoints_require_master_password() -> None:
         json={"name": "New campaign", "key": "new-campaign"},
     ).status_code == 201
     assert client.delete(
-        "/admin/experiments/ui-skins/variants/missing"
+        "/admin/experiments/ad-campaigns/variants/missing"
     ).status_code == 401
     assert client.delete(
-        "/admin/experiments/ui-skins/variants/missing",
+        "/admin/experiments/ad-campaigns/variants/missing",
         auth=("admin", "secret"),
     ).status_code == 404

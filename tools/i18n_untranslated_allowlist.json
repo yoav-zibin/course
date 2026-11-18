@@ -58,37 +58,11 @@
     "invites.js": [
       "GET /admin/invites: {}"
     ],
-    "experiments.js": [
-      "Cached skin assignment could not be read.",
-      "Campaign attribution is unavailable in this browser.",
-      "Could not refresh the UI skin assignment.",
-      "GET skin assignment: {}",
-      "Isaac UI",
-      "Saved skin preference could not be cleared from browser storage.",
-      "Saved skin preference could not be cleared.",
-      "Saved skin preference could not be read from browser storage.",
-      "Saved skin preference could not be read.",
-      "Saved skin preference could not be stored in browser storage.",
-      "Saved skin preference could not be stored.",
-      "Skin assignment is unavailable in this browser.",
-      "Skin discovery could not run."
-    ],
     "console.html": [
       "X-User-Password"
     ],
     "portal.html": [
-      "BuildPlay.fun",
-      "Ⅰ",
-      "Ⅱ",
-      "Ⅲ"
-    ],
-    "portal-chat-preview.js": [
-      "Dragonfruit",
-      "Kiwi",
-      "Mango",
-      "Blueberry",
-      "Peach",
-      "Y"
+      "BuildPlay.fun"
     ]
   },
   "ratchet": {
@@ -96,6 +70,6 @@
     "browse.js": 3,
     "console.js": 20,
     "feedback.js": 18,
-    "stats.js": 73
+    "stats.js": 58
   }
 }

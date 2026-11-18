@@ -17,7 +17,7 @@ async function portalFetch(method, path, { body, user, requestId } = {}) {
   try {
     const headers = {};
     if (requestId) headers["Idempotency-Key"] = requestId;
-    const campaignCode = window.ExperimentCampaignCode?.();
+    const campaignCode = (typeof experimentCampaignCode === "function" ? experimentCampaignCode() : null);
     if (campaignCode) headers["X-Campaign-Code"] = campaignCode;
     if (user) {
       headers["X-User-Id"] = user.id;
@@ -308,33 +308,28 @@ function initializeTokenWallet(user = me()) {
   }
   wallet.hidden = false;
 }
-function portalCurrencyName() {
-  return document.documentElement?.dataset?.portalCurrency === "gems" ? "gems" : "tokens";
+
+function tokenAmount(amount) {
+  return I18n.t("ui.stakes.tokens", {count:I18n.number(amount)}, "{count} tokens");
 }
-function portalCurrencyAmount(amount) {
-  return portalCurrencyText("ui.stakes.tokens", {count:I18n.number(amount)}, "{count} tokens");
-}
-function portalCurrencyText(key, params, fallback) {
-  const gems = portalCurrencyName() === "gems";
-  return I18n.t(gems ? `${key}_gems` : key, params, gems ? fallback.replace(/\btokens?\b(?!})/gi, word => word.toLowerCase() === "token" ? "gem" : "gems") : fallback);
-}
-function syncPortalCurrencyLabels() {
+
+function syncTokenLabels() {
   const stake = $("match-stake");
   if (stake) {
     for (const option of stake.options) {
-      option.textContent = portalCurrencyText(option.dataset.i18n, {}, option._i18nDefault ?? option.textContent);
+      option.textContent = I18n.t(option.dataset.i18n, {}, option._i18nDefault ?? option.textContent);
     }
   }
   const help = $("stake-help");
   if (help) {
-    help.textContent = portalCurrencyText("ui.stakes.help", {}, help._i18nDefault ?? help.textContent);
+    help.textContent = I18n.t("ui.stakes.help", {}, help._i18nDefault ?? help.textContent);
   }
   if (walletBalance !== null) syncWalletTitle();
   updateStakePreview();
 }
 function syncWalletTitle() {
   const wallet = $("token-wallet");
-  if (wallet) wallet.title = portalCurrencyText("ui.portal.wallet_hint", {balance:I18n.number(walletBalance ?? 0)}, "{balance} virtual tokens · One-time 1,000-token bonus for your first verified login");
+  if (wallet) wallet.title = I18n.t("ui.portal.wallet_hint", {balance:I18n.number(walletBalance ?? 0)}, "{balance} virtual tokens · One-time 1,000-token bonus for your first verified login");
 }
 function updateStakePreview() {
   const select = $("match-stake"), preview = $("stake-preview"), panel = $("token-stake-panel");
@@ -346,13 +341,13 @@ function updateStakePreview() {
   if (solo && select.value !== "0") select.value = "0";
   const amount = Number(select.value);
   if (!amount || solo) {
-    preview.replaceChildren(el("span", {class:"stake-preview-text", textContent: solo ? I18n.t("ui.stakes.preview_solo", {}, "Solo game · No wager") : portalCurrencyText("ui.stakes.preview_free", {}, "Free game · No tokens at risk")}));
+    preview.replaceChildren(el("span", {class:"stake-preview-text", textContent: solo ? I18n.t("ui.stakes.preview_solo", {}, "Solo game · No wager") : I18n.t("ui.stakes.preview_free", {}, "Free game · No tokens at risk")}));
   } else {
     // The smallest pot the match can have: its game's smallest multiplayer count
     // (the final count is only known at the start).
     const multiplayer = (game?.allowed_player_counts || []).filter(count => count > 1);
     const players = multiplayer.length ? Math.min(...multiplayer) : 2;
-    const previewText = portalCurrencyText(walletBalance === null ? "ui.stakes.preview" : "ui.stakes.preview_wallet", {
+    const previewText = I18n.t(walletBalance === null ? "ui.stakes.preview" : "ui.stakes.preview_wallet", {
         amount:I18n.number(amount), pot:I18n.number(amount * players), players, balance:I18n.number(walletBalance ?? 0),
       }, walletBalance === null
         ? "{amount} tokens per person · {pot} tokens in a {players}-player pot"
@@ -361,7 +356,7 @@ function updateStakePreview() {
   }
   // A selected stake or clock stays visible when the optional settings close.
   const options = [];
-  if (amount > 0 && !solo) options.push(`${I18n.t("ui.stakes.entry_per_player", {}, "Entry per player")}: ${portalCurrencyAmount(amount)}`);
+  if (amount > 0 && !solo) options.push(`${I18n.t("ui.stakes.entry_per_player", {}, "Entry per player")}: ${tokenAmount(amount)}`);
   const seconds = Number($("match-speed")?.value);
   if (seconds > 0 && !solo) options.push(I18n.t("ui.speed.meta", {minutes: seconds / 60}, "speed · {minutes} min per move"));
   $("match-options-summary").textContent = options.join(" · ");
@@ -408,11 +403,11 @@ function updateMatchCurrency(match, user) {
   const paid = stake > 0;
   box.className = `match-currency token-summary${paid ? " is-paid" : ""}`;
   const title = el("div", {class:"token-summary-title"},
-    el("span", {class:"token-summary-icon", "aria-hidden":"true", textContent:portalCurrencyName() === "gems" ? "💎" : "✦"}),
+    el("span", {class:"token-summary-icon", "aria-hidden":"true", textContent:"✦"}),
     el("strong", {textContent: paid ? I18n.t("ui.stakes.paid", {}, "Match stakes") : I18n.t("ui.stakes.free", {}, "Free match")}));
   const values = el("div", {class:"token-summary-values"},
-    el("div", {}, el("span", {textContent:I18n.t("ui.stakes.per_player", {}, "Per player")}), el("strong", {textContent:portalCurrencyAmount(stake)})),
-    el("div", {}, el("span", {textContent:I18n.t("ui.stakes.pot", {}, "Pot")}), el("strong", {textContent:portalCurrencyAmount(pot)})));
+    el("div", {}, el("span", {textContent:I18n.t("ui.stakes.per_player", {}, "Per player")}), el("strong", {textContent:tokenAmount(stake)})),
+    el("div", {}, el("span", {textContent:I18n.t("ui.stakes.pot", {}, "Pot")}), el("strong", {textContent:tokenAmount(pot)})));
   const notes = [];
   if (paid && match.status === "waiting_for_players")
     notes.push(el("p", {class:"token-summary-note", textContent:I18n.t("ui.stakes.pot_note", {}, "Pot is collected when the match starts. Paid matches need human players.")}));
@@ -424,12 +419,12 @@ function updateMatchCurrency(match, user) {
       const netAmount = `${net > 0 ? "+" : net < 0 ? "−" : ""}${I18n.number(Math.abs(net))}`;
       notes.push(el("div", {class:"token-summary-payout"},
         el("span", {textContent:I18n.t("ui.stakes.your_payout", {}, "Your payout")}),
-        el("strong", {textContent:portalCurrencyAmount(payout)}),
-        el("small", {textContent:portalCurrencyText("ui.stakes.net", {amount:netAmount}, "Net {amount} tokens")})));
+        el("strong", {textContent:tokenAmount(payout)}),
+        el("small", {textContent:I18n.t("ui.stakes.net", {amount:netAmount}, "Net {amount} tokens")})));
     } else notes.push(el("p", {class:"token-summary-note", textContent:I18n.t("ui.stakes.settled", {}, "Payouts settled for all players.")}));
   }
   if (!paid && match.status === "over")
-    notes.push(el("p", {class:"token-summary-note", textContent:portalCurrencyText("ui.stakes.none_wagered", {}, "No tokens were wagered in this game.")}));
+    notes.push(el("p", {class:"token-summary-note", textContent:I18n.t("ui.stakes.none_wagered", {}, "No tokens were wagered in this game.")}));
   box.replaceChildren(title, values, ...notes);
   box.hidden = false;
 }
@@ -445,14 +440,9 @@ function renderPortalAccountMenu() {
   const container = $("account-menu");
   Auth.renderMenu(container);
   const panel = container.querySelector(".auth-menu-panel");
-  panel?.querySelector(".portal-immersive-menu")?.remove();
   panel?.querySelector(".portal-profile-options")?.remove();
   if (!panel) return;
-  if (document.documentElement.dataset.skin === "immersive" && !document.documentElement.dataset.portalLayout) {
-    panel.prepend(el("div", { class: "portal-immersive-menu" },
-      el("a", { href:"#matches", textContent:I18n.t("ui.portal.my_matches", {}, "My matches"), onclick:() => container._hideAuthMenu?.() }),
-    ));
-  }
+
   const options = $("portal-more-options") || portalMoreOptions;
   if (options) {
     options.hidden = false;
@@ -492,16 +482,7 @@ function syncPortalScreen() {
     }
     render();
   }
-  // Focus and lobby open on the Matches screen when no screen was asked
-  // for: their home is the your-turn list, not the catalog. An explicit
-  // hash (#home, #games, ...) still wins, so the catalog stays reachable.
-  // (No hash rewrite here: rewriting to #matches would make location.hash
-  // non-empty and break shouldRestoreSavedMatch()'s in-progress restore.)
-  const archetype = document.documentElement.dataset.portalArchetype;
-  const defaultMatches = !requested && (archetype === "focus" || archetype === "lobby");
-  const view = params.has("match") ? "matches"
-    : ["games", "matches", "leaderboards"].includes(requested) ? requested
-    : defaultMatches ? "matches" : "home";
+  const view = params.has("match") || requested === "matches" ? "matches" : "games";
   document.body.dataset.portalView = view;
   document.body.classList.toggle("portal-match-active", params.has("match"));
   document.querySelectorAll("[data-portal-nav]").forEach(link => {
@@ -511,9 +492,7 @@ function syncPortalScreen() {
     else link.removeAttribute("aria-current");
   });
   const matchesScreen = $("matches-screen");
-  const leaderboardScreen = $("leaderboards-screen");
   if (matchesScreen) matchesScreen.hidden = view !== "matches" || params.has("match");
-  if (leaderboardScreen) leaderboardScreen.hidden = view !== "leaderboards";
 }
 
 /** Leaves the game page for the catalog. The plain link is not enough: it
@@ -1003,7 +982,7 @@ function matchItem(match) {
   if (outcome) badges.push(el("span", {class:`badge result-${outcome.kind}`, textContent:outcome.label}));
   if (yourTurn) badges.unshift(el("span", { class: "badge turn", textContent: I18n.t("ui.match.your_turn", {}, "your turn") }));
   const gameName = game ? displayGameName(game) : "?";
-  const hue = Array.from(match.game_id || "arcade").reduce((value, letter) => value + letter.charCodeAt(0), 0) % 360;
+  const hue = Array.from(match.game_id || "game").reduce((value, letter) => value + letter.charCodeAt(0), 0) % 360;
   const initials = gameName.trim().split(/\s+/).slice(0, 2).map(word => Array.from(word)[0] || "").join("");
   const art = el("div", {class:"match-card-art", style:`--art-hue:${hue}`, "aria-hidden":"true"},
     game?.cover_url
@@ -1131,7 +1110,6 @@ function openGamePage(id) {
     games.some(game => game.id === id))) return;
   const route = new URLSearchParams(location.hash.slice(1));
   route.delete("matches");
-  route.delete("leaderboards");
   route.delete("games");
   route.delete("home");
   route.delete("game");
@@ -1280,21 +1258,18 @@ function renderLibrary() {
     const selectLabel = random
       ? (state.randomJoining ? I18n.t("ui.games.finding_match", {}, "Finding a match…") : I18n.t("ui.games.random_join", {}, "Join a random match ↗"))
       : openLabel;
-    // Arcade draws its own animated arrow after the action label.
-    const arcadeSelectLabel = document.documentElement.dataset.skin === "arcade"
-      ? selectLabel.replace(/\s*[↗→➜]\s*$/, "")
-      : selectLabel;
+    const actionLabel = selectLabel.replace(/\s*[↗→➜]\s*$/, "");
     const card = el("button", {type:"button", class:"library-card", "aria-pressed":String(game.id === selected),
       "aria-label":random ? `${name}. ${description}` : I18n.t("ui.games.open_aria", { name, players: gameCountLabel(game) }, `Open ${name}, ${gameCountLabel(game)}`),
       disabled:random && state.randomJoining,
       onclick:() => random ? joinRandomMatch() : openGamePage(game.id)},
-      game.cover_url ? el("img", {class:"library-art", src:game.cover_url, alt:"", loading:"lazy", style:"object-fit:cover;width:100%;aspect-ratio:16/9"}) : el("span", {class:"library-art", style:`--art-hue:${hue}`, "aria-hidden":"true"},
+      game.cover_url ? el("img", {class:"library-art", src:game.cover_url, alt:"", loading:"lazy"}) : el("span", {class:"library-art", style:`--art-hue:${hue}`, "aria-hidden":"true"},
         el("span", {class:"library-monogram", textContent:initials}),
         el("span", {class:"library-art-label", textContent:I18n.t("ui.app_name", {}, "Game platform").toUpperCase()})),
       el("span", {class:"library-copy"}, el("span", {class:"library-mode", textContent:gameCountLabel(game)}),
         el("span", {class:"library-title", textContent:name}),
         el("span", {class:"library-description", textContent:description || I18n.t("ui.games.default_description", {}, "Choose this game to start a new match.")}),
-        el("span", {class:"library-select", textContent:arcadeSelectLabel})));
+        el("span", {class:"library-select", textContent:actionLabel})));
     if (!canInstantPlay(game)) return card;
     return el("div", {class: "library-card-wrap"}, card, quickPlayButton(game));
   }));
@@ -1893,7 +1868,7 @@ function renderMatch() {
           const ends = preview.pending_leave_ends_match
             ? " " + I18n.t("ui.match.leave_ends_all", {}, "Leaving ends the match for everyone.")
             : "";
-          if (!confirm(portalCurrencyText("ui.match.leave_refund", {payout}, "You will get {payout} tokens back — leave?") + ends)) return;
+          if (!confirm(I18n.t("ui.match.leave_refund", {payout}, "You will get {payout} tokens back — leave?") + ends)) return;
           await portalRequest("POST", `${path}/playerLeft`, { user });
         }, { danger: true }),
       );
@@ -2112,7 +2087,7 @@ function renderHistory() {
 function redrawAfterLanguageChange() {
   try {
     renderPortalAccountMenu();
-    syncPortalCurrencyLabels();
+    syncTokenLabels();
     render();
     renderLibrary();
     updateMatchSetup();
@@ -2775,7 +2750,7 @@ async function openInviteFromHash() {
     box.append(el("div", {style: "display:flex;gap:var(--space-sm);flex-wrap:wrap"}, notNow));
   } else {
     if (match.bet_per_player > 0)
-      box.append(el("p", {class: "muted", textContent: portalCurrencyText("ui.invite.stake", {tokens: match.bet_per_player},
+      box.append(el("p", {class: "muted", textContent: I18n.t("ui.invite.stake", {tokens: match.bet_per_player},
         "This match stakes {tokens} tokens per player.")}));
     let primary;
     if (!user) {
@@ -2814,7 +2789,7 @@ async function openInviteFromHash() {
 }
 
 function navigatePortalView(view, event) {
-  if (!event || !["home", "games", "matches", "leaderboards"].includes(view)) return;
+  if (!event || !["home", "games", "matches"].includes(view)) return;
   event.preventDefault();
   const search = new URLSearchParams(location.search);
   search.delete("game");
@@ -2835,32 +2810,6 @@ function shouldRestoreSavedMatch() {
   return !state.detailGameId && !location.hash;
 }
 
-function setupLeaderboardTabs() {
-  const tabs = [$("leaderboard-tokens-tab"), $("leaderboard-wins-tab")];
-  const panels = [$("leaderboard-tokens"), $("leaderboard-wins")];
-  const activate = (index, focus = false) => {
-    tabs.forEach((tab, i) => {
-      tab.setAttribute("aria-selected", String(i === index));
-      tab.tabIndex = i === index ? 0 : -1;
-      panels[i].hidden = i !== index;
-    });
-    if (focus) tabs[index].focus();
-  };
-  tabs.forEach((tab, index) => {
-    tab.addEventListener("click", () => activate(index));
-    tab.addEventListener("keydown", event => {
-      let next;
-      if (event.key === "ArrowRight" || event.key === "ArrowLeft") next = 1 - index;
-      else if (event.key === "Home") next = 0;
-      else if (event.key === "End") next = tabs.length - 1;
-      else return;
-      event.preventDefault();
-      activate(next, true);
-    });
-  });
-  activate(0);
-}
-
 async function main() {
   initializeTokenWallet();
   window.PortalInvites?.init({
@@ -2870,7 +2819,7 @@ async function main() {
     notify: toast,
   });
   setupPopularGamesCarousel();
-  syncPortalCurrencyLabels();
+  syncTokenLabels();
   window.PortalMatchLayout?.init(() => {
     selectMatch(null);
     render();
@@ -2883,17 +2832,6 @@ async function main() {
   document.querySelector(".topbar a")?.addEventListener("click", event => navigatePortalView("home", event));
   document.querySelectorAll("[data-portal-nav]").forEach(link => {
     link.addEventListener("click", event => navigatePortalView(link.dataset.portalNav, event));
-  });
-  document.addEventListener("portal-skin-change", () => {
-    renderPortalAccountMenu();
-    syncPortalRoutes();
-    syncPortalCurrencyLabels();
-    // A switch to focus/lobby applies their Matches-first home at once;
-    // a switch away restores the catalog home. Safe during a match: the
-    // match param still forces the matches view and skips the selected-id
-    // clearing in syncPortalScreen.
-    syncPortalScreen();
-    syncGame().catch(console.warn);
   });
   document.addEventListener("portal-layout-change", syncPortalRoutes);
   document.querySelector(".back-to-games")?.addEventListener("click", leaveGamePage);
@@ -3072,7 +3010,6 @@ async function main() {
   $("create-private").addEventListener("click", () => createMatch(true));
   window.addEventListener("hashchange", selectFromHash);
   window.addEventListener("popstate", selectFromHash);
-  setupLeaderboardTabs();
   syncPortalScreen();
   if (shouldRestoreSavedMatch() && offline.read().selectedId)
     history.replaceState(null, "", `#match=${offline.read().selectedId}`);

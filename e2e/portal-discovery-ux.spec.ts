@@ -15,7 +15,7 @@ async function discoveryFixture(page: Parameters<typeof loginAs>[0], request: Pa
 
 test('search and keyboard selection respect the player filter, and Browse all resets it', async ({page, request}) => {
   await discoveryFixture(page, request);
-  await page.goto('/static/portal.html?skin=arcade#games');
+  await page.goto('/static/portal.html#games');
   const solo = page.locator('[data-game-filter="solo"]');
   await solo.click();
   const search = page.locator('#game-search');
@@ -43,7 +43,7 @@ test('search displays translated game descriptions and the translated Random opt
     bundle.games['solo-puzzle'] = {name: 'Rompecabezas tranquilo', description: 'Encuentra el patrón oculto'};
     await route.fulfill({response, json: bundle});
   });
-  await page.goto('/static/portal.html?skin=classic#games');
+  await page.goto('/static/portal.html#games');
   await page.evaluate('I18n.choose("es")');
   const search = page.locator('#game-search');
   await search.fill('patrón');
@@ -59,43 +59,18 @@ test('search displays translated game descriptions and the translated Random opt
   await expect(page.getByRole('option').first()).not.toContainText('Aleatorio');
 });
 
-test('leaderboard tabs support arrow, Home, End and Tab navigation', async ({page, request}) => {
+test('game proposal copy and its submission status remain readable', async ({page, request}) => {
   await discoveryFixture(page, request);
-  await page.goto('/static/portal.html?skin=arcade#leaderboards');
-  const gems = page.getByRole('tab', {name: 'Gems'});
-  const wins = page.getByRole('tab', {name: 'Wins'});
-  await gems.focus();
-  await gems.press('ArrowRight');
-  await expect(wins).toBeFocused();
-  await expect(wins).toHaveAttribute('aria-selected', 'true');
-  await expect(gems).toHaveAttribute('tabindex', '-1');
-  await expect(page.locator('#leaderboard-wins')).toBeVisible();
-  await expect(page.locator('#leaderboard-tokens')).toBeHidden();
-  await wins.press('Home');
-  await expect(gems).toBeFocused();
-  await gems.press('End');
-  await expect(wins).toBeFocused();
-  await wins.press('ArrowLeft');
-  await expect(gems).toBeFocused();
-  await gems.press('Tab');
-  await expect(wins).not.toBeFocused();
+  await page.goto('/static/portal.html#games');
+  const copy = page.locator('.game-proposal > p').first();
+  await expect(copy).toBeVisible();
+  await expect.poll(() => contrast(copy)).toBeGreaterThanOrEqual(4.5);
+  await expect.poll(() => contrast(page.locator('#browse-games'))).toBeGreaterThanOrEqual(4.5);
+  // Exercise real form validation and submission, with only the response stubbed.
+  await page.route('**/game-proposals', route => route.fulfill({status: 201, json: {id: 'proposal'}}));
+  await page.locator('#proposal-name').fill('A new party game');
+  await page.locator('#proposal-submit').click();
+  await expect(page.locator('#proposal-status')).toContainText('Thank you');
+  await expect.poll(() => contrast(page.locator('#proposal-status'))).toBeGreaterThanOrEqual(4.5);
+  await expect(page.locator('#proposal-name')).toHaveValue('');
 });
-
-for (const skin of ['sunset', 'meadow', 'isaac-ui', 'lobby', 'library', 'white']) {
-  test(`${skin} keeps game proposal copy and its submission status readable`, async ({page, request}) => {
-    await discoveryFixture(page, request);
-    await page.goto(`/static/portal.html?skin=${skin}#games`);
-    const copy = page.locator('.game-proposal > p').first();
-    await expect(copy).toBeVisible();
-    // Theme colors transition briefly; still fail if the settled contrast is low.
-    await expect.poll(() => contrast(copy)).toBeGreaterThanOrEqual(4.5);
-    await expect.poll(() => contrast(page.locator('#browse-games'))).toBeGreaterThanOrEqual(4.5);
-    // Exercise real form validation and submission, with only the response stubbed.
-    await page.route('**/game-proposals', route => route.fulfill({status: 201, json: {id: 'proposal'}}));
-    await page.locator('#proposal-name').fill('A new party game');
-    await page.locator('#proposal-submit').click();
-    await expect(page.locator('#proposal-status')).toContainText('Thank you');
-    await expect.poll(() => contrast(page.locator('#proposal-status'))).toBeGreaterThanOrEqual(4.5);
-    await expect(page.locator('#proposal-name')).toHaveValue('');
-  });
-}

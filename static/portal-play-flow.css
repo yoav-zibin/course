@@ -1,4 +1,4 @@
-/* Shared play choices and invitations, using each portal skin's own palette. */
+/* Shared play choices and invitations use the standard portal palette. */
 body.game-detail-mode #match-creator:not([open]) { display: none; }
 :root .portal-shell .game-detail-page .selected-game-card { margin-top: 0; }
 .play-choice-title {

@@ -149,7 +149,7 @@ def test_recent_experiment_variant_deletion_is_atomic_when_legacy_limit_is_excee
     api = api_for(store)
     platform = api.client.app.state.platform
     platform.list_experiments()
-    before = store._get("experiments", "ui-skins")
+    before = store._get("experiments", "ad-campaigns")
     variant = before.variants[0]
     for index in range(101):
         store.put_experiment_assignment(
@@ -1262,6 +1262,8 @@ def test_library_normalization_and_account_jobs_preserve_saved_games(store):
 def test_offline_experiment_report_matches_legacy_metrics_and_resumes(store):
     from game_platform.scaling_experiment_report import rebuild, current
     from game_platform.service import GamePlatform, CAMPAIGN_EXPERIMENT_ID
+    from game_platform.models import Experiment, ExperimentAssignment, ExperimentEvent, ExperimentVariant
+    import datetime as dt
 
     api = api_for(store)
     owner, other = api.new_user("owner"), api.new_user("other")
@@ -1273,14 +1275,31 @@ def test_offline_experiment_report_matches_legacy_metrics_and_resumes(store):
     api.new_match(
         owner=owner, game_id=api.new_game(owner=owner), joiners=[other], start=True
     )
+    now = dt.datetime.now(dt.timezone.utc)
+    retired = Experiment(
+        id="ui-skins", name="Historical experiment", kind="skin", active=True,
+        variants=(ExperimentVariant(id="old", name="Old", key="old"),),
+        created_at=now, updated_at=now,
+    )
+    store.put_experiment(retired)
+    store.put_experiment_assignment(ExperimentAssignment(
+        user_id=owner, experiment_id=retired.id, variant_id="old", assigned_at=now,
+    ))
+    store.put_experiment_event(ExperimentEvent(
+        id="historical-signup", experiment_id=retired.id, variant_id="old",
+        kind="signup", user_id=owner, occurred_at=now,
+    ))
     expected = GamePlatform(store=store).experiment_stats()
     assert current(store) is None
     assert rebuild(store, run_id="metrics", max_records=1)["complete"] is False
     assert current(store) is None
     _run_until_complete(rebuild, store=store, run_id="metrics", max_records=2)
     actual = current(store)
-    for name in ("skin_experiment", "campaign_experiment"):
-        assert actual[name] == expected[name]
+    assert actual["campaign_experiment"] == expected["campaign_experiment"]
+    assert "skin_experiment" not in actual
+    assert store._get("experiments", retired.id) == retired
+    assert store.get_experiment_assignment(user_id=owner, experiment_id=retired.id) is not None
+    assert store._get("experiment_events", "historical-signup") is not None
     assert rebuild(store, run_id="metrics", max_records=1)["processed"] == 0
     with (
         patch.object(
@@ -1380,7 +1399,7 @@ def test_offline_metrics_use_live_experiment_configuration_after_admin_changes(s
     api = api_for(store)
     api.new_user("existing")
     _run_until_complete(rebuild, store=store, run_id="live-config", max_records=20)
-    old = store._get("experiments", "ui-skins")
+    old = store._get("experiments", "ad-campaigns")
     added = replace(
         old.variants[0], id="new-variant", key="new-variant", name="New variant"
     )
@@ -1390,12 +1409,12 @@ def test_offline_metrics_use_live_experiment_configuration_after_admin_changes(s
         )
     )
     result = current(store)
-    skin = result["skin_experiment"]
-    assert skin["name"] == "Updated name"
-    assert skin["active"] is False
-    assert old.variants[0].id not in {v["variant_id"] for v in skin["variants"]}
+    campaign = result["campaign_experiment"]
+    assert campaign["name"] == "Updated name"
+    assert campaign["active"] is False
+    assert old.variants[0].id not in {v["variant_id"] for v in campaign["variants"]}
     assert (
-        next(v for v in skin["variants"] if v["variant_id"] == added.id)["assigned"]
+        next(v for v in campaign["variants"] if v["variant_id"] == added.id)["assigned"]
         == 0
     )
     assert result["configuration_consistency"] == "live"
