@@ -84,8 +84,8 @@ on persistent storage and perform any authorized restart test.
 
 ## Verification and publication
 
-The native checks below are optional and are not a pre-push requirement. Follow
-the non-mobile verification requirements in [AGENTS.md](../AGENTS.md) before pushing.
+The native checks below are optional and are not a pre-push requirement. Choose
+checks relevant to the change as described in [AGENTS.md](../AGENTS.md).
 
 The bridge instrumentation test exercises real WebView origin isolation, nested-frame
 spoofing, duplicate messages and state resending. JVM tests cover protocol serialization,

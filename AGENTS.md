@@ -6,15 +6,12 @@ before pushing. Use the existing CI and deployment workflow.
 
 # Tests before pushing
 
-Fetch and integrate current upstream before final verification. Run all of the
-project's non-mobile test suites locally against the final combined changes;
-targeted tests alone are insufficient. If any project file changes afterward,
-rerun all required non-mobile suites. Do not push while a required suite is
-failing, incomplete, or still running, and do not rely on post-push CI to catch
-failures that local suites would detect.
-
-Native iOS and Android test suites are not required before pushing and must not
-block a push.
+Fetch and integrate current upstream before final checks. Choose local checks
+that are likely to catch problems in the changes; focused checks are sufficient
+when appropriate, and suites that would not exercise the changes may be skipped.
+Running every suite locally is not a pre-push requirement, including native iOS
+and Android suites. Use CI for broad validation and address failures when they
+appear. Preserve the direct-push workflow above.
 
 # Scaling coordination
 

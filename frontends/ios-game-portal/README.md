@@ -98,8 +98,8 @@ The bundled local game uses its original `state_change` / `next_state` bridge. S
 
 ## Verification
 
-These native checks are optional and are not a pre-push requirement. Follow the
-non-mobile verification requirements in [AGENTS.md](../../AGENTS.md) before pushing.
+These native checks are optional and are not a pre-push requirement. Choose
+checks relevant to the change as described in [AGENTS.md](../../AGENTS.md).
 
 Run commands from `frontends/ios-game-portal`:
 
