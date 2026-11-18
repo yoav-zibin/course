@@ -35,7 +35,7 @@ xcodebuild \
   -destination-timeout 120 \
   -parallel-testing-enabled NO \
   -test-timeouts-enabled YES \
-  -default-test-execution-time-allowance 180 \
+  -default-test-execution-time-allowance 300 \
   -maximum-test-execution-time-allowance 300 \
   -derivedDataPath "${GITHUB_WORKSPACE:-$results_dir}/ios-portal-build" \
   -resultBundlePath "$results_dir/SimulatorTests.xcresult" \

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Select an available iPhone from simctl JSON, preferring the newest iOS."""
+"""Select an available iPhone, preferring a mature iOS 18 baseline on Intel CI."""
 import json
 import re
 import sys
@@ -8,7 +8,11 @@ import sys
 def select_iphone(catalog):
     runtimes = sorted(
         (runtime for runtime in catalog["devices"] if ".iOS-" in runtime),
-        key=lambda runtime: tuple(map(int, re.findall(r"\d+", runtime))),
+        # iOS 26 cold migration/WebKit startup is unreliable on the Intel pool.
+        # Use its installed iOS 18 baseline when present, then fall back to the
+        # newest installed runtime as runner images evolve.
+        key=lambda runtime: (".iOS-18-" in runtime,
+                             tuple(map(int, re.findall(r"\d+", runtime)))),
         reverse=True,
     )
     for runtime in runtimes:

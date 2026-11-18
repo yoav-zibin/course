@@ -1,6 +1,9 @@
 import XCTest
 
 final class PortalUITests: XCTestCase {
+    // Cold WebKit processes on hosted Intel Macs can take longer than local runs.
+    private let boardLoadTimeout: TimeInterval = 60
+
     override func tearDownWithError() throws {
         if let testRun, testRun.failureCount > 0 {
             // Capture the whole device even if the app crashed or failed to launch.
@@ -34,7 +37,7 @@ final class PortalUITests: XCTestCase {
         let firstPlayer = app.textFields["firstPlayer"].value as? String ?? "Juan"
         app.buttons["Start match  →"].tap()
         let firstCell = app.webViews.buttons["Row 1, column 1, empty"]
-        XCTAssertTrue(firstCell.waitForExistence(timeout: 15))
+        XCTAssertTrue(firstCell.waitForExistence(timeout: boardLoadTimeout))
         firstCell.tap()
         let handoff = app.buttons["I’m Player 2 · Continue"]
         XCTAssertTrue(handoff.waitForExistence(timeout: 5))
@@ -48,7 +51,7 @@ final class PortalUITests: XCTestCase {
         match.tap()
         XCTAssertTrue(handoff.waitForExistence(timeout: 5))
         handoff.tap()
-        XCTAssertTrue(app.webViews.buttons["Row 1, column 1, X"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.webViews.buttons["Row 1, column 1, X"].waitForExistence(timeout: boardLoadTimeout))
         XCTAssertFalse(app.webViews.buttons["Row 1, column 1, X"].isEnabled)
         attachScreenshot(app.screenshot(), named: "Restored local match")
 

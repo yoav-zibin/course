@@ -19,6 +19,10 @@ struct GameWebView: UIViewRepresentable {
         if let url = Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "Game") {
             context.coordinator.gameURL = url
             view.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        } else {
+            #if DEBUG
+            print("LocalGame: bundled document is missing")
+            #endif
         }
         return view
     }
@@ -36,11 +40,31 @@ struct GameWebView: UIViewRepresentable {
         var ready = false
         init(_ parent: GameWebView) { self.parent = parent }
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            #if DEBUG
+            print("LocalGame: document finished loading")
+            #endif
             ready = true
             sendState(webView)
         }
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-            decisionHandler(navigationAction.request.url == gameURL && navigationAction.targetFrame?.isMainFrame == true ? .allow : .cancel)
+            let allowed = navigationAction.request.url == gameURL && navigationAction.targetFrame?.isMainFrame == true
+            #if DEBUG
+            let mainFrame = navigationAction.targetFrame.map { String($0.isMainFrame) } ?? "none"
+            print("LocalGame: navigation mainFrame=\(mainFrame), allowed=\(allowed)")
+            #endif
+            decisionHandler(allowed ? .allow : .cancel)
+        }
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            logFailure(error, event: "navigation failed")
+        }
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            logFailure(error, event: "provisional navigation failed")
+        }
+        private func logFailure(_ error: Error, event: String) {
+            #if DEBUG
+            let failure = error as NSError
+            print("LocalGame: \(event) (\(failure.domain), \(failure.code))")
+            #endif
         }
         func sendState(_ view: WKWebView) {
             guard ready else { return }
@@ -53,7 +77,11 @@ struct GameWebView: UIViewRepresentable {
                 "my_user": players[match.turn],
                 "players": players
             ]
-            view.callAsyncJavaScript("window.receiveState(payload)", arguments: ["payload": payload], in: nil, in: .page, completionHandler: nil)
+            view.callAsyncJavaScript("window.receiveState(payload)", arguments: ["payload": payload], in: nil, in: .page) { result in
+                if case .failure(let error) = result {
+                    self.logFailure(error, event: "state delivery failed")
+                }
+            }
         }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard message.frameInfo.isMainFrame, message.frameInfo.request.url == gameURL,

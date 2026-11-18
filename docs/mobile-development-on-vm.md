@@ -63,7 +63,8 @@ finish and a maintainer grants tester access. Existing tester membership is
 not automatically created by the build workflow.
 
 The iOS job also runs the local rules/persistence, cache, and mocked online-store
-tests, then launches an available iPhone simulator to test local gameplay,
+tests, then launches an available iPhone simulator (preferring installed iOS 18
+on the Intel runner) to test local gameplay,
 handoffs, closing/reopening the app, and restoring a match. Permanent screenshots
 show Discover, the restored match, and the finished game; a failing UI test adds
 a failure screenshot. These tests use local or mocked data. They do not establish

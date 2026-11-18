@@ -104,7 +104,9 @@ the existing local-gameplay UI test on a hosted Mac. It uploads
 `BuildPlay-ios-screenshots` (extracted image attachments) on success or failure.
 Screenshots cover Discover, restoring a match after relaunch, and the finished
 game; failed UI tests also capture the device screen. Artifacts are retained for
-14 days. The simulator app ZIP supports both Intel and Apple silicon Macs.
+14 days. The Intel runner prefers an installed iOS 18 simulator for baseline
+tests, with the newest available runtime as a fallback. The simulator app ZIP
+supports both Intel and Apple silicon Macs.
 
 From Linux, retrieve results for inspection with:
 
