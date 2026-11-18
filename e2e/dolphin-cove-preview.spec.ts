@@ -1,7 +1,8 @@
 import {test,expect} from '@playwright/test';
-import {createUser,loginAs,uniqueName} from './helpers';
+import {createUser,E2E_ADMIN_HEADERS,loginAs,uniqueName} from './helpers';
 test('admin previews Dolphin Cove and Arcade independently',async({page,request})=>{
   await loginAs(page,await createUser(request,uniqueName('Preview')));
+  await page.setExtraHTTPHeaders(E2E_ADMIN_HEADERS);
   await page.goto('/static/admin.html');
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
   await page.locator('#admin-skin-preview').selectOption('dolphin-cove');

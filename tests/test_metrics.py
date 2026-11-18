@@ -67,6 +67,10 @@ def _counting_client(counter: ApiCallCounter) -> TestClient:
     def broken() -> dict:
         raise RuntimeError("boom")
 
+    # These synthetic routes represent platform handlers regardless of the
+    # package name pytest assigns this test file in a temporary checkout.
+    list_things.__module__ = "game_platform.api"
+    broken.__module__ = "game_platform.api"
     app.add_middleware(ApiCallMetricsMiddleware, counter=counter)
     return TestClient(app, raise_server_exceptions=False)
 

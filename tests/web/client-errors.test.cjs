@@ -58,6 +58,28 @@ test("an unhandled promise rejection is reported", () => {
   assert.equal(sent[0].body.message, "boom");
 });
 
+test("error reports remove remembered credentials before truncation and after account switches", () => {
+  const { listeners, sent, context } = setup();
+  const previous = "previous-user-password", current = "current-user-password";
+  context.Auth = { accounts: () => [{password: previous}, {password: current}, {}] };
+  listeners.unhandledrejection({reason: new Error(`request failed: ${previous}; response: ${current}`)});
+  assert.equal(sent[0].body.message, "request failed: <redacted>; response: <redacted>");
+  context.reportClientError("script_error", "x".repeat(490) + current);
+  assert.equal(sent[1].body.message, "x".repeat(490) + "<redacted>");
+  assert.ok(!JSON.stringify(sent).includes(previous));
+  assert.ok(!JSON.stringify(sent).includes(current));
+});
+
+test("error reports remove password inputs and labeled URL or JSON secrets", () => {
+  const {sent, context} = setup();
+  context.document.querySelectorAll = () => [{value:"console-password"}];
+  context.reportClientError("script_error", 'console-password /auth?token=url-secret&v=2 {"password":"json-secret"} Bearer access-secret');
+  const message = sent[0].body.message;
+  for (const secret of ["console-password", "url-secret", "json-secret", "access-secret"])
+    assert.ok(!message.includes(secret), message);
+  assert.ok(message.includes("v=2"));
+});
+
 test("the same error is reported once, and at most five per page load", () => {
   const { listeners, sent, context } = setup();
   for (let i = 0; i < 3; i++) listeners.error({ message: "same", filename: "a.js", lineno: 1 });

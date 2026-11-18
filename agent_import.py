@@ -485,8 +485,7 @@ def make_router(platform_dependency, caller_dependency):
             name=body.name, description=body.description, rules=body.game_rules(),
             code=body.client_code, server_code=body.server_code,
             game_schemas=body.game_schemas(), import_package=package,
-            request_id=body.game_addition_request_id_and_secret, _create_only=True,
-            _translations=_bundle_translations(body))
+            request_id=body.game_addition_request_id_and_secret, _create_only=True)
         return GameOut.of(game)
 
     @router.patch('/games/{game_id}', response_model=GameOut,
@@ -505,7 +504,7 @@ def make_router(platform_dependency, caller_dependency):
         presented = patch.game_addition_request_id_and_secret
         if not is_master(request, presented) and not secrets.compare_digest(
                 package_secret_hash(target.import_package) or '', game_traces.secret_hash(presented)):
-            raise HTTPException(403, 'the game secret or master password is required')
+            raise HTTPException(403, 'a game secret or master password is required')
         try:
             body, changed = await run_in_threadpool(merge_update, target, patch)
             if not changed:
@@ -537,13 +536,13 @@ def make_router(platform_dependency, caller_dependency):
                           'name': body.name, 'description': body.description}
         if len(json.dumps(stored_content).encode()) > MAX_BODY_BYTES:
             raise HTTPException(422, 'Stored game package exceeds 900000 bytes; reduce code or schemas')
-        triples = _bundle_translations(body) if changed & {
-            'translations', 'name', 'description', 'declarative_ui', 'client_code'} else []
+        # Authored translations stay inside the capability-protected package.
+        # Global reviewed translation memory belongs to administrators.
         game = await run_in_threadpool(platform.import_agent_game,
             caller_id=target.owner_user_id, name=body.name, description=body.description,
             rules=body.game_rules(), code=body.client_code, server_code=body.server_code,
             game_schemas=schemas, import_package=package, existing_game_id=game_id,
-            preserve_secret=True, _expected_version=target.version, _translations=triples)
+            preserve_secret=True, _expected_version=target.version)
         return GameOut.of(game)
 
     @router.get('/games/schema')
@@ -552,24 +551,6 @@ def make_router(platform_dependency, caller_dependency):
 
     return router
 
-
-def _bundle_translations(body):
-    """(locale, source, text) triples for the portal bundle: the game's name,
-    description and in-game strings, in every supplied language but English
-    (English is the source language, so the bundle never translates into it)."""
-    from game_platform.game_text import extract_strings
-    table = extract_strings(body.client_code) or {}
-    triples = []
-    for locale, translation in body.translations.items():
-        if locale == 'en':
-            continue
-        triples.append((locale, body.name, translation.display_name))
-        triples.append((locale, body.description, translation.short_description))
-        for key, text in translation.client_strings.items():
-            source = table.get(key)
-            if source is not None:
-                triples.append((locale, source, text))
-    return triples
 
 
 if __name__ == '__main__':

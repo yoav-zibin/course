@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createUser, loginAs, uniqueName } from './helpers';
+import { createUser, E2E_ADMIN_HEADERS, loginAs, uniqueName } from './helpers';
 
 test('skin assignment is consistent across the portal and admin', async ({ page, request }) => {
   const user = await createUser(request, uniqueName('Skin'));
@@ -17,6 +17,7 @@ test('skin assignment is consistent across the portal and admin', async ({ page,
   // Compare both pages only after the real server assignment is applied.
   await expect(root).toHaveAttribute('data-skin', skin, {timeout: 15000});
 
+  await page.setExtraHTTPHeaders(E2E_ADMIN_HEADERS);
   await page.goto('/static/admin.html');
   await expect(root).toHaveAttribute('data-skin', skin);
 
@@ -71,15 +72,17 @@ test('experiment dashboard explains creation and supports deleting variants', as
     .replace(/[^a-z0-9]+/g, '-')
     .slice(0, 50);
   const skinResponse = await request.post('/admin/experiments/skin-variants', {
+    headers: E2E_ADMIN_HEADERS,
     data: { name: skinName, key: skinKey },
   });
   expect(skinResponse.status()).toBe(201);
   const campaignResponse = await request.post(
     '/admin/experiments/campaign-links',
-    { data: { name: campaignName, key: campaignKey } },
+    { headers: E2E_ADMIN_HEADERS, data: { name: campaignName, key: campaignKey } },
   );
   expect(campaignResponse.status()).toBe(201);
 
+  await page.setExtraHTTPHeaders(E2E_ADMIN_HEADERS);
   await page.goto('/static/stats.html');
   const skinPanel = page
     .locator('.experiment-panel')

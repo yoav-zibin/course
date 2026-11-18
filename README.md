@@ -345,8 +345,9 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `GET /games?owner_user_id=&q=` |  | List published games that aren't deleted, optionally by owner. `q` searches names and descriptions (every word must match, ignoring case). The list never includes code, which is most of each game; load one game in full from `GET /games/{id}` |
 | `GET /games/{id}` |  | Get the latest version of a game |
 | `GET /games/{id}/versions/{version}` |  | Get a specific version of a game |
-| `PATCH /games/{id}` | game secret or master password | Single game-content update API; all content fields optional, only changed fields and their dependencies are validated |
-| `DELETE /games/{id}` | yes | Delete a game (creator only) |
+| `PATCH /games/{id}` | game secret/master in body | Single game-content update API; include `game_addition_request_id_and_secret`. Content fields are optional; only changed fields and their dependencies are validated |
+| `DELETE /games/{id}` | game secret/master | Delete a game |
+| `POST /games/{id}/unpublish` | game secret/master | Hide a game from the public catalog |
 | `POST /feedback` | yes | Send a bug, a suggestion or a problem about a user, a game, a match or the platform `{kind, target_type, target_id?, text, page?}`; see [Feedback](#feedback) |
 | `POST /matches` | yes | Create a match `{game_id, num_computer_opponents, private?, turn_seconds?}` (`turn_seconds`: 60, 180 or 600 for a [speed match](#speed-matches)); the caller is player 0 |
 | `GET /matches?status=&game_id=` | yes | List the caller's matches (owned or seated, minus hidden ones) |
@@ -358,7 +359,7 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `POST /matches/{id}/moves` | yes | Make a move `{move, expected_move_count?}`; the server runs the game's `applyMove` |
 | `DELETE /matches/{id}/players/{user_id}` | yes | Owner removes a player before the match starts (like them leaving; the stake is refunded); they can't join it again. Not for quick matches |
 | `GET /matches/{id}/moves` |  | Full move history |
-| `DELETE /matches/{id}` | yes | Owner: delete the match. Other players: hide an ended match from their list |
+| `DELETE /matches/{id}` | yes | A seated player may cancel a waiting or free match, or hide an ended match from their own list. Ongoing matches holding tokens must use the normal leave/settlement flow |
 | `GET /users/me/saved-games` | yes | The caller's saved games, most recently saved first |
 | `PUT /users/me/saved-games/{game_id}` | yes | Save a game (idempotent); returns the library |
 | `DELETE /users/me/saved-games/{game_id}` | yes | Unsave a game (idempotent); returns the library |
@@ -509,7 +510,9 @@ Rematches keep the setting; quick matches are always regular.
   seat. Any player in the match can create one, optionally expiring
   (`expires_in_seconds`, 60s to 30 days) or limited (`max_uses`). A link stops seating
   people when it's revoked, expired, used up, or the match is over;
-  `GET /invites/{token}` then reports `usable: false` with a localized
+  revoked, expired and used-up links also stop exposing private matches (404).
+  Seated players continue through their authenticated match endpoints.
+  Other unusable links report `usable: false` from `GET /invites/{token}` with a localized
   `unusable_reason` and a stable `unusable_code`. Deleting a match deletes its invites.
 - **Referrals**: every match invite records how often it was opened (`views`) and who
   took a seat with it (`acceptances`). A newcomer who signs up with
@@ -634,7 +637,7 @@ stop the server at startup with an error naming the field.
 | `firestore.namespace`             | `""`                                     | The query schema's namespace inside the database; required when Firestore is enabled |
 | `firestore.allow_default_database_query` | `false`                             | Explicit opt-in to run the query schema in the `(default)` database |
 | `debug_tools`                     | `true`                                   | Serve `/console` and `/browse` (see [Pages](#pages)) |
-| `master_password`                 | `""`                                     | Password for `/browse` and the other admin pages (see [Master password](#master-password)). Empty is for loopback development only; the server refuses a non-loopback bind with debug tools enabled and no password |
+| `master_password`                 | `""`                                     | Password for `/browse` and the other admin pages (see [Master password](#master-password)). Empty disables protected admin operations; the server also refuses a non-loopback bind with debug tools enabled and no password |
 | `log_level`                       | `"INFO"`                                 | `"DEBUG"`, `"INFO"`, `"WARNING"` or `"ERROR"` |
 | `translation.*`                   | `"provider": "off"`                      | Translate games' own texts with Google Translate, on first use (see [docs/game-translation.md](docs/game-translation.md)); `google_api_key`, `daily_character_limit` |
 | `monitoring.*`                    | see `config.example.json`                | JSON logs, a log file for the Ops Agent, and the thresholds for alerts (slow requests, sign-up floods, memory...); see [docs/monitoring.md](docs/monitoring.md) |
@@ -958,10 +961,25 @@ fake users in `tools/fake_users`) and investigate from the logs (`tools/log_dige
 HTTP basic auth: the browser asks for a username and password once, and then sends
 them with every request, including the other pages' fetches of the paged admin
 collections (so opening the portal or console asks for it too). The username is
-ignored; only the password is checked. The product API and `/docs` don't need it.
+ignored; only the password is checked. Player operations and `/docs` do not need it.
 
-It defaults to empty for loopback development (`127.0.0.1` or `::1`). With debug
-tools enabled, a non-loopback bind requires a master password. A reverse proxy
+Changing game content uses `PATCH /games/{id}` with the JSON body field
+`game_addition_request_id_and_secret`, containing that game's secret or the
+configured master password. Deleting or unpublishing a game requires
+`X-Game-Secret: <the game_addition_request_id_and_secret>` or HTTP Basic
+authentication with the configured master password. A user password alone does
+not authorize these operations, including for the recorded creator. A valid game
+secret authorizes only its own game. Complete imports create games through POST
+and must pass the publication tests; PATCH validates the changed fields and
+their dependencies as described in [the update contract](docs/agent-game-import.md#updating-a-game).
+
+Browser writes authenticated by the HTTP Basic master password must come from
+the server's own origin or the configured `public_base_url` origin. Cross-site forms and untrusted origins
+are rejected because HTTP Basic credentials can be sent automatically by a browser.
+Command-line requests without browser origin metadata remain supported.
+
+It defaults to empty; protected admin operations then return 503, including on
+loopback. With debug tools enabled, a non-loopback bind requires a master password. A reverse proxy
 can expose even a loopback server: always configure a strong password before
 putting it behind a public proxy. Use HTTPS because Basic authentication sends
 the password with each request.

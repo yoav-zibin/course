@@ -1037,7 +1037,7 @@ def make_router(platform_dependency):
         except Exception as exc:
             raise HTTPException(422, f"the stored step 1 inputs are invalid: {exc}")
 
-    @router.post("/game-test/submissions", status_code=201)
+    @router.post("/game-test/submissions", status_code=201, dependencies=[Depends(validation_slot)])
     def submit_inputs(request: Request, payload: SubmissionIn, platform=Depends(platform_dependency)):
         store = store_of(platform)
         check_secret(payload.secret, request)

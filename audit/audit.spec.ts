@@ -131,6 +131,7 @@ test('UI audit: report everything that does not look right', async ({ browser, r
   for (const size of SIZES) {
     for (const p of PAGES) {
       const context = await browser.newContext({
+        httpCredentials: { username: 'audit', password: 'e2e-test-master' },
         viewport: { width: size.width, height: size.height },
         hasTouch: size.touch,
         isMobile: size.touch,

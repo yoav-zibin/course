@@ -94,7 +94,7 @@ def test_translation_bundle_batches_only_the_game_tables_not_already_cached():
     platform._store = SimpleNamespace(scalable=True, prefetch_game_versions=prefetch)
     platform._bundle_tables = {('known', 1): ({},)}
     platform._bundle_source_lock = threading.Lock()
-    games = [SimpleNamespace(id=key, version=1, code='', name=key, description='')
+    games = [SimpleNamespace(id=key, version=1, code='', name=key, description='', import_package=None)
              for key in ['known', 'new']]
     platform._bundle_published_games = lambda: games
 
@@ -138,7 +138,7 @@ def test_concurrent_locales_share_one_cold_bundle_source_load():
     platform._bundle_source_lock = ObservedLock()
     platform._bundle_tables = {}
     platform._bundle_published_games = lambda: [SimpleNamespace(
-        id='one', version=1, code='', name='One', description='')]
+        id='one', version=1, code='', name='One', description='', import_package=None)]
 
     def table(game):
         platform._bundle_tables[(game.id, game.version)] = ({},)
@@ -177,3 +177,28 @@ def test_import_identity_lookups_do_not_load_other_games_code():
         assert api.platform.find_game_by_id('') is None
     store.delete_game(game_id)
     assert api.platform.find_game_by_id(game_id) is None
+
+
+def test_translation_bundle_reuses_cached_tables_with_game_scoped_translations():
+    platform = object.__new__(GamePlatform)
+    prefetch = Mock()
+    platform._store = SimpleNamespace(scalable=True, prefetch_game_versions=prefetch)
+    platform._bundle_source_lock = threading.Lock()
+    platform._bundle_tables = {("one", 1): ({"add": "Add one"},)}
+    game = SimpleNamespace(id="one", version=1, code="", name="One", description="A game",
+        import_package={"translations": {"es": {
+            "display_name": "Uno", "short_description": "Un juego", "client_strings": {"add": "Añadir uno"},
+        }}})
+    platform._bundle_published_games = lambda: [game]
+    platform._translate_for_bundle = Mock(return_value=SimpleNamespace(texts={}, status="source"))
+
+    bundle = platform.translation_bundle("es")
+
+    assert bundle.status == "translated"
+    assert bundle.games["one"].name == "Uno"
+    assert bundle.games["one"].description == "Un juego"
+    assert bundle.games["one"].strings == {"add": "Añadir uno"}
+    # Game translations are read from metadata alongside the cached table. They
+    # require neither another source read nor lookup of globally shared texts.
+    prefetch.assert_not_called()
+    platform._translate_for_bundle.assert_called_once_with([], "es")

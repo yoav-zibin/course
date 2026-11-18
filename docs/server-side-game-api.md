@@ -259,11 +259,12 @@ on the game version.
 
 ## Running QuickJS (Phase 1 — `game_platform/game_logic.py`)
 
-- One QuickJS context per game version, created on first use and cached; it
-  evaluates a small prelude (`InvalidMove`, the seeded `Math.random`, the
-  frozen `Date`, a call helper), then `server_code`. The context can be
-  discarded and rebuilt at any time (e.g. after an error) because no state
-  lives in it.
+- Every runtime call gets a fresh QuickJS context that evaluates a small
+  prelude (`InvalidMove`, the seeded `Math.random`, the frozen `Date`, a call
+  helper), then `server_code`. The context is discarded after every result
+  or error, so mutable game globals and closures cannot retain one match's
+  private data for a later caller. Schema validators remain cached. Offline
+  publication checks retain an isolated test context to detect stateful code.
 - Calls pass JSON strings in and get a JSON string back, so nothing is
   shared between calls and results are always JSON. The prelude reseeds the
   RNG from the call's seed (derived from the match seed and move number) and

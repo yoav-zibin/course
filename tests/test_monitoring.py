@@ -54,7 +54,7 @@ def _capture_everything(caplog: pytest.LogCaptureFixture) -> None:
 def client_for(config: MonitoringConfig | None = None, **routes: Any) -> tuple[TestClient, Monitor]:
     """A test app with extra routes, e.g. `boom=lambda: 1 / 0`."""
     monitor = Monitor(config or MonitoringConfig())
-    app = create_app(GamePlatform(), monitor=monitor)
+    app = create_app(GamePlatform(), monitor=monitor, master_password="monitor-test-master")
     for name, handler in routes.items():
         app.add_api_route(f"/__{name}", handler, methods=["GET", "POST"])
     return TestClient(app, raise_server_exceptions=False), monitor
@@ -193,12 +193,17 @@ def test_a_5xx_answer_is_logged_with_the_request(caplog: pytest.LogCaptureFixtur
 
 
 def test_ordinary_requests_and_client_mistakes_are_not_logged_as_problems(
-    caplog: pytest.LogCaptureFixture,
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Check status classification independently of CPU scheduling. Dedicated
+    # timing tests exercise slow-request thresholds separately.
+    clock = SimpleNamespace(**vars(time))
+    clock.perf_counter = lambda: 0.0
+    monkeypatch.setattr(observability, "time", clock)
     client, _ = client_for()
-    client.get("/games")
-    client.get("/matches/nope")  # a 404
-    client.get("/matches")  # a 401
+    assert client.get("/games").status_code == 200
+    assert client.get("/matches/nope").status_code == 404
+    assert client.get("/matches").status_code == 401
     assert events(caplog) == []
 
 
@@ -526,13 +531,13 @@ def test_a_save_that_keeps_failing_becomes_a_major_alert_and_recovery_is_logged(
 
 def test_a_test_alert_can_be_sent_to_check_that_it_reaches_people(caplog: pytest.LogCaptureFixture) -> None:
     client, _ = client_for()
-    minor = client.post("/admin/alerts/test", params={"tier": "minor"}).json()
-    major = client.post("/admin/alerts/test", params={"tier": "major"}).json()
+    minor = client.post("/admin/alerts/test", auth=("test", "monitor-test-master"), params={"tier": "minor"}).json()
+    major = client.post("/admin/alerts/test", auth=("test", "monitor-test-master"), params={"tier": "major"}).json()
     assert (minor["alert"], major["alert"]) == ("minor", "major")
     first, second = events(caplog, "alert_test")
     assert (first["alert"], first["level"], first["test"]) == ("minor", "WARNING", True)
     assert (second["alert"], second["level"]) == ("major", "CRITICAL")
-    assert client.post("/admin/alerts/test", params={"tier": "loud"}).status_code == 422
+    assert client.post("/admin/alerts/test", auth=("test", "monitor-test-master"), params={"tier": "loud"}).status_code == 422
 
 
 def test_the_test_alert_and_snapshot_need_the_master_password() -> None:
@@ -546,7 +551,7 @@ def test_the_test_alert_and_snapshot_need_the_master_password() -> None:
 def test_the_monitoring_snapshot_shows_load_and_thresholds() -> None:
     client, monitor = client_for(MonitoringConfig(signup_surge_per_minute=7, signup_flood_per_minute=9))
     client.post("/users", json={"display_name": "a"})
-    snapshot = client.get("/admin/monitoring").json()
+    snapshot = client.get("/admin/monitoring", auth=("test", "monitor-test-master")).json()
     assert snapshot["signups_last_minute"] == 1
     assert snapshot["thresholds"]["signup_surge_per_minute"] == 7
     assert snapshot["in_flight"] == 1  # this very request

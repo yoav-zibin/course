@@ -1209,6 +1209,8 @@ test('quick delete follows participation rights and names hide/archive actions',
  assert.equal(row({...match,localMode:'pass'}).children[1]['aria-label'],'Remove practice from list');
  assert.equal(row({...match,owner_user_id:'other',players:[{player_index:0,kind:'human',user_id:'owner'}]})
    .children[1]['aria-label'],'Delete match','active participants can delete');
+ assert.equal(row({...match,token_pot:10,players:[{player_index:0,kind:'human',user_id:'owner'}]}).class,
+   'list-item match-list-card','ongoing paid matches must settle through Leave');
 });
 
 test('polling cannot re-enable an in-flight list deletion or send it twice',async()=>{
@@ -1407,11 +1409,13 @@ test('leaving an ongoing server-coded match previews the payout, confirms, then 
     return {};
   });
   run('globalThis.confirm=()=>true;state.games[0].server_code="code";state.gameCache.set("game@2",state.games[0]);'+
-      'state.match={id:"match",game_id:"game",game_version:2,owner_user_id:"someone-else",status:"ongoing",move_count:2,'+
+      'state.match={id:"match",game_id:"game",game_version:2,owner_user_id:"someone-else",status:"ongoing",move_count:2,token_pot:10,'+
       'players:[{player_index:0,kind:"human",user_id:"owner"},{player_index:1,kind:"computer",user_id:null}],turn_of_player_indices:[0]};'+
       'state.selectedId="match";renderMatch()');
   const leave=node('actions').children.find(child=>child.textContent==='Leave');
   assert.ok(leave,'Leave button is rendered');
+  const textOf=value=>[value?.textContent,...(value?.children||[]).flat(Infinity).flatMap(textOf)];
+  assert.ok(!textOf(node('actions')).includes('Delete match'));
   await leave.onclick();
   assert.deepEqual(calls,[['POST','/matches/match/maybeLeave'],['POST','/matches/match/playerLeft']]);
 });

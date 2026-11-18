@@ -304,17 +304,18 @@ def test_name_only_change_replaces_stale_foreign_names_without_translations(
 
 
 def test_invalid_translation_batch_cannot_save_a_game_version(api, imported_game, monkeypatch):
-    _owner, game, _raw, checks = imported_game
+    _owner, game, raw, checks = imported_game
     monkeypatch.setattr(game_traces, "assert_complete", fail_test_page)
     api.platform.set_translations(translations=[("es", game.name, "Nombre anterior")])
     translations_before = api.platform._store.list_translations()
-    monkeypatch.setattr(agent_import, "_bundle_translations", lambda body: [
-        ("es", "A valid new source", "Un texto válido"),
-        ("es", "", "An invalid entry with an empty source"),
-    ])
-    result = patch_game(api, game, name="This name must not be saved")
+    # Authored translations are validated in their own package, without any
+    # authority to write the administrator's global translation memory.
+    translations = copy.deepcopy(raw["translations"])
+    key = next(iter(translations["es"]["client_strings"]))
+    del translations["es"]["client_strings"][key]
+    result = patch_game(api, game, translations=translations)
     assert result.status_code in {400, 422}, result.text
-    assert "both the text and its translation are needed" in result.text
+    assert "incomplete" in result.text
     stored = api.platform.find_game_by_id(game.id)
     assert stored.version == 1 and stored.name == game.name
     assert api.platform._store.list_translations() == translations_before

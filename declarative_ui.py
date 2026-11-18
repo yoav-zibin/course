@@ -12,7 +12,6 @@ import base64
 import binascii
 import json
 from pathlib import Path
-from urllib.parse import urlsplit
 
 import quickjs
 from fastapi import Request
@@ -90,15 +89,6 @@ def validate_spec(spec):
     assets = spec.get("assets", {})
     for asset in assets.values():
         uri, media_type = asset["uri"], asset["media_type"]
-        if uri.startswith("https://"):
-            try:
-                parsed = urlsplit(uri)
-                if not parsed.hostname or parsed.username or parsed.password:
-                    raise ValueError("invalid asset URL")
-                _ = parsed.port
-            except ValueError as exc:
-                raise DeclarativeUIError("Asset URL must be HTTPS without credentials") from exc
-            continue
         prefix = "data:" + media_type + ";base64,"
         if not uri.startswith(prefix):
             raise DeclarativeUIError("Inline asset URI must match its media_type")
@@ -235,7 +225,7 @@ class DeclarativeLogic:
 
 def client_document(spec):
     """Platform-owned compatibility host for existing test/practice clients."""
-    return _client_document(spec, asset_query="?v=16")
+    return _client_document(spec, asset_query="?v=18")
 
 
 def _client_document(spec, *, asset_query):
@@ -267,6 +257,8 @@ def accepted_platform_host(spec, code):
     """
     return code in (
         client_document(spec),
+        _client_document(spec, asset_query="?v=17"),
+        _client_document(spec, asset_query="?v=16"),
         _client_document(spec, asset_query="?v=15"),
         _client_document(spec, asset_query="?v=14"),
         _client_document(spec, asset_query="?v=13"),

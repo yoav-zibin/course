@@ -171,6 +171,92 @@ def _get_caller_id_or_anonymous(
 
 AnonymousCallerId = Annotated[str | None, Depends(_get_caller_id_or_anonymous)]
 
+_MASTER_PASSWORD_REALM: Final = "Game platform debug tools"
+_basic_auth = HTTPBasic(auto_error=False, realm=_MASTER_PASSWORD_REALM)
+
+
+def _origin_of(url: str) -> tuple[str, str, int] | None:
+    """Compare origins by scheme, hostname and effective port, never URL prefixes."""
+    try:
+        parsed = urlsplit(url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username is not None or parsed.password is not None:
+            return None
+        port = parsed.port
+        return (parsed.scheme, parsed.hostname.casefold(), port if port is not None else (443 if parsed.scheme == "https" else 80))
+    except ValueError:
+        return None
+
+
+def _check_master_write_origin(request: Request) -> None:
+    """Basic credentials are ambient browser authority; block cross-origin writes.
+
+    CLI requests without browser origin metadata remain supported. Reverse
+    proxies may expose a different scheme or host, so the configured public base
+    URL is an additional trusted origin rather than trusting forwarded headers.
+    """
+    if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
+        return
+    denied = HTTPException(HTTPStatus.FORBIDDEN, "cross-origin requests cannot use the master password")
+    site = request.headers.get("sec-fetch-site", "").casefold()
+    if site == "cross-site":
+        raise denied
+    allowed = {_origin_of(str(request.url)), _origin_of(request.app.state.public_base_url)} - {None}
+    origin = request.headers.get("origin")
+    if origin is not None:
+        try:
+            parsed = urlsplit(origin)
+        except ValueError:
+            raise denied from None
+        if parsed.path or parsed.query or parsed.fragment or _origin_of(origin) not in allowed:
+            raise denied
+    elif (referer := request.headers.get("referer")) is not None:
+        if _origin_of(referer) not in allowed:
+            raise denied
+    elif site == "same-site":
+        # A sibling origin is not trusted merely because it shares a site.
+        raise denied
+
+
+def _get_game_write_owner(
+    request: Request,
+    platform: Platform,
+    game_id: str,
+    caller_id: AnonymousCallerId,
+    credentials: Annotated[HTTPBasicCredentials | None, Depends(_basic_auth)],
+    x_game_secret: Annotated[str | None, Header(max_length=200)] = None,
+) -> str:
+    """A game secret or configured master password authorizes global game writes.
+
+    Account ownership alone is insufficient: a stolen player credential must not
+    become a credential for changing globally shared game definitions. Return the
+    recorded owner for the service's existing ownership checks only after the
+    independent game capability has been checked.
+    """
+    from game_platform.models import package_secret_hash
+
+    master = request.app.state.master_password
+    presented_master = credentials.password if credentials is not None else None
+    is_master = bool(master) and presented_master is not None and secrets.compare_digest(
+        presented_master.encode(), master.encode()
+    )
+    if not is_master and caller_id is None and x_game_secret is None:
+        raise UnauthorizedError("a game secret or master password is required")
+    game = platform._store.get_game(game_id)
+    if game is None:
+        raise NotFoundError("game not found")
+    expected = package_secret_hash(game.import_package)
+    is_game_secret = bool(expected) and x_game_secret is not None and secrets.compare_digest(
+        hashlib.sha256(x_game_secret.encode()).hexdigest(), expected
+    )
+    if not is_master and not is_game_secret:
+        raise ForbiddenError("a game secret or master password is required")
+    if is_master and not is_game_secret:
+        _check_master_write_origin(request)
+    return game.owner_user_id
+
+
+GameWriteOwner = Annotated[str, Depends(_get_game_write_owner)]
+
 router = APIRouter()
 
 # Health
@@ -915,7 +1001,7 @@ def list_game_versions(
 
 
 @router.post("/games/{game_id}/unpublish")
-def unpublish_game(platform: Platform, caller_id: CallerId, game_id: str) -> GameOut:
+def unpublish_game(platform: Platform, caller_id: GameWriteOwner, game_id: str) -> GameOut:
     return GameOut.of(platform.unpublish_game(caller_id=caller_id, game_id=game_id))
 
 
@@ -977,7 +1063,7 @@ def get_game_cover(
 
 
 @router.delete("/games/{game_id}", status_code=HTTPStatus.NO_CONTENT)
-def delete_game(platform: Platform, caller_id: CallerId, game_id: str) -> None:
+def delete_game(platform: Platform, caller_id: GameWriteOwner, game_id: str) -> None:
     platform.delete_game(caller_id=caller_id, game_id=game_id)
 
 
@@ -1484,10 +1570,6 @@ _STATIC_DIR: Final = Path(__file__).parent / "static"
 
 debug_router = APIRouter(include_in_schema=False)
 
-_MASTER_PASSWORD_REALM: Final = "Game platform debug tools"
-_basic_auth = HTTPBasic(auto_error=False, realm=_MASTER_PASSWORD_REALM)
-
-
 def _check_master_password(
     request: Request,
     credentials: Annotated[HTTPBasicCredentials | None, Depends(_basic_auth)],
@@ -1496,7 +1578,7 @@ def _check_master_password(
     it with every request, including the pages' fetches of the admin collections."""
     master_password: str = request.app.state.master_password
     if not master_password:
-        return
+        raise HTTPException(HTTPStatus.SERVICE_UNAVAILABLE, "master password is not configured")
     if credentials is None or not secrets.compare_digest(
         credentials.password.encode(), master_password.encode()
     ):
@@ -1505,6 +1587,7 @@ def _check_master_password(
             detail="the master password is required (any username)",
             headers={"WWW-Authenticate": f'Basic realm="{_MASTER_PASSWORD_REALM}"'},
         )
+    _check_master_write_origin(request)
 
 
 MasterPassword = Depends(_check_master_password)
@@ -1837,8 +1920,8 @@ async def _handle_platform_error(request: Request, exc: Exception) -> JSONRespon
 
 
 async def _handle_unexpected_exception(request: Request, exc: Exception) -> Response:
-    """A bug: the request middleware has already logged it with its arguments and stack
-    trace. The caller gets the request id to quote when reporting it."""
+    """A bug: request logging retains diagnostics, with private evidence omitted.
+    The caller gets only the request id to quote when reporting it."""
     request_id = getattr(request.state, "request_id", None)
     if _is_html_navigation(request):
         content = (
@@ -1859,7 +1942,7 @@ async def _handle_unexpected_exception(request: Request, exc: Exception) -> Resp
     return JSONResponse(
         status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
         content={"detail": "internal server error", "code": "internal_error", "request_id": request_id},
-        headers={"X-Request-Id": request_id} if request_id else None,
+        headers={"Cache-Control": "private, no-store", **({"X-Request-Id": request_id} if request_id else {})},
     )
 
 
@@ -2037,6 +2120,35 @@ async def _choose_locale(
     return response
 
 
+class _PrivateResponseCacheMiddleware:
+    """Prevent HTTP caches from retaining credentials, private views and admin data."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        path = scope["path"]
+        headers = {name.lower() for name, _ in scope.get("headers", ())}
+        sensitive = bool(headers & {b"x-user-id", b"x-user-password", b"x-game-secret", b"authorization"}) or (
+            path == "/users" and scope["method"] == "POST"
+            or (path == "/games" or path.startswith("/games/"))
+            and scope["method"] not in ("GET", "HEAD", "OPTIONS")
+            or path == "/batch"
+            or any(path == prefix or path.startswith(prefix + "/")
+                   for prefix in ("/auth", "/matches", "/v2/matches", "/admin", "/v2/admin", "/browse", "/stats", "/feedback", "/invites", "/game-test", "/game-server-bugs"))
+        )
+
+        async def send_private(message: Message) -> None:
+            if sensitive and message["type"] == "http.response.start":
+                MutableHeaders(scope=message)["Cache-Control"] = "private, no-store"
+            await send(message)
+
+        await self.app(scope, receive, send_private)
+
+
 class _VersionedStaticCacheMiddleware:
     """Immutable caching for versioned static files.
 
@@ -2116,7 +2228,7 @@ def create_app(
     """[debug_tools] adds the web pages (/, /portal, /admin, /console, /browse)
     and the backoffice's /stats and /admin/* endpoints; the admin user pages
     expose every user's password. /admin, /browse, /stats and /admin/* need
-    [master_password], unless it is empty.
+    [master_password]. An empty password disables access to protected operations.
 
     [cors_allow_origins] are the origins whose pages may call the API from a browser;
     empty adds no CORS headers, for when a reverse proxy already adds them (two
@@ -2195,4 +2307,5 @@ def create_app(
     # game lists, match lists, the portal script — repay many times over.)
     app.add_middleware(_VersionedStaticCacheMiddleware)
     app.add_middleware(GZipMiddleware, compresslevel=6)
+    app.add_middleware(_PrivateResponseCacheMiddleware)
     return app

@@ -976,5 +976,9 @@
   "ui.match.link_copied": "链接已复制。发送给好友吧。",
   "ui.match.link_manual": "复制此链接并发送给好友。",
   "ui.portal.computer_mode_hint": "开始一局免费的人机对战。",
-  "ui.match.private_share_notice": "只有这场私人对局的玩家才能打开此链接。"
+  "ui.match.private_share_notice": "只有这场私人对局的玩家才能打开此链接。",
+  "error.game_capability_required": "需要游戏密钥或主密码",
+  "error.paid_match_delete_forbidden": "不能删除正在进行的付费对局；请先预览退出结果，再确认退出",
+  "error.master_password_not_configured": "尚未配置主密码",
+  "error.master_write_cross_origin": "跨源请求不能使用主密码"
 }

@@ -1,6 +1,8 @@
 import {test, expect} from '@playwright/test';
+import {E2E_ADMIN_HEADERS} from './helpers';
 
 test('query-mode referrals browse branches and search without a global export',async({page})=>{
+  await page.setExtraHTTPHeaders(E2E_ADMIN_HEADERS);
   const errors:string[]=[];let legacy=0;
   page.on('pageerror',error=>errors.push(error.message));
   const alice={id:'alice',display_name:'Alice',total_invites:2,direct_invites:1,invited_by_user_id:null};

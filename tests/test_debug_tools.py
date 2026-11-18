@@ -164,8 +164,10 @@ def test_the_all_data_endpoint_is_gone(api: Api) -> None:
     assert api.request("GET", "/debug/all-data").status_code == 404
 
 
-def test_without_a_master_password_the_debug_tools_are_open(api: Api) -> None:
-    assert api.request("GET", "/browse").status_code == 200
+def test_without_a_master_password_the_debug_tools_are_disabled() -> None:
+    client = TestClient(create_app())
+    assert client.get("/browse").status_code == 503
+    assert client.get("/admin/stats").status_code == 503
 
 
 def test_the_master_password_protects_browse() -> None:

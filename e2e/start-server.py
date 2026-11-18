@@ -47,6 +47,7 @@ with tempfile.TemporaryDirectory() as tmp:
     config = Path(tmp) / "config.json"
     config.write_text(
         '{"server": {"host": "127.0.0.1", "port": %s},'
+        ' "master_password": "e2e-test-master",'
         ' "data_file": {"path": "%s"}}' % (port, (Path(tmp) / "data.json").as_posix())
     )
     sys.exit(

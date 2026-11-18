@@ -976,5 +976,9 @@
   "ui.match.link_copied": "Enlace copiado. Envíalo a un amigo.",
   "ui.match.link_manual": "Copia este enlace y envíalo a un amigo.",
   "ui.portal.computer_mode_hint": "Inicia una partida gratuita contra oponentes controlados por el ordenador.",
-  "ui.match.private_share_notice": "Solo los jugadores de esta partida privada pueden abrir este enlace."
+  "ui.match.private_share_notice": "Solo los jugadores de esta partida privada pueden abrir este enlace.",
+  "error.game_capability_required": "se requiere el secreto del juego o la contraseña maestra",
+  "error.paid_match_delete_forbidden": "no se puede eliminar una partida con apuesta en curso; consulta la vista previa de la salida y confírmala",
+  "error.master_password_not_configured": "la contraseña maestra no está configurada",
+  "error.master_write_cross_origin": "las solicitudes de otro origen no pueden usar la contraseña maestra"
 }

@@ -31,7 +31,9 @@
   }
   function assetURI(asset) {
     const uri = asset?.uri;
-    return typeof uri === "string" && (/^https:\/\//.test(uri) || /^data:image\/(png|jpeg|svg\+xml);base64,[A-Za-z0-9+/=\s]+$/.test(uri)) ? uri : null;
+    // Image requests are an outbound channel too: choosing an authored remote
+    // asset based on a private card would disclose that card to its host.
+    return typeof uri === "string" && /^data:image\/(png|jpeg|svg\+xml);base64,[A-Za-z0-9+/=\s]+$/.test(uri) ? uri : null;
   }
   function boardCell(board, cell) {
     const explicit = board.cells?.find(item => item.id === cell);
@@ -924,10 +926,10 @@
     const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
     const data=value=>JSON.stringify(canonical(value)).replace(/</g,"\\u003c");
     return '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<link rel="stylesheet" href="/static/declarative-ui.css?v=17"><div id="declarative-game"></div>' +
+      '<link rel="stylesheet" href="/static/declarative-ui.css?v=18"><div id="declarative-game"></div>' +
       '<script type="application/json" id="i18n-strings">'+data(spec.strings || {})+'<'+'/script>' +
       '<script type="application/json" id="declarative-spec">'+data(spec)+'<'+'/script>' +
-      '<script src="/static/declarative-ui.js?v=17"><'+'/script><script>' +
+      '<script src="/static/declarative-ui.js?v=18"><'+'/script><script>' +
       'const host=DeclarativeUI.mount(document.getElementById("declarative-game"),' +
       'JSON.parse(document.getElementById("declarative-spec").textContent),' +
       '{onMove:move=>parent.postMessage({type:"make_move",move},"*"),' +

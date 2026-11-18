@@ -976,5 +976,9 @@
   "ui.match.link_copied": "Link kopiert. Sende ihn einem Freund.",
   "ui.match.link_manual": "Kopiere diesen Link und sende ihn einem Freund.",
   "ui.portal.computer_mode_hint": "Starte ein kostenloses Spiel gegen Computergegner.",
-  "ui.match.private_share_notice": "Nur Spieler dieses privaten Spiels können diesen Link öffnen."
+  "ui.match.private_share_notice": "Nur Spieler dieses privaten Spiels können diesen Link öffnen.",
+  "error.game_capability_required": "das Spielgeheimnis oder das Master-Passwort ist erforderlich",
+  "error.paid_match_delete_forbidden": "eine laufende Partie mit Einsatz kann nicht gelöscht werden; zeigen Sie die Vorschau für das Verlassen an und bestätigen Sie sie",
+  "error.master_password_not_configured": "das Master-Passwort ist nicht konfiguriert",
+  "error.master_write_cross_origin": "Anfragen von einem anderen Ursprung dürfen das Master-Passwort nicht verwenden"
 }

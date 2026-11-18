@@ -1534,3 +1534,34 @@ def test_history_move_privacy_on_query_backend(store):
 def test_lifecycle_payout_settlement_on_query_backend(store, phase):
     from game_platform.tests.test_security_audit import test_game_lifecycle_payouts_are_applied_exactly_once
     test_game_lifecycle_payouts_are_applied_exactly_once(api_for(store), phase)
+
+
+def test_view_rejection_privacy_on_query_backend(store):
+    from game_platform.tests.test_daily_match_security import test_invalid_move_from_view_for_never_exposes_its_diagnostic
+    api = api_for(store)
+    api.platform = api.client.app.state.platform
+    test_invalid_move_from_view_for_never_exposes_its_diagnostic(api)
+
+
+@pytest.mark.parametrize("seed_version", [1, 2])
+@pytest.mark.parametrize("action", ["join", "leave", "preview"])
+def test_legacy_lifecycle_rekey_on_query_backend(store, seed_version, action):
+    from game_platform.tests.test_daily_match_security import test_legacy_random_stream_is_rekeyed_before_lifecycle_callbacks
+    api = api_for(store)
+    api.platform = api.client.app.state.platform
+    test_legacy_random_stream_is_rekeyed_before_lifecycle_callbacks(api, seed_version, action)
+
+
+def test_partial_payout_delete_retries_conserve_tokens_on_query_backend(store):
+    from game_platform.tests.test_daily_match_security import test_partial_payout_cannot_be_replaced_by_a_player_refund
+    api = api_for(store)
+    api.platform = api.client.app.state.platform
+    test_partial_payout_cannot_be_replaced_by_a_player_refund(api)
+
+
+@pytest.mark.parametrize("reason", ["revoked", "expired", "consumed"])
+def test_unusable_private_invite_does_not_disclose_match_on_query_backend(store, reason):
+    from game_platform.tests.test_daily_match_security import test_unusable_bearer_invites_no_longer_disclose_private_matches
+    api = api_for(store)
+    api.platform = api.client.app.state.platform
+    test_unusable_bearer_invites_no_longer_disclose_private_matches(api, reason)

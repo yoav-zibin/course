@@ -414,7 +414,7 @@ An asset descriptor looks like:
 ```json
 {
   "pawn": {
-    "uri": "https://example.com/assets/pawn.png",
+    "uri": "data:image/png;base64,...",
     "media_type": "image/png",
     "width": 80,
     "height": 80,
@@ -426,12 +426,13 @@ An asset descriptor looks like:
 PNG uses `image/png`; JPG/JPEG uses `image/jpeg`; SVG uses `image/svg+xml`.
 Inline assets use a matching base64 data URI, such as
 `data:image/png;base64,...`. Each decoded inline image is at most 120,000
-bytes; SVG must meet the platform's inert SVG image rules. HTTPS asset URLs
-must have no embedded credentials. The reducer refers to asset IDs, never
-loads a URL itself. Hosts load/decode images and can cache them for native or
-offline play. Asset dimensions are metadata; piece dimensions control display.
-Keep externally hosted artwork version-stable and available to the intended
-players. Inline assets are useful for a self-contained package.
+bytes; SVG must meet the platform's inert SVG image rules. External image URLs
+are rejected: selecting remote artwork based on a private hand would disclose
+that hand through image requests. Existing external artwork is not loaded by
+the renderer; embed the image bytes in the package to restore it. The reducer
+refers to asset IDs, never loads a URL itself. Hosts decode the included images
+for native and offline play. Asset dimensions are metadata; piece dimensions
+control display.
 
 For an illustrated card, reference both asset IDs from its piece type:
 

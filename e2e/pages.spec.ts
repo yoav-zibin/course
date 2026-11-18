@@ -1,11 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { createUser, loginAs, uniqueName } from './helpers';
+import { createUser, E2E_ADMIN_HEADERS, loginAs, uniqueName } from './helpers';
 
 // Parameterized: every page must load (HTTP 200) without JavaScript errors.
 const pages = ['portal', 'admin', 'browse', 'invites', 'stats'];
 
 for (const name of pages) {
   test(`${name}.html loads without JS errors`, async ({ page }) => {
+    if (name !== 'portal') await page.setExtraHTTPHeaders(E2E_ADMIN_HEADERS);
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
     const response = await page.goto(`/static/${name}.html`);
@@ -19,6 +20,7 @@ test('Portal and Admin have direct entry points and no app navigation tabs', asy
   // The portal requires a login; the admin page keeps its own sign-in.
   await loginAs(page, await createUser(request, uniqueName('Pages visitor')));
   for (const [name, path] of [['portal', '/'], ['admin', '/admin']]) {
+    if (name === 'admin') await page.setExtraHTTPHeaders(E2E_ADMIN_HEADERS);
     await page.goto(path, { waitUntil: 'commit' });
     await expect(page).toHaveURL(name === 'portal' ? /\/static\/portal\.html$/ : /\/admin(?:#.*)?$/);
     const header = page.locator('header.topbar');

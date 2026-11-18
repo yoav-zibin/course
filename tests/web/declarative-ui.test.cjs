@@ -72,7 +72,7 @@ test('expanded target hit areas match portable schema geometry without changing 
 test('renderer rejects explosive grids, non-finite geometry and unapproved image schemes',()=>{
   const spec=sample();spec.boards[0].rows=100000;assert.throws(()=>api.validateSpec(spec),/2048/);
   spec.boards[0].rows=3;spec.boards[0].width=Infinity;assert.throws(()=>api.validateSpec(spec),/non-finite/);
-  for(const uri of ['javascript:alert(1)','file:///etc/passwd','http://insecure.test/a.png','data:text/html;base64,PHNjcmlwdD4='])assert.equal(api.assetURI({uri}),null);
+  for(const uri of ['javascript:alert(1)','file:///etc/passwd','http://insecure.test/a.png','https://tracker.example/card.png?private=ace','data:text/html;base64,PHNjcmlwdD4='])assert.equal(api.assetURI({uri}),null);
   assert.equal(api.assetURI({uri:'data:image/png;base64,aGVsbG8='}),'data:image/png;base64,aGVsbG8=');
 });
 
@@ -173,7 +173,7 @@ test('motion policy rejects unbounded timing and executable easing while retaini
 });
 
 test('destination artwork references and round action outlines retain the strict portable boundary',()=>{
-  const spec=sample();spec.assets={hint:{uri:'https://example.org/hint.png'}};
+  const spec=sample();spec.assets={hint:{uri:'data:image/png;base64,aGVsbG8='}};
   for(const action_outline of ['rect','ellipse','none'])assert.doesNotThrow(()=>api.validateSpec({...spec,piece_types:{token:{shape:'image',action_outline}}}));
   assert.throws(()=>api.validateSpec({...spec,piece_types:{token:{shape:'image',action_outline:'script'}}}));
   const target={id:'hint',board:'main',position:{cell:'0'},asset:'hint'};

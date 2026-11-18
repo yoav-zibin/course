@@ -9,6 +9,7 @@ time, as regression seeds.
 """
 
 import pytest
+from types import SimpleNamespace
 
 import game_platform.game_testing as game_testing
 from game_platform.tests.helpers import run_unrestricted_server_code as _test_server_code
@@ -106,17 +107,19 @@ MULTI_TURN_MOVE_GAME = GOOD_GAME.replace(
 # The tester itself.
 
 
-def test_a_correct_game_passes():
-    # Keep this a coverage check rather than a machine-specific throughput test.
-    # The budget is generous on purpose: the >100-walk assertion is about
-    # coverage, and a tight wall-clock budget flakes on loaded machines.
+def test_a_correct_game_passes(monkeypatch):
+    # Exercise a fixed number of genuine walks without requiring a particular
+    # machine throughput. Only this module's scheduling clock is controlled;
+    # QuickJS still enforces its real per-call limits. Deadline handling has
+    # dedicated tests below.
+    monkeypatch.setattr(game_testing, "time", SimpleNamespace(monotonic=lambda: 0.0))
     report = run_game_tests(
-        GOOD_GAME, rules=RULES, run_seed=7, budget_seconds=10.0
+        GOOD_GAME, rules=RULES, run_seed=7, budget_seconds=10.0, max_walks=128
     )
     assert report.passed
     assert report.failures == ()
     assert report.failed_seeds == ()
-    assert report.walks_completed > 100
+    assert report.walks_completed == 128
     assert report.moves_made > 0
     assert not report.too_slow
 

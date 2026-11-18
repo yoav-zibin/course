@@ -141,7 +141,7 @@
         "uri": {
           "type": "string",
           "maxLength": 240000,
-          "pattern": "^(data:image/(png|jpeg|svg\\+xml);base64,[A-Za-z0-9+/=]+|https://[^\\s]+)$"
+          "pattern": "^data:image/(png|jpeg|svg\\+xml);base64,[A-Za-z0-9+/=]+$"
         },
         "media_type": {
           "enum": [

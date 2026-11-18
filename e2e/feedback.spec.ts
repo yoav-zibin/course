@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createGame, createUser, loginAs, openMatchControls, uniqueName } from './helpers';
+import { createGame, createUser, E2E_ADMIN_CREDENTIALS, loginAs, openMatchControls, uniqueName } from './helpers';
 
 test('a guest reports a player and sends feedback on the website; both show on the admin Feedback tab', async ({ browser, request }) => {
   const alice = await createUser(request, uniqueName('Alice'));
@@ -14,6 +14,7 @@ test('a guest reports a player and sends feedback on the website; both show on t
   const page = await context.newPage();
   await loginAs(page, alice);
   await page.goto(`/static/portal.html#match=${match.id}`);
+  await expect(page.locator('#game-box .declarative-stage')).toBeVisible({timeout:15000});
   await openMatchControls(page);
 
   // Only the other player can be reported; never yourself. A report is always a problem.
@@ -47,8 +48,8 @@ test('a guest reports a player and sends feedback on the website; both show on t
   await page.locator('#feedback-done').click();
   await context.close();
 
-  // The admin's Feedback tab (the test server has no master password).
-  const admin = await browser.newPage();
+  // The admin's Feedback tab uses the disposable server's explicit master.
+  const admin = await browser.newPage({httpCredentials: E2E_ADMIN_CREDENTIALS});
   await admin.goto('/admin#feedback');
   const tab = admin.frameLocator('#admin-frame, iframe').first();
   await expect(tab.locator('#feedback')).toContainText('Their name is offensive');

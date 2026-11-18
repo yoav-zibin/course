@@ -149,12 +149,14 @@ def test_server_code(
             contract,
             game_schemas=game_schemas,
             game_id=game_id,
+            isolate_calls=False,
         )
     else:
         logic = GameLogic(
             server_code,
             game_schemas=game_schemas,
             game_id=game_id,
+            isolate_calls=False,
         )
     master = random.Random(run_seed)
     started = time.monotonic()

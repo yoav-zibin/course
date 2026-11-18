@@ -16,6 +16,7 @@ class ContractLogic(GameLogic):
         game_schemas=None,
         game_id="unsaved",
         game_version=0,
+        isolate_calls=True,
     ):
         if game_schemas is None:
             game_schemas = {
@@ -28,6 +29,7 @@ class ContractLogic(GameLogic):
             game_schemas=game_schemas,
             game_id=game_id,
             game_version=game_version,
+            isolate_calls=isolate_calls,
         )
         self.contract = contract
         self.validators = {key:Draft202012Validator(contract[key]) for key in ('state_schema','view_schema','move_schema')}
@@ -85,7 +87,7 @@ def _uses_player_left(case):
 
 
 def verify_examples(code, contract):
-    logic = ContractLogic(code, contract)
+    logic = ContractLogic(code, contract, isolate_calls=False)
     results = []
     for case in contract['cases']:
         try:
@@ -167,7 +169,7 @@ def probe_move_agreement(code, contract, *, samples=24):
     with one seed to prove seeded determinism, and times generator
     calls at the platform's own 100 ms limit. Returns failure strings;
     an empty list means agreement."""
-    logic = ContractLogic(code, contract)
+    logic = ContractLogic(code, contract, isolate_calls=False)
     if not logic.has('randomMove') and not logic.has('computerMove'):
         return []
     failures = []
@@ -316,7 +318,7 @@ def probe_leaving(code, contract, *, allowed_player_counts, allows_leave_mid_mat
     previously gated only by AI review. These probes exercise them with
     scripted rosters and pots and return failure strings; an empty list
     means every scenario behaved as the platform contract requires."""
-    logic = ContractLogic(code, contract)
+    logic = ContractLogic(code, contract, isolate_calls=False)
     if not logic.has('playerLeft'):
         return []
     failures = []

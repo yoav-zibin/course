@@ -219,7 +219,7 @@ def test_deleting_a_user_passes_their_invites_up_to_their_inviter(api: Api) -> N
     ann = api.new_user("ann")
     bob = invited(api, "bob", by=ann)
     invited(api, "cy", by=bob)
-    api.client.delete(f"/admin/users/{bob}")
+    api.ok("DELETE", f"/admin/users/{bob}")
     assert counts(api) == {"ann": ("", 1, 1, 0), "cy": ("ann", 0, 0, 1)}
 
 

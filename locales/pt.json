@@ -976,5 +976,9 @@
   "ui.match.link_copied": "Link copiado. Envie-o a um amigo.",
   "ui.match.link_manual": "Copie este link e envie-o a um amigo.",
   "ui.portal.computer_mode_hint": "Comece uma partida gratuita contra adversários controlados pelo computador.",
-  "ui.match.private_share_notice": "Apenas os jogadores desta partida privada podem abrir este link."
+  "ui.match.private_share_notice": "Apenas os jogadores desta partida privada podem abrir este link.",
+  "error.game_capability_required": "é necessário o segredo do jogo ou a senha mestra",
+  "error.paid_match_delete_forbidden": "uma partida com aposta em andamento não pode ser excluída; veja a prévia da saída e confirme-a",
+  "error.master_password_not_configured": "a senha mestra não está configurada",
+  "error.master_write_cross_origin": "solicitações de outra origem não podem usar a senha mestra"
 }

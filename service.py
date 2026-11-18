@@ -1934,7 +1934,6 @@ class GamePlatform:
         preserve_secret: bool = False,
         _create_only: bool = False,
         _expected_version: int | None = None,
-        _translations: Sequence[tuple[str, str, str]] = (),
     ) -> Game:
         """Creates a published game, or updates the one imported with [request_id]
         (see agent_import). The find and the create/update happen under one lock, so
@@ -1964,10 +1963,6 @@ class GamePlatform:
                 existing is None or existing.version != _expected_version
             ):
                 raise ConflictError("game changed during validation; retry the PATCH against its latest version")
-            # Validate all translations before writing the version, then store
-            # them under this same lock/transaction so concurrent updates cannot
-            # seed the portal bundle out of order.
-            translation_records = self._translation_records(_translations)
             # Only the request id's hash is ever stored: a resubmission is
             # found by comparing hashes, so the plaintext never persists,
             # whatever the package itself carried.
@@ -2008,8 +2003,6 @@ class GamePlatform:
                     game_schemas=game_schemas,
                     import_package=import_package,
                 )
-            if translation_records:
-                self._store.put_translations(translation_records)
             return game
 
     def find_game_by_addition_request_id(self, request_id: str) -> Game | None:
@@ -2138,8 +2131,8 @@ class GamePlatform:
         except game_text.StringsError:
             table = None
         warnings = game_text.lint(game.code)
-        prepared = (game.import_package or {}).get('translations', {}).get(i18n.normalize_locale(locale) or i18n.DEFAULT_LOCALE)
-        if prepared and isinstance(prepared.get('client_strings'), dict) and set(prepared['client_strings']) == set(table or {}):
+        prepared = self._prepared_translation(game, i18n.normalize_locale(locale) or i18n.DEFAULT_LOCALE, table or {})
+        if prepared:
             return GameStrings(game_id=game.id, game_version=game.version,
                 locale=i18n.normalize_locale(locale) or i18n.DEFAULT_LOCALE, status='translated',
                 name=prepared['display_name'], description=prepared['short_description'],
@@ -2197,6 +2190,12 @@ class GamePlatform:
         try:
             if error.template is None or i18n.normalize_locale(locale) in (None, i18n.DEFAULT_LOCALE):
                 return None
+            code = i18n.normalize_locale(locale)
+            game = self._plain_read(lambda: self._store.get_game_version(error.game_id, error.game_version))
+            prepared = self._prepared_translation(game, code) if game is not None else None
+            own_text = prepared["client_strings"].get(error.key) if prepared and error.key is not None else None
+            if own_text:
+                return game_messages.fill(own_text, error.params)
             translated = self._translation.translate([error.template], locale)
             text = translated.texts.get(error.template)
             if not text:
@@ -2205,6 +2204,31 @@ class GamePlatform:
         except Exception:  # noqa: BLE001 - translation must never fail a request
             logging.getLogger(__name__).exception("translating a game message failed")
             return None
+
+    @staticmethod
+    def _prepared_translation(game: Game, locale: str, table: dict[str, str] | None = None) -> dict[str, Any] | None:
+        """Author translations are scoped to their game, never global text hashes."""
+        package = game.import_package
+        translations = package.get("translations") if isinstance(package, dict) else None
+        prepared = translations.get(locale) if isinstance(translations, dict) else None
+        if not isinstance(prepared, dict) or not all(
+            isinstance(prepared.get(field), str) for field in ("display_name", "short_description")
+        ):
+            return None
+        strings = prepared.get("client_strings")
+        if not isinstance(strings, dict) or not all(isinstance(value, str) for value in strings.values()):
+            return None
+        if table is not None and set(strings) != set(table):
+            return None
+        return prepared
+
+    @staticmethod
+    def _translation_status(statuses: Sequence[str]) -> str:
+        if not statuses or all(status == "source" for status in statuses):
+            return "source"
+        if all(status in ("translated", "source") for status in statuses):
+            return "translated"
+        return "partial" if any(status in ("translated", "partial") for status in statuses) else "unavailable"
 
     def translation_bundle(self, locale: str) -> TranslationBundle:
         """The names, descriptions and string tables of the published games in [locale],
@@ -2223,9 +2247,10 @@ class GamePlatform:
             if prefetch is not None and missing:
                 self._plain_read(lambda: prefetch(missing))
             tables = {game.id: self._bundle_table(game) for game in games}
+        prepared = {game.id: self._prepared_translation(game, code, tables[game.id]) for game in games}
         wanted = [
             text
-            for game in games
+            for game in games if prepared[game.id] is None
             for text in (game.name, game.description, *(tables[game.id] or {}).values())
         ]
         translated = self._translate_for_bundle(wanted, code)
@@ -2244,15 +2269,16 @@ class GamePlatform:
         for game in games:
             table = tables[game.id]
             texts = [game.name, game.description, *(table or {}).values()]
+            own = prepared[game.id]
             entries[game.id] = BundleGame(
                 version=game.version,
-                name=shown(game.name),
-                description=shown(game.description),
-                status=status_of(texts),
+                name=own["display_name"] if own else shown(game.name),
+                description=own["short_description"] if own else shown(game.description),
+                status=("source" if code == i18n.DEFAULT_LOCALE else "translated") if own else status_of(texts),
                 translatable=table is not None,
-                strings={key: shown(text) for key, text in (table or {}).items()},
+                strings=dict(own["client_strings"]) if own else {key: shown(text) for key, text in (table or {}).items()},
             )
-        return TranslationBundle(locale=code, status=translated.status, games=entries)
+        return TranslationBundle(locale=code, status=self._translation_status([entry.status for entry in entries.values()]), games=entries)
 
     def _bundle_published_games(self) -> list[Game]:
         now = time.monotonic()
@@ -2340,9 +2366,10 @@ class GamePlatform:
         return translation
 
     def set_translations(self, *, translations: Sequence[tuple[str, str, str]]) -> list[Translation]:
-        """Stores manual translations of (locale, source, text) triples in one write, for
-        a game imported with its translations supplied: the portal bundle serves these
-        instead of asking Google. Every triple is checked the way [set_translation]
+        """Stores administrator-supplied global translations in one write.
+
+        Game authors must keep their translations in their own import package.
+        Every triple is checked the way [set_translation]
         checks one: the locale must be a language texts are translated into, both texts
         must be non-empty, and the translation must keep the source's placeholders.
         English is the source language, so it is never a target here."""
@@ -2382,12 +2409,22 @@ class GamePlatform:
         what a portal shows on its game cards. Like [game_strings], it never fails because
         of the translator."""
         games = self.list_games(owner_user_id=None, include_code=False)
+        code = i18n.normalize_locale(locale) or i18n.DEFAULT_LOCALE
+        prepared = {game.id: self._prepared_translation(game, code) for game in games}
+        fallback = [game for game in games if prepared[game.id] is None]
         translated = self._translation.translate(
-            [text for game in games for text in (game.name, game.description)], locale
+            [text for game in fallback for text in (game.name, game.description)], locale
         )
         shown = lambda text: translated.texts.get(text, text)  # noqa: E731
-        return translated.status, {
-            game.id: {"name": shown(game.name), "description": shown(game.description)}
+        status = self._translation_status([
+            *([translated.status] if fallback else []),
+            *("source" if code == i18n.DEFAULT_LOCALE else "translated" for game in games if prepared[game.id] is not None),
+        ])
+        return status, {
+            game.id: {
+                "name": prepared[game.id]["display_name"] if prepared[game.id] else shown(game.name),
+                "description": prepared[game.id]["short_description"] if prepared[game.id] else shown(game.description),
+            }
             for game in games
         }
 
@@ -2785,6 +2822,10 @@ class GamePlatform:
                 num_computer_opponents=match.num_computer_opponents,
             )
         game = self._store.get_game_version(match.game_id, match.game_version)
+        if match.status == "ongoing":
+            # playerJoined may draw cards or dice as well. Upgrade legacy
+            # public/32-bit streams before saving and invoking that callback.
+            match = self._rekey_seed(match)
         # A match takes the joiner's stake as they join, in the waiting room
         # and mid-match alike. The pot grows by the stake, so nobody holds
         # a seat in a paid match (and a share of its pot, or of its refund)
@@ -3728,7 +3769,7 @@ class GamePlatform:
                 player_id,
                 **invocation,
             )
-        except GameLogicError as error:
+        except (GameLogicError, InvalidMoveError) as error:
             self._record_logic_error(
                 game, "viewFor", error,
                 match=match, args=(match.state, player_id), invocation=invocation,
@@ -3876,6 +3917,9 @@ class GamePlatform:
                     pending_leave=None,
                 )
             )
+        # Leaving can run random game logic. Persist the upgraded secret
+        # with its result, just as an ordinary move does.
+        match = self._rekey_seed(match)
         preview = self._compute_leave_preview(match, game, caller_id)
         return self._apply_leave_preview(
             match, seat=seat, caller_id=caller_id, preview=preview
@@ -4035,6 +4079,8 @@ class GamePlatform:
                 raise ConflictError(
                     "the match's game has no server code"
                 )
+            # A preview and its confirmation must use the same private stream.
+            match = self._rekey_seed(match)
             preview = self._compute_leave_preview(match, game, caller_id)
             return self._save(replace(match, pending_leave=preview))
 
@@ -4134,15 +4180,18 @@ class GamePlatform:
         return self._store.get_match(match.id) or saved
 
     def delete_match(self, *, caller_id: str, match_id: str) -> None:
-        """A player in the match deletes it while it is not over; once it is
-        over, deleting only hides it from the caller's own list. Creating a
-        match gives no delete rights on its own: the caller must be one of
-        its players."""
+        """A player may cancel a waiting or free match. Paid ongoing games
+        use normal leaving/settlement, so deletion cannot bypass their payout
+        rules. Once over, deleting only hides the match from the caller's list.
+        Creating a match gives no delete rights on its own."""
         with self._lock:
             match = self._get_match(match_id)
             if match.status != "over" and caller_id in match.active_human_user_ids:
-                # Deleting refunds every stake the match holds (a waiting v2
-                # match's, taken as players joined, or an ongoing match's pot).
+                if match.status == "ongoing" and match.token_pot > 0:
+                    raise ConflictError(
+                        "an ongoing paid match cannot be deleted; preview and confirm leaving instead"
+                    )
+                # Only waiting matches may refund held stakes on player delete.
                 self._delete_match_and_invites(match_id)
                 return
             if match.status != "over":
@@ -4244,9 +4293,17 @@ class GamePlatform:
         and counted as a view in the creator's referral stats."""
         with self._lock:
             invite = self._get_invite(token)
+            match = self._get_match(invite.match_id)
+            if match.private and (
+                invite.revoked
+                or (invite.expires_at is not None and self._clock() >= invite.expires_at)
+                or (invite.max_uses is not None and len(invite.acceptances) >= invite.max_uses)
+            ):
+                # The bearer link grants private viewing as well as joining.
+                # Revoking/expiring/consuming it must withdraw both capabilities.
+                raise NotFoundError("invite not found")
             invite = replace(invite, views=invite.views + 1)
             self._store.put_invite(invite)
-            match = self._get_match(invite.match_id)
             game = self._store.get_game_version(match.game_id, match.game_version)
             try:
                 self._check_invite_usable(invite)

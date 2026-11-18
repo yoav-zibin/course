@@ -150,14 +150,14 @@ def test_update_validates_its_input(api: Api) -> None:
     assert "name" in response.text
 
 
-def test_updates_need_the_secret_and_only_the_creator_can_delete_a_game(api: Api) -> None:
+def test_other_users_cannot_update_or_delete_without_a_game_secret(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game_id = api.new_game(owner=alice)
     patch = api.request("PATCH", f"/games/{game_id}", as_user=bob,
                         json={"name": "x", "game_addition_request_id_and_secret": "incorrect-secret-0123456789"})
     delete = api.request("DELETE", f"/games/{game_id}", as_user=bob)
-    assert patch.status_code == 403
-    assert error(delete) == (403, "only the game's creator can change it")
+    assert error(patch) == (403, "a game secret or master password is required")
+    assert error(delete) == (403, "a game secret or master password is required")
     assert api.ok("GET", f"/games/{game_id}")["name"] == "Poker"
 
 

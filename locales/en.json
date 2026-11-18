@@ -976,5 +976,9 @@
   "ui.match.link_copied": "Link copied. Send it to a friend.",
   "ui.match.link_manual": "Copy this link and send it to a friend.",
   "ui.portal.computer_mode_hint": "Start a free game against computer opponents.",
-  "ui.match.private_share_notice": "Only players in this private match can open this link."
+  "ui.match.private_share_notice": "Only players in this private match can open this link.",
+  "error.game_capability_required": "a game secret or master password is required",
+  "error.paid_match_delete_forbidden": "an ongoing paid match cannot be deleted; preview and confirm leaving instead",
+  "error.master_password_not_configured": "master password is not configured",
+  "error.master_write_cross_origin": "cross-origin requests cannot use the master password"
 }

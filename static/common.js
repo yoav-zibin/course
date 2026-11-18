@@ -55,7 +55,20 @@ const clientErrorsSent = new Set();
  * snake_case name; never put a password or token in [message]. */
 function reportClientError(kind, message) {
   try {
-    const text = String(message ?? "").slice(0, 500);
+    let text = String(message ?? "");
+    // Exception text can contain a copied request or response. Remove every
+    // remembered account's credential before it leaves the browser, including
+    // when a delayed error arrives after an account switch.
+    const accounts = typeof Auth !== "undefined" ? Auth.accounts() : [];
+    const secrets = [...accounts.map(account => account.password),
+      ...Array.from(document.querySelectorAll?.('input[type="password"]') || [], input => input.value)];
+    for (const secret of secrets) {
+      if (typeof secret === "string" && secret)
+        text = text.split(secret).join("<redacted>");
+    }
+    text = text.replace(/\b(?:password|passwd|passcode|secret|token|authorization|api[_-]?key)\b["']?\s*[:=]\s*["']?[^\s,;&"'<>]+/gi, "<redacted>")
+      .replace(/\bbearer\s+[^\s,;&"'<>]+/gi, "<redacted>");
+    text = text.slice(0, 500);
     const key = `${kind}:${text}`;
     if (clientErrorsSent.has(key) || clientErrorsSent.size >= 5) return;
     clientErrorsSent.add(key);

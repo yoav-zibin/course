@@ -6,7 +6,9 @@ rewrites the whole file (see [SavingStore] for when).
 
 import datetime as dt
 import logging
+import os
 import shutil
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -84,9 +86,16 @@ class JsonFileStore(SavingStore):
             return
         try:
             directory = self._path.with_name(f"{self._path.name}.backups")
-            directory.mkdir(parents=True, exist_ok=True)
+            directory.mkdir(mode=0o700, parents=True, exist_ok=True)
             stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-            shutil.copyfile(self._path, directory / f"{self._path.stem}-{stamp}.json")
+            destination = directory / f"{self._path.stem}-{stamp}.json"
+            with tempfile.NamedTemporaryFile(dir=directory, delete=False) as handle:
+                temporary = Path(handle.name)
+            try:
+                shutil.copyfile(self._path, temporary)
+                temporary.replace(destination)
+            finally:
+                temporary.unlink(missing_ok=True)
             for old in sorted(directory.glob(f"{self._path.stem}-*.json"))[
                 : -self._backup_keep
             ]:
@@ -113,6 +122,19 @@ def write_snapshot(path: Path, snapshot: Snapshot) -> None:
     # never leaves a truncated file. The JSON is not pretty-printed: the game code
     # embedded in the data makes pretty files ~2x bigger for no benefit.
     contents = _FILE_ADAPTER.dump_json(_File(format_version=FORMAT_VERSION, data=snapshot))
-    temporary = path.with_name(f"{path.name}.tmp")
-    temporary.write_bytes(contents)
-    temporary.replace(path)
+    # NamedTemporaryFile creates a fresh owner-only file, even with a permissive
+    # umask, and does not follow a pre-existing <path>.tmp symlink. Snapshots and
+    # backups contain account credentials and private match state.
+    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as handle:
+        temporary = Path(handle.name)
+        try:
+            handle.write(contents)
+            handle.flush()
+            os.fsync(handle.fileno())
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
+    try:
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)

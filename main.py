@@ -41,8 +41,8 @@ def warn_about_insecure_setup(config: Config, platform: GamePlatform) -> None:
     """Logs problems that are fine in development and dangerous on the internet."""
     if config.debug_tools and not config.master_password:
         logger.warning(
-            "debug_tools is on with no master_password: anyone who can reach this "
-            "server can read every user's password via the admin pages"
+            "debug_tools is on with no master_password: protected admin "
+            "operations are disabled until a master password is configured"
         )
     if getattr(platform._store, "scalable", False):
         return  # Full-database hygiene checks belong to offline maintenance.

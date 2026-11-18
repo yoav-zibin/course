@@ -155,6 +155,14 @@ def test_inline_asset_data_is_type_checked_and_svg_is_inert():
         validate_spec(ui)
 
 
+@pytest.mark.parametrize("uri", ["https://tracker.example/card-ace.png", "https://tracker.example/?private=cards", "http://tracker.example/card.png"])
+def test_external_artwork_cannot_disclose_private_scene_choices(uri):
+    ui = spec()
+    ui["assets"] = {"private-card": {"media_type": "image/png", "uri": uri}}
+    with pytest.raises(DeclarativeUIError):
+        validate_spec(ui)
+
+
 def test_spec_topology_references_and_version_are_strict():
     ui = spec()
     ui["version"] = 2

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createGame, createUser, loginAs, uniqueName } from './helpers';
+import { createGame, createUser, E2E_ADMIN_HEADERS, loginAs, uniqueName } from './helpers';
 
 const sizes = [
   { name: 'small phone portrait', width: 360, height: 640 },
@@ -15,6 +15,7 @@ test.describe('Layout at different screen sizes', () => {
   for (const size of sizes) {
     for (const name of pages) {
       test(`${name}: no horizontal scrolling on ${size.name} (${size.width}x${size.height})`, async ({ page }) => {
+        if (name === 'browse') await page.setExtraHTTPHeaders(E2E_ADMIN_HEADERS);
         await page.setViewportSize({ width: size.width, height: size.height });
         await page.goto(`/static/${name}.html`);
         await expect(page.getByRole('heading', { name: /Game platform|BuildPlay.fun/ }).first()).toBeVisible();

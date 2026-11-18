@@ -1229,6 +1229,15 @@ def _iso_time(epoch: float) -> str:
     )
 
 
+def _omit_request_bodies(scope: Scope) -> bool:
+    """Reproduction evidence and review notes stay in the private bug store."""
+    path = scope["path"]
+    root = scope.get("root_path", "").rstrip("/")
+    if root and path.startswith(root + "/"):
+        path = path[len(root):]
+    return path == "/game-server-bugs" or path.startswith("/game-server-bugs/")
+
+
 class RequestLogMiddleware:
     """Gives every request an id (returned as X-Request-Id), measures it, and logs the
     ones worth investigating together with everything needed to repeat them: slow ones,
@@ -1262,6 +1271,7 @@ class RequestLogMiddleware:
         request_id = headers.get("x-request-id", "")[:64] or uuid.uuid4().hex[:16]
         client = _client_of(scope, headers)
         method, path = scope["method"], scope["path"]
+        keep_bodies = not _omit_request_bodies(scope)
         query = scope.get("query_string", b"").decode("latin-1")
         body = bytearray()
         body_size = 0
@@ -1277,7 +1287,7 @@ class RequestLogMiddleware:
             if message["type"] == "http.request":
                 chunk = message.get("body", b"")
                 body_size += len(chunk)
-                if len(body) < config.max_logged_body_bytes + 1:
+                if keep_bodies and len(body) < config.max_logged_body_bytes + 1:
                     body.extend(chunk[: config.max_logged_body_bytes + 1 - len(body)])
             return message
 
@@ -1296,7 +1306,7 @@ class RequestLogMiddleware:
             elif message["type"] == "http.response.body":
                 chunk = message.get("body", b"")
                 response_size += len(chunk)
-                if len(response_body) < config.max_logged_body_bytes + 1:
+                if keep_bodies and len(response_body) < config.max_logged_body_bytes + 1:
                     response_body.extend(
                         chunk[: config.max_logged_body_bytes + 1 - len(response_body)]
                     )
@@ -1335,17 +1345,58 @@ class RequestLogMiddleware:
             await self.app(scope, receive_and_keep, send_with_id)
         except Exception as error:
             duration_ms = (time.perf_counter() - started) * 1000
+            exception_fields: dict[str, Any] = {}
+            if keep_bodies:
+                message = f"{type(error).__name__} in {method} {path}: {error}"
+                exception_info = sys.exc_info()
+            else:
+                # Storage/serialization failures can quote reproduction data
+                # in their exception text or chained traceback. Keep location
+                # metadata without exception messages, source lines or locals.
+                message = f"{type(error).__name__} in {method} {path}: private evidence omitted"
+                exception_info = None
+                exception_fields = {
+                    "exception_type": type(error).__name__,
+                    "stack_frames": [
+                        {"file": frame.f_code.co_filename, "line": line,
+                         "function": frame.f_code.co_name}
+                        for frame, line in traceback.walk_tb(error.__traceback__)
+                    ][-16:],
+                }
             log_event(
                 "unexpected_exception",
-                f"{type(error).__name__} in {method} {path}: {error}",
+                message,
                 level=logging.ERROR,
                 alert="minor",
-                exc_info=sys.exc_info(),
+                exc_info=exception_info,
                 duration_ms=round(duration_ms),
+                **exception_fields,
                 **describe(),
             )
             monitor.count("unexpected_exceptions")
             crashed = True
+            if not keep_bodies:
+                # Starlette deliberately rethrows exceptions after its error
+                # handler. Answer here so an outer server logger cannot print
+                # the original private exception and its chained traceback.
+                if not status:
+                    content = json.dumps({"detail": "internal server error",
+                                          "code": "internal_error",
+                                          "request_id": request_id}).encode()
+                    try:
+                        await send_with_id({"type": "http.response.start", "status": 500,
+                            "headers": [(b"content-type", b"application/json"),
+                                        (b"content-length", str(len(content)).encode()),
+                                        (b"cache-control", b"private, no-store")]})
+                        await send_with_id({"type": "http.response.body", "body": content})
+                    except Exception:
+                        # A disconnected transport must not expose the original
+                        # exception through a new exception's implicit context.
+                        pass
+                # If headers were already sent, leave the response incomplete
+                # so the server closes it; never send a second response start.
+                status = status or 500
+                return
             status = status or 500
             raise
         finally:
@@ -1446,11 +1497,12 @@ class RequestLogMiddleware:
             record["memory_rss_before_bytes"] = memory_before[0]
             record["memory_rss_after_bytes"] = memory_after[0]
             record["memory_rss_delta_bytes"] = memory_after[0] - memory_before[0]
-        if request_body:
+        keep_bodies = not _omit_request_bodies(scope)
+        if keep_bodies and request_body:
             record["request_body"] = RequestLogMiddleware._body_for_log(
                 bytes(request_body), headers, config, request_size
             )
-        if response_body:
+        if keep_bodies and response_body:
             record["response_body"] = RequestLogMiddleware._body_for_log(
                 bytes(response_body), response_headers, config, response_size
             )
@@ -1461,7 +1513,9 @@ class RequestLogMiddleware:
         raw: bytes, headers: dict[str, str], config: MonitoringConfig, total_size: int
     ) -> Any:
         if total_size > config.max_logged_body_bytes:
-            return {"_truncated": True, "bytes": total_size, "head": raw[:200].decode("utf-8", "replace")}
+            # A prefix is not valid JSON and cannot be reliably redacted. It may
+            # begin with a password, verification code, or protected admin data.
+            return {"_truncated": True, "bytes": total_size}
         if "json" in headers.get("content-type", ""):
             try:
                 return capture(json.loads(raw), config.max_logged_body_bytes)

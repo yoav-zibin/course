@@ -976,5 +976,9 @@
   "ui.match.link_copied": "लिंक कॉपी हो गया। इसे किसी दोस्त को भेजें।",
   "ui.match.link_manual": "इस लिंक को कॉपी करके किसी दोस्त को भेजें।",
   "ui.portal.computer_mode_hint": "कंप्यूटर प्रतिद्वंद्वियों के खिलाफ़ मुफ़्त मैच शुरू करें।",
-  "ui.match.private_share_notice": "केवल इस निजी मैच के खिलाड़ी ही यह लिंक खोल सकते हैं।"
+  "ui.match.private_share_notice": "केवल इस निजी मैच के खिलाड़ी ही यह लिंक खोल सकते हैं।",
+  "error.game_capability_required": "गेम की गुप्त कुंजी या मास्टर पासवर्ड आवश्यक है",
+  "error.paid_match_delete_forbidden": "चल रहा दांव वाला मैच हटाया नहीं जा सकता; इसके बजाय छोड़ने के परिणाम का पूर्वावलोकन देखें और पुष्टि करें",
+  "error.master_password_not_configured": "मास्टर पासवर्ड सेट नहीं किया गया है",
+  "error.master_write_cross_origin": "दूसरे मूल से आने वाले अनुरोध मास्टर पासवर्ड का उपयोग नहीं कर सकते"
 }

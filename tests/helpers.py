@@ -118,7 +118,7 @@ class Api:
         max_push_subscriptions_per_user: int = 10,
         computer_move_delay_seconds: float = 0,
         require_game_strings: bool = False,
-        master_password: str | None = None,
+        master_password: str | None = "explicit-test-master-password",
     ) -> None:
         platform = GamePlatform(
             require_game_strings=require_game_strings,
@@ -167,8 +167,22 @@ class Api:
             and "game_schemas" not in json
         ):
             json = {**json, "game_schemas": TEST_GAME_SCHEMAS}
+        # Mechanics tests explicitly use the fixture's administrator credential
+        # for backoffice calls and the acting owner's game changes. Security
+        # tests use client directly to control every credential themselves.
+        master = self.client.app.state.master_password
+        use_master = path.startswith(("/admin/", "/v2/admin/")) or (
+            method == "GET" and path in ("/admin", "/browse", "/stats", "/invites", "/feedback")
+        )
+        parts = path.split("/")
+        if len(parts) >= 3 and parts[1] == "games" and method in ("PATCH", "DELETE", "POST"):
+            game = self.platform._store.get_game(parts[2])
+            use_master = game is not None and game.owner_user_id == as_user
+            if method == "PATCH" and use_master and isinstance(json, dict):
+                json = {"game_addition_request_id_and_secret": master or TEST_GAME_SECRET, **json}
+        auth = ("test-admin", master) if use_master and master else None
         return self.client.request(
-            method, path, headers=headers, json=json, params=params
+            method, path, headers=headers, json=json, params=params, auth=auth
         )
 
     def ok(

@@ -11,6 +11,7 @@ import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import kotlinx.serialization.json.*
+import java.io.ByteArrayInputStream
 
 const val HOST_ORIGIN = "https://appassets.androidplatform.net"
 const val HOST_URL = "$HOST_ORIGIN/assets/game-host.html"
@@ -65,7 +66,9 @@ internal fun initializeGameWebView(view: WebView, payload: () -> String,
         val loader = WebViewAssetLoader.Builder().addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context)).build()
         webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
-                loader.shouldInterceptRequest(request.url)
+                if (request.url.toString() == HOST_URL) loader.shouldInterceptRequest(request.url)
+                else WebResourceResponse("text/plain", "UTF-8", 403, "Forbidden",
+                    mapOf("Cache-Control" to "no-store"), ByteArrayInputStream(byteArrayOf()))
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 // Allow the sandboxed srcdoc document to load; never navigate the trusted host.
                 val internalFrame = !request.isForMainFrame && request.url.toString() in setOf("about:srcdoc", "about:blank")

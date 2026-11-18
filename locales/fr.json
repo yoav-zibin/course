@@ -976,5 +976,9 @@
   "ui.match.link_copied": "Lien copié. Envoyez-le à un ami.",
   "ui.match.link_manual": "Copiez ce lien et envoyez-le à un ami.",
   "ui.portal.computer_mode_hint": "Lancez une partie gratuite contre des adversaires contrôlés par l’ordinateur.",
-  "ui.match.private_share_notice": "Seuls les joueurs de cette partie privée peuvent ouvrir ce lien."
+  "ui.match.private_share_notice": "Seuls les joueurs de cette partie privée peuvent ouvrir ce lien.",
+  "error.game_capability_required": "le secret du jeu ou le mot de passe maître est requis",
+  "error.paid_match_delete_forbidden": "une partie payante en cours ne peut pas être supprimée ; prévisualisez votre départ puis confirmez-le",
+  "error.master_password_not_configured": "le mot de passe maître n’est pas configuré",
+  "error.master_write_cross_origin": "les requêtes provenant d’une autre origine ne peuvent pas utiliser le mot de passe maître"
 }

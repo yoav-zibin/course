@@ -9,12 +9,11 @@ playerLeft. This module is the only place Python talks to that JavaScript.
 
 Design notes:
 
-- One QuickJS context per [GameLogic] instance (i.e. per game version),
-  created lazily and cached. A context evaluates a small prelude and then
-  the game's server code. Calls are stateless: arguments and results cross
-  the boundary as JSON, and the prelude reseeds the random generator and
-  freezes the clock on *every* call, so a context can be discarded and
-  rebuilt at any time (and is, after any bug-level error).
+- One fresh QuickJS context per call. A context evaluates a small prelude
+  and then the game's server code, and is discarded after the result. Calls
+  are stateless: arguments and results cross the boundary as JSON, and no
+  game global or closure can retain private data for a later caller. The
+  offline verifier alone keeps a context to detect forbidden stateful code.
 - Determinism is a contract, not a hope: given the same arguments, the
   same seed and the same frozen time, a function must return the same
   result. Game code gets randomness only from ctx.random() (Math.random is
@@ -456,7 +455,9 @@ def _is_timeout(error: Exception) -> bool:
 
 class GameLogic:
     """One game's server code, runnable. Create one per game version and
-    reuse it: the QuickJS context is cached between calls.
+    reuse its schema validators. Each call gets a fresh QuickJS context:
+    a game's globals and closures must never carry one player's private
+    state into another player's view or a different match.
 
     The platform shares one instance across threads (request threads,
     the computer-move timer, the game tester), but a QuickJS context may
@@ -473,8 +474,12 @@ class GameLogic:
         game_version: int = 0,
         time_limit_seconds: float = TIME_LIMIT_SECONDS,
         memory_limit_bytes: int = MEMORY_LIMIT_BYTES,
+        isolate_calls: bool = True,
     ) -> None:
         self._server_code = server_code
+        # Only offline publication checks disable isolation, to catch code
+        # that relies on mutable globals. Runtime callers always use True.
+        self._isolate_calls = isolate_calls
         self._game_id = game_id
         self._game_version = game_version
         self._time_limit_seconds = time_limit_seconds
@@ -729,10 +734,12 @@ class GameLogic:
     ) -> Any:
         """Calls game.<function>(*args, ctx) and returns its JSON result.
 
-        Serialized on this instance's lock (see the class docstring):
-        the cached QuickJS context is never entered concurrently.
+        Serialized on this instance's lock (see the class docstring), with
+        no JavaScript heap surviving from another call.
         """
         with self._lock:
+            if self._isolate_calls:
+                self._drop_context()
             if function not in GAME_FUNCTIONS:
                 raise GameLogicError(f"unknown game function: {function!r}")
             input_json = json.dumps(
@@ -772,6 +779,10 @@ class GameLogic:
                         kind="invalid_move",
                     )
                 raise
+            finally:
+                # Errors and InvalidMove can retain inputs in game globals too.
+                if self._isolate_calls:
+                    self._drop_context()
 
     def _call(
         self,

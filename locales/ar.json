@@ -976,5 +976,9 @@
   "ui.match.link_copied": "تم نسخ الرابط. أرسله إلى صديق.",
   "ui.match.link_manual": "انسخ هذا الرابط وأرسله إلى صديق.",
   "ui.portal.computer_mode_hint": "ابدأ مباراة مجانية ضد خصوم يتحكم بهم الكمبيوتر.",
-  "ui.match.private_share_notice": "لا يمكن فتح هذا الرابط إلا للاعبين المشاركين في هذه المباراة الخاصة."
+  "ui.match.private_share_notice": "لا يمكن فتح هذا الرابط إلا للاعبين المشاركين في هذه المباراة الخاصة.",
+  "error.game_capability_required": "يلزم تقديم سر اللعبة أو كلمة المرور الرئيسية",
+  "error.paid_match_delete_forbidden": "لا يمكن حذف مباراة مدفوعة جارية؛ اعرض معاينة المغادرة ثم أكّدها بدلاً من ذلك",
+  "error.master_password_not_configured": "لم يتم إعداد كلمة المرور الرئيسية",
+  "error.master_write_cross_origin": "لا يمكن للطلبات الواردة من مصدر مختلف استخدام كلمة المرور الرئيسية"
 }

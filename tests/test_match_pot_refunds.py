@@ -45,12 +45,14 @@ def admin_delete(api: Api, path: str) -> None:
 
 
 @pytest.mark.parametrize("who", ["alice", "bob"])
-def test_a_player_deleting_an_ongoing_paid_match_refunds_both_stakes(who: str) -> None:
-    # Regression: deleting used to drop the pot, the other player's stake too.
+def test_a_player_cannot_refund_an_ongoing_paid_match_by_deleting_it(who: str) -> None:
     api = Api()
     match_id, alice, bob = paid_match(api)
-    api.ok("DELETE", f"/matches/{match_id}", as_user=alice if who == "alice" else bob)
-    assert (balance(api, alice), balance(api, bob)) == (10, 10)
+    response = api.request("DELETE", f"/matches/{match_id}", as_user=alice if who == "alice" else bob)
+    assert response.status_code == 409
+    assert "preview and confirm leaving" in response.text
+    assert (balance(api, alice), balance(api, bob)) == (5, 5)
+    assert api.platform._store.get_match(match_id).token_pot == 10
 
 
 def test_an_admin_deleting_an_ongoing_paid_match_refunds_both_stakes() -> None:

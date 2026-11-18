@@ -1023,10 +1023,10 @@ function matchItem(match) {
       el("span", {class:"match-card-players", textContent:match.players.map(playerName).join(" · ")}),
       el("span", {class:"match-card-moves", textContent:I18n.t("ui.match.moves_count", { count: match.move_count }, `${match.move_count} moves`)})),
   );
-  // One-click removal uses the match view's DELETE permissions: active
-  // participants can delete live matches; past participants can hide completed
-  // ones. Creating a match grants no separate rights. Local practices archive.
-  const canDelete = Boolean(user && (match.localMode || match.players.some(player =>
+  // Paid games must settle through Leave; a cancellation refund would let a
+  // losing player avoid the game's result. Completed matches can be hidden.
+  const paidOngoing = match.status === "ongoing" && (match.token_pot ?? 0) > 0;
+  const canDelete = !paidOngoing && Boolean(user && (match.localMode || match.players.some(player =>
     player.user_id === user.id && (match.status === "over" || player.active !== false))));
   if (!canDelete) return card;
   const deleteLabel = match.localMode
@@ -1943,7 +1943,7 @@ function renderMatch() {
     if (mySeat && !match.localMode)
       actions.push(actionButton(I18n.t("ui.match.hide_from_list", {}, "Hide from my list"), call("DELETE")));
   }
-  if (mySeat && !match.localMode && match.status === "ongoing") {
+  if (mySeat && !match.localMode && match.status === "ongoing" && !(match.token_pot > 0)) {
     secondaryActions.push(
       actionButton(I18n.t("ui.match.delete_match", {}, "Delete match"), call("DELETE"), {
         danger: true,

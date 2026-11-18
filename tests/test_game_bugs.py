@@ -16,7 +16,7 @@ AUTH = ("reviewer", "test-master-password")
 
 
 def test_bug_review_fails_closed_without_a_master_password():
-    client = Api().client
+    client = Api(master_password="").client
     assert client.get("/game-server-bugs").status_code == 503
     assert client.get("/game-server-bugs/missing").status_code == 503
     assert client.post("/game-server-bugs/missing/examine",

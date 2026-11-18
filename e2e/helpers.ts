@@ -8,6 +8,13 @@ export const DECLARATIVE_TICTACTOE = JSON.parse(
 
 export interface Account { id: string; display_name: string; password: string }
 
+// Public credentials for the disposable loopback server in start-server.py.
+// Apply only to administrator workflows; player contexts stay unprivileged.
+export const E2E_ADMIN_CREDENTIALS = {username: 'e2e-admin', password: 'e2e-test-master'};
+export const E2E_ADMIN_HEADERS = {
+  Authorization: `Basic ${Buffer.from(`${E2E_ADMIN_CREDENTIALS.username}:${E2E_ADMIN_CREDENTIALS.password}`).toString('base64')}`,
+};
+
 /** Creates a real guest user on the test server (the same call the Log in dialog makes). */
 export async function createUser(request: APIRequestContext, name: string): Promise<Account> {
   const res = await request.post('/users', { data: { display_name: name } });
