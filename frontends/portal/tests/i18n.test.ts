@@ -2,9 +2,18 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import copy from '../src/platform/ui-copy.json';
 import bundled from '../src/core/bundled-tictactoe.json';
+import english from '../../../locales/en.json';
+import spanish from '../../../locales/es.json';
+import french from '../../../locales/fr.json';
+import german from '../../../locales/de.json';
+import portuguese from '../../../locales/pt.json';
+import chinese from '../../../locales/zh.json';
+import hindi from '../../../locales/hi.json';
+import arabic from '../../../locales/ar.json';
 import {configureI18n,copyText,gameTexts,getDirection,t} from '../src/platform/i18n';
 
 const codes=['es','fr','de','pt','zh','hi','ar'];
+const catalogs:Record<string,typeof english>={es:spanish,fr:french,de:german,pt:portuguese,zh:chinese,hi:hindi,ar:arabic};
 test('shared interface dictionaries cover every locale with the same parameters',()=>{
   const parameters=(value:string)=>[...new Set([...value.matchAll(/\{(\w+)\}/g)].map(match=>match[1]))].sort();
   for(const [source,translations] of Object.entries(copy)){
@@ -24,6 +33,11 @@ test('all seven translations work offline for missing catalog keys and the bundl
     for(const code of codes){
       await configureI18n('https://must-not-contact.test',code,true);
       assert.equal(copyText('Play history'),copy['Play history'][code as keyof typeof copy['Play history']]);
+      for(const key of ['ui.match.you_won','ui.match.you_lost','ui.match.draw','ui.match.ended_early','ui.match.result_unavailable','ui.match.won','ui.match.player_n','ui.match.awaiting_sync'] as const){
+        const params={name:'Alice {number}',number:2};
+        const expected=catalogs[code][key].replace(/\{(\w+)\}/g,(_,name)=>String(params[name as keyof typeof params]));
+        assert.equal(t(key,params,english[key]),expected,`offline match outcome: ${key}`);
+      }
       assert.notEqual(t('ui.language.label',{},'Language'),'Language');
       assert.equal(getDirection(),code==='ar'?'rtl':'ltr');
       const texts=gameTexts(bundled);assert.ok(texts?.strings?.cell);assert.notEqual(texts.strings.cell,'Cell {n}');

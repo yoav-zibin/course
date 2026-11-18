@@ -111,6 +111,20 @@ test('browser Back from a local match restores its game detail screen and play c
   await expect(page.getByRole('button',{name:'Pass and play',exact:true})).toBeVisible();
 });
 
+test('a delayed browser Back response cannot replace newer Preferences navigation',async({page,request})=>{
+  const created=await game(request,uniqueName('Delayed history game'));await page.goto(`/portal#game=${created.id}`);
+  await page.getByRole('button',{name:'Pass and play',exact:true}).click();await expect(page).toHaveURL(/#match=local-/);
+  let release!:()=>void,started!:()=>void;
+  const held=new Promise<void>(resolve=>{release=resolve;}),requested=new Promise<void>(resolve=>{started=resolve;});
+  await page.route(`**/games/${created.id}`,async route=>{started();await held;await route.continue();});
+  await page.goBack();await requested;
+  await page.getByRole('button',{name:'Preferences',exact:true}).click();await expect(page.getByRole('heading',{name:'Preferences',exact:true})).toBeVisible();
+  const response=page.waitForResponse(response=>new URL(response.url()).pathname===`/games/${created.id}`);
+  release();await (await response).finished();
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  await expect(page).toHaveURL(/#settings$/);await expect(page.getByRole('heading',{name:'Preferences',exact:true})).toBeVisible();
+});
+
 test('campaign arrival persists before login and attributes the guest signup',async({page,request})=>{
   const name=uniqueName('Arrival campaign');
   const key=uniqueName('arrival-campaign').toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,50);
@@ -186,14 +200,21 @@ test('bundled local game is playable offline, hides handoffs, persists, and repl
   await expect(page.getByTestId('match-outcome')).toHaveText('Player 1 won');
 });
 
-test('a genuinely finished local draw is shown in both native detail and match list',async({page})=>{
+test('a genuinely finished local draw stays translated offline in detail and match list',async({page,context})=>{
   await page.goto('/portal');await page.getByRole('button',{name:'On this device',exact:true}).click();await page.getByRole('button',{name:'Pass and play',exact:true}).click();
   for(const [index,cell] of [1,2,3,5,4,6,8,7,9].entries()){
     if(index)await page.getByRole('button',{name:'I’m ready'}).click();
     await page.getByRole('button',{name:`Cell ${cell}`,exact:true}).click();
   }
   await expect(page.getByTestId('match-outcome')).toHaveText('Draw');
-  await page.getByRole('button',{name:'On this device',exact:true}).click();await expect(page.getByTestId('match-outcome')).toHaveText('Draw');
+  // Spanish has never been downloaded in this fresh browser context.
+  await context.setOffline(true);
+  await page.getByRole('button',{name:'Log in',exact:true}).click();
+  await page.getByRole('button',{name:/Language:.*Español/}).click();
+  await expect(page.locator('html')).toHaveAttribute('lang','es');
+  await page.getByRole('button',{name:'Cerrar diálogo',exact:true}).click();
+  await expect(page.getByTestId('match-outcome')).toHaveText('Empate');
+  await page.getByRole('button',{name:'En este dispositivo',exact:true}).click();await expect(page.getByTestId('match-outcome')).toHaveText('Empate');
 });
 
 test('private invitation survives guest sign-in and creates a usable shared link and QR code',async({page,request})=>{

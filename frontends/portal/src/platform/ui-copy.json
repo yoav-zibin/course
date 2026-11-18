@@ -2509,5 +2509,77 @@
     "zh": "取消",
     "hi": "रद्द करें",
     "ar": "إلغاء"
+  },
+  "You won": {
+    "es": "Ganaste",
+    "fr": "Vous avez gagné",
+    "de": "Du hast gewonnen",
+    "pt": "Você venceu",
+    "zh": "你赢了",
+    "hi": "आप जीत गए",
+    "ar": "لقد فزت"
+  },
+  "You lost": {
+    "es": "Perdiste",
+    "fr": "Vous avez perdu",
+    "de": "Du hast verloren",
+    "pt": "Você perdeu",
+    "zh": "你输了",
+    "hi": "आप हार गए",
+    "ar": "لقد خسرت"
+  },
+  "Draw": {
+    "es": "Empate",
+    "fr": "Match nul",
+    "de": "Unentschieden",
+    "pt": "Empate",
+    "zh": "平局",
+    "hi": "ड्रॉ",
+    "ar": "تعادل"
+  },
+  "Ended early": {
+    "es": "Terminó antes de tiempo",
+    "fr": "Terminée prématurément",
+    "de": "Vorzeitig beendet",
+    "pt": "Encerrada antes do fim",
+    "zh": "提前结束",
+    "hi": "समय से पहले समाप्त",
+    "ar": "انتهت مبكرًا"
+  },
+  "Result unavailable": {
+    "es": "Resultado no disponible",
+    "fr": "Résultat indisponible",
+    "de": "Ergebnis nicht verfügbar",
+    "pt": "Resultado indisponível",
+    "zh": "暂无结果",
+    "hi": "परिणाम उपलब्ध नहीं",
+    "ar": "النتيجة غير متاحة"
+  },
+  "{name} won": {
+    "es": "{name} ganó",
+    "fr": "{name} a gagné",
+    "de": "{name} hat gewonnen",
+    "pt": "{name} venceu",
+    "zh": "{name} 赢了",
+    "hi": "{name} जीत गया",
+    "ar": "فاز {name}"
+  },
+  "Player {number}": {
+    "es": "Jugador {number}",
+    "fr": "Joueur {number}",
+    "de": "Spieler {number}",
+    "pt": "Jogador {number}",
+    "zh": "玩家 {number}",
+    "hi": "खिलाड़ी {number}",
+    "ar": "اللاعب {number}"
+  },
+  "awaiting sync": {
+    "es": "pendiente de sincronizar",
+    "fr": "en attente de synchronisation",
+    "de": "wartet auf Synchronisierung",
+    "pt": "aguardando sincronização",
+    "zh": "等待同步",
+    "hi": "सिंक की प्रतीक्षा में",
+    "ar": "بانتظار المزامنة"
   }
 }

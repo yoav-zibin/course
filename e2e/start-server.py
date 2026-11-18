@@ -30,7 +30,7 @@ with tempfile.TemporaryDirectory() as tmp:
     # and entering a match never grant tokens.
     sys.path.insert(0, tmp)
     import game_platform
-    if Path(game_platform.__file__).resolve().parent != repo:
+    if Path(game_platform.__file__).resolve().parent != package_alias.resolve():
         raise RuntimeError("Browser tests imported a different game_platform checkout")
     from game_platform.json_file_store import JsonFileStore
     from game_platform.models import User
