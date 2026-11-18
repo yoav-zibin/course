@@ -16,6 +16,7 @@
 .declarative-stage{user-select:none;-webkit-user-select:none}
 .declarative-roll{transform-box:fill-box;transform-origin:center}
 .declarative-target-hit{pointer-events:none}
+.declarative-target[data-drop-state=placement] .declarative-target-hit{pointer-events:all}
 .show-drop-hints .declarative-target[data-drop-state=allowed] .declarative-target-hit{pointer-events:all}
 .declarative-piece-action-outline,.declarative-action-badges{visibility:hidden;pointer-events:none}
 .declarative-piece.actionable .declarative-piece-action-outline,.declarative-piece.actionable .declarative-action-badges{visibility:visible}
@@ -62,6 +63,6 @@
 .declarative-target[data-drop-state=allowed] .declarative-target-outline{visibility:visible;stroke:#d2ff5a;stroke-width:2;stroke-dasharray:6 4}
 .declarative-target.snapped .declarative-target-area{opacity:1;stroke:#fff;stroke-width:5;stroke-dasharray:none}
 .declarative-target[data-drop-state=allowed].snapped .declarative-target-outline{stroke:#fff;stroke-width:4;stroke-dasharray:none;filter:drop-shadow(0 0 4px #d2ff5a)}
-/* Destination artwork never captures a checker tap; only the selected source's
-   declared legal hit rectangles take pointer input. */
+/* Artwork stays inert. Declared placement/drop rectangles receive input;
+   placement targets stay below selectable pieces. */
 image.declarative-target-area{pointer-events:none}

@@ -341,6 +341,9 @@
     let latest = null, localState = null, revision = 0, renderedRevision = -1, destroyed = false, moveSent = false, selected = null, dragging = null, nativeDragging = null, currentScene = null, suppressClick = false;
     let lastStateMoveCount = null, lastStateWasReplay = false, lastStateTurn = null, lastRoundWinner = null, dragPreview = null;
     let motionPending=false,motionTimer=null,motionRelease=null,motionReady=Promise.resolve();
+    let pointerSequence=0;
+    function pointerStarted(){pointerSequence++;}
+    global.addEventListener("pointerdown",pointerStarted,true);
     function clearMotionHold(){
       if(motionTimer!==null)global.clearTimeout(motionTimer);
       motionTimer=null;motionPending=false;motionRelease?.();motionRelease=null;
@@ -591,6 +594,14 @@
       const destinations=active&&pieceActions(piece||{actions:[]}).includes("move")?new Set(piece.move_targets):null;
       stage.classList.toggle("show-action-hints",Boolean(active));
       stage.classList.toggle("show-drop-hints",Boolean(destinations));
+      // A destination can share its surface with a selectable checker. Keep
+      // pieces above placement targets until a source is selected, then put
+      // the legal drop destinations above the pieces at their original layer.
+      const targetLayer=stage.querySelector(".declarative-target-layer");
+      if(targetLayer&&previewLayer?.parentNode===stage){
+        if(destinations)previewLayer.after(targetLayer);
+        else stage.insertBefore(targetLayer,stage.querySelector(".declarative-piece")||previewLayer);
+      }
       for(const node of stage.querySelectorAll(".declarative-piece")){
         const enabled=active&&Boolean(node.dataset.actions);
         node.classList.toggle("actionable",Boolean(enabled));
@@ -651,7 +662,16 @@
       node.setAttribute("role", "button"); node.setAttribute("tabindex", canAct() ? "0" : "-1");
       node.setAttribute("aria-label", String(label || id)); node.setAttribute("aria-disabled", String(!canAct()));
       node.dataset.uiId = id;
-      node.addEventListener("click", () => { if (!suppressClick&&!cameraClickBlocked()&&enabled()) fn(); });
+      let pointerPress=null;
+      node.addEventListener("pointerdown",()=>{pointerPress=enabled()?{sequence:pointerSequence,revision}:null;});
+      node.addEventListener("click", event => {
+        const press=pointerPress;pointerPress=null;
+        // Cancelling a touch can expose a newly enabled target under its end
+        // point. Only a press that began on this current target may click it.
+        // Keyboard and assistive clicks have detail=0 and retain their path.
+        if(event.detail>0&&(!press||press.sequence!==pointerSequence||press.revision!==revision))return;
+        if (!suppressClick&&!cameraClickBlocked()&&enabled()) fn();
+      });
       node.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); if (enabled()) fn(); } });
     }
     function draw(scene,animate=false,rollEffects=false,turnEnded=false) {
@@ -696,7 +716,7 @@
         stage.append(layer);
       }
       for (const path of scene.paths || []) stage.append(svg("polyline",{points:(path.points || []).map(p=>`${num(p.x)},${num(p.y)}`).join(" "),fill:"none",stroke:path.color || "#d2ff5a","stroke-width":num(path.width,3)}));
-      const targetLayer=svg("g");
+      const targetLayer=svg("g",{class:"declarative-target-layer"});
       for (const target of scene.targets || []) {
         const point = position(spec,target), board=point.board;
         const width = board.kind === "grid" ? board.width/board.columns : 44;
@@ -917,7 +937,7 @@
         resetDrag();latest=clone(message);revision++;moveSent=false;selected=null;nativeDragging=null;updateHints();const atRevision=revision;
         queue=queue.then(()=>reduce(latest,atRevision,options)).catch(error);return queue;
       },
-      destroy(){resetDrag();clearMotionHold();destroyed=true;revision++;touches.clear();cameraGesture=null;cameraObserver?.disconnect();global.removeEventListener("resize",scheduleCamera);if(cameraFrame!==null)global.cancelAnimationFrame(cameraFrame);for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();global.removeEventListener("pointermove",cameraPointerMove);global.removeEventListener("keydown",toolKeys);global.removeEventListener("pointermove",movePointer);global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game","declarative-immersive","declarative-has-previews");},
+      destroy(){resetDrag();clearMotionHold();destroyed=true;revision++;touches.clear();cameraGesture=null;cameraObserver?.disconnect();global.removeEventListener("resize",scheduleCamera);if(cameraFrame!==null)global.cancelAnimationFrame(cameraFrame);for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();global.removeEventListener("pointermove",cameraPointerMove);global.removeEventListener("pointerdown",pointerStarted,true);global.removeEventListener("keydown",toolKeys);global.removeEventListener("pointermove",movePointer);global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game","declarative-immersive","declarative-has-previews");},
       dispatch,
       async whenIdle(){await Promise.allSettled([motionReady,...[...pieceAnimations].map(animation=>animation.finished)]);},
     };
@@ -926,10 +946,10 @@
     const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
     const data=value=>JSON.stringify(canonical(value)).replace(/</g,"\\u003c");
     return '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<link rel="stylesheet" href="/static/declarative-ui.css?v=18"><div id="declarative-game"></div>' +
+      '<link rel="stylesheet" href="/static/declarative-ui.css?v=19"><div id="declarative-game"></div>' +
       '<script type="application/json" id="i18n-strings">'+data(spec.strings || {})+'<'+'/script>' +
       '<script type="application/json" id="declarative-spec">'+data(spec)+'<'+'/script>' +
-      '<script src="/static/declarative-ui.js?v=18"><'+'/script><script>' +
+      '<script src="/static/declarative-ui.js?v=19"><'+'/script><script>' +
       'const host=DeclarativeUI.mount(document.getElementById("declarative-game"),' +
       'JSON.parse(document.getElementById("declarative-spec").textContent),' +
       '{onMove:move=>parent.postMessage({type:"make_move",move},"*"),' +
