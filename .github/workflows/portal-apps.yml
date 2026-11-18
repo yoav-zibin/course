@@ -96,7 +96,7 @@ jobs:
     # The ARM runner pool has failed to acquire runners; standard Intel Macs
     # also run iOS Simulator tests without requiring a paid larger runner.
     runs-on: ${{ inputs.ios_runner || 'macos-15-intel' }}
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: maxim-lobanov/setup-xcode@v1
@@ -141,7 +141,9 @@ jobs:
       - name: Run local gameplay and restart tests in an iPhone Simulator
         if: ${{ !cancelled() && steps.ios-build.outcome == 'success' }}
         # Leave time for diagnostics/artifacts if simulator or XCTest startup stalls.
-        timeout-minutes: 15
+        # Boot (up to 10m), destination acquisition (2m), and the test (5m)
+        # need room for app installation and Xcode's result-bundle finalization.
+        timeout-minutes: 20
         run: |
           set -o pipefail
           bash frontends/ios-game-portal/scripts/test-simulator.sh \
