@@ -60,8 +60,8 @@ def nested_code(app):
 
 
 def read_entitlements(result):
-    # Modern codesign writes the plist to stdout; older versions also emitted
-    # it on stderr alongside their diagnostic banner.
+    # --xml is required: current codesign otherwise displays a human-readable
+    # DER representation. Older versions emitted XML on stderr with a banner.
     for text in (result.stdout, result.stderr):
         start, end = text.find("<?xml"), text.rfind("</plist>")
         if start >= 0 and end >= start:
@@ -98,7 +98,7 @@ def sign_simulator(app, run=subprocess.run):
             command([CODESIGN, "--verify", "--deep", "--strict", "--arch", architecture, str(app)])
             actual = read_entitlements(command([
                 CODESIGN, "--display", "--arch", architecture,
-                "--entitlements", "-", str(app),
+                "--entitlements", "-", "--xml", str(app),
             ]))
             if actual != entitlements:
                 raise ValueError(f"The {architecture} simulator signature has unexpected Keychain entitlements")

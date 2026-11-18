@@ -72,7 +72,9 @@ def fake_apple_tools(calls, *, architectures="x86_64 arm64", wrong_entitlement=F
             entitlements = dict(run.entitlements)
             if wrong_entitlement:
                 entitlements["keychain-access-groups"] = ["another.group"]
-            output = plistlib.dumps(entitlements).decode()
+            # Current macOS defaults to an abstract DER representation; only
+            # --xml promises the plist format consumed by the signer.
+            output = plistlib.dumps(entitlements).decode() if "--xml" in arguments else "[Dict] [application-identifier] [String]"
         return subprocess.CompletedProcess(arguments, 0, output, "")
     return run
 
@@ -103,6 +105,8 @@ def test_inside_out_signing_uses_actual_identity_and_verifies_both_slices(tmp_pa
     for operation in ("--verify", "--display"):
         matching = [call for call in calls if operation in call]
         assert {call[call.index("--arch") + 1] for call in matching} == {"arm64", "x86_64"}
+        if operation == "--display":
+            assert all("--xml" in call for call in matching)
     assert result["nested_code_signed"] == 3
     assert (app / "CustomPortal").read_bytes() == b"original binary"
 
