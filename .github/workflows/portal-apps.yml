@@ -149,6 +149,9 @@ jobs:
             | tee "$GITHUB_WORKSPACE/ios-test-results/simulator-tests.log"
       - name: Export test screenshots
         if: always()
+        # A stalled Simulator/xcresulttool must not consume the remaining job
+        # allowance before the always-run log and result uploads below.
+        timeout-minutes: 2
         run: |
           results="$GITHUB_WORKSPACE/ios-test-results"
           mkdir -p "$results/screenshots"

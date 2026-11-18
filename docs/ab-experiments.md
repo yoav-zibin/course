@@ -15,9 +15,11 @@ match starts count total started matches.
 
 Create campaign links from the campaign form. The key becomes the stable short
 URL `/c/<key>`; use lowercase letters, digits, and hyphens. The budget defaults
-to $100 and cannot exceed that amount. Update **Actual spend** as the campaign
-runs. The dashboard calculates cost per signup, match-starting user, and
-returning user from recorded spend. Clicks are counted per campaign and day;
+to $100 and cannot exceed that amount. Record actual spend through
+`PATCH /admin/experiments/campaign-links/{variant_id}` with a `spend_usd`
+field. The API report includes cost per signup, match-starting user, and
+returning user; the dashboard shows traffic, conversion rates, and budget.
+Clicks are counted per campaign and day;
 multiple clicks by the same visitor are not deduplicated.
 
 Campaign links use first-touch attribution in a browser. The campaign code is

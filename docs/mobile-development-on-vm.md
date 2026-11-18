@@ -90,6 +90,8 @@ gh run download RUN_ID --repo yoav-zibin/course \
 The screenshots artifact contains ordinary image files for viewing on the VM;
 the full `.xcresult` can also be opened in Xcode on a Mac. If compilation or
 simulator startup fails before screenshots exist, inspect the test-results logs.
+Screenshot export has a two-minute limit so a stalled simulator cannot prevent
+the following log and test-result uploads from running.
 
 Routine student builds reuse repository Actions secrets automatically. They
 do not require copying private keys into a checkout or resetting secrets.
