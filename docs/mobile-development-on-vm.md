@@ -42,6 +42,11 @@ gh workflow run portal-apps.yml --repo yoav-zibin/course --ref main
 gh run list --repo yoav-zibin/course --workflow portal-apps.yml --limit 5
 ```
 
+The default iOS runner is `macos-15-intel`. If GitHub cannot acquire that image,
+select `macos-26-intel` in the **Run workflow** runner choice, or pass
+`--field ios_runner=macos-26-intel` to `gh workflow run`. Both are standard
+GitHub runner images. The selected image also applies to the TestFlight job.
+
 Open the resulting run, wait for success and download its **Artifacts**. In
 the CLI, replace `RUN_ID` with that run's numeric ID:
 

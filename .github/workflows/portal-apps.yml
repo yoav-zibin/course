@@ -6,6 +6,15 @@ name: Portal apps
 
 on:
   workflow_dispatch:
+    inputs:
+      ios_runner:
+        description: Standard Mac runner (try the other image if capacity is delayed)
+        type: choice
+        required: true
+        default: macos-15-intel
+        options:
+          - macos-15-intel
+          - macos-26-intel
   push:
     branches: [main]
     paths:
@@ -86,7 +95,7 @@ jobs:
     name: BuildPlay iOS (simulator build and tests)
     # The ARM runner pool has failed to acquire runners; standard Intel Macs
     # also run iOS Simulator tests without requiring a paid larger runner.
-    runs-on: macos-15-intel
+    runs-on: ${{ inputs.ios_runner || 'macos-15-intel' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -178,7 +187,7 @@ jobs:
     # Reuses ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 and APPLE_TEAM_ID.
     if: vars.TESTFLIGHT_ENABLED == 'true' && vars.IOS_PORTAL_BUNDLE_ID != '' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: ios-portal
-    runs-on: macos-15-intel
+    runs-on: ${{ inputs.ios_runner || 'macos-15-intel' }}
     defaults:
       run:
         working-directory: frontends/ios-game-portal
