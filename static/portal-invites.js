@@ -177,6 +177,8 @@ window.PortalInvites = (() => {
           target.open.href = prepared;
           target.open.textContent = prepared;
           target.retry = null;
+          // The error view hides the input; reveal it before focusing it.
+          renderDialog();
           selectLink(input);
         } catch {} finally {
           if (dialog === target) { target.loading = false; renderDialog(); }

@@ -156,3 +156,39 @@ test('a delayed invitation from a previous account cannot replace the current ac
     expect(view.created_by_user_id).toBe(second.id);
   } finally { release(); await page.unrouteAll({ behavior: 'wait' }); }
 });
+
+test('retrying an ongoing private table invite selects the recovered link for manual copying', async ({ page }) => {
+  // Tables that allow joining after play starts use the share dialog rather
+  // than the waiting-lobby panel. Exercise real browser focus with only the
+  // invitation component and a deterministic transient API failure.
+  await page.route('**/invite-recovery-fixture', route => route.fulfill({
+    contentType: 'text/html',
+    body: '<button id="share">Invite friends</button><button id="lobby-invite-copy" hidden></button>',
+  }));
+  await page.goto('/invite-recovery-fixture#match=ongoing-private-table');
+  await page.evaluate(() => { (window as any).I18n = { t: (_key: string, _params: unknown, fallback: string) => fallback }; });
+  await page.addScriptTag({ url: '/static/portal-invites.js' });
+  await page.evaluate(() => {
+    const invites = (window as any).PortalInvites;
+    const user = { id: 'fixture-host' };
+    const match = { id: 'ongoing-private-table', private: true, status: 'ongoing' };
+    const options = { user, participant: true, canInvite: true };
+    let attempts = 0;
+    invites.init({ currentUser: () => user, request: async () => {
+      if (++attempts === 1) throw new Error('Temporary invite failure');
+      return { url: `${location.origin}/portal#invite=recovered-private-token` };
+    } });
+    invites.update(match, options);
+    document.getElementById('share')!.onclick = () => invites.copy(match, options);
+  });
+  await page.getByRole('button', { name: 'Invite friends', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Share match', exact: true });
+  await expect(dialog.locator('#portal-share-link')).toBeHidden();
+  await dialog.getByRole('button', { name: 'Retry', exact: true }).click();
+  const input = dialog.locator('#portal-share-link');
+  await expect(input).toHaveValue(/#invite=recovered-private-token$/);
+  await expect(input).toBeVisible();
+  await expect(input).toBeFocused();
+  expect(await input.evaluate((node: HTMLInputElement) => [node.selectionStart, node.selectionEnd]))
+    .toEqual([0, (await input.inputValue()).length]);
+});
