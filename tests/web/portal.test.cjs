@@ -43,6 +43,64 @@ test('creating a solo-only game starts one human immediately',async()=>{
   assert.equal(node('create').textContent,'Play solo ↗');
 });
 
+test('solo card play starts one human with no inherited stakes or move clock',async()=>{
+  const calls=[];
+  const t=setup(async(method,path,options)=>{
+    calls.push([method,path,options.body]);
+    return {id:'solo-now',game_id:'game',game_version:2,players:[{kind:'human',user_id:'owner'}]};
+  });
+  t.run('state.gameCache.set("game@2",{...state.games[0],server_code:"rules",declarative_ui:{}})');
+  t.node('match-speed').value='60';t.node('match-stake').value='20';
+  assert.equal(t.run('canInstantPlay(state.games[0])'),true);
+  assert.equal(t.run('canQuickStart(state.games[0])'),false);
+  assert.equal(t.run('quickPlayButton(state.games[0])["aria-label"]'),'Play Hanoi solo now');
+  await t.run('playWithAllComputers(state.games[0])');
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)),[
+    ['POST','/matches',{game_id:'game',num_computer_opponents:0,bet_per_player:0}],
+    ['POST','/matches/solo-now/start',{first_turn_player_indices:[0]}],
+  ]);
+  assert.equal(t.run('state.selectedId'),'solo-now');
+});
+
+test('multiplayer card play keeps its computer-opponent count and free entry',async()=>{
+  const calls=[];
+  const t=setup(async(method,path,options)=>{
+    calls.push([method,path,options.body]);
+    return {id:'computer-now',game_id:'game',game_version:2,players:[{kind:'human',user_id:'owner'}]};
+  });
+  t.run('state.games[0].allowed_player_counts=[2,3,4];state.gameCache.set("game@2",{...state.games[0],server_code:"rules",declarative_ui:{}})');
+  t.node('computer-player-count').value='2';
+  assert.equal(t.run('canQuickStart(state.games[0])'),true);
+  await t.run('playWithAllComputers(state.games[0])');
+  assert.equal(calls[0][2].num_computer_opponents,3);
+  assert.equal(calls[0][2].bet_per_player,0);
+  assert.equal(calls[1][1],'/matches/computer-now/start');
+});
+
+for (const phase of ['download','create','start']) {
+  test(`solo quick play ignores an account switch during ${phase}`,async()=>{
+    const calls=[];
+    let release;
+    const waiting=new Promise(resolve=>{release=resolve});
+    const match={id:'old-account-match',game_id:'game',game_version:2,players:[{kind:'human',user_id:'owner'}]};
+    const t=setup(async(method,path)=>{
+      calls.push(path);
+      return (phase==='create'&&path==='/matches') || (phase==='start'&&path.endsWith('/start')) ? waiting : match;
+    });
+    if(phase==='download') t.run('fetchGameVersion=()=>new Promise(resolve=>{globalThis.releaseDownload=resolve})');
+    else t.run('state.gameCache.set("game@2",{...state.games[0],server_code:"rules",declarative_ui:{}})');
+    const pending=t.run('playWithAllComputers(state.games[0])');
+    await new Promise(resolve=>setImmediate(resolve));
+    t.run('Auth.current=()=>({id:"different-account"})');
+    if(phase==='download') t.run('releaseDownload({server_code:"rules",declarative_ui:{}})');
+    else release(match);
+    await pending;
+    assert.equal(t.run('state.selectedId'),null);
+    assert.equal(calls.length,phase==='download'?0:phase==='create'?1:2);
+    assert.equal(t.run('state.creating'),false);
+  });
+}
+
 test('creating a deep-linked solo game ignores a previous multiplayer clock',async()=>{
   const calls=[];
   const t=setup(async(method,path,opts)=>{
@@ -299,7 +357,8 @@ test('gallery cards navigate to detail pages and polling preserves card nodes',(
   run('renderLibrary()');assert.equal(node('game-library').children,original);
   assert.equal(original[0].children[1].children[1].textContent,'Random');
   assert.equal(original[0].children[1].children[2].textContent,'Join an open match of any game');
-  original[1].onclick();
+  assert.equal(original[1].children[1]['aria-label'],'Play Hanoi solo now');
+  original[1].children[0].onclick();
   assert.equal(navigations[0],'/static/portal.html#game=game');
   run('state.libraryView="list";renderLibrary()');
   assert.match(node('game-library').className,/is-list/);

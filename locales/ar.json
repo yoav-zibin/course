@@ -959,5 +959,20 @@
   "error.html_games_read_only": "ألعاب HTML للقراءة فقط؛ أرسل حزمة declarative_ui",
   "error.legacy_game_not_found": "اللعبة القديمة غير موجودة",
   "error.html_matches_retired": "لم تعد ألعاب HTML تدعم المباريات",
-  "error.page_limit_invalid": "يجب أن يكون الحد بين 1 و100"
+  "error.page_limit_invalid": "يجب أن يكون الحد بين 1 و100",
+  "ui.portal.choose_play_mode": "كيف تود أن تلعب؟",
+  "ui.portal.play_friends": "العب مع الأصدقاء",
+  "ui.portal.friends_hint": "أنشئ طاولة خاصة وأرسل رابط الدعوة إلى صديقك.",
+  "ui.portal.match_options": "خيارات المباراة",
+  "ui.portal.create_public_match": "إنشاء مباراة عامة ↗",
+  "ui.portal.friends_create_hint": "الروابط الخاصة للأصدقاء المدعوين. المباريات العامة مفتوحة للجميع.",
+  "ui.portal.quick_play_solo_aria": "العب {name} بمفردك الآن",
+  "ui.match.invite_link": "رابط الدعوة",
+  "ui.match.copy_link": "نسخ الرابط",
+  "ui.match.link_loading": "جارٍ إعداد رابط الدعوة…",
+  "ui.match.link_failed": "تعذر إنشاء رابط دعوة. حاول مرة أخرى.",
+  "ui.match.link_copied": "تم نسخ الرابط. أرسله إلى صديق.",
+  "ui.match.link_manual": "انسخ هذا الرابط وأرسله إلى صديق.",
+  "ui.portal.computer_mode_hint": "ابدأ مباراة مجانية ضد خصوم يتحكم بهم الكمبيوتر.",
+  "ui.match.private_share_notice": "لا يمكن فتح هذا الرابط إلا للاعبين المشاركين في هذه المباراة الخاصة."
 }

@@ -1,0 +1,56 @@
+{
+  "date": "2026-11-18",
+  "scope": "Portal navigation and match setup; game implementations unchanged",
+  "references": [
+    {
+      "site": "Papergames.io",
+      "url": "https://papergames.io/en/tic-tac-toe",
+      "single_player": [
+        "Choose Play vs robot and enter a guest nickname",
+        "Play board moves and observe computer replies",
+        "Observe the result and Play again action"
+      ],
+      "multiplayer": [
+        "Host chooses Play with a friend and enters a guest nickname",
+        "Waiting screen displays a complete invitation URL",
+        "Open that URL in an independent browser context",
+        "Accept the named invitation and enter a different guest nickname",
+        "Play alternating moves to a result visible in both sessions",
+        "Request a rematch and observe waiting and opponent-consent prompts"
+      ],
+      "notes": "Rematch request and consent UI were inspected; a second rematch was not completed before the site's leave countdown."
+    },
+    {
+      "site": "CardGames.io",
+      "url": "https://cardgames.io/",
+      "single_player": [
+        "Open Solitaire and play a legal tableau move and stock draw",
+        "Use Undo, Pause and Resume",
+        "Start a new game after confirming abandonment",
+        "Open Reversi against a computer"
+      ],
+      "private_table": [
+        "Open Hearts multiplayer and create a private table",
+        "Observe a room code, selectable invitation URL and waiting-for-players message",
+        "Leave the private table after inspection"
+      ],
+      "limitation": "Separate browser contexts received identical server-issued multiplayer identities, so a two-session match was verified on Papergames.io instead."
+    },
+    {
+      "site": "Board Game Arena",
+      "url": "https://en.boardgamearena.com/",
+      "inspection": "Public catalog, Solo filter and tutorial entry",
+      "limitation": "Playing required email or social-account registration; no account was created."
+    }
+  ],
+  "adaptations": [
+    "Explicit friends, computer and device play choices",
+    "A direct private-table creation action with public matches kept separate",
+    "Optional settings collapsed, with selected stakes and clocks visible in their summary",
+    "Immediate solo starts from catalog, recent, popular and detail entries",
+    "A persistent selectable invitation URL and Copy link action in the lobby",
+    "Readable sharing fallback when clipboard access fails",
+    "Explicit invitation retry and account-scoped link caching"
+  ],
+  "implementation": "Uses BuildPlay's existing game catalog, private-match, invitation and start APIs with its own branding and theme tokens."
+}

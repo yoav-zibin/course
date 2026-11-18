@@ -60,7 +60,7 @@ test.describe('Choosing and playing a game (logged in, real server)', () => {
     await page.goto('/static/portal.html');
     await page.getByRole('combobox', { name: 'Search games' }).fill(gameName);
     await page.getByRole('option', { name: new RegExp(gameName) }).click();
-    await page.getByRole('button', { name: /Create match/ }).click();
+    await page.getByRole('button', { name: /Create public match/ }).click();
 
     await expect(page.locator('#match')).toBeVisible();
     await expect(page.locator('#match-toolbar-title')).toContainText(gameName);

@@ -29,11 +29,15 @@ const star = {
 };
 const multiplayer = { ...star, id:'multiplayer-setup-fixture', name:'Multiplayer setup', allowed_player_counts:[2] };
 
-async function prepare(page: Page, request: APIRequestContext) {
+async function prepare(page: Page, request: APIRequestContext, shelf: 'catalog' | 'recent' | 'popular' | 'detail' = 'catalog') {
   const user = await createUser(request, uniqueName('Solo player'));
   await loginAs(page, user);
   const games = [star, multiplayer];
-  const mocks: Record<string, unknown> = { '/games': games, '/games/popular': [], '/users/me/recent-games': [] };
+  const mocks: Record<string, unknown> = {
+    '/games': games,
+    '/games/popular': shelf === 'popular' ? [star] : [],
+    '/users/me/recent-games': shelf === 'recent' ? [star] : [],
+  };
   for (const game of games) {
     mocks[`/games/${game.id}`] = game;
     mocks[`/games/${game.id}/versions/${game.version}`] = game;
@@ -42,9 +46,15 @@ async function prepare(page: Page, request: APIRequestContext) {
   return user;
 }
 
+async function openMatchOptions(page: Page) {
+  if (await page.locator('#match-options').getAttribute('open') === null)
+    await page.locator('#match-options > summary').click();
+}
+
 test('switching from a timed multiplayer setup to solo removes hidden match settings', async ({page, request}) => {
   await prepare(page, request);
   await page.goto(`/static/portal.html#game=${multiplayer.id}`);
+  await openMatchOptions(page);
   await page.locator('#match-speed').selectOption('60');
   await page.locator('#match-stake').selectOption('5');
   await page.locator('.back-to-games').click();
@@ -67,10 +77,68 @@ test('switching from a timed multiplayer setup to solo removes hidden match sett
   await page.getByRole('combobox', {name: 'Search games'}).fill(multiplayer.name);
   await page.getByRole('option', {name: new RegExp(multiplayer.name)}).click();
   await expect(page.locator('#local-play-title')).toHaveText('Pass and play');
-  await expect(page.locator('#online-play-hint')).toHaveText('Set up your opponents in the lobby.');
+  await expect(page.locator('#online-play-hint')).toHaveText('Create a private table and send your friend the invite link.');
   await expect(page.locator('#match-speed')).toBeEnabled();
+  await openMatchOptions(page);
   await expect(page.locator('#token-stake-panel')).toBeVisible();
 });
+
+for (const entry of ['catalog', 'recent', 'popular', 'detail'] as const) {
+  test(`solo quick play from the ${entry} starts immediately without inherited stakes or a clock`, async ({page, request}) => {
+    const user = await prepare(page, request, entry);
+    const player = {player_index: 0, kind: 'human', user_id: user.id, id: user.id, active: true};
+    let match = {
+      id: 'quick-solo-fixture', game_id: star.id, game_version: star.version,
+      owner_user_id: user.id, players: [player], status: 'waiting_for_players',
+      end_reason: null, state: {count: 0}, move_count: 0, turn_of_player_indices: [0],
+      created_at: star.created_at, updated_at: star.updated_at, token_pot: 0, bet_per_player: 0,
+    };
+    const calls: {path: string; body: unknown}[] = [];
+    await page.route('**/matches', route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      calls.push({path: '/matches', body: route.request().postDataJSON()});
+      return route.fulfill({status: 201, json: match});
+    });
+    await page.route('**/matches/quick-solo-fixture/start', route => {
+      calls.push({path: '/start', body: route.request().postDataJSON()});
+      match = {...match, status: 'ongoing'};
+      return route.fulfill({json: match});
+    });
+    await page.route('**/matches/quick-solo-fixture', route => route.fulfill({json: match}));
+    await page.route('**/matches/quick-solo-fixture/moves', route => {
+      match = {...match, move_count: 1, state: {count: 1}, updated_at: new Date().toISOString()};
+      return route.fulfill({json: match});
+    });
+    // Leave real multiplayer settings behind, then use the solo card directly.
+    await page.goto(`/static/portal.html#game=${multiplayer.id}`);
+    await openMatchOptions(page);
+    await page.locator('#match-speed').selectOption('60');
+    await page.locator('#match-stake').selectOption('5');
+    await page.locator('.back-to-games').click();
+    const soloCard = page.locator('#game-library .library-card-wrap')
+      .filter({has: page.locator('.library-title', {hasText: star.name})});
+    let button;
+    if (entry === 'detail') {
+      await soloCard.locator('.library-card').click();
+      await expect(page.locator('#game-detail-page')).toBeVisible();
+      button = page.locator('#quick-play');
+    } else {
+      const container = entry === 'catalog' ? soloCard : page.locator(`#${entry}-games`);
+      button = container.getByRole('button', {name: `Play ${star.name} solo now`, exact: true});
+    }
+    await button.click();
+    await expect(page.locator('#match-status')).toHaveClass('badge ongoing');
+    await expect(page.locator('#waiting')).toBeHidden();
+    await expect(page.locator('#game-detail-page')).toBeHidden();
+    await expect(page.locator('#game-box .declarative-stage > text')).toContainText('Count: 0 of 5');
+    expect(calls).toEqual([
+      {path: '/matches', body: {game_id: star.id, num_computer_opponents: 0, bet_per_player: 0}},
+      {path: '/start', body: {first_turn_player_indices: [0]}},
+    ]);
+    await page.locator('#game-box [data-ui-id=add]').click();
+    await expect(page.locator('#game-box .declarative-stage > text')).toContainText('Count: 1 of 5');
+  });
+}
 
 test('solo Play again attempts to start immediately and keeps Start available after a connection error', async ({page, request}) => {
   const user = await prepare(page, request);

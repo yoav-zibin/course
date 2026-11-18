@@ -959,5 +959,20 @@
   "error.html_games_read_only": "HTML गेम केवल पढ़े जा सकते हैं; declarative_ui पैकेज सबमिट करें",
   "error.legacy_game_not_found": "पुराना गेम नहीं मिला",
   "error.html_matches_retired": "HTML गेम में अब मैच नहीं खेले जा सकते",
-  "error.page_limit_invalid": "सीमा 1 से 100 के बीच होनी चाहिए"
+  "error.page_limit_invalid": "सीमा 1 से 100 के बीच होनी चाहिए",
+  "ui.portal.choose_play_mode": "आप कैसे खेलना चाहेंगे?",
+  "ui.portal.play_friends": "दोस्तों के साथ खेलें",
+  "ui.portal.friends_hint": "एक निजी टेबल बनाएँ और अपने दोस्त को आमंत्रण लिंक भेजें।",
+  "ui.portal.match_options": "मैच के विकल्प",
+  "ui.portal.create_public_match": "सार्वजनिक मैच बनाएँ ↗",
+  "ui.portal.friends_create_hint": "निजी लिंक आमंत्रित दोस्तों के लिए हैं। सार्वजनिक मैच सभी के लिए खुले हैं।",
+  "ui.portal.quick_play_solo_aria": "अभी {name} अकेले खेलें",
+  "ui.match.invite_link": "आमंत्रण लिंक",
+  "ui.match.copy_link": "लिंक कॉपी करें",
+  "ui.match.link_loading": "आमंत्रण लिंक तैयार हो रहा है…",
+  "ui.match.link_failed": "आमंत्रण लिंक नहीं बनाया जा सका। फिर कोशिश करें।",
+  "ui.match.link_copied": "लिंक कॉपी हो गया। इसे किसी दोस्त को भेजें।",
+  "ui.match.link_manual": "इस लिंक को कॉपी करके किसी दोस्त को भेजें।",
+  "ui.portal.computer_mode_hint": "कंप्यूटर प्रतिद्वंद्वियों के खिलाफ़ मुफ़्त मैच शुरू करें।",
+  "ui.match.private_share_notice": "केवल इस निजी मैच के खिलाड़ी ही यह लिंक खोल सकते हैं।"
 }

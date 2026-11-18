@@ -959,5 +959,20 @@
   "error.html_games_read_only": "HTML 游戏为只读；请提交 declarative_ui 游戏包",
   "error.legacy_game_not_found": "未找到旧版游戏",
   "error.html_matches_retired": "HTML 游戏不再支持对局",
-  "error.page_limit_invalid": "上限必须介于 1 到 100 之间"
+  "error.page_limit_invalid": "上限必须介于 1 到 100 之间",
+  "ui.portal.choose_play_mode": "你想怎么玩？",
+  "ui.portal.play_friends": "和好友一起玩",
+  "ui.portal.friends_hint": "创建私人房间，并将邀请链接发给好友。",
+  "ui.portal.match_options": "对局选项",
+  "ui.portal.create_public_match": "创建公开对局 ↗",
+  "ui.portal.friends_create_hint": "私人链接供受邀好友使用。公开对局对所有人开放。",
+  "ui.portal.quick_play_solo_aria": "立即单人游玩 {name}",
+  "ui.match.invite_link": "邀请链接",
+  "ui.match.copy_link": "复制链接",
+  "ui.match.link_loading": "正在准备邀请链接…",
+  "ui.match.link_failed": "无法创建邀请链接，请重试。",
+  "ui.match.link_copied": "链接已复制。发送给好友吧。",
+  "ui.match.link_manual": "复制此链接并发送给好友。",
+  "ui.portal.computer_mode_hint": "开始一局免费的人机对战。",
+  "ui.match.private_share_notice": "只有这场私人对局的玩家才能打开此链接。"
 }

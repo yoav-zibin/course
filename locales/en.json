@@ -959,5 +959,20 @@
   "error.html_games_read_only": "HTML games are read-only; submit a declarative_ui package",
   "error.legacy_game_not_found": "legacy game not found",
   "error.html_matches_retired": "HTML games no longer support matches",
-  "error.page_limit_invalid": "limit must be between 1 and 100"
+  "error.page_limit_invalid": "limit must be between 1 and 100",
+  "ui.portal.choose_play_mode": "How would you like to play?",
+  "ui.portal.play_friends": "Play with friends",
+  "ui.portal.friends_hint": "Create a private table and send your friend the invite link.",
+  "ui.portal.match_options": "Match options",
+  "ui.portal.create_public_match": "Create public match ↗",
+  "ui.portal.friends_create_hint": "Private links are for invited friends. Public matches are open to everyone.",
+  "ui.portal.quick_play_solo_aria": "Play {name} solo now",
+  "ui.match.invite_link": "Invite link",
+  "ui.match.copy_link": "Copy link",
+  "ui.match.link_loading": "Preparing invite link…",
+  "ui.match.link_failed": "Could not create an invite link. Try again.",
+  "ui.match.link_copied": "Link copied. Send it to a friend.",
+  "ui.match.link_manual": "Copy this link and send it to a friend.",
+  "ui.portal.computer_mode_hint": "Start a free game against computer opponents.",
+  "ui.match.private_share_notice": "Only players in this private match can open this link."
 }

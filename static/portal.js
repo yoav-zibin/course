@@ -359,6 +359,12 @@ function updateStakePreview() {
         : "{amount} tokens per person · {pot} tokens in a {players}-player pot · Wallet: {balance} tokens");
     preview.replaceChildren(el("span", {class:"stake-preview-text", textContent:previewText}));
   }
+  // A selected stake or clock stays visible when the optional settings close.
+  const options = [];
+  if (amount > 0 && !solo) options.push(`${I18n.t("ui.stakes.entry_per_player", {}, "Entry per player")}: ${portalCurrencyAmount(amount)}`);
+  const seconds = Number($("match-speed")?.value);
+  if (seconds > 0 && !solo) options.push(I18n.t("ui.speed.meta", {minutes: seconds / 60}, "speed · {minutes} min per move"));
+  $("match-options-summary").textContent = options.join(" · ");
 }
 
 async function updateTokenWallet(user, record) {
@@ -1289,7 +1295,7 @@ function renderLibrary() {
         el("span", {class:"library-title", textContent:name}),
         el("span", {class:"library-description", textContent:description || I18n.t("ui.games.default_description", {}, "Choose this game to start a new match.")}),
         el("span", {class:"library-select", textContent:arcadeSelectLabel})));
-    if (!canQuickStart(game)) return card;
+    if (!canInstantPlay(game)) return card;
     return el("div", {class: "library-card-wrap"}, card, quickPlayButton(game));
   }));
 }
@@ -1329,7 +1335,7 @@ function gameCarouselCards(games, ranked = false) {
         el("span", {class: "popular-game-title", textContent: name}),
         el("span", {class: "popular-game-players", textContent: gameCountLabel(game)}),
         el("span", {class: "popular-game-open", textContent: I18n.t("ui.games.open_game", {}, "Play game ↗")})));
-    if (!canQuickStart(game)) return card;
+    if (!canInstantPlay(game)) return card;
     return el("div", {class: "popular-game-card-wrap"}, card, quickPlayButton(game));
   });
 }
@@ -1545,6 +1551,7 @@ function updateMatchSetup() {
   $("game-detail-page").hidden = !detailPage || browsingGames || Boolean(state.selectedId);
   const maximum = game ? Math.max(...game.allowed_player_counts) - 1 : 0;
   $("create").disabled = !me() || !game || state.creating || !navigator.onLine;
+  $("create-private").disabled = $("create").disabled;
   // Practice stays clickable while logged out: practice() sends the
   // visitor to the login page and back, rather than dead-ending here.
   $("practice").disabled = !game;
@@ -1556,22 +1563,36 @@ function updateMatchSetup() {
   const supportsComputerMatch=canQuickStart(game);
   $("computer-match-option").hidden=!supportsComputerMatch;
   $("play-computers").disabled=!game || state.creating || !navigator.onLine;
-  $("quick-play").hidden = !canQuickStart(game);
+  $("quick-play").hidden = !canInstantPlay(game);
   $("quick-play").disabled = state.creating || !navigator.onLine;
-  $("quick-play").textContent = I18n.t("ui.portal.quick_play", {}, "▶ Play");
   const solo = game?.allowed_player_counts.length === 1 && maximum === 0;
+  $("quick-play").textContent = solo
+    ? I18n.t("ui.portal.play_solo", {}, "Play solo ↗")
+    : I18n.t("ui.portal.computers_button", {}, "Play with computers ↗");
+  $("online-play-title").textContent = solo
+    ? I18n.t("ui.portal.play_solo", {}, "Play solo ↗")
+    : I18n.t("ui.portal.play_friends", {}, "Play with friends");
+  $("create-private").hidden = solo;
+  $("match-options").hidden = solo;
+  $("create").classList.toggle("primary", solo);
+  $("create").classList.toggle("secondary", !solo);
+  const quickPlayLabel = solo
+    ? I18n.t("ui.portal.quick_play_solo_aria", {name: game ? catalogGameLabel(game) : ""}, "Play {name} solo now")
+    : I18n.t("ui.portal.quick_play_aria", {name: game ? catalogGameLabel(game) : ""}, "Play {name} against computers now");
+  $("quick-play").setAttribute("aria-label", quickPlayLabel);
+  $("quick-play").title = quickPlayLabel;
   const localTitle = $("local-play-title");
   localTitle.dataset.i18n = solo ? "ui.mode.solo" : "ui.mode.pass_and_play";
   localTitle.textContent = solo ? I18n.t("ui.mode.solo", {}, "Solo") : I18n.t("ui.mode.pass_and_play", {}, "Pass and play");
   const onlineHint = $("online-play-hint");
-  onlineHint.dataset.i18n = solo ? "ui.portal.hint_solo" : "ui.portal.online_hint";
-  onlineHint.textContent = solo ? I18n.t("ui.portal.hint_solo", {}, "Starts immediately. No opponent needed.") : I18n.t("ui.portal.online_hint", {}, "Set up your opponents in the lobby.");
+  onlineHint.dataset.i18n = solo ? "ui.portal.hint_solo" : "ui.portal.friends_hint";
+  onlineHint.textContent = solo ? I18n.t("ui.portal.hint_solo", {}, "Starts immediately. No opponent needed.") : I18n.t("ui.portal.friends_hint", {}, "Create a private table and send your friend the invite link.");
   $("speed-choice").hidden = solo;
   $("match-speed").disabled = solo;
   if (solo) $("match-speed").value = "";
   $("token-stake-panel").hidden = solo;
   updateStakePreview();
-  $("create").textContent = solo ? I18n.t("ui.portal.play_solo", {}, "Play solo ↗") : I18n.t("ui.portal.create_match", {}, "Create match ↗");
+  $("create").textContent = solo ? I18n.t("ui.portal.play_solo", {}, "Play solo ↗") : I18n.t("ui.portal.create_public_match", {}, "Create public match ↗");
   $("selected-game-card").hidden = !game;
   const canGiveFeedback = Boolean(game && me() && game.owner_user_id && game.owner_user_id !== me().id && !isRandomGame(game));
   $("feedback-game").hidden = !canGiveFeedback;
@@ -1579,7 +1600,7 @@ function updateMatchSetup() {
   $("selected-game-name").textContent = (game && displayGameName(game)) || I18n.t("ui.games.choose", {}, "Choose a game");
   $("selected-game-description").textContent = (game && I18n.gameDescription(game.id, game.description)) || "";
   $("selected-game-mode").textContent = solo ? I18n.t("ui.games.solo_label", {}, "1 player · solo") : game ? I18n.t("ui.portal.mode_players", {counts: game.allowed_player_counts.join(", ")}, `${game.allowed_player_counts.join(", ")} players`) : "";
-  $("create-hint").textContent = solo ? I18n.t("ui.portal.hint_solo", {}, "Starts immediately. No opponent needed.") : game ? I18n.t("ui.portal.hint_invite_friends", {}, "Create a match, then invite friends to join.") : state.games.length ? I18n.t("ui.portal.hint_choose", {}, "Choose a game from the search results to continue.") : I18n.t("ui.portal.hint_choose", {}, "Choose a game from the search results to continue.");
+  $("create-hint").textContent = solo ? I18n.t("ui.portal.hint_solo", {}, "Starts immediately. No opponent needed.") : game ? I18n.t("ui.portal.friends_create_hint", {}, "Private links are for invited friends. Public matches are open to everyone.") : I18n.t("ui.portal.hint_choose", {}, "Choose a game from the search results to continue.");
 }
 
 function selectMatch(id) {
@@ -1661,6 +1682,7 @@ function renderMatch() {
   $("match").hidden = !match;
   $("placeholder").hidden = Boolean(match);
   if (!match) {
+    window.PortalInvites?.update(null);
     window.PortalMatchLayout?.update(null);
     $("placeholder").textContent = user
       ? I18n.t("ui.portal.placeholder", {}, "Your game will open here. You can also choose a match from the Matches menu.")
@@ -1725,6 +1747,7 @@ function renderMatch() {
   $("match-meta").textContent = meta.join(" · ");
 
   const mySeat = user ? seatOf(match, user.id) : null;
+  window.PortalInvites?.update(match, {user, canInvite:hasOpenMatchSeat(match), participant:Boolean(mySeat)});
   const turn = match.turn_of_player_indices ?? [];
   $("seats").replaceChildren(
     ...match.players.map((player) =>
@@ -1936,22 +1959,7 @@ function renderMatch() {
           ? I18n.t("ui.match.invite_friends", {}, "Invite friends")
           : I18n.t("ui.match.share_match", {}, "Share match"),
         class: "invite-action",
-        onclick: async () => {
-          let link;
-          try {
-            // A private match only seats people through an invite token; elsewhere a
-            // link with the sender's id as "ref" counts whoever signs up as invited by them.
-            link = match.private && mySeat
-              ? (await portalRequest("POST", `/matches/${match.id}/invites`, {})).url
-              : Auth.current() && Auth.inviteLink
-                ? Auth.inviteLink(Auth.current(), `match=${match.id}`)
-                : `${location.origin}/portal#match=${match.id}`;
-            await navigator.clipboard.writeText(link);
-            toast(I18n.t("ui.match.invite_copied", {}, "✓ Invite link copied"));
-          } catch (error) {
-            showMessage(link || error.message, link ? "" : "error");
-          }
-        },
+        onclick: () => window.PortalInvites?.copy(match, {user, canInvite:hasOpenMatchSeat(match), participant:Boolean(mySeat)}),
       }),
     );
   if (user && !match.localMode) {
@@ -2529,7 +2537,7 @@ async function practice() {
 
 // Creating matches
 
-async function createMatch() {
+async function createMatch(privateMatch = false) {
   if (state.creating) return;
   const user = me();
   const gameId = state.detailGameId || $("new-game").value;
@@ -2545,6 +2553,7 @@ async function createMatch() {
   let match;
   state.creating = true;
   $("create").disabled = true;
+  $("create-private").disabled = true;
   try {
     const bet = Number($("match-stake").value);
     let speedFields = window.PortalSpeed?.createFields($("match-speed").value) ?? {};
@@ -2571,6 +2580,7 @@ async function createMatch() {
         game_id: gameId,
         num_computer_opponents: 0,
         bet_per_player: bet,
+        ...(privateMatch === true ? {private: true} : {}),
         ...speedFields,
       },
     });
@@ -2605,9 +2615,22 @@ function canQuickStart(game) {
     && game.allowed_player_counts.some((count) => count > 1);
 }
 
+function isSoloOnly(game) {
+  return Array.isArray(game?.allowed_player_counts)
+    && game.allowed_player_counts.length === 1 && game.allowed_player_counts[0] === 1;
+}
+
+// Both a solo puzzle and a game against computers can start from its card.
+// Keep canQuickStart specific to computers: detail setup uses it for that mode.
+function canInstantPlay(game) {
+  return Boolean(game) && !isRandomGame(game) && (isSoloOnly(game) || canQuickStart(game));
+}
+
 function quickPlayButton(game) {
   return el("button", {type: "button", class: "game-quick-play primary",
-    "aria-label": I18n.t("ui.portal.quick_play_aria", {name: catalogGameLabel(game)}, `Play ${catalogGameLabel(game)} against computers now`),
+    "aria-label": isSoloOnly(game)
+      ? I18n.t("ui.portal.quick_play_solo_aria", {name: catalogGameLabel(game)}, `Play ${catalogGameLabel(game)} solo now`)
+      : I18n.t("ui.portal.quick_play_aria", {name: catalogGameLabel(game)}, `Play ${catalogGameLabel(game)} against computers now`),
     onclick: (event) => { event.stopPropagation(); void playWithAllComputers(game); }},
     I18n.t("ui.portal.quick_play", {}, "▶ Play"));
 }
@@ -2630,8 +2653,9 @@ async function playWithAllComputers(quickGame) {
   }
   // The dialog's count select belongs to the detail game; for any other
   // game the dialog default is its preselection: the largest seat count.
+  const solo = isSoloOnly(game);
   const chosenCount = quick && state.detailGameId !== quick.id ? NaN : Number($("computer-player-count").value);
-  const playerCount=chosenCount>1 && game.allowed_player_counts.includes(chosenCount)
+  const playerCount=solo ? 1 : chosenCount>1 && game.allowed_player_counts.includes(chosenCount)
     ? chosenCount
     : Math.max(...game.allowed_player_counts.filter(count=>count>1));
   if (!Number.isFinite(playerCount)) {
@@ -2646,20 +2670,26 @@ async function playWithAllComputers(quickGame) {
     $("play-computers").disabled=true;
     $("play-computers").textContent=I18n.t("ui.portal.starting_match", {}, "Starting match…");
   }
-  $("create-message").textContent=I18n.plural("ui.portal.starting_computers", playerCount-1, {}, {one: "Starting a free match against 1 computer…", many: `Starting a free match against ${playerCount-1} computers…`});
+  $("create-message").textContent=solo
+    ? I18n.t("ui.portal.starting_match", {}, "Starting match…")
+    : I18n.plural("ui.portal.starting_computers", playerCount-1, {}, {one: "Starting a free match against 1 computer…", many: `Starting a free match against ${playerCount-1} computers…`});
   $("create-message").className="message";
   try {
     const cachedGame=gameOf(game.id,game.version);
     const full=cachedGame?.declarative_ui ? cachedGame : await fetchGameVersion(game.id,game.version);
+    if (user.id !== me()?.id) return;
     if (!full.server_code) throw new Error(I18n.t("ui.portal.computers_server_only", {}, "Play with computers is available for server-side games."));
     match=await portalRequest("POST","/matches",{user,body:{game_id:game.id,num_computer_opponents:playerCount-1,bet_per_player:0}});
+    if (user.id !== me()?.id) return;
     match=await portalRequest("POST",`/matches/${match.id}/start`,{user,body:{first_turn_player_indices:[0]}});
+    if (user.id !== me()?.id) return;
     invalidatePopularGames();
     invalidateRecentGames();
     invalidateGamePopularity(match.game_id);
     $("create-message").textContent="";
     selectMatch(match.id);
   } catch(error) {
+    if (user.id !== me()?.id) return;
     $("create-message").textContent=match
       ? I18n.t("ui.portal.created_not_started", {message: error.message}, `Match created, but couldn't start automatically: ${error.message}. Press Start to retry.`)
       : error.message;
@@ -2833,6 +2863,12 @@ function setupLeaderboardTabs() {
 
 async function main() {
   initializeTokenWallet();
+  window.PortalInvites?.init({
+    request: portalRequest,
+    currentUser: me,
+    inviteLink: (user, fragment) => Auth.inviteLink(user, fragment),
+    notify: toast,
+  });
   setupPopularGamesCarousel();
   syncPortalCurrencyLabels();
   window.PortalMatchLayout?.init(() => {
@@ -3031,7 +3067,9 @@ async function main() {
     }
   });
   $("match-stake").addEventListener("change", updateStakePreview);
+  $("match-speed").addEventListener("change", updateStakePreview);
   $("create").addEventListener("click", createMatch);
+  $("create-private").addEventListener("click", () => createMatch(true));
   window.addEventListener("hashchange", selectFromHash);
   window.addEventListener("popstate", selectFromHash);
   setupLeaderboardTabs();

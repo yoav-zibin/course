@@ -1,0 +1,158 @@
+import { test, expect } from '@playwright/test';
+import { createGame, createUser, loginAs, openMatchControls, uniqueName } from './helpers';
+
+declare const Auth: any;
+declare const I18n: any;
+
+test('a persistent private invite survives polling and reload, and a new guest joins and plays', async ({ page, browser, request }, testInfo) => {
+  const owner = await createUser(request, uniqueName('Private host'));
+  const game = await createGame(request, owner, uniqueName('Private friends duel'));
+  await loginAs(page, owner);
+  await page.addInitScript(() => Object.defineProperty(navigator, 'clipboard', {
+    configurable: true, value: { writeText: async (link: string) => { (window as any).copiedInvite = link; } },
+  }));
+  let invitations = 0;
+  page.on('request', req => { if (req.method() === 'POST' && /\/matches\/[^/]+\/invites$/.test(new URL(req.url()).pathname)) invitations++; });
+  await page.goto(`/static/portal.html?skin=classic#game=${game}`);
+  await page.locator('#create-private').click();
+  const input = page.locator('#lobby-invite-link');
+  await expect(input).toHaveValue(/#invite=/);
+  const link = await input.inputValue();
+  await input.focus();
+  await input.evaluate((node: HTMLInputElement) => node.setSelectionRange(4, 12));
+  for (let i = 0; i < 3; i++) await page.evaluate('refresh()');
+  await expect(input).toBeFocused();
+  expect(await input.evaluate((node: HTMLInputElement) => [node.selectionStart, node.selectionEnd])).toEqual([4, 12]);
+  await page.evaluate(async () => { await I18n.choose('ar'); });
+  await expect(input).toBeFocused();
+  await expect(input).toHaveValue(link);
+  expect(await input.evaluate((node: HTMLInputElement) => [node.selectionStart, node.selectionEnd])).toEqual([4, 12]);
+  await page.evaluate(async () => { await I18n.choose('en'); });
+  expect(invitations).toBe(1);
+  await page.reload();
+  await expect(input).toHaveValue(link);
+  expect(invitations).toBe(1);
+  await page.locator('#lobby-invite-copy').click();
+  await expect(page.locator('#lobby-invite-status')).toHaveText('Link copied. Send it to a friend.');
+  expect(await page.evaluate(() => (window as any).copiedInvite)).toBe(link);
+  await testInfo.attach('private-lobby-invite', { body: await page.screenshot(), contentType: 'image/png' });
+
+  const friendContext = await browser.newContext(testInfo.project.use);
+  try {
+    const friend = await friendContext.newPage();
+    await friend.goto(link);
+    await expect(friend.locator('#welcome-guest-name')).toBeVisible();
+    await friend.locator('#welcome-guest-name').fill(uniqueName('Invited friend'));
+    await friend.locator('#welcome-guest').click();
+    const invitation = friend.getByRole('dialog');
+    await expect(invitation).toContainText(owner.display_name);
+    await invitation.getByRole('button', { name: 'Join match', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Start game', exact: true })).toBeEnabled();
+    await expect(page.locator('#lobby-invite-panel')).toBeHidden();
+    await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', {
+      configurable: true, value: { writeText: async () => { throw new Error('Clipboard permission denied'); } },
+    }));
+    await page.locator('.invite-action').click();
+    const share = page.getByRole('dialog', { name: 'Share match', exact: true });
+    await expect(share.locator('#portal-share-link')).toHaveValue(/#match=/);
+    await expect(share).toContainText('Only players in this private match can open this link.');
+    await share.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.getByRole('button', { name: 'Start game', exact: true }).click();
+    await expect(page.locator('#game-box .declarative-stage')).toBeVisible();
+    await page.locator('#game-box [data-ui-id=cell_0]').click();
+    await expect(friend.locator('#game-box [data-ui-id=piece_0]')).toHaveText('X');
+    expect(invitations).toBe(1);
+  } finally { await friendContext.close(); }
+});
+
+test('clipboard denial opens a readable share dialog and returns focus after polling', async ({ page, request }) => {
+  const owner = await createUser(request, uniqueName('Share host'));
+  const game = await createGame(request, owner, uniqueName('Shared computer duel'));
+  const headers = { 'X-User-Id': owner.id, 'X-User-Password': owner.password };
+  const match = await (await request.post('/matches', { headers, data: { game_id: game, num_computer_opponents: 1 } })).json();
+  expect((await request.post(`/matches/${match.id}/start`, { headers, data: {} })).ok()).toBeTruthy();
+  await loginAs(page, owner);
+  await page.addInitScript(() => Object.defineProperty(navigator, 'clipboard', {
+    configurable: true, value: { writeText: async () => { throw new Error('Clipboard permission denied'); } },
+  }));
+  await page.goto(`/static/portal.html#match=${match.id}`);
+  await openMatchControls(page);
+  await page.locator('.invite-action').click();
+  const dialog = page.getByRole('dialog', { name: 'Share match', exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('#portal-share-link')).toHaveValue(new RegExp(`match=${match.id}`));
+  await expect(dialog.locator('.portal-share-open')).toHaveAttribute('href', new RegExp(`match=${match.id}`));
+  await expect(dialog.locator('#portal-share-link')).toBeFocused();
+  await page.evaluate('refresh()');
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(page.locator('.invite-action')).toBeFocused();
+});
+
+test('an invite failure waits for explicit Retry and denied clipboard keeps the link selectable', async ({ page, request }) => {
+  const owner = await createUser(request, uniqueName('Retry host'));
+  const game = await createGame(request, owner, uniqueName('Invite retry duel'));
+  const headers = { 'X-User-Id': owner.id, 'X-User-Password': owner.password };
+  const match = await (await request.post('/matches', { headers, data: { game_id: game, private: true } })).json();
+  await loginAs(page, owner);
+  await page.addInitScript(() => Object.defineProperty(navigator, 'clipboard', {
+    configurable: true, value: { writeText: async () => { throw new Error('Clipboard permission denied'); } },
+  }));
+  let attempts = 0;
+  await page.route(`**/matches/${match.id}/invites`, async route => {
+    if (route.request().method() !== 'POST') return route.continue();
+    attempts++;
+    if (attempts === 1) await route.fulfill({ status: 503, json: { detail: 'Temporary invite failure' } });
+    else await route.continue();
+  });
+  await page.goto(`/static/portal.html#match=${match.id}`);
+  await expect(page.locator('#lobby-invite-copy')).toHaveText('Retry');
+  await expect(page.locator('#lobby-invite-status')).toHaveText('Could not create an invite link. Try again.');
+  for (let i = 0; i < 3; i++) await page.evaluate('refresh()');
+  expect(attempts).toBe(1);
+  await page.locator('#lobby-invite-copy').click();
+  await expect(page.locator('#lobby-invite-link')).toHaveValue(/#invite=/);
+  expect(attempts).toBe(2);
+  await page.locator('#lobby-invite-copy').click();
+  const input = page.locator('#lobby-invite-link');
+  await expect(input).toBeFocused();
+  await expect(page.locator('#lobby-invite-status')).toHaveText('Copy this link and send it to a friend.');
+  expect(await input.evaluate((node: HTMLInputElement) => node.selectionEnd)).toBe((await input.inputValue()).length);
+  expect(attempts).toBe(2);
+});
+
+test('a delayed invitation from a previous account cannot replace the current account link', async ({ page, request }) => {
+  const first = await createUser(request, uniqueName('First host'));
+  const second = await createUser(request, uniqueName('Second host'));
+  const game = await createGame(request, first, uniqueName('Account invite duel'));
+  const create = async (user: typeof first) => (await request.post('/matches', {
+    headers: { 'X-User-Id': user.id, 'X-User-Password': user.password }, data: { game_id: game, private: true },
+  })).json();
+  const a = await create(first), b = await create(second);
+  await page.addInitScript(({ first, second }) => {
+    localStorage.setItem('game-platform.accounts.v1', JSON.stringify([first, second].map(user => ({ ...user, linked: [], picture_url: '' }))));
+    localStorage.setItem('game-platform.current-account.v1', first.id);
+  }, { first, second });
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let requested = false;
+  await page.route(`**/matches/${a.id}/invites`, async route => {
+    requested = true;
+    const response = await route.fetch();
+    await gate;
+    await route.fulfill({ response }).catch(() => {});
+  });
+  try {
+    await page.goto(`/static/portal.html#match=${a.id}`);
+    await expect.poll(() => requested).toBe(true);
+    await page.evaluate(({ user, match }) => { Auth.setCurrent(user); location.hash = `match=${match}`; }, { user: second.id, match: b.id });
+    await expect(page.locator('#lobby-invite-link')).toHaveValue(/#invite=/);
+    const current = await page.locator('#lobby-invite-link').inputValue();
+    release();
+    await page.evaluate('refresh()');
+    await expect(page.locator('#lobby-invite-link')).toHaveValue(current);
+    const token = new URLSearchParams(new URL(current).hash.slice(1)).get('invite');
+    const view = await (await request.get(`/invites/${token}`)).json();
+    expect(view.created_by_user_id).toBe(second.id);
+  } finally { release(); await page.unrouteAll({ behavior: 'wait' }); }
+});

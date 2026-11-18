@@ -959,5 +959,20 @@
   "error.html_games_read_only": "Os jogos HTML são somente leitura; envie um pacote declarative_ui",
   "error.legacy_game_not_found": "jogo antigo não encontrado",
   "error.html_matches_retired": "Os jogos HTML não permitem mais partidas",
-  "error.page_limit_invalid": "o limite deve estar entre 1 e 100"
+  "error.page_limit_invalid": "o limite deve estar entre 1 e 100",
+  "ui.portal.choose_play_mode": "Como você gostaria de jogar?",
+  "ui.portal.play_friends": "Jogar com amigos",
+  "ui.portal.friends_hint": "Crie uma mesa privada e envie o link de convite ao seu amigo.",
+  "ui.portal.match_options": "Opções da partida",
+  "ui.portal.create_public_match": "Criar partida pública ↗",
+  "ui.portal.friends_create_hint": "Os links privados são para amigos convidados. As partidas públicas estão abertas a todos.",
+  "ui.portal.quick_play_solo_aria": "Jogar {name} sozinho agora",
+  "ui.match.invite_link": "Link de convite",
+  "ui.match.copy_link": "Copiar link",
+  "ui.match.link_loading": "Preparando link de convite…",
+  "ui.match.link_failed": "Não foi possível criar um link de convite. Tente novamente.",
+  "ui.match.link_copied": "Link copiado. Envie-o a um amigo.",
+  "ui.match.link_manual": "Copie este link e envie-o a um amigo.",
+  "ui.portal.computer_mode_hint": "Comece uma partida gratuita contra adversários controlados pelo computador.",
+  "ui.match.private_share_notice": "Apenas os jogadores desta partida privada podem abrir este link."
 }

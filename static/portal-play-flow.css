@@ -1,0 +1,158 @@
+/* Shared play choices and invitations, using each portal skin's own palette. */
+body.game-detail-mode #match-creator:not([open]) { display: none; }
+:root .portal-shell .game-detail-page .selected-game-card { margin-top: 0; }
+.play-choice-title {
+  margin: 30px 0 14px;
+  color: var(--color-text-primary);
+  font-size: 18px;
+  letter-spacing: -.02em;
+}
+:root .portal-shell .game-detail-page .play-options {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 16px;
+  margin-top: 0;
+  align-items: start;
+}
+:root .portal-shell .game-detail-page .play-option {
+  gap: 16px;
+  padding: 20px;
+  border-color: var(--color-border-3);
+  border-radius: 16px;
+  background: var(--color-bg-1);
+}
+:root .portal-shell .game-detail-page .play-option-heading {
+  gap: 12px;
+  margin: 0;
+}
+:root .portal-shell .game-detail-page .play-option-heading h3 {
+  font-size: 18px;
+  line-height: 1.35;
+  color: var(--color-text-primary);
+}
+:root .portal-shell .game-detail-page .play-option-heading p,
+:root .portal-shell .game-detail-page .play-option-note {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+}
+:root .portal-shell .game-detail-page .create-controls {
+  gap: 10px;
+}
+:root .portal-shell .game-detail-page #create-private,
+:root .portal-shell .game-detail-page #create,
+:root .portal-shell .game-detail-page #practice,
+:root .portal-shell .game-detail-page #play-computers {
+  min-height: 48px;
+  white-space: normal;
+}
+:root .portal-shell .game-detail-page #create.secondary {
+  background: transparent;
+  border-color: var(--color-border-3);
+  color: var(--color-text-primary);
+}
+.match-options {
+  border-top: 1px solid var(--color-border-2);
+  padding-top: 12px;
+  min-width: 0;
+}
+.match-options > summary {
+  cursor: pointer;
+  padding: 8px 0;
+  min-height: 28px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+}
+#match-options-summary {
+  display: block;
+  padding-top: 4px;
+  color: var(--color-text-primary);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+#match-options-summary:empty { display: none; }
+.match-options .speed-choice { margin-top: 12px; }
+:root .portal-shell .match-options .token-stake-panel {
+  padding: 12px;
+  margin: 12px 0 0;
+  border-radius: 10px;
+  box-shadow: none;
+}
+:root .portal-shell .match-options .stake-select {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 6px;
+}
+:root .portal-shell .match-options .stake-select select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.lobby-invite-panel {
+  margin: 18px 0;
+  padding: 20px;
+  border: 1px solid var(--color-border-3);
+  border-radius: 14px;
+  background: var(--color-bg-2);
+}
+.lobby-invite-panel > label {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--color-text-primary);
+  font-weight: 700;
+  font-size: 15px;
+}
+.lobby-invite-controls {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.lobby-invite-controls > input {
+  flex: 1 1 220px;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 12px;
+  font-size: 14px;
+  color: var(--color-text-primary);
+  background: var(--color-bg-0);
+  border: 1px solid var(--color-border-3);
+  border-radius: 8px;
+}
+.lobby-invite-controls > button { min-height: 48px; }
+.lobby-invite-panel [role="status"] {
+  margin: 10px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.lobby-invite-panel [role="status"]:empty { display: none; }
+.portal-share-dialog {
+  width: min(480px, calc(100vw - 40px));
+  max-height: calc(100dvh - 40px);
+  box-sizing: border-box;
+  padding: 24px;
+  border: 1px solid var(--color-border-3);
+  border-radius: 16px;
+  color: var(--color-text-primary);
+  background: var(--color-bg-1);
+  overflow: auto;
+}
+.portal-share-dialog::backdrop { background: rgb(0 0 0 / .65); }
+.portal-share-dialog h2 { font-size: 20px; margin: 0 0 20px; }
+.portal-share-dialog .lobby-invite-panel { padding: 0; border: 0; margin: 0; }
+.portal-share-dialog-close { margin-top: 20px; }
+.portal-share-open {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  :root .portal-shell .game-detail-page .play-options { grid-template-columns: minmax(0, 1fr); }
+  .lobby-invite-panel { padding: 16px; }
+}

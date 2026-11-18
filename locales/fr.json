@@ -959,5 +959,20 @@
   "error.html_games_read_only": "Les jeux HTML sont en lecture seule ; envoyez un package declarative_ui",
   "error.legacy_game_not_found": "ancien jeu introuvable",
   "error.html_matches_retired": "Les jeux HTML ne permettent plus de créer des parties",
-  "error.page_limit_invalid": "la limite doit être comprise entre 1 et 100"
+  "error.page_limit_invalid": "la limite doit être comprise entre 1 et 100",
+  "ui.portal.choose_play_mode": "Comment souhaitez-vous jouer ?",
+  "ui.portal.play_friends": "Jouer avec des amis",
+  "ui.portal.friends_hint": "Créez une table privée et envoyez le lien d’invitation à votre ami.",
+  "ui.portal.match_options": "Options de la partie",
+  "ui.portal.create_public_match": "Créer une partie publique ↗",
+  "ui.portal.friends_create_hint": "Les liens privés sont réservés aux amis invités. Les parties publiques sont ouvertes à tous.",
+  "ui.portal.quick_play_solo_aria": "Jouer à {name} en solo maintenant",
+  "ui.match.invite_link": "Lien d’invitation",
+  "ui.match.copy_link": "Copier le lien",
+  "ui.match.link_loading": "Préparation du lien d’invitation…",
+  "ui.match.link_failed": "Impossible de créer un lien d’invitation. Réessayez.",
+  "ui.match.link_copied": "Lien copié. Envoyez-le à un ami.",
+  "ui.match.link_manual": "Copiez ce lien et envoyez-le à un ami.",
+  "ui.portal.computer_mode_hint": "Lancez une partie gratuite contre des adversaires contrôlés par l’ordinateur.",
+  "ui.match.private_share_notice": "Seuls les joueurs de cette partie privée peuvent ouvrir ce lien."
 }
