@@ -174,11 +174,13 @@ def test_real_sdk_and_event_driven_worker_use_budgeted_emulator(tmp_path):
             assert http.get("/storage/capabilities").status_code == 401
             root = http.get("/", auth=("demo", "test"), follow_redirects=False)
             assert root.status_code == 200
-            assert "Game platform · Welcome" in root.text
+            assert "<title>BuildPlay</title>" in root.text
+            assert "/static/app/_expo/static/js/web/" in root.text
             demo = http.get("/demo", auth=("demo", "test"), follow_redirects=False)
             assert demo.headers["location"] == "/portal"
             portal = http.get("/portal", auth=("demo", "test"))
-            assert "BuildPlay.fun · Games" in portal.text
+            assert "<title>BuildPlay</title>" in portal.text
+            assert "/static/app/_expo/static/js/web/" in portal.text
             assert "Play. Replay." not in portal.text
             assert http.get("/storage/capabilities", auth=("demo", "test")).json()[
                 "pagination"

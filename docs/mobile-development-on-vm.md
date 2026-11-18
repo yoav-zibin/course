@@ -170,11 +170,10 @@ launch diagnostics are in `BuildPlay-android-test-results`. Successful pushes to
 Manual runs provide artifacts without replacing that download. An unsigned
 simulator ZIP needs a Mac with Xcode; it cannot be installed on an iPhone.
 
-The default Mac runner is `macos-26-intel`, retaining the upstream fix for
-repeated macOS15 WebKit/GPU stalls in the earlier native gameplay tests. When
-unavailable, select
-`macos-15-intel` in the workflow input or pass
-`--field ios_runner=macos-15-intel`. Both are standard hosted runners.
+Use `macos-26-intel` for this Expo version. Its Xcode26.6 toolchain compiled the
+shared app successfully. The macOS15 image's Xcode26.3 failed Swift concurrency
+checks in Expo's dependencies, so it is no longer offered as a fallback.
+Simulator startup has a separate fifteen-minute allowance for first-boot work.
 
 ## Existing Apple signing setup
 

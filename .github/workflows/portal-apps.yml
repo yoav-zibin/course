@@ -3,11 +3,11 @@ on:
   workflow_dispatch:
     inputs:
       ios_runner:
-        description: Standard Mac runner
+        description: Mac runner with the validated Expo Xcode toolchain
         type: choice
         required: true
         default: macos-26-intel
-        options: [macos-26-intel, macos-15-intel]
+        options: [macos-26-intel]
   push:
     branches: [main]
     paths: ['frontends/portal/**', '.github/workflows/portal-apps.yml']
@@ -55,6 +55,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: android-actions/setup-android@v3
+        with: {packages: platform-tools}
       - run: npm ci
       - run: npx expo prebuild --platform android --no-install --no-clean
       - name: Build APK with embedded JavaScript
@@ -115,11 +116,11 @@ jobs:
           files: BuildPlay.apk
 
   ios-portal:
-    # Preserve the upstream runner fix after macOS15 WebKit/GPU stalls.
+    # Expo's Swift dependencies also fail under macOS15's older Xcode26.3.
     name: BuildPlay iOS (simulator build and launch)
     needs: shared-client
     runs-on: ${{ inputs.ios_runner || 'macos-26-intel' }}
-    timeout-minutes: 50
+    timeout-minutes: 60
     env:
       EXPO_PUBLIC_API_URL: https://buildplay.fun
     defaults:
@@ -156,7 +157,7 @@ jobs:
           test -f "$app/main.jsbundle"
           ditto -c -k --sequesterRsrc --keepParent "$app" "$GITHUB_WORKSPACE/BuildPlay-simulator.zip"
       - name: Launch simulator and capture screen
-        timeout-minutes: 8
+        timeout-minutes: 15
         run: |
           bash scripts/smoke-ios-simulator.sh \
             "$GITHUB_WORKSPACE/ios-portal-build/Build/Products/Release-iphonesimulator/BuildPlay.app" \
