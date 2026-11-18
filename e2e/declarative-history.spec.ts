@@ -118,6 +118,39 @@ test('reduced-motion history is immediate and read only',async({page})=>{
   expect(result).toEqual({animations:0,moves:[]});
 });
 
+test('a seat change clears an already fading private face on an unchanged scene',async({page})=>{
+  await page.goto('/static/declarative-test.html');
+  const result=await page.evaluate(async spec=>{
+    spec.ui_code=`const gameUI={reduce(m){return {scene:{pieces:m.view.show?[{
+      id:'private-card',type:'token',board:'table',position:{x:150,y:150},
+      text:'Seat zero private face',actions:[]
+    }]:[]}};}};`;
+    const cases=[];
+    for(const [viewer,count] of [[1,1],[1,2],[null,1]]){
+      const box=document.createElement('div');box.style.cssText='position:fixed;inset:0';document.body.append(box);
+      const host=(window as any).DeclarativeUI.mount(box,spec,{animate:false});
+      const message={type:'state_changed',status:'ongoing',my_player_index:0,acting_for_player_index:null,
+        move_count:0,view:{show:true},replay:{index:0,total:2}};
+      await host.send(message,{animate:false});
+      const empty={...message,move_count:1,view:{show:false},replay:{index:1,total:2}};
+      await host.send(empty,{animate:true});
+      // Keep the transition in progress without depending on test-machine speed.
+      for(const animation of box.getAnimations({subtree:true}))animation.pause();
+      const fadingBefore=box.querySelectorAll('.declarative-history-ghost').length;
+      await host.send({...empty,my_player_index:viewer,move_count:count,replay:{index:count,total:2}},{animate:true});
+      const fadingAfter=box.querySelectorAll('.declarative-history-ghost').length;
+      const oldFaceVisible=box.textContent!.includes('Seat zero private face');
+      host.destroy();box.remove();cases.push({viewer,count,fadingBefore,fadingAfter,oldFaceVisible});
+    }
+    return cases;
+  },structuredClone(spec));
+  for(const row of result){
+    expect(row.fadingBefore).toBe(1);
+    expect(row.fadingAfter).toBe(0);
+    expect(row.oldFaceVisible).toBe(false);
+  }
+});
+
 test('history makes placements, counter changes and removals visible without actionable ghosts',async({page})=>{
   await page.goto('/static/declarative-test.html');
   const result=await page.evaluate(async spec=>{

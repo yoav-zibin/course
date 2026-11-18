@@ -942,11 +942,12 @@
       if(result.make_move!==undefined && message.type==="ui_event" && canAct()) {moveSent=true;callbacks.onMove?.(clone(result.make_move));}
       else if(message.type==="ui_event")resetDrag();
       const reducedMotion=global.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      const sameViewer=lastViewerSeat===(message.my_player_index??null);
       const adjacentReplay=message.type==="state_changed"&&Boolean(message.replay)&&options.animate===true&&
         Number.isInteger(lastStateMoveCount)&&Number.isInteger(message.move_count)&&Math.abs(message.move_count-lastStateMoveCount)===1;
-      const motionEnabled=message.type==="state_changed"&&options.animate!==false&&!reducedMotion&&
+      const motionEnabled=message.type==="state_changed"&&options.animate!==false&&!reducedMotion&&sameViewer&&
         (adjacentReplay||!message.replay&&(callbacks.animate===true||spec.motion?.animate_own===true));
-      const rollEffects=message.type==="state_changed"&&options.animate!==false&&!reducedMotion&&
+      const rollEffects=message.type==="state_changed"&&options.animate!==false&&!reducedMotion&&sameViewer&&
         (adjacentReplay||!message.replay&&!lastStateWasReplay&&Number.isInteger(lastStateMoveCount)&&Number.isInteger(message.move_count)&&message.move_count>lastStateMoveCount);
       // The actor belongs to the completed move, not the next turn. Missing
       // metadata snaps conservatively; an own move never animates captures either.
@@ -958,11 +959,13 @@
       const animate=motionEnabled&&(adjacentReplay||!newRound&&!lastStateWasReplay&&Number.isInteger(lastStateMoveCount)&&Number.isInteger(message.move_count)&&message.move_count>lastStateMoveCount&&Number.isInteger(actor)&&actor>=0&&actor<10&&(knownOther||spec.motion?.animate_own===true));
       // Polls can arrive just after a move starts. Keep the existing elements
       // and their animation clocks when the authoritative scene is unchanged.
-      const preserveEffects=message.type==="state_changed"&&options.animate!==false&&!reducedMotion&&(pieceAnimations.size>0||motionPending);
+      // Even an identical new scene must discard the previous seat's fading
+      // private faces and animation origins when the viewing authority changes.
+      const preserveEffects=message.type==="state_changed"&&options.animate!==false&&!reducedMotion&&sameViewer&&(pieceAnimations.size>0||motionPending);
       if((motionEnabled||preserveEffects)&&currentScene&&JSON.stringify(scene)===JSON.stringify(currentScene)){
         stage.setAttribute("aria-busy",String(moveSent));updateHints();
       }else draw(scene,animate,rollEffects,lastStateTurn!==null&&view?.n>lastStateTurn,
-        adjacentReplay&&animate,lastViewerSeat===(message.my_player_index??null));
+        adjacentReplay&&animate,sameViewer);
       if(message.type==="state_changed"){
         lastStateMoveCount=Number.isInteger(message.move_count)?message.move_count:null;
         lastStateWasReplay=Boolean(message.replay);
@@ -988,10 +991,10 @@
     const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
     const data=value=>JSON.stringify(canonical(value)).replace(/</g,"\\u003c");
     return '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<link rel="stylesheet" href="/static/declarative-ui.css?v=21"><div id="declarative-game"></div>' +
+      '<link rel="stylesheet" href="/static/declarative-ui.css?v=22"><div id="declarative-game"></div>' +
       '<script type="application/json" id="i18n-strings">'+data(spec.strings || {})+'<'+'/script>' +
       '<script type="application/json" id="declarative-spec">'+data(spec)+'<'+'/script>' +
-      '<script src="/static/declarative-ui.js?v=21"><'+'/script><script>' +
+      '<script src="/static/declarative-ui.js?v=22"><'+'/script><script>' +
       'const host=DeclarativeUI.mount(document.getElementById("declarative-game"),' +
       'JSON.parse(document.getElementById("declarative-spec").textContent),' +
       '{onMove:move=>parent.postMessage({type:"make_move",move},"*"),' +
