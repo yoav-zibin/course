@@ -57,7 +57,11 @@ body.match-lobby .match-tools { position:static; width:100%; max-height:none; ov
    inside a Home Screen app, and keeps the renderer mounted. */
 body.match-focus { height:100vh; height:100dvh; overflow:hidden; }
 body.match-focus > .topbar, body.match-focus .portal-sidebar { display:none; }
-body.match-focus .portal-shell { grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr); overflow:hidden; }
+/* A docked navigation preference must not reserve a second grid column while
+   the active board uses the whole screen. Override the drawer's docked rules. */
+html:root body.match-focus .portal-shell > .portal-sidebar { display:none; }
+html:root body.match-focus .portal-shell > .portal-main { grid-column:1; grid-row:1; }
+html:root body.match-focus .portal-shell { grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr); overflow:hidden; }
 body.match-focus .portal-main { padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); overflow:hidden; }
 body.match-focus .match-stage { border:0; border-radius:0; padding:0; gap:0; }
 body.match-focus .match-toolbar { flex-wrap:nowrap; padding:0 8px; min-height:44px; }

@@ -24,7 +24,7 @@ test('Portal and Admin have direct entry points and no app navigation tabs', asy
     await page.goto(path, { waitUntil: 'commit' });
     await expect(page).toHaveURL(name === 'portal' ? /\/static\/portal\.html$/ : /\/admin(?:#.*)?$/);
     const header = page.locator('header.topbar');
-    await expect(header.locator('.app-home-link')).toHaveAttribute('href', name === 'portal' ? /portal.html#home$/ : '/');
+    await expect(header.locator('.app-home-link')).toHaveAttribute('href', name === 'portal' ? /portal.html#games$/ : '/');
     // The redesigned portal keeps the language picker in its "More options" panel instead of the top bar.
     if (name === 'portal') await expect(page.locator('#portal-more-options')).toHaveCount(1);
     else await expect(header.getByRole('combobox', { name: 'Language' })).toBeVisible();

@@ -1926,17 +1926,20 @@ function renderMatch() {
       }),
     );
   }
-  if (!match.localMode)
+  if (!match.localMode) {
+    const inviteLabel = hasOpenMatchSeat(match)
+      ? I18n.t("ui.match.invite_friends", {}, "Invite friends")
+      : I18n.t("ui.match.share_match", {}, "Share match");
     actions.push(
       el("button", {
         type: "button",
-        textContent: hasOpenMatchSeat(match)
-          ? I18n.t("ui.match.invite_friends", {}, "Invite friends")
-          : I18n.t("ui.match.share_match", {}, "Share match"),
+        textContent: inviteLabel,
+        "aria-label": inviteLabel,
         class: "invite-action",
         onclick: () => window.PortalInvites?.copy(match, {user, canInvite:hasOpenMatchSeat(match), participant:Boolean(mySeat)}),
       }),
     );
+  }
   if (user && !match.localMode) {
     const gameName = game ? displayGameName(game) : I18n.t("ui.feedback.a_game", {}, "a game");
     secondaryActions.push(el("button", {type: "button", class: "feedback-action", textContent: I18n.t("ui.feedback.match", {}, "Send feedback about this match"),
