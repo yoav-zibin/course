@@ -21,9 +21,9 @@ import sys
 
 try:
     subprocess.run(["xcrun", "simctl", "bootstatus", sys.argv[1], "-b"],
-                   check=True, timeout=240)
+                   check=True, timeout=600)
 except subprocess.TimeoutExpired:
-    raise SystemExit("iPhone simulator boot did not finish within 240 seconds.")
+    raise SystemExit("iPhone simulator boot did not finish within 600 seconds.")
 PY
 
 # A single simulator keeps screenshot fallback and UI tests on the same device.
