@@ -1,3 +1,4 @@
+import {copyText} from './platform/i18n';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, AppState, BackHandler, Linking, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions} from 'react-native';
 import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
@@ -115,12 +116,12 @@ function PortalApp() {
     <SafeAreaView style={[s.safe,{direction:getDirection()}]} edges={['top','bottom','left','right']}>
       <StatusBar style="light" />
       <View style={s.header}>
-        <Pressable accessibilityRole="link" accessibilityLabel="BuildPlay home" onPress={()=>navigate('games')} style={{flexShrink:0}}><Copy style={s.brand}>BuildPlay<Copy style={{color:colors.accent,fontSize:25}}>●</Copy></Copy></Pressable>
+        <Pressable accessibilityRole="link" accessibilityLabel={copyText("BuildPlay home")} onPress={()=>navigate('games')} style={{flexShrink:0}}><Copy style={s.brand}>BuildPlay<Copy style={{color:colors.accent,fontSize:25}}>●</Copy></Copy></Pressable>
         {width >= 800 && layout === 'top' && tabs}
         <View style={{flex:1}} />
         {p.account && <Copy small style={{color:colors.accent}}>{(p.profile?.token_balance ?? p.account.token_balance ?? 0).toLocaleString()} ✦</Copy>}
-        <Button secondary compact disabled={!p.ready} onPress={()=>setAccount(true)} label={p.account ? 'Account menu' : 'Log in'}>{p.account?.display_name || t('ui.auth.log_in','Log in')}</Button>
-        {(width < 800 || layout === 'hamburger') && <Button secondary compact label="Navigation menu" onPress={()=>setMenu(!menu)}>☰</Button>}
+        <Button secondary compact disabled={!p.ready} onPress={()=>setAccount(true)} label={p.account ? copyText("Account menu") : copyText("Log in")}>{p.account?.display_name || t('ui.auth.log_in','Log in')}</Button>
+        {(width < 800 || layout === 'hamburger') && <Button secondary compact label={copyText("Navigation menu")} onPress={()=>setMenu(!menu)}>☰</Button>}
       </View>
       {menu && <View style={s.menu}>{tabs}<Button compact secondary onPress={()=>navigate('settings')}>⚙ {t('ui.preferences.title','Preferences')}</Button></View>}
       {width < 800 && !menu && <ScrollView horizontal style={s.mobileTabs} contentContainerStyle={{gap:6,paddingHorizontal:12,paddingVertical:8}}>{links.slice(0,3).map(link=><Button key={link.key} secondary compact selected={screen===link.key} onPress={()=>navigate(link.key)}>{link.label}</Button>)}</ScrollView>}
@@ -130,16 +131,16 @@ function PortalApp() {
           {(notice || p.error) && <Notice error onDismiss={()=>{setNotice('');p.actions.clearError();}}>{notice || p.error}</Notice>}
           {p.storageError && <Notice error>{p.storageError}</Notice>}
           {(!p.network || p.pending>0) && <Notice>{p.network ? t('ui.offline.online','Online') : t('ui.offline.offline','Offline')} · {p.pending} {t('ui.offline.pending_moves','pending moves')}. {p.pending ? t('ui.offline.move_saved','Your move is saved on this device and will sync when connected.') : t('ui.offline.downloaded_play','Downloaded games are available on this device.')}</Notice>}
-          {appSession&&<Card><Title small>Continue to the BuildPlay app</Title><Copy muted>Confirm the account you want to use in the app. Your password stays out of the browser callback link.</Copy><Button onPress={()=>run(async()=>{if(!p.account){setAccount(true);return;}const result=await p.actions.request('POST',`/auth/app-sessions/${encodeURIComponent(appSession)}/complete`);await Linking.openURL(result.callback_url);setAppSession('');})}>{p.account?`Continue as ${p.account.display_name}`:'Log in to continue'}</Button></Card>}
-          {pendingInvite&&<Card><Title small>{invitePreview?.created_by_display_name?`${invitePreview.created_by_display_name} invited you to play`:'You’re invited to play'}</Title><Copy muted>{p.account?'Join the match with your current account.':'Log in or continue as a guest, then join this match.'}</Copy><Row><Button onPress={()=>run(async()=>{if(!p.account){setAccount(true);return;}const joined=await p.actions.acceptInvite(pendingInvite);setPendingInvite('');setInvitePreview(null);setScreen('matches');writeRoute(`match=${encodeURIComponent(joined.id)}`);})}>{p.account?'Join match':'Log in to join'}</Button><Button secondary onPress={()=>{setPendingInvite('');setInvitePreview(null);writeRoute('games');}}>Not now</Button></Row></Card>}
-          {!p.ready ? <View style={s.loading}><ActivityIndicator size="large" color={colors.accent}/><Copy muted>Loading BuildPlay…</Copy></View>
+          {appSession&&<Card><Title small>{copyText("Continue to the BuildPlay app")}</Title><Copy muted>{copyText("Confirm the account you want to use in the app. Your password stays out of the browser callback link.")}</Copy><Button onPress={()=>run(async()=>{if(!p.account){setAccount(true);return;}const result=await p.actions.request('POST',`/auth/app-sessions/${encodeURIComponent(appSession)}/complete`);await Linking.openURL(result.callback_url);setAppSession('');})}>{p.account?copyText("Continue as {v0}",{v0:p.account.display_name}):copyText("Log in to continue")}</Button></Card>}
+          {pendingInvite&&<Card><Title small>{invitePreview?.created_by_display_name?copyText("{v0} invited you to play",{v0:invitePreview.created_by_display_name}):copyText("You’re invited to play")}</Title><Copy muted>{p.account?copyText("Join the match with your current account."):copyText("Log in or continue as a guest, then join this match.")}</Copy><Row><Button onPress={()=>run(async()=>{if(!p.account){setAccount(true);return;}const joined=await p.actions.acceptInvite(pendingInvite);setPendingInvite('');setInvitePreview(null);setScreen('matches');writeRoute(`match=${encodeURIComponent(joined.id)}`);})}>{p.account?copyText("Join match"):copyText("Log in to join")}</Button><Button secondary onPress={()=>{setPendingInvite('');setInvitePreview(null);writeRoute('games');}}>{copyText("Not now")}</Button></Row></Card>}
+          {!p.ready ? <View style={s.loading}><ActivityIndicator size="large" color={colors.accent}/><Copy muted>{copyText("Loading BuildPlay…")}</Copy></View>
             : gameVisible ? <MatchStage />
             : screen==='games' ? p.selectedGameId ? <GameDetail /> : <Catalog />
             : screen==='matches' ? <Matches />
             : screen==='local' ? <LocalMatches />
             : screen==='invites' ? <Invitations />
             : <Settings layout={layout} setLayout={next=>{setLayout(next); void AsyncStorage.setItem('buildplay.navigation.v2',next);}} />}
-          <Row style={s.footer}><Copy small muted>BuildPlay.fun</Copy><Button secondary compact onPress={()=>setFeedback(true)}>{t('ui.feedback.general','Feedback')}</Button><Button secondary compact onPress={()=>navigate('settings')}>{t('ui.preferences.title','Preferences')}</Button><Button secondary compact onPress={()=>Linking.openURL(`${p.baseUrl}/static/privacy.html`)}>{t('ui.privacy.title','Privacy')}</Button><Copy small muted>{p.network ? '● Online' : '○ Offline'}</Copy></Row>
+          <Row style={s.footer}><Copy small muted>BuildPlay.fun</Copy><Button secondary compact onPress={()=>setFeedback(true)}>{t('ui.feedback.general','Feedback')}</Button><Button secondary compact onPress={()=>navigate('settings')}>{t('ui.preferences.title','Preferences')}</Button><Button secondary compact onPress={()=>Linking.openURL(`${p.baseUrl}/static/privacy.html`)}>{t('ui.privacy.title','Privacy')}</Button><Copy small muted>{p.network ? copyText("● Online") : copyText("○ Offline")}</Copy></Row>
         </ScrollView>
       </View>
       <AccountDialog visible={account} onClose={()=>setAccount(false)} />

@@ -6,7 +6,7 @@ import { PortalStore } from '../src/core';
 import { rulesSource } from '../src/game/runtimeSource';
 import { AccountRepository } from '../src/core/repository';
 import { redactedNativeArchive } from '../src/core/native-migration';
-import { setLocale, localizeGame, gameTexts, getDirection } from '../src/platform/i18n';
+import { setLocale, localizeGame, gameTexts, getDirection, t } from '../src/platform/i18n';
 import { ApiError } from '../src/core/api';
 
 function browserStorage() {
@@ -66,6 +66,17 @@ test('real bundled computer turns advance using the same shared offline engine',
     await store.actions.submitMove({ cell: 4 }); const match = store.getSnapshot().selectedMatch!;
     assert.equal(match.move_count, 2); assert.deepEqual(match.turn_of_player_indices, [0]); assert.equal(match.state.board.filter((v: number) => v !== -1).length, 2);
     assert.equal(match.awaitingHandoff, undefined); assert.equal(store.actions.presentationMessage().acting_for_player_index, 0);
+  } finally { restore(); }
+});
+test('history cannot reveal the next player board before the device handoff is confirmed', async () => {
+  browserStorage(); const restore = mockedFetch();
+  try {
+    const store = new PortalStore(testRuntime()); await store.bootstrap('https://local.test');
+    await store.actions.startPractice('bundled-tictactoe', { humans: 2, computers: 0 });
+    await store.actions.submitMove({ cell: 0 }); assert.equal(store.getSnapshot().selectedMatch!.awaitingHandoff, true);
+    await assert.rejects(store.actions.replay(1), /next player.*ready/i);
+    assert.equal(store.getSnapshot().replayIndex, null);
+    await store.actions.revealLocal(); await store.actions.replay(1); assert.equal(store.getSnapshot().replayIndex, 1);
   } finally { restore(); }
 });
 test('local-only launch loads accounts and resumes local play while making zero network calls', async () => {
@@ -199,6 +210,112 @@ test('failed game-package fetch cannot pair an old match with a newly selected g
     await assert.rejects(store.actions.selectGame('missing'), /Game not found/);
     assert.equal(store.getSnapshot().selectedMatch, null); assert.equal(store.getSnapshot().game, null); assert.equal(store.getSnapshot().selectedGameId, 'missing'); assert.equal(store.getSnapshot().history, null); assert.equal((await new AccountRepository('https://local.test').read('visitor')).selectedId, null);
   } finally { restore(); }
+});
+test('opening another match never pairs its private view with the previous game package', async () => {
+  browserStorage();
+  let release!: (value: any) => void, started!: () => void;
+  const download = new Promise(resolve => { release = resolve; });
+  const downloading = new Promise<void>(resolve => { started = resolve; });
+  const restore = mockedFetch(url => {
+    if (url.pathname === '/matches/other') return { id: 'other', game_id: 'other-game', game_version: 3, players: [], status: 'ongoing', state: { private: 'other game view' }, turn_of_player_indices: [0], move_count: 1 };
+    if (url.pathname === '/games/other-game/versions/3') { started(); return download; }
+  });
+  let opening: Promise<unknown> | undefined;
+  try {
+    const store = new PortalStore(testRuntime()); await store.bootstrap('https://local.test');
+    await store.actions.startPractice('bundled-tictactoe', { humans: 2, computers: 0 });
+    const previous = store.getSnapshot().game!;
+    opening = store.actions.selectMatch('other'); await downloading;
+    try {
+      assert.equal(store.getSnapshot().selectedMatch!.id, 'other');
+      assert.equal(store.getSnapshot().game, null, 'a pending package must not expose another game reducer to this view');
+    } finally { release({ ...previous, id: 'other-game', version: 3 }); await opening; }
+    assert.equal(store.getSnapshot().game!.id, 'other-game');
+  } finally { restore(); }
+});
+for (const operation of ['addBots', 'removePlayer'] as const) test(`a delayed ${operation} response cannot reopen a match after navigation`, async () => {
+  browserStorage(); let release!: (value: any) => void;
+  const response = new Promise(resolve => { release = resolve; });
+  const match = (id: string) => ({ id, game_id: 'bundled-tictactoe', game_version: 1, players: [], status: 'waiting_for_players', state: null, turn_of_player_indices: [], move_count: 0 });
+  const restore = mockedFetch((url, init) => {
+    if (init.method === 'PATCH' || init.method === 'DELETE') return response;
+    if (url.pathname === '/matches/first') return match('first');
+    if (url.pathname === '/matches/second') return match('second');
+  });
+  try {
+    const store = new PortalStore(testRuntime()); await store.bootstrap('https://local.test'); await store.actions.selectMatch('first');
+    const pending = operation === 'addBots' ? store.actions.addBots(1) : store.actions.removePlayer('someone');
+    await store.actions.selectMatch('second'); release(match('first')); await pending;
+    assert.equal(store.getSnapshot().selectedMatch!.id, 'second');
+  } finally { restore(); }
+});
+test('a missing archived history frame cannot be presented as the live board', async () => {
+  browserStorage();
+  const restore = mockedFetch(url => {
+    if (url.pathname === '/storage/capabilities') return { pagination: true };
+    if (url.pathname.startsWith('/v2/') && !url.pathname.endsWith('/history')) return { items: [], next_cursor: null };
+    if (url.pathname === '/matches/archived') return { id: 'archived', game_id: 'bundled-tictactoe', game_version: 1, players: [], status: 'ongoing', state: { private: 'live view' }, turn_of_player_indices: [0], move_count: 4 };
+    if (url.pathname === '/v2/matches/archived/history') return { items: [], total: 4, initial_state: {}, initial_turn_player_indices: [0] };
+  });
+  try {
+    const store = new PortalStore(testRuntime()); await store.bootstrap('https://local.test'); await store.actions.selectMatch('archived');
+    await assert.rejects(store.actions.replay(2), /history.*(?:unavailable|not available)/i);
+    assert.equal(store.getSnapshot().replayIndex, null);
+  } finally { restore(); }
+});
+test('hiding an online match cannot silently discard its durable pending move', async () => {
+  browserStorage(); const restore = mockedFetch();
+  try {
+    const store = new PortalStore(testRuntime()); await store.bootstrap('https://local.test', true);
+    const repository = new AccountRepository('https://local.test');
+    const pending = { requestId: 'original-retry-key', body: { move: { cell: 4 }, expected_move_count: 0 }, baseState: {}, baseTurn: [0] };
+    await repository.mutate('visitor', data => { data.responses['/matches/pending'] = { id: 'pending', game_id: 'game', game_version: 1 }; data.queues.pending = [pending]; });
+    await store.actions.refresh();
+    await assert.rejects(store.actions.archiveMatch('pending'), /pending action|sync/i);
+    const saved = await repository.read('visitor'); assert.deepEqual(saved.queues.pending, [pending]); assert.equal(saved.archivedMatches.length, 0);
+  } finally { restore(); }
+});
+test('a delayed language download cannot replace a newer language selection', async () => {
+  browserStorage(); let release!: (value: any) => void, started!: () => void;
+  const delayed = new Promise(resolve => { release = resolve; }); const downloading = new Promise<void>(resolve => { started = resolve; });
+  const restore = mockedFetch(url => {
+    if (url.pathname === '/i18n/bundle/ar') { started(); return delayed; }
+    if (url.pathname === '/i18n/bundle/es') return { direction: 'ltr', catalog: { messages: { 'audit.language': 'Español' } }, games: {} };
+  });
+  try {
+    const store = new PortalStore(testRuntime()); await store.bootstrap('https://local.test');
+    const older = store.actions.setLocale('ar'); await downloading;
+    await store.actions.setLocale('es'); release({ direction: 'rtl', catalog: { messages: { 'audit.language': 'Arabic' } }, games: {} }); await older;
+    assert.equal(store.getSnapshot().locale, 'es'); assert.equal(getDirection(), 'ltr'); assert.equal(t('audit.language'), 'Español');
+  } finally { restore(); }
+});
+test('replay starts at the first retained move when the initial frame is unavailable', async () => {
+  browserStorage();
+  const restore = mockedFetch(url => {
+    if (url.pathname === '/storage/capabilities') return { pagination: true };
+    if (url.pathname.endsWith('/history')) return { items: [{ new_state: { frame: 'first move' }, next_turn_player_indices: [1] }], total: 3, initial_state: null, initial_turn_player_indices: null };
+    if (url.pathname.startsWith('/v2/')) return { items: [], next_cursor: null };
+    if (url.pathname === '/matches/older') return { id: 'older', game_id: 'bundled-tictactoe', game_version: 1, players: [], status: 'ongoing', state: { frame: 'live' }, turn_of_player_indices: [0], move_count: 3 };
+  });
+  try {
+    const store = new PortalStore(testRuntime()); await store.bootstrap('https://local.test'); await store.actions.selectMatch('older');
+    assert.equal(await store.actions.replay(0), 1); assert.equal(store.getSnapshot().replayIndex, 1);
+    assert.deepEqual(store.actions.presentationMessage().state, { frame: 'first move' });
+  } finally { restore(); }
+});
+test('language selection guards a delayed response body from an older download', async () => {
+  browserStorage(); const original = globalThis.fetch;
+  let release!: (data: any) => void, started!: () => void;
+  const decoding = new Promise<void>(resolve => { started = resolve; });
+  const data = new Promise(resolve => { release = resolve; });
+  globalThis.fetch = (async input => String(input).endsWith('/ar')
+    ? { ok: true, json: () => { started(); return data; } }
+    : new Response(JSON.stringify({ direction: 'ltr', catalog: { messages: { 'audit.language': 'Español' } }, games: {} }))) as typeof fetch;
+  try {
+    const first = setLocale('ar'); await decoding; await setLocale('es');
+    release({ direction: 'rtl', catalog: { messages: { 'audit.language': 'Arabic' } }, games: {} });
+    assert.equal(await first, false); assert.equal(getDirection(), 'ltr'); assert.equal(t('audit.language'), 'Español');
+  } finally { globalThis.fetch = original; }
 });
 test('native migration archive never downgrades decrypted account passwords into ordinary storage', () => {
   const archive = redactedNativeArchive({ android: { user: { id: 'a', password: 'android-secret' }, raw: { password: 'android-secret', serialized: '{"password":"android-secret"}' } }, ios: { identity: { id: 'i', password: 'ios-secret' }, portal: { matches: [{ board: [null], name: 'Saved game' }] } } });

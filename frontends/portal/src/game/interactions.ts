@@ -1,3 +1,4 @@
+import {copyText} from '../platform/i18n';
 import type { GameSpec, Piece, Point, Scene, StateMessage, Target, UIEvent } from './types';
 import { pieceActions, position } from './validation';
 
@@ -8,7 +9,7 @@ export function canMove(message: StateMessage | null, sent = false): boolean {
 }
 
 export function pieceName(piece: Piece): string {
-  return piece.face === 'back' ? 'Covered piece' : piece.aria_label || piece.text || piece.id;
+  return piece.face === 'back' ? copyText('Covered piece') : piece.aria_label || piece.text || piece.id;
 }
 
 export function pieceSize(spec: GameSpec, piece: Piece): { width: number; height: number } {

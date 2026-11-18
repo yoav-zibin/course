@@ -1,3 +1,4 @@
+import {copyText} from '../platform/i18n';
 import React from 'react';
 import {View} from 'react-native';
 import {reportClientIssue} from '../core/reporting';
@@ -6,5 +7,5 @@ export class ErrorBoundary extends React.Component<{children:React.ReactNode},{f
   state={failed:false};
   static getDerivedStateFromError(){return {failed:true};}
   componentDidCatch(error:Error){reportClientIssue('render_error',error);}
-  render(){if(!this.state.failed)return this.props.children;return <View style={{flex:1,padding:32,gap:20,justifyContent:'center',backgroundColor:colors.background}}><Title>Let’s try that again</Title><Copy>The screen could not load. Your saved games remain on this device.</Copy><Button onPress={()=>this.setState({failed:false})}>Reload the screen</Button></View>;}
+  render(){if(!this.state.failed)return this.props.children;return <View style={{flex:1,padding:32,gap:20,justifyContent:'center',backgroundColor:colors.background}}><Title>{copyText("Let’s try that again")}</Title><Copy>{copyText("The screen could not load. Your saved games remain on this device.")}</Copy><Button onPress={()=>this.setState({failed:false})}>{copyText("Reload the screen")}</Button></View>;}
 }

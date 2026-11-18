@@ -2,12 +2,48 @@ import {test,expect,Page,APIRequestContext} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {E2E_ADMIN_HEADERS,uniqueName} from './helpers';
+import sharedCopy from '../src/platform/ui-copy.json';
 
 const fixture=JSON.parse(readFileSync(path.resolve(__dirname,'../../../games/declarative/tictactoe.json'),'utf8'));
 test.beforeEach(async({baseURL})=>{if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Portal acceptance tests require a disposable loopback server.');});
 async function account(request:APIRequestContext,name:string){const response=await request.post('/users',{data:{display_name:name}});expect(response.ok()).toBeTruthy();return response.json();}
 async function restore(page:Page,user:any){await page.addInitScript(user=>{localStorage.setItem('game-platform.accounts.v1',JSON.stringify([user]));localStorage.setItem('game-platform.current-account.v1',user.id);},user);}
 async function game(request:APIRequestContext,name:string){const payload=structuredClone(fixture);payload.name=name;payload.game_addition_request_id_and_secret=`shared-${Date.now()}-${Math.random()}-secret`;const response=await request.post('/games/declarative',{data:payload});expect(response.ok(),await response.text()).toBeTruthy();return response.json();}
+
+test('host controls and the offline starter game retain all eight languages without changing saves',async({page,request})=>{
+  test.setTimeout(120000);
+  const copy=(source:string,locale:string)=>locale==='en'?source:(sharedCopy as Record<string,Record<string,string>>)[source][locale];
+  const locales=(await (await request.get('/i18n/locales')).json()).locales;
+  await page.goto('/portal');await page.getByRole('button',{name:'On this device',exact:true}).click();
+  await page.getByRole('button',{name:'Pass and play',exact:true}).click();await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
+  const saves=()=>page.evaluate(()=>Object.fromEntries(Object.keys(localStorage).filter(key=>key.startsWith('buildplay.shared.v1.')).map(key=>[key,JSON.parse(localStorage.getItem(key)!).local])));
+  const original=await saves();let current='en';
+  for(const locale of ['es','fr','de','pt','zh','hi','ar','en']){
+    await page.getByRole('button',{name:copy('Log in',current),exact:true}).click();
+    const entry=locales.find((item:any)=>item.code===locale),endonym=entry.native_name||entry.name||locale;
+    const language=page.getByRole('button').filter({hasText:endonym});await language.last().click();
+    await expect(page.locator('html')).toHaveAttribute('lang',locale);await expect(page.locator('html')).toHaveAttribute('dir',locale==='ar'?'rtl':'ltr');
+    await page.getByRole('button',{name:copy('Close dialog',locale),exact:true}).click();
+    await expect(page.getByRole('button',{name:copy('Play history',locale),exact:true})).toBeVisible();
+    const cell=locale==='en'?'Cell {n}':fixture.translations[locale].client_strings.cell;
+    await expect(page.getByRole('button',{name:cell.replace('{n}','1'),exact:true})).toBeVisible();
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);current=locale;
+  }
+  expect(await saves()).toEqual(original);
+});
+
+test('a newly created match stays selected after reloading a game detail link',async({page,request})=>{
+  const user=await account(request,'Reload player'),created=await game(request,uniqueName('Reload game'));
+  await restore(page,user);await page.goto(`/portal#game=${created.id}`);
+  await page.getByRole('button',{name:/^Create match/}).click();
+  await expect(page.getByRole('button',{name:'Share match',exact:true})).toBeVisible();
+  await expect(page).toHaveURL(/#match=/);
+  const current=new URL(page.url()),selected=new URLSearchParams(current.hash.slice(1)).get('match');
+  const resumed=page.waitForResponse(response=>new URL(response.url()).pathname===(selected?`/matches/${selected}`:`/games/${created.id}`));
+  await page.reload();
+  await resumed;
+  await expect(page.getByRole('button',{name:'Share match',exact:true})).toBeVisible();
+});
 
 test('campaign arrival persists before login and attributes the guest signup',async({page,request})=>{
   const name=uniqueName('Arrival campaign');
@@ -70,6 +106,8 @@ test('bundled local game is playable offline, hides handoffs, persists, and repl
   await context.setOffline(true);
   await page.getByRole('button',{name:'Cell 1',exact:true}).click();await expect(page.getByRole('button',{name:'I’m ready'})).toBeVisible();
   await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Play history',exact:true})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'← Previous',exact:true})).toBeDisabled();
   await page.reload();await expect(page.getByRole('button',{name:'I’m ready'})).toBeVisible();
   for(const cell of [4,2,5,3]){await page.getByRole('button',{name:'I’m ready'}).click();await page.getByRole('button',{name:`Cell ${cell}`,exact:true}).click();}
   await expect(page.getByText('Finished',{exact:true}).first()).toBeVisible();

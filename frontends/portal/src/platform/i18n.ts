@@ -1,14 +1,23 @@
 import * as storage from './storage';
+import sharedCopy from './ui-copy.json';
 let locale = 'en';
 let messages: Record<string, string> = {};
 let bundle: any = null;
 let direction: 'ltr' | 'rtl' = 'ltr';
 let baseUrl = '';
 let offlineOnly = false;
+let localeRequest = 0;
 let locales: any[] = [{ code: 'en', name: 'English', direction: 'ltr' }, { code: 'es', name: 'Español', direction: 'ltr' }, { code: 'fr', name: 'Français', direction: 'ltr' }, { code: 'de', name: 'Deutsch', direction: 'ltr' }, { code: 'pt', name: 'Português', direction: 'ltr' }, { code: 'zh', name: '中文', direction: 'ltr' }, { code: 'hi', name: 'हिन्दी', direction: 'ltr' }, { code: 'ar', name: 'العربية', direction: 'rtl' }];
 const listeners = new Set<() => void>();
+const copyCatalog = sharedCopy as Record<string, Record<string, string>>;
+// Explicitly authored interface copy only. Game text and account names enter
+// through parameters and are never used as translation keys.
+export function copyText(source: string, params: Record<string, any> = {}): string {
+  const value = locale === 'en' ? source : copyCatalog[source]?.[locale] ?? source;
+  return value.replace(/\{(\w+)\}/g, (match, name) => Object.hasOwn(params, name) ? String(params[name]) : match);
+}
 export function t(key: string, params: Record<string, any> = {}, fallback = key): string {
-  return (messages[key] ?? fallback).replace(/\{(\w+)\}/g, (match, name) => name in params ? String(params[name]) : match);
+  return (messages[key] ?? copyText(fallback)).replace(/\{(\w+)\}/g, (match, name) => Object.hasOwn(params, name) ? String(params[name]) : match);
 }
 export function plural(key: string, count: number, params: Record<string, any> = {}, fallbacks: Record<string, string> = {}): string {
   const form = new Intl.PluralRules(locale).select(count); return t(`${key}_${form}`, { count, ...params }, fallbacks[form] ?? fallbacks.many ?? key);
@@ -37,11 +46,16 @@ export async function configureI18n(base: string, preferred?: string, localOnly 
   const stored = await storage.getItem('game-platform.locale.v1').catch(() => null);
   await setLocale(preferred || stored || 'en');
 }
-export async function setLocale(value: string): Promise<void> {
+export async function setLocale(value: string): Promise<boolean> {
+  const request = ++localeRequest, base = baseUrl, localOnly = offlineOnly;
+  const current = () => request === localeRequest;
   locale = value; direction = locales.find(item => item.code === value)?.direction ?? 'ltr';
   await storage.setItem('game-platform.locale.v1', value).catch(() => {});
+  if (!current()) return false;
   const key = `game-platform.i18n-bundle.v1:${value}`;
-  const saved = await cacheGet(key); if (saved?.data) adopt(saved.data); else { messages = {}; bundle = null; listeners.forEach(fn => fn()); }
-  if (!offlineOnly) try { const response = await fetch(`${baseUrl}/i18n/bundle/${encodeURIComponent(value)}`); if (response.ok && locale === value) { const data = await response.json(); adopt(data); await cacheSet(key, { data }); } } catch { /* cached catalogs and supplied English fallbacks remain usable */ }
+  const saved = await cacheGet(key); if (!current()) return false;
+  if (saved?.data) adopt(saved.data); else { messages = {}; bundle = null; listeners.forEach(fn => fn()); }
+  if (!localOnly) try { const response = await fetch(`${base}/i18n/bundle/${encodeURIComponent(value)}`); if (response.ok && current()) { const data = await response.json(); if (!current()) return false; adopt(data); await cacheSet(key, { data }); } } catch { /* cached catalogs and supplied English fallbacks remain usable */ }
+  return current();
 }
 export const I18n = { t, plural, code: getLocale, direction: getDirection, locales: getLocales, gameTexts, setLocale };

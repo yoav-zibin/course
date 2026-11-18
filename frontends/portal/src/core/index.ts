@@ -6,7 +6,7 @@ import { importNativeLegacy, finishNativeImport } from './native-migration';
 import * as storage from '../platform/storage';
 import { loadAccounts, saveAccounts, CURRENT_KEY } from '../platform/credentials';
 import { isOnline, watchConnectivity } from '../platform/connectivity';
-import { configureI18n, setLocale, getLocale, getDirection, gameTexts, localizeGame, subscribeI18n, t } from '../platform/i18n';
+import { configureI18n, setLocale, getLocale, getDirection, gameTexts, localizeGame, subscribeI18n, t, copyText } from '../platform/i18n';
 import bundled from './bundled-tictactoe.json';
 import { browserLogin } from '../platform/browser-login';
 import { rememberUrlAttribution, newAccountAttribution, forgetInviter } from './attribution';
@@ -163,7 +163,8 @@ export class PortalStore {
   async selectMatch(id: string) {
     const token = ++this.selection; const guard = this.capture(); await this.reloadData();
     const match = this.data.local[id] || await this.read(`/matches/${encodeURIComponent(id)}`); guard(); if (token !== this.selection) return;
-    this.patch({ selectedMatch: this.decorate(match), replayIndex: null, history: null });
+    const packageMatches = this.state.game?.id === match.game_id && this.state.game.version === match.game_version;
+    this.patch({ selectedMatch: this.decorate(match), game: packageMatches ? this.state.game : null, selectedGameId: match.game_id, replayIndex: null, history: null });
     await this.repository.mutate(this.identity(), data => { guard(); if (token === this.selection) data.selectedId = id; });
     const game = await this.pinnedGame(match.game_id, match.game_version); guard(); if (token === this.selection) this.patch({ game, selectedGameId: game.id });
     await this.loadProfiles().catch(() => {});
@@ -237,10 +238,21 @@ export class PortalStore {
   async createMatch(options: any) { const match = await this.request('POST', '/matches', options); await this.cache(`/matches/${match.id}`, match); await this.selectMatch(match.id); return match; }
   async quickMatch(gameId = '', numPlayers?: number) { const match = await this.request('POST', '/matchmaking/quick-match', { game_id: gameId, ...(numPlayers ? { num_players: numPlayers } : {}) }); await this.cache(`/matches/${match.id}`, match); await this.selectMatch(match.id); return match; }
   async matchAction(action: string, body?: any) { const match = this.state.selectedMatch; if (!match) throw new Error('Choose a match first'); const token = this.selection; const result = await this.request('POST', `/matches/${encodeURIComponent(match.id)}/${action}`, body); if (result?.id) { await this.cache(`/matches/${result.id}`, result); if (token === this.selection) this.patch({ selectedMatch: this.decorate(result) }); } await this.refreshProfile().catch(() => {}); return result; }
-  async addBots(count: number) { const match = this.state.selectedMatch; if (!match) return; const result = await this.request('PATCH', `/matches/${encodeURIComponent(match.id)}`, { num_computer_opponents: count }); await this.cache(`/matches/${result.id}`, result); this.patch({ selectedMatch: this.decorate(result) }); }
-  async removePlayer(userId: string) { const match = this.state.selectedMatch; if (!match) return; const result = await this.request('DELETE', `/matches/${encodeURIComponent(match.id)}/players/${encodeURIComponent(userId)}`); await this.cache(`/matches/${result.id}`, result); this.patch({ selectedMatch: this.decorate(result) }); }
-  async archiveMatch(id: string) { await this.repository.mutate(this.identity(), data => { data.archivedMatches.push({ id, match: data.local[id] || data.responses[`/matches/${id}`], moves: data.queues[id] || [], savedAt: new Date().toISOString() }); delete data.local[id]; delete data.queues[id]; delete data.conflicts[id]; delete data.responses[`/matches/${id}`]; data.selectedId = null; }); if (this.state.selectedMatch?.id === id) this.clearMatch(); await this.reloadData(); this.patch({ myMatches: this.state.myMatches.filter(m => m.id !== id) }); }
-  async deleteMatch() { const match = this.state.selectedMatch; if (!match) return; if (!this.data.local[match.id]) await this.request('DELETE', `/matches/${encodeURIComponent(match.id)}`); await this.archiveMatch(match.id); }
+  async addBots(count: number) { const match = this.state.selectedMatch; if (!match) return; const token = this.selection; const result = await this.request('PATCH', `/matches/${encodeURIComponent(match.id)}`, { num_computer_opponents: count }); await this.cache(`/matches/${result.id}`, result); if (token === this.selection) this.patch({ selectedMatch: this.decorate(result) }); }
+  async removePlayer(userId: string) { const match = this.state.selectedMatch; if (!match) return; const token = this.selection; const result = await this.request('DELETE', `/matches/${encodeURIComponent(match.id)}/players/${encodeURIComponent(userId)}`); await this.cache(`/matches/${result.id}`, result); if (token === this.selection) this.patch({ selectedMatch: this.decorate(result) }); }
+  async archiveMatch(id: string, deleted = false) {
+    const guard = this.capture(), owner = this.identity(), token = this.selection;
+    await this.repository.mutate(owner, data => {
+      guard();
+      if (!deleted && !data.local[id] && (data.queues[id]?.length || data.conflicts[id] || this.data.conflicts[id])) throw new Error(copyText('Sync or resolve pending actions before hiding this match.'));
+      data.archivedMatches.push({ id, match: data.local[id] || data.responses[`/matches/${id}`], moves: data.queues[id] || [], savedAt: new Date().toISOString() });
+      delete data.local[id]; delete data.queues[id]; delete data.conflicts[id]; delete data.responses[`/matches/${id}`];
+      if (data.selectedId === id) data.selectedId = null;
+    });
+    guard(); if (token === this.selection && this.state.selectedMatch?.id === id) this.clearMatch();
+    await this.reloadData(); guard(); this.patch({ myMatches: this.state.myMatches.filter(m => m.id !== id) });
+  }
+  async deleteMatch() { const match = this.state.selectedMatch; if (!match) return; if (!this.data.local[match.id]) await this.request('DELETE', `/matches/${encodeURIComponent(match.id)}`); await this.archiveMatch(match.id, true); }
   private async sync(freshRequestId?: string, matchId?: string) {
     if (this.localOnly || !this.state.account || !isOnline() || (!freshRequestId && Date.now() < this.retryAfter)) return;
     if (this.syncPromise) return this.syncPromise;
@@ -326,12 +338,17 @@ export class PortalStore {
   }
   async replay(index: number | null) {
     const replayToken = ++this.replaySelection; const match = this.state.selectedMatch; if (!match) return; if (index === null) { this.patch({ replayIndex: null }); return; }
-    const guard = this.capture(); const token = this.selection; const wanted = Math.max(0, Math.min(match.move_count, index));
+    if (this.data.local[match.id]?.awaitingHandoff) throw new Error(copyText('Confirm the next player is ready before viewing history.'));
+    const guard = this.capture(); const token = this.selection; let wanted = Math.max(0, Math.min(match.move_count, index));
     let history = this.state.history;
     if (this.paginated && !this.data.local[match.id]) {
       const result = await this.read(`/v2/matches/${encodeURIComponent(match.id)}/history?start=${Math.max(0, wanted - 1)}&limit=1`); history = { ...result, moves: result.items, offset: Math.max(0, wanted - 1), total: result.total };
     } else if (!history) history = await this.loadHistory();
-    guard(); if (token === this.selection && replayToken === this.replaySelection) this.patch({ history, replayIndex: wanted });
+    guard(); if (token !== this.selection || replayToken !== this.replaySelection) return;
+    if (wanted === 0 && match.move_count > 0 && history?.initial_turn_player_indices === null) wanted = 1;
+    const move = wanted === 0 && history && Object.hasOwn(history, 'initial_state') ? { new_state: history.initial_state } : history?.moves?.[wanted - 1 - (history.offset || 0)];
+    if (!move || !Object.hasOwn(move, 'new_state')) throw new Error(copyText('This history frame is not available. Try another move.'));
+    this.patch({ history, replayIndex: wanted }); return wanted;
   }
   private async recoverPresentation(match: Match, previous?: Match) {
     const guard = this.capture(); const token = this.selection;
@@ -378,7 +395,7 @@ export class PortalStore {
     createInvite: (options: any = {}) => this.perform(async () => { const id = this.state.selectedMatch?.id; if (!id) throw new Error('Choose a match first'); return this.request('POST', `/matches/${encodeURIComponent(id)}/invites`, options); }),
     acceptInvite: (token: string) => this.perform(async () => { const result = await this.request('POST', `/invites/${encodeURIComponent(token)}/accept`); await this.selectMatch(result.id); return result; }),
     revokeInvite: (token: string) => this.perform(async () => { const result = await this.request('POST', `/invites/${encodeURIComponent(token)}/revoke`); await this.list('invites'); return result; }),
-    setLocale: (locale: string) => this.perform(async () => { await setLocale(locale); this.patch({ locale }); if (this.state.account) await this.updateProfile({ locale }); }),
+    setLocale: (locale: string) => this.perform(async () => { if (!await setLocale(locale)) return; this.patch({ locale }); if (this.state.account) await this.updateProfile({ locale }); }),
     clearError: () => this.patch({ error: null }),
   };
 }

@@ -1,3 +1,4 @@
+import {copyText} from '../platform/i18n';
 import React, { ReactNode, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
 
@@ -48,12 +49,12 @@ export function Card({children, style, testID}: {children: ReactNode; style?: Vi
 }
 
 export function Notice({children, error, onDismiss}: {children: ReactNode; error?: boolean; onDismiss?: () => void}) {
-  return <View accessibilityRole="alert" style={[styles.notice, error && {borderColor: colors.error}]}><Copy style={[{flex: 1}, error && {color: colors.error}]}>{children}</Copy>{onDismiss && <Button secondary compact label="Dismiss message" onPress={onDismiss}>×</Button>}</View>;
+  return <View accessibilityRole="alert" style={[styles.notice, error && {borderColor: colors.error}]}><Copy style={[{flex: 1}, error && {color: colors.error}]}>{children}</Copy>{onDismiss && <Button secondary compact label={copyText("Dismiss message")} onPress={onDismiss}>×</Button>}</View>;
 }
 
 export function Dialog({visible, title, children, onClose, wide}: {visible: boolean; title: string; children: ReactNode; onClose: () => void; wide?: boolean}) {
   return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} accessibilityViewIsModal>
-    <View style={styles.modalShade}><View style={[styles.modal, wide && {maxWidth: 760}]}><Row style={{justifyContent: 'space-between'}}><Title small>{title}</Title><Button compact secondary label="Close dialog" onPress={onClose}>×</Button></Row>
+    <View style={styles.modalShade}><View style={[styles.modal, wide && {maxWidth: 760}]}><Row style={{justifyContent: 'space-between'}}><Title small>{title}</Title><Button compact secondary label={copyText("Close dialog")} onPress={onClose}>×</Button></Row>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{gap: 18, paddingBottom: 10}}>{children}</ScrollView>
     </View></View>
   </Modal>;

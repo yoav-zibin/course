@@ -1,3 +1,4 @@
+import {copyText} from '../platform/i18n';
 import React,{useState} from 'react';
 import {Button,Choices,Copy,Dialog,Field,Notice} from './components';
 import {text,useApp} from './context';
@@ -6,7 +7,7 @@ export function FeedbackDialog({visible,onClose,target}: {visible:boolean;onClos
   const [kind,setKind]=useState('bug'),[value,setValue]=useState(''),[error,setError]=useState(''),[sent,setSent]=useState(false);
   return <Dialog visible={visible} title={t('ui.feedback.general','Feedback')} onClose={()=>{setSent(false);setError('');onClose();}}>
     {sent?<><Notice>{t('ui.feedback.thanks','Thanks for the feedback!')}</Notice><Button onPress={()=>{setSent(false);setValue('');onClose();}}>{t('ui.action.close','Close')}</Button></>:<>
-      <Copy muted>{target.name?`About ${target.name}`:t('ui.feedback.about_platform','About BuildPlay')}</Copy>
+      <Copy muted>{target.name?copyText("About {v0}",{v0:target.name}):t('ui.feedback.about_platform','About BuildPlay')}</Copy>
       <Choices label={t('ui.feedback.kind','Kind')} value={kind} options={[{value:'bug',label:t('ui.feedback.kind_bug','Bug')},{value:'suggestion',label:t('ui.feedback.kind_suggestion','Suggestion')},{value:'problem',label:t('ui.feedback.kind_problem','Problem')}]} onChange={setKind}/>
       <Field label={t('ui.feedback.placeholder_bug','What happened, and what did you expect?')} multiline value={value} onChangeText={setValue} maxLength={1000}/><Copy small muted>{value.length} / 1000</Copy>
       {error&&<Notice error>{error}</Notice>}

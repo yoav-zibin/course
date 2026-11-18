@@ -1,0 +1,2513 @@
+{
+  "Games": {
+    "es": "Juegos",
+    "fr": "Jeux",
+    "de": "Spiele",
+    "pt": "Jogos",
+    "zh": "游戏",
+    "hi": "खेल",
+    "ar": "الألعاب"
+  },
+  "Matches": {
+    "es": "Partidas",
+    "fr": "Parties",
+    "de": "Partien",
+    "pt": "Partidas",
+    "zh": "对局",
+    "hi": "मैच",
+    "ar": "المباريات"
+  },
+  "On this device": {
+    "es": "En este dispositivo",
+    "fr": "Sur cet appareil",
+    "de": "Auf diesem Gerät",
+    "pt": "Neste dispositivo",
+    "zh": "在此设备上",
+    "hi": "इस डिवाइस पर",
+    "ar": "على هذا الجهاز"
+  },
+  "Invites": {
+    "es": "Invitaciones",
+    "fr": "Invitations",
+    "de": "Einladungen",
+    "pt": "Convites",
+    "zh": "邀请",
+    "hi": "आमंत्रण",
+    "ar": "الدعوات"
+  },
+  "BuildPlay home": {
+    "es": "Inicio de BuildPlay",
+    "fr": "Accueil BuildPlay",
+    "de": "BuildPlay-Startseite",
+    "pt": "Início do BuildPlay",
+    "zh": "BuildPlay 首页",
+    "hi": "BuildPlay होम",
+    "ar": "الرئيسية في BuildPlay"
+  },
+  "Account menu": {
+    "es": "Menú de cuenta",
+    "fr": "Menu du compte",
+    "de": "Kontomenü",
+    "pt": "Menu da conta",
+    "zh": "账户菜单",
+    "hi": "खाता मेन्यू",
+    "ar": "قائمة الحساب"
+  },
+  "Log in": {
+    "es": "Iniciar sesión",
+    "fr": "Se connecter",
+    "de": "Anmelden",
+    "pt": "Entrar",
+    "zh": "登录",
+    "hi": "लॉग इन करें",
+    "ar": "تسجيل الدخول"
+  },
+  "Navigation menu": {
+    "es": "Menú de navegación",
+    "fr": "Menu de navigation",
+    "de": "Navigationsmenü",
+    "pt": "Menu de navegação",
+    "zh": "导航菜单",
+    "hi": "नेविगेशन मेन्यू",
+    "ar": "قائمة التنقل"
+  },
+  "Preferences": {
+    "es": "Preferencias",
+    "fr": "Préférences",
+    "de": "Einstellungen",
+    "pt": "Preferências",
+    "zh": "偏好设置",
+    "hi": "प्राथमिकताएँ",
+    "ar": "التفضيلات"
+  },
+  "Online": {
+    "es": "En línea",
+    "fr": "En ligne",
+    "de": "Online",
+    "pt": "Online",
+    "zh": "在线",
+    "hi": "ऑनलाइन",
+    "ar": "متصل"
+  },
+  "Offline": {
+    "es": "Sin conexión",
+    "fr": "Hors ligne",
+    "de": "Offline",
+    "pt": "Offline",
+    "zh": "离线",
+    "hi": "ऑफ़लाइन",
+    "ar": "غير متصل"
+  },
+  "pending moves": {
+    "es": "jugadas pendientes",
+    "fr": "coups en attente",
+    "de": "ausstehende Züge",
+    "pt": "jogadas pendentes",
+    "zh": "步待同步",
+    "hi": "लंबित चालें",
+    "ar": "نقلات معلقة"
+  },
+  "Your move is saved on this device and will sync when connected.": {
+    "es": "Tu jugada está guardada en este dispositivo y se sincronizará al conectarte.",
+    "fr": "Votre coup est enregistré sur cet appareil et sera synchronisé à la reconnexion.",
+    "de": "Dein Zug ist auf diesem Gerät gespeichert und wird bei Verbindung synchronisiert.",
+    "pt": "Sua jogada está salva neste dispositivo e será sincronizada ao reconectar.",
+    "zh": "你的走法已保存在此设备上，联网后会同步。",
+    "hi": "आपकी चाल इस डिवाइस पर सहेजी गई है और कनेक्ट होने पर सिंक होगी।",
+    "ar": "حُفظت نقلتك على هذا الجهاز وستتم مزامنتها عند الاتصال."
+  },
+  "Downloaded games are available on this device.": {
+    "es": "Los juegos descargados están disponibles en este dispositivo.",
+    "fr": "Les jeux téléchargés sont disponibles sur cet appareil.",
+    "de": "Heruntergeladene Spiele sind auf diesem Gerät verfügbar.",
+    "pt": "Os jogos baixados estão disponíveis neste dispositivo.",
+    "zh": "下载的游戏可在此设备上使用。",
+    "hi": "डाउनलोड किए गए खेल इस डिवाइस पर उपलब्ध हैं।",
+    "ar": "الألعاب المنزّلة متاحة على هذا الجهاز."
+  },
+  "Continue to the BuildPlay app": {
+    "es": "Continuar a la aplicación BuildPlay",
+    "fr": "Continuer vers l’application BuildPlay",
+    "de": "Weiter zur BuildPlay-App",
+    "pt": "Continuar para o aplicativo BuildPlay",
+    "zh": "继续前往 BuildPlay 应用",
+    "hi": "BuildPlay ऐप पर जारी रखें",
+    "ar": "المتابعة إلى تطبيق BuildPlay"
+  },
+  "Confirm the account you want to use in the app. Your password stays out of the browser callback link.": {
+    "es": "Confirma la cuenta que quieres usar en la aplicación. Tu contraseña no se incluye en el enlace de regreso.",
+    "fr": "Confirmez le compte à utiliser dans l’application. Votre mot de passe n’est pas inclus dans le lien de retour.",
+    "de": "Bestätige das Konto für die App. Dein Passwort wird nicht in den Rückkehrlink aufgenommen.",
+    "pt": "Confirme a conta a usar no aplicativo. Sua senha não é incluída no link de retorno.",
+    "zh": "确认要在应用中使用的账户。返回链接不会包含你的密码。",
+    "hi": "ऐप में इस्तेमाल करने वाला खाता चुनें। वापसी लिंक में आपका पासवर्ड शामिल नहीं होता।",
+    "ar": "أكّد الحساب الذي تريد استخدامه في التطبيق. لا يتضمن رابط العودة كلمة مرورك."
+  },
+  "Continue as {v0}": {
+    "es": "Continuar como {v0}",
+    "fr": "Continuer en tant que {v0}",
+    "de": "Als {v0} fortfahren",
+    "pt": "Continuar como {v0}",
+    "zh": "以 {v0} 身份继续",
+    "hi": "{v0} के रूप में जारी रखें",
+    "ar": "المتابعة باسم {v0}"
+  },
+  "Log in to continue": {
+    "es": "Inicia sesión para continuar",
+    "fr": "Connectez-vous pour continuer",
+    "de": "Zum Fortfahren anmelden",
+    "pt": "Entre para continuar",
+    "zh": "登录以继续",
+    "hi": "जारी रखने के लिए लॉग इन करें",
+    "ar": "سجّل الدخول للمتابعة"
+  },
+  "{v0} invited you to play": {
+    "es": "{v0} te invitó a jugar",
+    "fr": "{v0} vous invite à jouer",
+    "de": "{v0} hat dich zum Spielen eingeladen",
+    "pt": "{v0} convidou você para jogar",
+    "zh": "{v0} 邀请你一起玩",
+    "hi": "{v0} ने आपको खेलने के लिए आमंत्रित किया",
+    "ar": "دعاك {v0} للعب"
+  },
+  "You’re invited to play": {
+    "es": "Te invitaron a jugar",
+    "fr": "Vous êtes invité à jouer",
+    "de": "Du bist zum Spielen eingeladen",
+    "pt": "Você recebeu um convite para jogar",
+    "zh": "你收到了游戏邀请",
+    "hi": "आपको खेलने का निमंत्रण मिला है",
+    "ar": "أنت مدعو للعب"
+  },
+  "Join the match with your current account.": {
+    "es": "Únete a la partida con tu cuenta actual.",
+    "fr": "Rejoignez la partie avec votre compte actuel.",
+    "de": "Tritt der Partie mit deinem aktuellen Konto bei.",
+    "pt": "Entre na partida com sua conta atual.",
+    "zh": "使用当前账户加入对局。",
+    "hi": "अपने मौजूदा खाते से मैच में शामिल हों।",
+    "ar": "انضم إلى المباراة بحسابك الحالي."
+  },
+  "Log in or continue as a guest, then join this match.": {
+    "es": "Inicia sesión o continúa como invitado para ocupar tu lugar.",
+    "fr": "Connectez-vous ou continuez en tant qu'invité pour prendre votre place.",
+    "de": "Melde dich an oder spiele als Gast weiter, um deinen Platz einzunehmen.",
+    "pt": "Entre ou continue como convidado para ocupar seu lugar.",
+    "zh": "登录或以访客身份继续，即可入座。",
+    "hi": "अपनी सीट लेने के लिए लॉग इन करें या मेहमान के रूप में जारी रखें।",
+    "ar": "سجّل الدخول أو تابع كضيف لتأخذ مقعدك."
+  },
+  "Join match": {
+    "es": "Unirse a la partida",
+    "fr": "Rejoindre la partie",
+    "de": "Partie beitreten",
+    "pt": "Entrar na partida",
+    "zh": "加入对局",
+    "hi": "मैच में शामिल हों",
+    "ar": "انضم إلى المباراة"
+  },
+  "Log in to join": {
+    "es": "Inicia sesión para unirte",
+    "fr": "Se connecter pour rejoindre",
+    "de": "Anmelden und beitreten",
+    "pt": "Entrar para participar",
+    "zh": "登录并加入",
+    "hi": "शामिल होने के लिए लॉग इन करें",
+    "ar": "سجّل الدخول للانضمام"
+  },
+  "Not now": {
+    "es": "Ahora no",
+    "fr": "Pas maintenant",
+    "de": "Nicht jetzt",
+    "pt": "Agora não",
+    "zh": "以后再说",
+    "hi": "अभी नहीं",
+    "ar": "ليس الآن"
+  },
+  "Loading BuildPlay…": {
+    "es": "Cargando BuildPlay…",
+    "fr": "Chargement de BuildPlay…",
+    "de": "BuildPlay wird geladen…",
+    "pt": "Carregando BuildPlay…",
+    "zh": "正在加载 BuildPlay…",
+    "hi": "BuildPlay लोड हो रहा है…",
+    "ar": "جارٍ تحميل BuildPlay…"
+  },
+  "Feedback": {
+    "es": "Comentarios",
+    "fr": "Commentaires",
+    "de": "Feedback",
+    "pt": "Feedback",
+    "zh": "反馈",
+    "hi": "फ़ीडबैक",
+    "ar": "الملاحظات"
+  },
+  "Privacy": {
+    "es": "Privacidad",
+    "fr": "Confidentialité",
+    "de": "Datenschutz",
+    "pt": "Privacidade",
+    "zh": "隐私",
+    "hi": "गोपनीयता",
+    "ar": "الخصوصية"
+  },
+  "● Online": {
+    "es": "En línea",
+    "fr": "En ligne",
+    "de": "Online",
+    "pt": "Online",
+    "zh": "在线",
+    "hi": "ऑनलाइन",
+    "ar": "متصل"
+  },
+  "○ Offline": {
+    "es": "Sin conexión",
+    "fr": "Hors ligne",
+    "de": "Offline",
+    "pt": "Offline",
+    "zh": "离线",
+    "hi": "ऑफ़लाइन",
+    "ar": "غير متصل"
+  },
+  "Guest": {
+    "es": "Invitado",
+    "fr": "Invité",
+    "de": "Gast",
+    "pt": "Convidado",
+    "zh": "访客",
+    "hi": "अतिथि",
+    "ar": "ضيف"
+  },
+  "Email": {
+    "es": "Correo electrónico",
+    "fr": "E-mail",
+    "de": "E-Mail",
+    "pt": "E-mail",
+    "zh": "电子邮件",
+    "hi": "ईमेल",
+    "ar": "البريد الإلكتروني"
+  },
+  "Phone": {
+    "es": "Número de teléfono",
+    "fr": "Numéro de téléphone",
+    "de": "Telefonnummer",
+    "pt": "Número de telefone",
+    "zh": "手机号码",
+    "hi": "फ़ोन नंबर",
+    "ar": "رقم الهاتف"
+  },
+  "Your account": {
+    "es": "Tu cuenta",
+    "fr": "Votre compte",
+    "de": "Dein Konto",
+    "pt": "Sua conta",
+    "zh": "你的账户",
+    "hi": "आपका खाता",
+    "ar": "حسابك"
+  },
+  "Welcome to BuildPlay": {
+    "es": "Iniciar sesión",
+    "fr": "Se connecter",
+    "de": "Anmelden",
+    "pt": "Entrar",
+    "zh": "登录",
+    "hi": "लॉग इन करें",
+    "ar": "تسجيل الدخول"
+  },
+  "Language": {
+    "es": "Idioma",
+    "fr": "Langue",
+    "de": "Sprache",
+    "pt": "Idioma",
+    "zh": "语言",
+    "hi": "भाषा",
+    "ar": "اللغة"
+  },
+  "Verified account": {
+    "es": "Cuenta verificada",
+    "fr": "Compte vérifié",
+    "de": "Verifiziertes Konto",
+    "pt": "Conta verificada",
+    "zh": "已验证账户",
+    "hi": "सत्यापित खाता",
+    "ar": "حساب موثّق"
+  },
+  "Guest account": {
+    "es": "Cuenta de invitado",
+    "fr": "Compte invité",
+    "de": "Gastkonto",
+    "pt": "Conta de convidado",
+    "zh": "访客账户",
+    "hi": "अतिथि खाता",
+    "ar": "حساب ضيف"
+  },
+  "tokens": {
+    "es": "fichas",
+    "fr": "jetons",
+    "de": "Token",
+    "pt": "fichas",
+    "zh": "代币",
+    "hi": "टोकन",
+    "ar": "رموز"
+  },
+  "Edit profile": {
+    "es": "Editar perfil",
+    "fr": "Modifier le profil",
+    "de": "Profil bearbeiten",
+    "pt": "Editar perfil",
+    "zh": "编辑个人资料",
+    "hi": "प्रोफ़ाइल बदलें",
+    "ar": "تعديل الملف الشخصي"
+  },
+  "Log out": {
+    "es": "Cerrar sesión",
+    "fr": "Se déconnecter",
+    "de": "Abmelden",
+    "pt": "Sair",
+    "zh": "退出登录",
+    "hi": "लॉग आउट करें",
+    "ar": "تسجيل الخروج"
+  },
+  "Display name": {
+    "es": "Nombre para mostrar",
+    "fr": "Nom affiché",
+    "de": "Anzeigename",
+    "pt": "Nome de exibição",
+    "zh": "显示名称",
+    "hi": "प्रदर्शित नाम",
+    "ar": "الاسم المعروض"
+  },
+  "Save": {
+    "es": "Guardar",
+    "fr": "Enregistrer",
+    "de": "Speichern",
+    "pt": "Salvar",
+    "zh": "保存",
+    "hi": "सहेजें",
+    "ar": "حفظ"
+  },
+  "Switch account": {
+    "es": "Cambiar de cuenta",
+    "fr": "Changer de compte",
+    "de": "Konto wechseln",
+    "pt": "Trocar de conta",
+    "zh": "切换账号",
+    "hi": "खाता बदलें",
+    "ar": "تبديل الحساب"
+  },
+  "Add a login or use another account": {
+    "es": "Añadir otra cuenta",
+    "fr": "Ajouter un autre compte",
+    "de": "Weiteres Konto hinzufügen",
+    "pt": "Adicionar outra conta",
+    "zh": "添加其他账号",
+    "hi": "दूसरा खाता जोड़ें",
+    "ar": "إضافة حساب آخر"
+  },
+  "Account to use": {
+    "es": "Cuenta que usar",
+    "fr": "Compte à utiliser",
+    "de": "Zu verwendendes Konto",
+    "pt": "Conta a usar",
+    "zh": "使用的账户",
+    "hi": "इस्तेमाल करने वाला खाता",
+    "ar": "الحساب المراد استخدامه"
+  },
+  "Continue with": {
+    "es": "Continuar con",
+    "fr": "Continuer avec",
+    "de": "Fortfahren mit",
+    "pt": "Continuar com",
+    "zh": "继续方式",
+    "hi": "इससे जारी रखें",
+    "ar": "المتابعة باستخدام"
+  },
+  "Your name": {
+    "es": "Nombre para mostrar",
+    "fr": "Nom affiché",
+    "de": "Anzeigename",
+    "pt": "Nome de exibição",
+    "zh": "显示名称",
+    "hi": "प्रदर्शित नाम",
+    "ar": "الاسم المعروض"
+  },
+  "Continue as guest": {
+    "es": "Continuar como invitado",
+    "fr": "Continuer en invité",
+    "de": "Als Gast fortfahren",
+    "pt": "Continuar como convidado",
+    "zh": "以访客身份继续",
+    "hi": "अतिथि के रूप में जारी रखें",
+    "ar": "المتابعة كضيف"
+  },
+  "Guest accounts are saved on this device. Add a verified login to keep access across devices. Guests receive no welcome tokens.": {
+    "es": "Las cuentas de invitado se guardan en este dispositivo. Añade un acceso verificado para usarlas en otros dispositivos. Los invitados no reciben fichas de bienvenida.",
+    "fr": "Les comptes invités sont enregistrés sur cet appareil. Ajoutez une connexion vérifiée pour les utiliser ailleurs. Les invités ne reçoivent pas de jetons de bienvenue.",
+    "de": "Gastkonten werden auf diesem Gerät gespeichert. Füge eine verifizierte Anmeldung für den Zugriff auf anderen Geräten hinzu. Gäste erhalten keine Willkommensmarken.",
+    "pt": "Contas de convidado ficam neste dispositivo. Adicione um acesso verificado para usá-las em outros dispositivos. Convidados não recebem fichas de boas-vindas.",
+    "zh": "访客账户保存在此设备上。添加已验证的登录方式，即可在其他设备访问。访客不会获得欢迎代币。",
+    "hi": "अतिथि खाते इसी डिवाइस पर सहेजे जाते हैं। दूसरे डिवाइस से इस्तेमाल करने के लिए सत्यापित लॉगिन जोड़ें। अतिथियों को स्वागत टोकन नहीं मिलते।",
+    "ar": "تُحفظ حسابات الضيوف على هذا الجهاز. أضف وسيلة دخول موثّقة للوصول من أجهزة أخرى. لا يحصل الضيوف على رموز ترحيبية."
+  },
+  "Phone number": {
+    "es": "Número de teléfono",
+    "fr": "Numéro de téléphone",
+    "de": "Telefonnummer",
+    "pt": "Número de telefone",
+    "zh": "手机号码",
+    "hi": "फ़ोन नंबर",
+    "ar": "رقم الهاتف"
+  },
+  "Send verification code": {
+    "es": "Enviar código",
+    "fr": "Envoyer le code",
+    "de": "Code senden",
+    "pt": "Enviar código",
+    "zh": "发送验证码",
+    "hi": "कोड भेजें",
+    "ar": "إرسال الرمز"
+  },
+  "Call me": {
+    "es": "Llámame",
+    "fr": "Appelez-moi",
+    "de": "Mich anrufen",
+    "pt": "Ligue para mim",
+    "zh": "给我打电话",
+    "hi": "मुझे कॉल करें",
+    "ar": "اتصل بي"
+  },
+  "Verification code": {
+    "es": "Código de verificación",
+    "fr": "Code de vérification",
+    "de": "Bestätigungscode",
+    "pt": "Código de verificação",
+    "zh": "验证码",
+    "hi": "सत्यापन कोड",
+    "ar": "رمز التحقق"
+  },
+  "Verify and continue": {
+    "es": "Verificar",
+    "fr": "Vérifier",
+    "de": "Bestätigen",
+    "pt": "Verificar",
+    "zh": "验证",
+    "hi": "सत्यापित करें",
+    "ar": "تحقق"
+  },
+  "Use another address or resend": {
+    "es": "Usar otra dirección o reenviar",
+    "fr": "Utiliser une autre adresse ou renvoyer",
+    "de": "Andere Adresse verwenden oder erneut senden",
+    "pt": "Usar outro endereço ou reenviar",
+    "zh": "使用其他地址或重新发送",
+    "hi": "दूसरा पता इस्तेमाल करें या फिर भेजें",
+    "ar": "استخدم عنوانًا آخر أو أعد الإرسال"
+  },
+  "Get 1,000 tokens once with your first verified login. Repeat logins do not grant another bonus.": {
+    "es": "Recibe 1000 fichas una sola vez con tu primer inicio de sesión verificado. Usa Google o verifica un código enviado a tu correo o teléfono. Los invitados no reciben el bono de bienvenida.",
+    "fr": "Recevez 1 000 jetons une seule fois lors de votre première connexion vérifiée. Utilisez Google ou validez un code reçu par e-mail ou téléphone. Les invités ne reçoivent pas ce bonus de bienvenue.",
+    "de": "Erhalte einmalig 1.000 Spielmarken bei deiner ersten verifizierten Anmeldung. Nutze Google oder bestätige einen Code per E-Mail oder Telefon. Gäste erhalten keinen Willkommensbonus.",
+    "pt": "Receba 1.000 fichas uma única vez no seu primeiro login verificado. Use o Google ou confirme um código enviado por e-mail ou telefone. Visitantes não recebem o bônus de boas-vindas.",
+    "zh": "首次完成验证登录，即可一次性获得1,000枚代币。使用Google登录，或输入发送到邮箱或手机的验证码。游客不享受欢迎奖励。",
+    "hi": "पहली बार सत्यापित लॉगिन पूरा करने पर एक बार 1,000 टोकन पाएँ। Google का उपयोग करें या ईमेल या फ़ोन पर भेजे गए कोड की पुष्टि करें। अतिथियों को स्वागत बोनस नहीं मिलता।",
+    "ar": "احصل على 1,000 رمز مرة واحدة عند إتمام أول تسجيل دخول موثّق. استخدم Google أو أكّد الرمز المرسل إلى بريدك الإلكتروني أو هاتفك. لا يحصل الضيوف على مكافأة الترحيب."
+  },
+  "Let’s try that again": {
+    "es": "Inténtalo de nuevo.",
+    "fr": "Veuillez réessayer.",
+    "de": "Bitte versuche es erneut.",
+    "pt": "Tente novamente.",
+    "zh": "请重试。",
+    "hi": "कृपया फिर से प्रयास करें।",
+    "ar": "يرجى المحاولة مجددًا."
+  },
+  "The screen could not load. Your saved games remain on this device.": {
+    "es": "No se pudo cargar la pantalla. Tus partidas siguen guardadas en este dispositivo.",
+    "fr": "L’écran n’a pas pu se charger. Vos parties restent enregistrées sur cet appareil.",
+    "de": "Der Bildschirm konnte nicht geladen werden. Deine gespeicherten Spiele bleiben auf diesem Gerät.",
+    "pt": "Não foi possível carregar a tela. Suas partidas continuam salvas neste dispositivo.",
+    "zh": "无法加载页面。保存的游戏仍保留在此设备上。",
+    "hi": "स्क्रीन लोड नहीं हो सकी। आपके सहेजे हुए खेल इस डिवाइस पर सुरक्षित हैं।",
+    "ar": "تعذّر تحميل الشاشة. ما زالت ألعابك المحفوظة على هذا الجهاز."
+  },
+  "Reload the screen": {
+    "es": "Volver a cargar la pantalla",
+    "fr": "Recharger l’écran",
+    "de": "Bildschirm neu laden",
+    "pt": "Recarregar a tela",
+    "zh": "重新加载页面",
+    "hi": "स्क्रीन फिर लोड करें",
+    "ar": "إعادة تحميل الشاشة"
+  },
+  "Thanks for the feedback!": {
+    "es": "¡Gracias por tus comentarios!",
+    "fr": "Merci pour votre avis !",
+    "de": "Danke für dein Feedback!",
+    "pt": "Obrigado pelo feedback!",
+    "zh": "感谢你的反馈！",
+    "hi": "फ़ीडबैक के लिए धन्यवाद!",
+    "ar": "شكرًا على ملاحظاتك!"
+  },
+  "Close": {
+    "es": "Cerrar",
+    "fr": "Fermer",
+    "de": "Schließen",
+    "pt": "Fechar",
+    "zh": "关闭",
+    "hi": "बंद करें",
+    "ar": "إغلاق"
+  },
+  "About {v0}": {
+    "es": "Sobre {v0}",
+    "fr": "À propos de {v0}",
+    "de": "Über {v0}",
+    "pt": "Sobre {v0}",
+    "zh": "关于 {v0}",
+    "hi": "{v0} के बारे में",
+    "ar": "حول {v0}"
+  },
+  "About BuildPlay": {
+    "es": "Sobre el sitio web",
+    "fr": "À propos du site",
+    "de": "Über die Website",
+    "pt": "Sobre o site",
+    "zh": "关于本网站",
+    "hi": "वेबसाइट के बारे में",
+    "ar": "عن الموقع"
+  },
+  "Kind": {
+    "es": "Tipo",
+    "fr": "Type",
+    "de": "Art",
+    "pt": "Tipo",
+    "zh": "类型",
+    "hi": "प्रकार",
+    "ar": "النوع"
+  },
+  "Bug": {
+    "es": "Error",
+    "fr": "Bug",
+    "de": "Fehler",
+    "pt": "Bug",
+    "zh": "错误",
+    "hi": "बग",
+    "ar": "خطأ"
+  },
+  "Suggestion": {
+    "es": "Sugerencia",
+    "fr": "Suggestion",
+    "de": "Vorschlag",
+    "pt": "Sugestão",
+    "zh": "建议",
+    "hi": "सुझाव",
+    "ar": "اقتراح"
+  },
+  "Problem": {
+    "es": "Problema",
+    "fr": "Problème",
+    "de": "Problem",
+    "pt": "Problema",
+    "zh": "问题",
+    "hi": "समस्या",
+    "ar": "مشكلة"
+  },
+  "What happened, and what did you expect?": {
+    "es": "¿Qué pasó y qué esperabas?",
+    "fr": "Que s'est-il passé, et qu'attendiez-vous ?",
+    "de": "Was ist passiert, und was hast du erwartet?",
+    "pt": "O que aconteceu e o que você esperava?",
+    "zh": "发生了什么？你期望的是什么？",
+    "hi": "क्या हुआ, और आपने क्या उम्मीद की थी?",
+    "ar": "ماذا حدث، وماذا كنت تتوقع؟"
+  },
+  "Send feedback": {
+    "es": "Enviar",
+    "fr": "Envoyer",
+    "de": "Senden",
+    "pt": "Enviar",
+    "zh": "发送",
+    "hi": "भेजें",
+    "ar": "إرسال"
+  },
+  "Log in to send": {
+    "es": "Iniciar sesión",
+    "fr": "Se connecter",
+    "de": "Anmelden",
+    "pt": "Entrar",
+    "zh": "登录",
+    "hi": "लॉग इन करें",
+    "ar": "تسجيل الدخول"
+  },
+  "Continue with Google in your browser": {
+    "es": "Continuar con Google",
+    "fr": "Continuer avec Google",
+    "de": "Mit Google fortfahren",
+    "pt": "Continuar com o Google",
+    "zh": "使用 Google 继续",
+    "hi": "Google से जारी रखें",
+    "ar": "المتابعة باستخدام Google"
+  },
+  "Could not load Google sign-in. Check your connection.": {
+    "es": "No se pudo cargar el acceso con Google. Comprueba tu conexión.",
+    "fr": "Impossible de charger la connexion Google. Vérifiez votre connexion.",
+    "de": "Google-Anmeldung konnte nicht geladen werden. Prüfe deine Verbindung.",
+    "pt": "Não foi possível carregar o login do Google. Verifique sua conexão.",
+    "zh": "无法加载 Google 登录。请检查网络连接。",
+    "hi": "Google लॉगिन लोड नहीं हो सका। अपना कनेक्शन जाँचें।",
+    "ar": "تعذّر تحميل تسجيل الدخول عبر Google. تحقّق من اتصالك."
+  },
+  "The history frame could not finish rendering. Try stepping through it manually.": {
+    "es": "No se pudo terminar de mostrar este paso del historial. Prueba a avanzar manualmente.",
+    "fr": "Cette étape de l’historique n’a pas pu finir de s’afficher. Essayez d’avancer manuellement.",
+    "de": "Dieser Verlaufsschritt konnte nicht fertig dargestellt werden. Versuche, manuell weiterzuschalten.",
+    "pt": "Esta etapa do histórico não terminou de carregar. Tente avançar manualmente.",
+    "zh": "此历史画面未能完成渲染。请尝试手动逐步查看。",
+    "hi": "इतिहास का यह दृश्य पूरा नहीं दिख सका। कृपया एक-एक चाल करके देखें।",
+    "ar": "تعذّر إكمال عرض هذه الخطوة من السجل. جرّب التنقل يدويًا."
+  },
+  "Invite only": {
+    "es": "Partida privada",
+    "fr": "Partie privée",
+    "de": "Private Partie",
+    "pt": "Partida privada",
+    "zh": "私人对局",
+    "hi": "निजी मैच",
+    "ar": "مباراة خاصة"
+  },
+  "Public match": {
+    "es": "Partida pública",
+    "fr": "Partie publique",
+    "de": "Öffentliche Partie",
+    "pt": "Partida pública",
+    "zh": "公开对局",
+    "hi": "सार्वजनिक मैच",
+    "ar": "مباراة عامة"
+  },
+  "Refresh": {
+    "es": "Actualizar",
+    "fr": "Actualiser",
+    "de": "Aktualisieren",
+    "pt": "Atualizar",
+    "zh": "刷新",
+    "hi": "रीफ़्रेश करें",
+    "ar": "تحديث"
+  },
+  "Match": {
+    "es": "Partida",
+    "fr": "Partie",
+    "de": "Partie",
+    "pt": "Partida",
+    "zh": "对局",
+    "hi": "मैच",
+    "ar": "مباراة"
+  },
+  "Finished": {
+    "es": "Terminadas",
+    "fr": "Terminées",
+    "de": "Beendet",
+    "pt": "Finalizadas",
+    "zh": "已完成",
+    "hi": "पूरे हुए",
+    "ar": "المنتهية"
+  },
+  "Waiting for players": {
+    "es": "Esperando jugadores",
+    "fr": "En attente de joueurs",
+    "de": "Wartet auf Spieler",
+    "pt": "Aguardando jogadores",
+    "zh": "等待玩家",
+    "hi": "खिलाड़ियों की प्रतीक्षा",
+    "ar": "في انتظار اللاعبين"
+  },
+  "Your turn": {
+    "es": "Tu turno",
+    "fr": "À vous de jouer",
+    "de": "Du bist am Zug",
+    "pt": "Sua vez",
+    "zh": "轮到你了",
+    "hi": "आपकी बारी",
+    "ar": "دورك"
+  },
+  "Game in progress": {
+    "es": "Partida en curso",
+    "fr": "Partie en cours",
+    "de": "Partie läuft",
+    "pt": "Partida em andamento",
+    "zh": "对局进行中",
+    "hi": "मैच चल रहा है",
+    "ar": "المباراة جارية"
+  },
+  "moves ·": {
+    "es": "jugadas ·",
+    "fr": "coups ·",
+    "de": "Züge ·",
+    "pt": "jogadas ·",
+    "zh": "步 ·",
+    "hi": "चालें ·",
+    "ar": "نقلات ·"
+  },
+  "players": {
+    "es": "Jugadores",
+    "fr": "Joueurs",
+    "de": "Spieler",
+    "pt": "Jogadores",
+    "zh": "玩家",
+    "hi": "खिलाड़ी",
+    "ar": "اللاعبون"
+  },
+  " · Saved on this device": {
+    "es": "Una partida rápida, guardada en este dispositivo.",
+    "fr": "Une partie rapide, enregistrée sur cet appareil.",
+    "de": "Ein schnelles Spiel, auf diesem Gerät gespeichert.",
+    "pt": "Um jogo rápido, salvo neste dispositivo.",
+    "zh": "快速游戏，保存在此设备上。",
+    "hi": "एक झटपट गेम, इसी डिवाइस पर सहेजा गया।",
+    "ar": "لعبة سريعة تُحفظ على هذا الجهاز."
+  },
+  " · {v0} remaining": {
+    "es": " · quedan {v0}",
+    "fr": " · {v0} restant",
+    "de": " · noch {v0}",
+    "pt": " · restam {v0}",
+    "zh": " · 剩余 {v0}",
+    "hi": " · {v0} बाकी",
+    "ar": " · المتبقي {v0}"
+  },
+  "Computer {v0}": {
+    "es": "Ordenador {v0}",
+    "fr": "Ordinateur {v0}",
+    "de": "Computer {v0}",
+    "pt": "Computador {v0}",
+    "zh": "电脑 {v0}",
+    "hi": "कंप्यूटर {v0}",
+    "ar": "الكمبيوتر {v0}"
+  },
+  "Player {v0}": {
+    "es": "Jugador {v0}",
+    "fr": "Joueur {v0}",
+    "de": "Spieler {v0}",
+    "pt": "Jogador {v0}",
+    "zh": "玩家 {v0}",
+    "hi": "खिलाड़ी {v0}",
+    "ar": "اللاعب {v0}"
+  },
+  "Left": {
+    "es": "Se fue",
+    "fr": "Parti",
+    "de": "Verlassen",
+    "pt": "Saiu",
+    "zh": "已离开",
+    "hi": "छोड़ चुके",
+    "ar": "غادر"
+  },
+  "Report {v0}": {
+    "es": "Denunciar a {v0}",
+    "fr": "Signaler {v0}",
+    "de": "{v0} melden",
+    "pt": "Denunciar {v0}",
+    "zh": "举报 {v0}",
+    "hi": "{v0} की शिकायत करें",
+    "ar": "الإبلاغ عن {v0}"
+  },
+  "Report": {
+    "es": "⚑ Reportar",
+    "fr": "⚑ Signaler",
+    "de": "⚑ Melden",
+    "pt": "⚑ Denunciar",
+    "zh": "⚑ 举报",
+    "hi": "⚑ रिपोर्ट",
+    "ar": "⚑ إبلاغ"
+  },
+  "Remove": {
+    "es": "Quitar",
+    "fr": "Retirer",
+    "de": "Entfernen",
+    "pt": "Remover",
+    "zh": "移除",
+    "hi": "हटाएं",
+    "ar": "إزالة"
+  },
+  "Use server version…": {
+    "es": "Usar la versión del servidor",
+    "fr": "Utiliser la version du serveur",
+    "de": "Serverversion verwenden",
+    "pt": "Usar a versão do servidor",
+    "zh": "使用服务器版本",
+    "hi": "सर्वर संस्करण उपयोग करें",
+    "ar": "استخدام نسخة الخادم"
+  },
+  "Your move is saved and waiting for server confirmation. The board stays paused so another action cannot conflict with it.": {
+    "es": "Tu jugada está guardada y espera confirmación del servidor. El tablero queda en pausa para evitar acciones en conflicto.",
+    "fr": "Votre coup est enregistré et attend la confirmation du serveur. Le plateau reste en pause pour éviter les conflits.",
+    "de": "Dein Zug ist gespeichert und wartet auf die Serverbestätigung. Das Brett bleibt pausiert, um widersprüchliche Aktionen zu verhindern.",
+    "pt": "Sua jogada está salva e aguarda confirmação do servidor. O tabuleiro fica pausado para evitar ações conflitantes.",
+    "zh": "你的走法已保存，正在等待服务器确认。棋盘会暂停，以避免其他操作产生冲突。",
+    "hi": "आपकी चाल सहेजी गई है और सर्वर की पुष्टि की प्रतीक्षा में है। टकराव रोकने के लिए बोर्ड रुका रहेगा।",
+    "ar": "حُفظت نقلتك وهي بانتظار تأكيد الخادم. تبقى اللوحة متوقفة لمنع تعارض الإجراءات."
+  },
+  "{v0} tokens per person": {
+    "es": "{v0} fichas por persona",
+    "fr": "{v0} jetons par personne",
+    "de": "{v0} Marken pro Person",
+    "pt": "{v0} fichas por pessoa",
+    "zh": "每人 {v0} 枚代币",
+    "hi": "प्रति व्यक्ति {v0} टोकन",
+    "ar": "{v0} رمز لكل شخص"
+  },
+  "Free match": {
+    "es": "Partida gratis",
+    "fr": "Partie gratuite",
+    "de": "Kostenloses Spiel",
+    "pt": "Partida grátis",
+    "zh": "免费对局",
+    "hi": "मुफ़्त मैच",
+    "ar": "مباراة مجانية"
+  },
+  "tokens in the pot": {
+    "es": "fichas en el bote",
+    "fr": "jetons dans le pot",
+    "de": "Marken im Pot",
+    "pt": "fichas no pote",
+    "zh": "枚代币在奖池中",
+    "hi": "टोकन साझा राशि में",
+    "ar": "رمز في الرصيد المشترك"
+  },
+  "Your payout:": {
+    "es": "Tu pago",
+    "fr": "Votre gain",
+    "de": "Deine Auszahlung",
+    "pt": "Seu pagamento",
+    "zh": "你的奖金",
+    "hi": "आपका भुगतान",
+    "ar": "مكسبك"
+  },
+  "Start game": {
+    "es": "Empezar partida",
+    "fr": "Démarrer la partie",
+    "de": "Spiel starten",
+    "pt": "Iniciar partida",
+    "zh": "开始游戏",
+    "hi": "गेम शुरू करें",
+    "ar": "ابدأ اللعبة"
+  },
+  "Add a computer": {
+    "es": "Añadir oponente computadora",
+    "fr": "Ajouter un adversaire ordinateur",
+    "de": "Computergegner hinzufügen",
+    "pt": "Adicionar oponente computador",
+    "zh": "添加电脑对手",
+    "hi": "कंप्यूटर प्रतिद्वंद्वी जोड़ें",
+    "ar": "إضافة خصم حاسوبي"
+  },
+  "Remove a computer": {
+    "es": "Quitar computadora",
+    "fr": "Retirer l'ordinateur",
+    "de": "Computer entfernen",
+    "pt": "Remover computador",
+    "zh": "移除电脑",
+    "hi": "कंप्यूटर हटाएँ",
+    "ar": "إزالة الحاسوب"
+  },
+  "Share match": {
+    "es": "Compartir partida",
+    "fr": "Partager la partie",
+    "de": "Match teilen",
+    "pt": "Compartilhar partida",
+    "zh": "分享对局",
+    "hi": "मैच शेयर करें",
+    "ar": "مشاركة المباراة"
+  },
+  "Leave match": {
+    "es": "Abandonar partida",
+    "fr": "Quitter la partie",
+    "de": "Partie verlassen",
+    "pt": "Sair da partida",
+    "zh": "离开对局",
+    "hi": "मैच छोड़ें",
+    "ar": "مغادرة المباراة"
+  },
+  "Delete match": {
+    "es": "Eliminar partida",
+    "fr": "Supprimer la partie",
+    "de": "Spiel löschen",
+    "pt": "Excluir partida",
+    "zh": "删除对局",
+    "hi": "मैच हटाएँ",
+    "ar": "حذف المباراة"
+  },
+  "Play again": {
+    "es": "Jugar de nuevo",
+    "fr": "Rejouer",
+    "de": "Nochmal spielen",
+    "pt": "Jogar novamente",
+    "zh": "再玩一次",
+    "hi": "फिर से खेलें",
+    "ar": "العب مجددًا"
+  },
+  "Your lobby is ready": {
+    "es": "Tu sala está lista",
+    "fr": "Votre salon est prêt",
+    "de": "Deine Lobby ist bereit",
+    "pt": "Sua sala está pronta",
+    "zh": "你的房间已准备好",
+    "hi": "आपकी लॉबी तैयार है",
+    "ar": "غرفتك جاهزة"
+  },
+  "Waiting for the host": {
+    "es": "Esperando al anfitrión",
+    "fr": "En attente de l’hôte",
+    "de": "Warten auf den Gastgeber",
+    "pt": "Aguardando o anfitrião",
+    "zh": "正在等待房主",
+    "hi": "मेज़बान की प्रतीक्षा में",
+    "ar": "بانتظار المضيف"
+  },
+  "Share the match with a friend. Start when the required number of players has joined.": {
+    "es": "Crea una partida y luego invita a tus amigos o añade computadoras en la sala de espera.",
+    "fr": "Créez une partie, puis invitez des amis ou ajoutez des ordinateurs dans le salon.",
+    "de": "Erstelle eine Partie und lade dann in der Lobby Freunde ein oder füge Computer hinzu.",
+    "pt": "Crie uma partida e depois convide amigos ou adicione computadores no lobby.",
+    "zh": "创建对局后，可在大厅里邀请朋友或添加电脑。",
+    "hi": "मैच बनाएँ, फिर लॉबी में दोस्तों को आमंत्रित करें या कंप्यूटर जोड़ें।",
+    "ar": "أنشئ مباراة ثم ادعُ أصدقاءك أو أضف حواسيب من الردهة."
+  },
+  "Join an open seat, then the host can start the game.": {
+    "es": "Ocupa una plaza libre y el anfitrión podrá empezar la partida.",
+    "fr": "Prenez une place libre, puis l’hôte pourra lancer la partie.",
+    "de": "Belege einen freien Platz, dann kann der Gastgeber starten.",
+    "pt": "Entre em uma vaga livre; depois o anfitrião pode iniciar a partida.",
+    "zh": "加入一个空位后，房主即可开始游戏。",
+    "hi": "खाली सीट पर शामिल हों, फिर मेज़बान खेल शुरू कर सकता है।",
+    "ar": "انضم إلى مقعد متاح، ثم يمكن للمضيف بدء اللعبة."
+  },
+  "This game needs": {
+    "es": "Este juego necesita",
+    "fr": "Ce jeu nécessite",
+    "de": "Dieses Spiel benötigt",
+    "pt": "Este jogo precisa de",
+    "zh": "此游戏需要",
+    "hi": "इस खेल के लिए चाहिए",
+    "ar": "تحتاج هذه اللعبة إلى"
+  },
+  "players.": {
+    "es": "Jugadores",
+    "fr": "Joueurs",
+    "de": "Spieler",
+    "pt": "Jogadores",
+    "zh": "玩家",
+    "hi": "खिलाड़ी",
+    "ar": "اللاعبون"
+  },
+  "Pass the device": {
+    "es": "Pasa el dispositivo",
+    "fr": "Passez l’appareil",
+    "de": "Gerät weitergeben",
+    "pt": "Passe o dispositivo",
+    "zh": "传递设备",
+    "hi": "डिवाइस आगे दें",
+    "ar": "مرّر الجهاز"
+  },
+  "The next player’s board stays hidden until they are ready.": {
+    "es": "El tablero del siguiente jugador permanece oculto hasta que esté listo.",
+    "fr": "Le plateau du joueur suivant reste masqué jusqu’à ce qu’il soit prêt.",
+    "de": "Das Brett des nächsten Spielers bleibt verborgen, bis er bereit ist.",
+    "pt": "O tabuleiro do próximo jogador fica oculto até ele estar pronto.",
+    "zh": "下一位玩家准备好之前，其棋盘将保持隐藏。",
+    "hi": "अगला खिलाड़ी तैयार होने तक उसका बोर्ड छिपा रहता है।",
+    "ar": "تبقى لوحة اللاعب التالي مخفية حتى يكون مستعدًا."
+  },
+  "I’m ready": {
+    "es": "Estoy listo",
+    "fr": "Je suis prêt",
+    "de": "Ich bin bereit",
+    "pt": "Estou pronto",
+    "zh": "我准备好了",
+    "hi": "मैं तैयार हूँ",
+    "ar": "أنا مستعد"
+  },
+  "Loading the match’s saved game version…": {
+    "es": "Cargando la versión guardada del juego de esta partida…",
+    "fr": "Chargement de la version du jeu enregistrée pour cette partie…",
+    "de": "Gespeicherte Spielversion dieser Partie wird geladen…",
+    "pt": "Carregando a versão do jogo salva para esta partida…",
+    "zh": "正在加载此对局保存的游戏版本…",
+    "hi": "इस मैच का सहेजा हुआ खेल संस्करण लोड हो रहा है…",
+    "ar": "جارٍ تحميل إصدار اللعبة المحفوظ لهذه المباراة…"
+  },
+  "Live board": {
+    "es": "Tablero en directo",
+    "fr": "Plateau en direct",
+    "de": "Aktuelles Brett",
+    "pt": "Tabuleiro ao vivo",
+    "zh": "实时棋盘",
+    "hi": "लाइव बोर्ड",
+    "ar": "اللوحة الحالية"
+  },
+  "Replay · move {v0} of {v1}": {
+    "es": "Repetición · jugada {v0} de {v1}",
+    "fr": "Relecture · coup {v0} sur {v1}",
+    "de": "Wiedergabe · Zug {v0} von {v1}",
+    "pt": "Repetição · jogada {v0} de {v1}",
+    "zh": "回放 · 第 {v0} 步，共 {v1} 步",
+    "hi": "रीप्ले · चाल {v0}, कुल {v1}",
+    "ar": "إعادة العرض · النقلة {v0} من {v1}"
+  },
+  "Pause history": {
+    "es": "Pausar historial",
+    "fr": "Suspendre l’historique",
+    "de": "Verlauf pausieren",
+    "pt": "Pausar histórico",
+    "zh": "暂停历史",
+    "hi": "इतिहास रोकें",
+    "ar": "إيقاف سجل الحركات مؤقتًا"
+  },
+  "Play history": {
+    "es": "Reproducir historial",
+    "fr": "Lire l’historique",
+    "de": "Verlauf abspielen",
+    "pt": "Reproduzir histórico",
+    "zh": "播放历史",
+    "hi": "इतिहास चलाएँ",
+    "ar": "تشغيل سجل الحركات"
+  },
+  "Pause": {
+    "es": "Pausar",
+    "fr": "Pause",
+    "de": "Pausieren",
+    "pt": "Pausar",
+    "zh": "暂停",
+    "hi": "रोकें",
+    "ar": "إيقاف مؤقت"
+  },
+  "← Previous": {
+    "es": "← Jugada anterior",
+    "fr": "← Coup précédent",
+    "de": "← Voriger Zug",
+    "pt": "← Jogada anterior",
+    "zh": "← 上一步",
+    "hi": "← पिछली चाल",
+    "ar": "← الحركة السابقة"
+  },
+  "Next →": {
+    "es": "Jugada siguiente →",
+    "fr": "Coup suivant →",
+    "de": "Nächster Zug →",
+    "pt": "Próxima jogada →",
+    "zh": "下一步 →",
+    "hi": "अगली चाल →",
+    "ar": "الحركة التالية →"
+  },
+  "Hide finished game": {
+    "es": "Ocultar partida terminada",
+    "fr": "Masquer la partie terminée",
+    "de": "Beendetes Spiel ausblenden",
+    "pt": "Ocultar partida terminada",
+    "zh": "隐藏已结束的游戏",
+    "hi": "पूरा हुआ खेल छिपाएँ",
+    "ar": "إخفاء اللعبة المنتهية"
+  },
+  "Invite link": {
+    "es": "Enlace de invitación",
+    "fr": "Lien d’invitation",
+    "de": "Einladungslink",
+    "pt": "Link de convite",
+    "zh": "邀请链接",
+    "hi": "आमंत्रण लिंक",
+    "ar": "رابط الدعوة"
+  },
+  "Copy link": {
+    "es": "Copiar enlace",
+    "fr": "Copier le lien",
+    "de": "Link kopieren",
+    "pt": "Copiar link",
+    "zh": "复制链接",
+    "hi": "लिंक कॉपी करें",
+    "ar": "نسخ الرابط"
+  },
+  "Share…": {
+    "es": "Compartir…",
+    "fr": "Partager…",
+    "de": "Teilen…",
+    "pt": "Compartilhar…",
+    "zh": "分享…",
+    "hi": "साझा करें…",
+    "ar": "مشاركة…"
+  },
+  "Match invite QR code": {
+    "es": "Código QR de invitación a la partida",
+    "fr": "Code QR d’invitation à la partie",
+    "de": "QR-Code der Spieleinladung",
+    "pt": "Código QR de convite para a partida",
+    "zh": "对局邀请二维码",
+    "hi": "मैच निमंत्रण का QR कोड",
+    "ar": "رمز QR لدعوة المباراة"
+  },
+  "Anyone with this invite can join this private match.": {
+    "es": "Cualquiera que tenga esta invitación puede unirse a la partida privada.",
+    "fr": "Toute personne disposant de cette invitation peut rejoindre cette partie privée.",
+    "de": "Jeder mit dieser Einladung kann der privaten Partie beitreten.",
+    "pt": "Qualquer pessoa com este convite pode entrar na partida privada.",
+    "zh": "持有此邀请的人均可加入这场私人对局。",
+    "hi": "इस निमंत्रण वाला कोई भी व्यक्ति निजी मैच में शामिल हो सकता है।",
+    "ar": "يمكن لأي شخص لديه هذه الدعوة الانضمام إلى المباراة الخاصة."
+  },
+  "Send the link or scan the QR code to join.": {
+    "es": "Envía el enlace o escanea el código QR para unirte.",
+    "fr": "Envoyez le lien ou scannez le code QR pour rejoindre.",
+    "de": "Sende den Link oder scanne den QR-Code, um beizutreten.",
+    "pt": "Envie o link ou leia o código QR para entrar.",
+    "zh": "发送链接或扫描二维码即可加入。",
+    "hi": "शामिल होने के लिए लिंक भेजें या QR कोड स्कैन करें।",
+    "ar": "أرسل الرابط أو امسح رمز QR للانضمام."
+  },
+  "Use server version?": {
+    "es": "Usar la versión del servidor",
+    "fr": "Utiliser la version du serveur",
+    "de": "Serverversion verwenden",
+    "pt": "Usar a versão do servidor",
+    "zh": "使用服务器版本",
+    "hi": "सर्वर संस्करण उपयोग करें",
+    "ar": "استخدام نسخة الخادم"
+  },
+  "Delete this match?": {
+    "es": "¿Eliminar esta partida?",
+    "fr": "Supprimer cette partie ?",
+    "de": "Diese Partie löschen?",
+    "pt": "Excluir esta partida?",
+    "zh": "删除这场对局？",
+    "hi": "यह मैच मिटाएँ?",
+    "ar": "هل تريد حذف هذه المباراة؟"
+  },
+  "Leave this match?": {
+    "es": "¿Abandonar esta partida?",
+    "fr": "Quitter cette partie ?",
+    "de": "Diese Partie verlassen?",
+    "pt": "Sair desta partida?",
+    "zh": "离开这场对局？",
+    "hi": "यह मैच छोड़ें?",
+    "ar": "هل تريد مغادرة هذه المباراة؟"
+  },
+  "Your pending branch will be kept in an archive before loading the server board.": {
+    "es": "Tu rama pendiente se conservará en un archivo antes de cargar el tablero del servidor.",
+    "fr": "Votre branche en attente sera archivée avant de charger le plateau du serveur.",
+    "de": "Dein ausstehender Spielverlauf wird archiviert, bevor das Serverbrett geladen wird.",
+    "pt": "Sua sequência pendente será arquivada antes de carregar o tabuleiro do servidor.",
+    "zh": "加载服务器棋盘前，会将你待同步的分支保存在归档中。",
+    "hi": "सर्वर का बोर्ड लोड करने से पहले आपकी लंबित शाखा संग्रह में सुरक्षित रखी जाएगी।",
+    "ar": "سيُحفظ فرعك المعلّق في الأرشيف قبل تحميل لوحة الخادم."
+  },
+  "This removes the match for everyone. This action cannot be undone.": {
+    "es": "Esto elimina la partida para todos. Esta acción no se puede deshacer.",
+    "fr": "Cette action supprime la partie pour tout le monde. Elle est irréversible.",
+    "de": "Dies löscht die Partie für alle. Die Aktion kann nicht rückgängig gemacht werden.",
+    "pt": "Isso exclui a partida para todos. Esta ação não pode ser desfeita.",
+    "zh": "这会为所有人删除此对局，且无法撤销。",
+    "hi": "इससे मैच सभी के लिए मिट जाएगा। यह कार्रवाई वापस नहीं की जा सकती।",
+    "ar": "سيؤدي ذلك إلى حذف المباراة للجميع. لا يمكن التراجع عن هذا الإجراء."
+  },
+  "Your seat will leave the match. The server calculates any token settlement.": {
+    "es": "Tu plaza abandonará la partida. El servidor calcula la liquidación de fichas.",
+    "fr": "Vous quitterez votre place dans la partie. Le serveur calculera le règlement des jetons.",
+    "de": "Dein Platz wird die Partie verlassen. Der Server berechnet die Markenabrechnung.",
+    "pt": "Você sairá da partida. O servidor calculará o acerto das fichas.",
+    "zh": "你将离开此对局。服务器会计算代币结算。",
+    "hi": "आपकी सीट मैच छोड़ देगी। टोकन का निपटारा सर्वर करेगा।",
+    "ar": "ستغادر مقعدك في المباراة. وسيحسب الخادم تسوية الرموز."
+  },
+  "Use server version": {
+    "es": "Usar la versión del servidor",
+    "fr": "Utiliser la version du serveur",
+    "de": "Serverversion verwenden",
+    "pt": "Usar a versão do servidor",
+    "zh": "使用服务器版本",
+    "hi": "सर्वर संस्करण उपयोग करें",
+    "ar": "استخدام نسخة الخادم"
+  },
+  "Preview leaving": {
+    "es": "Vista previa de la salida",
+    "fr": "Aperçu du départ",
+    "de": "Verlassen ansehen",
+    "pt": "Prévia da saída",
+    "zh": "预览离开结果",
+    "hi": "छोड़ने का पूर्वावलोकन",
+    "ar": "معاينة المغادرة"
+  },
+  "Confirm leaving": {
+    "es": "Confirmar salida",
+    "fr": "Confirmer le départ",
+    "de": "Verlassen bestätigen",
+    "pt": "Confirmar saída",
+    "zh": "确认离开",
+    "hi": "छोड़ने की पुष्टि करें",
+    "ar": "تأكيد المغادرة"
+  },
+  "Dismiss message": {
+    "es": "Cerrar mensaje",
+    "fr": "Fermer le message",
+    "de": "Meldung schließen",
+    "pt": "Fechar mensagem",
+    "zh": "关闭消息",
+    "hi": "संदेश बंद करें",
+    "ar": "إغلاق الرسالة"
+  },
+  "Close dialog": {
+    "es": "Cerrar diálogo",
+    "fr": "Fermer la boîte de dialogue",
+    "de": "Dialog schließen",
+    "pt": "Fechar diálogo",
+    "zh": "关闭对话框",
+    "hi": "संवाद बंद करें",
+    "ar": "إغلاق مربع الحوار"
+  },
+  "Play {v0}": {
+    "es": "Jugar a {v0}",
+    "fr": "Jouer à {v0}",
+    "de": "{v0} spielen",
+    "pt": "Jogar {v0}",
+    "zh": "玩 {v0}",
+    "hi": "{v0} खेलें",
+    "ar": "العب {v0}"
+  },
+  "Play": {
+    "es": "Jugar",
+    "fr": "Jouer",
+    "de": "Spielen",
+    "pt": "Jogar",
+    "zh": "开始游戏",
+    "hi": "खेलें",
+    "ar": "العب"
+  },
+  "Unsave": {
+    "es": "Quitar de guardados",
+    "fr": "Retirer des favoris",
+    "de": "Nicht mehr speichern",
+    "pt": "Remover dos salvos",
+    "zh": "取消收藏",
+    "hi": "सहेजी सूची से हटाएँ",
+    "ar": "إلغاء الحفظ"
+  },
+  "★ Saved": {
+    "es": "★ Guardado",
+    "fr": "★ Enregistré",
+    "de": "★ Gespeichert",
+    "pt": "★ Salvo",
+    "zh": "★ 已收藏",
+    "hi": "★ सहेजा गया",
+    "ar": "★ محفوظ"
+  },
+  "☆ Save": {
+    "es": "Guardar",
+    "fr": "Enregistrer",
+    "de": "Speichern",
+    "pt": "Salvar",
+    "zh": "保存",
+    "hi": "सहेजें",
+    "ar": "حفظ"
+  },
+  "YOUR NEXT GOOD GAME": {
+    "es": "TU PRÓXIMO GRAN JUEGO",
+    "fr": "VOTRE PROCHAIN BON JEU",
+    "de": "DEIN NÄCHSTES GUTES SPIEL",
+    "pt": "SEU PRÓXIMO BOM JOGO",
+    "zh": "发现下一款好游戏",
+    "hi": "आपका अगला बढ़िया खेल",
+    "ar": "لعبتك الممتعة التالية"
+  },
+  "Let’s play.": {
+    "es": "Vamos a jugar.",
+    "fr": "Jouons.",
+    "de": "Lass uns spielen.",
+    "pt": "Vamos jogar.",
+    "zh": "开始玩吧。",
+    "hi": "आइए खेलें।",
+    "ar": "لنلعب."
+  },
+  "Discover a game, invite your friends, or play on this device. Pick up the same match on web, iPhone, and Android.": {
+    "es": "Descubre un juego, invita a tus amigos o juega en este dispositivo. Continúa la misma partida en web, iPhone y Android.",
+    "fr": "Découvrez un jeu, invitez vos amis ou jouez sur cet appareil. Retrouvez la même partie sur le web, iPhone et Android.",
+    "de": "Entdecke ein Spiel, lade Freunde ein oder spiele auf diesem Gerät. Setze dieselbe Partie im Web, auf iPhone und Android fort.",
+    "pt": "Descubra um jogo, convide amigos ou jogue neste dispositivo. Continue a mesma partida na web, no iPhone e no Android.",
+    "zh": "发现游戏、邀请朋友，或直接在此设备上玩。同一对局可在网页、iPhone 和 Android 上继续。",
+    "hi": "नया खेल चुनें, दोस्तों को बुलाएँ या इस डिवाइस पर खेलें। वही मैच वेब, iPhone और Android पर जारी रखें।",
+    "ar": "اكتشف لعبة، أو ادعُ أصدقاءك، أو العب على هذا الجهاز. تابع المباراة نفسها على الويب وiPhone وAndroid."
+  },
+  "Make yourself at home": {
+    "es": "Siéntete como en casa",
+    "fr": "Faites comme chez vous",
+    "de": "Fühl dich wie zu Hause",
+    "pt": "Sinta-se em casa",
+    "zh": "欢迎来到这里",
+    "hi": "यहाँ अपना सा महसूस करें",
+    "ar": "أهلًا بك"
+  },
+  "Log in or continue as a guest to create and join matches.": {
+    "es": "Inicia sesión para ver tus partidas.",
+    "fr": "Connectez-vous pour voir vos parties.",
+    "de": "Melde dich an, um deine Partien zu sehen.",
+    "pt": "Entre para ver suas partidas.",
+    "zh": "登录后查看你的对局。",
+    "hi": "अपने मैच देखने के लिए साइन इन करें।",
+    "ar": "سجّل الدخول لرؤية مبارياتك."
+  },
+  "Log in / continue as guest": {
+    "es": "Iniciar sesión",
+    "fr": "Se connecter",
+    "de": "Anmelden",
+    "pt": "Entrar",
+    "zh": "登录",
+    "hi": "लॉग इन करें",
+    "ar": "تسجيل الدخول"
+  },
+  "Local play also works without an account.": {
+    "es": "También puedes jugar localmente sin una cuenta.",
+    "fr": "Vous pouvez aussi jouer sur cet appareil sans compte.",
+    "de": "Lokales Spielen ist auch ohne Konto möglich.",
+    "pt": "Você também pode jogar localmente sem uma conta.",
+    "zh": "无需账户也能在本地玩。",
+    "hi": "आप बिना खाते के भी इस डिवाइस पर खेल सकते हैं।",
+    "ar": "يمكنك أيضًا اللعب محليًا دون حساب."
+  },
+  "Search games": {
+    "es": "Buscar juegos",
+    "fr": "Rechercher des jeux",
+    "de": "Spiele suchen",
+    "pt": "Buscar jogos",
+    "zh": "搜索游戏",
+    "hi": "खेल खोजें",
+    "ar": "البحث عن ألعاب"
+  },
+  "Find a game…": {
+    "es": "Encuentra un juego…",
+    "fr": "Trouvez un jeu…",
+    "de": "Finde ein Spiel…",
+    "pt": "Encontre um jogo…",
+    "zh": "查找游戏…",
+    "hi": "कोई खेल खोजें…",
+    "ar": "ابحث عن لعبة…"
+  },
+  "All games": {
+    "es": "← Todos los juegos",
+    "fr": "← Tous les jeux",
+    "de": "← Alle Spiele",
+    "pt": "← Todos os jogos",
+    "zh": "← 全部游戏",
+    "hi": "← सभी गेम",
+    "ar": "← كل الألعاب"
+  },
+  "Saved games": {
+    "es": "Juegos guardados",
+    "fr": "Jeux enregistrés",
+    "de": "Gespeicherte Spiele",
+    "pt": "Jogos salvos",
+    "zh": "已收藏的游戏",
+    "hi": "सहेजे गए गेम",
+    "ar": "الألعاب المحفوظة"
+  },
+  "Recently played": {
+    "es": "Jugados recientemente",
+    "fr": "Récemment joués",
+    "de": "Zuletzt gespielt",
+    "pt": "Jogos recentes",
+    "zh": "最近玩过",
+    "hi": "हाल ही में खेले गए",
+    "ar": "لُعبت مؤخرًا"
+  },
+  "Popular games": {
+    "es": "JUEGOS POPULARES",
+    "fr": "JEUX POPULAIRES",
+    "de": "Beliebte Spiele",
+    "pt": "JOGOS POPULARES",
+    "zh": "热门游戏",
+    "hi": "लोकप्रिय गेम",
+    "ar": "الألعاب الشائعة"
+  },
+  "Loading games…": {
+    "es": "Cargando el juego…",
+    "fr": "Chargement du jeu…",
+    "de": "Spiel wird geladen…",
+    "pt": "Carregando o jogo…",
+    "zh": "正在加载游戏…",
+    "hi": "गेम लोड हो रहा है…",
+    "ar": "جارٍ تحميل اللعبة…"
+  },
+  "No games found. Try another search.": {
+    "es": "No se encontraron juegos. Prueba otra búsqueda.",
+    "fr": "Aucun jeu trouvé. Essayez une autre recherche.",
+    "de": "Keine Spiele gefunden. Versuche eine andere Suche.",
+    "pt": "Nenhum jogo encontrado. Tente outra busca.",
+    "zh": "未找到游戏，请换个关键词。",
+    "hi": "कोई खेल नहीं मिला। कुछ और खोजें।",
+    "ar": "لم يُعثر على ألعاب. جرّب بحثًا آخر."
+  },
+  "Load more games": {
+    "es": "Cargar más juegos",
+    "fr": "Charger plus de jeux",
+    "de": "Weitere Spiele laden",
+    "pt": "Carregar mais jogos",
+    "zh": "加载更多游戏",
+    "hi": "और खेल लोड करें",
+    "ar": "تحميل المزيد من الألعاب"
+  },
+  "Missing a game? Propose it": {
+    "es": "¿Falta un juego? Propónlo",
+    "fr": "Un jeu manque ? Proposez-le",
+    "de": "Fehlt ein Spiel? Schlage es vor",
+    "pt": "Falta um jogo? Proponha-o",
+    "zh": "缺少某个游戏？来推荐它",
+    "hi": "कोई गेम नहीं मिल रहा? उसे प्रस्तावित करें",
+    "ar": "لعبة مفقودة؟ اقترحها"
+  },
+  "Tell us which game you would like to play here. Our AI agents will review your proposal and create the game within 24 hours.": {
+    "es": "Cuéntanos qué juego te gustaría jugar aquí. Nuestros agentes de IA revisarán tu propuesta y crearán el juego en un plazo de 24 horas.",
+    "fr": "Dites-nous à quel jeu vous aimeriez jouer ici. Nos agents IA examineront votre proposition et créeront le jeu dans les 24 heures.",
+    "de": "Sag uns, welches Spiel du hier spielen möchtest. Unsere KI-Agenten prüfen deinen Vorschlag und erstellen das Spiel innerhalb von 24 Stunden.",
+    "pt": "Conte-nos qual jogo você gostaria de jogar aqui. Nossos agentes de IA analisarão sua proposta e criarão o jogo em até 24 horas.",
+    "zh": "告诉我们你想在这里玩哪个游戏。我们的人工智能代理将审核你的提议，并在 24 小时内创建该游戏。",
+    "hi": "हमें बताएं कि आप यहां कौन सा गेम खेलना चाहेंगे। हमारे AI एजेंट आपके प्रस्ताव की समीक्षा करेंगे और 24 घंटों के भीतर गेम बना देंगे।",
+    "ar": "أخبرنا باللعبة التي تريد لعبها هنا. سيراجعها وكلاء الذكاء الاصطناعي لدينا ويقومون بإنشائها خلال 24 ساعة."
+  },
+  "Propose a game": {
+    "es": "¿Falta un juego? Propónlo",
+    "fr": "Un jeu manque ? Proposez-le",
+    "de": "Fehlt ein Spiel? Schlage es vor",
+    "pt": "Falta um jogo? Proponha-o",
+    "zh": "缺少某个游戏？来推荐它",
+    "hi": "कोई गेम नहीं मिल रहा? उसे प्रस्तावित करें",
+    "ar": "لعبة مفقودة؟ اقترحها"
+  },
+  "Game name": {
+    "es": "Nombre del juego",
+    "fr": "Nom du jeu",
+    "de": "Spielname",
+    "pt": "Nome do jogo",
+    "zh": "游戏名称",
+    "hi": "गेम का नाम",
+    "ar": "اسم اللعبة"
+  },
+  "Why this game?": {
+    "es": "¿Por qué este juego? (opcional)",
+    "fr": "Pourquoi ce jeu ? (facultatif)",
+    "de": "Warum dieses Spiel? (optional)",
+    "pt": "Por que este jogo? (opcional)",
+    "zh": "为什么推荐这个游戏？（可选）",
+    "hi": "यह गेम क्यों? (वैकल्पिक)",
+    "ar": "لماذا هذه اللعبة؟ (اختياري)"
+  },
+  "Link to the rules (optional)": {
+    "es": "Enlace a las reglas (opcional)",
+    "fr": "Lien vers les règles (facultatif)",
+    "de": "Link zu den Regeln (optional)",
+    "pt": "Link para as regras (opcional)",
+    "zh": "规则链接（可选）",
+    "hi": "नियमों का लिंक (वैकल्पिक)",
+    "ar": "رابط القواعد (اختياري)"
+  },
+  "Submit proposal": {
+    "es": "Enviar propuesta",
+    "fr": "Envoyer la proposition",
+    "de": "Vorschlag einreichen",
+    "pt": "Enviar proposta",
+    "zh": "提交提议",
+    "hi": "प्रस्ताव भेजें",
+    "ar": "إرسال الاقتراح"
+  },
+  "Loading game…": {
+    "es": "Cargando el juego…",
+    "fr": "Chargement du jeu…",
+    "de": "Spiel wird geladen…",
+    "pt": "Carregando o jogo…",
+    "zh": "正在加载游戏…",
+    "hi": "गेम लोड हो रहा है…",
+    "ar": "جارٍ تحميل اللعبة…"
+  },
+  "Feedback on this game": {
+    "es": "Comentarios sobre este juego",
+    "fr": "Avis sur ce jeu",
+    "de": "Feedback zu diesem Spiel",
+    "pt": "Feedback sobre este jogo",
+    "zh": "对此游戏的反馈",
+    "hi": "इस गेम पर फ़ीडबैक",
+    "ar": "ملاحظات عن هذه اللعبة"
+  },
+  "players · v": {
+    "es": "jugadores · v",
+    "fr": "joueurs · v",
+    "de": "Spieler · v",
+    "pt": "jogadores · v",
+    "zh": "名玩家 · v",
+    "hi": "खिलाड़ी · v",
+    "ar": "لاعبين · v"
+  },
+  "How would you like to play?": {
+    "es": "¿Cómo te gustaría jugar?",
+    "fr": "Comment souhaitez-vous jouer ?",
+    "de": "Wie möchtest du spielen?",
+    "pt": "Como você gostaria de jogar?",
+    "zh": "你想怎么玩？",
+    "hi": "आप कैसे खेलना चाहेंगे?",
+    "ar": "كيف تود أن تلعب؟"
+  },
+  "Play online": {
+    "es": "Jugar en línea",
+    "fr": "Jouer en ligne",
+    "de": "Online spielen",
+    "pt": "Jogar online",
+    "zh": "在线玩",
+    "hi": "ऑनलाइन खेलें",
+    "ar": "اللعب عبر الإنترنت"
+  },
+  "Create a match for friends or computer opponents. Everyone shares the same match across devices.": {
+    "es": "Prepara a tus oponentes en la sala de espera.",
+    "fr": "Préparez vos adversaires dans le salon.",
+    "de": "Richte deine Gegner in der Lobby ein.",
+    "pt": "Configure seus oponentes no lobby.",
+    "zh": "在大厅里设置你的对手。",
+    "hi": "लॉबी में अपने प्रतिद्वंद्वी तय करें।",
+    "ar": "جهّز خصومك في الردهة."
+  },
+  "Computer opponents": {
+    "es": "Oponentes del ordenador",
+    "fr": "Adversaires ordinateur",
+    "de": "Computergegner",
+    "pt": "Oponentes do computador",
+    "zh": "电脑对手",
+    "hi": "कंप्यूटर प्रतिद्वंद्वी",
+    "ar": "خصوم الكمبيوتر"
+  },
+  "Who can join?": {
+    "es": "¿Quién puede unirse?",
+    "fr": "Qui peut rejoindre ?",
+    "de": "Wer kann beitreten?",
+    "pt": "Quem pode entrar?",
+    "zh": "谁可以加入？",
+    "hi": "कौन शामिल हो सकता है?",
+    "ar": "من يمكنه الانضمام؟"
+  },
+  "Public lobby": {
+    "es": "Sala pública",
+    "fr": "Salon public",
+    "de": "Öffentliche Lobby",
+    "pt": "Sala pública",
+    "zh": "公开房间",
+    "hi": "सार्वजनिक लॉबी",
+    "ar": "غرفة عامة"
+  },
+  "Tokens per person": {
+    "es": "Entrada por jugador",
+    "fr": "Mise par joueur",
+    "de": "Einsatz pro Spieler",
+    "pt": "Entrada por jogador",
+    "zh": "每位玩家的入场费",
+    "hi": "प्रति खिलाड़ी प्रवेश",
+    "ar": "رسوم الدخول لكل لاعب"
+  },
+  "Free": {
+    "es": "Partida gratis",
+    "fr": "Partie gratuite",
+    "de": "Kostenloses Spiel",
+    "pt": "Partida grátis",
+    "zh": "免费对局",
+    "hi": "मुफ़्त मैच",
+    "ar": "مباراة مجانية"
+  },
+  "Time per move": {
+    "es": "Tiempo por jugada",
+    "fr": "Temps par coup",
+    "de": "Zeit pro Zug",
+    "pt": "Tempo por jogada",
+    "zh": "每步时间",
+    "hi": "प्रति चाल समय",
+    "ar": "الوقت لكل نقلة"
+  },
+  "No clock": {
+    "es": "Sin reloj",
+    "fr": "Sans chronomètre",
+    "de": "Ohne Zeitlimit",
+    "pt": "Sem cronômetro",
+    "zh": "不限时",
+    "hi": "समय सीमा नहीं",
+    "ar": "دون مؤقّت"
+  },
+  "Paid matches use your existing wallet and human players. Tokens are collected when the match starts.": {
+    "es": "Las partidas con fichas usan tu saldo actual y jugadores humanos. Las fichas se cobran cuando empieza la partida.",
+    "fr": "Les parties avec mise utilisent votre solde actuel et des joueurs humains. Les jetons sont prélevés au début de la partie.",
+    "de": "Partien mit Einsatz nutzen dein vorhandenes Guthaben und menschliche Spieler. Die Marken werden beim Spielstart eingezogen.",
+    "pt": "Partidas com aposta usam seu saldo atual e jogadores humanos. As fichas são cobradas quando a partida começa.",
+    "zh": "有代币押注的对局使用现有钱包，并由真人参与。对局开始时收取代币。",
+    "hi": "टोकन वाले मैच आपके मौजूदा बटुए और मानव खिलाड़ियों के साथ होते हैं। मैच शुरू होने पर टोकन लिए जाते हैं।",
+    "ar": "تستخدم مباريات الرهان رصيدك الحالي ولاعبين بشريين. تُحصّل الرموز عند بدء المباراة."
+  },
+  "Create match": {
+    "es": "Crear partida ↗",
+    "fr": "Créer la partie ↗",
+    "de": "Partie erstellen ↗",
+    "pt": "Criar partida ↗",
+    "zh": "创建对局 ↗",
+    "hi": "मैच बनाएँ ↗",
+    "ar": "إنشاء مباراة ↗"
+  },
+  "Find an open match": {
+    "es": "Encontrar una partida abierta",
+    "fr": "Trouver une partie ouverte",
+    "de": "Offene Partie finden",
+    "pt": "Encontrar uma partida aberta",
+    "zh": "查找开放对局",
+    "hi": "खुला मैच खोजें",
+    "ar": "البحث عن مباراة مفتوحة"
+  },
+  "Play on this device": {
+    "es": "Jugar en este dispositivo ↗",
+    "fr": "Jouer sur cet appareil ↗",
+    "de": "Auf diesem Gerät spielen ↗",
+    "pt": "Jogar neste dispositivo ↗",
+    "zh": "在此设备上玩 ↗",
+    "hi": "इसी डिवाइस पर खेलें ↗",
+    "ar": "العب على هذا الجهاز ↗"
+  },
+  "Play a downloaded game offline. Local matches stay on this device and do not change online matches.": {
+    "es": "Juega sin conexión a un juego descargado. Las partidas locales se quedan en este dispositivo y no cambian las partidas en línea.",
+    "fr": "Jouez hors ligne à un jeu téléchargé. Les parties locales restent sur cet appareil sans modifier les parties en ligne.",
+    "de": "Spiele ein heruntergeladenes Spiel offline. Lokale Partien bleiben auf diesem Gerät und verändern keine Onlinepartien.",
+    "pt": "Jogue offline um jogo baixado. Partidas locais ficam neste dispositivo e não alteram as partidas online.",
+    "zh": "下载后即可离线玩。本地对局保留在此设备上，不会改变在线对局。",
+    "hi": "डाउनलोड किया हुआ खेल ऑफलाइन खेलें। स्थानीय मैच इसी डिवाइस पर रहते हैं और ऑनलाइन मैच नहीं बदलते।",
+    "ar": "العب لعبة منزّلة دون اتصال. تبقى المباريات المحلية على هذا الجهاز ولا تغيّر المباريات عبر الإنترنت."
+  },
+  "People sharing this device": {
+    "es": "Personas que comparten este dispositivo",
+    "fr": "Personnes partageant cet appareil",
+    "de": "Personen an diesem Gerät",
+    "pt": "Pessoas compartilhando este dispositivo",
+    "zh": "共用此设备的人数",
+    "hi": "इस डिवाइस को साझा करने वाले लोग",
+    "ar": "الأشخاص الذين يتشاركون هذا الجهاز"
+  },
+  "Start local game": {
+    "es": "Iniciar partida local",
+    "fr": "Démarrer une partie locale",
+    "de": "Lokales Spiel starten",
+    "pt": "Iniciar jogo local",
+    "zh": "开始本地游戏",
+    "hi": "स्थानीय खेल शुरू करें",
+    "ar": "بدء لعبة محلية"
+  },
+  "Pass and play": {
+    "es": "Pasar y jugar",
+    "fr": "À tour de rôle sur le même appareil",
+    "de": "Reihum am selben Gerät",
+    "pt": "Passar e jogar",
+    "zh": "同屏轮流玩",
+    "hi": "बारी-बारी से खेलें",
+    "ar": "تناوب على الجهاز نفسه"
+  },
+  "Practice with computers": {
+    "es": "Jugar con computadoras",
+    "fr": "Jouer contre des ordinateurs",
+    "de": "Mit Computern spielen",
+    "pt": "Jogar com computadores",
+    "zh": "与电脑对战",
+    "hi": "कंप्यूटर के साथ खेलें",
+    "ar": "العب ضد الحواسيب"
+  },
+  "Connect once to download this game before playing offline.": {
+    "es": "Este juego aún no está guardado en este dispositivo. Conéctate a internet e inténtalo de nuevo: se descarga una vez y luego se juega en este dispositivo en cualquier momento.",
+    "fr": "Ce jeu n'est pas encore enregistré sur cet appareil. Connectez-vous à Internet et réessayez : il se télécharge une fois, puis se joue sur cet appareil à tout moment.",
+    "de": "Dieses Spiel ist auf diesem Gerät noch nicht gespeichert. Stelle eine Internetverbindung her und versuche es erneut: Es wird einmal heruntergeladen und kann danach jederzeit auf diesem Gerät gespielt werden.",
+    "pt": "Este jogo ainda não está salvo neste dispositivo. Conecte-se à internet e tente de novo: ele é baixado uma vez e depois pode ser jogado neste dispositivo a qualquer momento.",
+    "zh": "这款游戏尚未保存在此设备上。请连接互联网后重试：只需下载一次，之后随时都能在本设备上游玩。",
+    "hi": "यह गेम अभी इस डिवाइस पर सहेजा नहीं गया है। इंटरनेट से कनेक्ट करके फिर कोशिश करें — यह एक बार डाउनलोड होगा, फिर कभी भी इस डिवाइस पर खेला जा सकेगा।",
+    "ar": "هذه اللعبة غير محفوظة على هذا الجهاز بعد. اتصل بالإنترنت وحاول مجددًا — تُنزَّل مرة واحدة، ثم يمكن لعبها على هذا الجهاز في أي وقت."
+  },
+  "How to play": {
+    "es": "Cómo se juega",
+    "fr": "Comment jouer",
+    "de": "Spielanleitung",
+    "pt": "Como jogar",
+    "zh": "玩法说明",
+    "hi": "कैसे खेलें",
+    "ar": "طريقة اللعب"
+  },
+  "Ongoing": {
+    "es": "En curso",
+    "fr": "En cours",
+    "de": "Laufend",
+    "pt": "Em andamento",
+    "zh": "进行中",
+    "hi": "चल रहे",
+    "ar": "جارية"
+  },
+  "players ·": {
+    "es": "Jugadores",
+    "fr": "Joueurs",
+    "de": "Spieler",
+    "pt": "Jogadores",
+    "zh": "玩家",
+    "hi": "खिलाड़ी",
+    "ar": "اللاعبون"
+  },
+  "moves": {
+    "es": "jugadas",
+    "fr": "coups",
+    "de": "Züge",
+    "pt": "jogadas",
+    "zh": "步",
+    "hi": "चालें",
+    "ar": "نقلات"
+  },
+  " · Invite only": {
+    "es": " · Solo con invitación",
+    "fr": " · Sur invitation uniquement",
+    "de": " · Nur mit Einladung",
+    "pt": " · Somente por convite",
+    "zh": " · 仅限邀请",
+    "hi": " · केवल निमंत्रण से",
+    "ar": " · بالدعوة فقط"
+  },
+  " · {v0} min per move": {
+    "es": " · {v0} min por jugada",
+    "fr": " · {v0} min par coup",
+    "de": " · {v0} Min. pro Zug",
+    "pt": " · {v0} min por jogada",
+    "zh": " · 每步 {v0} 分钟",
+    "hi": " · प्रति चाल {v0} मिनट",
+    "ar": " · {v0} دقيقة لكل نقلة"
+  },
+  "Open match": {
+    "es": "Abrir partida",
+    "fr": "Ouvrir la partie",
+    "de": "Partie öffnen",
+    "pt": "Abrir partida",
+    "zh": "打开对局",
+    "hi": "मैच खोलें",
+    "ar": "فتح المباراة"
+  },
+  "Hide from list": {
+    "es": "Ocultar",
+    "fr": "Masquer",
+    "de": "Ausblenden",
+    "pt": "Ocultar",
+    "zh": "隐藏",
+    "hi": "छिपाएँ",
+    "ar": "إخفاء"
+  },
+  "Jump back into a game or find a new lobby.": {
+    "es": "Vuelve a una partida o encuentra una sala nueva.",
+    "fr": "Reprenez une partie ou trouvez un nouveau salon.",
+    "de": "Steige wieder in ein Spiel ein oder finde eine neue Lobby.",
+    "pt": "Volte a um jogo ou encontre uma nova sala.",
+    "zh": "回到一局游戏，或寻找新的大厅。",
+    "hi": "किसी खेल में लौटें या नया लॉबी खोजें।",
+    "ar": "عد إلى لعبة أو ابحث عن ردهة جديدة."
+  },
+  "Log in to see your matches": {
+    "es": "Iniciar sesión",
+    "fr": "Se connecter",
+    "de": "Anmelden",
+    "pt": "Entrar",
+    "zh": "登录",
+    "hi": "लॉग इन करें",
+    "ar": "تسجيل الدخول"
+  },
+  "Open a match or invite link": {
+    "es": "Abrir un enlace de partida o invitación",
+    "fr": "Ouvrir un lien de partie ou d’invitation",
+    "de": "Partie- oder Einladungslink öffnen",
+    "pt": "Abrir um link de partida ou convite",
+    "zh": "打开对局或邀请链接",
+    "hi": "मैच या निमंत्रण का लिंक खोलें",
+    "ar": "فتح رابط مباراة أو دعوة"
+  },
+  "Open link": {
+    "es": "Abrir enlace",
+    "fr": "Ouvrir le lien",
+    "de": "Link öffnen",
+    "pt": "Abrir link",
+    "zh": "打开链接",
+    "hi": "लिंक खोलें",
+    "ar": "فتح الرابط"
+  },
+  "No matches here yet.": {
+    "es": "No hay partidas aquí.",
+    "fr": "Aucune partie ici.",
+    "de": "Hier gibt es keine Partien.",
+    "pt": "Nenhuma partida aqui.",
+    "zh": "这里没有对局。",
+    "hi": "यहाँ कोई मैच नहीं है।",
+    "ar": "لا توجد مباريات هنا."
+  },
+  "Load more matches": {
+    "es": "Cargar más partidas",
+    "fr": "Charger plus de parties",
+    "de": "Weitere Partien laden",
+    "pt": "Carregar mais partidas",
+    "zh": "加载更多对局",
+    "hi": "और मैच लोड करें",
+    "ar": "تحميل المزيد من المباريات"
+  },
+  "Open matches you can join": {
+    "es": "Partidas abiertas a las que puedes unirte",
+    "fr": "Parties ouvertes que vous pouvez rejoindre",
+    "de": "Offene Partien, denen du beitreten kannst",
+    "pt": "Partidas abertas em que você pode entrar",
+    "zh": "可以加入的公开对局",
+    "hi": "खुले मैच जिनमें आप शामिल हो सकते हैं",
+    "ar": "مباريات مفتوحة يمكنك الانضمام إليها"
+  },
+  "No open matches right now. Create a public match to invite someone.": {
+    "es": "No hay partidas abiertas ahora. Crea una partida pública para invitar a alguien.",
+    "fr": "Aucune partie ouverte pour le moment. Créez une partie publique pour inviter quelqu’un.",
+    "de": "Zurzeit gibt es keine offenen Partien. Erstelle eine öffentliche Partie, um jemanden einzuladen.",
+    "pt": "Nenhuma partida aberta agora. Crie uma partida pública para convidar alguém.",
+    "zh": "目前没有开放对局。创建公开对局来邀请其他人吧。",
+    "hi": "अभी कोई खुला मैच नहीं है। किसी को बुलाने के लिए सार्वजनिक मैच बनाएँ।",
+    "ar": "لا توجد مباريات مفتوحة حاليًا. أنشئ مباراة عامة لدعوة الآخرين."
+  },
+  "Load more open matches": {
+    "es": "Cargar más partidas abiertas",
+    "fr": "Charger plus de parties ouvertes",
+    "de": "Weitere offene Partien laden",
+    "pt": "Carregar mais partidas abertas",
+    "zh": "加载更多开放对局",
+    "hi": "और खुले मैच लोड करें",
+    "ar": "تحميل المزيد من المباريات المفتوحة"
+  },
+  "Local games are saved here, including after you close the app. Download a game once to play without internet.": {
+    "es": "Las partidas locales se guardan aquí, incluso después de cerrar la aplicación. Descarga un juego una vez para jugar sin internet.",
+    "fr": "Les parties locales sont conservées ici, même après fermeture de l’application. Téléchargez un jeu une fois pour jouer sans Internet.",
+    "de": "Lokale Partien werden hier auch nach dem Schließen der App gespeichert. Lade ein Spiel einmal herunter, um ohne Internet zu spielen.",
+    "pt": "Partidas locais ficam salvas aqui, mesmo após fechar o aplicativo. Baixe um jogo uma vez para jogar sem internet.",
+    "zh": "本地对局保存在这里，关闭应用后也会保留。下载一次即可离线玩。",
+    "hi": "ऐप बंद करने के बाद भी स्थानीय मैच यहाँ सहेजे रहते हैं। इंटरनेट के बिना खेलने के लिए खेल एक बार डाउनलोड करें।",
+    "ar": "تُحفظ المباريات المحلية هنا حتى بعد إغلاق التطبيق. نزّل اللعبة مرة واحدة للعب دون إنترنت."
+  },
+  "Tic-tac-toe": {
+    "es": "Tres en raya",
+    "fr": "Morpion",
+    "de": "Tic-Tac-Toe",
+    "pt": "Jogo da velha",
+    "zh": "井字棋",
+    "hi": "टिक-टैक-टो",
+    "ar": "إكس أو"
+  },
+  "A bundled game, ready to play offline on a fresh installation.": {
+    "es": "Un juego incluido, listo para jugar sin conexión desde la primera instalación.",
+    "fr": "Un jeu inclus, prêt à jouer hors ligne dès l’installation.",
+    "de": "Ein mitgeliefertes Spiel, das direkt nach der Installation offline spielbar ist.",
+    "pt": "Um jogo incluído, pronto para jogar offline desde a instalação.",
+    "zh": "内置游戏，首次安装后即可离线玩。",
+    "hi": "ऐप के साथ मिला खेल, नई स्थापना पर ही ऑफलाइन खेलने के लिए तैयार।",
+    "ar": "لعبة مضمّنة جاهزة للعب دون اتصال فور التثبيت."
+  },
+  "Practice with a computer": {
+    "es": "Jugar con computadoras",
+    "fr": "Jouer contre des ordinateurs",
+    "de": "Mit Computern spielen",
+    "pt": "Jogar com computadores",
+    "zh": "与电脑对战",
+    "hi": "कंप्यूटर के साथ खेलें",
+    "ar": "العب ضد الحواسيب"
+  },
+  "No local matches yet. Choose a game and select Pass and play or Practice with computers.": {
+    "es": "Todavía no hay partidas locales. Elige un juego y selecciona Pasa y juega o Practica con ordenadores.",
+    "fr": "Aucune partie locale pour le moment. Choisissez un jeu, puis Jouer à tour de rôle ou S’entraîner contre l’ordinateur.",
+    "de": "Noch keine lokalen Partien. Wähle ein Spiel und dann Weitergeben und spielen oder Gegen Computer üben.",
+    "pt": "Ainda não há partidas locais. Escolha um jogo e selecione Passe e jogue ou Praticar com computadores.",
+    "zh": "还没有本地对局。选择游戏，然后选择传递设备游玩或与电脑练习。",
+    "hi": "अभी कोई स्थानीय मैच नहीं है। खेल चुनें, फिर बारी-बारी खेलना या कंप्यूटर के साथ अभ्यास चुनें।",
+    "ar": "لا توجد مباريات محلية بعد. اختر لعبة ثم اللعب بالتناوب أو التدريب مع الكمبيوتر."
+  },
+  "Preserved previous app data": {
+    "es": "Datos conservados de la aplicación anterior",
+    "fr": "Données conservées de l’ancienne application",
+    "de": "Erhaltene Daten der früheren App",
+    "pt": "Dados preservados do aplicativo anterior",
+    "zh": "保留的旧版应用数据",
+    "hi": "पिछले ऐप का सुरक्षित रखा डेटा",
+    "ar": "بيانات التطبيق السابق المحفوظة"
+  },
+  "Saved games and pending branches from the previous app are preserved for review. Retired HTML moves cannot be submitted to current online matches.": {
+    "es": "Las partidas y ramas pendientes de la aplicación anterior se conservan para revisarlas. Las jugadas HTML antiguas no pueden enviarse a las partidas en línea actuales.",
+    "fr": "Les parties et branches en attente de l’ancienne application sont conservées pour examen. Les anciens coups HTML ne peuvent pas être envoyés aux parties en ligne actuelles.",
+    "de": "Gespeicherte Partien und ausstehende Spielstände der früheren App bleiben zur Prüfung erhalten. Alte HTML-Züge können nicht an aktuelle Onlinepartien gesendet werden.",
+    "pt": "Partidas e ações pendentes do aplicativo anterior ficam preservadas para revisão. Jogadas HTML antigas não podem ser enviadas às partidas online atuais.",
+    "zh": "旧版应用保存的对局和待同步分支均已保留，供查看恢复。旧版 HTML 游戏的走法不能提交到当前在线对局。",
+    "hi": "पिछले ऐप के सहेजे मैच और लंबित शाखाएँ समीक्षा के लिए सुरक्षित हैं। पुराने HTML खेलों की चालें मौजूदा ऑनलाइन मैचों में नहीं भेजी जा सकतीं।",
+    "ar": "تُحفظ مباريات التطبيق السابق والفروع المعلقة للمراجعة. لا يمكن إرسال نقلات ألعاب HTML القديمة إلى المباريات الحالية عبر الإنترنت."
+  },
+  "saved records": {
+    "es": "registros guardados",
+    "fr": "enregistrements sauvegardés",
+    "de": "gespeicherte Datensätze",
+    "pt": "registros salvos",
+    "zh": "条保存记录",
+    "hi": "सहेजे गए रिकॉर्ड",
+    "ar": "سجلات محفوظة"
+  },
+  "Copy preserved data": {
+    "es": "Copiar datos conservados",
+    "fr": "Copier les données conservées",
+    "de": "Erhaltene Daten kopieren",
+    "pt": "Copiar dados preservados",
+    "zh": "复制保留的数据",
+    "hi": "सुरक्षित रखा डेटा कॉपी करें",
+    "ar": "نسخ البيانات المحفوظة"
+  },
+  "Invite links let friends join a match, including invite-only matches.": {
+    "es": "Los enlaces de invitación permiten a tus amigos unirse a una partida, incluso si es privada.",
+    "fr": "Les liens d’invitation permettent à vos amis de rejoindre une partie, même privée.",
+    "de": "Über Einladungslinks können Freunde einer Partie beitreten, auch wenn sie nur auf Einladung zugänglich ist.",
+    "pt": "Links de convite permitem que amigos entrem em partidas, inclusive nas privadas.",
+    "zh": "朋友可通过邀请链接加入对局，包括仅限邀请的私人对局。",
+    "hi": "निमंत्रण लिंक से मित्र मैच में शामिल हो सकते हैं, निजी मैच में भी।",
+    "ar": "تتيح روابط الدعوة للأصدقاء الانضمام إلى مباراة، حتى إن كانت خاصة."
+  },
+  "Log in to use an invite": {
+    "es": "Inicia sesión para usar una invitación",
+    "fr": "Connectez-vous pour utiliser une invitation",
+    "de": "Zum Verwenden einer Einladung anmelden",
+    "pt": "Entre para usar um convite",
+    "zh": "登录以使用邀请",
+    "hi": "निमंत्रण इस्तेमाल करने के लिए लॉग इन करें",
+    "ar": "سجّل الدخول لاستخدام دعوة"
+  },
+  "Invite link or token": {
+    "es": "Enlace o código de invitación",
+    "fr": "Lien ou code d’invitation",
+    "de": "Einladungslink oder -code",
+    "pt": "Link ou código de convite",
+    "zh": "邀请链接或邀请码",
+    "hi": "निमंत्रण लिंक या कोड",
+    "ar": "رابط الدعوة أو رمزها"
+  },
+  "Revoked": {
+    "es": "Revocada",
+    "fr": "Révoquée",
+    "de": "Widerrufen",
+    "pt": "Revogado",
+    "zh": "已撤销",
+    "hi": "रद्द किया गया",
+    "ar": "ملغاة"
+  },
+  "{v0} accepted": {
+    "es": "{v0} aceptaron",
+    "fr": "{v0} acceptations",
+    "de": "{v0} angenommen",
+    "pt": "{v0} aceitaram",
+    "zh": "已接受 {v0} 次",
+    "hi": "{v0} ने स्वीकार किया",
+    "ar": "{v0} قبول"
+  },
+  " · Expires {v0}": {
+    "es": " · Caduca {v0}",
+    "fr": " · Expire le {v0}",
+    "de": " · Läuft ab: {v0}",
+    "pt": " · Expira em {v0}",
+    "zh": " · 到期时间：{v0}",
+    "hi": " · समाप्ति: {v0}",
+    "ar": " · تنتهي في {v0}"
+  },
+  "Copy invite": {
+    "es": "Copiar enlace de invitación",
+    "fr": "Copier le lien d'invitation",
+    "de": "Einladungslink kopieren",
+    "pt": "Copiar link de convite",
+    "zh": "复制邀请链接",
+    "hi": "आमंत्रण लिंक कॉपी करें",
+    "ar": "نسخ رابط الدعوة"
+  },
+  "Revoke invite": {
+    "es": "Revocar invitación",
+    "fr": "Révoquer l’invitation",
+    "de": "Einladung widerrufen",
+    "pt": "Revogar convite",
+    "zh": "撤销邀请",
+    "hi": "निमंत्रण रद्द करें",
+    "ar": "إلغاء الدعوة"
+  },
+  "No invites yet. Open a match and choose Share match.": {
+    "es": "Todavía no hay invitaciones. Abre una partida y elige Compartir partida.",
+    "fr": "Aucune invitation pour le moment. Ouvrez une partie et choisissez Partager la partie.",
+    "de": "Noch keine Einladungen. Öffne eine Partie und wähle Partie teilen.",
+    "pt": "Ainda não há convites. Abra uma partida e escolha Compartilhar partida.",
+    "zh": "还没有邀请。打开对局并选择分享对局。",
+    "hi": "अभी कोई निमंत्रण नहीं है। मैच खोलें और मैच साझा करें चुनें।",
+    "ar": "لا توجد دعوات بعد. افتح مباراة واختر مشاركة المباراة."
+  },
+  "Load more invites": {
+    "es": "Cargar más invitaciones",
+    "fr": "Charger plus d’invitations",
+    "de": "Weitere Einladungen laden",
+    "pt": "Carregar mais convites",
+    "zh": "加载更多邀请",
+    "hi": "और निमंत्रण लोड करें",
+    "ar": "تحميل المزيد من الدعوات"
+  },
+  "Navigation layout": {
+    "es": "Diseño de navegación",
+    "fr": "Disposition de navigation",
+    "de": "Navigationslayout",
+    "pt": "Layout de navegação",
+    "zh": "导航布局",
+    "hi": "नेविगेशन लेआउट",
+    "ar": "تخطيط التنقل"
+  },
+  "Offline storage": {
+    "es": "Almacenamiento sin conexión",
+    "fr": "Stockage hors ligne",
+    "de": "Offlinespeicher",
+    "pt": "Armazenamento offline",
+    "zh": "离线存储",
+    "hi": "ऑफलाइन संग्रहण",
+    "ar": "التخزين دون اتصال"
+  },
+  "Downloaded game packages and local matches are saved per account. A pending online action keeps its original request ID until the server confirms it. Conflicts preserve your saved branch.": {
+    "es": "Los juegos descargados y las partidas locales se guardan por cuenta. Una acción en línea pendiente mantiene su identificador original hasta que el servidor la confirma. Los conflictos conservan tu rama guardada.",
+    "fr": "Les jeux téléchargés et parties locales sont enregistrés par compte. Une action en ligne en attente conserve son identifiant d’origine jusqu’à confirmation du serveur. En cas de conflit, votre branche enregistrée est conservée.",
+    "de": "Heruntergeladene Spiele und lokale Partien werden pro Konto gespeichert. Eine ausstehende Onlineaktion behält ihre ursprüngliche Anfrage-ID bis zur Serverbestätigung. Bei Konflikten bleibt dein gespeicherter Spielstand erhalten.",
+    "pt": "Jogos baixados e partidas locais são salvos por conta. Uma ação online pendente mantém seu identificador original até a confirmação do servidor. Em caso de conflito, sua versão salva é preservada.",
+    "zh": "下载的游戏和本地对局按账户保存。待确认的在线操作会保留原请求标识，直到服务器确认。出现冲突时会保留已保存的分支。",
+    "hi": "डाउनलोड किए गए खेल और स्थानीय मैच हर खाते के लिए अलग सहेजे जाते हैं। लंबित ऑनलाइन कार्रवाई सर्वर की पुष्टि तक अपना मूल अनुरोध पहचानकर्ता रखती है। टकराव होने पर आपकी सहेजी शाखा सुरक्षित रहती है।",
+    "ar": "تُحفظ الألعاب المنزّلة والمباريات المحلية لكل حساب على حدة. يحتفظ الإجراء المعلق بمعرّف طلبه الأصلي حتى يؤكده الخادم. وعند التعارض يُحفظ فرعك المسجّل."
+  },
+  "local matches ·": {
+    "es": "partidas locales ·",
+    "fr": "parties locales ·",
+    "de": "lokale Partien ·",
+    "pt": "partidas locais ·",
+    "zh": "场本地对局 ·",
+    "hi": "स्थानीय मैच ·",
+    "ar": "مباريات محلية ·"
+  },
+  "pending actions ·": {
+    "es": "acciones pendientes ·",
+    "fr": "actions en attente ·",
+    "de": "ausstehende Aktionen ·",
+    "pt": "ações pendentes ·",
+    "zh": "项待同步操作 ·",
+    "hi": "लंबित कार्रवाइयाँ ·",
+    "ar": "إجراءات معلقة ·"
+  },
+  "conflicts": {
+    "es": "conflictos",
+    "fr": "conflits",
+    "de": "Konflikte",
+    "pt": "conflitos",
+    "zh": "个冲突",
+    "hi": "टकराव",
+    "ar": "تعارضات"
+  },
+  "Sync now": {
+    "es": "Sincronizar ahora",
+    "fr": "Synchroniser maintenant",
+    "de": "Jetzt synchronisieren",
+    "pt": "Sincronizar agora",
+    "zh": "立即同步",
+    "hi": "अभी सिंक करें",
+    "ar": "المزامنة الآن"
+  },
+  "Install & notifications": {
+    "es": "Instalación y notificaciones",
+    "fr": "Installation et notifications",
+    "de": "Installation und Benachrichtigungen",
+    "pt": "Instalação e notificações",
+    "zh": "安装与通知",
+    "hi": "स्थापना और सूचनाएँ",
+    "ar": "التثبيت والإشعارات"
+  },
+  "Add BuildPlay to your home screen for quick access and offline local games.": {
+    "es": "Añade BuildPlay a la pantalla de inicio para acceder rápidamente y jugar localmente sin conexión.",
+    "fr": "Ajoutez BuildPlay à l’écran d’accueil pour y accéder rapidement et jouer hors ligne.",
+    "de": "Füge BuildPlay zum Startbildschirm hinzu, um schnell darauf zuzugreifen und lokale Spiele offline zu spielen.",
+    "pt": "Adicione BuildPlay à tela inicial para acesso rápido e jogos locais offline.",
+    "zh": "把 BuildPlay 添加到主屏幕，即可快捷访问并离线玩本地游戏。",
+    "hi": "तेज़ी से खोलने और स्थानीय खेल ऑफलाइन खेलने के लिए BuildPlay को होम स्क्रीन पर जोड़ें।",
+    "ar": "أضف BuildPlay إلى الشاشة الرئيسية للوصول السريع واللعب المحلي دون اتصال."
+  },
+  "Install BuildPlay": {
+    "es": "Instalar BuildPlay",
+    "fr": "Installer BuildPlay",
+    "de": "BuildPlay installieren",
+    "pt": "Instalar BuildPlay",
+    "zh": "安装 BuildPlay",
+    "hi": "BuildPlay स्थापित करें",
+    "ar": "تثبيت BuildPlay"
+  },
+  "Enable turn notifications": {
+    "es": "Activar notificaciones",
+    "fr": "Activer les notifications",
+    "de": "Benachrichtigungen aktivieren",
+    "pt": "Ativar notificações",
+    "zh": "开启通知",
+    "hi": "सूचनाएँ चालू करें",
+    "ar": "تفعيل الإشعارات"
+  },
+  "The same player app and game presentation on web, iPhone, and Android. Match rules, online turns, and token balances are validated by the server.": {
+    "es": "La misma aplicación y presentación de juegos en web, iPhone y Android. El servidor valida las reglas, los turnos en línea y los saldos de fichas.",
+    "fr": "La même application et présentation des jeux sur le web, iPhone et Android. Le serveur valide les règles, les tours en ligne et les soldes de jetons.",
+    "de": "Dieselbe Spieler-App und Spieldarstellung im Web, auf iPhone und Android. Spielregeln, Onlinezüge und Markenguthaben werden vom Server geprüft.",
+    "pt": "O mesmo aplicativo e a mesma apresentação dos jogos na web, no iPhone e no Android. Regras, turnos online e saldos de fichas são validados pelo servidor.",
+    "zh": "网页、iPhone 和 Android 使用相同的玩家应用与游戏画面。游戏规则、在线回合和代币余额均由服务器验证。",
+    "hi": "वेब, iPhone और Android पर वही खिलाड़ी ऐप और खेल के दृश्य। नियम, ऑनलाइन चालें और टोकन शेष सर्वर द्वारा सत्यापित होते हैं।",
+    "ar": "تطبيق اللاعب وعرض الألعاب نفسه على الويب وiPhone وAndroid. يتحقق الخادم من القواعد والأدوار عبر الإنترنت وأرصدة الرموز."
+  },
+  "Version 2.0.0 ·": {
+    "es": "Versión 2.0.0 ·",
+    "fr": "Version 2.0.0 ·",
+    "de": "Version 2.0.0 ·",
+    "pt": "Versão 2.0.0 ·",
+    "zh": "版本 2.0.0 ·",
+    "hi": "संस्करण 2.0.0 ·",
+    "ar": "الإصدار 2.0.0 ·"
+  },
+  "Select": {
+    "es": "Seleccionar",
+    "fr": "Sélectionner",
+    "de": "Auswählen",
+    "pt": "Selecionar",
+    "zh": "选择",
+    "hi": "चुनें",
+    "ar": "اختيار"
+  },
+  "Move": {
+    "es": "Mover",
+    "fr": "Déplacer",
+    "de": "Bewegen",
+    "pt": "Mover",
+    "zh": "移动",
+    "hi": "चलाएँ",
+    "ar": "حرّك"
+  },
+  "Rotate": {
+    "es": "Girar",
+    "fr": "Tourner",
+    "de": "Drehen",
+    "pt": "Girar",
+    "zh": "旋转",
+    "hi": "घुमाएँ",
+    "ar": "أدر"
+  },
+  "Flip": {
+    "es": "Voltear",
+    "fr": "Retourner",
+    "de": "Spiegeln",
+    "pt": "Virar",
+    "zh": "翻转",
+    "hi": "पलटें",
+    "ar": "اقلب"
+  },
+  "Resize": {
+    "es": "Cambiar tamaño",
+    "fr": "Redimensionner",
+    "de": "Größe ändern",
+    "pt": "Redimensionar",
+    "zh": "调整大小",
+    "hi": "आकार बदलें",
+    "ar": "غيّر الحجم"
+  },
+  "Invalid game package": {
+    "es": "Paquete de juego no válido",
+    "fr": "Paquet de jeu non valide",
+    "de": "Ungültiges Spielpaket",
+    "pt": "Pacote de jogo inválido",
+    "zh": "游戏包无效",
+    "hi": "अमान्य खेल पैकेज",
+    "ar": "حزمة لعبة غير صالحة"
+  },
+  "Only a current player interaction may submit a move": {
+    "es": "Solo un evento de interfaz del jugador que tiene el turno puede emitir make_move",
+    "fr": "Seul un événement d’interface du joueur dont c’est le tour peut émettre make_move",
+    "de": "Nur ein Oberflächenereignis des Spielers, der am Zug ist, darf make_move ausgeben",
+    "pt": "Somente um evento da interface do jogador da vez pode emitir make_move",
+    "zh": "只有当前回合玩家的界面事件可以发出 make_move",
+    "hi": "जिस खिलाड़ी की बारी है, केवल उसका इंटरफ़ेस इवेंट make_move भेज सकता है",
+    "ar": "لا يمكن إصدار make_move إلا من حدث واجهة للاعب صاحب الدور الحالي"
+  },
+  "Reviewing match": {
+    "es": "Revisando partida",
+    "fr": "Consultation de la partie",
+    "de": "Partie wird angesehen",
+    "pt": "Revisando partida",
+    "zh": "正在查看对局",
+    "hi": "मैच की समीक्षा",
+    "ar": "مراجعة المباراة"
+  },
+  "Sending move…": {
+    "es": "Enviando jugada…",
+    "fr": "Envoi du coup…",
+    "de": "Zug wird gesendet…",
+    "pt": "Enviando jogada…",
+    "zh": "正在提交走法…",
+    "hi": "चाल भेजी जा रही है…",
+    "ar": "جارٍ إرسال النقلة…"
+  },
+  "Game finished": {
+    "es": "Juego terminado",
+    "fr": "Partie terminée",
+    "de": "Spiel beendet",
+    "pt": "Jogo terminado",
+    "zh": "游戏已结束",
+    "hi": "खेल पूरा हुआ",
+    "ar": "انتهت اللعبة"
+  },
+  "Waiting for a move": {
+    "es": "Esperando una jugada",
+    "fr": "En attente d’un coup",
+    "de": "Warten auf einen Zug",
+    "pt": "Aguardando uma jogada",
+    "zh": "等待走法",
+    "hi": "चाल की प्रतीक्षा में",
+    "ar": "بانتظار نقلة"
+  },
+  "Zoom out": {
+    "es": "Alejar",
+    "fr": "Réduire",
+    "de": "Verkleinern",
+    "pt": "Reduzir",
+    "zh": "缩小",
+    "hi": "छोटा करें",
+    "ar": "تصغير"
+  },
+  "Reset board view": {
+    "es": "Restablecer vista",
+    "fr": "Réinitialiser la vue",
+    "de": "Ansicht zurücksetzen",
+    "pt": "Redefinir vista",
+    "zh": "重置视图",
+    "hi": "दृश्य रीसेट करें",
+    "ar": "إعادة ضبط العرض"
+  },
+  "Zoom in": {
+    "es": "Acercar",
+    "fr": "Agrandir",
+    "de": "Vergrößern",
+    "pt": "Ampliar",
+    "zh": "放大",
+    "hi": "बड़ा करें",
+    "ar": "تكبير"
+  },
+  "Loading game board": {
+    "es": "Cargando el juego…",
+    "fr": "Chargement du jeu…",
+    "de": "Spiel wird geladen…",
+    "pt": "Carregando o jogo…",
+    "zh": "正在加载游戏…",
+    "hi": "गेम लोड हो रहा है…",
+    "ar": "جارٍ تحميل اللعبة…"
+  },
+  "Game board. Use pieces and highlighted destinations. Zoom controls are above the board.": {
+    "es": "Tablero. Usa las piezas y los destinos resaltados. Los controles de zoom están arriba.",
+    "fr": "Plateau de jeu. Utilisez les pièces et les destinations en surbrillance. Les commandes de zoom sont au-dessus.",
+    "de": "Spielbrett. Verwende Figuren und markierte Ziele. Die Zoomsteuerung ist oberhalb des Bretts.",
+    "pt": "Tabuleiro. Use as peças e os destinos destacados. Os controles de zoom ficam acima.",
+    "zh": "游戏棋盘。使用棋子和高亮目标。缩放控件位于棋盘上方。",
+    "hi": "खेल बोर्ड। मोहरों और उभरे हुए गंतव्यों का उपयोग करें। ज़ूम नियंत्रण बोर्ड के ऊपर हैं।",
+    "ar": "لوحة اللعبة. استخدم القطع والوجهات المظللة. توجد أدوات التكبير فوق اللوحة."
+  },
+  " · choose a highlighted destination": {
+    "es": "Elige un destino resaltado",
+    "fr": "Choisissez une destination en surbrillance",
+    "de": "Wähle ein hervorgehobenes Ziel",
+    "pt": "Escolha um destino destacado",
+    "zh": "选择一个高亮目标位置",
+    "hi": "उजागर गंतव्य चुनें",
+    "ar": "اختر وجهة مميزة"
+  },
+  "Rotate counterclockwise": {
+    "es": "Girar en sentido antihorario",
+    "fr": "Tourner dans le sens antihoraire",
+    "de": "Gegen den Uhrzeigersinn drehen",
+    "pt": "Girar no sentido anti-horário",
+    "zh": "逆时针旋转",
+    "hi": "वामावर्त घुमाएँ",
+    "ar": "تدوير عكس عقارب الساعة"
+  },
+  "Rotate clockwise": {
+    "es": "Girar en sentido horario",
+    "fr": "Tourner dans le sens horaire",
+    "de": "Im Uhrzeigersinn drehen",
+    "pt": "Girar no sentido horário",
+    "zh": "顺时针旋转",
+    "hi": "दक्षिणावर्त घुमाएँ",
+    "ar": "تدوير مع عقارب الساعة"
+  },
+  "Flip piece": {
+    "es": "Voltear pieza",
+    "fr": "Retourner la pièce",
+    "de": "Figur wenden",
+    "pt": "Virar peça",
+    "zh": "翻转棋子",
+    "hi": "मोहरा पलटें",
+    "ar": "قلب القطعة"
+  },
+  "Make piece smaller": {
+    "es": "Reducir pieza",
+    "fr": "Réduire la pièce",
+    "de": "Figur verkleinern",
+    "pt": "Diminuir peça",
+    "zh": "缩小棋子",
+    "hi": "मोहरा छोटा करें",
+    "ar": "تصغير القطعة"
+  },
+  "Make piece larger": {
+    "es": "Ampliar pieza",
+    "fr": "Agrandir la pièce",
+    "de": "Figur vergrößern",
+    "pt": "Aumentar peça",
+    "zh": "放大棋子",
+    "hi": "मोहरा बड़ा करें",
+    "ar": "تكبير القطعة"
+  },
+  "Cancel selection": {
+    "es": "Cancelar selección",
+    "fr": "Annuler la sélection",
+    "de": "Auswahl aufheben",
+    "pt": "Cancelar seleção",
+    "zh": "取消选择",
+    "hi": "चयन हटाएँ",
+    "ar": "إلغاء التحديد"
+  },
+  "Preview:": {
+    "es": "Vista previa:",
+    "fr": "Aperçu :",
+    "de": "Vorschau:",
+    "pt": "Prévia:",
+    "zh": "预览：",
+    "hi": "पूर्वावलोकन:",
+    "ar": "معاينة:"
+  },
+  ". Tap the destination again to confirm.": {
+    "es": ". Toca otra vez el destino para confirmar.",
+    "fr": ". Touchez à nouveau la destination pour confirmer.",
+    "de": ". Tippe zum Bestätigen erneut auf das Ziel.",
+    "pt": ". Toque novamente no destino para confirmar.",
+    "zh": "。再次点击目标以确认。",
+    "hi": "। पुष्टि करने के लिए गंतव्य को दोबारा छुएँ।",
+    "ar": ". انقر الوجهة مجددًا للتأكيد."
+  },
+  "Destination {v0}": {
+    "es": "Destino {v0}",
+    "fr": "Destination {v0}",
+    "de": "Ziel {v0}",
+    "pt": "Destino {v0}",
+    "zh": "目标 {v0}",
+    "hi": "गंतव्य {v0}",
+    "ar": "الوجهة {v0}"
+  },
+  "This history frame is not available. Try another move.": {
+    "es": "Este paso del historial no está disponible. Prueba otra jugada.",
+    "fr": "Cette étape de l’historique n’est pas disponible. Essayez un autre coup.",
+    "de": "Dieser Verlaufsschritt ist nicht verfügbar. Versuche einen anderen Zug.",
+    "pt": "Esta etapa do histórico não está disponível. Tente outra jogada.",
+    "zh": "此历史画面不可用。请尝试查看其他步。",
+    "hi": "इतिहास का यह दृश्य उपलब्ध नहीं है। दूसरी चाल चुनें।",
+    "ar": "هذه الخطوة من السجل غير متاحة. جرّب نقلة أخرى."
+  },
+  "Covered piece": {
+    "es": "Pieza cubierta",
+    "fr": "Pièce cachée",
+    "de": "Verdeckte Figur",
+    "pt": "Peça coberta",
+    "zh": "背面棋子",
+    "hi": "ढका हुआ मोहरा",
+    "ar": "قطعة مغطاة"
+  },
+  "placement": {
+    "es": "colocación",
+    "fr": "placement",
+    "de": "Platzierung",
+    "pt": "colocação",
+    "zh": "放置位置",
+    "hi": "स्थान",
+    "ar": "موضع"
+  },
+  "Confirm the next player is ready before viewing history.": {
+    "es": "Confirma que el siguiente jugador está listo antes de ver el historial.",
+    "fr": "Confirmez que le joueur suivant est prêt avant de consulter l’historique.",
+    "de": "Bestätige vor dem Anzeigen des Verlaufs, dass der nächste Spieler bereit ist.",
+    "pt": "Confirme que o próximo jogador está pronto antes de ver o histórico.",
+    "zh": "查看历史前，请确认下一位玩家已经准备好。",
+    "hi": "इतिहास देखने से पहले अगले खिलाड़ी के तैयार होने की पुष्टि करें।",
+    "ar": "أكّد أن اللاعب التالي مستعد قبل عرض السجل."
+  },
+  "Link to this account": {
+    "es": "Vincular a esta cuenta",
+    "fr": "Lier à ce compte",
+    "de": "Mit diesem Konto verknüpfen",
+    "pt": "Vincular a esta conta",
+    "zh": "关联到此账户",
+    "hi": "इस खाते से जोड़ें",
+    "ar": "الربط بهذا الحساب"
+  },
+  "Use another account": {
+    "es": "Usar otra cuenta",
+    "fr": "Utiliser un autre compte",
+    "de": "Anderes Konto verwenden",
+    "pt": "Usar outra conta",
+    "zh": "使用其他账户",
+    "hi": "दूसरा खाता इस्तेमाल करें",
+    "ar": "استخدام حساب آخر"
+  },
+  "Top navigation": {
+    "es": "Navegación superior",
+    "fr": "Navigation en haut",
+    "de": "Navigation oben",
+    "pt": "Navegação superior",
+    "zh": "顶部导航",
+    "hi": "ऊपरी नेविगेशन",
+    "ar": "التنقل العلوي"
+  },
+  "Left navigation": {
+    "es": "Navegación lateral izquierda",
+    "fr": "Navigation à gauche",
+    "de": "Navigation links",
+    "pt": "Navegação à esquerda",
+    "zh": "左侧导航",
+    "hi": "बाएँ नेविगेशन",
+    "ar": "التنقل الأيسر"
+  },
+  "Menu": {
+    "es": "Menú",
+    "fr": "Menu",
+    "de": "Menü",
+    "pt": "Menu",
+    "zh": "菜单",
+    "hi": "मेन्यू",
+    "ar": "القائمة"
+  },
+  "Invite link copied.": {
+    "es": "Enlace de invitación copiado.",
+    "fr": "Lien d’invitation copié.",
+    "de": "Einladungslink kopiert.",
+    "pt": "Link de convite copiado.",
+    "zh": "已复制邀请链接。",
+    "hi": "निमंत्रण लिंक कॉपी किया गया।",
+    "ar": "تم نسخ رابط الدعوة."
+  },
+  "Use your browser’s “Install app” or “Add to Home Screen” option.": {
+    "es": "Usa la opción «Instalar aplicación» o «Añadir a la pantalla de inicio» de tu navegador.",
+    "fr": "Utilisez l’option « Installer l’application » ou « Ajouter à l’écran d’accueil » du navigateur.",
+    "de": "Verwende die Browseroption „App installieren“ oder „Zum Startbildschirm hinzufügen“.",
+    "pt": "Use a opção «Instalar aplicativo» ou «Adicionar à tela inicial» do navegador.",
+    "zh": "请使用浏览器的“安装应用”或“添加到主屏幕”选项。",
+    "hi": "ब्राउज़र में “ऐप स्थापित करें” या “होम स्क्रीन पर जोड़ें” विकल्प इस्तेमाल करें।",
+    "ar": "استخدم خيار «تثبيت التطبيق» أو «إضافة إلى الشاشة الرئيسية» في متصفحك."
+  },
+  "Sync or resolve pending actions before hiding this match.": {
+    "es": "Sincroniza o resuelve las acciones pendientes antes de ocultar esta partida.",
+    "fr": "Synchronisez ou résolvez les actions en attente avant de masquer cette partie.",
+    "de": "Synchronisiere oder kläre ausstehende Aktionen, bevor du diese Partie ausblendest.",
+    "pt": "Sincronize ou resolva as ações pendentes antes de ocultar esta partida.",
+    "zh": "隐藏此对局前，请先同步或解决待处理的操作。",
+    "hi": "इस मैच को छिपाने से पहले लंबित कार्रवाइयों को सिंक करें या सुलझाएँ।",
+    "ar": "زامن الإجراءات المعلقة أو حلّها قبل إخفاء هذه المباراة."
+  },
+  "Cancel": {
+    "es": "Cancelar",
+    "fr": "Annuler",
+    "de": "Abbrechen",
+    "pt": "Cancelar",
+    "zh": "取消",
+    "hi": "रद्द करें",
+    "ar": "إلغاء"
+  }
+}

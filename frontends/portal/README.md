@@ -61,6 +61,14 @@ context with time, memory, stack, input and output limits. Browser execution use
 an opaque-origin frame and a terminable worker. The native game board uses SVG
 components directly, without a game WebView.
 
+Interface copy uses the existing server catalog plus the bundled eight-language
+fallback in `src/platform/ui-copy.json`. Use `copyText` for authored interface
+literals and `t` for existing catalog keys; update all seven translations when
+changing copy. Keep names and other user content as parameters. The bundled
+starter game includes translations from `games/declarative/tictactoe.json` so it
+also works in every language offline. Dictionary tests check locale/parameter
+coverage; browser tests switch all eight languages without changing saved games.
+
 ## Delivery
 
 CI builds the web artifact, backend tests and browser acceptance before deploying

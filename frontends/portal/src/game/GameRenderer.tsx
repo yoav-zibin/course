@@ -1,3 +1,4 @@
+import {copyText} from '../platform/i18n';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import Svg, { Circle, Ellipse, Image as SvgImage, Line, Polygon, Polyline, Rect, SvgXml, Text as SvgText } from 'react-native-svg';
@@ -31,7 +32,7 @@ export function GameRenderer(props: GameRendererProps) {
     try { return {spec: validateSpec(copy(props.spec))}; }
     catch (error) { return {error: errorOf(error)}; }
   }, [serialized]);
-  if (!checked.spec) return <Text accessibilityRole="alert" style={styles.error}>{checked.error?.message || 'Invalid game package'}</Text>;
+  if (!checked.spec) return <Text accessibilityRole="alert" style={styles.error}>{checked.error?.message || copyText("Invalid game package")}</Text>;
   return <Renderer {...props} key={`${props.contextKey || ''}:${serialized}:viewer:${props.message.my_player_index??'spectator'}`} spec={checked.spec} />;
 }
 
@@ -92,7 +93,7 @@ function Renderer({spec, message, onMove, onError, deliveryKey,onAnimationStateC
     if (!alive.current || atRevision !== revision.current) return;
     knownObject(result,['scene','local_state','make_move'],['scene']); finiteJSON(result);
     const next = validateScene(spec,result.scene);
-    if (result.make_move !== undefined && (stateChange || !canMove(latest.current,sent.current))) throw new Error('Only a current player interaction may submit a move');
+    if (result.make_move !== undefined && (stateChange || !canMove(latest.current,sent.current))) throw new Error(copyText("Only a current player interaction may submit a move"));
     local.current = result.local_state === undefined ? null : copy(result.local_state);
     renderedRevision.current=atRevision;
     const changed = JSON.stringify(next)!==JSON.stringify(sceneRef.current);
@@ -313,18 +314,18 @@ function Renderer({spec, message, onMove, onError, deliveryKey,onAnimationStateC
 
   return <View style={styles.container}>
     <View style={styles.toolbar}>
-      <Text style={styles.status} accessibilityLiveRegion="polite">{message.replay?'Reviewing match':busy?'Sending move…':message.status!=='ongoing'?'Game finished':active?'Your turn':'Waiting for a move'}</Text>
+      <Text style={styles.status} accessibilityLiveRegion="polite">{message.replay?copyText("Reviewing match"):busy?copyText("Sending move…"):message.status!=='ongoing'?copyText("Game finished"):active?copyText("Your turn"):copyText("Waiting for a move")}</Text>
       {spec.viewport.camera_enabled!==false&&<View style={styles.row}>
-        <Tool label="Zoom out" text="−" onPress={()=>zoomTo(camera.zoom/1.25)} />
-        <Tool label="Reset board view" text={`${Math.round(camera.zoom*100)}%`} onPress={()=>setCamera({zoom:1,x:0,y:0})} />
-        <Tool label="Zoom in" text="+" onPress={()=>zoomTo(camera.zoom*1.25)} />
+        <Tool label={copyText("Zoom out")} text="−" onPress={()=>zoomTo(camera.zoom/1.25)} />
+        <Tool label={copyText("Reset board view")} text={`${Math.round(camera.zoom*100)}%`} onPress={()=>setCamera({zoom:1,x:0,y:0})} />
+        <Tool label={copyText("Zoom in")} text="+" onPress={()=>zoomTo(camera.zoom*1.25)} />
       </View>}
     </View>
-    {!ready&&<ActivityIndicator accessibilityLabel="Loading game board" color="#91d7c4" style={styles.loading}/>}
+    {!ready&&<ActivityIndicator accessibilityLabel={copyText("Loading game board")} color="#91d7c4" style={styles.loading}/>}
     {!!error&&<Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
     <View ref={canvas} collapsable={false} focusable style={[styles.canvas,{height}]} {...webProps} {...responders.panHandlers}
       onLayout={event=>{setWidth(event.nativeEvent.layout.width);measureOrigin();}}
-      accessibilityLabel="Game board. Use pieces and highlighted destinations. Zoom controls are above the board.">
+      accessibilityLabel={copyText("Game board. Use pieces and highlighted destinations. Zoom controls are above the board.")}>
       <Svg width="100%" height="100%" viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}>
         {spec.boards.map(board=><BoardGraphic key={board.id} board={board} spec={spec}/>)}
         {display.scene.paths?.map(path=><Polyline key={path.id} points={path.points.map(p=>`${p.x},${p.y}`).join(' ')} fill="none" stroke={path.color||'#d2ff5a'} strokeWidth={path.width||3}/>)}
@@ -348,14 +349,14 @@ function Renderer({spec, message, onMove, onError, deliveryKey,onAnimationStateC
       </Svg>
     </View>
     <View style={styles.tools}>
-      {selectedPiece&&<Text style={styles.selectedLabel} accessibilityLiveRegion="polite">{pieceName(selectedPiece)}{selectedPiece.move_targets?.length?' · choose a highlighted destination':''}</Text>}
+      {selectedPiece&&<Text style={styles.selectedLabel} accessibilityLiveRegion="polite">{pieceName(selectedPiece)}{selectedPiece.move_targets?.length?copyText(" · choose a highlighted destination"):''}</Text>}
       <View style={styles.row}>
-        {selectedActions.includes('rotate')&&<><Tool label="Rotate counterclockwise" text="↺" disabled={!active} onPress={()=>transform({type:'rotate',id:'',delta:-90})}/><Tool label="Rotate clockwise" text="↻" disabled={!active} onPress={()=>transform({type:'rotate',id:'',delta:90})}/></>}
-        {selectedActions.includes('flip')&&<Tool label="Flip piece" text="⇋" disabled={!active} onPress={()=>transform({type:'flip',id:''})}/>}
-        {selectedActions.includes('scale')&&<><Tool label="Make piece smaller" text="↙" disabled={!active} onPress={()=>transform({type:'scale',id:'',factor:1/1.1})}/><Tool label="Make piece larger" text="↗" disabled={!active} onPress={()=>transform({type:'scale',id:'',factor:1.1})}/></>}
-        {selectedPiece&&<Tool label="Cancel selection" text="Cancel" onPress={()=>{select(null);showPreview(null);setDrag(null);}}/>}
+        {selectedActions.includes('rotate')&&<><Tool label={copyText("Rotate counterclockwise")} text="↺" disabled={!active} onPress={()=>transform({type:'rotate',id:'',delta:-90})}/><Tool label={copyText("Rotate clockwise")} text="↻" disabled={!active} onPress={()=>transform({type:'rotate',id:'',delta:90})}/></>}
+        {selectedActions.includes('flip')&&<Tool label={copyText("Flip piece")} text="⇋" disabled={!active} onPress={()=>transform({type:'flip',id:''})}/>}
+        {selectedActions.includes('scale')&&<><Tool label={copyText("Make piece smaller")} text="↙" disabled={!active} onPress={()=>transform({type:'scale',id:'',factor:1/1.1})}/><Tool label={copyText("Make piece larger")} text="↗" disabled={!active} onPress={()=>transform({type:'scale',id:'',factor:1.1})}/></>}
+        {selectedPiece&&<Tool label={copyText("Cancel selection")} text={copyText("Cancel")} onPress={()=>{select(null);showPreview(null);setDrag(null);}}/>}
       </View>
-      {previewTarget?.preview?.length? <Text accessibilityLiveRegion="polite" style={styles.preview}>Preview: {previewTarget.aria_label||previewTarget.label||'placement'}. Tap the destination again to confirm.</Text>:null}
+      {previewTarget?.preview?.length? <Text accessibilityLiveRegion="polite" style={styles.preview}>{copyText("Preview:")} {previewTarget.aria_label||previewTarget.label||copyText('placement')}{copyText(". Tap the destination again to confirm.")}</Text>:null}
     </View>
     <View style={styles.controls}>{display.scene.controls?.map(control=><SceneControl key={control.id} control={control} enabled={active&&!control.disabled} dispatch={dispatch}/>)}</View>
   </View>;
@@ -419,7 +420,7 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
   const roll=animate&&newEffect&&piece.animation?.kind==='roll'?(1-p)*360:0;
   const notice=piece.animation?.kind==='notice'?(animate&&newEffect&&p>.02&&p<.96?1:0):1;
   const fade=effect==='enter'?p:effect==='change'?.25+.75*p:effect==='exit'?(p<.65?1-p/.65*.2:.8*(1-(p-.65)/.35)):1;
-  const accessibleName=`${pieceName(piece)}${enabled&&actions.length?`: ${actions.map(a=>labels[a]).join(', ')}`:''}`;
+  const accessibleName=`${pieceName(piece)}${enabled&&actions.length?`: ${actions.map(a=>copyText(labels[a])).join(', ')}`:''}`;
   const accessibility:Record<string,unknown>=effect==='exit'?{accessible:false,accessibilityElementsHidden:true,importantForAccessibility:'no-hide-descendants','aria-hidden':true,testID:'history-ghost',pointerEvents:'none'}:{accessible:true,accessibilityLabel:accessibleName,accessibilityRole:actions.length?'button':'image',
     accessibilityState:{disabled:!enabled,selected:!!selected},onPress:enabled&&actions.length?onPress:undefined};
   return <G transform={`translate(${x} ${y}) rotate(${rotation+roll}) scale(${scale})`} opacity={(piece.opacity??1)*notice*fade} {...accessibility}>
@@ -434,7 +435,7 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
 const TargetGraphic=memo(function TargetGraphic({target,spec,enabled,selected,onPress}:{target:Target;spec:GameSpec;enabled:boolean;selected:boolean;onPress:()=>void}) {
   const point=position(spec,target),box=targetBox(spec,target),art=!!target.asset;
   return <G transform={`translate(${point.x} ${point.y})`} opacity={enabled?selected?1:.72:.18}
-    accessible accessibilityRole="button" accessibilityLabel={target.aria_label||target.label||`Destination ${target.id}`} accessibilityState={{disabled:!enabled,selected}}
+    accessible accessibilityRole="button" accessibilityLabel={target.aria_label||target.label||copyText("Destination {v0}",{v0:target.id})} accessibilityState={{disabled:!enabled,selected}}
     onPress={enabled?onPress:undefined}>
     <Rect x={box.x-point.x} y={box.y-point.y} width={box.width} height={box.height} rx={5} fill={art?'transparent':target.color||'#b8ef5b'} stroke={selected?'#ffffff':'#c9ff63'} strokeWidth={selected?4:2}/>
     <Asset spec={spec} id={target.asset} x={box.x-point.x} y={box.y-point.y} width={box.width} height={box.height}/>
