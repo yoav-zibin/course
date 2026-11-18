@@ -34,6 +34,9 @@ final class PortalUITests: XCTestCase {
 
     func testLocalMatchFlow() {
         let app = XCUIApplication()
+        // Keep this bundled-game flow independent of production data/network.
+        // The setting stays on this application across terminate/launch below.
+        app.launchEnvironment["BUILDPLAY_LOCAL_UI_TEST"] = "1"
         continueAfterFailure = false
         app.launch()
         if app.buttons["Play as guest  →"].waitForExistence(timeout: 5) {

@@ -107,6 +107,10 @@ game; failed UI tests also capture the device screen. Artifacts are retained for
 14 days. The Intel runner prefers an installed iOS 18 simulator for baseline
 tests, with the newest available runtime as a fallback. The simulator app ZIP
 supports both Intel and Apple silicon Macs.
+The bundled-game UI test sets `BUILDPLAY_LOCAL_UI_TEST=1`, which disables the
+automatic live catalog refresh in Debug builds, including after app relaunch.
+Release builds ignore this test setting. Online API behavior is covered by the
+separate mocked online-store suite.
 The UI test waits for each exact empty square to be enabled and hittable before
 tapping it once, including after a handoff recreates the WebView. The gameplay
 step allows 20 minutes for simulator boot, installation, testing and result-bundle

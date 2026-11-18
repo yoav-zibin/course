@@ -50,7 +50,14 @@ struct RootView: View {
                 NavigationStack { MatchesView() }
                     .tabItem { Label("Local Matches", systemImage: "iphone") }.tag(2)
             }.environmentObject(online)
-                .task { await online.refresh() }
+                .task {
+                    #if DEBUG
+                    // Local gameplay UI tests must not read the live catalog or
+                    // compete with unrelated network updates during a handoff.
+                    if ProcessInfo.processInfo.environment["BUILDPLAY_LOCAL_UI_TEST"] == "1" { return }
+                    #endif
+                    await online.refresh()
+                }
         }
     }
 }
