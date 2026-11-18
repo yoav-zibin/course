@@ -15,7 +15,16 @@ if ! xcrun simctl list devices booted --json | python3 -c \
   "$simulator_udid"; then
   xcrun simctl boot "$simulator_udid"
 fi
-xcrun simctl bootstatus "$simulator_udid" -b
+python3 - "$simulator_udid" <<'PY'
+import subprocess
+import sys
+
+try:
+    subprocess.run(["xcrun", "simctl", "bootstatus", sys.argv[1], "-b"],
+                   check=True, timeout=240)
+except subprocess.TimeoutExpired:
+    raise SystemExit("iPhone simulator boot did not finish within 240 seconds.")
+PY
 
 # A single simulator keeps screenshot fallback and UI tests on the same device.
 xcodebuild \
@@ -25,7 +34,10 @@ xcodebuild \
   -destination "platform=iOS Simulator,id=$simulator_udid" \
   -destination-timeout 120 \
   -parallel-testing-enabled NO \
+  -test-timeouts-enabled YES \
+  -default-test-execution-time-allowance 180 \
+  -maximum-test-execution-time-allowance 300 \
   -derivedDataPath "${GITHUB_WORKSPACE:-$results_dir}/ios-portal-build" \
   -resultBundlePath "$results_dir/SimulatorTests.xcresult" \
-  ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO \
-  test
+  ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO \
+  test-without-building

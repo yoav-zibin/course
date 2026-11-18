@@ -93,7 +93,7 @@ jobs:
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
-      - name: Build for the iOS Simulator (unsigned)
+      - name: Build app and UI tests for the iOS Simulator (unsigned)
         id: ios-build
         run: |
           mkdir -p "$GITHUB_WORKSPACE/ios-test-results"
@@ -106,7 +106,7 @@ jobs:
             -derivedDataPath "$GITHUB_WORKSPACE/ios-portal-build" \
             ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO \
-            build 2>&1 | tee "$GITHUB_WORKSPACE/ios-test-results/build.log"
+            build-for-testing 2>&1 | tee "$GITHUB_WORKSPACE/ios-test-results/build.log"
       - name: Verify distribution metadata in the built app
         run: |
           app="$GITHUB_WORKSPACE/ios-portal-build/Build/Products/Debug-iphonesimulator/GamePortal.app"
@@ -131,6 +131,8 @@ jobs:
             | tee "$GITHUB_WORKSPACE/ios-test-results/model-tests.log"
       - name: Run local gameplay and restart tests in an iPhone Simulator
         if: ${{ !cancelled() && steps.ios-build.outcome == 'success' }}
+        # Leave time for diagnostics/artifacts if simulator or XCTest startup stalls.
+        timeout-minutes: 15
         run: |
           set -o pipefail
           bash frontends/ios-game-portal/scripts/test-simulator.sh \
