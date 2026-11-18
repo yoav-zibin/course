@@ -1,246 +1,208 @@
-# Develop Android and iOS apps with an agent
+# BuildPlay web, Android and iOS development
 
-Use the course VM to edit, review and push code. GitHub Actions builds Android
-APKs on Linux and iOS apps on a hosted Mac. Students do not need a local Mac
-for cloud builds. The Linux VM itself cannot run Xcode or the iOS Simulator.
+The application source is [frontends/portal](../frontends/portal). Expo and React
+Native render the same screens, navigation, game scenes and match behavior on
+Android, iOS and web. Platform adapters provide secure storage, file persistence,
+the native JavaScript game runtime, sharing and migration from older installations.
+The Python backend remains authoritative for online play.
 
-## Start here
+Use a separate checkout on the course VM. Do not develop in the running backend
+checkout (`/opt/game-platform`) or the automated auditor's checkout. Read
+`AGENTS.md`, integrate current upstream, perform checks relevant to the change,
+and push directly to `main`; this repository does not require new PRs. CI provides
+broad validation. Native builds are not a pre-push requirement for unrelated work.
 
-1. Give your agent SSH access to the course VM and access to
-   `https://github.com/yoav-zibin/course`.
-2. Use a separate student checkout on `main`. Do not develop in the running
-   backend checkout (`/opt/game-platform`) or the automated auditor's checkout.
-3. Ask the agent to read `AGENTS.md`, this guide and the app's README, implement
-   the change, fetch and integrate current upstream, run local checks relevant
-   to the change, and push directly to `main`. A full local suite run, including
-   native Android/iOS tests, is not a pre-push requirement. CI provides broad
-   validation. This repository does not use new branches or pull requests.
-4. Open [GitHub Actions](https://github.com/yoav-zibin/course/actions), select
-   the workflow below, choose **Run workflow**, and select **main**. Pushes
-   that change the relevant app or workflow also start builds automatically.
+## Install and run
 
-| App source | Workflow | Downloadable artifact |
-| --- | --- | --- |
-| `android/` — BuildPlay Android | Portal apps | `BuildPlay-android-apk` |
-| `frontends/ios-game-portal/` — BuildPlay iOS | Portal apps | `BuildPlay-ios-simulator` |
-| iOS model tests and iPhone Simulator UI tests | Portal apps | `BuildPlay-ios-test-results`, `BuildPlay-ios-screenshots` |
+Use Node 22.13 or newer. From the repository root:
 
-These are the repository's only two native applications. The temporary Android
-and iOS samples and the paused legacy iOS Builder app have been removed. Its standalone HTML game examples have also been retired.
+```bash
+npm --prefix frontends/portal ci
+npm --prefix frontends/portal run typecheck
+npm --prefix frontends/portal test
+npm --prefix frontends/portal run web
+```
 
-BuildPlay iOS also has an opt-in TestFlight job in the same workflow. It requires
-an owned App Store Connect bundle ID in `IOS_PORTAL_BUNDLE_ID`, valid team
-credentials and Apple cloud-signing access. Its default development bundle ID
-is preserved; the distribution job overrides it explicitly when configured.
+`EXPO_PUBLIC_API_URL` selects the backend when bundling. The default is
+`https://buildplay.fun`; use a disposable local/test backend for tests that create
+accounts or matches. `npm --prefix frontends/portal run build:web` exports the
+production browser application into `static/app`. Build that asset directory
+before packaging or deploying the Python server.
 
-## Build and get the result
+Generated `frontends/portal/android`, `frontends/portal/ios`, `.expo` and native
+build outputs are local artifacts. Change `app.config.ts`, config plugins, local
+modules or TypeScript source, then regenerate; do not maintain another app in
+those generated directories. The local modules under `modules/` are source.
 
-With an authenticated GitHub CLI and repository Actions write access:
+Expo Go does not include the custom native game-runtime or legacy-migration
+modules. Use a native build for gameplay and account-upgrade testing.
+
+## Android on the VM
+
+The existing toolchain is available under the `yoav_zibin` account:
+
+| Path | Purpose |
+| --- | --- |
+| `/home/yoav_zibin/.local/share/buildplay-mobile/android-env.sh` | Selects installed SDK and Java; no credentials. |
+| `/home/yoav_zibin/.local/share/buildplay-mobile/android-sdk` | Android SDK. Gradle installs its pinned NDK/build tools as needed. |
+| `/home/yoav_zibin/.local/share/buildplay-mobile/jdk` | Java 21 JDK. |
+| `/home/yoav_zibin/.local/share/buildplay-mobile/gradle-cache` | Existing download/dependency cache. |
+| `/home/yoav_zibin/.local/share/buildplay-mobile/artifacts/<run-id>/` | Downloaded cloud artifacts. |
+
+These are aliases to an existing installation. Reuse the tools; do not delete
+their installation or edit its owning checkout. From `frontends/portal`:
+
+```bash
+source /home/yoav_zibin/.local/share/buildplay-mobile/android-env.sh
+export BUILDPLAY_VARIANT=debug
+npx expo prebuild --platform android --no-install --no-clean
+DD_INSTRUMENT_SERVICE_WITH_APM=false DD_INJECT_NATIVE=never \
+  bash android/gradlew --project-dir android --no-daemon --max-workers=2 \
+  -Pandroid.enableMinifyInReleaseBuilds=false :app:assembleRelease
+```
+
+The per-command Datadog flags prevent this VM's automatic instrumentation from
+inserting JVM diagnostics into Android Gradle's prefab protocol.
+
+`android/app/build/outputs/apk/release/app-release.apk` is standalone: its
+JavaScript and assets are embedded. `npx expo run:android` builds a development
+app connected to Metro instead. Do not publish an ordinary development APK as
+a standalone download.
+
+For disposable local API tests, prebuild and bundle with `BUILDPLAY_LOCAL_TEST=1`
+and `EXPO_PUBLIC_API_URL=http://127.0.0.1:PORT`, then run
+`adb reverse tcp:PORT tcp:PORT` before launching. The native config permits HTTP
+only with that explicit test flag and localhost, loopback IPs or Android's
+`10.0.2.2` host alias. Production bundles use HTTPS.
+
+The downloadable development application retains package
+`com.dapillah.gameportal.debug`; `BUILDPLAY_VARIANT=debug` selects it. The
+unsuffixed `com.dapillah.gameportal` remains the release identity. Never change
+an installed app's package merely to work around a signing error.
+
+The Expo template contains a public development signing key, providing stable
+future CI development downloads. It is not a private store-distribution key.
+Previous workflows generated Android debug keys on ephemeral machines, so an
+arbitrary old APK may have a different signer. **An update preserves the old
+app's private data only when the package and signer match.** Do not uninstall an
+existing guest installation to resolve a signature mismatch without preserving
+its account first. The upgrade reader cannot access an uninstalled app's data.
+
+When an existing VM-built app used the VM's own default debug key, reuse it:
+
+```bash
+BUILDPLAY_ANDROID_DEBUG_KEYSTORE=/home/yoav_zibin/.android/debug.keystore \
+  bash android/gradlew --project-dir android :app:assembleRelease
+```
+
+This selects the existing file without copying it into source control. Do not
+print keys/passwords or commit private signing files. Google Play distribution
+requires the original release signing configuration and is separate from the
+development APK workflow.
+
+## iOS on a Mac and in CI
+
+The default bundle identifier is preserved as
+`edu.columbia.gameportal.starter`. `IOS_PORTAL_BUNDLE_ID` overrides it for the
+existing App Store Connect record. On a Mac, from `frontends/portal`:
+
+```bash
+npx expo prebuild --platform ios --no-install --no-clean
+cd ios
+pod install
+open BuildPlay.xcworkspace
+```
+
+Choose the BuildPlay scheme. Use a simulator for unsigned development or the
+existing Apple team for a phone build. Upgrading with the same bundle ID and
+team preserves access to the old sandbox and Keychain. Switching identity/team
+creates a different app or loses access to its account. The Linux VM cannot
+compile iOS or run an iPhone Simulator; GitHub Actions uses a hosted Mac.
+
+## Upgrade data
+
+`modules/legacy-portal` reads the previous native applications' data without
+modifying it. Android decrypts the existing `portal-session` account using its
+original Android Keystore key and restores the selected match. iOS reads the
+existing `edu.columbia.gameportal.online` Keychain item, `Documents/portal.json`
+and `Application Support/OnlineSnapshots/account-*.json`.
+
+The new native cache stores atomic JSON envelopes in Android's
+`filesDir/BuildPlayShared` or iOS Application Support's `BuildPlayShared`.
+SHA-256 key filenames allow large packages and archives without SQLite's row
+and database limits. Existing AsyncStorage values are copied only after a
+successful atomic write; their originals remain available for recovery.
+Credentials stay in SecureStore rather than these cache files.
+
+The shared importer persists the recovered identity and archives old snapshots,
+local matches and pending branches before recording migration completion.
+Retired HTML packages and their pending state-based moves are retained for
+inspection; they are never executed or sent to the current move API. Corrupt
+JSON originals are retained as base64 in the archive. A read/storage failure
+leaves original files intact. Migration data and account exports are private;
+keep them out of logs, screenshots, CI artifacts and Git.
+
+## Cloud builds and downloads
+
+The [Portal apps workflow](../.github/workflows/portal-apps.yml) runs shared
+TypeScript checks and tests, builds the standalone Android APK, checks real
+Keystore migration, corrupt-data preservation and large atomic cache values in
+an Android emulator, and
+builds and launches both native apps. It captures launch screenshots and checks
+that the apps remain running. Android also drives bundled pass-and-play through
+the native SVG scene, handoffs, restart restoration, completion and replay with
+network access disabled. These checks do not replace offline recovery and
+migration testing on real devices.
 
 ```bash
 gh workflow run portal-apps.yml --repo yoav-zibin/course --ref main
 gh run list --repo yoav-zibin/course --workflow portal-apps.yml --limit 5
-```
-
-The default iOS runner is `macos-26-intel`. The macOS 15 image repeatedly stalled
-the simulator's WebKit and GPU processes during the local gameplay test, even
-on fresh hosts. If GitHub cannot acquire the default image, `macos-15-intel`
-remains available in the **Run workflow** runner choice, or via
-`--field ios_runner=macos-15-intel` with `gh workflow run`. Both are standard
-GitHub runner images. The selected image also applies to the TestFlight job.
-
-Open the resulting run, wait for success and download its **Artifacts**. In
-the CLI, replace `RUN_ID` with that run's numeric ID:
-
-```bash
 gh run watch RUN_ID --repo yoav-zibin/course --exit-status
 gh run download RUN_ID --repo yoav-zibin/course \
   --name BuildPlay-android-apk --dir ./mobile-build-downloads
 ```
 
-Install an Android APK on a test phone after allowing installation from your
-browser/file manager. Successful **push** builds on `main` also update stable
-download for [BuildPlay](https://github.com/yoav-zibin/course/releases/download/portal-apps/BuildPlay.apk).
-Manual builds provide artifacts; they do not update those rolling releases.
+Artifacts keep their existing names: `BuildPlay-android-apk`,
+`BuildPlay-ios-simulator`, `BuildPlay-ios-test-results`,
+`BuildPlay-ios-screenshots`, and `BuildPlay-gradle-logs`. Android migration and
+launch diagnostics are in `BuildPlay-android-test-results`. Successful pushes to
+`main` update [BuildPlay.apk](https://github.com/yoav-zibin/course/releases/download/portal-apps/BuildPlay.apk).
+Manual runs provide artifacts without replacing that download. An unsigned
+simulator ZIP needs a Mac with Xcode; it cannot be installed on an iPhone.
 
-An iOS simulator ZIP runs on a Mac with Xcode and an installed simulator
-runtime. It cannot be installed on a physical iPhone. For a configured signed BuildPlay
-build, use Apple's TestFlight app after the CI upload and Apple's processing
-finish and a maintainer grants tester access. Existing tester membership is
-not automatically created by the build workflow.
+The default Mac runner is `macos-26-intel`, retaining the upstream fix for
+repeated macOS15 WebKit/GPU stalls in the earlier native gameplay tests. When
+unavailable, select
+`macos-15-intel` in the workflow input or pass
+`--field ios_runner=macos-15-intel`. Both are standard hosted runners.
 
-The iOS job also runs the local rules/persistence, cache, and mocked online-store
-tests, then launches an available iPhone simulator (preferring installed iOS 18
-on the Intel runner) to test local gameplay,
-handoffs, closing/reopening the app, and restoring a match. Permanent screenshots
-show Discover, the restored match, and the finished game; a failing UI test adds
-a failure screenshot. These tests use local or mocked data. They do not establish
-compatibility with the live online game API.
+## Existing Apple signing setup
 
-Logs, the `.xcresult` test bundle, and extracted screenshots are uploaded even
-when a test fails, with 14-day retention. Agents on this Linux VM can inspect them
-through GitHub CLI without a local Mac:
+The optional TestFlight job remains gated by repository variables
+`TESTFLIGHT_ENABLED=true` and `IOS_PORTAL_BUNDLE_ID`. It reuses the existing
+Actions secrets `ASC_KEY_P8`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, and `APPLE_TEAM_ID`.
+Routine app builds need no new secrets. The distribution archive uses ad hoc
+signing and then exports with the existing App Store Connect API key and cloud
+distribution signing. A simulator build does not establish TestFlight signing
+or upload success. Apple must process the uploaded build and grant tester access.
 
-```bash
-gh run view RUN_ID --repo yoav-zibin/course --log
-gh run download RUN_ID --repo yoav-zibin/course \
-  --name BuildPlay-ios-screenshots --dir /tmp/buildplay-ios-screenshots
-gh run download RUN_ID --repo yoav-zibin/course \
-  --name BuildPlay-ios-test-results --dir /tmp/buildplay-ios-test-results
-```
+Maintainer credentials remain outside all checkouts:
 
-The screenshots artifact contains ordinary image files for viewing on the VM;
-the full `.xcresult` can also be opened in Xcode on a Mac. If compilation or
-simulator startup fails before screenshots exist, inspect the test-results logs.
-Screenshot export has a two-minute limit so a stalled simulator cannot prevent
-the following log and test-result uploads from running.
-
-Routine student builds reuse repository Actions secrets automatically. They
-do not require copying private keys into a checkout or resetting secrets.
-
-## Existing Android tools on the course VM
-
-These stable paths are already available under the `yoav_zibin` VM account:
-
-| Path | Purpose |
+| Path | Use |
 | --- | --- |
-| `/home/yoav_zibin/.local/share/buildplay-mobile/android-env.sh` | Source this to select the installed Android tools; contains no credentials. |
-| `/home/yoav_zibin/.local/share/buildplay-mobile/android-sdk` | Android SDK; platforms/build tools 35 and 36 are installed. |
-| `/home/yoav_zibin/.local/share/buildplay-mobile/jdk` | Complete Java 21 JDK, including `javac`. |
-| `/home/yoav_zibin/.local/share/buildplay-mobile/gradle-cache` | Existing Gradle download/dependency cache. |
-| `/home/yoav_zibin/.local/share/buildplay-mobile/artifacts/<run-id>/` | Downloaded cloud APKs and iOS simulator ZIPs, grouped by CI run. |
+| `/home/yoav_zibin/.config/buildplay-mobile-ci-handoff/AuthKey.p8` | Existing App Store Connect team key. |
+| `/home/yoav_zibin/.config/buildplay-mobile-ci-handoff/credentials.json` | Matching key, issuer and team identifiers. |
+| `/home/yoav_zibin/.config/buildplay-mobile-ci-handoff/configure-github-secrets.py` | Validates and uploads existing Actions secrets without displaying them. |
+| `/home/yoav_zibin/.config/gh/` | Owner-only GitHub CLI login configuration. |
 
-The tool directories are aliases to the existing installation in the audit
-workspace. Reuse them; do not delete the installation or edit that checkout.
-A maintainer can relocate the tools and update the aliases without changing
-student commands. Build output stays in each student's own checkout.
+Check login with `gh auth status --hostname github.com`; do not print tokens or
+credential files. The owner-only handoff directory must remain private. When
+the maintainer replaces a key, use the existing helper with `--check-only`, then
+without that flag to sync secrets. Preserve the `.p8` PEM lines and actual
+newlines. Issuer ID differs from Apple Developer team ID. The existing app
+record and API key need cloud-managed distribution certificate permission.
+Do not revoke shared certificates to repair ephemeral CI development signing.
 
-From your checkout's root, build and test the Android portal locally:
-
-```bash
-source /home/yoav_zibin/.local/share/buildplay-mobile/android-env.sh
-bash android/gradlew --project-dir android --no-daemon --max-workers=2 \
-  :app:testDebugUnitTest :app:assembleDebug
-```
-
-The APK is exported to `android/artifacts/app-debug.apk`. The wrapper selects
-the project's pinned Gradle version; a system-wide Gradle install is not
-needed. This headless command runs JVM tests and builds the APK; it does not
-run an Android emulator or exercise live student accounts.
-
-## Private VM handoff: exact file locations
-
-The maintainer's existing credentials are outside every checkout:
-
-| Path | Contents / use |
-| --- | --- |
-| `/home/yoav_zibin/.config/buildplay-mobile-ci-handoff/AuthKey.p8` | Original App Store Connect **team API** private key; becomes Actions secret `ASC_KEY_P8`. |
-| `/home/yoav_zibin/.config/buildplay-mobile-ci-handoff/credentials.json` | Matching `ASC_KEY_ID`, `ASC_ISSUER_ID` and `APPLE_TEAM_ID`. |
-| `/home/yoav_zibin/.config/buildplay-mobile-ci-handoff/configure-github-secrets.py` | Maintainer helper that validates the files and uploads the four Actions secrets through `gh`, without displaying their values. |
-| `/home/yoav_zibin/.config/gh/` | GitHub CLI configuration/login for this Linux account. `hosts.yml` may contain its login token when no system keyring is available. |
-
-The handoff directory and GitHub CLI directory are owner-only (`700`);
-credential files and the helper are owner-only (`600`), owned by `yoav_zibin`.
-An agent using another Linux account should use its own GitHub login and the
-cloud workflows, or ask the maintainer for intended access. Do not make the
-private directory world-readable. Agents sharing the `yoav_zibin` Linux
-account also share its file access and GitHub CLI login.
-
-Keep the `.p8`, JSON values, GitHub token and signed credential exports out of
-Git, chat, build artifacts and logs. Document paths and secret names only.
-Do not run `gh auth token` or print `hosts.yml` to discover whether login works;
-`gh auth status` is the appropriate check.
-
-## Maintainer setup and recovery
-
-The connector in an agent's chat and `gh` on the VM have separate logins. SSH
-push access also does not authenticate the GitHub REST API. Check the CLI with:
-
-```bash
-gh auth status --hostname github.com
-```
-
-If needed, start the official browser login flow on the VM:
-
-```bash
-gh auth login --hostname github.com --git-protocol ssh --web --skip-ssh-key
-```
-
-Open `https://github.com/login` in a regular browser and sign in, then open
-`https://github.com/login/device` and enter the one-time code printed by the
-CLI. Approve GitHub CLI using the intended account. Codes expire; restart the
-command to obtain a fresh code rather than putting an old code in this guide.
-`--skip-ssh-key` preserves the existing SSH identity without uploading another.
-The CLI uses a credential store when available and can fall back to its
-owner-only configuration file on a headless VM.
-
-After replacing the handoff files, the maintainer can validate them and sync
-GitHub's repository Actions secrets:
-
-```bash
-python3 /home/yoav_zibin/.config/buildplay-mobile-ci-handoff/configure-github-secrets.py --check-only
-python3 /home/yoav_zibin/.config/buildplay-mobile-ci-handoff/configure-github-secrets.py
-```
-
-The GitHub account/token needs repository **Secrets write** permission to
-update secrets and **Actions write** permission to request workflow runs.
-These are maintainer operations, separate from routine app development.
-The helper accepts `--rerun-failed RUN_ID` to rerun a specific failed run
-after uploading the credentials; without that option it only updates secrets.
-
-The workflow expects all four secrets: `ASC_KEY_P8`, `ASC_KEY_ID`,
-`ASC_ISSUER_ID`, and `APPLE_TEAM_ID`. The `.p8` must retain its original PEM
-BEGIN/END lines and actual newlines, rather than base64 text, a filename or
-literal `\n` sequences. Issuer ID and Apple Developer Team ID are different
-identifiers. The matching team must have active Apple Developer membership
-and an App Store Connect app record matching `IOS_PORTAL_BUNDLE_ID`.
-The existing `fun.buildplay.sample` record can be reused for the real portal
-if the maintainer chooses it; the temporary sample source project is removed.
-
-Repository variables `TESTFLIGHT_ENABLED=true` and a nonempty
-`IOS_PORTAL_BUNDLE_ID` enable the portal upload after the unsigned iOS build
-and metadata check succeed. Uploads are restricted to
-pushes to `main` and manual runs on `main`. Leave this shared setting to the
-maintainer. A new run/attempt receives a distinct archive build number.
-`invalidPEMDocument` means the key could not be parsed; resolve the key format
-before investigating certificates or provisioning. The CI archive uses an ad hoc
-signing identity to preserve entitlements without requiring an Apple Development
-private key on an ephemeral Mac. The App Store Connect export then performs
-distribution signing using the existing API key and cloud-managed certificates.
-Do not revoke a shared development certificate to repair a missing CI private
-key. Simulator success alone does not prove TestFlight signing or upload
-succeeded. An archive can also succeed while IPA export fails with
-**Cloud signing permission error**:
-the Account Holder/Admin must check access to cloud-managed distribution
-certificates and distribution provisioning for the CI team/key. Active
-membership and an app record alone do not establish that permission. See
-[Apple cloud-managed certificates](https://developer.apple.com/help/account/certificates/cloud-managed-certificates/).
-
-For Android's current debug APK workflows, no Apple key, Google Play service
-account or private release keystore is required. A signed Android release uses
-the separate configuration described in [android/VM_BUILD.md](../android/VM_BUILD.md);
-the example `/var/lib/playroom-build/private` paths there are a provisioning
-recipe, not a claim that a release keystore is installed on this VM.
-
-## Prompt for a student agent
-
-```text
-Work in my separate checkout of yoav-zibin/course on the course VM.
-Read AGENTS.md, docs/mobile-development-on-vm.md and the app's README.
-Implement my requested Android/iOS change and integrate current upstream main.
-Run local checks relevant to the change, then push directly to main without a PR.
-Skip suites that would not exercise the change; a full local suite run, including
-native Android/iOS tests, is not a pre-push requirement. Use CI for broad validation
-and address failures when they appear.
-Use the existing Portal apps GitHub Actions workflow for both platforms.
-Verify its result and give me the run/artifact link and installation steps.
-Reuse the documented toolchain and existing CI secrets. Keep credentials
-outside Git and logs. Use disposable local test data; do not change the
-production backend, real student accounts or shared signing configuration.
-```
-
-See also the [Android portal](../android/README.md), [Android VM release build](../android/VM_BUILD.md),
-and [iOS portal](../frontends/ios-game-portal/README.md) guides. Official references:
-[GitHub CLI login](https://cli.github.com/manual/gh_auth_login),
-[setting Actions secrets](https://cli.github.com/manual/gh_secret_set),
-and [Apple team API keys](https://developer.apple.com/documentation/appstoreconnectapi/creating-api-keys-for-app-store-connect-api).
+See [Apple cloud-managed certificates](https://developer.apple.com/help/account/certificates/cloud-managed-certificates/),
+[team API keys](https://developer.apple.com/documentation/appstoreconnectapi/creating-api-keys-for-app-store-connect-api),
+and [GitHub CLI login](https://cli.github.com/manual/gh_auth_login).

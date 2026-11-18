@@ -204,7 +204,9 @@ def test_online_random_stream_matches_cryptography_across_blocks():
     assert b''.join(int(x).to_bytes(4,'little') for x in words) == expected
 
 
-def test_portal_canonicalizes_before_rendering_and_preserves_query(api):
+def test_portal_serves_shared_shell_without_redirecting_or_losing_query(api):
     response = api.client.get('/portal?game=example', follow_redirects=False)
-    assert response.status_code == 307
-    assert response.headers['location'] == '/static/portal.html?game=example'
+    assert response.status_code == 200
+    assert response.request.url.query == b'game=example'
+    assert response.content == api.client.get('/static/portal.html').content
+    assert '/static/app/_expo/static/js/web/' in response.text

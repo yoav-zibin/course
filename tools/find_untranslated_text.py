@@ -36,12 +36,11 @@ ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "static"
 ALLOWLIST = Path(__file__).with_name("i18n_untranslated_allowlist.json")
 
-# Pages and scripts that are converted first; the test requires them to stay clean.
+# Retained Admin/Auth pages and the stored-game compatibility bridge. The player
+# UI now lives in React Native TSX, outside this HTML/DOM-specific scanner.
 PRIORITY = [
-    "portal.html", "portal.js", "portal-practice.js", "portal-speed.js", "portal-install.js",
-    "portal-match-layout.js", "portal-offline.js", "portal-feedback.js",
-    "auth.js", "common.js", "push-notifications.js", "storage-pages.js",
-    "feedback-dialog.js", "invites.html", "invites.js", "referral-pages.js",
+    "auth.js", "common.js", "storage-pages.js", "declarative-ui.js",
+    "invites.html", "invites.js", "referral-pages.js",
 ]
 
 # Not page text: the language library itself, the service worker, game-side helpers.

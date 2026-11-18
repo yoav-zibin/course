@@ -1,0 +1,1 @@
+{"platforms":["apple","android"],"apple":{"modules":["BuildPlayRuntimeModule"],"podspecPath":"BuildPlayRuntime.podspec"},"android":{"modules":["com.buildplay.runtime.BuildPlayRuntimeModule"]}}

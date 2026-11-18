@@ -1,11 +1,11 @@
-"""Keep browser practice on the same deterministic API as server games."""
+"""Keep shared web/native practice on the deterministic server game API."""
 from pathlib import Path
 
 from game_platform.game_logic import _PRELUDE
 
 
-def test_browser_practice_uses_the_server_runtime_prelude():
-    source = (Path(__file__).parents[1] / "static" / "portal-practice.js").read_text(
+def test_shared_practice_uses_the_server_runtime_prelude():
+    source = (Path(__file__).parents[1] / "frontends" / "portal" / "src" / "game" / "practicePrelude.ts").read_text(
         encoding="utf-8"
     )
     browser_prelude = source.split("const PRACTICE_PRELUDE = String.raw`", 1)[1].split("`;", 1)[0]

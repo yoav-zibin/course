@@ -10,4 +10,13 @@ test-results/
 .venv/
 audit-report/
 
+# Shared Expo application: generated platform projects and web bundles.
+frontends/portal/android/
+frontends/portal/ios/
+frontends/portal/.expo/
+frontends/portal/dist/
+frontends/portal/modules/*/android/build/
+frontends/portal/modules/*/android/.cxx/
+static/app/
+
 # Generated guided-builder review artifacts (not source).

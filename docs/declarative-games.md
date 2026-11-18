@@ -11,10 +11,10 @@ same presentation code can run in QuickJS inside an iOS or Android app. The
 native host renders ordinary boards, pieces and controls from its JSON output;
 the game supplies no HTML, DOM operations or WebView UI.
 
-The portal includes the browser renderer for this contract. A native client
-still needs to implement the renderer and host bridge described below; this
-format alone is not a shipped SwiftUI/UIKit renderer. Existing HTML games are retained only in the read-only
-[legacy archive](html-game-retirement.md) until migration.
+The shared React Native client in `frontends/portal` renders this contract on
+web, Android and iOS. It uses the same SVG scene components and an isolated,
+bounded QuickJS module on native platforms. Existing HTML games remain only in
+the read-only [legacy archive](html-game-retirement.md).
 
 The authoritative contract is
 [`schemas/declarative-ui.schema.json`](../schemas/declarative-ui.schema.json),

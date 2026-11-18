@@ -3,7 +3,6 @@ const assert = require("node:assert/strict");
 const vm = require("node:vm");
 const fs = require("node:fs");
 const path = require("node:path");
-const Offline = require("../../static/portal-offline.js");
 
 const source = fs.readFileSync(path.join(__dirname, "../../static/common.js"), "utf8");
 // The reporting code, without the rest of the page's helpers.
@@ -94,36 +93,4 @@ test("reporting never throws, even when the network call does", () => {
     throw new Error("offline");
   };
   assert.doesNotThrow(() => context.reportClientError("script_error", "x"));
-});
-
-test("a full device storage is reported to the server as storage_full", () => {
-  const reports = [];
-  globalThis.reportClientError = (kind, message) => reports.push({ kind, message });
-  try {
-    // The probe is a 1-byte write, so a denied store falls back to memory
-    // instead: a quota is a store that accepts tiny writes and refuses
-    // larger ones.
-    const map = new Map();
-    const storage = {
-      getItem: (k) => map.get(k) || null,
-      setItem: (k, v) => { if (v.length > 10) throw Error("quota"); map.set(k, v); },
-    };
-    const o = new Offline(storage, undefined, () => ({ id: "alice", password: "t" }), () => false);
-    assert.throws(() => o.write({ responses: {}, queues: {}, archives: [] }), /Device storage is full/);
-    assert.equal(reports[0].kind, "storage_full");
-    assert.match(reports[0].message, /Device storage is full or unavailable/);
-  } finally {
-    delete globalThis.reportClientError;
-  }
-});
-
-test("the offline cache works on pages that have no error reporting", () => {
-  delete globalThis.reportClientError;
-  const map = new Map();
-  const storage = {
-    getItem: (k) => map.get(k) || null,
-    setItem: (k, v) => { if (v.length > 10) throw Error("quota"); map.set(k, v); },
-  };
-  const o = new Offline(storage, undefined, () => ({ id: "alice", password: "t" }), () => false);
-  assert.throws(() => o.write({ responses: {}, queues: {}, archives: [] }), /Device storage is full/);
 });

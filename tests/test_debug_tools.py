@@ -19,14 +19,13 @@ DEBUG_PATHS = (
     "/console",
     "/portal",
     "/static/welcome.html",
-    "/static/welcome.css",
-    "/static/welcome.js",
     "/browse",
     "/static/common.css",
     "/static/common.js",
     "/static/console.js",
     "/static/browse.js",
-    "/static/portal.js",
+    "/static/app/entry.json",
+    "/portal-worker.js",
 )
 
 
@@ -35,10 +34,12 @@ def test_debug_pages_are_served(api: Api, path: str) -> None:
     assert api.request("GET", path).status_code == 200
 
 
-def test_root_serves_the_welcome_page(api: Api) -> None:
+def test_root_serves_the_shared_player_application(api: Api) -> None:
     response = api.client.get("/", follow_redirects=False)
     assert response.status_code == 200
-    assert "Game platform · Welcome" in response.text
+    assert 'id="root"' in response.text
+    assert "/static/app/_expo/static/js/web/" in response.text
+    assert response.content == api.client.get("/portal").content
 
 
 def test_debug_tools_can_be_disabled() -> None:
@@ -53,6 +54,9 @@ def test_debug_endpoints_are_not_in_the_api_schema(api: Api) -> None:
     paths = api.ok("GET", "/openapi.json")["paths"]
     assert all(not path.startswith("/v2/admin") for path in paths)
     assert sorted(path for path in paths if not path.startswith("/v2/") and path != "/storage/capabilities") == [
+        "/auth/app-sessions",
+        "/auth/app-sessions/{token}/complete",
+        "/auth/app-sessions/{token}/exchange",
         "/auth/config",
         "/auth/email/start",
         "/auth/email/verify",
@@ -204,5 +208,5 @@ def test_browsers_revalidate_pages_and_scripts(api: Api) -> None:
         return api.request("GET", path).headers.get("cache-control")
 
     assert {
-        path: cache_control(path) for path in ("/portal", "/static/portal.js", "/games")
-    } == {"/portal": "no-cache", "/static/portal.js": "no-cache", "/games": None}
+        path: cache_control(path) for path in ("/portal", "/portal-worker.js", "/games")
+    } == {"/portal": "no-cache", "/portal-worker.js": "no-cache", "/games": None}

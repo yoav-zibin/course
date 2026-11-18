@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, type Page } from '@playwright/test';
-import { createUser, createGame, loginAs, uniqueName } from '../e2e/helpers';
+import { createUser, createGame, loginAs, uniqueName } from '../frontends/portal/e2e/helpers';
 
 interface Issue { severity: 'error' | 'warn'; kind: string; detail: string }
 
@@ -124,7 +124,7 @@ test('UI audit: report everything that does not look right', async ({ browser, r
   fs.mkdirSync(path.join(outDir, 'screenshots'), { recursive: true });
 
   const user = await createUser(request, uniqueName('Auditor'));
-  await createGame(request, user, uniqueName('Audit game'));
+  await createGame(request, uniqueName('Audit game'));
 
   const results: { page: string; size: string; screenshot: string; issues: Issue[] }[] = [];
 

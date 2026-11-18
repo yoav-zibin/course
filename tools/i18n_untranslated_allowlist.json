@@ -63,6 +63,9 @@
     ],
     "portal.html": [
       "BuildPlay.fun"
+    ],
+    "declarative-ui.js": [
+      "BuildPlay"
     ]
   },
   "ratchet": {

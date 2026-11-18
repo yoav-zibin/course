@@ -16,14 +16,17 @@ def test_preview_portal_disables_service_worker_and_prevents_asset_caching():
         assert entry.headers['cache-control'] == 'no-store'
         assert 'name="local-preview"' in entry.text
         assert "registration.unregister()" in entry.text
-        assert "location.replace('/static/portal.html'+location.search+location.hash)" in entry.text
+        assert "/static/app/_expo/static/js/web/" in entry.text
 
         portal = client.get('/static/portal.html')
         assert portal.status_code == 200
         assert portal.headers['cache-control'] == 'no-store'
         assert 'name="local-preview"' in portal.text
 
-        script = client.get('/static/portal.js?v=20')
+        import json
+        from pathlib import Path
+        manifest = json.loads((Path(__file__).resolve().parents[1] / 'static/app/entry.json').read_text())
+        script = client.get(manifest['scripts'][0])
         assert script.status_code == 200
         assert script.headers['cache-control'] == 'no-store'
         assert 'meta[name="local-preview"]' in script.text

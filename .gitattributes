@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Preserve vendored upstream QuickJS bytes, including its whitespace.
+frontends/portal/modules/game-runtime/cpp/quickjs/* -whitespace

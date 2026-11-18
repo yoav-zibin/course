@@ -1,0 +1,12 @@
+export type JSONValue = null | boolean | number | string | JSONValue[] | { [key: string]: JSONValue };
+// Backend records evolve independently; named fields below are the shared client contract.
+export interface Account { id: string; password: string; display_name: string; picture_url?: string; locale?: string; linked?: any[]; referral_code?: string | null; [key: string]: any }
+export interface Player { player_index: number; kind: 'human' | 'computer'; user_id: string | null; id: string; active?: boolean; name?: string }
+export interface Game { id: string; version: number; name: string; description: string; allowed_player_counts: number[]; renderer_type?: string; declarative_ui?: any; server_code?: string; game_schemas?: any; [key: string]: any }
+export interface Match { id: string; game_id: string; game_version: number; owner_user_id: string; status: string; state?: any; players: Player[]; turn_of_player_indices: number[] | null; move_count: number; created_at: string; [key: string]: any }
+export interface LocalMatch extends Match { localMode: 'pass' | 'computer'; logicState: any; practiceSeed: number; moves: any[]; initialState: any; initialTurn: number[] | null; awaitingHandoff?: boolean }
+export interface QueueEntry { requestId: string; body: { move: any; expected_move_count: number }; baseState: any; baseTurn: number[] | null; savedAt?: string }
+export interface Conflict { message: string; remote?: Match | null }
+export interface AccountData { version: 1; responses: Record<string, any>; queues: Record<string, QueueEntry[]>; conflicts: Record<string, Conflict>; local: Record<string, LocalMatch>; archives: any[]; archivedMatches: any[]; selectedId: string | null; imported?: boolean }
+export type ListKind = 'games' | 'myMatches' | 'openMatches' | 'savedGames' | 'invites';
+export interface PortalState { ready: boolean; baseUrl: string; account: Account | null; accounts: Account[]; profile: any; profiles: Record<string, any>; authConfig: any; games: Game[]; popularGames: Game[]; recentGames: Game[]; myMatches: Match[]; openMatches: Match[]; savedGames: Game[]; invites: any[]; localMatches: LocalMatch[]; selectedMatch: Match | null; selected: Match | null; selectedGame: Game | null; game: Game | null; selectedGameId: string | null; history: any; replayIndex: number | null; pending: number; conflicts: Record<string, Conflict>; archived: any[]; network: boolean; loading: boolean; error: string | null; storageError: string | null; locale: string; query: string; cursors: Partial<Record<ListKind, string | null>> }

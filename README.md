@@ -1,10 +1,9 @@
 # game-platform
 
-**Develop Android or iOS apps with an agent:** start with the
-[course VM and cloud-build guide](docs/mobile-development-on-vm.md). It lists
-the two native apps (BuildPlay for Android and iOS), build/download
-commands, installed VM toolchain, exact
-private credential-file locations, GitHub login steps and a student agent prompt.
+**BuildPlay web, Android and iOS use one application:** the React Native + web
+source lives in [frontends/portal](frontends/portal). Start with the
+[course VM and cloud-build guide](docs/mobile-development-on-vm.md) for local
+development, native builds, existing-account migration and cloud artifacts.
 
 An in-memory REST backend for a multiplayer turn-based games platform, built with FastAPI.
 
@@ -24,8 +23,9 @@ An in-memory REST backend for a multiplayer turn-based games platform, built wit
 [eleven complete games, including Backgammon](games/declarative). Submit a `declarative_ui` package
 instead of game HTML; pure QuickJS presentation turns state messages into JSON
 boards, pieces, images and controls, then requests moves through the existing
-API. The portal includes its renderer; native apps implement the same scene
-contract without a game WebView.
+API. The shared React Native scene renderer runs on web, Android and iOS.
+Native apps execute presentation JavaScript in isolated QuickJS contexts and
+render platform controls without a game WebView.
 
 The renderer keeps action hints visible: games declare each piece's available
 `actions` and `move_targets`, and selecting or dragging a piece highlights its
@@ -76,6 +76,7 @@ in bounded, paginated queries.
 | `api.py`     | FastAPI routes and `create_app`                                 |
 | `main.py`    | Server binary (`game_platform_server`)                          |
 | `static/`    | Web pages: portal, API console and data browser                 |
+| `frontends/portal/` | Shared React Native + web portal and its small native modules; Expo generates the Android/iOS projects |
 | `docs/ab-experiments.md` | Advertisement campaign experiment framework and workflow |
 | `games/`     | The example games' code: tic-tac-toe, poker, take-away and a debug game, plus community game sources |
 | `data.example.json` | Example data: 8 users, the 3 games and 23 matches        |
@@ -986,9 +987,10 @@ the password with each request.
 ## Game API
 
 Games use a [declarative UI package](docs/declarative-games.md): a portable
-JSON scene vocabulary and pure JavaScript presentation reducer. The portal
-renders these games with platform-owned boards, pieces and controls; native
-apps can run the same reducer in QuickJS and implement native scene rendering.
+JSON scene vocabulary and pure JavaScript presentation reducer. The shared
+portal renders these games with React Native boards, pieces and controls on
+all three platforms. Its native QuickJS module executes the same reducer in an
+isolated context on Android and iOS.
 Its JSON `make_move` output uses the normal authoritative move API.
 
 HTML games are retained as a read-only migration archive. `GET /legacy/games`

@@ -1,0 +1,200 @@
+"use strict";
+// Shared portable contract. Keep fixtures in tests/fixtures/declarative in parity.
+function t(key, params, fallback) { return fallback.replace(/\{(\w+)\}/g, (m,k)=>params[k]??m); }
+const num=(v,f=0)=>Number.isFinite(v)?v:f;
+  function assetURI(asset) {
+    const uri = asset?.uri;
+    // Image requests are an outbound channel too: choosing an authored remote
+    // asset based on a private card would disclose that card to its host.
+    return typeof uri === "string" && /^data:image\/(png|jpeg|svg\+xml);base64,[A-Za-z0-9+/=\s]+$/.test(uri) ? uri : null;
+  }
+  function boardCell(board, cell) {
+    const explicit = board.cells?.find(item => item.id === cell);
+    if (explicit) return {x: num(explicit.x), y: num(explicit.y)};
+    if (board.cells?.length) throw new Error(t("ui.declarative.error.unknown_cell", {id:cell}, "Unknown board cell: {id}"));
+    if (board.kind === "grid" && /^(0|[1-9]\d*)$/.test(String(cell))) {
+      const index = Number(cell), rows = board.rows, columns = board.columns;
+      if (index < rows * columns) return {x: (index % columns + .5) * board.width / columns, y: (Math.floor(index / columns) + .5) * board.height / rows};
+    }
+    throw new Error(t("ui.declarative.error.unknown_cell", {id:cell}, "Unknown board cell: {id}"));
+  }
+  function position(spec, item) {
+    const board = spec.boards.find(board => board.id === item.board);
+    if (!board) throw new Error(t("ui.declarative.error.unknown_board", {id:item.board}, "Unknown board: {id}"));
+    const at = item.position || {};
+    const cell = at.cell !== undefined ? boardCell(board, at.cell) : at;
+    return {x: num(board.x) + num(cell.x), y: num(board.y) + num(cell.y), board};
+  }
+  function finiteJSON(value, depth=0) {
+    if(depth>64)throw new Error(t("ui.declarative.error.ui_json_is_nested_too_deeply", {}, "UI JSON is nested too deeply"));
+    if(typeof value==="number"&&!Number.isFinite(value))throw new Error(t("ui.declarative.error.ui_json_contains_a_non_finite_number", {}, "UI JSON contains a non-finite number"));
+    if(value&&typeof value==="object")for(const item of Object.values(value))finiteJSON(item,depth+1);
+  }
+  function validateSpec(spec) {
+    finiteJSON(spec);
+    if(!spec || spec.format!=="buildplay-ui" || spec.version!==1)throw new Error(t("ui.declarative.error.unsupported_declarative_ui_format", {}, "Unsupported declarative UI format"));
+    if(spec.motion!==undefined){
+      knownObject(spec.motion,["move_ms","roll_ms","roll_settle_ms","turn_pause_ms","animate_own","easing"]);
+      for(const key of ["move_ms","roll_ms","roll_settle_ms","turn_pause_ms"])if(key in spec.motion&&(!Number.isInteger(spec.motion[key])||spec.motion[key]<0||spec.motion[key]>5000))throw new Error(t("ui.declarative.error.invalid_numeric_geometry", {}, "Invalid numeric geometry"));
+      if("animate_own" in spec.motion&&typeof spec.motion.animate_own!=="boolean")throw new Error(t("ui.declarative.error.invalid_ui_flag", {}, "Invalid UI flag"));
+      if("easing" in spec.motion&&!["ease-out","ease-in-out-quad"].includes(spec.motion.easing))throw new Error(t("ui.declarative.error.invalid_ui_object_fields", {}, "Invalid UI object fields"));
+    }
+    if(!spec.viewport || !(spec.viewport.width>0) || !(spec.viewport.height>0))throw new Error(t("ui.declarative.error.invalid_viewport", {}, "Invalid viewport"));
+    if(Object.hasOwn(spec.viewport,"camera_enabled")&&typeof spec.viewport.camera_enabled!=="boolean")throw new Error(t("ui.declarative.error.invalid_viewport", {}, "Invalid viewport"));
+    if(!Array.isArray(spec.boards)||!spec.boards.length||spec.boards.length>32)throw new Error(t("ui.declarative.error.expected_1_32_boards", {}, "Expected 1–32 boards"));
+    if(!spec.piece_types||typeof spec.piece_types!=="object"||Array.isArray(spec.piece_types))throw new Error(t("ui.declarative.error.expected_piece_types", {}, "Expected piece types"));
+    for(const type of Object.values(spec.piece_types)){
+      if(type.action_outline!==undefined&&!["rect","ellipse","none"].includes(type.action_outline))throw new Error(t("ui.declarative.error.invalid_ui_object_fields", {}, "Invalid UI object fields"));
+      if(type.font_size!==undefined&&(typeof type.font_size!=="number"||type.font_size<=0||type.font_size>100000))throw new Error(t("ui.declarative.error.invalid_positive_geometry", {}, "Invalid positive geometry"));
+    }
+    if(typeof spec.ui_code!=="string"||spec.ui_code.length>200000)throw new Error(t("ui.declarative.error.invalid_presentation_source", {}, "Invalid presentation source"));
+    for(const board of spec.boards){
+      if(!(board.width>0)||!(board.height>0))throw new Error(t("ui.declarative.error.invalid_board_dimensions", {}, "Invalid board dimensions"));
+      if(board.kind==="grid"&&(!Number.isInteger(board.rows)||!Number.isInteger(board.columns)||board.rows<1||board.columns<1||board.rows*board.columns>2048))throw new Error(t("ui.declarative.error.a_grid_must_contain_1_2048_cells", {}, "A grid must contain 1–2048 cells"));
+      if(board.cells&&(!Array.isArray(board.cells)||board.cells.length>2048))throw new Error(t("ui.declarative.error.too_many_explicit_cells", {}, "Too many explicit cells"));
+    }
+    if(new TextEncoder().encode(JSON.stringify(spec)).length>350000)throw new Error(t("ui.declarative.error.declarative_package_exceeds_the_size_limit", {}, "Declarative package exceeds the size limit"));
+    return spec;
+  }
+  function knownObject(value, allowed, required=[]) {
+    if(!value || typeof value!=="object" || Array.isArray(value) || Object.keys(value).some(key=>!allowed.includes(key)) || required.some(key=>!Object.hasOwn(value,key)))throw new Error(t("ui.declarative.error.invalid_ui_object_fields", {}, "Invalid UI object fields"));
+  }
+  const isId=value=>typeof value==="string" && value.length<=80 && /^[A-Za-z0-9_.:-]+$/.test(value);
+  function checkPoint(point) {
+    knownObject(point,["x","y"],["x","y"]);
+    if([point.x,point.y].some(value=>typeof value!=="number"||Math.abs(value)>100000))throw new Error(t("ui.declarative.error.invalid_point_geometry", {}, "Invalid point geometry"));
+  }
+  function checkElement(kind,item) {
+    const fields={pieces:["id","type","board","position","text","aria_label","asset","rotation","scale","opacity","z","face","move_targets","selected","hidden","draggable","actions","animation"],targets:["id","board","position","label","aria_label","color","asset","hit_area","preview"],labels:["id","text","x","y","color","font_size"],controls:["id","label","kind","value","min","max","step","options","disabled"],paths:["id","points","color","width"]};
+    const required={pieces:["id","type","board","position"],targets:["id","board","position"],labels:["id","text","x","y"],controls:["id","label","kind"],paths:["id","points"]};
+    knownObject(item,fields[kind],required[kind]);
+    for(const key of ["id","type","board","asset"])if(key in item&&!isId(item[key]))throw new Error(t("ui.declarative.error.invalid_ui_identifier", {}, "Invalid UI identifier"));
+    for(const key of ["text","label","aria_label"])if(key in item&&(typeof item[key]!=="string"||Array.from(item[key]).length>4000||key==="aria_label"&&!item[key].length))throw new Error(t("ui.declarative.error.invalid_display_text", {}, "Invalid display text"));
+    if("color" in item&&!/^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$/.test(item.color))throw new Error(t("ui.declarative.error.invalid_display_color", {}, "Invalid display color"));
+    for(const key of ["selected","hidden","draggable","disabled"])if(key in item&&typeof item[key]!=="boolean")throw new Error(t("ui.declarative.error.invalid_ui_flag", {}, "Invalid UI flag"));
+    for(const key of ["rotation","z","x","y","min","max"])if(key in item&&(typeof item[key]!=="number"||Math.abs(item[key])>100000))throw new Error(t("ui.declarative.error.invalid_numeric_geometry", {}, "Invalid numeric geometry"));
+    for(const key of ["scale","font_size","width","step"])if(key in item&&(!(typeof item[key]==="number"&&item[key]>0)||item[key]>(key==="scale"?100:100000)))throw new Error(t("ui.declarative.error.invalid_positive_geometry", {}, "Invalid positive geometry"));
+    if("opacity" in item&&(typeof item.opacity!=="number"||item.opacity<0||item.opacity>1))throw new Error(t("ui.declarative.error.invalid_opacity", {}, "Invalid opacity"));
+    if("face" in item&&!["front","back"].includes(item.face))throw new Error(t("ui.declarative.error.invalid_piece_face", {}, "Invalid piece face"));
+    if("position" in item){
+      const at=item.position;knownObject(at,["cell","x","y"]);
+      if("cell" in at){if(!isId(at.cell)||"x" in at||"y" in at)throw new Error(t("ui.declarative.error.invalid_cell_position", {}, "Invalid cell position"));}
+      else checkPoint(at);
+    }
+    if("move_targets" in item&&(!Array.isArray(item.move_targets)||item.move_targets.length>2048||item.move_targets.some(value=>!isId(value))||new Set(item.move_targets).size!==item.move_targets.length))throw new Error(t("ui.declarative.error.invalid_move_targets", {}, "Invalid move targets"));
+    if("actions" in item&&(!Array.isArray(item.actions)||item.actions.some(action=>!["tap","move","rotate","flip","scale"].includes(action))||new Set(item.actions).size!==item.actions.length||item.actions.includes("move")&&!item.move_targets?.length))throw new Error(t("ui.declarative.error.invalid_move_targets", {}, "Invalid move targets"));
+    if("animation" in item){
+      knownObject(item.animation,["kind","key","duration_ms","delay_ms"],["kind","key"]);
+      if(!["roll","move","notice"].includes(item.animation.kind))throw new Error(t("ui.declarative.error.invalid_ui_object_fields", {}, "Invalid UI object fields"));
+      if(!isId(item.animation.key))throw new Error(t("ui.declarative.error.invalid_ui_identifier", {}, "Invalid UI identifier"));
+      for(const key of ["duration_ms","delay_ms"])if(key in item.animation&&(!Number.isInteger(item.animation[key])||item.animation[key]<0||item.animation[key]>5000))throw new Error(t("ui.declarative.error.invalid_numeric_geometry", {}, "Invalid numeric geometry"));
+    }
+    if("hit_area" in item){
+      knownObject(item.hit_area,["x","y","width","height"],["x","y","width","height"]);
+      for(const key of ["x","y"])if(typeof item.hit_area[key]!=="number"||Math.abs(item.hit_area[key])>100000)throw new Error(t("ui.declarative.error.invalid_numeric_geometry", {}, "Invalid numeric geometry"));
+      for(const key of ["width","height"])if(typeof item.hit_area[key]!=="number"||item.hit_area[key]<=0||item.hit_area[key]>100000)throw new Error(t("ui.declarative.error.invalid_positive_geometry", {}, "Invalid positive geometry"));
+    }
+    if("preview" in item){
+      // Ghost cells drawn while a destination is hovered, focused, dragged over
+      // or armed by a first touch. Presentation only; the server still decides.
+      if(!Array.isArray(item.preview)||!item.preview.length||item.preview.length>64)throw new Error(t("ui.declarative.error.invalid_target_preview", {}, "Invalid target preview"));
+      for(const cell of item.preview){
+        knownObject(cell,["position","color","asset","rotation","text"],["position"]);
+        knownObject(cell.position,["cell","x","y"]);
+        if("cell" in cell.position){if(!isId(cell.position.cell)||"x" in cell.position||"y" in cell.position)throw new Error(t("ui.declarative.error.invalid_cell_position", {}, "Invalid cell position"));}
+        else checkPoint(cell.position);
+        if("color" in cell&&!/^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$/.test(cell.color))throw new Error(t("ui.declarative.error.invalid_display_color", {}, "Invalid display color"));
+        if("asset" in cell&&!isId(cell.asset))throw new Error(t("ui.declarative.error.invalid_ui_identifier", {}, "Invalid UI identifier"));
+        if("rotation" in cell&&(typeof cell.rotation!=="number"||Math.abs(cell.rotation)>100000))throw new Error(t("ui.declarative.error.invalid_numeric_geometry", {}, "Invalid numeric geometry"));
+        if("text" in cell&&(typeof cell.text!=="string"||Array.from(cell.text).length>40))throw new Error(t("ui.declarative.error.invalid_display_text", {}, "Invalid display text"));
+      }
+    }
+    if(kind==="paths"){
+      if(!Array.isArray(item.points)||item.points.length<2||item.points.length>4096)throw new Error(t("ui.declarative.error.invalid_path_points", {}, "Invalid path points"));
+      item.points.forEach(checkPoint);
+    }
+    if(kind==="controls"){
+      if(!["button","number","choice","text"].includes(item.kind))throw new Error(t("ui.declarative.error.unknown_control_kind", {}, "Unknown control kind"));
+      if("value" in item&&item.value!==null&&!["string","number","boolean"].includes(typeof item.value))throw new Error(t("ui.declarative.error.invalid_control_value", {}, "Invalid control value"));
+      if("min" in item&&"max" in item&&item.min>item.max)throw new Error(t("ui.declarative.error.control_minimum_exceeds_maximum", {}, "Control minimum exceeds maximum"));
+      if("options" in item){
+        if(!Array.isArray(item.options)||item.options.length>100)throw new Error(t("ui.declarative.error.invalid_control_options", {}, "Invalid control options"));
+        for(const option of item.options){knownObject(option,["value","label"],["value","label"]);if(!["string","number","boolean"].includes(typeof option.value)||typeof option.label!=="string"||Array.from(option.label).length>4000)throw new Error(t("ui.declarative.error.invalid_control_option", {}, "Invalid control option"));}
+      }
+      if(item.kind==="choice"&&!item.options?.length)throw new Error(t("ui.declarative.error.choice_controls_need_options", {}, "Choice controls need options"));
+    }
+  }
+  function validateScene(spec, scene) {
+    finiteJSON(scene);
+    knownObject(scene,["pieces","targets","labels","controls","paths"]);
+    if (!scene || typeof scene !== "object" || Array.isArray(scene)) throw new Error(t("ui.declarative.error.ui_response_must_contain_a_scene", {}, "UI response must contain a scene"));
+    const allIds = new Set();
+    for (const [key, limit] of [["pieces", 2048], ["targets", 2048], ["controls", 128], ["labels", 128], ["paths", 128]]) {
+      const items = Object.hasOwn(scene,key) ? scene[key] : [];
+      if (!Array.isArray(items) || items.length > limit) throw new Error(t("ui.declarative.error.too_many", {kind:key}, "Too many {kind}"));
+      const ids = new Set();
+      for (const item of items) {
+        checkElement(key,item);
+        if (!item || typeof item.id !== "string" || ids.has(item.id)) throw new Error(t("ui.declarative.error.duplicate_id", {kind:key}, "Invalid or duplicate {kind} ID"));
+        if(allIds.has(item.id))throw new Error(t("ui.declarative.error.scene_ids_must_be_unique_across_element_kinds", {}, "Scene IDs must be unique across element kinds"));
+        ids.add(item.id);allIds.add(item.id);
+        if (key === "pieces" || key === "targets") position(spec, item);
+        if (key === "pieces" && !Object.hasOwn(spec.piece_types, item.type)) throw new Error(t("ui.declarative.error.unknown_piece_type", {}, "Unknown piece type"));
+        if (item.asset && !Object.hasOwn(spec.assets || {}, item.asset)) throw new Error(t("ui.declarative.error.unknown_asset", {}, "Unknown asset"));
+        for (const cell of key === "targets" ? item.preview || [] : []) {
+          position(spec, {board:item.board, position:cell.position});
+          if (cell.asset && !Object.hasOwn(spec.assets || {}, cell.asset)) throw new Error(t("ui.declarative.error.unknown_asset", {}, "Unknown asset"));
+        }
+      }
+    }
+    const targets = new Set((scene.targets || []).map(target => target.id));
+    for (const piece of scene.pieces || []) for (const target of piece.move_targets || []) if (!targets.has(target)) throw new Error(t("ui.declarative.error.unknown_move_target", {}, "Unknown move target"));
+    return scene;
+  }
+  // Older v1 packages treated every piece as tappable. An explicit empty list
+  // lets new packages mark decoration precisely; destinations also declare move.
+  function pieceActions(piece) {
+    if(piece.hidden)return [];
+    const actions=piece.actions===undefined?["tap"]:piece.actions;
+    return ["tap","move","rotate","flip","scale"].filter(action=>actions.includes(action)||action==="move"&&piece.move_targets?.length);
+  }
+  function actionLabel(action) {
+    if(action==="tap")return t("ui.declarative.hints.tap", {}, "Click");
+    if(action==="move")return t("ui.declarative.hints.move", {}, "Move");
+    if(action==="rotate")return t("ui.declarative.hints.rotate", {}, "Rotate");
+    if(action==="flip")return t("ui.declarative.hints.flip", {}, "Flip");
+    return t("ui.declarative.hints.scale", {}, "Resize");
+  }
+  function contentBounds(spec, scene = {}) {
+    const boxes = spec.boards.map(board => ({x:num(board.x),y:num(board.y),width:board.width,height:board.height}));
+    // Hands and other playable pieces may live outside their board surface.
+    // Include their rotated bodies and legal destinations, but not headings or
+    // instructions placed around the scene by an older game package.
+    for(const piece of scene.pieces || []) {
+      if(piece.hidden)continue;
+      const point=position(spec,piece),board=point.board,type=spec.piece_types[piece.type];
+      const width=num(type.width,board.kind==="grid"?board.width/board.columns*.76:42),height=num(type.height,board.kind==="grid"?board.height/board.rows*.76:width);
+      const angle=num(piece.rotation)*Math.PI/180,scale=num(piece.scale,1);
+      const w=(Math.abs(Math.cos(angle))*width+Math.abs(Math.sin(angle))*height)*scale;
+      const h=(Math.abs(Math.sin(angle))*width+Math.abs(Math.cos(angle))*height)*scale;
+      boxes.push({x:point.x-w/2,y:point.y-h/2,width:w,height:h});
+    }
+    for(const target of scene.targets || []) {
+      const point=position(spec,target),board=point.board;
+      const width=board.kind==="grid"?board.width/board.columns:44,height=board.kind==="grid"?board.height/board.rows:44;
+      boxes.push({x:point.x-width/2,y:point.y-height/2,width,height});
+    }
+    const x=Math.min(...boxes.map(box=>box.x)),y=Math.min(...boxes.map(box=>box.y));
+    return {x,y,width:Math.max(...boxes.map(box=>box.x+box.width))-x,height:Math.max(...boxes.map(box=>box.y+box.height))-y};
+  }
+  function cameraLimits(bounds, zoom) {
+    const width=bounds.width/zoom,height=bounds.height/zoom;
+    // Leave room to bring edge pieces under a finger without letting the board
+    // disappear. The margin stays proportional to the currently visible area.
+    const marginX=width*.18,marginY=height*.18;
+    const left=bounds.x+Math.min(0,(bounds.width-width)/2),top=bounds.y+Math.min(0,(bounds.height-height)/2);
+    return {width,height,minX:left-marginX,maxX:Math.max(left,bounds.x+bounds.width-width)+marginX,
+      minY:top-marginY,maxY:Math.max(top,bounds.y+bounds.height-height)+marginY};
+  }
+
+module.exports={finiteJSON,validateSpec,validateScene,knownObject,assetURI,boardCell,position,pieceActions,contentBounds,cameraLimits};

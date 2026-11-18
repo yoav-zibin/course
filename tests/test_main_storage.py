@@ -40,7 +40,8 @@ def test_data_file_server_has_no_demo_routes(tmp_path):
         assert client.get("/storage/capabilities").json()["pagination"] is False
         root = client.get("/", follow_redirects=False)
         assert root.status_code == 200
-        assert "Game platform · Welcome" in root.text
+        assert 'id="root"' in root.text
+        assert "/static/app/_expo/static/js/web/" in root.text
         for path in ("/demo", "/demo/accounts", "/demo/budget", "/admin/demo-fixtures"):
             assert client.get(path).status_code == 404
 

@@ -1,0 +1,11 @@
+import type { Board, GameSpec, Piece, PieceAction, Point, Scene } from './types';
+export function finiteJSON(value: unknown, depth?: number): void;
+export function knownObject(value: unknown, allowed: string[], required?: string[]): void;
+export function validateSpec(spec: unknown): GameSpec;
+export function validateScene(spec: GameSpec, scene: unknown): Scene;
+export function assetURI(asset?: {uri: string}): string | null;
+export function boardCell(board: Board, cell: string): Point;
+export function position(spec: GameSpec, item: {board: string; position: unknown}): Point & {board: Board};
+export function pieceActions(piece: Partial<Piece>): PieceAction[];
+export function contentBounds(spec: GameSpec, scene?: Scene): Point & {width:number;height:number};
+export function cameraLimits(bounds: Point & {width:number;height:number}, zoom: number): {width:number;height:number;minX:number;maxX:number;minY:number;maxY:number};

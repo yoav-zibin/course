@@ -1,0 +1,50 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const { AndroidConfig, withAndroidManifest, withAppBuildGradle, withDangerousMod } = require('expo/config-plugins');
+
+/** Preserve the former app's no-backup policy and permit an existing debug key. */
+module.exports = function withPortalNative(config) {
+  // Saves live in the app sandbox; the portal does not need shared storage or
+  // permission to draw over other applications from the development template.
+  config = AndroidConfig.Permissions.withBlockedPermissions(config, [
+    'android.permission.READ_EXTERNAL_STORAGE',
+    'android.permission.WRITE_EXTERNAL_STORAGE',
+    'android.permission.SYSTEM_ALERT_WINDOW',
+  ]);
+  config = withAndroidManifest(config, config => {
+    const application = config.modResults.manifest.application?.[0];
+    if (application) {
+      application.$['android:allowBackup'] = 'false';
+      application.$['android:fullBackupContent'] = '@xml/portal_backup_rules';
+      application.$['android:dataExtractionRules'] = '@xml/portal_data_extraction_rules';
+      let localHttp = false;
+      try {
+        const api = new URL(config.extra?.apiUrl);
+        localHttp = process.env.BUILDPLAY_LOCAL_TEST === '1' && api.protocol === 'http:' &&
+          ['localhost', '127.0.0.1', '[::1]', '10.0.2.2'].includes(api.hostname);
+      } catch {}
+      application.$['android:usesCleartextTraffic'] = localHttp ? 'true' : 'false';
+    }
+    return config;
+  });
+  config = withDangerousMod(config, ['android', async config => {
+    const directory = path.join(config.modRequest.platformProjectRoot, 'app/src/main/res/xml');
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, 'portal_backup_rules.xml'),
+      '<?xml version="1.0" encoding="utf-8"?>\n<full-backup-content><exclude domain="sharedpref" path="." /></full-backup-content>\n');
+    fs.writeFileSync(path.join(directory, 'portal_data_extraction_rules.xml'),
+      '<?xml version="1.0" encoding="utf-8"?>\n<data-extraction-rules><cloud-backup><exclude domain="sharedpref" path="." /></cloud-backup><device-transfer><exclude domain="sharedpref" path="." /></device-transfer></data-extraction-rules>\n');
+    return config;
+  }]);
+  return withAppBuildGradle(config, config => {
+    // The Expo template's bundled development key gives reproducible future
+    // debug builds. An existing installation may need its original VM key.
+    if (!config.modResults.contents.includes('BUILDPLAY_ANDROID_DEBUG_KEYSTORE')) {
+      config.modResults.contents = config.modResults.contents.replace(
+        /storeFile file\(['"]debug\.keystore['"]\)/,
+        "storeFile file(System.getenv('BUILDPLAY_ANDROID_DEBUG_KEYSTORE') ?: 'debug.keystore')"
+      );
+    }
+    return config;
+  });
+};

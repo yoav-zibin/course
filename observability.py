@@ -245,7 +245,7 @@ def setup_logging(level: str, log_format: Literal["text", "json"], log_file: str
 # "token_pot" and "pass_and_play" are not, and hiding them would hide what to reproduce.
 _SECRET_KEY: Final = re.compile(
     r"password|passwd|passcode|secret|(^|[_-])token$|api[_-]?key|authorization|credential"
-    r"|private[_-]?key|cookie|verification|vapid|smtp",
+    r"|private[_-]?key|cookie|verification|vapid|smtp|(^|[_-])verifier$|callback[_-]?url",
     re.I,
 )
 _MAX_STRING: Final = 400
@@ -1230,12 +1230,13 @@ def _iso_time(epoch: float) -> str:
 
 
 def _omit_request_bodies(scope: Scope) -> bool:
-    """Reproduction evidence and review notes stay in the private bug store."""
+    """Keep private bug evidence and native login proofs out of request logs."""
     path = scope["path"]
     root = scope.get("root_path", "").rstrip("/")
     if root and path.startswith(root + "/"):
         path = path[len(root):]
-    return path == "/game-server-bugs" or path.startswith("/game-server-bugs/")
+    return (path == "/game-server-bugs" or path.startswith("/game-server-bugs/")
+            or path == "/auth/app-sessions" or path.startswith("/auth/app-sessions/"))
 
 
 class RequestLogMiddleware:

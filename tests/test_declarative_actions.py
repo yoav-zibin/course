@@ -129,22 +129,16 @@ def test_protocol_schema_and_probe_expose_rotation_scaling_without_publishing(ap
     assert response.status_code == 200, response.text
     assert response.json()["local_state"] == {"rotation": 180, "scale": 1.5}
     assert api.client.get("/games").json() == []
-    assert "/static/declarative-ui.js?v=22" in client_document(spec())
-    assert "/static/declarative-ui.css?v=22" in client_document(spec())
+    assert "/static/app/compat.js" in client_document(spec())
+    assert "/static/declarative-ui.js" not in client_document(spec())
 
 
 def legacy_client_document(ui, asset_query=""):
-    current = client_document(ui)
-    # Fail clearly when the current host advances: a no-op replacement would
-    # silently stop exercising the exact older recorded template below.
-    assert 'href="/static/declarative-ui.css?v=22"' in current
-    assert 'src="/static/declarative-ui.js?v=22"' in current
-    return current.replace('href="/static/declarative-ui.css?v=22"',
-                                      f'href="/static/declarative-ui.css{asset_query}"').replace(
-        'src="/static/declarative-ui.js?v=22"', f'src="/static/declarative-ui.js{asset_query}"')
+    from game_platform.declarative_ui import _legacy_client_document
+    return _legacy_client_document(ui, asset_query=asset_query)
 
 
-@pytest.mark.parametrize("asset_query", ["", "?v=2", "?v=3", "?v=4", "?v=5", "?v=6", "?v=7", "?v=8", "?v=9", "?v=10", "?v=11", "?v=12", "?v=13", "?v=14", "?v=15", "?v=16", "?v=17", "?v=18", "?v=19", "?v=20", "?v=21"])
+@pytest.mark.parametrize("asset_query", ["", "?v=2", "?v=3", "?v=4", "?v=5", "?v=6", "?v=7", "?v=8", "?v=9", "?v=10", "?v=11", "?v=12", "?v=13", "?v=14", "?v=15", "?v=16", "?v=17", "?v=18", "?v=19", "?v=20", "?v=21", "?v=22"])
 def test_exact_legacy_platform_host_keeps_recorded_body_and_hash_unchanged(asset_query):
     from game_platform.agent_import import GameImport
     from game_platform import game_traces as traces
@@ -186,5 +180,18 @@ def test_legacy_host_recognition_does_not_accept_modified_html_or_unknown_versio
     assert not accepted_platform_host(request["declarative_ui"], modified)
     assert embedded_spec(modified) is None
     request["client_code"] = modified
+    with pytest.raises(ValidationError):
+        GameImport.model_validate(request)
+
+
+def test_unknown_future_legacy_platform_asset_version_is_not_trusted():
+    from game_platform.agent_import import GameImport
+    from pydantic import ValidationError
+
+    request = declarative_payload()
+    unknown = legacy_client_document(request["declarative_ui"], "?v=23")
+    assert not accepted_platform_host(request["declarative_ui"], unknown)
+    assert embedded_spec(unknown) is None
+    request["client_code"] = unknown
     with pytest.raises(ValidationError):
         GameImport.model_validate(request)

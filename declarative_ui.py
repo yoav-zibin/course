@@ -224,11 +224,27 @@ class DeclarativeLogic:
 
 
 def client_document(spec):
-    """Platform-owned compatibility host for existing test/practice clients."""
-    return _client_document(spec, asset_query="?v=22")
+    """Compatibility document using the same React Native web game renderer."""
+    return _client_document(spec, asset_query="")
 
 
 def _client_document(spec, *, asset_query):
+    def data(value):
+        # Recorded test payloads canonicalize object-key order. Keep the generated
+        # host byte-identical after a stored submission is loaded again.
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True).replace("<", "\\u003c")
+    return (
+        '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<style>html,body,#root{height:100%;margin:0}body{background:#10141f}#root{display:flex}</style><div id="root"></div>'
+        '<script type="application/json" id="i18n-strings">' + data(spec.get("strings", {})) + '</script>'
+        '<script type="application/json" id="declarative-spec">' + data(spec) + '</script>'
+        '<script src="/static/app/compat.js"></script>'
+    )
+
+
+# Exact historical templates are retained only to verify recorded import hashes.
+# They are never selected by the player application or emitted for new games.
+def _legacy_client_document(spec, *, asset_query):
     def data(value):
         # Recorded test payloads canonicalize object-key order. Keep the generated
         # host byte-identical after a stored submission is loaded again.
@@ -257,27 +273,28 @@ def accepted_platform_host(spec, code):
     """
     return code in (
         client_document(spec),
-        _client_document(spec, asset_query="?v=21"),
-        _client_document(spec, asset_query="?v=20"),
-        _client_document(spec, asset_query="?v=19"),
-        _client_document(spec, asset_query="?v=18"),
-        _client_document(spec, asset_query="?v=17"),
-        _client_document(spec, asset_query="?v=16"),
-        _client_document(spec, asset_query="?v=15"),
-        _client_document(spec, asset_query="?v=14"),
-        _client_document(spec, asset_query="?v=13"),
-        _client_document(spec, asset_query="?v=12"),
-        _client_document(spec, asset_query="?v=11"),
-        _client_document(spec, asset_query="?v=10"),
-        _client_document(spec, asset_query="?v=9"),
-        _client_document(spec, asset_query="?v=8"),
-        _client_document(spec, asset_query="?v=7"),
-        _client_document(spec, asset_query="?v=6"),
-        _client_document(spec, asset_query="?v=5"),
-        _client_document(spec, asset_query="?v=4"),
-        _client_document(spec, asset_query="?v=3"),
-        _client_document(spec, asset_query="?v=2"),
-        _client_document(spec, asset_query=""),
+        _legacy_client_document(spec, asset_query="?v=22"),
+        _legacy_client_document(spec, asset_query="?v=21"),
+        _legacy_client_document(spec, asset_query="?v=20"),
+        _legacy_client_document(spec, asset_query="?v=19"),
+        _legacy_client_document(spec, asset_query="?v=18"),
+        _legacy_client_document(spec, asset_query="?v=17"),
+        _legacy_client_document(spec, asset_query="?v=16"),
+        _legacy_client_document(spec, asset_query="?v=15"),
+        _legacy_client_document(spec, asset_query="?v=14"),
+        _legacy_client_document(spec, asset_query="?v=13"),
+        _legacy_client_document(spec, asset_query="?v=12"),
+        _legacy_client_document(spec, asset_query="?v=11"),
+        _legacy_client_document(spec, asset_query="?v=10"),
+        _legacy_client_document(spec, asset_query="?v=9"),
+        _legacy_client_document(spec, asset_query="?v=8"),
+        _legacy_client_document(spec, asset_query="?v=7"),
+        _legacy_client_document(spec, asset_query="?v=6"),
+        _legacy_client_document(spec, asset_query="?v=5"),
+        _legacy_client_document(spec, asset_query="?v=4"),
+        _legacy_client_document(spec, asset_query="?v=3"),
+        _legacy_client_document(spec, asset_query="?v=2"),
+        _legacy_client_document(spec, asset_query=""),
     )
 
 

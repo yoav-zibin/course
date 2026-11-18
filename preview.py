@@ -23,7 +23,7 @@ STATIC = Path(__file__).resolve().parent / "static"
 # with the pages: a missing area answers "not available in the local preview".
 FORWARDED = frozenset({
     "auth", "users", "games", "matches", "v2", "i18n", "push", "invites",
-    "matchmaking", "storage", "feedback", "client-errors", "batch",
+    "matchmaking", "storage", "feedback", "client-errors", "batch", "game-proposals",
 })
 
 
@@ -62,13 +62,13 @@ void (async () => {{
     await Promise.all(registrations
       .filter((registration) =>
         [registration.active, registration.waiting, registration.installing]
-          .some((worker) => worker?.scriptURL.endsWith("/static/portal-sw.js")))
+          .some((worker) => worker?.scriptURL.endsWith("/static/portal-sw.js") || worker?.scriptURL.endsWith("/portal-worker.js")))
       .map((registration) => registration.unregister()));
   }}
   if ("caches" in window) {{
     const names = await caches.keys();
     await Promise.all(names
-      .filter((name) => name.startsWith("playroom-portal-shell-"))
+      .filter((name) => name.startsWith("playroom-portal-shell-") || name.startsWith("buildplay-shared-"))
       .map((name) => caches.delete(name)));
   }}
   {redirect}
@@ -81,7 +81,7 @@ void (async () => {{
 
     @app.get("/static/portal.html")
     async def local_portal_page():
-        html = (STATIC / "portal.html").read_text(encoding="utf-8")
+        html = (STATIC / "app/index.html").read_text(encoding="utf-8")
         return preview_html(html)
 
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
@@ -92,13 +92,13 @@ void (async () => {{
             page = path or "portal"
             if page == "privacy":
                 return FileResponse(STATIC / "privacy.html")
-            html = (STATIC / f"{page}.html").read_text(encoding="utf-8")
+            html = (STATIC / "app/index.html").read_text(encoding="utf-8")
             notice = f'<div style="padding:8px 16px;background:#26304a;color:#eef0f5;font:12px/1.5 sans-serif">Local UI preview · Connected to {escape(parsed.netloc)}. Accounts and saved games use the live course server.</div>'
             if '<div class="sidebar-footer">' in html:
                 html = html.replace('<div class="sidebar-footer">', '<div class="sidebar-footer">' + notice, 1)
             else:
                 html = html.replace("</header>", "</header>" + notice, 1)
-            return preview_html(html, redirect_to_static=page == "portal")
+            return preview_html(html)
         if request.method == "GET" and path.startswith("r/") and path.count("/") == 1:
             # A short invite link: like the backend, open the portal with the code as
             # the inviter (here, so the redirect stays on the preview).

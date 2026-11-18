@@ -1,185 +1,182 @@
-# The repository's two native apps: BuildPlay for Android and iOS.
-# Android builds/tests on Ubuntu and publishes BuildPlay.apk on main pushes.
-# iOS builds and runs tests on a hosted Mac. The TestFlight job is maintainer opt-in;
-# see docs/mobile-development-on-vm.md for credentials, bundle ID and access.
 name: Portal apps
-
 on:
   workflow_dispatch:
     inputs:
       ios_runner:
-        description: Standard Mac runner (try the other image if capacity is delayed)
+        description: Standard Mac runner
         type: choice
         required: true
         default: macos-26-intel
-        options:
-          - macos-26-intel
-          - macos-15-intel
+        options: [macos-26-intel, macos-15-intel]
   push:
     branches: [main]
-    paths:
-      - "android/**"
-      - "frontends/ios-game-portal/**"
-      - ".github/workflows/portal-apps.yml"
-  pull_request:
-    paths:
-      - "android/**"
-      - "frontends/ios-game-portal/**"
-      - ".github/workflows/portal-apps.yml"
+    paths: ['frontends/portal/**', '.github/workflows/portal-apps.yml']
 
 jobs:
-  android-portal:
-    name: BuildPlay Android (APK)
+  shared-client:
+    name: Shared portal checks
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # update the rolling portal-apps release
     defaults:
       run:
-        working-directory: android
+        working-directory: frontends/portal
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontends/portal/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  android-portal:
+    name: BuildPlay Android (standalone APK)
+    runs-on: ubuntu-latest
+    needs: shared-client
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      BUILDPLAY_VARIANT: debug
+      EXPO_PUBLIC_API_URL: https://buildplay.fun
+    defaults:
+      run:
+        working-directory: frontends/portal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontends/portal/package-lock.json
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "21"
-      - name: Unit tests
-        run: |
-          chmod +x gradlew
-          set -o pipefail
-          ./gradlew :app:testDebugUnitTest --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/buildplay-test.log"
-      - name: Build debug APK (points at https://buildplay.fun)
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+      - run: npx expo prebuild --platform android --no-install --no-clean
+      - name: Build APK with embedded JavaScript
         run: |
           set -o pipefail
-          ./gradlew :app:assembleDebug --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/buildplay-build.log"
-      - name: Publish Gradle logs (summary + artifact)
+          bash android/gradlew --project-dir android --no-daemon --max-workers=2 \
+            -Pandroid.enableMinifyInReleaseBuilds=false :app:assembleRelease \
+            2>&1 | tee "$GITHUB_WORKSPACE/buildplay-build.log"
+          cp android/app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/BuildPlay.apk"
+      - name: Enable emulator acceleration
+        run: sudo chmod a+rw /dev/kvm
+      - name: Test native account upgrade and launch standalone app
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader -feature -Vulkan -no-snapshot -noaudio -no-boot-anim
+          working-directory: frontends/portal
+          script: |
+            bash android/gradlew --project-dir android --no-daemon --max-workers=2 -PreactNativeArchitectures=x86_64 :legacy-portal:connectedDebugAndroidTest
+            bash scripts/smoke-android.sh "$GITHUB_WORKSPACE/BuildPlay.apk" "$GITHUB_WORKSPACE/android-test-results"
+            adb shell svc wifi disable
+            adb shell svc data disable
+            python3 scripts/native-smoke.py com.dapillah.gameportal.debug "$GITHUB_WORKSPACE/android-test-results"
+      - uses: actions/upload-artifact@v4
         if: always()
-        working-directory: ${{ github.workspace }}
-        run: |
-          for f in buildplay-test.log buildplay-build.log; do
-            if [ -f "$f" ]; then
-              { echo "## $f — last 200 lines"; echo '```'; tail -n 200 "$f"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-            fi
-          done
+        with:
+          name: BuildPlay-android-test-results
+          path: |
+            android-test-results/
+            frontends/portal/modules/legacy-portal/android/build/reports/androidTests/
+          if-no-files-found: warn
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: BuildPlay-gradle-logs
-          path: |
-            buildplay-test.log
-            buildplay-build.log
-          if-no-files-found: ignore
-      - name: Rename APK for a stable download name
-        run: cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/BuildPlay.apk"
+          path: buildplay-build.log
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
           name: BuildPlay-android-apk
           path: BuildPlay.apk
           retention-days: 90
-      - name: Publish APK to the rolling release
+      - name: Update rolling APK download
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: portal-apps
           name: BuildPlay apps (latest builds)
           body: |
-            Latest cloud builds of the BuildPlay apps.
-
-            **Android (BuildPlay):** download `BuildPlay.apk` below on your phone and install it
-            (allow "Install unknown apps" for your browser when asked). The app connects to
-            https://buildplay.fun — sign in as a guest and play.
+            BuildPlay uses one React Native application for Android, iOS and web.
+            Download BuildPlay.apk to install the standalone Android app.
           prerelease: true
           make_latest: false
           files: BuildPlay.apk
 
   ios-portal:
-    name: BuildPlay iOS (simulator build and tests)
-    # The ARM runner pool has failed to acquire runners; standard Intel Macs
-    # also run iOS Simulator tests without requiring a paid larger runner.
-    # macOS 15 repeatedly stalled WebKit/GPU processes during local gameplay.
+    # Preserve the upstream runner fix after macOS15 WebKit/GPU stalls.
+    name: BuildPlay iOS (simulator build and launch)
+    needs: shared-client
     runs-on: ${{ inputs.ios_runner || 'macos-26-intel' }}
-    timeout-minutes: 35
+    timeout-minutes: 50
+    env:
+      EXPO_PUBLIC_API_URL: https://buildplay.fun
+    defaults:
+      run:
+        working-directory: frontends/portal
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontends/portal/package-lock.json
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
-      - name: Build app and UI tests for the iOS Simulator (unsigned)
-        id: ios-build
+      - run: npm ci
+      - run: npx expo prebuild --platform ios --no-install --no-clean
+      - working-directory: frontends/portal/ios
+        run: pod install
+      - name: Build standalone simulator app
         run: |
           mkdir -p "$GITHUB_WORKSPACE/ios-test-results"
           set -o pipefail
-          xcodebuild \
-            -project frontends/ios-game-portal/GamePortal.xcodeproj \
-            -scheme GamePortal \
-            -configuration Debug \
-            -destination 'generic/platform=iOS Simulator' \
+          xcodebuild -workspace ios/BuildPlay.xcworkspace -scheme BuildPlay \
+            -configuration Release -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$GITHUB_WORKSPACE/ios-portal-build" \
-            ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            build-for-testing 2>&1 | tee "$GITHUB_WORKSPACE/ios-test-results/build.log"
-      - name: Verify distribution metadata in the built app
+            ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee "$GITHUB_WORKSPACE/ios-test-results/build.log"
+      - name: Check bundle metadata and embedded JavaScript
         run: |
-          app="$GITHUB_WORKSPACE/ios-portal-build/Build/Products/Debug-iphonesimulator/GamePortal.app"
+          app="$GITHUB_WORKSPACE/ios-portal-build/Build/Products/Release-iphonesimulator/BuildPlay.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$app/Info.plist")" = BuildPlay
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$app/Info.plist")" = AppIcon
-          /usr/libexec/PlistBuddy -c 'Print :UILaunchScreen' "$app/Info.plist"
-          test -f "$app/Assets.car"
-      - name: Zip the simulator app
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")" = edu.columbia.gameportal.starter
+          test -f "$app/main.jsbundle"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "$GITHUB_WORKSPACE/BuildPlay-simulator.zip"
+      - name: Launch simulator and capture screen
+        timeout-minutes: 8
         run: |
-          cd "$GITHUB_WORKSPACE/ios-portal-build/Build/Products/Debug-iphonesimulator"
-          ditto -c -k --sequesterRsrc --keepParent GamePortal.app "$GITHUB_WORKSPACE/BuildPlay-simulator.zip"
+          bash scripts/smoke-ios-simulator.sh \
+            "$GITHUB_WORKSPACE/ios-portal-build/Build/Products/Release-iphonesimulator/BuildPlay.app" \
+            "$GITHUB_WORKSPACE/ios-test-results"
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: BuildPlay-ios-simulator
           path: BuildPlay-simulator.zip
+          if-no-files-found: warn
           retention-days: 90
-      - name: Test rules, persistence, cache, and mocked online store
-        if: ${{ !cancelled() && steps.ios-build.outcome == 'success' }}
-        run: |
-          set -o pipefail
-          bash frontends/ios-game-portal/scripts/test-models.sh 2>&1 \
-            | tee "$GITHUB_WORKSPACE/ios-test-results/model-tests.log"
-      - name: Run local gameplay and restart tests in an iPhone Simulator
-        if: ${{ !cancelled() && steps.ios-build.outcome == 'success' }}
-        # Leave time for diagnostics/artifacts if simulator or XCTest startup stalls.
-        # Boot (up to 10m), destination acquisition (2m), and the test (5m)
-        # need room for app installation and Xcode's result-bundle finalization.
-        timeout-minutes: 20
-        run: |
-          set -o pipefail
-          bash frontends/ios-game-portal/scripts/test-simulator.sh \
-            "$GITHUB_WORKSPACE/ios-test-results" 2>&1 \
-            | tee "$GITHUB_WORKSPACE/ios-test-results/simulator-tests.log"
-      - name: Export test screenshots
+      - uses: actions/upload-artifact@v4
         if: always()
-        # A stalled Simulator/xcresulttool must not consume the remaining job
-        # allowance before the always-run log and result uploads below.
-        timeout-minutes: 2
-        run: |
-          results="$GITHUB_WORKSPACE/ios-test-results"
-          mkdir -p "$results/screenshots"
-          export_status=0
-          if [ -d "$results/SimulatorTests.xcresult" ]; then
-            xcrun xcresulttool export attachments \
-              --path "$results/SimulatorTests.xcresult" \
-              --output-path "$results/screenshots" || export_status=$?
-          fi
-          if [ -s "$results/simulator.udid" ]; then
-            xcrun simctl io "$(cat "$results/simulator.udid")" screenshot \
-              "$results/screenshots/simulator-final.png" || true
-          fi
-          exit "$export_status"
-      - name: Upload iOS test logs and Xcode results
-        if: always()
-        uses: actions/upload-artifact@v4
         with:
           name: BuildPlay-ios-test-results
           path: ios-test-results/
           if-no-files-found: warn
           retention-days: 14
-      - name: Upload iOS screenshots
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: actions/upload-artifact@v4
         with:
           name: BuildPlay-ios-screenshots
           path: ios-test-results/screenshots/
@@ -188,83 +185,77 @@ jobs:
 
   ios-testflight:
     name: BuildPlay iOS (TestFlight upload)
-    # The maintainer registers a portal bundle ID and grants Apple cloud-signing
-    # access, then sets IOS_PORTAL_BUNDLE_ID and TESTFLIGHT_ENABLED=true.
-    # Reuses ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 and APPLE_TEAM_ID.
     if: vars.TESTFLIGHT_ENABLED == 'true' && vars.IOS_PORTAL_BUNDLE_ID != '' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: ios-portal
     runs-on: ${{ inputs.ios_runner || 'macos-26-intel' }}
+    timeout-minutes: 50
+    env:
+      IOS_PORTAL_BUNDLE_ID: ${{ vars.IOS_PORTAL_BUNDLE_ID }}
+      EXPO_PUBLIC_API_URL: https://buildplay.fun
     defaults:
       run:
-        working-directory: frontends/ios-game-portal
+        working-directory: frontends/portal
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontends/portal/package-lock.json
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
-      - name: Write the App Store Connect API key
+      - run: npm ci
+      - run: npx expo prebuild --platform ios --no-install --no-clean
+      - working-directory: frontends/portal/ios
+        run: pod install
+      - name: Write existing App Store Connect key
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
         run: |
           mkdir -p "$HOME/.appstoreconnect/private_keys"
-          printf '%s' "$ASC_KEY_P8" \
-            > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
-      - name: Archive app for distribution (ad hoc signing)
+          printf '%s' "$ASC_KEY_P8" > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+      - name: Archive for distribution
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          IOS_PORTAL_BUNDLE_ID: ${{ vars.IOS_PORTAL_BUNDLE_ID }}
         run: |
-          # Hosted Macs do not retain Apple Development private keys. Preserve
-          # entitlements with an ad hoc archive, then distribution-sign at export.
-          xcodebuild \
-            -project GamePortal.xcodeproj \
-            -scheme GamePortal \
-            -configuration Release \
-            -destination 'generic/platform=iOS' \
-            -archivePath "$GITHUB_WORKSPACE/GamePortal.xcarchive" \
-            CODE_SIGN_IDENTITY=- \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            CODE_SIGN_STYLE=Automatic \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+          xcodebuild -workspace ios/BuildPlay.xcworkspace -scheme BuildPlay \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath "$GITHUB_WORKSPACE/BuildPlay.xcarchive" \
+            CODE_SIGN_IDENTITY=- AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" \
-            PRODUCT_BUNDLE_IDENTIFIER="$IOS_PORTAL_BUNDLE_ID" \
-            archive
-      - name: Export the IPA
+            PRODUCT_BUNDLE_IDENTIFIER="$IOS_PORTAL_BUNDLE_ID" archive
+      - name: Export IPA with existing cloud signing access
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          IOS_PORTAL_BUNDLE_ID: ${{ vars.IOS_PORTAL_BUNDLE_ID }}
         run: |
           cat > "$GITHUB_WORKSPACE/ExportOptions.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key><string>app-store-connect</string>
-            <key>teamID</key><string>${APPLE_TEAM_ID}</string>
-            <key>signingStyle</key><string>automatic</string>
-            <key>stripSwiftSymbols</key><true/>
-            <key>manageAppVersionAndBuildNumber</key><false/>
-          </dict>
-          </plist>
+          <plist version="1.0"><dict>
+          <key>method</key><string>app-store-connect</string>
+          <key>teamID</key><string>${APPLE_TEAM_ID}</string>
+          <key>signingStyle</key><string>automatic</string>
+          <key>stripSwiftSymbols</key><true/>
+          <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
           PLIST
-          xcodebuild -exportArchive \
-            -archivePath "$GITHUB_WORKSPACE/GamePortal.xcarchive" \
+          xcodebuild -exportArchive -archivePath "$GITHUB_WORKSPACE/BuildPlay.xcarchive" \
             -exportPath "$GITHUB_WORKSPACE/export" \
             -exportOptionsPlist "$GITHUB_WORKSPACE/ExportOptions.plist" \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
       - name: Upload to TestFlight
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
-          xcrun altool --upload-app \
-            --type ios \
-            --file "$GITHUB_WORKSPACE/export/GamePortal.ipa" \
-            --apiKey "$ASC_KEY_ID" \
-            --apiIssuer "$ASC_ISSUER_ID"
+          ipa=$(python3 -c 'import glob, os; paths = glob.glob(os.environ["GITHUB_WORKSPACE"] + "/export/*.ipa"); assert len(paths) == 1; print(paths[0])')
+          test -n "$ipa"
+          xcrun altool --upload-app --type ios --file "$ipa" \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"

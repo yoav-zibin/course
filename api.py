@@ -1564,8 +1564,8 @@ MasterPassword = Depends(_check_master_password)
 
 @debug_router.get("/")
 def index() -> FileResponse:
-    """Serve the welcome page; its browser-side account check forwards signed-in players."""
-    return FileResponse(_STATIC_DIR / "welcome.html")
+    """The web build of the shared React Native player application."""
+    return FileResponse(_STATIC_DIR / "app/index.html")
 
 
 @debug_router.get("/console")
@@ -1574,11 +1574,27 @@ def console() -> FileResponse:
 
 
 @debug_router.get("/portal")
-def portal(request: Request) -> RedirectResponse:
-    # Canonicalize before rendering: a service-worker-triggered reload after
-    # the page becomes interactive discards open menus and in-progress input.
-    query = "?" + request.url.query if request.url.query else ""
-    return RedirectResponse("/static/portal.html" + query, status_code=307)
+def portal() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "app/index.html")
+
+
+@debug_router.get("/static/portal.html")
+@debug_router.get("/static/welcome.html")
+def legacy_portal_entry() -> FileResponse:
+    # Old bookmarks, invites and installed PWAs keep their URL and storage origin.
+    return FileResponse(_STATIC_DIR / "app/index.html")
+
+
+@debug_router.get("/portal-worker.js")
+@debug_router.get("/static/portal-sw.js")
+def shared_portal_worker() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "app/worker.js", media_type="text/javascript",
+                        headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"})
+
+
+@debug_router.get("/static/portal.webmanifest")
+def legacy_portal_manifest() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "app/manifest.webmanifest", media_type="application/manifest+json")
 
 
 @debug_router.get("/r/{code}")
@@ -2233,6 +2249,8 @@ def create_app(
     from game_platform.scaling_api import install as install_scaling_api
     install_scaling_api(app, debug_tools=debug_tools)
     app.include_router(auth_router)
+    from game_platform.app_auth import make_router as make_app_auth_router
+    app.include_router(make_app_auth_router(_get_platform, _get_caller_id))
     app.include_router(i18n_router)
     app.include_router(push_router)
     app.middleware("http")(_choose_locale)

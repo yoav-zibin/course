@@ -8,6 +8,26 @@ on:
   pull_request:
 
 jobs:
+  portal-web:
+    name: Shared portal and web build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontends/portal/package-lock.json
+      - run: npm --prefix frontends/portal ci
+      - run: npm run typecheck:portal
+      - run: npm run test:portal
+      - run: npm run build:portal
+      - run: tar -czf portal-web.tar.gz -C static app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BuildPlay-web
+          path: portal-web.tar.gz
+
   production-runtime:
     runs-on: ubuntu-latest
     steps:
@@ -23,6 +43,7 @@ jobs:
       - run: python -c "import game_platform.main"
 
   unit-tests:
+    needs: portal-web
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,9 +56,15 @@ jobs:
           cache: pip
           cache-dependency-path: game_platform/requirements*.txt
       - run: pip install -r game_platform/requirements-dev.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: BuildPlay-web
+          path: game_platform
+      - run: tar -xzf game_platform/portal-web.tar.gz -C game_platform/static
       - run: python -m pytest game_platform/tests
 
   ui-tests:
+    needs: portal-web
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -58,9 +85,14 @@ jobs:
           cache: npm
           cache-dependency-path: game_platform/package-lock.json
       - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: BuildPlay-web
+          path: game_platform
+      - run: tar -xzf portal-web.tar.gz -C static
       - run: node --test tests/web/*.test.cjs
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test
+      - run: npx playwright test -c frontends/portal/playwright.config.ts
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
@@ -74,6 +106,9 @@ jobs:
     runs-on: ubuntu-latest
     concurrency: deploy
     steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: BuildPlay-web
       - name: Check the tested revision is still main
         id: revision
         env:
@@ -97,17 +132,32 @@ jobs:
           printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
           ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
+          scp -i ~/.ssh/id_deploy portal-web.tar.gz "$VM_USER@$VM_HOST:/tmp/buildplay-web-$GITHUB_SHA.tar.gz"
+          ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" \
+            "sudo mkdir -p /opt/game-platform/web-builds/$GITHUB_SHA && sudo tar -xzf /tmp/buildplay-web-$GITHUB_SHA.tar.gz -C /opt/game-platform/web-builds/$GITHUB_SHA && if [ -d /opt/game-platform/game_platform/static/app ] && [ ! -L /opt/game-platform/game_platform/static/app ]; then sudo mv /opt/game-platform/game_platform/static/app /opt/game-platform/web-builds/$GITHUB_SHA/previous-app; fi && sudo ln -sfnT /opt/game-platform/web-builds/$GITHUB_SHA/app /opt/game-platform/game_platform/static/app"
           ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" "$VM_DEPLOY_COMMAND"
+          ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" \
+            "test \"\$(sudo git -C /opt/game-platform/game_platform rev-parse HEAD)\" = \"$GITHUB_SHA\""
+          ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" \
+            "sudo ln -sfnT /opt/game-platform/web-builds/$GITHUB_SHA/app /opt/game-platform/game_platform/static/app && rm -f /tmp/buildplay-web-$GITHUB_SHA.tar.gz"
       - name: Verify deployed service health
         if: steps.revision.outputs.current == 'true'
         env:
           VM_HOST: ${{ secrets.GCP_VM_HOST }}
           VM_USER: ${{ secrets.GCP_VM_USER }}
+          EXPECTED_REVISION: ${{ github.sha }}
         run: |
           # First startup includes a bounded99-version Firestore recovery.
           deadline=$((SECONDS + 180))
           while [ "$SECONDS" -lt "$deadline" ]; do
-            if curl --fail --silent --show-error --max-time 10 https://buildplay.fun/health; then
+            if curl --fail --silent --show-error --max-time 10 https://buildplay.fun/health && \
+               curl --fail --silent --show-error --max-time 10 https://buildplay.fun/portal | grep -q '/static/app/_expo/static/js/web/'; then
+              curl --fail --silent --show-error --max-time 10 https://buildplay.fun/static/app/entry.json -o /tmp/buildplay-live-entry.json
+              curl --fail --silent --show-error --max-time 10 https://buildplay.fun/static/app/version.json -o /tmp/buildplay-live-version.json
+              python3 -c 'import json, os; assert json.load(open("/tmp/buildplay-live-version.json"))["commit"] == os.environ["EXPECTED_REVISION"]'
+              asset=$(python3 -c 'import json; print(json.load(open("/tmp/buildplay-live-entry.json"))["scripts"][0])')
+              case "$asset" in /static/app/_expo/static/js/web/*.js) ;; *) exit 1 ;; esac
+              curl --fail --silent --show-error --max-time 30 "https://buildplay.fun$asset" -o /dev/null
               exit 0
             fi
             sleep 5
