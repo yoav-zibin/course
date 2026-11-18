@@ -13,6 +13,23 @@ Running every suite locally is not a pre-push requirement, including native iOS
 and Android suites. Use CI for broad validation and address failures when they
 appear. Preserve the direct-push workflow above.
 
+# Updating game content
+
+Use `PATCH /games/{game_id}` as the only game-content update API. Include the
+game's secret or the configured master password in the JSON field
+`game_addition_request_id_and_secret`; account credentials or HTTP Basic alone
+do not authorize this endpoint. Send only changed content fields and omit
+unchanged fields instead of sending `null`. PATCH returns HTTP 200. Both
+`POST /games` and `POST /games/declarative` create new games only (HTTP 201).
+
+Server code, unit tests and mechanical-rule changes need their relevant logic,
+schema, example and random-walk checks. Declarative presentation changes need
+recorded test-flow evidence for the complete merged payload. Name, description,
+textual rules, images and other metadata changes need only their relevant
+artifact/translation checks. A task may independently require a broader audit;
+do not describe that broader coverage as an API requirement for every patch.
+See [the partial-update contract](docs/agent-game-import.md#updating-a-game).
+
 # Scaling coordination
 
 Before changing storage, Portal or admin pages, read

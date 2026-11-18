@@ -307,6 +307,10 @@ print(published['id'], published['version'])
 
 ## Instructions for a game-writing agent
 
+Use steps 1–6 below for an authorized new-game task. For an explicitly authorized
+edit to an existing game, use the update workflow afterward. Keep unrelated games
+and production settings outside the task's scope.
+
 1. Read the agreed spreadsheet row and instruction document, if supplied. State
    variants and supported player counts. Do not copy or edit an existing game.
 2. Read the contracts linked above. Design rules, legal moves, hidden-information
@@ -340,6 +344,28 @@ print(published['id'], published['version'])
    published; never claim otherwise.
 6. Obtain deployment/publication authorization where needed before submitting to
    production. Do not alter production settings, existing games or other users' games.
+
+For an authorized existing-game edit:
+
+1. Read the current game and identify its exact game ID. Read its submission secret
+   or the configured master password privately; never paste it into prompts, logs,
+   source control or saved payload artifacts.
+2. Prepare only the changed content fields for `PATCH /games/{game_id}`. Inject
+   `game_addition_request_id_and_secret` when sending the request. Omit unchanged
+   fields instead of sending `null`; schemas are part of `unit_tests`, not a
+   separate `game_schemas` field. Account credentials or HTTP Basic alone do not
+   authorize this endpoint.
+3. For server code, unit tests or mechanical rules, run their relevant correctness,
+   schema, example, determinism and random-walk checks. For declarative presentation
+   changes, test the complete merged package and record the required REST flow
+   with the same update credential. For names, descriptions, textual rules, images
+   and other metadata, use the relevant artifact/translation checks. Keep any
+   broader audit coverage explicitly required by the task; the API does not require
+   random walks or test-page evidence for every metadata patch.
+4. Send the PATCH, expect HTTP 200, and verify the returned game ID/version and
+   requested changes. Preserve its original secret and historical versions. If the
+   response is lost, inspect that same game before retrying. Both POST game routes
+   create new games only and must not be used to update an existing game.
 
 For a batch, assign one game per agent only when delegation is explicitly
 requested. Keep credentials out of agent prompts and payload artifacts. Track

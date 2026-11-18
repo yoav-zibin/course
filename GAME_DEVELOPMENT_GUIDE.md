@@ -4,6 +4,9 @@ All playable games use a declarative presentation package and authoritative
 JavaScript rules. Start with [Authoring declarative games](docs/declarative-games.md)
 and the [interaction requirements](docs/declarative-game-requirements.md).
 
+Use the numbered steps to create a new game. For an authorized edit to an existing
+game, follow the partial-update instructions below.
+
 1. Write deterministic rules implementing the [server game API](docs/server-side-game-api.md).
 2. Define state, move and view schemas and complete initial, intermediate and terminal examples.
 3. Build a `declarative_ui` package conforming to [the schema](schemas/declarative-ui.schema.json).
@@ -20,7 +23,9 @@ and the [interaction requirements](docs/declarative-game-requirements.md).
 Update an existing game only through `PATCH /games/{game_id}`, including its
 submission secret or the configured master password in
 `game_addition_request_id_and_secret`. Send only the content fields that should
-change. Server logic and unit-test changes run server checks and random walks;
+change; omit unchanged fields instead of sending `null`. PATCH returns HTTP 200;
+the POST routes create new games only (HTTP 201). Server logic, unit-test and
+mechanical-rule changes run server checks and random walks;
 presentation changes require the recorded test flow for the complete resulting
 payload. Name, textual rules, images and other metadata edits need only the
 relevant artifact/translation checks. See [partial updates](docs/agent-game-import.md#updating-a-game)

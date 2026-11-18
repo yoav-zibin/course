@@ -69,10 +69,22 @@ regression that verifies the rules as well as the repair. Existing resource
 limits and JSON schemas remain requirements. Unknown peak memory measurements
 must stay identified as unknown; they are not reconstructed exact peaks.
 
-A fix must reach the stored game through the existing complete, tested
-[game resubmission flow](agent-game-import.md), targeting the same `game_id`.
-Changing a repository example alone does not update an imported game. Verify
-the published version and replay the failing call before recording `fixed`:
+A fix must reach the same stored game through
+[`PATCH /games/{game_id}`](agent-game-import.md#updating-a-game). Put the game's
+secret or privately read master password in `game_addition_request_id_and_secret`
+and send only changed fields; omit unchanged fields rather than sending `null`.
+For a server-only repair, send `server_code` and the credential. Include
+`unit_tests` or mechanical-rule fields only when they also change. Schemas come
+from `unit_tests`; do not send a separate `game_schemas` field. The bug-evidence
+API's HTTP Basic authentication does not replace the PATCH body credential.
+
+Run the corresponding logic/example/schema checks and random walks for server,
+test or mechanical-rule changes. Record the full test flow for the merged payload
+when changing declarative presentation; metadata-only edits need lightweight
+artifact/translation checks. Keep any additional audit coverage the task requires.
+POST game routes create new games only; PATCH returns HTTP 200. Changing a
+repository example alone does not update an imported game. Verify the returned
+published game ID/version and replay the failing call before recording `fixed`:
 
 ```bash
 python3 ops/game-server-bugs/review.py examine <bug-id> \
