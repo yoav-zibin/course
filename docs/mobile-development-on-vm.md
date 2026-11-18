@@ -23,6 +23,7 @@ for cloud builds. The Linux VM itself cannot run Xcode or the iOS Simulator.
 | --- | --- | --- |
 | `android/` — BuildPlay Android | Portal apps | `BuildPlay-android-apk` |
 | `frontends/ios-game-portal/` — BuildPlay iOS | Portal apps | `BuildPlay-ios-simulator` |
+| iOS model tests and iPhone Simulator UI tests | Portal apps | `BuildPlay-ios-test-results`, `BuildPlay-ios-screenshots` |
 
 These are the repository's only two native applications. The temporary Android
 and iOS samples and the paused legacy iOS Builder app have been removed. Its standalone HTML game examples have also been retired.
@@ -60,6 +61,29 @@ runtime. It cannot be installed on a physical iPhone. For a configured signed Bu
 build, use Apple's TestFlight app after the CI upload and Apple's processing
 finish and a maintainer grants tester access. Existing tester membership is
 not automatically created by the build workflow.
+
+The iOS job also runs the local rules/persistence, cache, and mocked online-store
+tests, then launches an available iPhone simulator to test local gameplay,
+handoffs, closing/reopening the app, and restoring a match. Permanent screenshots
+show Discover, the restored match, and the finished game; a failing UI test adds
+a failure screenshot. These tests use local or mocked data. They do not establish
+compatibility with the live online game API.
+
+Logs, the `.xcresult` test bundle, and extracted screenshots are uploaded even
+when a test fails, with 14-day retention. Agents on this Linux VM can inspect them
+through GitHub CLI without a local Mac:
+
+```bash
+gh run view RUN_ID --repo yoav-zibin/course --log
+gh run download RUN_ID --repo yoav-zibin/course \
+  --name BuildPlay-ios-screenshots --dir /tmp/buildplay-ios-screenshots
+gh run download RUN_ID --repo yoav-zibin/course \
+  --name BuildPlay-ios-test-results --dir /tmp/buildplay-ios-test-results
+```
+
+The screenshots artifact contains ordinary image files for viewing on the VM;
+the full `.xcresult` can also be opened in Xcode on a Mac. If compilation or
+simulator startup fails before screenshots exist, inspect the test-results logs.
 
 Routine student builds reuse repository Actions secrets automatically. They
 do not require copying private keys into a checkout or resetting secrets.

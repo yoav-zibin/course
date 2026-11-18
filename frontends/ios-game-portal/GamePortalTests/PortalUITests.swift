@@ -1,6 +1,21 @@
 import XCTest
 
 final class PortalUITests: XCTestCase {
+    override func tearDownWithError() throws {
+        if let testRun, testRun.failureCount > 0 {
+            // Capture the whole device even if the app crashed or failed to launch.
+            attachScreenshot(XCUIScreen.main.screenshot(), named: "Failure - \(name)")
+        }
+        try super.tearDownWithError()
+    }
+
+    private func attachScreenshot(_ screenshot: XCUIScreenshot, named name: String) {
+        let attachment = XCTAttachment(screenshot: screenshot)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     func testLocalMatchFlow() {
         let app = XCUIApplication()
         continueAfterFailure = false
@@ -11,10 +26,7 @@ final class PortalUITests: XCTestCase {
             app.buttons["Play as guest  →"].tap()
         }
         app.tabBars.buttons["Discover"].tap()
-        let discover = XCTAttachment(screenshot: app.screenshot())
-        discover.name = "Discover carousel"
-        discover.lifetime = .keepAlways
-        add(discover)
+        attachScreenshot(app.screenshot(), named: "Discover carousel")
         app.tabBars.buttons["Local Matches"].tap()
         XCTAssertTrue(app.staticTexts["Your games on this phone."].waitForExistence(timeout: 5))
         app.tabBars.buttons["Discover"].tap()
@@ -38,6 +50,7 @@ final class PortalUITests: XCTestCase {
         handoff.tap()
         XCTAssertTrue(app.webViews.buttons["Row 1, column 1, X"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.webViews.buttons["Row 1, column 1, X"].isEnabled)
+        attachScreenshot(app.screenshot(), named: "Restored local match")
 
         for (row, col, next) in [(2, 1, firstPlayer), (1, 2, "Player 2"), (2, 2, firstPlayer)] {
             app.webViews.buttons["Row \(row), column \(col), empty"].tap()
@@ -48,10 +61,7 @@ final class PortalUITests: XCTestCase {
         }
         app.webViews.buttons["Row 1, column 3, empty"].tap()
         XCTAssertTrue(app.staticTexts["\(firstPlayer) won"].waitForExistence(timeout: 5))
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "Finished local match"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
+        attachScreenshot(app.screenshot(), named: "Finished local match")
         app.navigationBars.buttons.firstMatch.tap()
         app.buttons["Finished"].tap()
         XCTAssertTrue(app.staticTexts["\(firstPlayer) won"].waitForExistence(timeout: 5))

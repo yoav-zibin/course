@@ -98,7 +98,26 @@ The bundled local game uses its original `state_change` / `next_state` bridge. S
 
 ## Verification
 
-These native checks are optional and are not a pre-push requirement. Choose
+The **Portal apps** GitHub workflow runs all three model test suites below and
+the existing local-gameplay UI test on a hosted Mac. It uploads
+`BuildPlay-ios-test-results` (logs, selected simulator, and `.xcresult`) and
+`BuildPlay-ios-screenshots` (extracted image attachments) on success or failure.
+Screenshots cover Discover, restoring a match after relaunch, and the finished
+game; failed UI tests also capture the device screen. Artifacts are retained for
+14 days. The simulator app ZIP supports both Intel and Apple silicon Macs.
+
+From Linux, retrieve results for inspection with:
+
+```sh
+gh run view RUN_ID --repo yoav-zibin/course --log
+gh run download RUN_ID --repo yoav-zibin/course \
+  --name BuildPlay-ios-screenshots --dir /tmp/buildplay-ios-screenshots
+```
+
+The online-store suite uses mock responses; current online API compatibility
+needs separate integration coverage.
+
+Running these checks locally is optional and is not a pre-push requirement. Choose
 checks relevant to the change as described in [AGENTS.md](../../AGENTS.md).
 
 Run commands from `frontends/ios-game-portal`:
