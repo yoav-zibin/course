@@ -298,6 +298,8 @@
   "ui.portal.history_prev": "← الحركة السابقة",
   "ui.portal.history_next": "الحركة التالية →",
   "ui.portal.history_live": "العودة إلى المباشر",
+  "ui.portal.history_play": "تشغيل سجل الحركات",
+  "ui.portal.history_pause": "إيقاف سجل الحركات مؤقتًا",
   "ui.auth.log_in": "تسجيل الدخول",
   "ui.auth.link_title": "ربط تسجيل دخول بحساب {name}",
   "ui.auth.merge_note": "إذا كان تسجيل الدخول هذا يخص حسابًا آخر لك، فسيُدمج ذلك الحساب في هذا الحساب.",

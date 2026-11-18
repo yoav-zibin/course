@@ -652,6 +652,75 @@ test('history responses for a previously selected match are discarded',async()=>
   assert.equal(t.run('state.replay'),undefined);
 });
 
+test('history responses cannot cross an account change on the same match',async()=>{
+  let release;const response=new Promise(resolve=>release=resolve),t=setup(()=>response);
+  t.run('state.match={id:"same-match",move_count:2};syncGame=async()=>{}');
+  const pending=t.run('browseHistory(-1)');
+  await new Promise(resolve=>setImmediate(resolve));
+  t.run('Auth.current=()=>({id:"other-account"})');
+  release({moves:[{new_state:{private:"old account"},next_turn_player_indices:[0]}],initial_state:null,initial_turn_player_indices:null});
+  await pending;assert.equal(t.run('state.replay'),undefined);
+});
+
+test('only the newest manual history navigation may change the displayed view',async()=>{
+  const requests=[];const t=setup(()=>new Promise(resolve=>requests.push(resolve)));
+  t.run('state.match={id:"same-match",move_count:3};syncGame=async()=>{}');
+  const previous=t.run('browseHistory(-1)');await new Promise(resolve=>setImmediate(resolve));
+  const first=t.run('browseHistory("first")');await new Promise(resolve=>setImmediate(resolve));
+  const data={moves:[1,2,3].map(score=>({new_state:{score},next_turn_player_indices:[0]})),initial_state:{score:0},initial_turn_player_indices:[0]};
+  requests[1](data);await first;requests[0](data);await previous;
+  assert.equal(t.run('state.replay.index'),0);assert.equal(t.run('state.replay.move.new_state.score'),0);
+});
+
+test('history playback waits for the rendered move, pauses and never changes live state',async()=>{
+  const data={moves:[1,2].map(n=>({new_state:{n},next_turn_player_indices:[0]})),initial_state:{n:0},initial_turn_player_indices:[0]};
+  const t=setup(async()=>data);
+  t.run(`state.match={id:"playback",move_count:2,state:{n:2}};
+    globalThis.playbackFrames=[];globalThis.playbackTimers=[];globalThis.playbackIdle=[];
+    globalThis.setTimeout=(fn,ms)=>{playbackTimers.push({fn,ms});return playbackTimers.length;};globalThis.clearTimeout=()=>{};
+    frame.declarative={whenIdle:()=>new Promise(resolve=>playbackIdle.push(resolve))};
+    syncGame=async()=>{playbackFrames.push(state.replay.index);};toggleHistoryPlayback();`);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(Array.from(t.run('playbackFrames')),[0]);
+  assert.equal(t.run('playbackTimers.length'),0,'Do not advance before the rendered initial view is ready');
+  t.run('playbackIdle.shift()()');await new Promise(resolve=>setImmediate(resolve));
+  t.run('playbackTimers.shift().fn()');await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(Array.from(t.run('playbackFrames')),[0,1]);
+  t.run('toggleHistoryPlayback();playbackIdle.shift()()');await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(t.run('historyPlayback'),null);assert.equal(t.run('state.replay.index'),1);
+  assert.equal(t.run('state.match.state.n'),2);assert.equal(t.run('state.match.move_count'),2);
+  assert.equal(t.node('history-play').textContent,'Play history');
+});
+
+test('pausing history while its initial read is pending discards the stale reply',async()=>{
+  let release;const t=setup(()=>new Promise(resolve=>release=resolve));
+  t.run('state.match={id:"playback",move_count:2};frame.declarative={};syncGame=async()=>{};toggleHistoryPlayback()');
+  await new Promise(resolve=>setImmediate(resolve));t.run('toggleHistoryPlayback()');
+  release({moves:[],initial_state:{private:"old history"},initial_turn_player_indices:[0]});
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(t.run('state.replay'),undefined);assert.equal(t.run('historyPlayback'),null);
+});
+
+test('playback stops at its recorded endpoint even if new live moves arrive',async()=>{
+  const data={moves:[1,2,3].map(n=>({new_state:{n},next_turn_player_indices:[0]})),initial_state:{n:0},initial_turn_player_indices:[0]};
+  const t=setup(async()=>data);
+  t.run(`state.match={id:"playback",move_count:2,state:{n:2}};globalThis.playbackTimers=[];globalThis.playbackFrames=[];
+    globalThis.setTimeout=fn=>{playbackTimers.push(fn);return playbackTimers.length;};globalThis.clearTimeout=()=>{};
+    frame.declarative={whenIdle:async()=>{}};syncGame=async()=>{playbackFrames.push(state.replay.index);};toggleHistoryPlayback();`);
+  await new Promise(resolve=>setImmediate(resolve));t.run('state.match={...state.match,move_count:3,state:{n:3}}');
+  for(let index=0;index<3;index++){t.run('playbackTimers.shift()()');await new Promise(resolve=>setImmediate(resolve));}
+  assert.deepEqual(Array.from(t.run('playbackFrames')),[0,1,2]);assert.equal(t.run('historyPlayback'),null);
+  assert.equal(t.run('state.match.state.n'),3);assert.equal(t.run('state.replay.index'),2);
+});
+
+test('missing archived moves stop playback rather than reading forever',async()=>{
+  let reads=0;const t=setup(async()=>{reads++;return{moves:[],initial_state:{n:0},initial_turn_player_indices:[0]};});
+  t.run(`state.match={id:"playback",move_count:2};globalThis.playbackTimers=[];
+    globalThis.setTimeout=fn=>{playbackTimers.push(fn);return playbackTimers.length;};globalThis.clearTimeout=()=>{};
+    frame.declarative={whenIdle:async()=>{}};syncGame=async()=>{};toggleHistoryPlayback();`);
+  await new Promise(resolve=>setImmediate(resolve));t.run('playbackTimers.shift()()');await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(reads,2);assert.equal(t.run('historyPlayback'),null);assert.equal(t.run('playbackTimers.length'),0);
+});
+
 
 test('history reaches a recorded custom initial state at move zero',async()=>{
   const t=setup(async()=>({initial_state:{score:42},initial_turn_player_indices:[1],moves:[{new_state:{score:43},next_turn_player_indices:[0]}]}));
@@ -923,6 +992,19 @@ test('local replay observations stop at the displayed move and never include fut
  assert.equal(result.animate,false);assert.equal(result.baseline,undefined);
  assert.deepEqual(Array.from(result.presentation_history,item=>item.move_count),[1,2,3,4,5]);
  assert.equal(result.presentation_history.at(-1).view.visible,5);
+});
+
+test('adjacent history steps animate every actor in either direction, while jumps snap',async()=>{
+ for(const [previous,next,expected] of [[3,2,true],[1,2,true],[0,2,false]]){
+  const t=transitionSetup(async()=>{throw new Error('Local history went online');});
+  t.run(`frame.lastMessage={move_count:${previous},my_player_index:0,replay:{index:${previous},total:4}};
+    transitionMessage.move_count=${next};transitionMessage.last_move_player_index=0;
+    transitionMessage.replay={index:${next},total:4};`);
+  const result=await t.run('declarativeTransition({id:"m",move_count:4,localMode:"pass",moves:transitionMoves},transitionMessage)');
+  assert.equal(result.animate,expected,`${previous} -> ${next}`);
+  assert.equal(result.baseline,undefined);
+  assert.ok(result.presentation_history.every(item=>item.move_count<=next));
+ }
 });
 
 test('a normal own single move never waits for capability discovery or history',async()=>{

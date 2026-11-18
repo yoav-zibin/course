@@ -298,6 +298,8 @@
   "ui.portal.history_prev": "← Coup précédent",
   "ui.portal.history_next": "Coup suivant →",
   "ui.portal.history_live": "Revenir au direct",
+  "ui.portal.history_play": "Lire l’historique",
+  "ui.portal.history_pause": "Suspendre l’historique",
   "ui.auth.log_in": "Se connecter",
   "ui.auth.link_title": "Associer une connexion à {name}",
   "ui.auth.merge_note": "Si cette connexion appartient à un autre de vos comptes, ce compte est fusionné avec celui-ci.",

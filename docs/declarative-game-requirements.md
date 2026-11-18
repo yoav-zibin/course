@@ -199,8 +199,11 @@ Before accepting a game or host update, verify:
 ## Current implementation notes
 
 The current portal provides the JSON renderer, action hints, zoom/pan and
-actor-based live animations. History navigation currently changes scenes
-immediately: **animated history review is a requirement still to implement**.
+actor-based live animations. Adjacent native history steps animate in both
+directions, including the reviewer's moves. Play history advances in recorded
+order after each animation settles; Pause stops automatic advancement. Manual
+steps or returning to live also stop playback. History remains read-only, and
+reduced-motion users receive immediate scenes with readable playback intervals.
 The schema exposes reusable primitives and per-game piece types, rather than
 the complete shared component collection described above. Rendered minimum
 sizes and the full acceptance checklist require device-level verification;

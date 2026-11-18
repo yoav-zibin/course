@@ -298,6 +298,8 @@
   "ui.portal.history_prev": "← Previous move",
   "ui.portal.history_next": "Next move →",
   "ui.portal.history_live": "Return to live",
+  "ui.portal.history_play": "Play history",
+  "ui.portal.history_pause": "Pause history",
   "ui.auth.log_in": "Log in",
   "ui.auth.link_title": "Link a login to {name}",
   "ui.auth.merge_note": "If this login belongs to another of your accounts, that account is merged into this one.",

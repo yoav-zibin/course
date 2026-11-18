@@ -59,6 +59,38 @@ async function pointer(page: Page, touch: boolean) {
   };
 }
 
+test('a piece supporting taps and moves preserves stationary clicks, keyboard actions and real drops',async({page},testInfo)=>{
+  await page.goto('/static/declarative-test.html');
+  await page.evaluate(async()=>{
+    const w=window as any,box=document.createElement('div');box.id='tap-move-board';
+    box.style.cssText='position:fixed;inset:24px;z-index:9999;background:#102330';document.body.append(box);
+    const spec={format:'buildplay-ui',version:1,viewport:{width:400,height:300},
+      boards:[{id:'table',kind:'zone',width:400,height:300}],
+      piece_types:{card:{shape:'card',width:60,height:80}},
+      ui_code:`const gameUI={reduce(m){const scene={pieces:[
+        {id:'card',type:'card',board:'table',position:{x:70,y:70},actions:['tap','move'],move_targets:['destination']},
+        {id:'decoration',type:'card',board:'table',position:{x:160,y:70},actions:[]}],
+        targets:[{id:'destination',board:'table',position:{x:300,y:180}}]};
+        return {scene,...(m.type==='ui_event'?{make_move:{action:m.event.type}}:{})};}};`};
+    w.tapMoveCommands=[];w.tapMoveHost=w.DeclarativeUI.mount(box,spec,{onMove:(move:any)=>w.tapMoveCommands.push(move)});
+    w.tapMoveMessage={type:'state_changed',status:'ongoing',view:{},move_count:0,my_player_index:0,acting_for_player_index:0};
+    await w.tapMoveHost.send(w.tapMoveMessage);
+  });
+  const card=page.locator('#tap-move-board .declarative-piece[data-ui-id="card"]');
+  const start=await center(card.locator('.declarative-piece-art'));
+  const send=await pointer(page,testInfo.project.name==='mobile');
+  await send('down',start);await send('up',start);
+  await expect.poll(()=>page.evaluate(()=>(window as any).tapMoveCommands),{timeout:5000}).toEqual([{action:'tap'}]);
+  if(testInfo.project.name!=='mobile')await expect(card).toBeFocused();
+  await page.evaluate(()=>(window as any).tapMoveHost.send({...((window as any).tapMoveMessage),move_count:1}));
+  const destination=await center(page.locator('#tap-move-board .declarative-target[data-ui-id="destination"] .declarative-target-area'));
+  await send('down',start);await send('move',destination);await send('up',destination);
+  await expect.poll(()=>page.evaluate(()=>(window as any).tapMoveCommands)).toEqual([{action:'tap'},{action:'drop'}]);
+  await page.evaluate(()=>(window as any).tapMoveHost.send({...((window as any).tapMoveMessage),move_count:2}));
+  await card.focus();await page.keyboard.press('Enter');
+  await expect.poll(()=>page.evaluate(()=>(window as any).tapMoveCommands)).toEqual([{action:'tap'},{action:'drop'},{action:'tap'}]);
+});
+
 test('Backgammon highlights destinations immediately and keeps a held touch checker above and inward from either edge', async ({page}, testInfo) => {
   const {host, checker, art, stage} = await mountBackgammon(page);
   const touch = testInfo.project.name === 'mobile', send = await pointer(page, touch);

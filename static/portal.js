@@ -2047,42 +2047,126 @@ async function gamePresentation(match) {
   return cached?.declarative_ui ? cached : fetchGameVersion(match.game_id, match.game_version);
 }
 
-async function browseHistory(direction) {
+let historyNavigation = 0, historyBusy = null, historyPlayback = null;
+
+function historyPlaybackCurrent(playback) {
+  return historyPlayback === playback && !playback.cancelled &&
+    state.match?.id === playback.matchId && (me()?.id ?? null) === playback.userId;
+}
+
+function stopHistoryPlayback() {
+  const playback = historyPlayback;
+  if (!playback) return;
+  historyPlayback = null;
+  playback.cancelled = true;
+  if (playback.timer !== null) clearTimeout(playback.timer);
+  playback.wake?.();
+  historyNavigation++;
+  historyBusy = null;
+}
+
+function historyPlaybackWait(playback, milliseconds) {
+  if (!historyPlaybackCurrent(playback)) return Promise.resolve(false);
+  return new Promise(resolve => {
+    playback.wake = () => { playback.wake = null; playback.timer = null; resolve(historyPlaybackCurrent(playback)); };
+    playback.timer = setTimeout(playback.wake, milliseconds);
+  });
+}
+
+async function playHistory(playback) {
+  try {
+    const replay = state.replay?.id === playback.matchId ? state.replay : null;
+    if (!replay || replay.index >= playback.end) {
+      if (!await browseHistory("first", playback) || !await historyPlaybackWait(playback, 500)) return;
+    }
+    while (historyPlaybackCurrent(playback) && state.replay?.index < playback.end) {
+      const started = Date.now(), previousIndex = state.replay.index;
+      if (!await browseHistory(1, playback)) return;
+      if (state.replay?.index <= previousIndex) return;
+      // Wait for the actual animation, then leave a readable settled frame.
+      // Reduced-motion and static scenes still have a useful viewing interval.
+      if (!await historyPlaybackWait(playback, Math.max(150, 1440 - (Date.now() - started)))) return;
+    }
+  } finally {
+    if (historyPlayback === playback) { stopHistoryPlayback(); renderHistory(); }
+  }
+}
+
+function toggleHistoryPlayback() {
+  if (historyPlayback) { stopHistoryPlayback(); renderHistory(); return; }
   const match = state.match;
-  if (!match || !match.move_count) return;
-  if (direction === "live") state.replay = null;
-  else try {
+  if (!match?.move_count || !frame.declarative) return;
+  const playback = {matchId:match.id, userId:me()?.id ?? null, end:match.move_count,
+    cancelled:false, timer:null, wake:null};
+  historyPlayback = playback;
+  renderHistory();
+  void playHistory(playback).catch(error => showMessage(I18n.t("ui.portal.history_unavailable",
+    {message:error.message}, `History unavailable: ${error.message}`), "error"));
+}
+
+async function browseHistory(direction, playback = null) {
+  if (!playback) stopHistoryPlayback();
+  else if (!historyPlaybackCurrent(playback)) return false;
+  const match = state.match;
+  if (!match || !match.move_count) return false;
+  const userId = me()?.id ?? null, revision = ++historyNavigation;
+  const currentRequest = () => revision === historyNavigation && state.match?.id === match.id &&
+    (me()?.id ?? null) === userId && (!playback || historyPlaybackCurrent(playback));
+  historyBusy = revision;
+  renderHistory();
+  try {
+    if (direction === "live") state.replay = null;
+    else {
     if (await StoragePages.enabled() && !match.localMode) {
+      if (!currentRequest()) return false;
       const current = state.replay?.id === match.id ? state.replay.index : match.move_count;
-      let index = Math.max(0, Math.min(match.move_count, current + direction));
+      let index = direction === "first" ? 0 : Math.max(0, Math.min(match.move_count, current + direction));
       const data = await portalRequest("GET", `/v2/matches/${match.id}/history?start=${Math.max(0,index-1)}&limit=1`, {user:me()});
-      if (state.match?.id !== match.id) return;
+      if (!currentRequest()) return false;
       const minimum = data.initial_turn_player_indices === null ? 1 : 0;
       index = Math.max(minimum,index);
       const move = index === 0 ? {new_state:data.initial_state,next_turn_player_indices:data.initial_turn_player_indices} : data.items[0];
-      if (move) state.replay = {id:match.id,index,minimum,move};
+      if (!move) return false;
+      state.replay = {id:match.id,index,minimum,move,direction};
     } else {
     const data = await portalRequest("GET", `/matches/${match.id}/history`, {user: me()});
     const moves = data.moves;
     const minimum = data.initial_turn_player_indices === null ? 1 : 0;
-    if (state.match?.id !== match.id) return;
+    if (!currentRequest()) return false;
     const current = state.replay?.id === match.id ? state.replay.index : moves.length;
-    const index = Math.max(minimum, Math.min(moves.length, current + direction));
+    const index = direction === "first" ? minimum : Math.max(minimum, Math.min(moves.length, current + direction));
     const move = index === 0 ? {new_state: data.initial_state, next_turn_player_indices: data.initial_turn_player_indices} : moves[index - 1];
-    if (!move) return;
-    state.replay = {id: match.id, index, minimum, move};
+    if (!move) return false;
+    state.replay = {id: match.id, index, minimum, move, direction};
     }
-  } catch (error) { showMessage(I18n.t("ui.portal.history_unavailable", {message: error.message}, `History unavailable: ${error.message}`), "error"); return; }
-  renderHistory();await syncGame();
+    }
+    renderHistory();
+    await syncGame();
+    if (!currentRequest()) return false;
+    await frame.declarative?.whenIdle?.();
+    return currentRequest();
+  } catch (error) {
+    if (currentRequest()) showMessage(I18n.t("ui.portal.history_unavailable", {message:error.message}, `History unavailable: ${error.message}`), "error");
+    return false;
+  } finally {
+    if (historyBusy === revision) { historyBusy = null; renderHistory(); }
+  }
 }
 function renderHistory() {
+  if (historyPlayback && !historyPlaybackCurrent(historyPlayback)) stopHistoryPlayback();
   const match = state.match, replay = state.replay?.id === match?.id ? state.replay : null;
   const count = match?.move_count || 0;
   $("match-history").hidden = count < 1;
-  $("history-position").textContent = replay ? I18n.t("ui.portal.viewing_move", {index: replay.index, count}, `Viewing move ${replay.index} of ${count} · read only`) : I18n.plural("ui.portal.live_moves", count, {}, {one: "Live · 1 move", many: `Live · ${count} moves`});
-  $("history-back").disabled = (replay?.index ?? count) <= (replay?.minimum ?? 0);
-  $("history-forward").disabled = !replay || replay.index >= count;
+  const arrow = replay?.direction === -1 ? "← " : replay?.direction === 1 ? "→ " : "";
+  $("history-position").textContent = replay ? arrow + I18n.t("ui.portal.viewing_move", {index: replay.index, count}, `Viewing move ${replay.index} of ${count} · read only`) : I18n.plural("ui.portal.live_moves", count, {}, {one: "Live · 1 move", many: `Live · ${count} moves`});
+  $("history-back").disabled = Boolean(historyBusy) || (replay?.index ?? count) <= (replay?.minimum ?? 0);
+  $("history-forward").disabled = Boolean(historyBusy) || !replay || replay.index >= count;
   $("history-live").disabled = !replay;
+  $("history-play").hidden = !frame.declarative;
+  $("history-play").disabled = count < 1;
+  $("history-play").dataset.i18n = historyPlayback ? "ui.portal.history_pause" : "ui.portal.history_play";
+  $("history-play").textContent = historyPlayback ? I18n.t("ui.portal.history_pause", {}, "Pause history") : I18n.t("ui.portal.history_play", {}, "Play history");
+  $("history-play").setAttribute("aria-pressed", String(Boolean(historyPlayback)));
 }
 
 // Texts the script built (badges, buttons, lists, the offline line in the sidebar) are redrawn in
@@ -2164,6 +2248,10 @@ async function declarativeTransition(match, message) {
   if (!frame.declarative || !Number.isSafeInteger(message.move_count)) return {};
   const delta = previous ? message.move_count - previous.move_count : null;
   try {
+    if (message.replay) {
+      return {animate:Boolean(previous && Number.isSafeInteger(previous.move_count) && Math.abs(delta) === 1),
+        presentation_history:await recoverPresentationHistory(match, message)};
+    }
     if (!previous || !Number.isSafeInteger(previous.move_count) || previous.replay || message.replay || delta < 0 || delta > 100) {
       return {animate: false, presentation_history: await recoverPresentationHistory(match, message)};
     }
@@ -2291,7 +2379,7 @@ async function syncGame() {
     mySeat: mySeat ? mySeat.player_index : null,
   });
   message.token_pot = view.token_pot ?? 0;
-  message.last_move_player_index = replay ? null : (match.last_move_player_index ?? null);
+  message.last_move_player_index = replay ? (replay.move.player_index ?? null) : (match.last_move_player_index ?? null);
   // Let game UIs distinguish a historical snapshot from a live opponent turn.
   message.replay = replay ? { index: replay.index, total: match.move_count } : null;
   // The viewer's language and, for a game with a string table, its texts in that language.
@@ -2301,7 +2389,8 @@ async function syncGame() {
   const json = JSON.stringify(message);
   if (json !== state.lastSent) {
     let delivery=null,releaseDelivery=null;
-    if(frame.motion){
+    const ordered = frame.motion || Boolean(message.replay) || Boolean(frame.lastMessage?.replay);
+    if(ordered){
       if(frame.delivery){
         await frame.delivery;
         if(stillCurrent()&&state.loaded===key)return syncGame();
@@ -2311,8 +2400,8 @@ async function syncGame() {
       frame.delivery=delivery;
     }
     try {
-      if(frame.motion) {
-        await frame.declarative.whenIdle();
+      if(ordered) {
+        await frame.declarative?.whenIdle?.();
         if(!stillCurrent()||state.loaded!==key||json===state.lastSent)return;
       }
       const transition = await declarativeTransition(match, message);
@@ -2352,7 +2441,7 @@ async function syncGame() {
 
 async function onMakeMove(move) {
   if (!move || typeof move !== "object" || !Object.hasOwn(move, "move")) return;
-  if (state.moveInFlight || state.replay?.id === state.match?.id) return;
+  if (state.moveInFlight || historyBusy !== null || state.replay?.id === state.match?.id) return;
   const receivedFor = state.match;
   if (!receivedFor || state.loaded !== `${receivedFor.id}@${receivedFor.game_id}@${receivedFor.game_version}`) return;
   const receivedUserId = me()?.id;
@@ -3098,4 +3187,5 @@ async function main() {
 $("history-back").addEventListener("click", () => browseHistory(-1));
 $("history-forward").addEventListener("click", () => browseHistory(1));
 $("history-live").addEventListener("click", () => browseHistory("live"));
+$("history-play").addEventListener("click", toggleHistoryPlayback);
 main();

@@ -298,6 +298,8 @@
   "ui.portal.history_prev": "← Jogada anterior",
   "ui.portal.history_next": "Próxima jogada →",
   "ui.portal.history_live": "Voltar ao ao vivo",
+  "ui.portal.history_play": "Reproduzir histórico",
+  "ui.portal.history_pause": "Pausar histórico",
   "ui.auth.log_in": "Entrar",
   "ui.auth.link_title": "Vincular um login a {name}",
   "ui.auth.merge_note": "Se este login pertencer a outra de suas contas, essa conta será mesclada com esta.",

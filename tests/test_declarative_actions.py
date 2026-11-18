@@ -129,22 +129,22 @@ def test_protocol_schema_and_probe_expose_rotation_scaling_without_publishing(ap
     assert response.status_code == 200, response.text
     assert response.json()["local_state"] == {"rotation": 180, "scale": 1.5}
     assert api.client.get("/games").json() == []
-    assert "/static/declarative-ui.js?v=20" in client_document(spec())
-    assert "/static/declarative-ui.css?v=20" in client_document(spec())
+    assert "/static/declarative-ui.js?v=21" in client_document(spec())
+    assert "/static/declarative-ui.css?v=21" in client_document(spec())
 
 
 def legacy_client_document(ui, asset_query=""):
     current = client_document(ui)
     # Fail clearly when the current host advances: a no-op replacement would
     # silently stop exercising the exact older recorded template below.
-    assert 'href="/static/declarative-ui.css?v=20"' in current
-    assert 'src="/static/declarative-ui.js?v=20"' in current
-    return current.replace('href="/static/declarative-ui.css?v=20"',
+    assert 'href="/static/declarative-ui.css?v=21"' in current
+    assert 'src="/static/declarative-ui.js?v=21"' in current
+    return current.replace('href="/static/declarative-ui.css?v=21"',
                                       f'href="/static/declarative-ui.css{asset_query}"').replace(
-        'src="/static/declarative-ui.js?v=20"', f'src="/static/declarative-ui.js{asset_query}"')
+        'src="/static/declarative-ui.js?v=21"', f'src="/static/declarative-ui.js{asset_query}"')
 
 
-@pytest.mark.parametrize("asset_query", ["", "?v=2", "?v=3", "?v=4", "?v=5", "?v=6", "?v=7", "?v=8", "?v=9", "?v=10", "?v=11", "?v=12", "?v=13", "?v=14", "?v=15", "?v=16", "?v=17", "?v=18", "?v=19"])
+@pytest.mark.parametrize("asset_query", ["", "?v=2", "?v=3", "?v=4", "?v=5", "?v=6", "?v=7", "?v=8", "?v=9", "?v=10", "?v=11", "?v=12", "?v=13", "?v=14", "?v=15", "?v=16", "?v=17", "?v=18", "?v=19", "?v=20"])
 def test_exact_legacy_platform_host_keeps_recorded_body_and_hash_unchanged(asset_query):
     from game_platform.agent_import import GameImport
     from game_platform import game_traces as traces

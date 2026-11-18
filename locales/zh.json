@@ -298,6 +298,8 @@
   "ui.portal.history_prev": "← 上一步",
   "ui.portal.history_next": "下一步 →",
   "ui.portal.history_live": "回到当前",
+  "ui.portal.history_play": "播放历史",
+  "ui.portal.history_pause": "暂停历史",
   "ui.auth.log_in": "登录",
   "ui.auth.link_title": "将登录方式关联到 {name}",
   "ui.auth.merge_note": "如果此登录方式属于你的另一个账号，该账号将合并到当前账号。",

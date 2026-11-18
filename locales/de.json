@@ -298,6 +298,8 @@
   "ui.portal.history_prev": "← Voriger Zug",
   "ui.portal.history_next": "Nächster Zug →",
   "ui.portal.history_live": "Zurück zum Live-Stand",
+  "ui.portal.history_play": "Verlauf abspielen",
+  "ui.portal.history_pause": "Verlauf pausieren",
   "ui.auth.log_in": "Anmelden",
   "ui.auth.link_title": "Anmeldung mit {name} verknüpfen",
   "ui.auth.merge_note": "Gehört diese Anmeldung zu einem anderen deiner Konten, wird dieses Konto mit diesem zusammengeführt.",

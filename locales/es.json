@@ -298,6 +298,8 @@
   "ui.portal.history_prev": "← Jugada anterior",
   "ui.portal.history_next": "Jugada siguiente →",
   "ui.portal.history_live": "Volver al directo",
+  "ui.portal.history_play": "Reproducir historial",
+  "ui.portal.history_pause": "Pausar historial",
   "ui.auth.log_in": "Iniciar sesión",
   "ui.auth.link_title": "Vincular un inicio de sesión a {name}",
   "ui.auth.merge_note": "Si este inicio de sesión pertenece a otra de tus cuentas, esa cuenta se fusiona con esta.",

@@ -339,7 +339,7 @@
     container.append(stage, pieceTools, previewStatus, controls, sceneStatus, errorBox);
     const engine = createEngine(container);
     let latest = null, localState = null, revision = 0, renderedRevision = -1, destroyed = false, moveSent = false, selected = null, dragging = null, nativeDragging = null, currentScene = null, suppressClick = false;
-    let lastStateMoveCount = null, lastStateWasReplay = false, lastStateTurn = null, lastRoundWinner = null, dragPreview = null;
+    let lastStateMoveCount = null, lastStateWasReplay = false, lastStateTurn = null, lastRoundWinner = null, lastViewerSeat = null, dragPreview = null;
     let motionPending=false,motionTimer=null,motionRelease=null,motionReady=Promise.resolve();
     let pointerSequence=0;
     function pointerStarted(){pointerSequence++;}
@@ -463,7 +463,9 @@
       if(drag){
         if(!keepPreview){
           drag.body.removeAttribute("transform");
-          if(drag.nextSibling?.parentNode===stage)stage.insertBefore(drag.node,drag.nextSibling);
+          // Only real dragging raises the node. Re-inserting a stationary,
+          // focused piece here blurs it and suppresses the browser's click.
+          if(drag.moved&&drag.nextSibling?.parentNode===stage)stage.insertBefore(drag.node,drag.nextSibling);
         }
         drag.node.style.pointerEvents="";drag.node.classList.remove("dragging");
         try{drag.node.releasePointerCapture(drag.pointerId);}catch(_){}
@@ -681,13 +683,14 @@
       });
       node.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); if (enabled()) fn(); } });
     }
-    function draw(scene,animate=false,rollEffects=false,turnEnded=false) {
+    function draw(scene,animate=false,rollEffects=false,turnEnded=false,replayEffects=false,preserveOldView=true) {
       const previousPieces=new Map((currentScene?.pieces||[]).map(piece=>[piece.id,piece]));
-      const previousTransforms=new Map();
+      const previousTransforms=new Map(),previousNodes=new Map();
       if(animate&&!global.matchMedia?.("(prefers-reduced-motion: reduce)").matches){
         const stageMatrix=stage.getCTM();
         if(stageMatrix)for(const node of stage.querySelectorAll(".declarative-piece")){
           const matrix=node.getCTM();if(matrix){const relative=stageMatrix.inverse().multiply(matrix);previousTransforms.set(node.dataset.uiId,`matrix(${relative.a},${relative.b},${relative.c},${relative.d},${relative.e},${relative.f})`);}
+          if(replayEffects)previousNodes.set(node.dataset.uiId,node.cloneNode(true));
         }
       }
       for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();
@@ -809,6 +812,16 @@
           node.addEventListener("dragstart",event=>event.preventDefault());}
         stage.append(node);
         const previous=previousPieces.get(piece.id),from=previousTransforms.get(piece.id);
+        if(replayEffects&&piece.animation?.kind!=="roll"&&piece.animation?.kind!=="notice"){
+          const duration=spec.motion?.move_ms??1440;
+          if(!previousNodes.has(piece.id)&&node.animate){
+            const animation=node.animate([{opacity:0},{opacity:1}],{duration,fill:"backwards"});
+            pieceAnimations.add(animation);animation.onfinish=()=>pieceAnimations.delete(animation);
+          }else if(body.animate&&["type","asset","text","color","opacity"].some(key=>previous?.[key]!==piece[key])){
+            const animation=body.animate([{opacity:.25},{opacity:1}],{duration});
+            pieceAnimations.add(animation);animation.onfinish=()=>pieceAnimations.delete(animation);
+          }
+        }
         // Spending a die fades its accepted face into the gray used artwork.
         // A new roll has a different event key and uses the tumble instead.
         if(spec.motion&&(animate||rollEffects)&&piece.animation?.kind==="roll"&&
@@ -841,6 +854,21 @@
             const animation=node.animate(movement.frames,{duration:timing.duration_ms??spec.motion?.move_ms??1440,delay:timing.delay_ms??0,fill:"backwards",easing:movement.easing});
             pieceAnimations.add(animation);animation.onfinish=()=>pieceAnimations.delete(animation);
           }
+        }
+      }
+      // Captured/removed objects visibly leave the recorded scene. Clones have
+      // no listeners and are excluded from interaction and accessibility. Never
+      // carry old private faces across a change of viewing seat.
+      if(replayEffects&&preserveOldView){
+        const visible=new Set((scene.pieces||[]).filter(piece=>!piece.hidden).map(piece=>piece.id));
+        for(const[id,ghost]of previousNodes)if(!visible.has(id)&&ghost.animate){
+          ghost.removeAttribute("data-ui-id");ghost.removeAttribute("tabindex");ghost.removeAttribute("aria-label");
+          ghost.classList.remove("declarative-piece");ghost.classList.add("declarative-history-ghost");
+          ghost.setAttribute("aria-hidden","true");ghost.setAttribute("role","presentation");ghost.style.pointerEvents="none";
+          for(const hint of ghost.querySelectorAll(".declarative-action-badges,.declarative-piece-action-outline"))hint.remove();
+          stage.append(ghost);
+          const animation=ghost.animate([{opacity:1,offset:0},{opacity:.8,offset:.65},{opacity:0,offset:1}],{duration:spec.motion?.move_ms??1440,fill:"forwards"});
+          pieceAnimations.add(animation);animation.onfinish=()=>{pieceAnimations.delete(animation);ghost.remove();};
         }
       }
       // Ghost cells sit above the pieces and below the destinations, so a
@@ -913,8 +941,13 @@
       errorBox.hidden=true;
       if(result.make_move!==undefined && message.type==="ui_event" && canAct()) {moveSent=true;callbacks.onMove?.(clone(result.make_move));}
       else if(message.type==="ui_event")resetDrag();
-      const motionEnabled=message.type==="state_changed"&&options.animate!==false&&(callbacks.animate===true||spec.motion?.animate_own===true)&&!latest?.replay&&!global.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-      const rollEffects=message.type==="state_changed"&&options.animate!==false&&!latest?.replay&&!lastStateWasReplay&&Number.isInteger(lastStateMoveCount)&&Number.isInteger(message.move_count)&&message.move_count>lastStateMoveCount&&!global.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      const reducedMotion=global.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      const adjacentReplay=message.type==="state_changed"&&Boolean(message.replay)&&options.animate===true&&
+        Number.isInteger(lastStateMoveCount)&&Number.isInteger(message.move_count)&&Math.abs(message.move_count-lastStateMoveCount)===1;
+      const motionEnabled=message.type==="state_changed"&&options.animate!==false&&!reducedMotion&&
+        (adjacentReplay||!message.replay&&(callbacks.animate===true||spec.motion?.animate_own===true));
+      const rollEffects=message.type==="state_changed"&&options.animate!==false&&!reducedMotion&&
+        (adjacentReplay||!message.replay&&!lastStateWasReplay&&Number.isInteger(lastStateMoveCount)&&Number.isInteger(message.move_count)&&message.move_count>lastStateMoveCount);
       // The actor belongs to the completed move, not the next turn. Missing
       // metadata snaps conservatively; an own move never animates captures either.
       const actor=message.last_move_player_index;
@@ -922,18 +955,20 @@
       const knownOther=viewer===null||(Number.isInteger(viewer)&&viewer>=0&&viewer<10&&actor!==viewer);
       const view=message.view||message.state;
       const newRound=lastRoundWinner!==null&&view?.round_winner===null;
-      const animate=motionEnabled&&!newRound&&!lastStateWasReplay&&Number.isInteger(lastStateMoveCount)&&Number.isInteger(message.move_count)&&message.move_count>lastStateMoveCount&&Number.isInteger(actor)&&actor>=0&&actor<10&&(knownOther||spec.motion?.animate_own===true);
+      const animate=motionEnabled&&(adjacentReplay||!newRound&&!lastStateWasReplay&&Number.isInteger(lastStateMoveCount)&&Number.isInteger(message.move_count)&&message.move_count>lastStateMoveCount&&Number.isInteger(actor)&&actor>=0&&actor<10&&(knownOther||spec.motion?.animate_own===true));
       // Polls can arrive just after a move starts. Keep the existing elements
       // and their animation clocks when the authoritative scene is unchanged.
-      const preserveEffects=message.type==="state_changed"&&options.animate!==false&&!latest?.replay&&!global.matchMedia?.("(prefers-reduced-motion: reduce)").matches&&(pieceAnimations.size>0||motionPending);
+      const preserveEffects=message.type==="state_changed"&&options.animate!==false&&!reducedMotion&&(pieceAnimations.size>0||motionPending);
       if((motionEnabled||preserveEffects)&&currentScene&&JSON.stringify(scene)===JSON.stringify(currentScene)){
         stage.setAttribute("aria-busy",String(moveSent));updateHints();
-      }else draw(scene,animate,rollEffects,lastStateTurn!==null&&view?.n>lastStateTurn);
+      }else draw(scene,animate,rollEffects,lastStateTurn!==null&&view?.n>lastStateTurn,
+        adjacentReplay&&animate,lastViewerSeat===(message.my_player_index??null));
       if(message.type==="state_changed"){
         lastStateMoveCount=Number.isInteger(message.move_count)?message.move_count:null;
         lastStateWasReplay=Boolean(message.replay);
         lastStateTurn=view?.n??null;
         lastRoundWinner=view?.round_winner??null;
+        lastViewerSeat=message.my_player_index??null;
       }
       callbacks.onScene?.(clone(scene));
       return true;
@@ -953,10 +988,10 @@
     const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
     const data=value=>JSON.stringify(canonical(value)).replace(/</g,"\\u003c");
     return '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<link rel="stylesheet" href="/static/declarative-ui.css?v=20"><div id="declarative-game"></div>' +
+      '<link rel="stylesheet" href="/static/declarative-ui.css?v=21"><div id="declarative-game"></div>' +
       '<script type="application/json" id="i18n-strings">'+data(spec.strings || {})+'<'+'/script>' +
       '<script type="application/json" id="declarative-spec">'+data(spec)+'<'+'/script>' +
-      '<script src="/static/declarative-ui.js?v=20"><'+'/script><script>' +
+      '<script src="/static/declarative-ui.js?v=21"><'+'/script><script>' +
       'const host=DeclarativeUI.mount(document.getElementById("declarative-game"),' +
       'JSON.parse(document.getElementById("declarative-spec").textContent),' +
       '{onMove:move=>parent.postMessage({type:"make_move",move},"*"),' +

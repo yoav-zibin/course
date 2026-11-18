@@ -298,6 +298,8 @@
   "ui.portal.history_prev": "← पिछली चाल",
   "ui.portal.history_next": "अगली चाल →",
   "ui.portal.history_live": "लाइव पर लौटें",
+  "ui.portal.history_play": "इतिहास चलाएँ",
+  "ui.portal.history_pause": "इतिहास रोकें",
   "ui.auth.log_in": "लॉग इन करें",
   "ui.auth.link_title": "{name} से लॉगिन जोड़ें",
   "ui.auth.merge_note": "यदि यह लॉगिन आपके किसी दूसरे खाते का है, तो वह खाता इसमें मर्ज कर दिया जाएगा।",
