@@ -228,6 +228,16 @@ class MonitoringConfig(_Section):
 
 
 class Config(_Section):
+    @model_validator(mode="before")
+    @classmethod
+    def _ignore_retired_model_api(cls, value: object) -> object:
+        # Existing installations can retain the removed Builder's credentials.
+        # Ignore only this retired section so a restart does not require editing
+        # a private config file; every active section still forbids unknown keys.
+        if isinstance(value, dict) and "model_api" in value:
+            return {key: item for key, item in value.items() if key != "model_api"}
+        return value
+
     server: ServerConfig = ServerConfig()
     data_file: DataFileConfig = DataFileConfig()
     firestore: FirestoreConfig = FirestoreConfig()

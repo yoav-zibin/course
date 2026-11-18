@@ -32,6 +32,31 @@ def test_omitted_fields_take_their_defaults(tmp_path: Path) -> None:
     )
 
 
+def test_retired_model_api_does_not_block_restart_or_change_active_settings(tmp_path: Path) -> None:
+    active = {
+        "server": {"port": 9123},
+        "master_password": "existing-master-password",
+        "auth": {"google": {"client_id": "existing-oauth-client"}},
+        "firestore": {"enabled": True, "project_id": "test-project",
+                      "namespace": "production_v3", "allow_default_database_query": True},
+    }
+    original = {**active, "model_api": {"enabled": True, "api_key": "retired-private-key"}}
+    before = json.loads(json.dumps(original))
+    parsed = Config.model_validate(original)
+    assert parsed == Config.model_validate(active)
+    assert original == before
+    assert "model_api" not in parsed.model_dump()
+    assert "retired-private-key" not in parsed.model_dump_json()
+    expected = load_config(_write_config(tmp_path, active))
+    assert load_config(_write_config(tmp_path, original)) == expected
+
+
+@pytest.mark.parametrize("extra", [{"model_apix": {}}, {"server": {"porrt": 9123}}])
+def test_retired_model_api_does_not_relax_other_config_validation(extra: dict) -> None:
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        Config.model_validate({"model_api": {"api_key": "retired-private-key"}, **extra})
+
+
 def test_data_file_path_is_relative_to_the_config_file(tmp_path: Path) -> None:
     config_dir = tmp_path / "conf"
     config_dir.mkdir()
