@@ -4,6 +4,18 @@ Push completed, tested changes directly to `main`; the user does not want pull
 requests. Fetch and integrate current upstream changes and resolve any conflicts
 before pushing. Use the existing CI and deployment workflow.
 
+# Tests before pushing
+
+Fetch and integrate current upstream before final verification. Run all of the
+project's non-mobile test suites locally against the final combined changes;
+targeted tests alone are insufficient. If any project file changes afterward,
+rerun all required non-mobile suites. Do not push while a required suite is
+failing, incomplete, or still running, and do not rely on post-push CI to catch
+failures that local suites would detect.
+
+Native iOS and Android test suites are not required before pushing and must not
+block a push.
+
 # Scaling coordination
 
 Before changing storage, Portal or admin pages, read

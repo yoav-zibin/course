@@ -84,6 +84,9 @@ on persistent storage and perform any authorized restart test.
 
 ## Verification and publication
 
+The native checks below are optional and are not a pre-push requirement. Follow
+the non-mobile verification requirements in [AGENTS.md](../AGENTS.md) before pushing.
+
 The bridge instrumentation test exercises real WebView origin isolation, nested-frame
 spoofing, duplicate messages and state resending. JVM tests cover protocol serialization,
 auth headers, conflict handling and link parsing. The optional live API smoke test
@@ -139,8 +142,3 @@ Before committing, inspect staged paths and
 the diff. The intended additions live entirely under `android/`. Keep local Python
 environments and test-account files outside Git using `.git/info/exclude`. Do not include server data, account files, keys, APKs, or
 local IDE settings. Backend endpoints, schemas and portal/game messages remain unchanged.
-
-The upstream backend suite currently has a pre-existing stale example fixture failure
-at `test_example_data.py::test_the_example_data_file_is_up_to_date` (160 passed, 1 failed after integrating shared main `dab47ed`).
-That unrelated generated-data change is deliberately excluded from the Android
-frontend contribution.

@@ -11,8 +11,10 @@ for cloud builds. The Linux VM itself cannot run Xcode or the iOS Simulator.
 2. Use a separate student checkout on `main`. Do not develop in the running
    backend checkout (`/opt/game-platform`) or the automated auditor's checkout.
 3. Ask the agent to read `AGENTS.md`, this guide and the app's README, implement
-   the change, run appropriate checks, fetch current upstream and push directly
-   to `main`. This repository does not use new branches or pull requests.
+   the change, fetch and integrate current upstream, run all non-mobile test
+   suites locally against the final combined changes, and push directly to
+   `main`. Native Android/iOS tests are not a pre-push requirement. This repository
+   does not use new branches or pull requests.
 4. Open [GitHub Actions](https://github.com/yoav-zibin/course/actions), select
    the workflow below, choose **Run workflow**, and select **main**. Pushes
    that change the relevant app or workflow also start builds automatically.
@@ -186,8 +188,10 @@ recipe, not a claim that a release keystore is installed on this VM.
 ```text
 Work in my separate checkout of yoav-zibin/course on the course VM.
 Read AGENTS.md, docs/mobile-development-on-vm.md and the app's README.
-Implement my requested Android/iOS change, run appropriate local checks,
-integrate current upstream main, and push directly to main without a PR.
+Implement my requested Android/iOS change and integrate current upstream main.
+Run all non-mobile test suites locally against the final combined changes,
+then push directly to main without a PR. Native Android/iOS tests are not
+a pre-push requirement.
 Use the existing Portal apps GitHub Actions workflow for both platforms.
 Verify its result and give me the run/artifact link and installation steps.
 Reuse the documented toolchain and existing CI secrets. Keep credentials
