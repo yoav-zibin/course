@@ -159,8 +159,9 @@ def test_server_code(
     master = random.Random(run_seed)
     started = time.monotonic()
     deadline = started + budget_seconds
-    first_walk_deadline = max(deadline, started + first_walk_budget_seconds) \
-        if first_walk_budget_seconds is not None else deadline
+    first_walk_budget = max(budget_seconds, first_walk_budget_seconds) \
+        if first_walk_budget_seconds is not None else budget_seconds
+    first_walk_deadline = started + first_walk_budget
     walk_seeds = [
         *regression_seeds,
         *(master.getrandbits(32) for _ in range(max_walks)),
@@ -204,7 +205,7 @@ def test_server_code(
                 function="test",
                 message=(
                     "too slow: no random walk finished within the "
-                    f"{budget_seconds:g}-second test budget"
+                    f"{first_walk_budget:g}-second test budget"
                 ),
                 seed=walk_seeds[0] if walk_seeds else 0,
                 player_count=0,

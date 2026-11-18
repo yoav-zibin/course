@@ -244,6 +244,31 @@ def test_no_walk_completed_within_the_budget_is_reported_too_slow(monkeypatch):
     assert report.walks_completed == 0
 
 
+@pytest.mark.parametrize('first_budget,reported_budget', [(None, 8), (30, 30), (2, 8)])
+def test_slow_first_walk_reports_its_effective_allowance(monkeypatch, first_budget, reported_budget):
+    now = [0.0]
+    monkeypatch.setattr(game_testing.time, 'monotonic', lambda: now[0])
+
+    class Walk:
+        def __init__(self, logic, **options):
+            self.deadline = options['deadline']
+            self.failures = []
+            self.move_count = 12
+            self.states_seen = {'board'}
+            self.terminal_states = set()
+
+        def run(self, max_moves):
+            now[0] = self.deadline
+            return False
+
+    monkeypatch.setattr(game_testing, '_Walk', Walk)
+    report = run_game_tests(GOOD_GAME, rules=RULES, run_seed=7, budget_seconds=8,
+                            first_walk_budget_seconds=first_budget)
+    assert not report.passed and report.too_slow
+    assert report.walks_completed == 0
+    assert f'{reported_budget}-second test budget' in report.failures[0].message
+
+
 @pytest.mark.parametrize('walk_duration,expected_deadlines', [
     (12, [30]), (2, [30, 8, 8, 8]),
 ])

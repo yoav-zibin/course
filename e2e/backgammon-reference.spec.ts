@@ -98,7 +98,8 @@ for(const mode of ['computer','pass'] as const)test(`reference checker timing an
   await page.evaluate(async()=>{const w=window as any;await w.referenceHost.send(w.referenceAfter);});
   const records=await finishedRecords(page),moving=records.find((item:any)=>item.id===id);
   expect(records.filter((item:any)=>item.id===id)).toHaveLength(1);
-  expect(moving).toMatchObject({duration:800,delay:0,easing:'linear'});
+  expect(moving).toMatchObject({duration:800,delay:0});
+  expect(moving.easing).toMatch(/^linear\(/);
   const actor=vector.ctx.players.findIndex((player:any)=>player.id===vector.player_id);
   const captured=records.find((item:any)=>item.id.startsWith(`checker_${1-actor}_`));
   expect(captured).toMatchObject({duration:400,delay:400});

@@ -50,15 +50,16 @@
     const cell = at.cell !== undefined ? boardCell(board, at.cell) : at;
     return {x: num(board.x) + num(cell.x), y: num(board.y) + num(cell.y), board};
   }
-  // Sample the same quadratic easing used by physical checker slides. Keeping
-  // this in the host lets portable games declare timing without running clocks.
-  function movementFrames(from,to,easing) {
-    if(easing!=="ease-in-out-quad")return [{transform:from},{transform:to}];
-    const a=new global.DOMMatrix(from),b=new global.DOMMatrix(to);
-    return Array.from({length:21},(_,i)=>{
-      const offset=i/20,p=offset<.5?2*offset*offset:1-Math.pow(-2*offset+2,2)/2;
-      return {offset,transform:`matrix(${["a","b","c","d","e","f"].map(key=>a[key]+(b[key]-a[key])*p).join(",")})`};
-    });
+  const quadraticEasing=`linear(${Array.from({length:21},(_,i)=>{
+    const t=i/20,p=t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+    return `${Number(p.toFixed(6))} ${i*5}%`;
+  }).join(",")})`;
+  function movementTiming(from,to,easing) {
+    if(easing!=="ease-in-out-quad")return {frames:[{transform:from},{transform:to}],easing:"ease-out"};
+    // Ease time, leaving transform decomposition to the browser. Interpolating
+    // matrix coefficients shrinks rotations and collapses a half-turn to zero.
+    return {frames:[{transform:from},{transform:new global.DOMMatrix(to).toString()}],
+      easing:global.CSS?.supports?.("animation-timing-function",quadraticEasing)?quadraticEasing:"ease-in-out"};
   }
   // A fresh worker for every reduction prevents hidden mutable globals from
   // becoming state. Only local_state returned as JSON survives a call.
@@ -785,7 +786,8 @@
           if(before.x!==point.x||before.y!==point.y||num(previous.rotation)!==num(piece.rotation)||num(previous.scale,1)!==num(piece.scale,1)){
             const to=`translate(${point.x}px, ${point.y}px) rotate(${num(piece.rotation)}deg) scale(${num(piece.scale,1)})`;
             const timing=piece.animation?.kind==="move"?piece.animation:{};
-            const animation=node.animate(movementFrames(from,to,spec.motion?.easing),{duration:timing.duration_ms??spec.motion?.move_ms??1440,delay:timing.delay_ms??0,fill:"backwards",easing:spec.motion?.easing==="ease-in-out-quad"?"linear":"ease-out"});
+            const movement=movementTiming(from,to,spec.motion?.easing);
+            const animation=node.animate(movement.frames,{duration:timing.duration_ms??spec.motion?.move_ms??1440,delay:timing.delay_ms??0,fill:"backwards",easing:movement.easing});
             pieceAnimations.add(animation);animation.onfinish=()=>pieceAnimations.delete(animation);
           }
         }
@@ -900,10 +902,10 @@
     const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
     const data=value=>JSON.stringify(canonical(value)).replace(/</g,"\\u003c");
     return '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<link rel="stylesheet" href="/static/declarative-ui.css?v=15"><div id="declarative-game"></div>' +
+      '<link rel="stylesheet" href="/static/declarative-ui.css?v=16"><div id="declarative-game"></div>' +
       '<script type="application/json" id="i18n-strings">'+data(spec.strings || {})+'<'+'/script>' +
       '<script type="application/json" id="declarative-spec">'+data(spec)+'<'+'/script>' +
-      '<script src="/static/declarative-ui.js?v=15"><'+'/script><script>' +
+      '<script src="/static/declarative-ui.js?v=16"><'+'/script><script>' +
       'const host=DeclarativeUI.mount(document.getElementById("declarative-game"),' +
       'JSON.parse(document.getElementById("declarative-spec").textContent),' +
       '{onMove:move=>parent.postMessage({type:"make_move",move},"*"),' +

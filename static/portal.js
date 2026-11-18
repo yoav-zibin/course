@@ -275,6 +275,7 @@ const frame = {
     if (this.declarative) { this.declarative.destroy(); this.declarative = null; }
     this.lastMessage = null;
     this.motion = null;
+    this.delivery = null;
     $("game-box").replaceChildren();
   },
 };

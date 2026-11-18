@@ -5,6 +5,7 @@ import {createUser, loginAs, uniqueName} from './helpers';
 import {backgammonAction,clickBackgammonTarget,ordinaryBackgammonView,spentDice} from './backgammon-helpers';
 
 declare const state: any;
+declare const frame: any;
 declare function pollActiveMatch(): Promise<void>;
 
 const packageFile = path.resolve(__dirname, '../games/declarative/backgammon.json');
@@ -108,6 +109,11 @@ test('a complete computer turn between polls keeps its rolled faces, ready highl
     const values = roll.new_state.last_roll?.values || roll.new_state.moves.slice(0, 2);
     release();
     await expect.poll(() => page.evaluate(() => state.match.move_count),{timeout:30000}).toBe(current.move_count);
+    // Consecutive identical rolls can already match the old dice artwork.
+    // Wait for the accepted timeline to reach its final rendered state and
+    // finish physical playback before asserting that the next player can act.
+    await expect.poll(() => page.evaluate(() => frame.lastMessage?.move_count),{timeout:30000}).toBe(current.move_count);
+    await page.evaluate(() => frame.declarative.whenIdle());
     await expect.poll(() => diceFaces(page), {timeout: 30000}).toEqual(spentDice(values));
     await expect(page.locator('#game-box .declarative-piece.actionable[data-ui-id^="die_"]')).toHaveCount(spentDice(values).length);
     await expect.poll(() => page.evaluate(() => (window as any).rollAnimations.length),{timeout:30000}).toBeGreaterThan(beforeComputerAnimations);
