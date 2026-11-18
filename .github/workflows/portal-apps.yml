@@ -11,10 +11,10 @@ on:
         description: Standard Mac runner (try the other image if capacity is delayed)
         type: choice
         required: true
-        default: macos-15-intel
+        default: macos-26-intel
         options:
-          - macos-15-intel
           - macos-26-intel
+          - macos-15-intel
   push:
     branches: [main]
     paths:
@@ -95,7 +95,8 @@ jobs:
     name: BuildPlay iOS (simulator build and tests)
     # The ARM runner pool has failed to acquire runners; standard Intel Macs
     # also run iOS Simulator tests without requiring a paid larger runner.
-    runs-on: ${{ inputs.ios_runner || 'macos-15-intel' }}
+    # macOS 15 repeatedly stalled WebKit/GPU processes during local gameplay.
+    runs-on: ${{ inputs.ios_runner || 'macos-26-intel' }}
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
@@ -192,7 +193,7 @@ jobs:
     # Reuses ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 and APPLE_TEAM_ID.
     if: vars.TESTFLIGHT_ENABLED == 'true' && vars.IOS_PORTAL_BUNDLE_ID != '' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: ios-portal
-    runs-on: ${{ inputs.ios_runner || 'macos-15-intel' }}
+    runs-on: ${{ inputs.ios_runner || 'macos-26-intel' }}
     defaults:
       run:
         working-directory: frontends/ios-game-portal

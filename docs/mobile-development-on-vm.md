@@ -42,9 +42,11 @@ gh workflow run portal-apps.yml --repo yoav-zibin/course --ref main
 gh run list --repo yoav-zibin/course --workflow portal-apps.yml --limit 5
 ```
 
-The default iOS runner is `macos-15-intel`. If GitHub cannot acquire that image,
-select `macos-26-intel` in the **Run workflow** runner choice, or pass
-`--field ios_runner=macos-26-intel` to `gh workflow run`. Both are standard
+The default iOS runner is `macos-26-intel`. The macOS 15 image repeatedly stalled
+the simulator's WebKit and GPU processes during the local gameplay test, even
+on fresh hosts. If GitHub cannot acquire the default image, `macos-15-intel`
+remains available in the **Run workflow** runner choice, or via
+`--field ios_runner=macos-15-intel` with `gh workflow run`. Both are standard
 GitHub runner images. The selected image also applies to the TestFlight job.
 
 Open the resulting run, wait for success and download its **Artifacts**. In
