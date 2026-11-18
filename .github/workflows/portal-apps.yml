@@ -110,14 +110,25 @@ jobs:
           name: BuildPlay apps (latest builds)
           body: |
             BuildPlay uses one React Native application for Android, iOS and web.
-            Download BuildPlay.apk to install the standalone Android app.
+            Source: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }}).
+            Download BuildPlay.apk to install the standalone Android app with embedded JavaScript.
+            It connects to https://buildplay.fun and supports arm64-v8a, armeabi-v7a, x86 and x86_64.
+
+            **Existing APK users: preserve your current installation and saved data.**
+            Previous rolling APKs used unavailable ephemeral signing keys, so Android cannot
+            install this APK as an in-place update. If you have guest-only credentials or saved
+            games, **do not uninstall the old app to try this update**. Keep the old installation
+            and preserve access to that account and its data. This APK uses the deterministic
+            Expo development signer; it is a development distribution, not a Play Store release.
+
+            BuildPlayFun.apk, if shown below, is an older legacy build.
           prerelease: true
           make_latest: false
           files: BuildPlay.apk
 
   ios-portal:
     # Expo's Swift dependencies also fail under macOS15's older Xcode26.3.
-    name: BuildPlay iOS (simulator build and launch)
+    name: BuildPlay iOS (simulator build)
     needs: shared-client
     runs-on: ${{ inputs.ios_runner || 'macos-26-intel' }}
     timeout-minutes: 60
@@ -142,26 +153,21 @@ jobs:
         run: pod install
       - name: Build standalone simulator app
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/ios-test-results"
+          mkdir -p "$GITHUB_WORKSPACE/ios-build-results"
           set -o pipefail
           xcodebuild -workspace ios/BuildPlay.xcworkspace -scheme BuildPlay \
             -configuration Release -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$GITHUB_WORKSPACE/ios-portal-build" \
             ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO \
-            build 2>&1 | tee "$GITHUB_WORKSPACE/ios-test-results/build.log"
+            build 2>&1 | tee "$GITHUB_WORKSPACE/ios-build-results/build.log"
       - name: Check bundle metadata and embedded JavaScript
         run: |
           app="$GITHUB_WORKSPACE/ios-portal-build/Build/Products/Release-iphonesimulator/BuildPlay.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$app/Info.plist")" = BuildPlay
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")" = edu.columbia.gameportal.starter
           test -f "$app/main.jsbundle"
+          python3 scripts/sign-ios-simulator.py "$app"
           ditto -c -k --sequesterRsrc --keepParent "$app" "$GITHUB_WORKSPACE/BuildPlay-simulator.zip"
-      - name: Launch simulator and capture screen
-        timeout-minutes: 15
-        run: |
-          bash scripts/smoke-ios-simulator.sh \
-            "$GITHUB_WORKSPACE/ios-portal-build/Build/Products/Release-iphonesimulator/BuildPlay.app" \
-            "$GITHUB_WORKSPACE/ios-test-results"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -169,25 +175,74 @@ jobs:
           path: BuildPlay-simulator.zip
           if-no-files-found: warn
           retention-days: 90
+          overwrite: true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: BuildPlay-ios-build-results
+          path: ios-build-results/
+          if-no-files-found: warn
+          retention-days: 14
+          overwrite: true
+
+  ios-smoke:
+    name: BuildPlay iOS (simulator launch)
+    needs: ios-portal
+    runs-on: ${{ inputs.ios_runner || 'macos-26-intel' }}
+    timeout-minutes: 50
+    defaults:
+      run:
+        working-directory: frontends/portal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - uses: actions/download-artifact@v4
+        with:
+          name: BuildPlay-ios-simulator
+          path: ios-smoke-input
+      - name: Unpack compiled simulator app
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/ios-smoke-app" "$GITHUB_WORKSPACE/ios-smoke-results"
+          ditto -x -k "$GITHUB_WORKSPACE/ios-smoke-input/BuildPlay-simulator.zip" "$GITHUB_WORKSPACE/ios-smoke-app"
+          test -f "$GITHUB_WORKSPACE/ios-smoke-app/BuildPlay.app/main.jsbundle"
+      - name: Prepare Xcode and simulator runtime caches
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          date -u '+%Y-%m-%dT%H:%M:%SZ preparing Xcode first launch' | tee "$GITHUB_WORKSPACE/ios-smoke-results/prewarm.log"
+          { time sudo xcodebuild -runFirstLaunch; } 2>&1 | tee -a "$GITHUB_WORKSPACE/ios-smoke-results/prewarm.log"
+          date -u '+%Y-%m-%dT%H:%M:%SZ updating simulator runtime dyld caches' | tee -a "$GITHUB_WORKSPACE/ios-smoke-results/prewarm.log"
+          { time xcrun simctl runtime dyld_shared_cache update --all; } 2>&1 | tee -a "$GITHUB_WORKSPACE/ios-smoke-results/prewarm.log"
+          date -u '+%Y-%m-%dT%H:%M:%SZ simulator runtime caches ready' | tee -a "$GITHUB_WORKSPACE/ios-smoke-results/prewarm.log"
+      - name: Launch simulator and capture screen
+        timeout-minutes: 25
+        run: |
+          bash scripts/smoke-ios-simulator.sh \
+            "$GITHUB_WORKSPACE/ios-smoke-app/BuildPlay.app" \
+            "$GITHUB_WORKSPACE/ios-smoke-results"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: BuildPlay-ios-test-results
-          path: ios-test-results/
+          path: ios-smoke-results/
           if-no-files-found: warn
           retention-days: 14
+          overwrite: true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: BuildPlay-ios-screenshots
-          path: ios-test-results/screenshots/
+          path: ios-smoke-results/screenshots/
           if-no-files-found: warn
           retention-days: 14
+          overwrite: true
 
   ios-testflight:
     name: BuildPlay iOS (TestFlight upload)
     if: vars.TESTFLIGHT_ENABLED == 'true' && vars.IOS_PORTAL_BUNDLE_ID != '' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    needs: ios-portal
+    needs: ios-smoke
     runs-on: ${{ inputs.ios_runner || 'macos-26-intel' }}
     timeout-minutes: 50
     env:
@@ -225,9 +280,10 @@ jobs:
             -configuration Release -destination 'generic/platform=iOS' \
             -archivePath "$GITHUB_WORKSPACE/BuildPlay.xcarchive" \
             CODE_SIGN_IDENTITY=- AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" \
-            PRODUCT_BUNDLE_IDENTIFIER="$IOS_PORTAL_BUNDLE_ID" archive
+            CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="$APPLE_TEAM_ID" archive
+          archive_app="$GITHUB_WORKSPACE/BuildPlay.xcarchive/Products/Applications/BuildPlay.app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$archive_app/Info.plist")" = "$IOS_PORTAL_BUNDLE_ID"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$archive_app/Info.plist")" = "${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
       - name: Export IPA with existing cloud signing access
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}

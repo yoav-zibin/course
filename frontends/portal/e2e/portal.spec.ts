@@ -124,8 +124,13 @@ test('private invitation survives guest sign-in and creates a usable shared link
   const inviteResponse=await request.post(`/matches/${match.id}/invites`,{headers,data:{}});expect(inviteResponse.ok()).toBeTruthy();const invite=await inviteResponse.json();
   await page.goto(`/portal#invite=${invite.token}`);await page.getByRole('button',{name:'Log in to join',exact:true}).click();
   await page.getByRole('textbox',{name:/Your name|Display name/}).fill('Invited guest');await page.getByRole('button',{name:'Continue as guest',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Close dialog'})).toHaveCount(0);
   await page.getByRole('button',{name:'Join match',exact:true}).click();await expect(page.getByRole('heading',{name:created.name,exact:true})).toBeVisible();
-  await page.getByRole('button',{name:/^(Share match|Share)$/}).click();await expect(page.getByRole('textbox',{name:'Invite link'})).toHaveValue(/invite=/);
+  // Acceptance finishes loading the pinned game before removing the invite banner.
+  // Wait for that navigation so its layout change cannot move Share during the press.
+  await expect(page).toHaveURL(new RegExp(`#match=${match.id}$`));
+  await expect(page.getByRole('button',{name:'Join match',exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:/^(Share match|Share)$/}).click();await expect(page.getByRole('textbox',{name:'Invite link'})).toHaveValue(/invite=/,{timeout:20000});
   const qr=page.getByLabel('Match invite QR code');await expect(qr).toBeVisible();
   await page.getByRole('button',{name:'Close dialog'}).click();await page.reload();await expect(page.getByRole('heading',{name:created.name,exact:true})).toBeVisible();
 });

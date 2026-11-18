@@ -113,7 +113,7 @@ pod install
 open BuildPlay.xcworkspace
 ```
 
-Choose the BuildPlay scheme. Use a simulator for unsigned development or the
+Choose the BuildPlay scheme. Use local ad-hoc signing for a simulator or the
 existing Apple team for a phone build. Upgrading with the same bundle ID and
 team preserves access to the old sandbox and Keychain. Switching identity/team
 creates a different app or loses access to its account. The Linux VM cannot
@@ -162,18 +162,33 @@ gh run download RUN_ID --repo yoav-zibin/course \
   --name BuildPlay-android-apk --dir ./mobile-build-downloads
 ```
 
-Artifacts keep their existing names: `BuildPlay-android-apk`,
-`BuildPlay-ios-simulator`, `BuildPlay-ios-test-results`,
+Artifacts include `BuildPlay-android-apk`,
+`BuildPlay-ios-simulator`, `BuildPlay-ios-build-results`, `BuildPlay-ios-test-results`,
 `BuildPlay-ios-screenshots`, and `BuildPlay-gradle-logs`. Android migration and
 launch diagnostics are in `BuildPlay-android-test-results`. Successful pushes to
 `main` update [BuildPlay.apk](https://github.com/yoav-zibin/course/releases/download/portal-apps/BuildPlay.apk).
-Manual runs provide artifacts without replacing that download. An unsigned
+Manual runs provide artifacts without replacing that download. The ad-hoc-signed
 simulator ZIP needs a Mac with Xcode; it cannot be installed on an iPhone.
+
+Before packaging the universal simulator app, CI runs
+`frontends/portal/scripts/sign-ios-simulator.py`. It refuses device-platform
+bundles, signs embedded frameworks and libraries before the app, and verifies
+both arm64 and x86_64 signatures and Keychain entitlements. Its temporary
+`TESTTEAM00.<bundle-identifier>` access group lets simulator Keychain migration
+and SecureStore run without production Apple secrets. Simulator upgrade fixtures
+must use the same synthetic group for the old and new app. **This helper and its
+synthetic entitlements never apply to real-device or TestFlight archives.** Real
+upgrades must retain their original App ID prefix, bundle identifier and team.
 
 Use `macos-26-intel` for this Expo version. Its Xcode26.6 toolchain compiled the
 shared app successfully. The macOS15 image's Xcode26.3 failed Swift concurrency
 checks in Expo's dependencies, so it is no longer offered as a fallback.
-Simulator startup has a separate fifteen-minute allowance for first-boot work.
+The simulator build and startup checks run in separate jobs. The startup job
+downloads the compiled app, prepares Xcode's runtime caches, and uses a fresh
+Mac with bounded boot, install and launch phases. Retrying a failed startup job
+reuses the successful build. Build logs are in `BuildPlay-ios-build-results`;
+phase logs, timing summaries and failure diagnostics are in
+`BuildPlay-ios-test-results`. Successful startup remains required for TestFlight.
 
 ## Existing Apple signing setup
 
