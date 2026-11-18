@@ -52,8 +52,11 @@ class SavingStore:
         # Why the last save failed, or None after a successful one. For health checks.
         self.last_write_error: str | None = None
         self._consecutive_failures = 0
-        # Guards [_inner] against the writer thread taking a snapshot mid-change.
-        self._lock = threading.Lock()
+        # The platform holds this across an entire read/modify/write operation,
+        # so a wallet credit cannot be snapshotted before its pot is settled.
+        # Reentrant store calls within that operation acquire the same lock.
+        self._lock = threading.RLock()
+        self.operation_lock = self._lock
         # Serializes saves, so the destination always ends up with the latest snapshot.
         self._write_lock = threading.Lock()
         # Whether there are changes that haven't been saved; guarded by [_lock].
@@ -80,12 +83,14 @@ class SavingStore:
 
     def flush(self) -> None:
         """Saves now if anything changed since the last save."""
-        with self._write_lock:
-            with self._lock:
-                if not self._dirty:
-                    return
-                self._dirty = False
-                snapshot = self._inner.snapshot()
+        # Always acquire the operation lock first, including during disk I/O.
+        # A flush inside an operation must not wait for a writer holding the
+        # write lock while that writer waits for this operation to finish.
+        with self._lock, self._write_lock:
+            if not self._dirty:
+                return
+            self._dirty = False
+            snapshot = self._inner.snapshot()
             try:
                 self._save(snapshot)
                 self.last_write_error = None

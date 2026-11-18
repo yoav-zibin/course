@@ -65,6 +65,12 @@ packages stored only in Firestore were not downloaded or penetration tested.
   deletion now rejects ongoing matches with a remaining token pot. Players
   use normal leave settlement instead. Waiting-room refunds and privileged
   administrator recovery remain available.
+- **The file writer could persist a partial payout.** File-backed stores now
+  share one operation lock with the service and use consistent flush lock
+  ordering. A snapshot cannot capture a credited wallet before the matching
+  pot update, including when a process stops and later restarts. This is
+  single-process consistency; production Firestore continues to use its
+  existing transactional coordination.
 - **An import could overwrite another game's translations.** Package
   translations now stay scoped to their game; an unrelated new-game secret
   cannot change the global reviewed translation map. Rendering resolves the
