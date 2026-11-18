@@ -97,6 +97,15 @@ function Renderer({spec, message, onMove, onError, deliveryKey,onAnimationStateC
     return ()=>{alive.current=false;revision.current++;subscription.remove();if(motionTimer.current)clearTimeout(motionTimer.current);callbacks.current.onAnimationStateChange?.(false);};
   },[]);
 
+  useEffect(()=>{
+    if(Platform.OS!=='web')return;
+    // Camera controls and account dialogs live outside the SVG canvas. Escape
+    // must cancel a held piece there too, without taking over the dialog key.
+    const cancel=(event:KeyboardEvent)=>{if(event.key==='Escape'){gesture.current=null;setDrag(null);select(null);showPreview(null);}};
+    window.addEventListener('keydown',cancel,true);
+    return()=>window.removeEventListener('keydown',cancel,true);
+  },[]);
+
   const apply = useCallback(async (input: unknown, atRevision: number, stateChange: boolean) => {
     const result = await runPresentation(spec.ui_code,input,local.current);
     if (!alive.current || atRevision !== revision.current) return;

@@ -83,6 +83,15 @@ test('piece selection exposes rotate/flip/resize and a legal destination submits
   expect((await moves(page))[1]).toEqual({event:{type:'drop',id:'token',piece_id:'token',target_id:'destination'}});
 });
 
+test('Escape from an outside camera control cancels a held selection without disabling direct placements',async({page,request})=>{
+  await mount(page,request);await page.getByRole('button',{name:/Green token/}).click();
+  await expect(page.getByRole('button',{name:'Rotate clockwise',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Zoom in',exact:true}).focus();await page.keyboard.press('Escape');
+  await expect(page.getByRole('button',{name:'Rotate clockwise',exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'Place here',exact:true}).click();
+  await expect.poll(()=>moves(page)).toEqual([{event:{type:'tap',id:'destination'}}]);
+});
+
 test('board zoom and keyboard/pointer gestures never emit a move and fixed-camera games stay fitted',async({page,request,isMobile})=>{
   await mount(page,request);
   await expect(page.getByRole('button',{name:'Reset board view'})).toHaveText('100%');
