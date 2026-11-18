@@ -454,6 +454,7 @@
     global.addEventListener("pointermove",cameraPointerMove,{passive:false});
     function resetDrag(keepPreview=false) {
       const drag=dragging;dragging=null;
+      for(const node of stage.querySelectorAll(".declarative-target.snapped"))node.classList.remove("snapped");
       if(drag){
         if(!keepPreview){
           drag.body.removeAttribute("transform");
@@ -471,41 +472,63 @@
       const point=stage.createSVGPoint();point.x=x;point.y=y;
       const matrix=node.getScreenCTM();return matrix?point.matrixTransform(matrix.inverse()):null;
     }
+    function dragPosition(drag,event){
+      if(drag.pointerType!=="touch"&&drag.pointerType!=="pen")return {x:event.clientX+drag.grab.x,y:event.clientY+drag.grab.y};
+      // Keep the artwork clear of the finger in screen pixels, independent of
+      // board zoom. Gradually change sides toward the middle of the screen.
+      const rect=stage.getBoundingClientRect(),left=Math.max(0,rect.left),right=Math.min(global.innerWidth,rect.right);
+      const top=Math.max(0,rect.top),bottom=Math.min(global.innerHeight,rect.bottom);
+      const fraction=Math.max(0,Math.min(1,(event.clientX-left)/Math.max(1,right-left)));
+      const side=Math.max(32,Math.min(64,drag.size.width/2+24));
+      const clamp=(value,min,max)=>Math.max(min,Math.min(Math.max(min,max),value));
+      return {x:clamp(event.clientX+side*(1-2*fraction),left+drag.size.width/2+4,right-drag.size.width/2-4),
+        y:clamp(event.clientY-Math.max(48,drag.size.height/2+28),top+drag.size.height/2+4,bottom-drag.size.height/2-4)};
+    }
+    function dropTarget(drag,event,held){
+      const rect=stage.getBoundingClientRect();
+      if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)return null;
+      const element=document.elementFromPoint(event.clientX,event.clientY);
+      if(!element||!stage.contains(element))return null;
+      const matrix=stage.getScreenCTM();if(!matrix)return null;
+      const candidates=(currentScene?.targets||[]).filter(target=>drag.targets.includes(target.id)).map(target=>{
+        const at=position(spec,target),board=at.board;
+        const width=board.kind==="grid"?board.width/board.columns:44,height=board.kind==="grid"?board.height/board.rows:44;
+        const area=target.hit_area||{x:-width/2,y:-height/2,width,height};
+        const screen=(x,y)=>{const point=stage.createSVGPoint();point.x=x;point.y=y;return point.matrixTransform(matrix);};
+        const start=screen(at.x+area.x,at.y+area.y),end=screen(at.x+area.x+area.width,at.y+area.y+area.height);
+        return {id:target.id,center:screen(at.x,at.y),left:start.x,top:start.y,right:end.x,bottom:end.y};
+      });
+      const distance=(target,point)=>Math.hypot(Math.max(target.left-point.x,0,point.x-target.right),Math.max(target.top-point.y,0,point.y-target.bottom));
+      const nearest=(point,radius)=>candidates.filter(target=>distance(target,point)<=radius).sort((a,b)=>
+        distance(a,point)-distance(b,point)||Math.hypot(a.center.x-point.x,a.center.y-point.y)-Math.hypot(b.center.x-point.x,b.center.y-point.y))[0];
+      // Aim with the lifted checker, while still accepting a finger directly
+      // over a destination. A small magnetic margin helps on dense phone boards.
+      return nearest(held,0)||nearest({x:event.clientX,y:event.clientY},0)||nearest(held,24)||null;
+    }
     function movePointer(event){
       if(!dragging||cameraGesture||event.pointerId!==dragging.pointerId)return;
       const drag=dragging;
       if(!drag.moved&&Math.hypot(event.clientX-drag.x,event.clientY-drag.y)<5)return;
-      const point=piecePoint(drag.node,event.clientX,event.clientY);if(!point||!drag.point)return;
       event.preventDefault();drag.moved=true;drag.node.classList.add("dragging");
       drag.node.style.pointerEvents="none";
-      drag.body.setAttribute("transform",`translate(${point.x-drag.point.x} ${point.y-drag.point.y})`);
       // Draw the held checker above the board and legal destination markers.
       stage.append(drag.node);
-    }
-    function dropTarget(drag,event){
-      const element=document.elementFromPoint(event.clientX,event.clientY);
-      const hit=element?.closest(".declarative-target");
-      if(hit&&stage.contains(hit)&&drag.targets.includes(hit.dataset.uiId))return hit.dataset.uiId;
-      if(!element||!stage.contains(element))return null;
-      const rect=stage.getBoundingClientRect();
-      if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)return null;
-      const point=boardPoint(event.clientX,event.clientY);
-      for(const target of currentScene?.targets||[]){
-        if(!drag.targets.includes(target.id)||!target.hit_area)continue;
-        const at=position(spec,target),area=target.hit_area,x=point.x-at.x,y=point.y-at.y;
-        if(x>=area.x&&x<=area.x+area.width&&y>=area.y&&y<=area.y+area.height)return target.id;
-      }
-      return null;
+      const held=dragPosition(drag,event),target=dropTarget(drag,event,held),at=target?.center||held;
+      const point=piecePoint(drag.node,at.x,at.y);if(!point)return;
+      drag.body.setAttribute("transform",`translate(${point.x} ${point.y})`);
+      drag.target=target?.id??null;
+      for(const node of stage.querySelectorAll(".declarative-target"))node.classList.toggle("snapped",node.dataset.uiId===drag.target);
+      if(drag.target)showPreview(drag.target);else clearPreview();
     }
     global.addEventListener("pointermove",movePointer,{passive:false});
     function finishPointer(event) {
       if(cameraPointerEnd(event))return;
       if(!dragging||nativeDragging||event.pointerId!==dragging.pointerId)return;
       const drag=dragging;
-      if(!drag.moved&&Math.hypot(event.clientX-drag.x,event.clientY-drag.y)>=5)movePointer(event);
+      movePointer(event);
       if(!drag.moved){resetDrag();updateHints();return;}
       suppressClick=true;setTimeout(()=>{suppressClick=false;},350);
-      const target=dropTarget(drag,event),valid=target&&canAct();
+      const target=drag.target,valid=target&&canAct();
       if(valid)dragPreview={id:drag.id,transform:drag.body.getAttribute("transform")};
       resetDrag(Boolean(valid));
       if(valid){event.preventDefault();dispatch({type:"drop",id:drag.id,piece_id:drag.id,target_id:target});}
@@ -514,13 +537,6 @@
     function cancelPointer(event){if(cameraPointerEnd(event))return;if(!dragging||nativeDragging||event.pointerId!==dragging.pointerId)return;resetDrag();selected=null;clearPreview();updateHints();}
     global.addEventListener("pointerup",finishPointer);
     global.addEventListener("pointercancel",cancelPointer);
-    // While a piece is dragged, preview the legal destination under the pointer.
-    function previewUnderPointer(event){
-      if(!dragging||nativeDragging||event.pointerId!==dragging.pointerId||cameraGesture||!dragging.moved)return;
-      const id=dropTarget(dragging,event);
-      if(id)showPreview(id);else clearPreview();
-    }
-    global.addEventListener("pointermove",previewUnderPointer);
     container.addEventListener("keydown",event=>{if(event.key==="Escape"){resetDrag();nativeDragging=null;selected=null;disarm();clearPreview();updateHints();}});
     // R / Shift+R rotate and F flips the selected piece, like its tool buttons.
     // Pointer selection need not move focus, so also listen while the page
@@ -689,6 +705,7 @@
         if(targetArt&&!target.hit_area)node.append(svg("rect",{class:"declarative-target-hit",x:-width/2,y:-height/2,width,height,fill:"transparent"}));
         if(targetArt)node.append(svg("image",{class:"declarative-target-area",href:targetArt,...(target.hit_area||{x:-width/2,y:-height/2,width,height})}));
         else node.append(svg("rect",{class:"declarative-target-area",x:-width/2,y:-height/2,width,height,rx:5,fill:target.color || "#b8ef5b",stroke:"#c9ff63","stroke-width":2}));
+        if(targetArt)node.append(svg("rect",{class:"declarative-target-outline",...(target.hit_area||{x:-width/2,y:-height/2,width,height}),rx:5,fill:"none","pointer-events":"none"}));
         if (target.label&&!targetArt) node.append(svg("text",{"text-anchor":"middle","dominant-baseline":"central",class:"declarative-location-label",fill:"#d7f6ab","font-size":14},target.label));
         if(target.preview?.length){
           node.dataset.preview="true";
@@ -754,7 +771,12 @@
         }
         if(actions.includes("move")){
           node.style.touchAction="none";
-          node.addEventListener("pointerdown",event=>{if(canAct()&&!cameraGesture&&event.button===0){resetDrag();suppressClick=false;selected=piece.id;dragging={id:piece.id,node,body:visual,nextSibling:node.nextSibling,pointerId:event.pointerId,x:event.clientX,y:event.clientY,point:piecePoint(node,event.clientX,event.clientY),targets:piece.move_targets || []};try{node.setPointerCapture(event.pointerId);}catch(_){}updateHints();}});
+          node.addEventListener("pointerdown",event=>{if(canAct()&&!cameraGesture&&event.button===0){
+            resetDrag();suppressClick=false;selected=piece.id;disarm();clearPreview();
+            const size=body.getBoundingClientRect(),center=node.getScreenCTM();
+            dragging={id:piece.id,node,body:visual,nextSibling:node.nextSibling,pointerId:event.pointerId,pointerType:event.pointerType,
+              x:event.clientX,y:event.clientY,size,grab:{x:(center?.e??event.clientX)-event.clientX,y:(center?.f??event.clientY)-event.clientY},targets:piece.move_targets || []};
+            try{node.setPointerCapture(event.pointerId);}catch(_){}updateHints();}});
           node.addEventListener("dragstart",event=>event.preventDefault());}
         stage.append(node);
         const previous=previousPieces.get(piece.id),from=previousTransforms.get(piece.id);
@@ -893,7 +915,7 @@
         resetDrag();latest=clone(message);revision++;moveSent=false;selected=null;nativeDragging=null;updateHints();const atRevision=revision;
         queue=queue.then(()=>reduce(latest,atRevision,options)).catch(error);return queue;
       },
-      destroy(){resetDrag();clearMotionHold();destroyed=true;revision++;touches.clear();cameraGesture=null;cameraObserver?.disconnect();global.removeEventListener("resize",scheduleCamera);if(cameraFrame!==null)global.cancelAnimationFrame(cameraFrame);for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();global.removeEventListener("pointermove",cameraPointerMove);global.removeEventListener("pointermove",previewUnderPointer);global.removeEventListener("keydown",toolKeys);global.removeEventListener("pointermove",movePointer);global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game","declarative-immersive","declarative-has-previews");},
+      destroy(){resetDrag();clearMotionHold();destroyed=true;revision++;touches.clear();cameraGesture=null;cameraObserver?.disconnect();global.removeEventListener("resize",scheduleCamera);if(cameraFrame!==null)global.cancelAnimationFrame(cameraFrame);for(const animation of pieceAnimations)animation.cancel();pieceAnimations.clear();global.removeEventListener("pointermove",cameraPointerMove);global.removeEventListener("keydown",toolKeys);global.removeEventListener("pointermove",movePointer);global.removeEventListener("pointerup",finishPointer);global.removeEventListener("pointercancel",cancelPointer);engine.destroy();container.replaceChildren();container.classList.remove("declarative-game","declarative-immersive","declarative-has-previews");},
       dispatch,
       async whenIdle(){await Promise.allSettled([motionReady,...[...pieceAnimations].map(animation=>animation.finished)]);},
     };
@@ -902,10 +924,10 @@
     const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
     const data=value=>JSON.stringify(canonical(value)).replace(/</g,"\\u003c");
     return '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<link rel="stylesheet" href="/static/declarative-ui.css?v=16"><div id="declarative-game"></div>' +
+      '<link rel="stylesheet" href="/static/declarative-ui.css?v=17"><div id="declarative-game"></div>' +
       '<script type="application/json" id="i18n-strings">'+data(spec.strings || {})+'<'+'/script>' +
       '<script type="application/json" id="declarative-spec">'+data(spec)+'<'+'/script>' +
-      '<script src="/static/declarative-ui.js?v=16"><'+'/script><script>' +
+      '<script src="/static/declarative-ui.js?v=17"><'+'/script><script>' +
       'const host=DeclarativeUI.mount(document.getElementById("declarative-game"),' +
       'JSON.parse(document.getElementById("declarative-spec").textContent),' +
       '{onMove:move=>parent.postMessage({type:"make_move",move},"*"),' +

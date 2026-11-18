@@ -130,7 +130,7 @@ test('a complete computer turn between polls keeps its rolled faces, ready highl
   } finally { release(); }
 });
 
-test('native checker dragging follows the pointer, invalid drops revert, and tap selection remains usable', async ({page, request}, testInfo) => {
+test('native checker dragging stays visible, snaps to legal targets, reverts invalid drops, and preserves tap selection', async ({page, request}, testInfo) => {
   test.setTimeout(120000);
   const game = await backgammon(request), user = await createUser(request, uniqueName('Checker drag player'));
   await loginAs(page, user); await page.goto(`/static/portal.html#game=${game.id}`);
@@ -167,13 +167,26 @@ test('native checker dragging follows the pointer, invalid drops revert, and tap
   const camera = await stage.getAttribute('viewBox');
   await pointer('down', start); await pointer('move', middle);
   await expect(checker).toHaveClass(/dragging/);
-  await expect.poll(async () => {
+  const snapped = host.locator('.declarative-target.snapped');
+  if (await snapped.count()) {
+    const marker = await snapped.evaluate(node => {
+      const point = new DOMPoint(0, 0).matrixTransform((node as SVGGraphicsElement).getScreenCTM()!);
+      return {x: point.x, y: point.y};
+    });
+    const bounds = (await checker.locator('g[opacity]').first().boundingBox())!;
+    expect(Math.hypot(bounds.x + bounds.width / 2 - marker.x, bounds.y + bounds.height / 2 - marker.y)).toBeLessThan(3);
+  } else if (touch) {
+    const bounds = (await checker.locator('g[opacity]').first().boundingBox())!;
+    expect(bounds.y + bounds.height / 2).toBeLessThan(middle.y - 35);
+  } else await expect.poll(async () => {
     const bounds = (await checker.locator('g[opacity]').first().boundingBox())!;
     return Math.hypot(bounds.x + bounds.width / 2 - middle.x, bounds.y + bounds.height / 2 - middle.y);
   }).toBeLessThan(3);
   expect(await stage.getAttribute('viewBox')).toBe(camera);
   expect(await page.evaluate(() => state.match.move_count)).toBe(initialCount);
-  await pointer('move', end); await pointer('up', end);
+  await pointer('move', end);
+  await expect(snapped).toHaveCount(1);
+  await pointer('up', end);
   await expect.poll(() => page.evaluate(() => state.match.move_count),{timeout:30000}).toBe(initialCount+1);
   await expect(host.locator('.declarative-piece.dragging')).toHaveCount(0);
 

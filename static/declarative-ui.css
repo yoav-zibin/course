@@ -13,6 +13,7 @@
 .declarative-piece.actionable.hint-selected[data-actions~=move]{cursor:grabbing}
 .declarative-piece.dragging{cursor:grabbing}
 .declarative-drag-visual{will-change:transform}
+.declarative-stage{user-select:none;-webkit-user-select:none}
 .declarative-roll{transform-box:fill-box;transform-origin:center}
 .declarative-target-hit{pointer-events:none}
 .show-drop-hints .declarative-target[data-drop-state=allowed] .declarative-target-hit{pointer-events:all}
@@ -57,6 +58,10 @@
 
 .declarative-piece ellipse.declarative-piece-action-outline{stroke:#9dff00;stroke-width:3;stroke-dasharray:none}
 .declarative-target[data-drop-state=allowed] image.declarative-target-area{opacity:1;filter:none}
+.declarative-target-outline{visibility:hidden;vector-effect:non-scaling-stroke}
+.declarative-target[data-drop-state=allowed] .declarative-target-outline{visibility:visible;stroke:#d2ff5a;stroke-width:2;stroke-dasharray:6 4}
+.declarative-target.snapped .declarative-target-area{opacity:1;stroke:#fff;stroke-width:5;stroke-dasharray:none}
+.declarative-target[data-drop-state=allowed].snapped .declarative-target-outline{stroke:#fff;stroke-width:4;stroke-dasharray:none;filter:drop-shadow(0 0 4px #d2ff5a)}
 /* Destination artwork never captures a checker tap; only the selected source's
    declared legal hit rectangles take pointer input. */
 image.declarative-target-area{pointer-events:none}
