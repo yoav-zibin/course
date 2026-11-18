@@ -51,7 +51,9 @@ test('short screens keep the full native board width and can scroll to its last 
     const board=page.getByLabel('Game board. Use pieces and highlighted destinations. Zoom controls are above the board.');
     await expect(page.getByRole('button',{name:'Cell 9',exact:true})).toBeAttached();
     const geometry=await board.boundingBox();expect(geometry!.width).toBeCloseTo(viewport.width,0);
-    expect(geometry!.height).toBeGreaterThanOrEqual(Math.min(viewport.width,viewport.height*.7)-1);
+    // The bundled package declares 600x560, including its instruction margins.
+    await expect(board.locator('svg').first()).toHaveAttribute('viewBox','0 0 600 560');
+    expect(geometry!.height).toBeGreaterThanOrEqual(Math.min(viewport.width*560/600,viewport.height*.7)-1);
     await board.scrollIntoViewIfNeeded();
     // Wheel over the actual board must reach the bottom through the native
     // containing scroll view, without silently zooming the game instead.

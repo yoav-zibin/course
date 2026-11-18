@@ -44,6 +44,15 @@ test('scene labels keep their declared left edge in an Arabic document',async({p
   expect(box.x).toBeGreaterThanOrEqual(23);expect(box.x).toBeLessThanOrEqual(25);
 });
 
+test('fitted native scenes retain instructions inside the complete declared viewport',async({page,request})=>{
+  const pkg={...spec(`const gameUI={reduce(){return {scene:{labels:[{id:'instruction',x:20,y:440,text:'Keep this complete instruction visible',font_size:18}]}}}};`),viewport:{width:400,height:500},boards:[{id:'board',kind:'zone',x:20,y:20,width:180,height:180}]};
+  await mount(page,request,pkg);const label=page.getByText('Keep this complete instruction visible',{exact:true});await expect(label).toBeVisible();
+  const board=page.getByLabel('Game board. Use pieces and highlighted destinations. Zoom controls are above the board.');
+  await label.scrollIntoViewIfNeeded();const caption=(await label.boundingBox())!,canvas=(await board.boundingBox())!;
+  expect(caption.y).toBeGreaterThanOrEqual(canvas.y);expect(caption.y+caption.height).toBeLessThanOrEqual(canvas.y+canvas.height+1);
+  await expect(label).toBeInViewport();
+});
+
 test('short-screen height fitting preserves 32px physical bodies and destinations',async({page,request})=>{
   const pkg={format:'buildplay-ui',version:1,viewport:{width:1120,height:1100},boards:[{id:'table',kind:'zone',x:0,y:0,width:1120,height:1100}],
     piece_types:{domino:{shape:'rect',width:224,height:112}},

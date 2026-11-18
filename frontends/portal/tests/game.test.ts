@@ -4,7 +4,7 @@ import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { validateSpec, validateScene, position, pieceActions, assetURI } from '../src/game/validation';
+import { validateSpec, validateScene, position, pieceActions, assetURI, contentBounds } from '../src/game/validation';
 import { canMove, historyChanges, hitPiece, hitTarget, pieceName, validEvent, animateUpdate, presentationSteps } from '../src/game/interactions';
 import { presentationSource, rulesSource } from '../src/game/runtimeSource';
 import type { GameSpec, Scene, StateMessage } from '../src/game/types';
@@ -35,6 +35,13 @@ test('hit testing respects transformed artwork, expanded legal destinations and 
   assert.equal(hitTarget(pkg,data,{x:240,y:50},data.pieces![0])?.id,'destination');
   data.pieces![0].hidden=true;assert.equal(hitPiece(pkg,data,{x:50,y:50}),undefined);
   assert.deepEqual(pieceActions({actions:[],rotation:90,scale:2}),[]);
+});
+
+test('camera fitting preserves the declared instruction viewport and complete offset target bodies',()=>{
+  const pkg=spec();pkg.viewport={width:400,height:500};pkg.boards=[{id:'board',kind:'zone',x:20,y:20,width:180,height:180}];
+  assert.deepEqual(contentBounds(pkg),{x:0,y:0,width:400,height:500});
+  const data:Scene={targets:[{id:'outside',board:'board',position:{x:350,y:480},hit_area:{x:-20,y:-10,width:100,height:80}}]};
+  validateScene(pkg,data);assert.deepEqual(contentBounds(pkg,data),{x:0,y:0,width:450,height:570});
 });
 
 test('move gates prohibit replay, spectators, passive transforms, stale choices and duplicate sends',()=>{

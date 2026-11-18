@@ -166,10 +166,11 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     return t("ui.declarative.hints.scale", {}, "Resize");
   }
   function contentBounds(spec, scene = {}) {
-    const boxes = spec.boards.map(board => ({x:num(board.x),y:num(board.y),width:board.width,height:board.height}));
+    const boxes = [{x:0,y:0,width:spec.viewport.width,height:spec.viewport.height},
+      ...spec.boards.map(board => ({x:num(board.x),y:num(board.y),width:board.width,height:board.height}))];
     // Hands and other playable pieces may live outside their board surface.
-    // Include their rotated bodies and legal destinations, but not headings or
-    // instructions placed around the scene by an older game package.
+    // Include their rotated bodies and complete legal destinations. The
+    // declared viewport also retains headings/instructions around the boards.
     for(const piece of scene.pieces || []) {
       if(piece.hidden)continue;
       const point=position(spec,piece),board=point.board,type=spec.piece_types[piece.type];
@@ -182,7 +183,9 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     for(const target of scene.targets || []) {
       const point=position(spec,target),board=point.board;
       const width=board.kind==="grid"?board.width/board.columns:44,height=board.kind==="grid"?board.height/board.rows:44;
-      boxes.push({x:point.x-width/2,y:point.y-height/2,width,height});
+      const hit=target.hit_area||{};
+      boxes.push({x:point.x+num(hit.x,-width/2),y:point.y+num(hit.y,-height/2),
+        width:num(hit.width,width),height:num(hit.height,height)});
     }
     const x=Math.min(...boxes.map(box=>box.x)),y=Math.min(...boxes.map(box=>box.y));
     return {x,y,width:Math.max(...boxes.map(box=>box.x+box.width))-x,height:Math.max(...boxes.map(box=>box.y+box.height))-y};
