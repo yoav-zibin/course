@@ -62,27 +62,33 @@ def test_unchanged_cover_revalidates_without_a_body(cover_api):
     assert api.client.get(url, headers={"If-None-Match": '"old"'}).status_code == 200
 
 
-def test_unpublished_cover_is_private_and_revalidation_cannot_bypass_access(cover_api):
+def test_unpublished_cover_requires_match_membership_even_with_a_cached_validator(cover_api):
     api = cover_api
-    owner, game_id, url = create_cover(api)
+    creator, game_id, url = create_cover(api)
     outsider = api.new_user("outsider")
+    player = api.new_user("player")
+    api.new_match(owner=player, game_id=game_id)
     etag = api.request("GET", url).headers["etag"]
-    api.ok("POST", f"/games/{game_id}/unpublish", as_user=owner)
-    for caller in (None, outsider):
+    api.ok("POST", f"/games/{game_id}/unpublish", as_user=creator)
+    for caller in (None, outsider, creator):
         response = api.request("GET", url, as_user=caller)
         assert response.status_code == 404
         assert response.headers["cache-control"] == "private, no-store"
-    # Even a validator obtained while public cannot turn a denied request into 304.
-    denied = api.client.get(url, headers={"If-None-Match": etag})
-    assert denied.status_code == 404
-    assert denied.headers["cache-control"] == "private, no-store"
-    owner_response = api.request("GET", url, as_user=owner)
-    assert owner_response.status_code == 200
-    assert owner_response.headers["cache-control"] == "private, no-store"
-    owner_cached = api.client.get(url, headers={"If-None-Match": etag,
-        "X-User-Id": owner, "X-User-Password": api.passwords_by_user_id[owner]})
-    assert owner_cached.status_code == 304
-    assert owner_cached.headers["cache-control"] == "private, no-store"
+        # A previously public validator gives the creator no extra authority.
+        headers = {"If-None-Match": etag}
+        if caller is not None:
+            headers.update({"X-User-Id": caller, "X-User-Password": api.passwords_by_user_id[caller]})
+        denied = api.client.get(url, headers=headers)
+        assert denied.status_code == 404
+        assert denied.headers["cache-control"] == "private, no-store"
+    participant_response = api.request("GET", url, as_user=player)
+    assert participant_response.status_code == 200
+    assert participant_response.text == SVG
+    assert participant_response.headers["cache-control"] == "private, no-store"
+    participant_cached = api.client.get(url, headers={"If-None-Match": etag,
+        "X-User-Id": player, "X-User-Password": api.passwords_by_user_id[player]})
+    assert participant_cached.status_code == 304
+    assert participant_cached.headers["cache-control"] == "private, no-store"
 
 
 def test_deleted_game_cover_is_not_publicly_cached(cover_api):

@@ -208,6 +208,14 @@ post-integration backend checks passed (56 tests), as did 158 Portal/feedback/PW
 unit checks. The separate real Firestore query suite passed 73 tests plus the
 new account-deletion regression; two real Chromium checks also passed.
 
+The broad CI run for `32bf614` found stale test assumptions about unpublished
+game creator access and a translation allowance left above its reduced count.
+The follow-up keeps all users without matching game-version participation denied,
+checks private cover revalidation, and reduces the statistics allowance. Upstream
+`a64403c` supplies the renderer-version assertion fixes. These corrections change
+tests and audit limits; they do not grant any player additional access. All 127
+focused checks passed after integrating upstream. Broad CI must run again.
+
 ## Daily incremental audit
 
 The user service `buildplay-security-audit.timer` runs every day at **08:00

@@ -60,25 +60,31 @@ def test_batch_rejects_more_than_200_refs(api: Api) -> None:
     assert response.status_code == 400
 
 
-def test_batch_keeps_unpublished_versions_private(api: Api) -> None:
-    owner, game_a, _ = _two_games(api)
-    stranger = api.new_user("stranger")
-    api.ok("POST", f"/games/{game_a}/unpublish", as_user=owner)
-    # The owner still gets every version; anyone else gets none of them,
-    # exactly as the single-version endpoint behaves.
-    own = api.ok(
-        "GET", "/games/versions", as_user=owner, params={"refs": f"{game_a}@1,{game_a}@2"}
-    )
-    assert [g["version"] for g in own] == [1, 2]
-    assert (
-        api.ok(
-            "GET",
-            "/games/versions",
-            as_user=stranger,
-            params={"refs": f"{game_a}@1,{game_a}@2"},
-        )
-        == []
-    )
-    assert (
-        api.ok("GET", "/games/versions", params={"refs": f"{game_a}@1"}) == []
-    )
+def test_batch_only_exposes_unpublished_versions_pinned_to_the_callers_matches(api: Api) -> None:
+    creator, stranger, first_player, second_player = [
+        api.new_user(name) for name in ("creator", "stranger", "first player", "second player")
+    ]
+    game_id = api.new_game(owner=creator)
+    first_match = api.new_match(owner=first_player, game_id=game_id)
+    api.ok("PATCH", f"/games/{game_id}", as_user=creator, json={
+        "name": "Poker 2", "game_addition_request_id_and_secret": TEST_GAME_SECRET,
+    })
+    second_match = api.new_match(owner=second_player, game_id=game_id)
+    assert api.ok("GET", f"/matches/{first_match}", as_user=first_player)["game_version"] == 1
+    assert api.ok("GET", f"/matches/{second_match}", as_user=second_player)["game_version"] == 2
+    api.ok("POST", f"/games/{game_id}/unpublish", as_user=creator)
+    refs = {"refs": f"{game_id}@1,{game_id}@2"}
+    for caller in (None, stranger, creator):
+        response = api.request("GET", "/games/versions", as_user=caller, params=refs)
+        assert response.status_code == 200
+        assert response.json() == []
+        assert response.headers["cache-control"] == "private, no-store"
+        for version in (1, 2):
+            assert api.request("GET", f"/games/{game_id}/versions/{version}", as_user=caller).status_code == 404
+    for player, pinned_version in ((first_player, 1), (second_player, 2)):
+        response = api.request("GET", "/games/versions", as_user=player, params=refs)
+        assert response.status_code == 200
+        assert [game["version"] for game in response.json()] == [pinned_version]
+        assert response.headers["cache-control"] == "private, no-store"
+        assert response.json()[0] == api.ok("GET", f"/games/{game_id}/versions/{pinned_version}", as_user=player)
+        assert api.request("GET", f"/games/{game_id}/versions/{3 - pinned_version}", as_user=player).status_code == 404

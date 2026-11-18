@@ -434,14 +434,21 @@ def test_a_game_without_a_string_table_translates_only_its_name_and_description(
     assert "no i18n-strings block" in body["warnings"][0]
 
 
-def test_an_unpublished_version_is_only_for_its_owner_and_players() -> None:
+def test_unpublished_version_strings_require_match_membership() -> None:
     api = TranslatingApi(FakeTranslator())
-    owner, stranger = api.new_user("owner"), api.new_user("stranger")
-    game_id = publish(api, owner)
-    api.ok("POST", f"/games/{game_id}/unpublish", as_user=owner)
-    assert api.request("GET", f"/games/{game_id}/versions/1/strings", params={"lang": "es"}).status_code == 404
-    assert api.request("GET", f"/games/{game_id}/versions/1/strings", as_user=stranger, params={"lang": "es"}).status_code == 404
-    assert api.request("GET", f"/games/{game_id}/versions/1/strings", as_user=owner, params={"lang": "es"}).status_code == 200
+    creator, stranger, player = [api.new_user(name) for name in ("creator", "stranger", "player")]
+    game_id = publish(api, creator)
+    api.new_match(owner=player, game_id=game_id)
+    api.ok("POST", f"/games/{game_id}/unpublish", as_user=creator)
+    url = f"/games/{game_id}/versions/1/strings"
+    for caller in (None, stranger, creator):
+        response = api.request("GET", url, as_user=caller, params={"lang": "es"})
+        assert response.status_code == 404
+        assert response.headers["cache-control"] == "private, no-store"
+    participant = api.request("GET", url, as_user=player, params={"lang": "es"})
+    assert participant.status_code == 200
+    assert participant.json()["strings"]["your_turn"] == "[es] Your turn"
+    assert participant.headers["cache-control"] == "private, no-store"
 
 
 def test_the_names_and_descriptions_of_every_game_can_be_translated_at_once() -> None:
