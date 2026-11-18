@@ -155,31 +155,34 @@ also updates immediately by default. A game with `motion.animate_own:true`
 uses its declared physical timings for local moves in both modes. For a game
 with a motion policy, coalesced accepted updates play individually in order
 instead of combining checker movement into one scene.
-History navigation currently updates immediately; the
-[requirements call for animated history review](declarative-game-requirements.md#5-show-what-happened-with-animations),
-including recorded own moves. A scene is
+Adjacent history snapshots animate read-only changes, including recorded own
+moves. Nonadjacent jumps settle immediately. A scene is
 still a complete snapshot; animation timing and transforms belong to the host.
 For games whose server stores counts rather than individual pieces,
 presentation `local_state` can reconcile identities, as Backgammon does for
 moves, captures, bar entry and bearing off.
 
-The Portal's immersive camera fits all board surfaces, visible piece bodies and
-legal destinations into the available panel at **100%**. Hands outside a board
-remain in view. Exterior headings and instructions do not reserve board space;
-their text remains available to screen readers. Labels inside board surfaces
-remain visible. Other mounts fit the complete declared viewport by default.
+The shared React Native host fits the complete declared viewport, boards,
+visible piece bodies and legal destinations at **100%**. Its canvas uses the
+available width and normally caps its height for short screens. When that cap
+would make piece bodies or destinations smaller than 32 CSS pixels, the canvas
+grows vertically and its native containing scroll view reaches the full board.
+A package that cannot meet the minimum at the available width still needs a
+responsive layout repair; this host adjustment does not certify a package.
+Scene coordinates and label left edges stay independent of the account's text
+direction. Full player names wrap without truncating identity.
 
-The board uses drag and two-finger pinch/spread without a camera toolbar or
-instruction panel. Pinch and mouse-wheel zoom allow **25%–400%** of the fitted
-view. Below 100%, the overview leaves additional space around the board.
-Background dragging works at every zoom level and permits a bounded margin of
-18% of the visible area beyond each edge, so edge pieces can be moved away from
-the screen boundary. The board cannot be panned completely out of view. Keyboard users
-can focus the board and use `+`/`-` to zoom, `0` to restore the fitted view,
-arrow keys to pan, and Home/End to reach the board's edges.
-Camera state survives scene changes, replay and viewport resizing, and resets
-when the host opens a new match. Camera gestures stay in the host and never
-emit `make_move`; two fingers cancel an unfinished piece gesture.
+The host provides zoom/reset controls, two-finger pinch/spread and **25%–600%**
+camera zoom. On the web, ordinary wheel scrolling reaches the page's board and
+controls; hold Ctrl or Meta while using the wheel to zoom. At the fitted view,
+dragging empty space scrolls the page. After zooming, background dragging pans
+the bounded camera. Keyboard users can focus the board and use `+`/`-` to zoom,
+`0` or Home to restore the fitted view, and arrow keys to pan.
+Camera state survives scene changes, replay, viewport resizing and language
+changes, and resets when the host opens a different match or viewer.
+Camera gestures stay in the host and never emit `make_move`; two fingers cancel
+an unfinished piece gesture. Audit actual object sizes, clipping, complete reach
+and input guards at every required viewport and zoom level.
 
 For compact boards that already fit well, declare
 `"viewport": {"width": 800, "height": 600, "camera_enabled": false}`.

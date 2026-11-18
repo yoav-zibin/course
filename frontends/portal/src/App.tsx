@@ -127,7 +127,7 @@ function PortalApp() {
       {width < 800 && !menu && <ScrollView horizontal style={s.mobileTabs} contentContainerStyle={{gap:6,paddingHorizontal:12,paddingVertical:8}}>{links.slice(0,3).map(link=><Button key={link.key} secondary compact selected={screen===link.key} onPress={()=>navigate(link.key)}>{link.label}</Button>)}</ScrollView>}
       <View style={{flex:1,flexDirection:'row',minHeight:0}}>
         {side && <View style={s.sidebar}>{tabs}<View style={{flex:1}}/><Button secondary onPress={()=>navigate('settings')}>⚙ {t('ui.preferences.title','Preferences')}</Button></View>}
-        <ScrollView style={{flex:1}} contentContainerStyle={[s.content,{padding:width<600?14:28},gameVisible && {maxWidth:1500}]} keyboardShouldPersistTaps="handled">
+        <ScrollView style={{flex:1,minWidth:0}} contentContainerStyle={[s.content,{padding:gameVisible?0:width<600?14:28},gameVisible && {maxWidth:1500}]} keyboardShouldPersistTaps="handled">
           {(notice || p.error) && <Notice error onDismiss={()=>{setNotice('');p.actions.clearError();}}>{notice || p.error}</Notice>}
           {p.storageError && <Notice error>{p.storageError}</Notice>}
           {(!p.network || p.pending>0) && <Notice>{p.network ? t('ui.offline.online','Online') : t('ui.offline.offline','Offline')} · {p.pending} {t('ui.offline.pending_moves','pending moves')}. {p.pending ? t('ui.offline.move_saved','Your move is saved on this device and will sync when connected.') : t('ui.offline.downloaded_play','Downloaded games are available on this device.')}</Notice>}

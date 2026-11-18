@@ -1,6 +1,6 @@
 import {copyText} from '../platform/i18n';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, ActivityIndicator, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
 import Svg, { Circle, Ellipse, Image as SvgImage, Line, Polygon, Polyline, Rect, SvgXml, Text as SvgText } from 'react-native-svg';
 import G from './SceneGroup';
 import type { Board, Control, GameSpec, Json, Piece, Point, Scene, StateMessage, Target, UIEvent } from './types';
@@ -66,7 +66,16 @@ function Renderer({spec, message, onMove, onError, deliveryKey,onAnimationStateC
   const [motionBusy,setMotionBusy]=useState(false), motionTimer=useRef<ReturnType<typeof setTimeout> | null>(null);
   const canvas = useRef<React.ComponentRef<typeof View>>(null), origin = useRef({x:0,y:0});
   const bounds = useMemo(()=>contentBounds(spec,display.scene),[spec,display.scene]);
-  const height = Math.max(220, Math.min(680, dimensions.height * .7, width * bounds.height / bounds.width));
+  const smallestObject = useMemo(()=>Math.min(Infinity,
+    ...(display.scene.pieces||[]).filter(piece=>!piece.hidden).map(piece=>{const size=pieceSize(spec,piece);return Math.min(size.width,size.height)*(piece.scale??1);}),
+    ...(display.scene.targets||[]).map(target=>{const size=targetBox(spec,target);return Math.min(size.width,size.height);}),
+  ),[spec,display.scene]);
+  const widthFittedHeight=width*bounds.height/bounds.width;
+  // A short screen may scroll a taller canvas rather than shrink physical
+  // objects below 32px. Width remains bounded by the actual native viewport;
+  // packages that cannot meet 32px at that width still need a layout repair.
+  const minimumHeight=Number.isFinite(smallestObject)&&smallestObject>0?32*bounds.height/smallestObject:0;
+  const height=Math.max(220,Math.min(widthFittedHeight,Math.max(Math.min(680,dimensions.height*.7),minimumHeight)));
   const limits = cameraLimits(bounds,camera.zoom);
   const view = {x: bounds.x + (bounds.width-limits.width)/2 + camera.x,
     y: bounds.y + (bounds.height-limits.height)/2 + camera.y, width:limits.width,height:limits.height};
@@ -198,12 +207,22 @@ function Renderer({spec, message, onMove, onError, deliveryKey,onAnimationStateC
 
   const actions = useRef({boardPoint,setSafeCamera,zoomTo,activatePiece,activateTarget,dispatch,transform,select,showPreview});
   actions.current={boardPoint,setSafeCamera,zoomTo,activatePiece,activateTarget,dispatch,transform,select,showPreview};
+  const claimGesture=(event:GestureResponderEvent)=>{
+    measureOrigin();
+    const e=event.nativeEvent,c=current.current;
+    if((e.touches?.length||0)>1||c.camera.zoom!==1)return true;
+    const point=actions.current.boardPoint({x:e.pageX-origin.current.x,y:e.pageY-origin.current.y}),scene=sceneRef.current;
+    const chosen=scene.pieces?.find(piece=>piece.id===selectedRef.current);
+    // At the fitted view, empty board space belongs to the containing native
+    // scroll view. A piece/destination still owns its complete drag gesture.
+    return canMove(latest.current,sent.current)&&Boolean(hitPiece(spec,scene,point)||hitTarget(spec,scene,point,chosen));
+  };
   const responders = useMemo(()=>PanResponder.create({
     // Native SVG's own touchable group would otherwise claim the responder
     // before the board can distinguish a drag from a two-finger camera gesture.
-    onStartShouldSetPanResponderCapture:()=>true,
-    onStartShouldSetPanResponder:()=>true,
-    onMoveShouldSetPanResponder:()=>true,
+    onStartShouldSetPanResponderCapture:claimGesture,
+    onStartShouldSetPanResponder:claimGesture,
+    onMoveShouldSetPanResponder:event=>(event.nativeEvent.touches?.length||0)>1||current.current.camera.zoom!==1,
     onPanResponderTerminationRequest:()=>false,
     onPanResponderGrant:event=>{
       measureOrigin();
@@ -308,8 +327,9 @@ function Renderer({spec, message, onMove, onError, deliveryKey,onAnimationStateC
       else if(key.startsWith('arrow')){event.preventDefault();setSafeCamera({...camera,x:camera.x+(key==='arrowleft'?-view.width*.1:key==='arrowright'?view.width*.1:0),y:camera.y+(key==='arrowup'?-view.height*.1:key==='arrowdown'?view.height*.1:0)});}
     }
   };
-  const webProps: Record<string, unknown>=Platform.OS==='web'?{onKeyDown:keyboard,onWheel:(event:{deltaY:number;clientX:number;clientY:number;preventDefault():void})=>{
-    if(spec.viewport.camera_enabled===false)return;event.preventDefault();zoomTo(camera.zoom*(event.deltaY<0?1.15:1/1.15),{x:event.clientX-origin.current.x,y:event.clientY-origin.current.y});
+  const webProps: Record<string, unknown>=Platform.OS==='web'?{onKeyDown:keyboard,onWheel:(event:{deltaY:number;clientX:number;clientY:number;ctrlKey:boolean;metaKey:boolean;preventDefault():void})=>{
+    if(spec.viewport.camera_enabled===false||!event.ctrlKey&&!event.metaKey)return;
+    event.preventDefault();measureOrigin();zoomTo(camera.zoom*(event.deltaY<0?1.15:1/1.15),{x:event.clientX-origin.current.x,y:event.clientY-origin.current.y});
   }}:{};
 
   return <View style={styles.container}>
@@ -326,7 +346,7 @@ function Renderer({spec, message, onMove, onError, deliveryKey,onAnimationStateC
     <View ref={canvas} collapsable={false} focusable style={[styles.canvas,{height}]} {...webProps} {...responders.panHandlers}
       onLayout={event=>{setWidth(event.nativeEvent.layout.width);measureOrigin();}}
       accessibilityLabel={copyText("Game board. Use pieces and highlighted destinations. Zoom controls are above the board.")}>
-      <Svg width="100%" height="100%" viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}>
+      <Svg width="100%" height="100%" style={{direction:'ltr'}} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}>
         {spec.boards.map(board=><BoardGraphic key={board.id} board={board} spec={spec}/>)}
         {display.scene.paths?.map(path=><Polyline key={path.id} points={path.points.map(p=>`${p.x},${p.y}`).join(' ')} fill="none" stroke={path.color||'#d2ff5a'} strokeWidth={path.width||3}/>)}
         {[...(display.scene.pieces||[])].sort((a,b)=>(a.z||0)-(b.z||0)).filter(piece=>!piece.hidden&&piece.id!==drag?.id).map(piece=><PieceGraphic key={piece.id} piece={piece} previous={display.previous.pieces?.find(old=>old.id===piece.id)}
@@ -345,7 +365,7 @@ function Renderer({spec, message, onMove, onError, deliveryKey,onAnimationStateC
           enabled={active&&(!selectedPiece?.move_targets?.length||selectedPiece.move_targets.includes(target.id))}
           selected={preview===target.id||drag?.target===target.id} onPress={()=>activateTarget(target,Platform.OS!=='web')}/>) }
         {drag&&display.scene.pieces?.filter(piece=>piece.id===drag.id).map(piece=><PieceGraphic key={`drag-${piece.id}`} piece={{...piece,position:{x:drag.at.x-(spec.boards.find(b=>b.id===piece.board)?.x||0),y:drag.at.y-(spec.boards.find(b=>b.id===piece.board)?.y||0)}}} spec={spec} animate={false} serial={display.serial} enabled={false} selected={true}/>) }
-        {display.scene.labels?.map(label=><SvgText key={label.id} x={label.x} y={label.y} fill={label.color||'#e4edf4'} fontSize={label.font_size||18} alignmentBaseline="hanging">{label.text}</SvgText>)}
+        {display.scene.labels?.map(label=><SvgText key={label.id} x={label.x} y={label.y} textAnchor="start" fill={label.color||'#e4edf4'} fontSize={label.font_size||18} alignmentBaseline="hanging">{label.text}</SvgText>)}
       </Svg>
     </View>
     <View style={styles.tools}>
@@ -461,11 +481,11 @@ function SceneControl({control,enabled,dispatch}:{control:Control;enabled:boolea
 }
 
 const styles=StyleSheet.create({
-  container:{width:'100%',gap:8},toolbar:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'},row:{flexDirection:'row',alignItems:'center',gap:6,flexWrap:'wrap'},
-  status:{color:'#b7ced9',fontSize:13},canvas:{width:'100%',backgroundColor:'#0a1924',borderRadius:14,overflow:'hidden'},
+  container:{width:'100%',minWidth:0,gap:8},toolbar:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'},row:{flexDirection:'row',alignItems:'center',gap:6,flexWrap:'wrap'},
+  status:{color:'#b7ced9',fontSize:13},canvas:{width:'100%',backgroundColor:'#0a1924',overflow:'hidden'},
   loading:{padding:20},error:{color:'#ffc8b9',backgroundColor:'#4a2527',padding:12,borderRadius:8},
-  tool:{minWidth:44,minHeight:44,paddingHorizontal:12,paddingVertical:11,borderRadius:10,borderWidth:1,borderColor:'#355469',backgroundColor:'#172f40',alignItems:'center',justifyContent:'center'},
-  toolText:{color:'#eff8fc',fontSize:14,fontWeight:'600'},disabled:{opacity:.4},pressed:{backgroundColor:'#2a5365'},chosen:{borderColor:'#a7e6ba',backgroundColor:'#225247'},
-  tools:{gap:7},selectedLabel:{color:'#b9e4ce',fontSize:13},preview:{color:'#d0eab2',fontSize:13,minHeight:20},controls:{flexDirection:'row',flexWrap:'wrap',gap:10},
-  field:{gap:5,minWidth:130,flexGrow:1},fieldLabel:{color:'#cbdce5',fontSize:13},input:{borderWidth:1,borderColor:'#365165',backgroundColor:'#102635',borderRadius:9,minHeight:44,color:'#ffffff',paddingHorizontal:12},
+  tool:{minWidth:44,minHeight:44,maxWidth:'100%',flexShrink:1,paddingHorizontal:12,paddingVertical:11,borderRadius:10,borderWidth:1,borderColor:'#355469',backgroundColor:'#172f40',alignItems:'center',justifyContent:'center'},
+  toolText:{color:'#eff8fc',fontSize:14,fontWeight:'600',flexShrink:1,minWidth:0,maxWidth:'100%'},disabled:{opacity:.4},pressed:{backgroundColor:'#2a5365'},chosen:{borderColor:'#a7e6ba',backgroundColor:'#225247'},
+  tools:{gap:7},selectedLabel:{color:'#b9e4ce',fontSize:13},preview:{color:'#d0eab2',fontSize:13,minHeight:20},controls:{flexDirection:'row',flexWrap:'wrap',gap:10,minWidth:0,maxWidth:'100%'},
+  field:{gap:5,minWidth:130,maxWidth:'100%',flexGrow:1},fieldLabel:{color:'#cbdce5',fontSize:13},input:{borderWidth:1,borderColor:'#365165',backgroundColor:'#102635',borderRadius:9,minHeight:44,color:'#ffffff',paddingHorizontal:12},
 });

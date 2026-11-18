@@ -14,7 +14,7 @@ async function mount(page:Page,request:APIRequestContext,pkg=spec(),initial=stat
     (window as any).__moves=[];(window as any).__ready=false;
     window.addEventListener('message',event=>{if(event.source!==window)return;if(event.data?.type==='make_move')(window as any).__moves.push(event.data.move);if(event.data?.type==='game_ready')(window as any).__ready=true;});
   });
-  await page.route('**/renderer-fixture',route=>route.fulfill({contentType:'text/html',body:document}));
+  await page.route('**/renderer-fixture',route=>route.fulfill({contentType:'text/html; charset=utf-8',body:document}));
   await page.goto('/renderer-fixture');await page.waitForFunction(()=>(window as any).__ready);
   await send(page,initial);
 }
@@ -34,6 +34,39 @@ test('shared renderer isolates game code, guards replay, hides private identity 
   await expect.poll(()=>moves(page)).toEqual([{event:{type:'tap',id:'roll'}}]);
   await expect(page.getByRole('button',{name:'Roll dice',exact:true})).toBeDisabled();
   await page.screenshot({path:info.outputPath('shared-renderer.png'),fullPage:true});
+});
+
+test('scene labels keep their declared left edge in an Arabic document',async({page,request})=>{
+  await mount(page,request,spec(`const gameUI={reduce(){return {scene:{labels:[{id:'arabic',x:24,y:24,text:'مرحبا بالعالم 123',font_size:20}]}}}};`));
+  await page.evaluate(()=>{document.documentElement.dir='rtl';document.documentElement.lang='ar';});
+  const label=page.getByText('مرحبا بالعالم 123',{exact:true});await expect(label).toBeVisible();
+  const box=await label.evaluate(node=>{const b=(node as unknown as SVGTextElement).getBBox();return {x:b.x,width:b.width};});
+  expect(box.x).toBeGreaterThanOrEqual(23);expect(box.x).toBeLessThanOrEqual(25);
+});
+
+test('short-screen height fitting preserves 32px physical bodies and destinations',async({page,request})=>{
+  const pkg={format:'buildplay-ui',version:1,viewport:{width:1120,height:1100},boards:[{id:'table',kind:'zone',x:0,y:0,width:1120,height:1100}],
+    piece_types:{domino:{shape:'rect',width:224,height:112}},
+    ui_code:`const gameUI={reduce(){return {scene:{pieces:[{id:'tile',type:'domino',board:'table',position:{x:300,y:700},aria_label:'Physical domino',actions:['move'],move_targets:['end']}],targets:[{id:'end',board:'table',position:{x:800,y:700},label:'Legal end',hit_area:{width:224,height:112,x:-112,y:-56}}]}}}};`};
+  for(const viewport of [{width:320,height:480},{width:480,height:320},{width:844,height:390}]){
+    await page.setViewportSize(viewport);await mount(page,request,pkg);
+    const body=page.getByRole('button',{name:/Physical domino/}).locator('rect').first();await expect(body).toBeAttached();
+    await expect.poll(async()=>{const box=(await body.boundingBox())!;return Math.min(box.width,box.height);}).toBeGreaterThanOrEqual(31.99);
+    const target=(await page.getByRole('button',{name:'Legal end',exact:true}).locator('rect').first().boundingBox())!;
+    expect(Math.min(target.width,target.height)).toBeGreaterThanOrEqual(31.99);
+  }
+});
+
+test('scene controls wrap complete 200-codepoint Unicode names inside the native viewport',async({page,request})=>{
+  const pkg=spec(`const gameUI={reduce(m){const s=m.type==='ui_event'?m.state_changed:m;return {scene:{controls:[{id:'status',kind:'button',label:s.view.name||'Player',disabled:true}]}}}};`);
+  const names=['مرحباالعالم世界🙂Ω'.repeat(20),'Alice العربية 中文 👩🏽‍🚀🦊'.repeat(20)].map(name=>Array.from(name).slice(0,200).join(''));
+  for(const viewport of [{width:320,height:480},{width:480,height:320},{width:820,height:1180},{width:1180,height:820}]){
+    await page.setViewportSize(viewport);await mount(page,request,pkg,state({view:{name:names[0]}}));
+    for(const name of names){
+      await send(page,state({view:{name}}));const control=page.getByRole('button',{name,exact:true});await expect(control).toHaveText(name);await expect(control).toBeDisabled();
+      const box=(await control.boundingBox())!;expect(box.x).toBeGreaterThanOrEqual(-1);expect(box.x+box.width).toBeLessThanOrEqual(viewport.width+1);expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+  }
 });
 
 test('piece selection exposes rotate/flip/resize and a legal destination submits one move',async({page,request})=>{

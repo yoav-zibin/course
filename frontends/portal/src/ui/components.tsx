@@ -63,14 +63,14 @@ export function Dialog({visible, title, children, onClose, wide}: {visible: bool
 export function Empty({children}: {children: ReactNode}) { return <Copy muted style={{paddingVertical: 20, lineHeight: 23}}>{children}</Copy>; }
 
 export const styles = StyleSheet.create({
-  copy: {fontSize: 15, lineHeight: 23, color: colors.text}, muted: {color: colors.muted}, small: {fontSize: 13, lineHeight: 20},
+  copy: {fontSize: 15, lineHeight: 23, color: colors.text, flexShrink: 1, minWidth: 0}, muted: {color: colors.muted}, small: {fontSize: 13, lineHeight: 20},
   title: {color: colors.text, fontSize: 30, fontWeight: '800', letterSpacing: -0.5, flexShrink: 1},
-  button: {backgroundColor: colors.accent, borderWidth: 1, borderColor: colors.accent, borderRadius: 8, minHeight: 44, paddingVertical: 11, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9},
-  buttonText: {color: colors.ink, fontWeight: '700', fontSize: 14, textAlign: 'center'},
+  button: {backgroundColor: colors.accent, borderWidth: 1, borderColor: colors.accent, borderRadius: 8, minHeight: 44, maxWidth: '100%', paddingVertical: 11, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9},
+  buttonText: {color: colors.ink, fontWeight: '700', fontSize: 14, textAlign: 'center', flexShrink: 1, minWidth: 0},
   secondary: {backgroundColor: colors.surface, borderColor: colors.border}, danger: {backgroundColor: colors.surface, borderColor: '#8c4f60'}, selected: {borderColor: colors.accent, backgroundColor: '#26321c'},
   fieldGroup: {gap: 8, flexShrink: 1}, field: {backgroundColor: colors.background, color: colors.text, fontSize: 16, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12, minHeight: 46},
-  row: {flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10},
-  card: {backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: 22, gap: 16},
+  row: {flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, minWidth: 0, maxWidth: '100%'},
+  card: {backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: 22, gap: 16, minWidth: 0, maxWidth: '100%'},
   notice: {backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, padding: 14, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 10},
   modalShade: {flex: 1, backgroundColor: '#050915bb', justifyContent: 'center', alignItems: 'center', padding: 18},
   modal: {width: '100%', maxWidth: 530, maxHeight: '90%', backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 22, gap: 22},
