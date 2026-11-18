@@ -3,7 +3,9 @@
 import re
 from dataclasses import replace
 from fastapi import HTTPException, Query, Response
-from game_platform.schemas import GameSummaryOut, UserOut, UserWithPasswordOut, MoveOut
+from game_platform.schemas import (
+    CursorPageOut, GameSummaryOut, MatchOut, UserOut, UserWithPasswordOut, MoveOut,
+)
 from game_platform.move_history import history_prefix
 
 
@@ -40,7 +42,7 @@ def install(app, *, debug_tools):
             "search": "word-prefix" if enabled else "substring",
         }
 
-    @app.get("/v2/games")
+    @app.get("/v2/games", response_model=CursorPageOut[GameSummaryOut])
     def games(
         platform: Platform,
         q: str = "",
@@ -64,7 +66,7 @@ def install(app, *, debug_tools):
             "next_cursor": result.next_cursor,
         }
 
-    @app.get("/v2/builder/games")
+    @app.get("/v2/builder/games", response_model=CursorPageOut[GameSummaryOut])
     def owned_games(
         platform: Platform,
         caller_id: CallerId,
@@ -139,7 +141,7 @@ def install(app, *, debug_tools):
             "next_cursor": result.next_cursor,
         }
 
-    @app.get("/v2/users/me/saved-games")
+    @app.get("/v2/users/me/saved-games", response_model=CursorPageOut[GameSummaryOut])
     def saved_games(
         platform: Platform,
         caller_id: CallerId,
@@ -183,7 +185,7 @@ def install(app, *, debug_tools):
         platform.set_saved_game(caller_id=caller_id, game_id=game_id, saved=False)
         return Response(status_code=204)
 
-    @app.get("/v2/matches/open")
+    @app.get("/v2/matches/open", response_model=CursorPageOut[MatchOut])
     def open_matches(
         platform: Platform,
         limit: int = Query(50, ge=1, le=100),
@@ -211,7 +213,7 @@ def install(app, *, debug_tools):
                 items.append(_match_out(platform, match))
         return {"items": items, "next_cursor": result.next_cursor}
 
-    @app.get("/v2/matches")
+    @app.get("/v2/matches", response_model=CursorPageOut[MatchOut])
     def matches(
         platform: Platform,
         caller_id: CallerId,

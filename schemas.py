@@ -2,7 +2,7 @@
 
 import base64
 import datetime as dt
-from typing import Annotated, Final, Literal
+from typing import Annotated, Final, Generic, Literal, TypeVar
 from urllib.parse import urlsplit
 
 from pydantic import (
@@ -45,6 +45,16 @@ Name = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
 ]
 PlayerCount = Annotated[int, Field(ge=MIN_PLAYERS, le=MAX_PLAYERS)]
+
+
+_PageItem = TypeVar("_PageItem")
+
+
+class CursorPageOut(BaseModel, Generic[_PageItem]):
+    """A bounded page, serialized with its items by Pydantic's native encoder."""
+
+    items: list[_PageItem]
+    next_cursor: str | None
 
 
 def _check_locale(tag: str) -> str:
