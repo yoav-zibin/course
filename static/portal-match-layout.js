@@ -13,6 +13,23 @@ window.PortalMatchLayout = (() => {
   let online = navigator.onLine;
   let previousStatus = null;
   let previousConflict = null;
+  let accountHome = null;
+
+  function positionAccountMenu(active) {
+    const account = $("account-menu");
+    if (!account?.parentNode) return;
+    if (!accountHome) {
+      accountHome = document.createComment("Account menu home");
+      account.before(accountHome);
+    }
+    const toolbar = $("match-toolbar-title").parentElement;
+    // Keep the existing account/preferences controls accessible when the
+    // header is hidden. Move only on entry/exit: polling must preserve focus
+    // in the language picker and the open menu's scroll position.
+    if (active && toolbar && account.parentNode !== toolbar) toolbar.append(account);
+    else if (!active && accountHome.parentNode && accountHome.nextSibling !== account) accountHome.after(account);
+    account._positionAuthMenu?.();
+  }
 
   function positionTools() {
     const toolbar = $("match-toolbar-title").parentElement;
@@ -69,6 +86,7 @@ window.PortalMatchLayout = (() => {
     $("match-play-notice").textContent = notices.join(" · ");
     $("match-play-notice").hidden = notices.length === 0;
     $("match-play-notice").classList.toggle("error", Boolean(error || match?.conflict));
+    positionAccountMenu(active);
     positionTools();
   }
 
