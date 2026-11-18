@@ -32,6 +32,7 @@ Design notes:
 """
 
 import datetime as dt
+import hashlib
 import json
 import threading
 import time
@@ -427,6 +428,10 @@ class GameLogicError(Exception):
     result. The platform answers 500, records the error on the game
     version, and leaves the match unchanged."""
 
+    # Attached while holding the runner's lock, before another call can
+    # overwrite its metrics. Invalid platform inputs have no game evidence.
+    bug_report: dict[str, Any] | None = None
+
 
 class GameLogicTimeout(GameLogicError):
     """A game function ran past the per-call time limit."""
@@ -439,6 +444,9 @@ class InvalidMoveError(Exception):
     def __init__(self, message: str) -> None:
         super().__init__(message)
         self.message = message
+        # A human's illegal move is expected. The service can promote this
+        # evidence to a bug when the rejected move came from the game's bot.
+        self.rejected_call_report: dict[str, Any] | None = None
 
 
 def _is_timeout(error: Exception) -> bool:
@@ -467,15 +475,6 @@ class GameLogic:
         memory_limit_bytes: int = MEMORY_LIMIT_BYTES,
     ) -> None:
         self._server_code = server_code
-        try:
-            self._schema_validators = compile_game_schemas(game_schemas)
-        except (SchemaError, TypeError, ValueError) as error:
-            raise GameLogicError(f"invalid game_schemas: {error}") from error
-        self._game_schemas = dict(game_schemas)
-        self._unrestricted_schemas = {
-            name: validator.schema is True or validator.schema == {}
-            for name, validator in self._schema_validators.items()
-        }
         self._game_id = game_id
         self._game_version = game_version
         self._time_limit_seconds = time_limit_seconds
@@ -484,23 +483,37 @@ class GameLogic:
         self._invoke: quickjs.Object | None = None
         self._available_functions: dict[str, bool] = {}
         self._lock = threading.RLock()
-        # Metrics of the most recent call (set by _call, even when the
-        # call raises): how long the QuickJS evaluation took, how much
-        # memory the context held afterwards, and the limits in effect.
-        # The tester reads these when it records a failure so the report
-        # can say exactly what the call cost.
+        # Capture measurements before dropping failed contexts. The game
+        # tester also reads these fields for its failure reports.
         self.last_call_duration_seconds: float = 0.0
         self.last_call_memory_used_bytes: int = 0
         self.last_call_memory_delta_bytes: int = 0
         self.last_call_time_limit_seconds: float = time_limit_seconds
         self.last_call_memory_limit_bytes: int = memory_limit_bytes
-        # The JSON result of the most recent call, set once the envelope
-        # is parsed and before it is validated; None when the call raised
-        # before producing a result. The tester reads it when a result
-        # fails validation, so the report can show what the game returned.
         self.last_call_result: Any = None
+        self.last_call_used_random = False
+        self._last_call_boundary: tuple[str, str, int | str, int] | None = None
+        self._call_phase = "load"
+        self._call_metrics_recorded = False
+        try:
+            self._game_schemas = dict(game_schemas)
+            self._schema_validators = compile_game_schemas(game_schemas)
+        except (SchemaError, TypeError, ValueError) as error:
+            failure = GameLogicError(f"invalid game_schemas: {error}")
+            failure.bug_report = self._bug_evidence(
+                "<load>", "{\"args\":[],\"ctx\":{}}", 0, 0, failure,
+                kind="invalid_schema",
+            )
+            raise failure from error
+        self._unrestricted_schemas = {
+            name: validator.schema is True or validator.schema == {}
+            for name, validator in self._schema_validators.items()
+        }
 
     def _new_context(self) -> quickjs.Context:
+        # Initializing the script always has the standard budget, even
+        # when the eventual playerLeft call requested a longer one.
+        self.last_call_time_limit_seconds = self._time_limit_seconds
         context = quickjs.Context()
         context.set_time_limit(self._time_limit_seconds)
         context.set_memory_limit(self._memory_limit_bytes)
@@ -518,20 +531,23 @@ class GameLogic:
             defined = context.eval(
                 "typeof game === 'object' && game !== null"
             )
+            available = {
+                function: bool(context.eval(f"typeof game.{function} === 'function'"))
+                for function in GAME_FUNCTIONS
+            } if defined else {}
         except quickjs.JSException as error:
+            # The new context is still local when initialization fails.
+            # Preserve its available snapshot before it is discarded.
+            self.last_call_memory_used_bytes = self._context_memory(context)
             raise GameLogicError(
                 f"the game's server code does not evaluate: {error}"
             ) from error
+        self.last_call_memory_used_bytes = self._context_memory(context)
         if not defined:
             raise GameLogicError(
                 "the game's server code does not define a global `game` object"
             )
-        self._available_functions = {
-            function: bool(
-                context.eval(f"typeof game.{function} === 'function'")
-            )
-            for function in GAME_FUNCTIONS
-        }
+        self._available_functions = available
         self._invoke = invoke
         return context
 
@@ -539,7 +555,17 @@ class GameLogic:
         """Load the server script under the usual limits, without starting a match."""
         with self._lock:
             if self._context is None:
-                self._context = self._new_context()
+                started = time.monotonic()
+                self._reset_call_metrics(None)
+                try:
+                    self._context = self._new_context()
+                except GameLogicError as error:
+                    self.last_call_duration_seconds = max(0, time.monotonic() - started)
+                    error.bug_report = self._bug_evidence(
+                        "<load>", "{\"args\":[],\"ctx\":{}}", 0, 0, error,
+                    )
+                    self._drop_context()
+                    raise
 
     def _drop_context(self) -> None:
         self._context = None
@@ -550,8 +576,12 @@ class GameLogic:
         """Bytes the QuickJS context currently holds, or 0 if unavailable."""
         if self._context is None:
             return 0
+        return self._context_memory(self._context)
+
+    @staticmethod
+    def _context_memory(context: quickjs.Context) -> int:
         try:
-            return int(self._context.memory().get("memory_used_size", 0))
+            return int(context.memory().get("memory_used_size", 0))
         except Exception:
             return 0
 
@@ -564,6 +594,102 @@ class GameLogic:
         used = self._memory_used_bytes()
         self.last_call_memory_used_bytes = used
         self.last_call_memory_delta_bytes = max(0, used - memory_before)
+        self._call_metrics_recorded = True
+
+    def _reset_call_metrics(self, time_limit_seconds: float | None) -> None:
+        self.last_call_duration_seconds = 0.0
+        self.last_call_memory_used_bytes = 0
+        self.last_call_memory_delta_bytes = 0
+        self.last_call_time_limit_seconds = (
+            self._time_limit_seconds if time_limit_seconds is None else time_limit_seconds
+        )
+        self.last_call_memory_limit_bytes = self._memory_limit_bytes
+        self.last_call_result = None
+        self.last_call_used_random = False
+        self._last_call_boundary = None
+        self._call_phase = "load"
+        self._call_metrics_recorded = False
+
+    def _bug_evidence(
+        self, function: str, input_json: str, seed: int | str,
+        frozen_millis: int, error: Exception, *, kind: str | None = None,
+    ) -> dict[str, Any]:
+        """A reproducible, detached snapshot; the service persists it privately.
+
+        QuickJS reports memory retained at the observation, not high-water
+        usage or the size of an allocation rejected by its hard cap. Keep
+        that distinction explicit rather than inventing an exceeded peak.
+        """
+        detail = str(error)
+        caused_by = str(error.__cause__ or "")
+        lower = (detail + " " + caused_by).lower()
+        if kind is None:
+            if isinstance(error, GameLogicTimeout) or (
+                isinstance(error.__cause__, quickjs.JSException) and _is_timeout(error.__cause__)
+            ):
+                kind = "timeout"
+            elif any(token in lower for token in ("out of memory", "memory limit", "cannot allocate")):
+                kind = "memory_limit"
+            elif self._call_phase == "validation":
+                kind = "invalid_result"
+            elif "is not defined" in lower:
+                kind = "missing_function"
+            elif self._call_phase == "load":
+                kind = "initialization"
+            else:
+                kind = "exception"
+        boundary = json.loads(input_json)
+        schemas = getattr(self, "_game_schemas", None)
+        # Invalid schema construction can include non-JSON values. Keep the
+        # diagnostic serializable without losing valid schemas' structure.
+        try:
+            schemas_json = json.dumps(schemas, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        except (TypeError, ValueError):
+            schemas_json = json.dumps({"invalid_schema_repr": repr(schemas)})
+        schemas = json.loads(schemas_json)
+        evidence = {
+            "game_id": self._game_id,
+            "game_version": self._game_version,
+            "function": function,
+            "kind": kind,
+            "phase": self._call_phase,
+            "message": detail,
+            "arguments": boundary["args"],
+            "ctx": boundary["ctx"],
+            "input_json": input_json,
+            # Firestore integers are signed 64-bit; match seeds are 256-bit.
+            "seed": str(seed),
+            "seed_type": "string" if isinstance(seed, str) else "integer",
+            "effective_seed": self._effective_seed(seed),
+            "frozen_time_millis": frozen_millis,
+            "server_code_sha256": hashlib.sha256(self._server_code.encode()).hexdigest(),
+            "game_schemas_sha256": hashlib.sha256(schemas_json.encode()).hexdigest(),
+            "game_schemas": schemas,
+            "result": self.last_call_result,
+            "duration_seconds": self.last_call_duration_seconds,
+            "memory_used_bytes": self.last_call_memory_used_bytes,
+            "memory_delta_bytes": self.last_call_memory_delta_bytes,
+            "time_limit_seconds": self.last_call_time_limit_seconds,
+            "memory_limit_bytes": self.last_call_memory_limit_bytes,
+            "memory_measurement": "context snapshot after call; peak usage and rejected allocation size unavailable",
+        }
+        # Detach result and schemas from mutable caller/test objects too.
+        return json.loads(json.dumps(evidence, allow_nan=False))
+
+    @staticmethod
+    def _effective_seed(seed: int | str) -> int | str:
+        return seed if isinstance(seed, str) else (
+            format(seed, "064x") if seed > 0xFFFFFFFF else int(seed) & 0xFFFFFFFF
+        )
+
+    def _attach_output_bug(self, error: GameLogicError) -> None:
+        """Used by extra contract validators immediately after a call."""
+        if self._last_call_boundary is not None:
+            self._call_phase = "validation"
+            error.bug_report = self._bug_evidence(
+                *self._last_call_boundary, error, kind="invalid_result",
+            )
+        self._drop_context()
 
     def has(self, function: str) -> bool:
         """Whether the game defines [function] (some functions are optional)."""
@@ -574,18 +700,23 @@ class GameLogic:
         if function in self._available_functions:
             return self._available_functions[function]
         if self._context is None:
-            try:
-                self._context = self._new_context()
-            except GameLogicError:
-                return False
+            self.load()
+            if function in self._available_functions:
+                return self._available_functions[function]
         try:
             result = bool(
                 self._context.eval(f"typeof game.{function} === 'function'")
             )
             self._available_functions[function] = result
             return result
-        except Exception:
-            return False
+        except quickjs.JSException as cause:
+            error = GameLogicError(f"game.{function} could not be inspected: {cause}")
+            error.__cause__ = cause
+            error.bug_report = self._bug_evidence(
+                function, "{\"args\":[],\"ctx\":{}}", 0, 0, error,
+            )
+            self._drop_context()
+            raise error from cause
 
     def call(
         self,
@@ -602,14 +733,45 @@ class GameLogic:
         the cached QuickJS context is never entered concurrently.
         """
         with self._lock:
-            return self._call(
-                function,
-                *args,
-                ctx=ctx,
-                seed=seed,
-                now=now,
-                time_limit_seconds=time_limit_seconds,
+            if function not in GAME_FUNCTIONS:
+                raise GameLogicError(f"unknown game function: {function!r}")
+            input_json = json.dumps(
+                {"args": list(args), "ctx": ctx or {}},
+                separators=(",", ":"), allow_nan=False,
             )
+            frozen_millis = int(now.timestamp() * 1000) if now is not None else 0
+            self._reset_call_metrics(time_limit_seconds)
+            self._last_call_boundary = (function, input_json, seed, frozen_millis)
+            started = time.monotonic()
+            try:
+                return self._call(
+                    function,
+                    *args,
+                    ctx=ctx,
+                    seed=seed,
+                    now=now,
+                    time_limit_seconds=time_limit_seconds,
+                    input_json=input_json,
+                    frozen_millis=frozen_millis,
+                )
+            except GameLogicError as error:
+                if self._call_phase != "input_validation":
+                    if not self._call_metrics_recorded:
+                        self.last_call_duration_seconds = max(0, time.monotonic() - started)
+                        if self._context is not None:
+                            self.last_call_memory_used_bytes = self._memory_used_bytes()
+                    error.bug_report = self._bug_evidence(
+                        function, input_json, seed, frozen_millis, error,
+                    )
+                    self._drop_context()
+                raise
+            except InvalidMoveError as error:
+                if self._call_phase == "call":
+                    error.rejected_call_report = self._bug_evidence(
+                        function, input_json, seed, frozen_millis, error,
+                        kind="invalid_move",
+                    )
+                raise
 
     def _call(
         self,
@@ -619,6 +781,8 @@ class GameLogic:
         seed: int | str = 0,
         now: dt.datetime | None = None,
         time_limit_seconds: float | None = None,
+        input_json: str,
+        frozen_millis: int,
     ) -> Any:
         """Calls game.<function>(*args, ctx) and returns its JSON result.
 
@@ -638,17 +802,11 @@ class GameLogic:
             self._context = self._new_context()
         if not self._has(function):
             raise GameLogicError(f"game.{function} is not defined")
+        self._call_phase = "input_validation"
         self._validate_inputs(function, args, ctx or {})
+        self._call_phase = "call"
         if self._context is None:
             self._context = self._new_context()
-        frozen_millis = 0
-        if now is not None:
-            frozen_millis = int(now.timestamp() * 1000)
-        input_json = json.dumps(
-            {"args": list(args), "ctx": ctx or {}},
-            separators=(",", ":"),
-            allow_nan=False,
-        )
         override = (
             time_limit_seconds
             if time_limit_seconds is not None
@@ -670,7 +828,7 @@ class GameLogic:
             envelope_text = self._invoke(
                 function,
                 input_json,
-                seed if isinstance(seed, str) else (format(seed, "064x") if seed > 0xFFFFFFFF else int(seed) & 0xFFFFFFFF),
+                self._effective_seed(seed),
                 float(frozen_millis),
             )
         except quickjs.JSException as error:
@@ -689,8 +847,14 @@ class GameLogic:
             if override is not None and self._context is not None:
                 self._context.set_time_limit(self._time_limit_seconds)
         self._record_call_metrics(started, memory_before)
-        envelope = json.loads(envelope_text)
+        try:
+            envelope = json.loads(envelope_text)
+        except (TypeError, ValueError) as error:
+            raise GameLogicError(f"game.{function} returned an invalid JSON envelope") from error
+        if not isinstance(envelope, dict):
+            raise GameLogicError(f"game.{function} returned an invalid JSON envelope")
         if envelope.get("ok"):
+            self._call_phase = "validation"
             self.last_call_used_random = bool(envelope.get("used_random"))
             result = envelope.get("result")
             self.last_call_result = result
@@ -713,7 +877,10 @@ class GameLogic:
                     raise GameLogicError("game.playerLeft must end the match when fewer than two humans remain")
             return result
         if envelope.get("kind") == "invalid_move":
-            raise InvalidMoveError(str(envelope.get("message", "invalid move")))
+            message = str(envelope.get("message", "invalid move"))
+            if function in ("applyMove", "playerLeft"):
+                raise InvalidMoveError(message)
+            raise GameLogicError(f"game.{function} unexpectedly raised InvalidMove: {message}")
         # A game bug: the context may hold half-mutated globals, so it is
         # rebuilt before the next call.
         self._drop_context()

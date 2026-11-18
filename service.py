@@ -2798,7 +2798,7 @@ class GamePlatform:
             if (
                 game is not None
                 and game.server_code
-                and self._logic_for(game).has("playerJoined")
+                and self._has_logic_function(game, match, "playerJoined")
             ):
                 # The game decides what a mid-match join does to its state
                 # (deal the new player in, spectate until the next round...).
@@ -3039,10 +3039,12 @@ class GamePlatform:
         logic = self._logic_cache.get(key)
         if logic is None:
             if game.game_schemas is None:
-                raise GameLogicError(
+                error = GameLogicError(
                     f"game {game.id} version {game.version} has no game_schemas; "
                     "add game_schemas to it before enabling this game"
                 )
+                error.bug_report = {"kind": "invalid_game_schemas", "phase": "load"}
+                raise error
             contract = (game.import_package or {}).get('unit_tests')
             if contract:
                 from game_platform.game_contract import ContractLogic
@@ -3062,6 +3064,13 @@ class GamePlatform:
                 )
             self._logic_cache[key] = logic
         return logic
+
+    def _has_logic_function(self, game: Game, match: Match, function: str) -> bool:
+        try:
+            return self._logic_for(game).has(function)
+        except GameLogicError as error:
+            self._record_logic_error(game, function, error, match=match)
+            raise PlatformError(f"the game's server code failed in {function}") from error
 
     def _game_ctx(self, match: Match, *, pot: int | None = None) -> dict[str, Any]:
         """The ctx every game function receives: who is playing (by player
@@ -3162,20 +3171,19 @@ class GamePlatform:
         version and raises a PlatformError for them. InvalidMove passes
         through: it is the player's fault, not a bug."""
         started = time.perf_counter()
+        invocation = {"ctx": self._game_ctx(match), "seed": self._logic_seed(match, function),
+                      "now": self._clock(), "time_limit_seconds": time_limit_seconds}
         try:
             result = self._logic_for(game).call(
                 function,
                 *args,
-                ctx=self._game_ctx(match),
-                seed=self._logic_seed(match, function),
-                now=self._clock(),
-                time_limit_seconds=time_limit_seconds,
+                **invocation,
             )
         except InvalidMoveError as error:
             self._log_illegal_move(game, match, function, args, error)
             raise
         except GameLogicError as error:
-            self._record_logic_error(game, function, error, match=match, args=args)
+            self._record_logic_error(game, function, error, match=match, args=args, invocation=invocation)
             raise PlatformError(
                 f"the game's server code failed in {function}"
             ) from error
@@ -3193,7 +3201,25 @@ class GamePlatform:
         *,
         match: Match | None = None,
         args: Sequence[Any] | None = None,
+        invocation: dict[str, Any] | None = None,
     ) -> None:
+        from game_platform.game_bugs import add_game_server_bug
+        evidence = getattr(error, "bug_report", None)
+        if isinstance(error, InvalidMoveError):
+            evidence = getattr(error, "rejected_call_report", None)
+            if evidence is not None:
+                evidence = {**evidence, "kind": "invalid_computer_move"}
+        if evidence is not None and invocation is not None and evidence.get("phase") == "load":
+            evidence = {**evidence, "arguments": list(args or ()),
+                        "function": function,
+                        "ctx": invocation["ctx"], "seed": str(invocation["seed"]),
+                        "seed_type": "integer", "effective_seed": GameLogic._effective_seed(invocation["seed"]),
+                        "frozen_time_millis": int(invocation["now"].timestamp() * 1000),
+                        "input_json": json.dumps({"args": list(args or ()), "ctx": invocation["ctx"]})}
+        add_game_server_bug(
+            self._store, game=game, function=function, error=error, match=match,
+            evidence=evidence,
+        )
         self._store.add_game_version_error(
             GameVersionError(
                 id=self._new_id(),
@@ -3433,17 +3459,17 @@ class GamePlatform:
             self._fund_match_tokens(match)
             pot = match.bet_per_player * len(humans)
         funded_view = replace(match, token_pot=pot)
+        invocation = {"ctx": self._game_ctx(funded_view),
+                      "seed": self._logic_seed(match, "newMatch"), "now": self._clock()}
         try:
             result = self._logic_for(game).call(
                 "newMatch",
-                ctx=self._game_ctx(funded_view),
                 # Initialization must not reveal/reuse the first move's RNG.
-                seed=self._logic_seed(match, "newMatch"),
-                now=self._clock(),
+                **invocation,
             )
             pot, payouts = self._pay_logic_result(funded_view, result)
         except GameLogicError as error:
-            self._record_logic_error(game, "newMatch", error, match=funded_view, args=())
+            self._record_logic_error(game, "newMatch", error, match=funded_view, args=(), invocation=invocation)
             raise PlatformError(
                 "the game's server code failed in newMatch"
             ) from error
@@ -3682,19 +3708,19 @@ class GamePlatform:
         cached = self._view_cache.get(key)
         if cached is not None and cached[0] is match:
             return cached[1]
+        invocation = {"ctx": self._game_ctx(match), "seed": self._view_seed(match, player_id),
+                      "now": self._clock()}
         try:
             view = self._logic_for(game).call(
                 "viewFor",
                 match.state,
                 player_id,
-                ctx=self._game_ctx(match),
-                seed=self._view_seed(match, player_id),
-                now=self._clock(),
+                **invocation,
             )
         except GameLogicError as error:
             self._record_logic_error(
                 game, "viewFor", error,
-                match=match, args=(match.state, player_id),
+                match=match, args=(match.state, player_id), invocation=invocation,
             )
             return None
         if len(self._view_cache) > 1024:
@@ -3853,7 +3879,7 @@ class GamePlatform:
         match and what leaving applies, so a confirmed leave pays exactly
         what was previewed. A game bug is recorded and answered 500; a
         game refusing the leave with InvalidMove is answered 400."""
-        if self._logic_for(game).has("playerLeft"):
+        if self._has_logic_function(game, match, "playerLeft"):
             try:
                 result = self._call_logic(
                     game,

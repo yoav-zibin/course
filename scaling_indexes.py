@@ -74,6 +74,7 @@ def index_config(namespace):
             "status": "order",
         },
         "feedback_targets": {"problem": "desc"},
+        "game_server_bugs": {"examined": "order"},
         "jobs": {"due_at": "order"},
         "outbox": {"due_at": "order"},
     }
@@ -100,7 +101,7 @@ def index_config(namespace):
                     "indexes": [],
                 }
             )
-    for group in ("body", "moves", "entries", "unique_users", "variants", "config"):
+    for group in ("body", "moves", "entries", "unique_users", "variants", "config", "evidence"):
         overrides.append({"collectionGroup": group, "fieldPath": "*", "indexes": []})
     overrides.append(
         {"collectionGroup": "referral_nodes", "fieldPath": "*", "indexes": []}

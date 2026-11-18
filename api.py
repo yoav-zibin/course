@@ -2191,6 +2191,8 @@ def create_app(
     app.include_router(make_game_test_router(_get_platform))
     from game_platform.game_proposals import make_router as make_proposals_router
     app.include_router(make_proposals_router(_get_platform, _check_master_password))
+    from game_platform.game_bugs import make_router as make_game_bugs_router
+    app.include_router(make_game_bugs_router(_get_platform, _check_master_password))
     app.include_router(router)
     from game_platform.scaling_api import install as install_scaling_api
     install_scaling_api(app, debug_tools=debug_tools)

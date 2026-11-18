@@ -88,6 +88,7 @@ INTERNAL_COLLECTIONS = frozenset(
         "feedback_targets",
         "game_test_traces",
         "game_proposals",
+        "game_server_bugs",
     }
 )
 COLLECTIONS = frozenset(TYPES) | INTERNAL_COLLECTIONS
@@ -1325,6 +1326,97 @@ class QueryStore:
 
     def add_game_version_error(self, error):
         self._put("game_version_errors", error.id, error)
+
+    @staticmethod
+    def _game_server_bug_summary(row):
+        return {name: value for name, value in row.items()
+                if name != "evidence" and not name.startswith("__bug_payload_")}
+
+    def put_game_server_bug(self, row):
+        """Persist failure evidence independently of the failed match operation.
+
+        The row's exact JSON goes in small unindexed chunks. Write its header
+        last, so a visible bug never points at an incomplete reproduction.
+        These direct writes deliberately bypass raw_put's active transaction:
+        the game failure that caused this record usually aborts that transaction.
+        """
+        payload = json.dumps(row, ensure_ascii=True, separators=(",", ":"),
+                             allow_nan=False)
+        chunks = [payload[start:start + 180_000]
+                  for start in range(0, len(payload), 180_000)]
+        ref = self.ref("game_server_bugs", row["id"])
+        digest = hashlib.sha256(payload.encode("ascii")).hexdigest()
+        # Content-addressed chunk ids keep retries/updates from corrupting a
+        # previously visible row while a replacement is being written.
+        for index, chunk in enumerate(chunks):
+            chunk_ref = ref.collection("evidence").document(f"{digest}_{index:06}")
+            with timed_external("firestore"):
+                chunk_ref.set({"text": chunk})
+        header = self._game_server_bug_summary(row)
+        header.update(__bug_payload_chunks=len(chunks), __bug_payload_sha256=digest)
+        with timed_external("firestore"):
+            ref.set(header)
+        self._cache_committed(ref.path, header)
+
+    def _decode_game_server_bug(self, ref, header):
+        if header is None:
+            return None
+        digest = header["__bug_payload_sha256"]
+        parts = []
+        for index in range(header["__bug_payload_chunks"]):
+            chunk_ref = ref.collection("evidence").document(f"{digest}_{index:06}")
+            # Reproduction reads deliberately bypass the match transaction and
+            # stale cache, just like the independent writes above.
+            chunk = self._read_doc(chunk_ref)
+            if chunk is None:
+                raise ValueError("game server bug evidence is incomplete")
+            parts.append(chunk["text"])
+        payload = "".join(parts)
+        if hashlib.sha256(payload.encode("ascii")).hexdigest() != digest:
+            raise ValueError("game server bug evidence checksum mismatch")
+        row = json.loads(payload)
+        # Reviews update the small header; the reproduction remains immutable.
+        row.update(self._game_server_bug_summary(header))
+        return row
+
+    def get_game_server_bug(self, bug_id):
+        ref = self.ref("game_server_bugs", bug_id)
+        return self._decode_game_server_bug(ref, self._read_doc(ref))
+
+    def list_game_server_bugs(self, *, examined, limit, after=None):
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        filters = () if examined is None else (("examined", "==", examined),)
+        docs = self._query("game_server_bugs", filters, limit=limit + 1,
+                           after=key(after) if after is not None else None)
+        selected = docs[:limit]
+        rows = [self._game_server_bug_summary(doc.to_dict()) for doc in selected]
+        return rows, rows[-1]["id"] if len(docs) > limit else None
+
+    def examine_game_server_bug(self, bug_id, review):
+        ref = self.ref("game_server_bugs", bug_id)
+        with self.atomic():
+            header = self.raw_get(ref)
+            if header is None:
+                return None
+            header = copy.deepcopy(header)
+            # Verify immutable evidence before committing a terminal review.
+            # A corrupt/missing chunk must leave the bug pending, rather than
+            # acknowledge it and only then fail to construct the response.
+            row = self._decode_game_server_bug(ref, header)
+            if header.get("examined"):
+                if header.get("review") != review:
+                    raise ValueError("this game server bug was already examined")
+            else:
+                header.update(
+                    examined=True,
+                    examined_at=(review.get("examined_at")
+                                 or dt.datetime.now(dt.timezone.utc).isoformat()),
+                    review=copy.deepcopy(review),
+                )
+                self.raw_put(ref, header)
+        row.update(self._game_server_bug_summary(header))
+        return row
 
     def list_game_version_errors(self, *, game_id, version):
         return self._list(

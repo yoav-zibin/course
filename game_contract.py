@@ -48,19 +48,29 @@ class ContractLogic(GameLogic):
             raise exception(f'{schema}: {error.message}')
 
     def call(self, function, *args, **kwargs):
+        # Keep the extra schema checks and their evidence under the same
+        # runtime lock as the call whose result they validate.
+        with self._lock:
+            return self._call_with_contract(function, *args, **kwargs)
+
+    def _call_with_contract(self, function, *args, **kwargs):
         if args and function != 'newMatch' and 'state' in self._additional_schema_checks:
             self.check('state_schema', args[0])
         if function == 'applyMove' and 'move' in self._additional_schema_checks:
             self.check('move_schema', args[2], move=True)
         result = super().call(function, *args, **kwargs)
-        if function == 'viewFor':
-            if 'view' in self._additional_schema_checks:
-                self.check('view_schema', result)
-        elif function in ('computerMove','randomMove'):
-            if result is not None and 'move' in self._additional_schema_checks:
-                self.check('move_schema', result)
-        elif isinstance(result, dict) and 'state' in result and 'state' in self._additional_schema_checks:
-            self.check('state_schema', result['state'])
+        try:
+            if function == 'viewFor':
+                if 'view' in self._additional_schema_checks:
+                    self.check('view_schema', result)
+            elif function in ('computerMove','randomMove'):
+                if result is not None and 'move' in self._additional_schema_checks:
+                    self.check('move_schema', result)
+            elif isinstance(result, dict) and 'state' in result and 'state' in self._additional_schema_checks:
+                self.check('state_schema', result['state'])
+        except GameLogicError as error:
+            self._attach_output_bug(error)
+            raise
         return result
 
 

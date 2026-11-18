@@ -11,6 +11,7 @@ import datetime as dt
 import logging
 import threading
 from collections.abc import Sequence
+from typing import Any
 
 from game_platform import observability
 
@@ -253,6 +254,28 @@ class SavingStore:
         with self._lock:
             self._inner.add_game_version_error(error)
             self._set_dirty()
+
+    def put_game_server_bug(self, row: dict[str, Any]) -> None:
+        with self._lock:
+            self._inner.put_game_server_bug(row)
+            self._set_dirty()
+
+    def get_game_server_bug(self, bug_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            return self._inner.get_game_server_bug(bug_id)
+
+    def list_game_server_bugs(self, *, examined, limit, after=None):
+        with self._lock:
+            return self._inner.list_game_server_bugs(
+                examined=examined, limit=limit, after=after
+            )
+
+    def examine_game_server_bug(self, bug_id, review):
+        with self._lock:
+            row = self._inner.examine_game_server_bug(bug_id, review)
+            if row is not None:
+                self._set_dirty()
+            return row
 
     def list_game_version_errors(
         self, *, game_id: str, version: int

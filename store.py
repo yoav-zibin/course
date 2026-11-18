@@ -5,10 +5,13 @@ Python memory. A database-backed implementation can replace it later without tou
 the service or the HTTP layer.
 """
 
+import copy
 import datetime as dt
+import hashlib
+import threading
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from typing import Protocol
+from typing import Any, Protocol
 
 from game_platform.models import (
     Experiment,
@@ -30,6 +33,18 @@ from game_platform.models import (
 
 
 class Store(Protocol):
+    def put_game_server_bug(self, row: dict[str, Any]) -> None: ...
+
+    def get_game_server_bug(self, bug_id: str) -> dict[str, Any] | None: ...
+
+    def list_game_server_bugs(
+        self, *, examined: bool | None, limit: int, after: str | None = None
+    ) -> tuple[list[dict[str, Any]], str | None]: ...
+
+    def examine_game_server_bug(
+        self, bug_id: str, review: dict[str, Any]
+    ) -> dict[str, Any] | None: ...
+
     def put_user(self, user: User) -> None: ...
 
     def get_user(self, user_id: str) -> User | None: ...
@@ -223,6 +238,8 @@ class Snapshot:
     # Optional so existing data files load without a migration. Server-code
     # failures recorded on game versions (v2 Game API).
     game_version_errors: tuple[GameVersionError, ...] = ()
+    # Private reproductions and completed reviews, absent from older files.
+    game_server_bugs: tuple[dict[str, Any], ...] = ()
     # Optional so existing data files load without a migration. Failed
     # random-walk test seeds per game, replayed as regression seeds.
     game_test_seeds: tuple[GameTestSeeds, ...] = ()
@@ -263,6 +280,8 @@ class InMemoryStore:
         self._push_subscription_ids_by_endpoint: dict[str, str] = {}
         self._invites: dict[str, Invite] = {}
         self._game_version_errors: list[GameVersionError] = []
+        self._game_server_bugs: dict[str, dict[str, Any]] = {}
+        self._game_server_bug_lock = threading.RLock()
         self._game_test_seeds: dict[str, GameTestSeeds] = {}
         self._translations: dict[tuple[str, str], Translation] = {}
         self._experiments: dict[str, Experiment] = {}
@@ -293,6 +312,8 @@ class InMemoryStore:
         for invite in snapshot.invites:
             store.put_invite(invite)
         store._game_version_errors.extend(snapshot.game_version_errors)
+        for row in snapshot.game_server_bugs:
+            store.put_game_server_bug(row)
         for record in snapshot.game_test_seeds:
             store.put_game_test_seeds(record)
         store.put_translations(snapshot.translations)
@@ -326,6 +347,7 @@ class InMemoryStore:
             push_subscriptions=tuple(self._push_subscriptions.values()),
             invites=tuple(self._invites.values()),
             game_version_errors=tuple(self._game_version_errors),
+            game_server_bugs=tuple(copy.deepcopy(list(self._game_server_bugs.values()))),
             game_test_seeds=tuple(self._game_test_seeds.values()),
             translations=tuple(self._translations.values()),
             experiments=tuple(self._experiments.values()),
@@ -624,6 +646,59 @@ class InMemoryStore:
 
     def add_game_version_error(self, error: GameVersionError) -> None:
         self._game_version_errors.append(error)
+
+    def put_game_server_bug(self, row: dict[str, Any]) -> None:
+        with self._game_server_bug_lock:
+            self._game_server_bugs[row["id"]] = copy.deepcopy(row)
+
+    def get_game_server_bug(self, bug_id: str) -> dict[str, Any] | None:
+        with self._game_server_bug_lock:
+            return copy.deepcopy(self._game_server_bugs.get(bug_id))
+
+    def list_game_server_bugs(
+        self, *, examined: bool | None, limit: int, after: str | None = None
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        # Match Firestore's hashed document-name ordering. The public cursor
+        # carries the original id; callers never need to know this encoding.
+        def order(bug_id):
+            return hashlib.sha256(bug_id.encode()).hexdigest()
+
+        with self._game_server_bug_lock:
+            rows = [
+                row
+                for bug_id, row in sorted(
+                    self._game_server_bugs.items(), key=lambda item: order(item[0])
+                )
+                if (after is None or order(bug_id) > order(after))
+                and (examined is None or row.get("examined", False) == examined)
+            ]
+            selected = rows[:limit]
+            cursor = selected[-1]["id"] if len(rows) > limit else None
+            return [
+                copy.deepcopy({k: v for k, v in row.items() if k != "evidence"})
+                for row in selected
+            ], cursor
+
+    def examine_game_server_bug(
+        self, bug_id: str, review: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        with self._game_server_bug_lock:
+            row = self._game_server_bugs.get(bug_id)
+            if row is None:
+                return None
+            if row.get("examined"):
+                if row.get("review") != review:
+                    raise ValueError("this game server bug was already examined")
+            else:
+                row.update(
+                    examined=True,
+                    examined_at=(review.get("examined_at")
+                                 or dt.datetime.now(dt.timezone.utc).isoformat()),
+                    review=copy.deepcopy(review),
+                )
+            return copy.deepcopy(row)
 
     def list_game_version_errors(
         self, *, game_id: str, version: int
