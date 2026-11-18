@@ -111,6 +111,35 @@ test('browser Back from a local match restores its game detail screen and play c
   await expect(page.getByRole('button',{name:'Pass and play',exact:true})).toBeVisible();
 });
 
+test('full localized instructions remain available at handoff, game end and read-only replay',async({page,request})=>{
+  const created=await game(request,uniqueName('Instruction game'));await page.goto(`/portal#game=${created.id}`);
+  await page.getByRole('button',{name:'Log in',exact:true}).click();await page.getByRole('button').filter({hasText:'العربية'}).last().click();
+  await expect(page.locator('html')).toHaveAttribute('lang','ar');await page.getByRole('button',{name:sharedCopy['Close dialog'].ar,exact:true}).click();
+  await expect(page.getByTestId('game-instructions')).toContainText(created.translations.ar.game_logic_rules);
+  await expect(page.getByTestId('game-instructions')).toContainText(created.translations.ar.game_ui_rules);
+  await page.getByRole('button',{name:sharedCopy['Log in'].ar,exact:true}).click();await page.getByRole('button').filter({hasText:'English'}).last().click();
+  await expect(page.locator('html')).toHaveAttribute('lang','en');await page.getByRole('button',{name:'Close dialog',exact:true}).click();
+  await expect(page.getByTestId('game-instructions')).toContainText(created.game_logic_rules);
+  await expect(page.getByTestId('game-instructions')).not.toContainText(created.translations.ar.game_logic_rules);
+  await page.getByRole('button',{name:'Pass and play',exact:true}).click();
+  for(const [index,cell] of [1,4,2,5,3].entries()){
+    if(index){
+      await expect(page.getByTestId('game-stage')).toHaveCount(0);
+      await page.getByRole('button',{name:'How to play',exact:true}).click();await expect(page.getByTestId('game-instructions')).toContainText(created.game_logic_rules);
+      await page.getByRole('button',{name:'Close dialog',exact:true}).click();await page.getByRole('button',{name:'I’m ready'}).click();
+    }
+    await page.getByRole('button',{name:`Cell ${cell}`,exact:true}).click();
+  }
+  await expect(page.getByTestId('match-outcome')).toHaveText('Player 1 won');
+  const svg=await page.getByTestId('game-stage').locator('svg').first().elementHandle();
+  await page.getByRole('button',{name:'How to play',exact:true}).click();await expect(page.getByTestId('game-instructions')).toContainText(created.game_ui_rules);
+  await page.getByRole('button',{name:'Close dialog',exact:true}).click();expect(await svg!.evaluate(node=>node===document.querySelector('[data-testid="game-stage"] svg'))).toBe(true);
+  await page.getByRole('button',{name:'← Previous',exact:true}).click();await expect(page.getByText('Replay · move 4 of 5')).toBeVisible();
+  await page.getByRole('button',{name:'How to play',exact:true}).click();await expect(page.getByTestId('game-instructions')).toContainText(created.game_logic_rules);
+  await expect(page.getByTestId('game-stage').locator('[role="button"][aria-disabled="false"]')).toHaveCount(0);
+  await page.getByRole('button',{name:'Close dialog',exact:true}).click();await expect(page.getByTestId('match-outcome')).toHaveText('Player 1 won');
+});
+
 test('a delayed browser Back response cannot replace newer Preferences navigation',async({page,request})=>{
   const created=await game(request,uniqueName('Delayed history game'));await page.goto(`/portal#game=${created.id}`);
   await page.getByRole('button',{name:'Pass and play',exact:true}).click();await expect(page).toHaveURL(/#match=local-/);

@@ -33,8 +33,25 @@ export function gameTexts(game: any): any {
   const pinned = game?.translations?.[locale]; return pinned && typeof pinned === 'object' ? { ...pinned, strings: pinned.client_strings ?? pinned.strings ?? {} } : null;
 }
 export function localizeGame<T extends { id: string; version: number; name: string; description: string; [key: string]: any }>(game: T): T {
-  const source = game._sourceText || { name: game.name, description: game.description }; const texts = gameTexts(game);
-  return { ...game, _sourceText: source, name: texts?.name || source.name, description: texts?.description || source.description };
+  const previous=game._sourceText||{},original=(key:string,fallback:any)=>Object.hasOwn(previous,key)?previous[key]:fallback;
+  const source={name:original('name',game.name),description:original('description',game.description),
+    game_logic_rules:original('game_logic_rules',game.game_logic_rules??game.rules),
+    game_ui_rules:original('game_ui_rules',game.game_ui_rules??game.ui_instructions),
+    tutorial_text:original('tutorial_text',game.tutorial_text??game.tutorial?.text)};
+  const texts=gameTexts(game),authored=locale==='en'?null:game.translations?.[locale];
+  const translated=(value:unknown)=>typeof value==='string'&&value.trim()?value:undefined;
+  return {...game,_sourceText:source,name:translated(texts?.name)||translated(texts?.display_name)||source.name,description:translated(texts?.description)||translated(texts?.short_description)||source.description,
+    game_logic_rules:translated(authored?.game_logic_rules)||source.game_logic_rules,
+    game_ui_rules:translated(authored?.game_ui_rules)||source.game_ui_rules,
+    tutorial_text:translateTutorial(source.tutorial_text,authored?.tutorial_strings)};
+}
+function translateTutorial(source:unknown,table:unknown):unknown {
+  if(typeof source!=='string'||!table||typeof table!=='object')return source;
+  const entries=Object.entries(table).filter(([key,value])=>key&&typeof value==='string'&&value&&source.includes(key));
+  if(!entries.length)return source;
+  const values=Object.fromEntries(entries),pattern=entries.map(([key])=>key).sort((a,b)=>b.length-a.length).map(key=>key.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');
+  // One literal pass: translated output must never become another source key.
+  return source.replace(new RegExp(pattern,'g'),key=>values[key] as string);
 }
 async function cacheGet(key: string) { try { const text = await storage.getItem(key); return text ? JSON.parse(text) : null; } catch { return null; } }
 async function cacheSet(key: string, value: any) { try { await storage.setItem(key, JSON.stringify(value)); } catch { /* translations are recoverable */ } }

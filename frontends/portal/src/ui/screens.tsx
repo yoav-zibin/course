@@ -8,6 +8,7 @@ import {Button, Card, Choices, Copy, Dialog, Empty, Field, Notice, Row, Title, c
 import {text, useApp} from './context';
 import {FeedbackDialog} from './FeedbackDialog';
 import {MatchOutcome} from './MatchOutcome';
+import {GameInstructions} from './GameInstructions';
 import {enableNotifications, installPrompt} from './webApp';
 
 function useText() {const {p} = useApp(); return (key: string, fallback: string) => text(p,key,fallback);}
@@ -75,7 +76,7 @@ export function GameDetail() {
         {!p.network&&!game.server_code&&<Copy small muted>{copyText("Connect once to download this game before playing offline.")}</Copy>}
       </Card>
     </View>
-    {(game.tutorial_text || game.game_logic_rules) && <Card><Title small>{t('ui.game.rules','How to play')}</Title><Copy selectable>{game.tutorial_text||game.game_logic_rules}</Copy></Card>}
+    {(game.tutorial_text || game.game_logic_rules || game.game_ui_rules) && <Card><Title small>{t('ui.game.rules','How to play')}</Title><GameInstructions game={game}/></Card>}
     <FeedbackDialog visible={feedback} onClose={()=>setFeedback(false)} target={{type:'game',id:game.id,name:game.name}}/>
   </>;
 }

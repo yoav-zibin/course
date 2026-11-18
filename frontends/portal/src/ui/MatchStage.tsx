@@ -9,11 +9,13 @@ import {text,useApp} from './context';
 import {FeedbackDialog} from './FeedbackDialog';
 import {reportClientIssue} from '../core/reporting';
 import {MatchOutcome} from './MatchOutcome';
+import {GameInstructions} from './GameInstructions';
 
 export function MatchStage() {
   const {p,run,navigate,notify,openMatch}=useApp(),t=(key:string,fallback:string)=>text(p,key,fallback);
   const match=p.selectedMatch!, game=p.game;
   const [share,setShare]=useState(false),[invite,setInvite]=useState<any>(null),[confirm,setConfirm]=useState(''),[feedback,setFeedback]=useState<any>(null),[clock,setClock]=useState(''),[rendererError,setRendererError]=useState('');
+  const [help,setHelp]=useState(false);
   const owner=match.owner_user_id===p.account?.id,local=Boolean(match.localMode),seat=match.players.find(player=>player.user_id===p.account?.id&&player.active!==false),participant=local||Boolean(seat),waiting=match.status==='waiting_for_players',over=match.status==='over';
   const turns=match.turn_of_player_indices||[],yourTurn=participant&&Boolean(seat&&turns.includes(seat.player_index));
   const conflict=p.conflicts[match.id],pending=match.pending||0;
@@ -39,7 +41,7 @@ export function MatchStage() {
       }
     }finally{if(active())setPlaying(false);}
   }
-  useEffect(()=>{setInvite(null);setShare(false);setRendererError('');},[match.id]);
+  useEffect(()=>{setInvite(null);setShare(false);setHelp(false);setRendererError('');},[match.id]);
   useEffect(()=>{if(!match.turn_deadline){setClock('');return;}const offset=match.server_time?Date.parse(match.server_time)-Date.now():0;
     const update=()=>{const seconds=Math.max(0,Math.ceil((Date.parse(match.turn_deadline)-Date.now()-offset)/1000));setClock(`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`);};update();const timer=setInterval(update,1000);return()=>clearInterval(timer);
   },[match.turn_deadline,match.server_time]);
@@ -47,7 +49,7 @@ export function MatchStage() {
   const submit=async(move:any)=>{if(local)await p.actions.practiceMove(move);else await p.actions.submitMove(move);};
   const replay=p.replayIndex;
   return <>
-    <Row><Button compact secondary onPress={()=>navigate(local?'local':'matches')}>← {t('ui.portal.nav_matches','Matches')}</Button><View style={{flex:1}}/><Copy small muted>{local?copyText("On this device"):match.private?copyText("Invite only"):copyText("Public match")}</Copy><Button compact secondary onPress={()=>run(()=>p.actions.refreshMatch())}>{t('ui.action.refresh','Refresh')}</Button></Row>
+    <Row><Button compact secondary onPress={()=>navigate(local?'local':'matches')}>← {t('ui.portal.nav_matches','Matches')}</Button><View style={{flex:1}}/><Copy small muted>{local?copyText("On this device"):match.private?copyText("Invite only"):copyText("Public match")}</Copy>{game&&(game.tutorial_text||game.game_logic_rules||game.game_ui_rules)&&<Button compact secondary onPress={()=>setHelp(true)}>{t('ui.game.rules','How to play')}</Button>}<Button compact secondary onPress={()=>run(()=>p.actions.refreshMatch())}>{t('ui.action.refresh','Refresh')}</Button></Row>
     <View style={{gap:8}}><Row><Title>{game?.name||copyText("Match")}</Title><View style={{flex:1}}/><Copy style={{color:over?colors.purple:yourTurn?colors.accent:colors.blue,fontWeight:'700'}}>{over?copyText("Finished"):waiting?copyText("Waiting for players"):yourTurn?copyText("Your turn"):copyText("Game in progress")}</Copy></Row><Copy small muted>{match.move_count} {copyText("moves ·")} {match.players.length} {copyText("players")}{local?copyText(" · Saved on this device"):''}{clock?copyText(" · {v0} remaining",{v0:clock}):''}</Copy></View>
     <MatchOutcome match={match}/>
     <Row>{match.players.map(player=>{const profile=player.user_id?p.profiles[player.user_id]:null;const label=player.name||profile?.display_name||(player.user_id===p.account?.id?p.account?.display_name:null)||(player.kind==='computer'?copyText("Computer {v0}",{v0:player.player_index+1}):copyText("Player {v0}",{v0:player.player_index+1}));return <Card key={player.player_index} style={{padding:12,flexGrow:1,flexBasis:150,borderColor:turns.includes(player.player_index)?colors.accent:colors.border}}>
@@ -76,6 +78,7 @@ export function MatchStage() {
     {rendererError&&<Notice error>{rendererError}</Notice>}
     {!waiting&&<Card style={{padding:16}}><Row><Copy small muted>{replay===null?copyText("Live board"):copyText("Replay · move {v0} of {v1}",{v0:replay,v1:match.move_count})}</Copy><View style={{flex:1}}/><Button compact secondary disabled={Boolean(match.awaitingHandoff)||!match.move_count} label={playing?copyText("Pause history"):copyText("Play history")} onPress={()=>{if(playing)stopPlayback();else void run(playHistory);}}>{playing?copyText("Pause"):copyText("Play history")}</Button><Button compact secondary disabled={Boolean(match.awaitingHandoff)||replay===0} onPress={()=>{stopPlayback();return run(()=>p.actions.replay(Math.max(0,(replay??match.move_count)-1)));}}>{copyText("← Previous")}</Button><Button compact secondary disabled={Boolean(match.awaitingHandoff)||replay===null||replay>=match.move_count} onPress={()=>{stopPlayback();return run(()=>p.actions.replay(Math.min(match.move_count,(replay??match.move_count)+1)));}}>{copyText("Next →")}</Button><Button compact secondary disabled={replay===null} onPress={()=>{stopPlayback();return run(()=>p.actions.replay(null));}}>{copyText("Live board")}</Button></Row></Card>}
     {local&&over&&<Row><Button onPress={()=>run(async()=>{const next=await p.actions.startPractice(match.game_id,{humans:match.players.filter(player=>player.kind==='human').length,computers:match.players.filter(player=>player.kind==='computer').length,names:match.players.map(player=>player.name||'Player')});await openMatch(next.id);})}>{copyText("Play again")}</Button><Button secondary onPress={()=>run(async()=>{await p.actions.deleteLocal(match.id);navigate('local');})}>{copyText("Hide finished game")}</Button></Row>}
+    {game&&<Dialog visible={help} title={t('ui.game.rules','How to play')} onClose={()=>setHelp(false)}><GameInstructions game={game}/></Dialog>}
     <Dialog visible={share} title={copyText("Share match")} onClose={()=>setShare(false)}>
       {invite&&<><Field label={copyText("Invite link")} value={invite.url} editable={false}/><Row><Button onPress={()=>run(async()=>{await Clipboard.setStringAsync(invite.url);notify(copyText("Invite link copied."));})}>{copyText("Copy link")}</Button><Button secondary onPress={()=>run(()=>Share.share({message:invite.url,url:invite.url}))}>{copyText("Share…")}</Button></Row><View style={{alignItems:'center',padding:20,backgroundColor:'white',borderRadius:8}}><SvgUri uri={new URL(invite.qr_code_url,p.baseUrl).href} width={200} height={200} accessibilityLabel={copyText("Match invite QR code")}/></View><Copy small muted>{match.private?copyText("Anyone with this invite can join this private match."):copyText("Send the link or scan the QR code to join.")}</Copy></>}
     </Dialog>
