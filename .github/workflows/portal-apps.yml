@@ -1,5 +1,5 @@
-# The repository's two native apps: BuildPlayFun for Android and iOS.
-# Android builds/tests on Ubuntu and publishes BuildPlayFun.apk on main pushes.
+# The repository's two native apps: BuildPlay for Android and iOS.
+# Android builds/tests on Ubuntu and publishes BuildPlay.apk on main pushes.
 # iOS compiles on a hosted Mac. The signed TestFlight job is maintainer opt-in;
 # see docs/mobile-development-on-vm.md for credentials, bundle ID and access.
 name: Portal apps
@@ -20,7 +20,7 @@ on:
 
 jobs:
   android-portal:
-    name: BuildPlayFun Android (APK)
+    name: BuildPlay Android (APK)
     runs-on: ubuntu-latest
     permissions:
       contents: write # update the rolling portal-apps release
@@ -37,16 +37,16 @@ jobs:
         run: |
           chmod +x gradlew
           set -o pipefail
-          ./gradlew :app:testDebugUnitTest --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/buildplayfun-test.log"
+          ./gradlew :app:testDebugUnitTest --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/buildplay-test.log"
       - name: Build debug APK (points at https://buildplay.fun)
         run: |
           set -o pipefail
-          ./gradlew :app:assembleDebug --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/buildplayfun-build.log"
+          ./gradlew :app:assembleDebug --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/buildplay-build.log"
       - name: Publish Gradle logs (summary + artifact)
         if: always()
         working-directory: ${{ github.workspace }}
         run: |
-          for f in buildplayfun-test.log buildplayfun-build.log; do
+          for f in buildplay-test.log buildplay-build.log; do
             if [ -f "$f" ]; then
               { echo "## $f — last 200 lines"; echo '```'; tail -n 200 "$f"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
             fi
@@ -54,36 +54,36 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: BuildPlayFun-gradle-logs
+          name: BuildPlay-gradle-logs
           path: |
-            buildplayfun-test.log
-            buildplayfun-build.log
+            buildplay-test.log
+            buildplay-build.log
           if-no-files-found: ignore
       - name: Rename APK for a stable download name
-        run: cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/BuildPlayFun.apk"
+        run: cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/BuildPlay.apk"
       - uses: actions/upload-artifact@v4
         with:
-          name: BuildPlayFun-android-apk
-          path: BuildPlayFun.apk
+          name: BuildPlay-android-apk
+          path: BuildPlay.apk
           retention-days: 90
       - name: Publish APK to the rolling release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: portal-apps
-          name: BuildPlayFun apps (latest builds)
+          name: BuildPlay apps (latest builds)
           body: |
-            Latest cloud builds of the BuildPlayFun apps.
+            Latest cloud builds of the BuildPlay apps.
 
-            **Android (BuildPlayFun):** download `BuildPlayFun.apk` below on your phone and install it
+            **Android (BuildPlay):** download `BuildPlay.apk` below on your phone and install it
             (allow "Install unknown apps" for your browser when asked). The app connects to
             https://buildplay.fun — sign in as a guest and play.
           prerelease: true
           make_latest: false
-          files: BuildPlayFun.apk
+          files: BuildPlay.apk
 
   ios-portal:
-    name: BuildPlayFun iOS (simulator build)
+    name: BuildPlay iOS (simulator build)
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -103,22 +103,22 @@ jobs:
       - name: Verify distribution metadata in the built app
         run: |
           app="$GITHUB_WORKSPACE/ios-portal-build/Build/Products/Debug-iphonesimulator/GamePortal.app"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$app/Info.plist")" = BuildPlayFun
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$app/Info.plist")" = BuildPlay
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$app/Info.plist")" = AppIcon
           /usr/libexec/PlistBuddy -c 'Print :UILaunchScreen' "$app/Info.plist"
           test -f "$app/Assets.car"
       - name: Zip the simulator app
         run: |
           cd "$GITHUB_WORKSPACE/ios-portal-build/Build/Products/Debug-iphonesimulator"
-          ditto -c -k --sequesterRsrc --keepParent GamePortal.app "$GITHUB_WORKSPACE/BuildPlayFun-simulator.zip"
+          ditto -c -k --sequesterRsrc --keepParent GamePortal.app "$GITHUB_WORKSPACE/BuildPlay-simulator.zip"
       - uses: actions/upload-artifact@v4
         with:
-          name: BuildPlayFun-ios-simulator
-          path: BuildPlayFun-simulator.zip
+          name: BuildPlay-ios-simulator
+          path: BuildPlay-simulator.zip
           retention-days: 90
 
   ios-testflight:
-    name: BuildPlayFun iOS (TestFlight upload)
+    name: BuildPlay iOS (TestFlight upload)
     # The maintainer registers a portal bundle ID and grants Apple cloud-signing
     # access, then sets IOS_PORTAL_BUNDLE_ID and TESTFLIGHT_ENABLED=true.
     # Reuses ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 and APPLE_TEAM_ID.

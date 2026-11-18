@@ -1,4 +1,4 @@
-# Build BuildPlayFun on the course VM
+# Build BuildPlay on the course VM
 
 For the already-installed SDK/JDK, a headless **debug** build without a private
 signing key, GitHub Actions and the exact VM credential-file locations, start
@@ -30,7 +30,7 @@ Create a signing key there interactively (keytool prompts for passwords):
 umask 077
 keytool -genkeypair -keystore /var/lib/playroom-build/private/playroom.jks \
   -alias playroom -keyalg RSA -keysize 3072 -validity 3650 \
-  -dname 'CN=BuildPlayFun Course App'
+  -dname 'CN=BuildPlay Course App'
 ```
 
 Using a private editor on the VM, create

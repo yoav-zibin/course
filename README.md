@@ -2,7 +2,7 @@
 
 **Develop Android or iOS apps with an agent:** start with the
 [course VM and cloud-build guide](docs/mobile-development-on-vm.md). It lists
-the two native apps (BuildPlayFun for Android and iOS), build/download
+the two native apps (BuildPlay for Android and iOS), build/download
 commands, installed VM toolchain, exact
 private credential-file locations, GitHub login steps and a student agent prompt.
 

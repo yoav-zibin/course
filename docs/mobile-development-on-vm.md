@@ -19,13 +19,13 @@ for cloud builds. The Linux VM itself cannot run Xcode or the iOS Simulator.
 
 | App source | Workflow | Downloadable artifact |
 | --- | --- | --- |
-| `android/` — BuildPlayFun Android | Portal apps | `BuildPlayFun-android-apk` |
-| `frontends/ios-game-portal/` — BuildPlayFun iOS | Portal apps | `BuildPlayFun-ios-simulator` |
+| `android/` — BuildPlay Android | Portal apps | `BuildPlay-android-apk` |
+| `frontends/ios-game-portal/` — BuildPlay iOS | Portal apps | `BuildPlay-ios-simulator` |
 
 These are the repository's only two native applications. The temporary Android
 and iOS samples and the paused legacy iOS Builder app have been removed. Its standalone HTML game examples have also been retired.
 
-BuildPlayFun iOS also has an opt-in TestFlight job in the same workflow. It requires
+BuildPlay iOS also has an opt-in TestFlight job in the same workflow. It requires
 an owned App Store Connect bundle ID in `IOS_PORTAL_BUNDLE_ID`, valid team
 credentials and Apple cloud-signing access. Its default development bundle ID
 is preserved; the distribution job overrides it explicitly when configured.
@@ -45,16 +45,16 @@ the CLI, replace `RUN_ID` with that run's numeric ID:
 ```bash
 gh run watch RUN_ID --repo yoav-zibin/course --exit-status
 gh run download RUN_ID --repo yoav-zibin/course \
-  --name BuildPlayFun-android-apk --dir ./mobile-build-downloads
+  --name BuildPlay-android-apk --dir ./mobile-build-downloads
 ```
 
 Install an Android APK on a test phone after allowing installation from your
 browser/file manager. Successful **push** builds on `main` also update stable
-download for [BuildPlayFun](https://github.com/yoav-zibin/course/releases/download/portal-apps/BuildPlayFun.apk).
+download for [BuildPlay](https://github.com/yoav-zibin/course/releases/download/portal-apps/BuildPlay.apk).
 Manual builds provide artifacts; they do not update those rolling releases.
 
 An iOS simulator ZIP runs on a Mac with Xcode and an installed simulator
-runtime. It cannot be installed on a physical iPhone. For a configured signed BuildPlayFun
+runtime. It cannot be installed on a physical iPhone. For a configured signed BuildPlay
 build, use Apple's TestFlight app after the CI upload and Apple's processing
 finish and a maintainer grants tester access. Existing tester membership is
 not automatically created by the build workflow.

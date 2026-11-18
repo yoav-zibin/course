@@ -89,6 +89,8 @@ class MoveRecoveryTest {
 }
 
 private abstract class UnusedApi : PortalApi {
+    override suspend fun agentChat(body: AgentChatRequest): AgentChatResponse = error("unused")
+    override suspend fun createGame(body: NewGame): Game = error("unused")
     override suspend fun createUser(body: NewUser): User = error("unused")
     override suspend fun create(body: NewMatch): Match = error("unused")
     override suspend fun join(id: String): Match = error("unused")

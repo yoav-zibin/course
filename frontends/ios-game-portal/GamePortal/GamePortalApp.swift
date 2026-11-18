@@ -61,7 +61,7 @@ struct WelcomeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 26) {
-                Label("BuildPlayFun", systemImage: "circle.hexagongrid.fill").font(.caption.bold()).tracking(3)
+                Label("BuildPlay", systemImage: "circle.hexagongrid.fill").font(.caption.bold()).tracking(3)
                 Spacer(minLength: 35)
                 HStack(spacing: 16) {
                     Text("×").foregroundStyle(Palette.teal)

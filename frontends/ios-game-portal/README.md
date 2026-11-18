@@ -1,7 +1,7 @@
-# BuildPlayFun iOS
+# BuildPlay iOS
 
 **Cloud builds and agents:** use the **Portal apps** GitHub Actions workflow
-to build the `BuildPlayFun-ios-simulator` artifact on a hosted Mac. The
+to build the `BuildPlay-ios-simulator` artifact on a hosted Mac. The
 [shared VM guide](../../docs/mobile-development-on-vm.md) provides the agent
 workflow, exact VM credential locations, GitHub login and download commands.
 The Linux VM can edit/push iOS code but cannot run Xcode. The same workflow includes an opt-in TestFlight job for this target; the
@@ -14,7 +14,7 @@ A SwiftUI app for the shared course platform at https://buildplay.fun, with bund
 
 1. Open `GamePortal.xcodeproj` in Xcode.
 2. Select the **GamePortal** scheme and an iPhone simulator or connected iPhone.
-3. Press **⌘R**. The installed app is named **BuildPlayFun**.
+3. Press **⌘R**. The installed app is named **BuildPlay**.
 
 The deployment target is iOS 17. Install an iOS simulator runtime if Xcode asks. Keep normal code signing enabled: the online account uses Keychain. For a physical iPhone, select your own team in the target's **Signing & Capabilities**, trust the connected Mac, and enable Developer Mode on the phone if prompted. Personal signing settings should not replace the project's shared defaults in a commit.
 
