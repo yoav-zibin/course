@@ -662,6 +662,26 @@ test('history responses cannot cross an account change on the same match',async(
   await pending;assert.equal(t.run('state.replay'),undefined);
 });
 
+test('history capability discovery cannot expose another account after an account round trip',async()=>{
+  let release;const readers=[];
+  const t=setup((method,path,options)=>{
+    readers.push(options.user.id);
+    return new Promise(resolve=>{release=resolve;});
+  });
+  t.run(`globalThis.discovery={};StoragePages.enabled=()=>new Promise(resolve=>{discovery.resolve=resolve;});
+    state.match={id:"same-match",move_count:2};syncGame=async()=>{};`);
+  const pending=t.run('browseHistory(-1)');
+  await new Promise(resolve=>setImmediate(resolve));
+  t.run('Auth.current=()=>({id:"other-account"});discovery.resolve(false);');
+  await new Promise(resolve=>setImmediate(resolve));
+  t.run('Auth.current=()=>({id:"owner"});state.match={id:"same-match",move_count:2};');
+  release?.({moves:[{new_state:{private:"other account face"},next_turn_player_indices:[0]}],
+    initial_state:null,initial_turn_player_indices:null});
+  await pending;
+  assert.equal(t.run('state.replay?.move.new_state.private'),undefined);
+  assert.deepEqual(readers,[]);
+});
+
 test('only the newest manual history navigation may change the displayed view',async()=>{
   const requests=[];const t=setup(()=>new Promise(resolve=>requests.push(resolve)));
   t.run('state.match={id:"same-match",move_count:3};syncGame=async()=>{}');

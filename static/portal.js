@@ -2109,7 +2109,7 @@ async function browseHistory(direction, playback = null) {
   else if (!historyPlaybackCurrent(playback)) return false;
   const match = state.match;
   if (!match || !match.move_count) return false;
-  const userId = me()?.id ?? null, revision = ++historyNavigation;
+  const user = me(), userId = user?.id ?? null, revision = ++historyNavigation;
   const currentRequest = () => revision === historyNavigation && state.match?.id === match.id &&
     (me()?.id ?? null) === userId && (!playback || historyPlaybackCurrent(playback));
   historyBusy = revision;
@@ -2121,7 +2121,7 @@ async function browseHistory(direction, playback = null) {
       if (!currentRequest()) return false;
       const current = state.replay?.id === match.id ? state.replay.index : match.move_count;
       let index = direction === "first" ? 0 : Math.max(0, Math.min(match.move_count, current + direction));
-      const data = await portalRequest("GET", `/v2/matches/${match.id}/history?start=${Math.max(0,index-1)}&limit=1`, {user:me()});
+      const data = await portalRequest("GET", `/v2/matches/${match.id}/history?start=${Math.max(0,index-1)}&limit=1`, {user});
       if (!currentRequest()) return false;
       const minimum = data.initial_turn_player_indices === null ? 1 : 0;
       index = Math.max(minimum,index);
@@ -2129,7 +2129,8 @@ async function browseHistory(direction, playback = null) {
       if (!move) return false;
       state.replay = {id:match.id,index,minimum,move,direction};
     } else {
-    const data = await portalRequest("GET", `/matches/${match.id}/history`, {user: me()});
+    if (!currentRequest()) return false;
+    const data = await portalRequest("GET", `/matches/${match.id}/history`, {user});
     const moves = data.moves;
     const minimum = data.initial_turn_player_indices === null ? 1 : 0;
     if (!currentRequest()) return false;
