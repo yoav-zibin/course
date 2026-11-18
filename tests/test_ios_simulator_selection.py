@@ -1,10 +1,12 @@
 """Cross-platform regression checks for simulator choice and bounded smoke phases."""
 
 import importlib.util
+import datetime as dt
 import json
 import os
 from pathlib import Path
 import plistlib
+import signal
 import subprocess
 import sys
 import time
@@ -23,7 +25,9 @@ def load_script(name):
 
 
 select_simulator = load_script("select-ios-simulator").select_simulator
-run_phase = load_script("run-ios-smoke-phase").run_phase
+phase_runner = load_script("run-ios-smoke-phase")
+run_phase = phase_runner.run_phase
+diagnostic_window = load_script("ios-smoke-diagnostic-window").diagnostic_window
 
 
 def phone(name, udid, *, available=True, booted=False):
@@ -117,8 +121,82 @@ def test_phase_caps_diagnostic_output_without_turning_success_into_failure(tmp_p
     assert summary["output_bytes"] > 4096
 
 
-@pytest.mark.parametrize("boot_failure", [False, True])
-def test_shell_smoke_orchestration_keeps_local_only_gate_and_captures_failures(tmp_path, boot_failure):
+def test_diagnostic_tail_keeps_the_final_launch_error_when_output_is_capped(tmp_path):
+    output = tmp_path / "diagnostic.log"
+    command = [sys.executable, "-S", "-c", "print('early context '*2048); print('SBMainWorkspace RequestDenied')"]
+    assert run_phase("diagnostic", 5, output, command, max_output_bytes=64, retain_tail=True) == 0
+    assert output.read_text().endswith("SBMainWorkspace RequestDenied\n")
+    assert len(output.read_bytes()) < 150
+    summary = json.loads((tmp_path / "phases.jsonl").read_text())
+    assert summary["output_truncated"] is True
+    assert summary["output_retention"] == "tail"
+
+
+@pytest.mark.parametrize("restricted_signal", [signal.SIGTERM, 0, signal.SIGKILL])
+def test_timeout_cleanup_eperm_preserves_timeout_and_reaps_owned_child(tmp_path, monkeypatch, restricted_signal):
+    real_killpg = os.killpg
+
+    def restricted_killpg(pid, number):
+        if number == restricted_signal:
+            raise PermissionError("restricted by macOS")
+        return real_killpg(pid, number)
+
+    monkeypatch.setattr(phase_runner.os, "killpg", restricted_killpg)
+    pid_file = tmp_path / "child.pid"
+    ignore_term = restricted_signal == signal.SIGKILL
+    child = f"import os,signal,time; from pathlib import Path; signal.signal(signal.SIGTERM,signal.SIG_IGN) if {ignore_term!r} else None; Path({str(pid_file)!r}).write_text(str(os.getpid())); print('phase started',flush=True); time.sleep(30)"
+    status = run_phase("apple-host-log", 1, tmp_path / "host.log", [sys.executable, "-S", "-c", child])
+    assert status == 124
+    summary = json.loads((tmp_path / "phases.jsonl").read_text())
+    assert summary["timed_out"] is True
+    assert summary["cleanup_restrictions"]
+    assert "Cleanup restricted" in (tmp_path / "host.log").read_text()
+    assert "Could not start phase" not in (tmp_path / "host.log").read_text()
+    with pytest.raises(ProcessLookupError):
+        os.kill(int(pid_file.read_text()), 0)
+
+
+def test_diagnostics_choose_launch_window_instead_of_boot_or_later_diagnostics():
+    window = diagnostic_window([
+        {"phase": "boot", "started_at": "2026-11-18T23:09:13+00:00", "elapsed_seconds": 151.7},
+        {"phase": "install", "started_at": "2026-11-18T23:11:53+00:00", "elapsed_seconds": 103.8},
+        {"phase": "launch", "started_at": "2026-11-18T23:13:42.633714+00:00", "elapsed_seconds": 7.425},
+        {"phase": "device-state", "started_at": "2026-11-18T23:14:30+00:00", "elapsed_seconds": 20},
+    ])
+    assert window["source_phase"] == "launch"
+    assert window["start"] == "2026-11-18 23:13:37+0000"
+    assert window["end"] == "2026-11-18 23:13:55+0000"
+
+
+def test_diagnostics_include_post_launch_failure_and_honor_timestamp_offset():
+    window = diagnostic_window([
+        {"phase": "launch", "started_at": "2026-11-19T01:13:42+02:00", "elapsed_seconds": 7},
+        {"phase": "processes", "started_at": "2026-11-19T01:14:03+02:00", "finished_at": "2026-11-19T01:14:08+02:00", "elapsed_seconds": 5},
+    ])
+    assert window["source_phase"] == "processes"
+    assert window["start"] == "2026-11-18 23:13:37+0000"
+    assert window["end"] == "2026-11-18 23:14:13+0000"
+
+
+def test_diagnostics_do_not_use_a_previous_invocations_launch():
+    window = diagnostic_window([
+        {"phase": "launch", "started_at": "2026-11-18T20:00:00+00:00", "elapsed_seconds": 7},
+        {"phase": "list-devices", "started_at": "2026-11-18T23:13:42+00:00", "elapsed_seconds": 5},
+    ])
+    assert window["source_phase"] == "list-devices"
+    assert window["start"] == "2026-11-18 23:13:37+0000"
+    assert window["end"] == "2026-11-18 23:13:52+0000"
+
+
+def test_missing_phase_metadata_uses_a_short_window_not_all_early_boot_logs():
+    window = diagnostic_window([], now=dt.datetime(2026, 11, 18, 23, 14, 0, tzinfo=dt.timezone.utc))
+    assert window["source_phase"] == "before-first-phase"
+    assert window["start"] == "2026-11-18 23:13:25+0000"
+    assert window["end"] == "2026-11-18 23:14:05+0000"
+
+
+@pytest.mark.parametrize("failure_phase", [None, "boot", "launch"])
+def test_shell_smoke_orchestration_keeps_local_only_gate_and_captures_failures(tmp_path, failure_phase):
     """Exercise shell/selector/phase interop without requiring Apple tools on Linux."""
     bin_path = tmp_path / "bin"
     bin_path.mkdir()
@@ -140,10 +218,13 @@ if args[:3]==['simctl','list','devices']:
       'com.apple.CoreSimulator.SimRuntime.iOS-26-5':[{{'name':'iPhone 17','udid':'new','isAvailable':True,'state':'Shutdown'}}]
     }}}}))
 elif args[:2]==['simctl','bootstatus']:
-    print('boot migration pending' if {boot_failure!r} else 'boot complete')
-    sys.exit(7 if {boot_failure!r} else 0)
+    print('boot migration pending' if {failure_phase!r}=='boot' else 'boot complete')
+    sys.exit(7 if {failure_phase!r}=='boot' else 0)
 elif args[:2]==['simctl','launch']:
     if os.environ.get('SIMCTL_CHILD_BUILDPLAY_LOCAL_UI_TEST')!='1':sys.exit(9)
+    if {failure_phase!r}=='launch':
+        print('FBSOpenApplicationServiceErrorDomain: SBMainWorkspace RequestDenied')
+        sys.exit(1)
     print('edu.columbia.gameportal.starter: 123')
 elif args[:2]==['simctl','io']:
     Path(args[-1]).write_bytes(b'fake screenshot')
@@ -158,16 +239,27 @@ elif args[:2]==['simctl','spawn'] and 'launchctl' in args:
     env = {**os.environ, "PATH": f"{bin_path}{os.pathsep}{os.environ['PATH']}"}
     results = tmp_path / "results"
     completed = subprocess.run(["bash", str(SCRIPTS / "smoke-ios-simulator.sh"), str(app), str(results)], env=env, capture_output=True, text=True, timeout=30)
-    assert completed.returncode == (7 if boot_failure else 0), completed.stdout + completed.stderr
+    assert completed.returncode == (7 if failure_phase == "boot" else 1 if failure_phase == "launch" else 0), completed.stdout + completed.stderr
     selected = json.loads((results / "selected-simulator.json").read_text())
     assert selected["udid"] == "new"
     phases = [json.loads(line) for line in (results / "phases.jsonl").read_text().splitlines()]
     recorded = [json.loads(line) for line in calls.read_text().splitlines()]
-    if boot_failure:
+    if failure_phase:
         assert (results / "failure-devices.json").exists()
         assert (results / "host-cpu.log").read_text() == "101 CoreSimulatorService\n"
-        assert "simulator-log" in [phase["phase"] for phase in phases]
-        assert not any(call["args"][:2] == ["simctl", "install"] for call in recorded)
+        names = [phase["phase"] for phase in phases]
+        assert names.index("simulator-log") < names.index("apple-host-log") < names.index("host-cpu") < names.index("device-state")
+        window = json.loads((results / "failure-window.json").read_text())
+        assert window["source_phase"] == failure_phase
+        logs = next(call["args"] for call in recorded if call["args"][:4] == ["simctl", "spawn", "new", "log"])
+        assert "--last" not in logs
+        assert logs[logs.index("--start") + 1] == window["start"]
+        assert logs[logs.index("--end") + 1] == window["end"]
+        assert all(name in logs[-1] for name in ["BuildPlay", "SpringBoard", "runningboardd", "amfid", "installd"])
+        if failure_phase == "boot":
+            assert not any(call["args"][:2] == ["simctl", "install"] for call in recorded)
+        else:
+            assert sum(call["args"][:2] == ["simctl", "launch"] for call in recorded) == 1
     else:
         launch = next(call for call in recorded if call["args"][:2] == ["simctl", "launch"])
         assert launch["local_only"] is True

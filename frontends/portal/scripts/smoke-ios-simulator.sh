@@ -12,20 +12,37 @@ run_phase() {
   python3 "$scripts_path/run-ios-smoke-phase.py" "$phase" "$deadline" "$output" "$@"
 }
 
+run_diagnostic() {
+  local phase=$1 deadline=$2 output=$3
+  shift 3
+  python3 "$scripts_path/run-ios-smoke-phase.py" --tail "$phase" "$deadline" "$output" "$@"
+}
+
 capture_failure() {
   local status=$?
   trap - EXIT
   if [[ $status -ne 0 ]]; then
     printf 'Simulator smoke failed (exit %s); collecting bounded diagnostics.\n' "$status"
-    run_phase device-state 20 "$results_path/failure-devices.json" xcrun simctl list devices available --json || true
+    # Capture the failing interval first, before slower host/state inspection.
+    # Explicit UTC offsets are supported by Apple's documented --start/--end:
+    # https://developer.apple.com/documentation/technotes/tn3163-understanding-the-synchronization-of-nspersistentcloudkitcontainer
+    local window failure_start failure_end
+    if window=$(python3 "$scripts_path/ios-smoke-diagnostic-window.py" "$results_path/phases.jsonl" "$results_path/failure-window.json"); then
+      IFS='|' read -r failure_start failure_end <<< "$window"
+      if [[ -n "$simulator_id" ]]; then
+        run_diagnostic simulator-log 25 "$results_path/simulator-system.log" xcrun simctl spawn "$simulator_id" log show \
+          --start "$failure_start" --end "$failure_end" --style compact \
+          --predicate 'process == "BuildPlay" OR process == "SpringBoard" OR process == "runningboardd" OR process == "amfid" OR process == "installd"' || true
+      fi
+      run_diagnostic apple-host-log 25 "$results_path/apple-host.log" /usr/bin/log show \
+        --start "$failure_start" --end "$failure_end" --style compact \
+        --predicate 'process == "CoreSimulatorService" OR process == "simdiskimaged" OR process == "syspolicyd" OR process == "launchd_sim" OR process == "amfid" OR process == "installd"' || true
+    else
+      printf 'Could not determine the failing log interval; preserving original smoke failure.\n'
+    fi
     # comm is the executable name, not its arguments or environment.
     run_phase host-cpu 10 "$results_path/host-cpu.log" ps -axo pid,ppid,pcpu,pmem,etime,comm || true
-    run_phase apple-host-log 25 "$results_path/apple-host.log" /usr/bin/log show --last 10m --style compact \
-      --predicate 'process == "CoreSimulatorService" OR process == "simdiskimaged" OR process == "syspolicyd" OR process == "launchd_sim"' || true
-    if [[ -n "$simulator_id" ]]; then
-      run_phase simulator-log 25 "$results_path/simulator-system.log" xcrun simctl spawn "$simulator_id" log show \
-        --last 10m --style compact --predicate 'process == "BuildPlay" OR process == "SpringBoard" OR process == "backboardd" OR process == "runningboardd"' || true
-    fi
+    run_phase device-state 20 "$results_path/failure-devices.json" xcrun simctl list devices available --json || true
   fi
   exit "$status"
 }

@@ -1,0 +1,44 @@
+name: Portal iOS launch diagnostics
+
+on: workflow_dispatch
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  simulator-diagnostics:
+    name: Diagnose the immutable d1 simulator artifact
+    runs-on: macos-26-intel
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Verify trusted artifact provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/diagnose-ios-simulator.py provenance ios-diagnostics/provenance.json
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: yoav-zibin/course
+          run-id: '44413435121'
+          artifact-ids: '14481145602'
+          merge-multiple: true
+          path: ios-diagnostics/input
+      - name: Run isolated simulator controls and signature comparisons
+        run: |
+          python3 scripts/diagnose-ios-simulator.py diagnose \
+            ios-diagnostics/input/BuildPlay-simulator.zip ios-diagnostics/results \
+            --provenance ios-diagnostics/provenance.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: BuildPlay-ios-launch-diagnostics
+          path: |
+            ios-diagnostics/provenance.json
+            ios-diagnostics/results/
+          if-no-files-found: warn
+          retention-days: 7
