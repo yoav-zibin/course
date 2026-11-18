@@ -7,6 +7,7 @@ import type {Game, Match} from '../core/types';
 import {Button, Card, Choices, Copy, Dialog, Empty, Field, Notice, Row, Title, colors} from './components';
 import {text, useApp} from './context';
 import {FeedbackDialog} from './FeedbackDialog';
+import {MatchOutcome} from './MatchOutcome';
 import {enableNotifications, installPrompt} from './webApp';
 
 function useText() {const {p} = useApp(); return (key: string, fallback: string) => text(p,key,fallback);}
@@ -83,7 +84,7 @@ function MatchCard({match,local=false}: {match: Match;local?: boolean}) {
   const {p,run,openMatch}=useApp(),t=useText();
   const game=p.games.find(item=>item.id===match.game_id)||p.savedGames.find(item=>item.id===match.game_id);
   const seat=match.players.find(player=>player.user_id===p.account?.id), turn=seat&&match.turn_of_player_indices?.includes(seat.player_index);
-  return <Card style={{padding:16}}><Pressable accessibilityRole="link" onPress={()=>run(()=>openMatch(match.id))} style={{gap:7}}><Row><Title small>{gameName(game,match.game_id)}</Title><View style={{flex:1}}/><Copy small style={{color:turn?colors.accent:colors.blue}}>{local?copyText("On this device"):turn?copyText("Your turn"):match.status==='waiting_for_players'?copyText("Waiting for players"):match.status==='over'?copyText("Finished"):copyText("Ongoing")}</Copy></Row><Copy small muted>{match.players.length} {copyText("players ·")} {match.move_count} {copyText("moves")}{match.private?copyText(" · Invite only"):''}{match.turn_seconds?copyText(" · {v0} min per move",{v0:match.turn_seconds/60}):''}</Copy></Pressable><Row><Button secondary compact onPress={()=>run(()=>openMatch(match.id))}>{t('ui.action.open','Open match')}</Button><Button secondary compact disabled={!local&&Boolean(match.pending||match.conflict)} onPress={()=>run(()=>local?p.actions.deleteLocal(match.id):p.actions.archiveMatch(match.id))}>{t('ui.action.hide','Hide from list')}</Button></Row>{!local&&Boolean(match.pending||match.conflict)&&<Copy small muted>{copyText('Sync or resolve pending actions before hiding this match.')}</Copy>}</Card>;
+  return <Card style={{padding:16}}><Pressable accessibilityRole="link" onPress={()=>run(()=>openMatch(match.id))} style={{gap:7}}><Row><Title small>{gameName(game,match.game_id)}</Title><View style={{flex:1}}/><Copy small style={{color:turn?colors.accent:colors.blue}}>{local?copyText("On this device"):turn?copyText("Your turn"):match.status==='waiting_for_players'?copyText("Waiting for players"):match.status==='over'?copyText("Finished"):copyText("Ongoing")}</Copy></Row><Copy small muted>{match.players.length} {copyText("players ·")} {match.move_count} {copyText("moves")}{match.private?copyText(" · Invite only"):''}{match.turn_seconds?copyText(" · {v0} min per move",{v0:match.turn_seconds/60}):''}</Copy><MatchOutcome match={match}/></Pressable><Row><Button secondary compact onPress={()=>run(()=>openMatch(match.id))}>{t('ui.action.open','Open match')}</Button><Button secondary compact disabled={!local&&Boolean(match.pending||match.conflict)} onPress={()=>run(()=>local?p.actions.deleteLocal(match.id):p.actions.archiveMatch(match.id))}>{t('ui.action.hide','Hide from list')}</Button></Row>{!local&&Boolean(match.pending||match.conflict)&&<Copy small muted>{copyText('Sync or resolve pending actions before hiding this match.')}</Copy>}</Card>;
 }
 
 export function Matches() {

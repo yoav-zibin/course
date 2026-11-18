@@ -101,6 +101,14 @@ test('a newly created match stays selected after reloading a game detail link',a
   await expect(page.getByRole('button',{name:'Share match',exact:true})).toBeVisible();
 });
 
+test('browser Back from a local match restores its game detail screen and play controls',async({page,request})=>{
+  const created=await game(request,uniqueName('History game'));await page.goto(`/portal#game=${created.id}`);
+  await page.getByRole('button',{name:'Pass and play',exact:true}).click();await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
+  await expect(page).toHaveURL(/#match=local-/);await page.goBack();
+  await expect(page).toHaveURL(new RegExp(`#game=${created.id}$`));await expect(page.getByRole('heading',{name:created.name,exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Pass and play',exact:true})).toBeVisible();
+});
+
 test('campaign arrival persists before login and attributes the guest signup',async({page,request})=>{
   const name=uniqueName('Arrival campaign');
   const key=uniqueName('arrival-campaign').toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,50);
@@ -167,10 +175,23 @@ test('bundled local game is playable offline, hides handoffs, persists, and repl
   await page.reload();await expect(page.getByRole('button',{name:'I’m ready'})).toBeVisible();
   for(const cell of [4,2,5,3]){await page.getByRole('button',{name:'I’m ready'}).click();await page.getByRole('button',{name:`Cell ${cell}`,exact:true}).click();}
   await expect(page.getByText('Finished',{exact:true}).first()).toBeVisible();
+  await expect(page.getByTestId('match-outcome')).toHaveText('Player 1 won');
   await page.getByRole('button',{name:'← Previous',exact:true}).click();await expect(page.getByText('Replay · move 4 of 5')).toBeVisible();
   await page.getByRole('button',{name:'Play history',exact:true}).click();await expect(page.getByText('Replay · move 5 of 5')).toBeVisible();await expect(page.getByRole('button',{name:'Play history',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Live board',exact:true}).click();await expect(page.getByText('Live board',{exact:true}).first()).toBeVisible();
   await context.setOffline(false);
+  await page.getByRole('button',{name:'On this device',exact:true}).click();
+  await expect(page.getByTestId('match-outcome')).toHaveText('Player 1 won');
+});
+
+test('a genuinely finished local draw is shown in both native detail and match list',async({page})=>{
+  await page.goto('/portal');await page.getByRole('button',{name:'On this device',exact:true}).click();await page.getByRole('button',{name:'Pass and play',exact:true}).click();
+  for(const [index,cell] of [1,2,3,5,4,6,8,7,9].entries()){
+    if(index)await page.getByRole('button',{name:'I’m ready'}).click();
+    await page.getByRole('button',{name:`Cell ${cell}`,exact:true}).click();
+  }
+  await expect(page.getByTestId('match-outcome')).toHaveText('Draw');
+  await page.getByRole('button',{name:'On this device',exact:true}).click();await expect(page.getByTestId('match-outcome')).toHaveText('Draw');
 });
 
 test('private invitation survives guest sign-in and creates a usable shared link and QR code',async({page,request})=>{

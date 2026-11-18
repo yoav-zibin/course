@@ -8,6 +8,7 @@ import {Button,Card,Copy,Dialog,Empty,Field,Notice,Row,Title,colors} from './com
 import {text,useApp} from './context';
 import {FeedbackDialog} from './FeedbackDialog';
 import {reportClientIssue} from '../core/reporting';
+import {MatchOutcome} from './MatchOutcome';
 
 export function MatchStage() {
   const {p,run,navigate,notify,openMatch}=useApp(),t=(key:string,fallback:string)=>text(p,key,fallback);
@@ -48,6 +49,7 @@ export function MatchStage() {
   return <>
     <Row><Button compact secondary onPress={()=>navigate(local?'local':'matches')}>← {t('ui.portal.nav_matches','Matches')}</Button><View style={{flex:1}}/><Copy small muted>{local?copyText("On this device"):match.private?copyText("Invite only"):copyText("Public match")}</Copy><Button compact secondary onPress={()=>run(()=>p.actions.refreshMatch())}>{t('ui.action.refresh','Refresh')}</Button></Row>
     <View style={{gap:8}}><Row><Title>{game?.name||copyText("Match")}</Title><View style={{flex:1}}/><Copy style={{color:over?colors.purple:yourTurn?colors.accent:colors.blue,fontWeight:'700'}}>{over?copyText("Finished"):waiting?copyText("Waiting for players"):yourTurn?copyText("Your turn"):copyText("Game in progress")}</Copy></Row><Copy small muted>{match.move_count} {copyText("moves ·")} {match.players.length} {copyText("players")}{local?copyText(" · Saved on this device"):''}{clock?copyText(" · {v0} remaining",{v0:clock}):''}</Copy></View>
+    <MatchOutcome match={match}/>
     <Row>{match.players.map(player=>{const profile=player.user_id?p.profiles[player.user_id]:null;const label=player.name||profile?.display_name||(player.user_id===p.account?.id?p.account?.display_name:null)||(player.kind==='computer'?copyText("Computer {v0}",{v0:player.player_index+1}):copyText("Player {v0}",{v0:player.player_index+1}));return <Card key={player.player_index} style={{padding:12,flexGrow:1,flexBasis:150,borderColor:turns.includes(player.player_index)?colors.accent:colors.border}}>
       <Row>{profile?.picture_url&&<Image source={{uri:new URL(profile.picture_url,p.baseUrl).href}} style={{width:32,height:32,borderRadius:16}}/>}<Copy style={{fontWeight:'600'}}>{player.kind==='computer'?'◈ ':''}{label}</Copy>{player.active===false&&<Copy small muted>{copyText("Left")}</Copy>}</Row>
       {!local&&player.user_id&&player.user_id!==p.account?.id&&<Row><Button secondary compact label={copyText("Report {v0}",{v0:label})} onPress={()=>setFeedback({type:'user',id:player.user_id,name:label})}>{copyText("Report")}</Button>{owner&&waiting&&<Button danger compact onPress={()=>run(()=>p.actions.removePlayer(player.user_id!))}>{copyText("Remove")}</Button>}</Row>}

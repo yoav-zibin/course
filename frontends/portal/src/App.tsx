@@ -67,7 +67,7 @@ function PortalApp() {
       if (match) await openMatch(match); else if (game) await openGame(game); else if (invite) await openInvite(invite);
     });});
     const resume = AppState.addEventListener('change', state => {if (state === 'active') void run(() => p.actions.refresh());});
-    const pop = () => {void run(async () => {await p.actions.rememberAttribution(window.location.href);const hash = new URLSearchParams(window.location.hash.slice(1)); const id=hash.get('match'), game=hash.get('game'); if(id) await p.actions.selectMatch(id); else {p.actions.clearGame(); if(game) await p.actions.selectGame(game); else setScreen((['games','matches','local','invites','settings'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'games') as Screen);}});};
+    const pop = () => {void run(async () => {await p.actions.rememberAttribution(window.location.href);const hash = new URLSearchParams(window.location.hash.slice(1)); const id=hash.get('match'), game=hash.get('game'); if(id) {await p.actions.selectMatch(id);setScreen('matches');} else {p.actions.clearGame(); if(game) {await p.actions.selectGame(game);setScreen('games');} else setScreen((['games','matches','local','invites','settings'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'games') as Screen);}});};
     if (Platform.OS === 'web') window.addEventListener('popstate',pop);
     return () => {subscription.remove(); resume.remove(); if (Platform.OS === 'web') window.removeEventListener('popstate',pop);};
   }, []);
