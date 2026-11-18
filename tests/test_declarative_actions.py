@@ -159,7 +159,7 @@ def test_exact_legacy_platform_host_keeps_recorded_body_and_hash_unchanged(asset
     store = query_store("legacy-hint-host", FakeClient())
     row = submit(store, body)
     complete_run(store, body, row["id"])
-    loaded = GameImport.model_validate(traces.load_submission_body(store, row))
+    loaded = GameImport.model_validate(traces.load_submission_body(store, row, secret=body.game_addition_request_id_and_secret))
     assert loaded.client_code == request["client_code"]
     assert traces.inputs_hash(loaded.model_dump()) == row["inputs_hash"]
     class Platform:

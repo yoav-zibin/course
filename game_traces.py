@@ -132,7 +132,12 @@ def record_submission(store, *, secret, game_name, body_dict):
     game body, and return the submission row."""
     submission_id = secrets_module.token_hex(16)
     ref = store.ref(TRACE_KIND, submission_id)
-    text = canonical_json(body_dict)
+    stored_body = dict(body_dict)
+    credential_redacted = "game_addition_request_id_and_secret" in stored_body
+    if credential_redacted:
+        if stored_body.pop("game_addition_request_id_and_secret") != secret:
+            raise ValueError("submission credential does not match its payload")
+    text = canonical_json(stored_body)
     parts = [text[i : i + CHUNK_CHARS] for i in range(0, len(text), CHUNK_CHARS)]
     row = {
         "kind": "submission",
@@ -144,6 +149,8 @@ def record_submission(store, *, secret, game_name, body_dict):
         "created_at": _now(),
         "created_ns": time.time_ns(),
     }
+    if credential_redacted:
+        row["credential_redacted"] = True
     with store.atomic():
         for i, part in enumerate(parts):
             store.raw_put(
@@ -153,7 +160,7 @@ def record_submission(store, *, secret, game_name, body_dict):
     return {"id": submission_id, **row}
 
 
-def load_submission_body(store, row):
+def load_submission_body(store, row, *, secret=None):
     ref = store.ref(TRACE_KIND, row["id"])
     parts = []
     for i in range(row["chunks"]):
@@ -161,7 +168,16 @@ def load_submission_body(store, row):
         if chunk is None:
             raise ValueError("submission body chunk is missing")
         parts.append(chunk["text"])
-    return json.loads("".join(parts))
+    body = json.loads("".join(parts))
+    if row.get("credential_redacted"):
+        if secret is None or not secrets_module.compare_digest(secret_hash(secret), row["secret_hash"]):
+            raise ValueError("the matching submission credential is required")
+        # Authorizing credentials are not game content. Reconstruct the exact
+        # tested payload only for a caller that already supplied its secret.
+        body["game_addition_request_id_and_secret"] = secret
+        if inputs_hash(body) != row["inputs_hash"]:
+            raise ValueError("submission body does not match its recorded inputs")
+    return body
 
 
 def submissions_with_ids(store, digest):
@@ -1031,11 +1047,11 @@ def make_router(platform_dependency):
             )
         return row
 
-    def stored_body(store, row):
+    def stored_body(store, row, secret):
         try:
-            return GameImport.model_validate(load_submission_body(store, row))
-        except Exception as exc:
-            raise HTTPException(422, f"the stored step 1 inputs are invalid: {exc}")
+            return GameImport.model_validate(load_submission_body(store, row, secret=secret))
+        except Exception:
+            raise HTTPException(422, "the stored step 1 inputs are invalid; upload corrected inputs") from None
 
     @router.post("/game-test/submissions", status_code=201, dependencies=[Depends(validation_slot)])
     def submit_inputs(request: Request, payload: SubmissionIn, platform=Depends(platform_dependency)):
@@ -1043,8 +1059,8 @@ def make_router(platform_dependency):
         check_secret(payload.secret, request)
         try:
             body = GameImport.model_validate(payload.body)
-        except Exception as exc:
-            raise HTTPException(422, f"the submission payload is invalid: {exc}")
+        except Exception:
+            raise HTTPException(422, "the submission payload is invalid; check the game artifact contract") from None
         if body.game_addition_request_id_and_secret != payload.secret:
             raise HTTPException(
                 422,
@@ -1083,7 +1099,7 @@ def make_router(platform_dependency):
             "submission_id": row["id"],
             "game_name": row["game_name"],
             "created_at": _iso(row["created_at"]),
-            "body": load_submission_body(store, row),
+            "body": load_submission_body(store, row, secret=secret),
         }
 
     @router.post("/game-test/server-check", dependencies=[Depends(validation_slot)])
@@ -1091,7 +1107,7 @@ def make_router(platform_dependency):
         store = store_of(platform)
         check_secret(payload.secret, request)
         row = owned_submission(store, payload.secret, payload.submission_id)
-        body = stored_body(store, row)
+        body = stored_body(store, row, payload.secret)
         report = run_server_checks_subprocess(body)
         record = {
             "kind": "server_check",
@@ -1116,7 +1132,7 @@ def make_router(platform_dependency):
         if payload.mode not in MODES:
             raise HTTPException(422, f"unknown play mode {payload.mode!r}")
         row = owned_submission(store, payload.secret, payload.submission_id)
-        check_config(payload.config, stored_body(store, row))
+        check_config(payload.config, stored_body(store, row, payload.secret))
         digest = move_md5(payload.state, payload.view, payload.move)
         record_row(
             store,
@@ -1154,7 +1170,7 @@ def make_router(platform_dependency):
         if len(payload.moves) > MAX_MOVES_PER_MATCH:
             raise HTTPException(422, "too many moves in one match")
         row = owned_submission(store, payload.secret, payload.submission_id)
-        body = stored_body(store, row)
+        body = stored_body(store, row, payload.secret)
         check_config(payload.config, body)
         if payload.config.num_players != len(payload.players):
             raise HTTPException(
@@ -1240,7 +1256,7 @@ def make_router(platform_dependency):
         if payload.mode not in MODES:
             raise HTTPException(422, f"unknown play mode {payload.mode!r}")
         row = owned_submission(store, payload.secret, payload.submission_id)
-        body = stored_body(store, row)
+        body = stored_body(store, row, payload.secret)
         check_config(payload.config, body)
         if payload.config.num_players != len(payload.players):
             raise HTTPException(
@@ -1293,7 +1309,7 @@ def make_router(platform_dependency):
                 "duplicate": True,
             }
         sub = owned_submission(store, payload.secret, payload.submission_id)
-        body = stored_body(store, sub)
+        body = stored_body(store, sub, payload.secret)
         try:
             updated, finished = append_session_move(
                 store,
@@ -1358,7 +1374,7 @@ def make_router(platform_dependency):
             return {"submission": None, "steps": {"step1": {"done": False}},
                     "gaps": ["no test run was recorded for this secret"],
                     "complete": False}
-        body = stored_body(store, row)
+        body = stored_body(store, row, secret)
         steps, gaps = evaluate(store, secret, body)
         return {
             "submission": {

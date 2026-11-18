@@ -299,7 +299,7 @@ def test_declarative_game_requires_full_query_store_trace_flow_and_retests_chang
     traces.assert_complete(Platform(), body)
     # The actual storage path canonicalizes object keys. Normalization must
     # regenerate exactly the same host and hash when authors resume the flow.
-    loaded = GameImport.model_validate(traces.load_submission_body(store, row))
+    loaded = GameImport.model_validate(traces.load_submission_body(store, row, secret=body.game_addition_request_id_and_secret))
     assert loaded.client_code == body.client_code
     assert traces.inputs_hash(loaded.model_dump()) == row["inputs_hash"]
     traces.assert_complete(Platform(), loaded)

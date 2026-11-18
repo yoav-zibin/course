@@ -24,7 +24,10 @@ non-persisting QuickJS presentation probe, not a publication/test-flow bypass.
 Credentials are optional. Send the existing account credentials in
 `X-User-Id` and `X-User-Password` to own the published game; without them the
 game is published ownerless (owner `agent-import`). Its submission secret still
-authorizes updates; unpublishing requires an owning account. Credentials that are sent but invalid return 401. Use HTTPS
+authorizes updates. Deletion and unpublishing require `X-Game-Secret` with that
+secret, or HTTP Basic authentication with the configured master password;
+account ownership alone does not authorize them. Credentials that are sent but
+invalid return 401. Use HTTPS
 except on loopback. Never put passwords in URLs, payload files or source
 control. All authenticated platform users (including guest accounts)
 can publish their own game. Ownership comes exclusively from

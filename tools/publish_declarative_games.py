@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import secrets
 import time
 import urllib.error
@@ -167,6 +168,12 @@ def save_private(path, data):
         temporary.unlink(missing_ok=True)
 
 
+class ExistingPublication(RuntimeError):
+    def __init__(self, game_id):
+        self.existing_game_id = game_id
+        super().__init__("The submission secret already identifies a published game")
+
+
 def request(base, path, data=None, *, method=None):
     raw = None if data is None else json.dumps(data, ensure_ascii=False).encode()
     for attempt in range(5):
@@ -176,6 +183,19 @@ def request(base, path, data=None, *, method=None):
             with urllib.request.urlopen(req, timeout=210) as response:
                 return json.load(response)
         except urllib.error.HTTPError as exc:
+            detail = exc.read().decode(errors="replace")
+            if exc.code == 409 and path == "/games/declarative":
+                try:
+                    response = json.loads(detail)
+                    message = response.get("detail") if isinstance(response, dict) else None
+                except ValueError:
+                    message = None
+                existing = re.fullmatch(
+                    r"(?:This secret already belongs to a game|game already exists); "
+                    r"use PATCH /games/([A-Za-z0-9_-]{1,100})", message,
+                ) if isinstance(message, str) else None
+                if existing:
+                    raise ExistingPublication(existing.group(1)) from None
             # A concurrent catalog/translation write may reject the transaction
             # before commit. PATCH retries retain the same target and payload;
             # creation retries retain the same unique submission secret.
@@ -184,7 +204,6 @@ def request(base, path, data=None, *, method=None):
             if retryable and attempt < 4:
                 time.sleep(min(15, int(exc.headers.get("Retry-After", "5"))))
                 continue
-            detail = exc.read().decode(errors="replace")
             private_keys = {"secret", "game_addition_request_id_and_secret"}
             parts = urllib.parse.urlsplit(path)
             query = urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
@@ -277,7 +296,15 @@ def publish(base, state_path, kinds):
             game = request(base, f"/games/{urllib.parse.quote(entry['id'], safe='')}",
                            recorded.model_dump(exclude_none=True), method="PATCH")
         else:
-            game = request(base, "/games/declarative", recorded.model_dump(exclude_none=True))
+            try:
+                game = request(base, "/games/declarative", recorded.model_dump(exclude_none=True))
+            except ExistingPublication as existing:
+                # Creation may have committed before its response or local ID
+                # was saved. Recover the secret-bound ID, then use PATCH.
+                entry["id"] = existing.existing_game_id
+                save_private(state_path, state)
+                game = request(base, f"/games/{urllib.parse.quote(entry['id'], safe='')}",
+                               recorded.model_dump(exclude_none=True), method="PATCH")
         entry["id"] = game["id"]
         entry["version"] = game["version"]
         entry["published_source_hash"] = source_hash

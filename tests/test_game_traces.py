@@ -103,7 +103,7 @@ def complete_run(store, body, submission_id):
 
 def test_submission_roundtrip_and_latest(store, body):
     first = submit(store, body)
-    loaded = gt.load_submission_body(store, {**first, "id": first["id"]})
+    loaded = gt.load_submission_body(store, {**first, "id": first["id"]}, secret=SECRET)
     assert loaded == body.model_dump()
     second = submit(store, body)
     latest = gt.latest_submission(store, gt.secret_hash(SECRET))

@@ -151,3 +151,44 @@ def test_private_failure_after_response_start_does_not_restart_or_escape(caplog)
     for private in (HIDDEN, SEED, NOTES):
         assert private not in captured(caplog)
         assert private not in caplog.text
+
+
+@pytest.mark.parametrize("configured,status", [(True, 401), (False, 503)])
+def test_failed_review_auth_does_not_log_submitted_private_notes(caplog, configured, status):
+    caplog.set_level(logging.INFO)
+    api = Api(master_password=AUTH[1] if configured else "")
+    try:
+        response = api.client.post("/game-server-bugs/failure-1/examine",
+            json={"outcome": "escalated", "notes": NOTES})
+        assert response.status_code == status
+        assert NOTES not in captured(caplog)
+    finally:
+        api.client.close()
+
+
+def test_malformed_large_review_does_not_log_a_raw_private_body_prefix(caplog):
+    caplog.set_level(logging.INFO)
+    api = Api(master_password=AUTH[1])
+    try:
+        response = api.client.post("/game-server-bugs/failure-1/examine", auth=AUTH,
+            content='{"notes":"' + NOTES + "x" * 20_000,
+            headers={"Content-Type": "application/json"})
+        assert response.status_code == 422
+        assert NOTES not in captured(caplog)
+    finally:
+        api.client.close()
+
+
+def test_batch_does_not_forward_master_access_to_private_bug_reports(caplog):
+    caplog.set_level(logging.INFO)
+    api = Api(master_password=AUTH[1])
+    try:
+        response = api.client.get("/batch", auth=AUTH,
+            params={"requests": json.dumps(["/game-server-bugs/failure-1"])})
+        assert response.status_code == 200
+        assert response.json()[0]["status"] == 401
+        for private in (HIDDEN, SEED, NOTES):
+            assert private not in response.text
+            assert private not in captured(caplog)
+    finally:
+        api.client.close()

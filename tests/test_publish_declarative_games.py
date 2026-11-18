@@ -65,14 +65,35 @@ def test_publication_http_errors_redact_private_secrets(monkeypatch, in_query):
     assert "private secret" in str(error.value)
 
 
-def test_resume_checks_actual_published_source_and_skips_unchanged_import(tmp_path, monkeypatch):
+@pytest.mark.parametrize("prefix", ["This secret already belongs to a game", "game already exists"])
+def test_creation_conflict_retains_resource_id_for_interrupted_publication(monkeypatch, prefix):
+    attempts = []
+    monkeypatch.setattr(release.time, "sleep", lambda delay: None)
+
+    def already_created(request, **kwargs):
+        attempts.append(request)
+        detail = {"detail": prefix + "; use PATCH /games/published-game"}
+        raise urllib.error.HTTPError(request.full_url, 409, "conflict", {},
+                                     io.BytesIO(json.dumps(detail).encode()))
+
+    monkeypatch.setattr(release.urllib.request, "urlopen", already_created)
+    with pytest.raises(RuntimeError) as caught:
+        release.request("https://example.test", "/games/declarative",
+            {"game_addition_request_id_and_secret": "private-release-secret-0123456789"})
+    assert getattr(caught.value, "existing_game_id", None) == "published-game"
+    assert len(attempts) == 1
+
+
+@pytest.mark.parametrize("lost_local_id", [False, True])
+def test_resume_checks_actual_published_source_and_skips_unchanged_import(tmp_path, monkeypatch, lost_local_id):
     calls = []
     tested_body = None
+    created = False
     game = {"id": "published-game", "version": 1, "name": "Tic-tac-toe (Declarative)",
             "renderer_type": "declarative", "server_code": "reviewed rules"}
 
     def request(base, path, body=None, *, method=None):
-        nonlocal tested_body
+        nonlocal tested_body, created
         calls.append((path, body, method))
         if path == "/game-test/submissions":
             # Simulate step 1 on a server with the prior platform-owned host.
@@ -92,6 +113,10 @@ def test_resume_checks_actual_published_source_and_skips_unchanged_import(tmp_pa
             return {"steps": {"complete": True}}
         if path in ("/games/declarative", "/games/published-game"):
             if body is not None:
+                if path == "/games/declarative":
+                    if created:
+                        raise release.ExistingPublication(game["id"])
+                    created = True
                 assert body["client_code"] == tested_body["client_code"]
                 assert method == (None if path == "/games/declarative" else "PATCH")
                 if method == "PATCH":
@@ -105,10 +130,20 @@ def test_resume_checks_actual_published_source_and_skips_unchanged_import(tmp_pa
     first = release.publish("https://example.test", path, ["tictactoe"])
     assert sum(route == "/game-test/verify-match" for route, _, _ in calls) == 5
     assert sum(route == "/game-test/moves" for route, _, _ in calls) == 2
+    if lost_local_id:
+        state = json.loads(path.read_text())
+        del state["games"]["tictactoe"]["id"]
+        release.save_private(path, state)
     calls.clear()
     again = release.publish("https://example.test", path, ["tictactoe"])
     assert again == first
-    assert calls == [("/games/published-game", None, None)]
+    if lost_local_id:
+        assert [route for route, _, _ in calls[-2:]] == ["/games/declarative", "/games/published-game"]
+        assert calls[-1][2] == "PATCH"
+        assert json.loads(path.read_text())["games"]["tictactoe"]["id"] == game["id"]
+        assert all(route != "/game-test/verify-match" for route, _, _ in calls)
+    else:
+        assert calls == [("/games/published-game", None, None)]
     # A changed remote record cannot be skipped merely because the local
     # private file says it was once published. PATCH with the existing secret
     # restores the reviewed package through the single update API.
