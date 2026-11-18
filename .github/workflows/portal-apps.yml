@@ -209,23 +209,22 @@ jobs:
           mkdir -p "$HOME/.appstoreconnect/private_keys"
           printf '%s' "$ASC_KEY_P8" \
             > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
-      - name: Archive (signed, automatic provisioning)
+      - name: Archive app for distribution (ad hoc signing)
         env:
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           IOS_PORTAL_BUNDLE_ID: ${{ vars.IOS_PORTAL_BUNDLE_ID }}
         run: |
+          # Hosted Macs do not retain Apple Development private keys. Preserve
+          # entitlements with an ad hoc archive, then distribution-sign at export.
           xcodebuild \
             -project GamePortal.xcodeproj \
             -scheme GamePortal \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$GITHUB_WORKSPACE/GamePortal.xcarchive" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            CODE_SIGN_IDENTITY=- \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" \
             PRODUCT_BUNDLE_IDENTIFIER="$IOS_PORTAL_BUNDLE_ID" \

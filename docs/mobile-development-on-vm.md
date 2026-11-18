@@ -201,9 +201,14 @@ and metadata check succeed. Uploads are restricted to
 pushes to `main` and manual runs on `main`. Leave this shared setting to the
 maintainer. A new run/attempt receives a distinct archive build number.
 `invalidPEMDocument` means the key could not be parsed; resolve the key format
-before investigating certificates or provisioning. Simulator success alone
-does not prove TestFlight signing or upload succeeded. A signed archive can
-also succeed while IPA export fails with **Cloud signing permission error**:
+before investigating certificates or provisioning. The CI archive uses an ad hoc
+signing identity to preserve entitlements without requiring an Apple Development
+private key on an ephemeral Mac. The App Store Connect export then performs
+distribution signing using the existing API key and cloud-managed certificates.
+Do not revoke a shared development certificate to repair a missing CI private
+key. Simulator success alone does not prove TestFlight signing or upload
+succeeded. An archive can also succeed while IPA export fails with
+**Cloud signing permission error**:
 the Account Holder/Admin must check access to cloud-managed distribution
 certificates and distribution provisioning for the CI team/key. Active
 membership and an app record alone do not establish that permission. See
