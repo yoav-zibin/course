@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 
 from game_platform.json_file_store import JsonFileStore
-from game_platform.tests.helpers import Api
+from game_platform.tests.helpers import Api, TEST_GAME_SECRET
 
 def _server_code(moves_to_end: int) -> str:
     """A small valid v2 game (Phase 5: only passing server code can be
@@ -75,10 +75,10 @@ def test_complete_package_replaces_server_code_and_metadata_patch_preserves_it(a
     game = _create_game(api, owner, client_code=None, code=CLIENT_CODE)
     partial = api.request(
         "PATCH", f"/games/{game['id']}", as_user=owner,
-        json={"server_code": SERVER_CODE_V2},
+        json={"server_code": SERVER_CODE_V2, "game_addition_request_id_and_secret": TEST_GAME_SECRET},
     )
-    assert partial.status_code == 400
-    assert "POST /games/declarative" in partial.json()["detail"]
+    # The service fixture has no unit-test contract to validate this change.
+    assert partial.status_code == 422
     original = api.platform._store.get_game(game['id'])
     changed = api.platform.import_agent_game(
         caller_id=owner, existing_game_id=original.id, name=original.name,
@@ -89,14 +89,14 @@ def test_complete_package_replaces_server_code_and_metadata_patch_preserves_it(a
     assert changed.version == 2 and changed.server_code == SERVER_CODE_V2
     redescribed = api.ok(
         "PATCH", f"/games/{game['id']}", as_user=owner,
-        json={"description": "A new description"},
+        json={"description": "A new description", "game_addition_request_id_and_secret": TEST_GAME_SECRET},
     )
     assert redescribed["version"] == 3
     assert redescribed["server_code"] == SERVER_CODE_V2
     assert api.request(
         "PATCH", f"/games/{game['id']}", as_user=owner,
-        json={"client_code": "<div>new</div>"},
-    ).status_code == 400
+        json={"client_code": "<div>new</div>", "game_addition_request_id_and_secret": TEST_GAME_SECRET},
+    ).status_code == 422
 
 
 def test_match_max_loss_and_player_ids(api: Api):

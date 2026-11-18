@@ -15,7 +15,16 @@ and the [interaction requirements](docs/declarative-game-requirements.md).
    [import guide](docs/agent-game-import.md). The trace endpoints retain their
    `/game-test/*` names; the old HTML submission page is removed.
 6. Submit the complete tested package to `POST /games/declarative`. Keep its
-   submission secret private for future resubmissions.
+   submission secret private and save the returned game ID for future updates.
+
+Update an existing game only through `PATCH /games/{game_id}`, including its
+submission secret or the configured master password in
+`game_addition_request_id_and_secret`. Send only the content fields that should
+change. Server logic and unit-test changes run server checks and random walks;
+presentation changes require the recorded test flow for the complete resulting
+payload. Name, textual rules, images and other metadata edits need only the
+relevant artifact/translation checks. See [partial updates](docs/agent-game-import.md#updating-a-game)
+for the authentication, merge and validation contracts.
 
 [Eleven complete examples](games/declarative) and
 [the standalone import example](examples/agent-game.json) show the payload.

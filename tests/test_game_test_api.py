@@ -447,3 +447,70 @@ def test_full_flow_then_import(api):
     response = api.client.post("/games", json=BODY)
     assert response.status_code == 201, response.text
     assert response.json()["name"] == BODY["name"]
+
+
+@pytest.mark.parametrize("master", ["admin", "管理员"])
+def test_short_master_can_complete_the_recorded_test_flow(api, master):
+    from game_platform.agent_import import GameImport, prepare
+
+    api.client.app.state.master_password = master
+    original = GameImport.model_validate(BODY)
+    game = api.client.app.state.platform.import_agent_game(
+        caller_id="agent-import", name=original.name, description=original.description,
+        rules=original.game_rules(), code=original.client_code,
+        server_code=original.server_code, game_schemas=original.game_schemas(),
+        import_package=prepare(original, changed_fields=set()), request_id=SECRET,
+    )
+    body = json.loads(json.dumps({**BODY, "game_addition_request_id_and_secret": master}))
+    body["declarative_ui"]["piece_types"]["token"]["color"] = "#abcdef"
+    submission_id, report = run_full_flow(api, master, body)
+    assert report["passed"], report
+    stored = api.client.get("/game-test/submission", params={"secret": master})
+    assert stored.status_code == 200, stored.text
+    assert stored.json()["submission_id"] == submission_id
+    status = api.client.get("/game-test/status", params={"secret": master})
+    assert status.status_code == 200, status.text
+    assert status.json()["complete"] is True, status.text
+
+    # Sessions use the same short credential, including persisted-body parsing.
+    start_session(api, submission_id, secret=master)
+    opened = api.client.get("/game-test/open-session", params={"secret": master})
+    assert opened.status_code == 200, opened.text
+    assert opened.json()["session"]["session_id"] == "sess-1"
+    appended = api.client.post("/game-test/sessions/sess-1/moves", json={
+        "secret": master, "submission_id": submission_id, "player_index": 0,
+        "move": {"add": 1}, "view": STATES[0],
+        "state_after": STATES[1], "turn_after": ["human-1"],
+    })
+    assert appended.status_code == 201, appended.text
+    abandoned = api.client.post("/game-test/sessions/sess-1/abandon", json={
+        "secret": master, "submission_id": submission_id,
+    })
+    assert abandoned.status_code == 200, abandoned.text
+    start_session(api, submission_id, session_id="capped", mode="against_computers", secret=master)
+    capped_move = append_move(api, "capped", 1, secret=master)
+    assert capped_move.status_code == 201, capped_move.text
+    closed = api.client.post("/game-test/sessions/capped/close", json={
+        "secret": master, "submission_id": submission_id,
+    })
+    assert closed.status_code == 200, closed.text
+    updated = api.client.patch(f"/games/{game.id}", json={
+        "game_addition_request_id_and_secret": master,
+        "declarative_ui": body["declarative_ui"],
+    })
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["version"] == 2
+    assert updated.json()["declarative_ui"] == body["declarative_ui"]
+
+
+@pytest.mark.parametrize("configured,secret", [("", "admin"), ("admin", "wrong"), ("admin", "")])
+def test_short_non_master_credentials_cannot_record_or_read_traces(api, configured, secret):
+    api.client.app.state.master_password = configured
+    body = {**BODY, "game_addition_request_id_and_secret": secret}
+    submission = api.client.post("/game-test/submissions", json={
+        "secret": secret, "game_name": body["name"], "body": body,
+    })
+    assert submission.status_code == 422, submission.text
+    for path in ("/game-test/submission", "/game-test/status", "/game-test/open-session"):
+        response = api.client.get(path, params={"secret": secret})
+        assert response.status_code == 422, response.text

@@ -10,7 +10,7 @@ from game_platform.agent_import import GameImport
 from game_platform.models import Game
 from game_platform.scaling_service import ScalablePlatform
 from game_platform.tests.fake_firestore import query_store
-from game_platform.tests.helpers import Api
+from game_platform.tests.helpers import Api, TEST_GAME_SECRET
 from game_platform.tests.test_agent_import import payload
 
 
@@ -83,8 +83,11 @@ def test_html_games_are_archived_and_only_declarative_games_use_portal_apis(quer
     assert detail["supports_local_practice"] is False
     assert api.request("POST", "/matches", as_user=owner,
                        json={"game_id": html.id, "num_computer_opponents": 0}).status_code == 404
+    api.client.app.state.master_password = TEST_GAME_SECRET
     assert api.request("PATCH", f"/games/{html.id}", as_user=owner,
-                       json={"name": "Updated HTML"}).status_code == 400
+                       json={"name": "Updated HTML",
+                             "game_addition_request_id_and_secret": TEST_GAME_SECRET}).status_code == 400
+    api.client.app.state.master_password = None
     assert api.request("POST", "/matchmaking/quick-match", as_user=owner,
                        json={"game_id": html.id}).status_code == 404
     assert api.request("POST", f"/games/{html.id}/unpublish", as_user=owner).status_code == 400

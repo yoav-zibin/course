@@ -174,7 +174,8 @@ viewer's seat as seat indices (`turn_of_player_indices`, `my_player_index`,
 
 | Endpoint | Behavior |
 |---|---|
-| `POST /games` | Creates and publishes a complete game in one call (the agent import): `declarative_ui`, `server_code`, schemas (in `unit_tests`), translations and images are all supplied in the body; the server runs the tests first and inserts nothing if they fail. `PATCH /games/{id}` edits name/description only; submit a complete tested declarative package to change behavior |
+| `POST /games` | Creates and publishes a complete game: `declarative_ui`, `server_code`, schemas (in `unit_tests`), translations and images are supplied; all creation gates must pass. `/games/declarative` is a creation alias. |
+| `PATCH /games/{id}` | The single content update API. Include the game secret or master password in `game_addition_request_id_and_secret`; all content fields are optional. Server-code, unit-test or mechanical-rule changes run server checks; presentation changes require recorded tests for the merged payload; metadata changes use lightweight checks. |
 | `POST /matches` | `{game_id, num_computer_opponents, private?, max_loss}` |
 | `POST /matches/{id}/join`, `POST /invites/{token}/accept` | Take a seat and deduct the stake (409 if the balance is too low); mid-match the server calls `playerJoined` |
 | `POST /matches/{id}/leave` | Before the start, a refund; mid-match, `playerLeft` |
@@ -274,14 +275,16 @@ on the game version.
 
 ## Testing before publishing (Phase 5 — `game_platform/game_testing.py`)
 
-Whenever a game is submitted or its `server_code` changes, the server tests it
-in QuickJS; only a passing version can be published (`POST /games` runs the
-gate before inserting anything; `PATCH /games/{id}` runs it on update).
-On import the checks run inside a 20-second validator
-subprocess, and the random walks inside it have a 3-second budget: up to
-1000 walks of up to 1000 moves each, stopping at whichever limit comes first.
-The `PATCH /games/{id}` update path runs the same tester with a 1-second
-walk budget. Each walk uses a random player count, either all humans or one human plus
+Whenever a game is created, or a PATCH actually changes `server_code`,
+`unit_tests`, player counts or join/leave behavior, the server tests the resulting
+logic in QuickJS before publishing a version. Unit tests and runtime schemas
+come from the combined stored and supplied fields. Server-only changes do not
+require a fresh presentation test flow. A presentation change does require
+recorded tests for the complete resulting payload. Metadata-only changes,
+including textual rules and images, do not run random walks.
+The bounded validator runs approved examples, settlement/move probes and up to
+1000 random walks of up to 1000 moves each. See [the import reference](agent-game-import.md)
+for current limits. Each walk uses a random player count, either all humans or one human plus
 computers, random `max_loss` values and a random seed; moves come from
 `computerMove`/`randomMove`; `viewFor` is called for every player and a
 spectator after each move; joins/leaves happen occasionally if allowed

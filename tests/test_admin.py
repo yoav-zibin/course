@@ -10,13 +10,13 @@ from game_platform.json_file_store import JsonFileStore
 from game_platform.config import Config
 from game_platform.main import purge_example_data, warn_about_insecure_setup
 from game_platform.service import GamePlatform
-from game_platform.tests.helpers import Api
+from game_platform.tests.helpers import Api, TEST_GAME_SECRET
 
 
 def test_stats_count_users_games_and_matches(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game_id = api.new_game(owner=alice)
-    api.ok("PATCH", f"/games/{game_id}", as_user=alice, json={"name": "Poker 2"})
+    api.ok("PATCH", f"/games/{game_id}", as_user=alice, json={"name": "Poker 2", "game_addition_request_id_and_secret": TEST_GAME_SECRET})
     match_id = api.new_match(owner=alice, game_id=game_id, joiners=[bob], start=True)
     api.move(match_id, as_user=alice, next_turn=1, state={"n": 1})
     api.new_match(owner=bob, game_id=game_id)

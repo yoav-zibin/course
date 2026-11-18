@@ -1,6 +1,6 @@
 import httpx
 
-from game_platform.tests.helpers import Api, error
+from game_platform.tests.helpers import Api, TEST_GAME_SECRET, error
 
 
 def test_create_a_match_with_computer_opponents(api: Api) -> None:
@@ -66,7 +66,8 @@ def test_rematch_reuses_game_version_and_accepting_players_join_open_lobby(
         "PATCH",
         f"/games/{game_id}",
         as_user=alice,
-        json={"description": "Published version 2"},
+        json={"description": "Published version 2",
+              "game_addition_request_id_and_secret": TEST_GAME_SECRET},
     )
     api.move(match_id, as_user=alice, next_turn=None, state={"winner": 0})
 

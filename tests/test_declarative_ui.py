@@ -232,7 +232,8 @@ def test_published_declarative_packages_are_pinned_to_each_game_version(api, mon
     # The shared import suite independently checks rule tests, localization and
     # trace requirements; this focuses on submission serialization/versioning.
     import game_platform.agent_import as imports
-    monkeypatch.setattr(imports, "verify_submission", lambda body: {"declarative_ui": body.declarative_ui, "tutorial": body.tutorial})
+    monkeypatch.setattr(imports, "verify_submission", lambda body, **kwargs: {
+        "declarative_ui": body.declarative_ui, "tutorial": body.tutorial})
     body = declarative_payload()
     response = api.client.post("/games/declarative", json=body)
     assert response.status_code == 201, response.text
@@ -241,8 +242,11 @@ def test_published_declarative_packages_are_pinned_to_each_game_version(api, mon
     assert first["declarative_ui"] == body["declarative_ui"]
     assert first["tutorial_text"] == body["tutorial"]["text"]
     body["declarative_ui"]["piece_types"]["token"]["color"] = "#654321"
-    second = api.client.post("/games/declarative", json=body)
-    assert second.status_code == 201, second.text
+    second = api.client.patch(f"/games/{first['id']}", json={
+        "game_addition_request_id_and_secret": body["game_addition_request_id_and_secret"],
+        "declarative_ui": body["declarative_ui"],
+    })
+    assert second.status_code == 200, second.text
     assert second.json()["version"] == 2
     pinned = api.client.get(f"/games/{first['id']}/versions/1").json()
     assert pinned["declarative_ui"]["piece_types"]["token"]["color"] == "#123456"

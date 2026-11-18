@@ -9,7 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from game_platform.json_file_store import FORMAT_VERSION, JsonFileStore
-from game_platform.tests.helpers import Api
+from game_platform.tests.helpers import Api, TEST_GAME_SECRET
 
 
 def _wait_until(condition: Callable[[], bool]) -> None:
@@ -31,7 +31,7 @@ def test_all_data_survives_a_restart(tmp_path: Path) -> None:
     api = Api(store=store)
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game_id = api.new_game(owner=alice)
-    api.ok("PATCH", f"/games/{game_id}", as_user=alice, json={"name": "Poker 2"})
+    api.ok("PATCH", f"/games/{game_id}", as_user=alice, json={"name": "Poker 2", "game_addition_request_id_and_secret": TEST_GAME_SECRET})
     match_id = api.new_match(owner=alice, game_id=game_id, joiners=[bob], start=True)
     api.move(match_id, as_user=alice, next_turn=None, state={"winner": [0, "alice"]})
     api.ok("DELETE", f"/matches/{match_id}", as_user=bob)

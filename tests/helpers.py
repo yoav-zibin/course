@@ -1,6 +1,7 @@
 """Test helpers: a thin client over the HTTP API that reads like the product terminology."""
 
 import datetime as dt
+import hashlib
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import Any
@@ -18,6 +19,7 @@ from game_platform.store import Store
 from game_platform.game_logic import GameLogic
 
 TEST_GAME_SCHEMAS = {"state": True, "move": True, "view": True}
+TEST_GAME_SECRET = "fixture-game-secret-0123456789"
 TEST_DECLARATIVE_UI = {
     "format": "buildplay-ui", "version": 1,
     "viewport": {"width": 300, "height": 300},
@@ -160,7 +162,7 @@ class Api:
             headers["X-User-Password"] = password
         if (
             isinstance(json, dict)
-            and path != "/games"  # imports derive schemas from their test contract
+            and not path.startswith("/games")  # submissions derive schemas from their test contract
             and json.get("server_code")
             and "game_schemas" not in json
         ):
@@ -219,7 +221,8 @@ class Api:
             code=code,
             server_code=server_code,
             game_schemas=game_schemas,
-            import_package={"declarative_ui": body.get("declarative_ui", TEST_DECLARATIVE_UI)},
+            import_package={"declarative_ui": body.get("declarative_ui", TEST_DECLARATIVE_UI),
+                            "game_addition_request_secret_hash": hashlib.sha256(TEST_GAME_SECRET.encode()).hexdigest()},
         )
         return GameOut.of(game).model_dump(mode="json")
 
@@ -243,7 +246,8 @@ class Api:
             code="<div>poker</div>",
             server_code=ECHO_SERVER_CODE,
             game_schemas=TEST_GAME_SCHEMAS,
-            import_package={"declarative_ui": TEST_DECLARATIVE_UI},
+            import_package={"declarative_ui": TEST_DECLARATIVE_UI,
+                            "game_addition_request_secret_hash": hashlib.sha256(TEST_GAME_SECRET.encode()).hexdigest()},
         )
         return game.id
 

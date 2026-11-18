@@ -5,9 +5,10 @@ this document is the endpoint reference.
 
 `POST /games` accepts a complete game and publishes it in one request:
 the game is live for every player, in every language, as soon as the call
-returns. It does not overwrite other games, call a paid model, or claim human approval:
-resubmitting with the same `game_addition_request_id_and_secret` updates the game
-it created (a new version if anything changed).
+returns. `POST /games/declarative` is an alias for creating the same kind of game.
+Both POST routes create games only. Use `PATCH /games/{game_id}` to update an
+existing game; reusing an existing submission secret in a POST is rejected with
+guidance to use PATCH. The API does not call a paid model or claim human approval.
 Imported source is checked but not visually reviewed by this API. Retain the
 original payload for comparison.
 
@@ -22,14 +23,15 @@ non-persisting QuickJS presentation probe, not a publication/test-flow bypass.
 
 Credentials are optional. Send the existing account credentials in
 `X-User-Id` and `X-User-Password` to own the published game; without them the
-game is published ownerless (owner `agent-import`), and no one can edit or
-unpublish it. Credentials that are sent but invalid return 401. Use HTTPS
+game is published ownerless (owner `agent-import`). Its submission secret still
+authorizes updates; unpublishing requires an owning account. Credentials that are sent but invalid return 401. Use HTTPS
 except on loopback. Never put passwords in URLs, payload files or source
 control. All authenticated platform users (including guest accounts)
 can publish their own game. Ownership comes exclusively from
 authentication. Unknown fields, including `id`, owner, publication and approval
-flags, are rejected (the one id-shaped field accepted is the optional
-`game_id` update target described under Request). Missing credentials no longer return 401; invalid ones do,
+flags, are rejected. Updates name their target in the PATCH URL and require
+the game secret or master password, as described below. Missing account
+credentials no longer return 401; invalid ones do,
 before reading the body. This does not introduce an admin-only policy or an
 independent API-key system.
 
@@ -70,34 +72,88 @@ with the game; agents do not submit a second potentially inconsistent copy.
 
 Optional: `language` (default `en`), `allows_join_mid_match` and
 `allows_leave_mid_match` (both default false). Do not enable unsupported handlers.
-`game_addition_request_id_and_secret` (required, 16–200 characters) is a string
-the agent picks when creating the game — a long random secret. Sending the same
-string again updates the game created with it instead of creating a duplicate:
-the name, description, rules, code, server code, schemas and translations are
-replaced and the game becomes a new version (a resubmission that changes nothing
-returns the game as is). Anyone holding the string can update the game, so keep
-it secret; a request without it is rejected. Only the string's SHA-256 hash is
-ever stored on the game — resubmission matching compares hashes, and no API
-response returns the string.
+`game_addition_request_id_and_secret` (required, 16–200 characters) is a long
+random secret the agent picks when creating the game. Keep it for future PATCH
+updates. Only its SHA-256 hash is stored on the game; API responses never return
+the secret. Reusing a secret in either POST route is rejected, so a retry cannot
+silently create a duplicate or change an existing game. The configured master
+password authorizes updates only; it cannot be used to create a game. Do not
+send `game_id` in a creation request.
 
-Optional: `game_id`, the id of the game this submission updates. With the
-game's own secret it merely pins the target (a game_id that does not belong to
-the secret is rejected). The configured master password may be sent in the
-secret field instead of a game's secret, to refactor an existing game whose
-secret is unknown: `game_id` is then required and names the target, the whole
-test flow must have been run with the master password as the secret, and the
-named game keeps its own secret — a later resubmission with the real secret
-still updates it. The master password without a `game_id` is rejected: it
-authorizes any game but identifies none, and it never creates a game.
-`game_id` is a targeting hint only — it is excluded from the payload identity
-the test-flow traces hash, so a tested payload can be retargeted without
-rerunning the flow.
 See [the server API](server-side-game-api.md), [translation contract](game-translation.md)
 and `game_artifacts.validate_artifact` for the authoritative detailed contracts.
 `examples/agent-game.json` is a runnable counter-game request example.
 Its test images are schematic illustrations, not captured gameplay screenshots.
 
-## What the endpoint validates
+## Updating a game
+
+`PATCH /games/{game_id}` is the single API for changing game content. The URL
+must identify an existing game. The JSON body must include
+`game_addition_request_id_and_secret`, containing either that game's original
+submission secret or the configured master password. A different game's
+secret is rejected. An optional body `game_id` must match the URL; it is useful
+when sending an already tested complete payload. Account ownership alone does not authorize a patch, and
+account credentials are not required when the update credential is valid.
+A master-password update preserves the game's original secret.
+
+Every content field accepted by the complete import is optional in PATCH:
+`name`, `description`, `allowed_player_counts`, `allows_leave_mid_match`,
+`allows_join_mid_match`, `declarative_ui`, `client_code`, `server_code`,
+`language`, `rules`, `ui_instructions`, `tutorial`, `images`, `unit_tests`,
+and `translations`. Omitted fields retain their current values. Supplied
+objects and lists replace that field, so send a complete replacement object
+for `declarative_ui`, `unit_tests`, `tutorial`, or `translations`. Explicit
+`null` and unknown fields are rejected. Runtime state/move/view schemas are
+derived from `unit_tests`; change those schemas through that field.
+The PATCH request schema is in `/openapi.json` and `/docs`.
+
+The server combines the supplied fields with the current version, compares
+actual values, and validates the fields and dependencies that changed:
+
+| Actual change | Validation |
+|---|---|
+| `server_code`, `unit_tests`, allowed player counts or join/leave behavior | Validate test artifacts, schemas and rosters; run approved examples, settlement and move checks, and random walks against the resulting server logic. A fresh recorded presentation test flow is not required when the presentation is unchanged. |
+| `declarative_ui` or its generated `client_code` | Validate the resulting presentation and localization, including its examples, and require the complete recorded `/game-test/*` flow for the resulting full payload. Review the changed scenes and interactions in the scene playground. |
+| Name, description, textual `rules`, `ui_instructions`, tutorial, images, language or translations | Validate the relevant text, translation, tutorial or image contracts and size limits. Do not run random walks or require a recorded presentation test flow for these edits alone. |
+| Supplied values equal the current values | No new game version or heavy validation. |
+
+Changing textual `rules` documents the game; changing `allowed_player_counts`
+or join/leave flags changes runtime behavior and requires server verification.
+If several categories change, their validations all apply. Existing fields
+remain available to validate dependencies: for example, changed unit tests run
+against the retained server code, and changed server code uses retained tests.
+A patch cannot remove required code or leave the stored package and runtime
+schemas inconsistent. Versions already used by matches retain their original
+code, presentation and metadata.
+
+For a presentation update, construct the complete resulting import payload,
+record the full test flow for it under the credential used by PATCH, and then
+send the changed fields to PATCH. Trace matching uses that merged payload,
+not the small patch body. When using the master password, record the flow under
+the master password; the target game ID is excluded from trace identity.
+
+For example, renaming a game requires no gameplay validation:
+
+```python
+response = httpx.patch(
+    base + '/games/' + published['id'],
+    json={
+        'game_addition_request_id_and_secret': os.environ['BUILDPLAY_GAME_SECRET'],
+        'name': 'A clearer game name',
+    },
+    timeout=35,
+)
+response.raise_for_status()
+updated = response.json()
+```
+
+A successful PATCH returns 200 with `GameOut`; an actual content change creates
+a new version. Before this change, both POST routes could update by secret and
+PATCH accepted owner credentials. Migrate existing update clients to PATCH,
+retain the published game ID, and include the game secret or master password
+in every update.
+
+## What creation validates
 
 Every check below runs before any write: a failure returns 422 and nothing
 is inserted. The checks, in order:
@@ -205,7 +261,7 @@ The complete stored package, including the derived runtime-schema copy, is also
 capped at 900,000 serialized bytes. Compressed uploads are rejected.
 Chunked requests have the same cumulative limit. Uploads have a 15-second deadline.
 
-- 201: complete `GameOut` for the published game (version 1 on create, higher on an update); save its `id`.
+- 201: complete `GameOut` for the newly published game, version 1; save its `id`.
 - 401: invalid credentials that were sent.
 - 400: malformed Content-Length.
 - 408: upload deadline exceeded.
@@ -219,14 +275,14 @@ Validation runs before any storage write, reusing the game artifact validators,
 example tests, localization checks, random walks and the existing QuickJS limits.
 An isolated validator process has a 200-second wall deadline, including schema
 validation. Errors never echo the full submitted source. Persistence creates the
-published game (or updates the one carrying the same request secret), with the import package (including translations) stored
-with it, and seeds the portal bundle with the supplied translations.
+published game with its import package (including translations), and seeds the
+portal bundle with the supplied translations.
 
-The endpoint is not idempotent without a request id: do not blindly retry a
-request whose response was lost. First inspect the published games and compare
-name and source — or send the same `game_addition_request_id_and_secret` again,
-which updates the game instead of duplicating it. This version
-has bounded concurrent validation per server process, not distributed user quotas.
+If a creation response is lost, inspect the published games and compare name
+and source before retrying. Reusing the same submission secret will be rejected
+if the first request succeeded. Save the game ID and use PATCH for subsequent
+changes. Validation concurrency is bounded per server process; there are no
+distributed user quotas.
 
 ## Example agent client
 

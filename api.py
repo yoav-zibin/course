@@ -55,7 +55,6 @@ from game_platform.schemas import (
     GameSummaryOut,
     LegacyGameOut,
     LegacyGameDetailOut,
-    GameUpdate,
     GoogleLogin,
     HealthOut,
     InviteCreate,
@@ -92,7 +91,6 @@ from game_platform.schemas import (
 from game_platform.service import (
     CAMPAIGN_EXPERIMENT_ID,
     SKIN_EXPERIMENT_ID,
-    UNSET,
     VERIFICATION_TTL_SECONDS,
     ConflictError,
     ForbiddenError,
@@ -976,31 +974,6 @@ def get_game_cover(
     if _etag_matches(request.headers.get("if-none-match"), etag):
         return Response(status_code=HTTPStatus.NOT_MODIFIED, headers=headers)
     return Response(svg, media_type="image/svg+xml", headers=headers)
-
-
-@router.patch("/games/{game_id}")
-def update_game(
-    platform: Platform, caller_id: CallerId, game_id: str, body: GameUpdate
-) -> GameOut:
-    game = platform.update_game(
-        caller_id=caller_id,
-        game_id=game_id,
-        name=body.name,
-        description=body.description,
-        allowed_player_counts=None
-        if body.allowed_player_counts is None
-        else tuple(body.allowed_player_counts),
-        allows_leave_mid_match=body.allows_leave_mid_match,
-        allows_join_mid_match=body.allows_join_mid_match,
-        code=body.client_code if body.client_code is not None else body.code,
-        server_code=body.server_code
-        if "server_code" in body.model_fields_set
-        else UNSET,
-        game_schemas=body.game_schemas.model_dump()
-        if body.game_schemas is not None
-        else UNSET,
-    )
-    return GameOut.of(game)
 
 
 @router.delete("/games/{game_id}", status_code=HTTPStatus.NO_CONTENT)

@@ -1932,6 +1932,9 @@ class GamePlatform:
         request_id: str | None = None,
         existing_game_id: str | None = None,
         preserve_secret: bool = False,
+        _create_only: bool = False,
+        _expected_version: int | None = None,
+        _translations: Sequence[tuple[str, str, str]] = (),
     ) -> Game:
         """Creates a published game, or updates the one imported with [request_id]
         (see agent_import). The find and the create/update happen under one lock, so
@@ -1955,6 +1958,16 @@ class GamePlatform:
                     raise InvalidRequestError(f"no game with id {existing_game_id}")
             elif request_id is not None:
                 existing = self.find_game_by_addition_request_id(request_id)
+            if existing is not None and _create_only:
+                raise ConflictError(f"game already exists; use PATCH /games/{existing.id}")
+            if _expected_version is not None and (
+                existing is None or existing.version != _expected_version
+            ):
+                raise ConflictError("game changed during validation; retry the PATCH against its latest version")
+            # Validate all translations before writing the version, then store
+            # them under this same lock/transaction so concurrent updates cannot
+            # seed the portal bundle out of order.
+            translation_records = self._translation_records(_translations)
             # Only the request id's hash is ever stored: a resubmission is
             # found by comparing hashes, so the plaintext never persists,
             # whatever the package itself carried.
@@ -1984,17 +1997,20 @@ class GamePlatform:
                 if not game.published:
                     self._store.set_game_published(game.id, True)
                     game = replace(game, published=True)
-                return game
-            return self.create_game(
-                caller_id=caller_id,
-                name=name,
-                description=description,
-                rules=rules,
-                code=code,
-                server_code=server_code,
-                game_schemas=game_schemas,
-                import_package=import_package,
-            )
+            else:
+                game = self.create_game(
+                    caller_id=caller_id,
+                    name=name,
+                    description=description,
+                    rules=rules,
+                    code=code,
+                    server_code=server_code,
+                    game_schemas=game_schemas,
+                    import_package=import_package,
+                )
+            if translation_records:
+                self._store.put_translations(translation_records)
+            return game
 
     def find_game_by_addition_request_id(self, request_id: str) -> Game | None:
         """The published game imported with [request_id] (see agent_import: the
@@ -2330,6 +2346,13 @@ class GamePlatform:
         checks one: the locale must be a language texts are translated into, both texts
         must be non-empty, and the translation must keep the source's placeholders.
         English is the source language, so it is never a target here."""
+        records = self._translation_records(translations)
+        if records:
+            self._store.put_translations(records)
+        return records
+
+    def _translation_records(self, translations: Sequence[tuple[str, str, str]]) -> list[Translation]:
+        """Validate a complete batch without persisting any of its entries."""
         records: list[Translation] = []
         for locale, source, text in translations:
             code = i18n.normalize_locale(locale)
@@ -2348,8 +2371,6 @@ class GamePlatform:
                 created_at=self._clock(),
                 reviewed=True,
             ))
-        if records:
-            self._store.put_translations(records)
         return records
 
     def delete_translation(self, locale: str, source_hash: str) -> None:
@@ -2372,7 +2393,7 @@ class GamePlatform:
 
     def unpublish_game(self, *, caller_id: str, game_id: str) -> Game:
         # No drafts anymore: unpublishing is a pure flag flip. Re-publishing
-        # happens by submitting the game again through POST /games.
+        # happens through the authenticated PATCH update path.
         with self._lock:
             game = self._get_owned_game(caller_id=caller_id, game_id=game_id)
             if not game.is_declarative:
@@ -2472,7 +2493,7 @@ class GamePlatform:
         with self._lock:
             game = self._get_owned_game(caller_id=caller_id, game_id=game_id)
             if not game.published and not _publishing:
-                raise ConflictError("game is unpublished; submit it again through POST /games to publish it")
+                raise ConflictError("game is unpublished; use PATCH /games/{game_id} to publish it")
             server_code_value = (
                 game.server_code
                 if server_code is UNSET
@@ -2482,19 +2503,7 @@ class GamePlatform:
                 raise InvalidRequestError(
                     "a game needs server_code; it cannot be removed"
                 )
-            game_schemas_value = (
-                (
-                    None
-                    if server_code is not UNSET
-                    and (
-                        server_code_value is None
-                        or server_code_value != game.server_code
-                    )
-                    else game.game_schemas
-                )
-                if game_schemas is UNSET
-                else game_schemas
-            )
+            game_schemas_value = game.game_schemas if game_schemas is UNSET else game_schemas
             rules = game.rules
             updated = replace(
                 game,
@@ -2541,7 +2550,7 @@ class GamePlatform:
                 # rendering the previous spec against a different game.
                 raise InvalidRequestError(
                     "Update declarative game code, rules or schemas through "
-                    "POST /games/declarative with the complete tested package"
+                    "PATCH /games/{game_id} with its secret or the master password"
                 )
             if updated.code != game.code:
                 self._require_translatable(updated.code, updated.server_code)
@@ -2549,6 +2558,8 @@ class GamePlatform:
                 updated.server_code != game.server_code
                 or updated.game_schemas != game.game_schemas
                 or updated.rules != game.rules
+                or (updated.import_package or {}).get('unit_tests')
+                != (game.import_package or {}).get('unit_tests')
             ):
                 # New or re-ruled server code must pass its tests before
                 # the new version is published (Phase 5 gate). An update

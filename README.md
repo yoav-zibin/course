@@ -338,14 +338,14 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `GET /i18n/{locale}` |  | Every text in one language: UI labels, status labels, error messages |
 | `POST /users/{id}/merge` | yes | Merge this account into `into_user_id` (authenticate as this user and send `into_password`, the target's password) |
 | `GET /matches/open` |  | Matches anyone may join (waiting, or ongoing with mid-match joins) |
-| `POST /games` | optional | Import and publish a complete game (see GAME_DEVELOPMENT_GUIDE.md) |
-| `POST /games/declarative` | optional | Import a native-ready game with `declarative_ui`, using the same tests and publication gates |
+| `POST /games` | optional | Create and publish a complete game; existing secrets are rejected (see GAME_DEVELOPMENT_GUIDE.md) |
+| `POST /games/declarative` | optional | Alias for creating a complete native-ready game with `declarative_ui` |
 | `GET /games/declarative/schema` | | Declarative package and scene JSON Schema |
 | `POST /games/declarative/validate` | optional | Execute one presentation message in bounded QuickJS, validate its scene, and return JSON without storing a game |
 | `GET /games?owner_user_id=&q=` |  | List published games that aren't deleted, optionally by owner. `q` searches names and descriptions (every word must match, ignoring case). The list never includes code, which is most of each game; load one game in full from `GET /games/{id}` |
 | `GET /games/{id}` |  | Get the latest version of a game |
 | `GET /games/{id}/versions/{version}` |  | Get a specific version of a game |
-| `PATCH /games/{id}` | yes | Update some fields of a game, creating a new version (creator only) |
+| `PATCH /games/{id}` | game secret or master password | Single game-content update API; all content fields optional, only changed fields and their dependencies are validated |
 | `DELETE /games/{id}` | yes | Delete a game (creator only) |
 | `POST /feedback` | yes | Send a bug, a suggestion or a problem about a user, a game, a match or the platform `{kind, target_type, target_id?, text, page?}`; see [Feedback](#feedback) |
 | `POST /matches` | yes | Create a match `{game_id, num_computer_opponents, private?, turn_seconds?}` (`turn_seconds`: 60, 180 or 600 for a [speed match](#speed-matches)); the caller is player 0 |
@@ -1349,7 +1349,12 @@ now deploys to https://buildplay.fun automatically — no manual VM step needed.
 ## Agent game imports
 
 Agents submit a complete game through `POST /games` (credentials optional).
-The import publishes the game; resubmitting with the same
-`game_addition_request_id_and_secret` updates it, creating a new version if
-anything changed. See [GAME_DEVELOPMENT_GUIDE.md](GAME_DEVELOPMENT_GUIDE.md) and
+Both `POST /games` and its `POST /games/declarative` alias create games only.
+To update a game, use `PATCH /games/{id}` with its
+`game_addition_request_id_and_secret` or the configured master password in that
+field. All content fields are optional; omitted fields are retained. Changes to
+server logic, unit tests or mechanical rules run server checks and random walks;
+presentation changes require recorded test-flow evidence for the merged payload.
+Name, rules text, images and other metadata changes use relevant lightweight
+validation. An actual change creates a new version; unchanged values do not. See [GAME_DEVELOPMENT_GUIDE.md](GAME_DEVELOPMENT_GUIDE.md) and
 [API usage and agent instructions](docs/agent-game-import.md).

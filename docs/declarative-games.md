@@ -518,7 +518,7 @@ Submit the resulting complete package to `POST /games/declarative`:
 
 Omit `client_code`: the platform derives it. `/games/declarative` requires the
 declarative package; `/games` accepts the same declarative form; HTML submissions are rejected. Authentication,
-ownership, idempotent updates, translations in all supported languages,
+ownership, translations in all supported languages,
 tutorials, cover/supporting images, JSON schemas, approved examples,
 determinism/random-walk checks and recorded test gates are the same as for
 other imported games. See [the import API reference](agent-game-import.md) for
@@ -551,11 +551,16 @@ history and cached game package stay unchanged. A missing or invalid repair
 asset leaves the original presentation in place. New publications use the
 complete updated package through the ordinary import flow below.
 
-Update declarative code, schemas or player/turn rules by resubmitting the full
-tested package through `POST /games/declarative` (or `POST /games`). Partial
-`PATCH /games/{id}` behavior changes are rejected so the native scene cannot
-be left paired with different rules. Metadata edits and unchanged values
-remain supported.
+Update game content only through `PATCH /games/{id}`. Include the game secret
+or configured master password in `game_addition_request_id_and_secret`; account
+ownership alone is insufficient. All content fields are optional, and omitted
+fields retain their current values. Presentation changes require recorded tests
+for the complete resulting package; server-code, unit-test and mechanical-rule
+changes run server checks and random walks. Text, images and other metadata
+edits use the relevant lightweight checks. The resulting presentation, tests
+and runtime schemas are stored together as a new version when content changes.
+The two POST publication routes create games only and reject existing secrets.
+See [the partial-update contract](agent-game-import.md#updating-a-game).
 
 ## Native host checklist
 
@@ -638,11 +643,12 @@ The scene playground can load the same examples from
 
 The checked-in examples contain **public example submission secrets**. Replace
 the secret with a new private value before beginning a real publication test
-flow, then keep that value for resubmissions of the same game.
+flow, then keep that value and the returned game ID for PATCH updates.
 
 For reviewed packages, `tools/publish_declarative_games.py` runs the ordinary
 authoring APIs, server checks and verified rules/UI protocol playthroughs,
-then submits through `POST /games/declarative`. It does not bypass the five-step
+then creates through `POST /games/declarative` or updates the saved game ID
+through `PATCH /games/{id}`. It does not bypass the five-step
 gate or create player accounts/matches. Its private state file must be outside
 the checkout; keep it to update the same records instead of creating duplicates.
 Protocol playthroughs complement browser tests; they do not verify pixel layout

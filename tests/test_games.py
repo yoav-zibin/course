@@ -1,7 +1,7 @@
 from typing import Any
 from dataclasses import replace
 
-from game_platform.tests.helpers import Api, ECHO_SERVER_CODE, TEST_GAME_SCHEMAS, TEST_DECLARATIVE_UI, error, validation_errors
+from game_platform.tests.helpers import Api, ECHO_SERVER_CODE, TEST_GAME_SCHEMAS, TEST_DECLARATIVE_UI, TEST_GAME_SECRET, error, validation_errors
 
 POKER: dict[str, Any] = {
     "name": "Poker",
@@ -79,7 +79,8 @@ def test_unknown_game_is_not_found(api: Api) -> None:
     alice = api.new_user("alice")
     assert error(api.request("GET", "/games/nope")) == (404, "game not found")
     assert error(
-        api.request("PATCH", "/games/nope", as_user=alice, json={"name": "x"})
+        api.request("PATCH", "/games/nope", as_user=alice,
+                    json={"name": "x", "game_addition_request_id_and_secret": TEST_GAME_SECRET})
     ) == (404, "game not found")
     assert error(api.request("DELETE", "/games/nope", as_user=alice)) == (
         404,
@@ -96,7 +97,8 @@ def test_update_creates_a_new_version_changing_only_the_given_fields(
         "PATCH",
         f"/games/{before['id']}",
         as_user=alice,
-        json={"name": "Poker 2", "description": "Updated rules description"},
+        json={"name": "Poker 2", "description": "Updated rules description",
+              "game_addition_request_id_and_secret": TEST_GAME_SECRET},
     )
     changed = {
         key: (before[key], after[key]) for key in before if before[key] != after[key]
@@ -122,7 +124,8 @@ def test_an_update_that_changes_nothing_keeps_the_version(api: Api) -> None:
     alice = api.new_user("alice")
     before = api.create_game(POKER, alice)
     after = api.ok(
-        "PATCH", f"/games/{before['id']}", as_user=alice, json={"name": "Poker"}
+        "PATCH", f"/games/{before['id']}", as_user=alice,
+        json={"name": "Poker", "game_addition_request_id_and_secret": TEST_GAME_SECRET}
     )
     assert after == before
 
@@ -134,23 +137,26 @@ def test_update_validates_its_input(api: Api) -> None:
         "PATCH",
         f"/games/{game_id}",
         as_user=alice,
-        json={"name": None, "allowed_player_counts": [0]},
+        json={"allowed_player_counts": [0], "game_addition_request_id_and_secret": TEST_GAME_SECRET},
     )
     assert validation_errors(response) == [
         "allowed_player_counts.0: Input should be greater than or equal to 1"
     ]
     response = api.request(
-        "PATCH", f"/games/{game_id}", as_user=alice, json={"name": None}
+        "PATCH", f"/games/{game_id}", as_user=alice,
+        json={"name": None, "game_addition_request_id_and_secret": TEST_GAME_SECRET}
     )
-    assert validation_errors(response) == ["Value error, name cannot be null"]
+    assert response.status_code == 422
+    assert "name" in response.text
 
 
-def test_only_the_creator_can_update_or_delete_a_game(api: Api) -> None:
+def test_updates_need_the_secret_and_only_the_creator_can_delete_a_game(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game_id = api.new_game(owner=alice)
-    patch = api.request("PATCH", f"/games/{game_id}", as_user=bob, json={"name": "x"})
+    patch = api.request("PATCH", f"/games/{game_id}", as_user=bob,
+                        json={"name": "x", "game_addition_request_id_and_secret": "incorrect-secret-0123456789"})
     delete = api.request("DELETE", f"/games/{game_id}", as_user=bob)
-    assert error(patch) == (403, "only the game's creator can change it")
+    assert patch.status_code == 403
     assert error(delete) == (403, "only the game's creator can change it")
     assert api.ok("GET", f"/games/{game_id}")["name"] == "Poker"
 
@@ -167,12 +173,13 @@ def test_a_deleted_game_is_unlisted_but_kept(api: Api) -> None:
     assert api.ok("GET", f"/games/{game_id}/versions/1")["deleted"] is True
 
     # It can no longer be changed or used for new matches.
-    patch = api.request("PATCH", f"/games/{game_id}", as_user=alice, json={"name": "x"})
+    patch = api.request("PATCH", f"/games/{game_id}", as_user=alice,
+                        json={"name": "x", "game_addition_request_id_and_secret": TEST_GAME_SECRET})
     delete = api.request("DELETE", f"/games/{game_id}", as_user=alice)
     new_match = api.request(
         "POST", "/matches", as_user=alice, json={"game_id": game_id}
     )
-    assert error(patch) == (409, "the game has been deleted")
+    assert error(patch) == (404, "game not found")
     assert error(delete) == (409, "the game has been deleted")
     assert error(new_match) == (409, "the game has been deleted")
 

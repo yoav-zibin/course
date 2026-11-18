@@ -1000,10 +1000,16 @@ def make_router(platform_dependency):
             )
         return store
 
-    def check_secret(secret):
-        if not 16 <= len(secret) <= 200:
+    def check_secret(secret, request):
+        # Master credentials authorize PATCH without creation's random-secret
+        # minimum. The same credential must work throughout its recorded test
+        # flow, including every session operation and readback.
+        password = request.app.state.master_password
+        is_master = bool(password) and secrets_module.compare_digest(
+            secret.encode(), password.encode())
+        if not 1 <= len(secret) <= 200 or (len(secret) < 16 and not is_master):
             raise HTTPException(
-                422, "the secret must be 16 to 200 characters, like the import secret"
+                422, "the secret must be 16 to 200 characters, or the configured master password"
             )
 
     def check_config(config, body):
@@ -1032,9 +1038,9 @@ def make_router(platform_dependency):
             raise HTTPException(422, f"the stored step 1 inputs are invalid: {exc}")
 
     @router.post("/game-test/submissions", status_code=201)
-    def submit_inputs(payload: SubmissionIn, platform=Depends(platform_dependency)):
+    def submit_inputs(request: Request, payload: SubmissionIn, platform=Depends(platform_dependency)):
         store = store_of(platform)
-        check_secret(payload.secret)
+        check_secret(payload.secret, request)
         try:
             body = GameImport.model_validate(payload.body)
         except Exception as exc:
@@ -1063,9 +1069,9 @@ def make_router(platform_dependency):
         }
 
     @router.get("/game-test/submission")
-    def get_submission(secret: str, platform=Depends(platform_dependency)):
+    def get_submission(request: Request, secret: str, platform=Depends(platform_dependency)):
         store = store_of(platform)
-        check_secret(secret)
+        check_secret(secret, request)
         row = latest_submission(store, secret_hash(secret))
         if row is None:
             raise HTTPException(
@@ -1081,9 +1087,9 @@ def make_router(platform_dependency):
         }
 
     @router.post("/game-test/server-check", dependencies=[Depends(validation_slot)])
-    def server_check(payload: ServerCheckIn, platform=Depends(platform_dependency)):
+    def server_check(request: Request, payload: ServerCheckIn, platform=Depends(platform_dependency)):
         store = store_of(platform)
-        check_secret(payload.secret)
+        check_secret(payload.secret, request)
         row = owned_submission(store, payload.secret, payload.submission_id)
         body = stored_body(store, row)
         report = run_server_checks_subprocess(body)
@@ -1104,9 +1110,9 @@ def make_router(platform_dependency):
         return report
 
     @router.post("/game-test/moves", status_code=201)
-    def record_move(payload: MoveIn, platform=Depends(platform_dependency)):
+    def record_move(request: Request, payload: MoveIn, platform=Depends(platform_dependency)):
         store = store_of(platform)
-        check_secret(payload.secret)
+        check_secret(payload.secret, request)
         if payload.mode not in MODES:
             raise HTTPException(422, f"unknown play mode {payload.mode!r}")
         row = owned_submission(store, payload.secret, payload.submission_id)
@@ -1132,9 +1138,9 @@ def make_router(platform_dependency):
         return {"md5": digest}
 
     @router.post("/game-test/verify-match", dependencies=[Depends(validation_slot)])
-    def verify_match(payload: VerifyMatchIn, platform=Depends(platform_dependency)):
+    def verify_match(request: Request, payload: VerifyMatchIn, platform=Depends(platform_dependency)):
         store = store_of(platform)
-        check_secret(payload.secret)
+        check_secret(payload.secret, request)
         if payload.mode not in VERIFIED_MODES:
             raise HTTPException(
                 422,
@@ -1228,9 +1234,9 @@ def make_router(platform_dependency):
         return row
 
     @router.post("/game-test/sessions", status_code=201)
-    def start_session(payload: SessionIn, platform=Depends(platform_dependency)):
+    def start_session(request: Request, payload: SessionIn, platform=Depends(platform_dependency)):
         store = store_of(platform)
-        check_secret(payload.secret)
+        check_secret(payload.secret, request)
         if payload.mode not in MODES:
             raise HTTPException(422, f"unknown play mode {payload.mode!r}")
         row = owned_submission(store, payload.secret, payload.submission_id)
@@ -1260,9 +1266,9 @@ def make_router(platform_dependency):
         return {"session_id": session["session_id"], "move_count": 0, "status": "open"}
 
     @router.post("/game-test/sessions/{session_id}/moves", status_code=201)
-    def append_move(session_id: str, payload: SessionMoveIn, platform=Depends(platform_dependency)):
+    def append_move(request: Request, session_id: str, payload: SessionMoveIn, platform=Depends(platform_dependency)):
         store = store_of(platform)
-        check_secret(payload.secret)
+        check_secret(payload.secret, request)
         row = owned_session(store, payload.secret, payload.submission_id, session_id)
         if payload.player_index >= len(row["players"]):
             raise HTTPException(422, "the move names a player outside the roster")
@@ -1305,9 +1311,9 @@ def make_router(platform_dependency):
         return {"move_count": updated["move_count"], "finished": finished}
 
     @router.post("/game-test/sessions/{session_id}/close")
-    def close(session_id: str, payload: SessionRefIn, platform=Depends(platform_dependency)):
+    def close(request: Request, session_id: str, payload: SessionRefIn, platform=Depends(platform_dependency)):
         store = store_of(platform)
-        check_secret(payload.secret)
+        check_secret(payload.secret, request)
         row = owned_session(store, payload.secret, payload.submission_id, session_id)
         if row["status"] == "finished":
             return {"finished": True, "moves_verified": row["move_count"]}
@@ -1320,18 +1326,18 @@ def make_router(platform_dependency):
         return {"finished": True, "moves_verified": updated["move_count"]}
 
     @router.post("/game-test/sessions/{session_id}/abandon")
-    def abandon(session_id: str, payload: SessionRefIn, platform=Depends(platform_dependency)):
+    def abandon(request: Request, session_id: str, payload: SessionRefIn, platform=Depends(platform_dependency)):
         store = store_of(platform)
-        check_secret(payload.secret)
+        check_secret(payload.secret, request)
         row = owned_session(store, payload.secret, payload.submission_id, session_id)
         if row["status"] == "open":
             abandon_session(store, row)
         return {"abandoned": True}
 
     @router.get("/game-test/open-session")
-    def get_open_session(secret: str, platform=Depends(platform_dependency)):
+    def get_open_session(request: Request, secret: str, platform=Depends(platform_dependency)):
         store = store_of(platform)
-        check_secret(secret)
+        check_secret(secret, request)
         row = latest_submission(store, secret_hash(secret))
         if row is None:
             raise HTTPException(
@@ -1344,9 +1350,9 @@ def make_router(platform_dependency):
         }
 
     @router.get("/game-test/status")
-    def status(secret: str, platform=Depends(platform_dependency)):
+    def status(request: Request, secret: str, platform=Depends(platform_dependency)):
         store = store_of(platform)
-        check_secret(secret)
+        check_secret(secret, request)
         row = latest_submission(store, secret_hash(secret))
         if row is None:
             return {"submission": None, "steps": {"step1": {"done": False}},

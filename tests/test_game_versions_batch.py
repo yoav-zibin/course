@@ -7,7 +7,7 @@ rules: a version the caller couldn't fetch on its own is skipped, never
 leaked.
 """
 
-from game_platform.tests.helpers import Api
+from game_platform.tests.helpers import Api, TEST_GAME_SECRET
 
 
 def _two_games(api: Api) -> tuple[str, str, str]:
@@ -15,7 +15,7 @@ def _two_games(api: Api) -> tuple[str, str, str]:
     owner = api.new_user("owner")
     game_a = api.new_game(owner=owner)
     game_b = api.new_game(owner=owner)
-    api.ok("PATCH", f"/games/{game_a}", as_user=owner, json={"name": "Poker 2"})
+    api.ok("PATCH", f"/games/{game_a}", as_user=owner, json={"name": "Poker 2", "game_addition_request_id_and_secret": TEST_GAME_SECRET})
     return owner, game_a, game_b
 
 

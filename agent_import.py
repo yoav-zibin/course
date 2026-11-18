@@ -1,17 +1,18 @@
-"""Bounded complete-game imports: one POST publishes a fully translated game."""
+"""Bounded game creation and authenticated, field-specific partial updates."""
 import asyncio
+import copy
 import json
 import secrets
 import subprocess
 import sys
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model, model_validator
 from starlette.concurrency import run_in_threadpool
 
-from game_platform.game_artifacts import validate_artifact, validate_test_rosters
+from game_platform.game_artifacts import text, validate_artifact, validate_test_rosters
 from game_platform.i18n import LOCALE_CODES as LANGUAGES
-from game_platform.models import GameRules, package_secret_hash
+from game_platform.models import GameRules, package_secret_hash, with_package_secret_hash
 from game_platform.schemas import GameOut, Name, PlayerCounts
 from game_platform.service import InvalidRequestError
 
@@ -22,7 +23,8 @@ MAX_PACKAGE_BYTES = 400_000
 UPLOAD_TIMEOUT_SECONDS = 15
 
 # The owner recorded for a game imported without an account: no user can
-# authenticate as it (user ids are UUIDs), so no one can edit or unpublish it.
+# authenticate as it (user ids are UUIDs). Its secret still authorizes updates;
+# account-only lifecycle operations such as unpublishing are unavailable.
 AGENT_IMPORT_OWNER_ID = "agent-import"
 
 
@@ -63,19 +65,13 @@ class GameImport(BaseModel):
     # published game is translated in all 8 languages from this one POST.
     translations: dict[str, GameTranslation]
     # A string the agent picks when creating the game (a long random secret).
-    # Required: every import carries one, so every game can be updated by
-    # resubmitting with the same string. Sending the same string again updates
-    # the game created with it instead of creating a duplicate: the request is
-    # an update, not a new addition. Anyone holding the string can update the
-    # game, so keep it secret. Only its SHA-256 hash is ever stored.
-    game_addition_request_id_and_secret: str = Field(min_length=16, max_length=200)
-    # Optional: the id of the game this submission updates. With the game's
-    # own secret it merely pins the target — the two must belong together.
-    # With the configured master password in the secret field instead, it is
-    # required and is what identifies the game: the master password
-    # authorizes updating any game but names none, and the named game keeps
-    # its own secret. The field never identifies a payload (the game-test
-    # trace hashes exclude it), so a tested payload can be retargeted.
+    # Creation requires a random secret of at least 16 characters. Shorter
+    # credentials are allowed in a test payload for master-password updates;
+    # the HTTP endpoints authenticate them before recording or applying it.
+    # Updates use PATCH and the game ID, and only the hash is ever stored.
+    game_addition_request_id_and_secret: str = Field(min_length=1, max_length=200, repr=False)
+    # Optional targeting hint for a test-page payload; PATCH's path identifies
+    # the target. POST rejects it because POST only creates games.
     game_id: str | None = Field(default=None, min_length=1, max_length=100)
 
     @model_validator(mode='after')
@@ -119,6 +115,95 @@ class GameImport(BaseModel):
                          allows_join_mid_match=self.allows_join_mid_match)
 
 
+class _PartialGame(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True, json_schema_extra={
+        'examples': [{'game_addition_request_id_and_secret': 'game-secret-or-master-password',
+                      'name': 'Updated game'}]})
+
+    @model_validator(mode='after')
+    def _reject_nulls(self):
+        for field in sorted(self.model_fields_set):
+            if getattr(self, field) is None:
+                raise ValueError(f'{field} cannot be null; omit it to keep its value')
+        return self
+
+
+# Share the import field constraints without inheriting validators that require
+# a complete new package. A master password need not satisfy creation's minimum
+# random-secret length. The game ID comes from the PATCH path.
+_update_fields = {}
+for _name, _field in GameImport.model_fields.items():
+    _info = copy.deepcopy(_field)
+    _info.default = None
+    _update_fields[_name] = (_field.annotation | None, _info)
+_update_fields['game_addition_request_id_and_secret'] = (
+    str, Field(min_length=1, max_length=200, repr=False))
+GameUpdate = create_model('GameUpdate', __base__=_PartialGame, **_update_fields)
+
+LOGIC_FIELDS = frozenset({'server_code', 'unit_tests', 'allowed_player_counts',
+                          'allows_leave_mid_match', 'allows_join_mid_match'})
+PRESENTATION_FIELDS = frozenset({'declarative_ui', 'client_code'})
+
+
+def merge_update(game, patch):
+    """Merge validated supplied fields with a detached copy of the stored version.
+
+    Retained artifacts were validated when published; do not run complete-import
+    validators on them for an unrelated metadata edit (including older packages).
+    """
+    package = copy.deepcopy(game.import_package or {})
+    translations = package.get('translations', {})
+    language = package.get('language')
+    if language is None:
+        language = next((locale for locale, item in translations.items()
+                         if item.get('display_name') == game.name
+                         and item.get('short_description') == game.description
+                         and item.get('game_logic_rules') == package.get('rules_text')), 'en')
+    values = dict(
+        name=game.name, description=game.description,
+        allowed_player_counts=list(game.rules.allowed_player_counts),
+        allows_leave_mid_match=game.rules.allows_leave_mid_match,
+        allows_join_mid_match=game.rules.allows_join_mid_match,
+        client_code=game.code, server_code=game.server_code,
+        declarative_ui=package.get('declarative_ui'), language=language,
+        rules=package.get('rules_text', ''), ui_instructions=package.get('ui_text', ''),
+        tutorial=package.get('tutorial', {}), images=package.get('images', []),
+        unit_tests=package.get('unit_tests', {}),
+        translations={locale: GameTranslation.model_construct(**item)
+                      for locale, item in translations.items() if locale != language},
+        game_id=game.id,
+        game_addition_request_id_and_secret=patch.game_addition_request_id_and_secret,
+    )
+    supplied = patch.model_dump(exclude_unset=True)
+    changed = {name for name, value in supplied.items()
+               if name not in {'game_id', 'game_addition_request_id_and_secret'}
+               and value != (values[name] if name != 'translations' else {
+                   locale: item.model_dump() for locale, item in values[name].items()})}
+    values.update(supplied)
+    if 'translations' in supplied:
+        values['translations'] = patch.translations
+    body = GameImport.model_construct(**values)
+    if 'translations' not in changed:
+        # A changed source text invalidates its old translation. Fall back to
+        # that new source until the author supplies replacement translations.
+        for source, translated in (
+            ('name', 'display_name'), ('description', 'short_description'),
+            ('rules', 'game_logic_rules'), ('ui_instructions', 'game_ui_rules'),
+        ):
+            if source in changed:
+                for item in body.translations.values():
+                    setattr(item, translated, getattr(body, source))
+    if changed & PRESENTATION_FIELDS:
+        # Regenerate the compatibility host whenever its portable spec changes.
+        # A supplied host must correspond to the resulting spec.
+        if 'declarative_ui' in changed and 'client_code' not in patch.model_fields_set:
+            body.client_code = None
+        body._normalize_presentation()
+    if body.language not in LANGUAGES:
+        raise InvalidRequestError(f'Unsupported language: {body.language!r}')
+    return body, changed
+
+
 def _validate_translations(body, table, tutorial_vocab):
     """The caller-supplied translations must cover the game's own strings exactly and
     keep every placeholder, so the published game is translated in every language
@@ -150,8 +235,10 @@ def _validate_translations(body, table, tutorial_vocab):
     return translations
 
 
-def prepare(body):
+def prepare(body, *, changed_fields=None):
     """Validate without writes. Run in a killable process, including user schemas."""
+    creating = changed_fields is None
+    changed = set(GameImport.model_fields) if creating else set(changed_fields)
     for code in (body.client_code, body.server_code):
         if len(code.encode('utf-8')) > MAX_CODE_BYTES:
             raise InvalidRequestError('Each code field must be at most 200000 UTF-8 bytes')
@@ -164,9 +251,24 @@ def prepare(body):
         'ui': {'text': body.ui_instructions}, 'tutorial': body.tutorial,
         'images': {'images': body.images}, 'tests': body.unit_tests,
     }
+    artifact_fields = {
+        'understanding': {'rules'}, 'identity': {'name', 'description'},
+        'logic': {'rules', 'allowed_player_counts', 'allows_leave_mid_match', 'allows_join_mid_match'},
+        'ui': {'ui_instructions'}, 'tutorial': {'tutorial'}, 'images': {'images'},
+        'tests': {'unit_tests'},
+    }
     for step, value in values.items():
+        if not changed & artifact_fields[step]:
+            continue
         try:
-            validate_artifact(step, value)
+            if step == 'identity' and not creating:
+                # Older published games may have an empty description. A name
+                # edit validates the name without revalidating retained text.
+                for field in ('name', 'description'):
+                    if field in changed:
+                        text(getattr(body, field), field)
+            else:
+                validate_artifact(step, value)
         except Exception as exc:
             # The shared validator can embed user schema values in its message.
             # Identify the failing artifact without reflecting that content.
@@ -175,18 +277,42 @@ def prepare(body):
     # not machine-translated), and they count toward the package size limit below.
     from game_platform.game_tutorial import vocabulary
     from game_platform.game_text import StringsError, extract_strings
-    try:
-        table = extract_strings(body.client_code)
-    except StringsError as exc:
-        raise InvalidRequestError(str(exc)) from exc
-    if table is None:
-        raise InvalidRequestError('Game is missing its translation string table')
-    translations = _validate_translations(body, table, vocabulary(body.tutorial['html']))
+    translation_fields = {'translations', 'declarative_ui', 'client_code', 'tutorial', 'language'}
+    if creating or changed & translation_fields:
+        body._translations_cover_every_other_language()
+        try:
+            table = extract_strings(body.client_code)
+        except StringsError as exc:
+            raise InvalidRequestError(str(exc)) from exc
+        if table is None:
+            raise InvalidRequestError('Game is missing its translation string table')
+        translations = _validate_translations(body, table, vocabulary(body.tutorial['html']))
+    else:
+        translations = {locale: item.model_dump() for locale, item in body.translations.items()}
+        # Retain supplied translations without making unrelated edits depend on
+        # the tutorial or client runtime. The source texts follow the new values.
+        if translations:
+            from game_platform import translation as translation_module
+            for source_field, target_field in (
+                ('name', 'display_name'), ('description', 'short_description'),
+                ('rules', 'game_logic_rules'), ('ui_instructions', 'game_ui_rules'),
+            ):
+                if source_field in changed:
+                    for item in translations.values():
+                        if translation_module.placeholders_of(item[target_field]) != translation_module.placeholders_of(getattr(body, source_field)):
+                            raise InvalidRequestError(f'Translations must keep placeholders in {source_field}')
+            translations[body.language] = {
+                'display_name': body.name, 'short_description': body.description,
+                'game_logic_rules': body.rules, 'game_ui_rules': body.ui_instructions,
+                'tutorial_strings': {s: s for s in vocabulary(body.tutorial.get('html', ''))},
+                'client_strings': extract_strings(body.client_code) or {},
+            }
     # The import package is the game's durable metadata: translations, the
     # resubmission secret, rules/UI text, tutorial, images and unit tests.
     # (The service stores only the secret's hash — see import_agent_game.)
     # There is no workflow around it anymore (no job, approvals or history).
     package = {
+        'language': body.language,
         'translations': translations,
         'game_addition_request_id_and_secret': body.game_addition_request_id_and_secret,
         'rules_text': body.rules,
@@ -197,17 +323,19 @@ def prepare(body):
     }
     if body.declarative_ui is not None:
         from game_platform.declarative_ui import verify_example_presentations
-        try:
-            verify_example_presentations(body.declarative_ui, body.unit_tests['cases'])
-        except ValueError as exc:
-            raise InvalidRequestError(str(exc)) from exc
+        if creating or changed & (PRESENTATION_FIELDS | {'unit_tests'}):
+            try:
+                verify_example_presentations(body.declarative_ui, body.unit_tests['cases'])
+            except ValueError as exc:
+                raise InvalidRequestError(str(exc)) from exc
         package['declarative_ui'] = body.declarative_ui
-    for image in [*body.images, *(i for case in body.unit_tests['cases'] for i in case['images'])]:
+    for image in [*body.images, *(i for case in body.unit_tests.get('cases', []) for i in case.get('images', []))]:
         if len(image['svg'].encode('utf-8')) > MAX_IMAGE_BYTES:
             raise InvalidRequestError('Each SVG must be at most 120000 UTF-8 bytes')
     if len(json.dumps(package).encode()) > MAX_PACKAGE_BYTES:
         raise InvalidRequestError('Combined metadata and images exceed 400000 bytes')
-    stored_content = {'import_package': package, 'game_schemas': body.game_schemas(),
+    stored_content = {'import_package': package,
+                      'game_schemas': body.game_schemas() if body.unit_tests else None,
                       'code': body.client_code, 'server_code': body.server_code,
                       'name': body.name, 'description': body.description}
     if len(json.dumps(stored_content).encode()) > MAX_BODY_BYTES:
@@ -216,8 +344,16 @@ def prepare(body):
     # Every test case's roster must be a seat count the rules allow; a
     # human plus a computer is two seats, so a one-seat roster can never
     # take turns correctly.
-    validate_test_rosters(body.allowed_player_counts, body.unit_tests)
-    checks = run_checks(body.client_code, body.server_code, values, body.game_rules())
+    if creating or changed & LOGIC_FIELDS:
+        validate_test_rosters(body.allowed_player_counts, body.unit_tests)
+    selected = set()
+    if creating or changed & LOGIC_FIELDS:
+        selected.update({'approved_examples', 'settlement_probes', 'move_agreement', 'random_walks'})
+    if creating or changed & (PRESENTATION_FIELDS | {'server_code'}):
+        selected.add('localization')
+    from game_platform.game_checks import CHECKS
+    checks = run_checks(body.client_code, body.server_code, values, body.game_rules(),
+                       skip={name for name, _ in CHECKS} - selected) if selected else {}
     failed = [name for name, result in checks.items() if not result['passed']]
     if failed:
         # Say exactly what failed and how to reproduce it, not just which
@@ -234,10 +370,12 @@ def prepare(body):
     return package
 
 
-def verify_submission(body):
+def verify_submission(body, *, changed_fields=None):
+    submission = body.model_dump_json() if changed_fields is None else json.dumps({
+        'body': body.model_dump(), 'changed_fields': sorted(changed_fields)})
     try:
         result = subprocess.run([sys.executable, '-m', 'game_platform.agent_import'],
-                                input=body.model_dump_json(), text=True,
+                                input=submission, text=True,
                                 capture_output=True, timeout=200, check=False)
     except subprocess.TimeoutExpired as exc:
         raise HTTPException(422, 'Game validation exceeded the 200 second limit') from exc
@@ -249,22 +387,40 @@ def verify_submission(body):
     return response['package']
 
 
+def _request_schema(model):
+    """Inline model-local definitions inside a manually parsed OpenAPI body."""
+    schema = model.model_json_schema()
+    if model is GameImport:
+        schema['properties']['game_addition_request_id_and_secret']['minLength'] = 16
+    definitions = schema.pop('$defs', {})
+
+    def inline(value):
+        if isinstance(value, dict):
+            ref = value.get('$ref', '')
+            if ref.startswith('#/$defs/'):
+                return inline({**definitions[ref.removeprefix('#/$defs/')],
+                               **{key: item for key, item in value.items() if key != '$ref'}})
+            return {key: inline(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [inline(item) for item in value]
+        return value
+
+    return inline(schema)
+
+
 def make_router(platform_dependency, caller_dependency):
     router = APIRouter()
 
-    @router.post('/games/declarative', status_code=201, response_model=GameOut,
-                 summary='Submit a portable declarative game (same validation and test gates)',
-                 openapi_extra={'requestBody': {'required': True, 'content': {
-                     'application/json': {'schema': GameImport.model_json_schema()}}}})
-    @router.post('/games', status_code=201, response_model=GameOut,
-                 summary='Import a complete game as a published game',
-                 openapi_extra={'requestBody': {'required': True, 'content': {
-                     'application/json': {'schema': GameImport.model_json_schema()}}}})
-    async def import_game(request: Request, platform=Depends(platform_dependency),
-                          caller=Depends(caller_dependency)):
-        # Authentication runs before reading or parsing the upload (including chunked bodies).
-        # Credentials are optional: a request without them publishes an ownerless game.
-        # Credentials that are sent but invalid are rejected by the dependency.
+    def validation_slot(request: Request):
+        slots = request.app.state.import_slots
+        if not slots.acquire(blocking=False):
+            raise HTTPException(429, 'Validation capacity is busy', headers={'Retry-After': '15'})
+        try:
+            yield
+        finally:
+            slots.release()
+
+    async def read_upload(request, model):
         if request.headers.get('content-type', '').split(';')[0].lower() != 'application/json':
             raise HTTPException(415, 'Use application/json')
         if request.headers.get('content-encoding', 'identity').lower() != 'identity':
@@ -279,75 +435,120 @@ def make_router(platform_dependency, caller_dependency):
                 raise HTTPException(400, 'Invalid Content-Length')
             if declared_length > MAX_BODY_BYTES:
                 raise HTTPException(413, 'Request exceeds 900000 bytes')
-        slots = request.app.state.import_slots
-        if not slots.acquire(blocking=False):
-            raise HTTPException(429, 'Validation capacity is busy', headers={'Retry-After': '15'})
+        data = bytearray()
         try:
-            data = bytearray()
-            try:
-                async with asyncio.timeout(UPLOAD_TIMEOUT_SECONDS):
-                    async for chunk in request.stream():
-                        if len(data) + len(chunk) > MAX_BODY_BYTES:
-                            raise HTTPException(413, 'Request exceeds 900000 bytes')
-                        data.extend(chunk)
-            except TimeoutError as exc:
-                raise HTTPException(408, 'Upload exceeded the 15 second limit') from exc
-            try:
-                body = GameImport.model_validate_json(data)
-            except ValidationError as exc:
-                raise HTTPException(422, [{'loc': list(e['loc']), 'msg': e['msg'], 'type': e['type']}
-                                          for e in exc.errors(include_input=False, include_context=False)]) from exc
-            # The master password may stand in for a game's secret, so an
-            # existing game can be refactored without knowing its secret —
-            # but it names no game, so game_id must name the target, and the
-            # test flow must have been run with the master password as the
-            # secret. A game_id sent with a game's own secret must belong to
-            # that secret.
-            from game_platform import game_traces
-            master_password = request.app.state.master_password
-            presented = body.game_addition_request_id_and_secret
-            is_master = bool(master_password) and secrets.compare_digest(
-                presented, master_password)
-            if is_master and body.game_id is None:
-                raise HTTPException(422, 'the master password can only update '
-                    'an existing game: pass game_id with it')
-            if body.game_id is not None:
-                target = await run_in_threadpool(platform.find_game_by_id, body.game_id)
-                if target is None:
-                    raise HTTPException(422, f'no game with id {body.game_id}')
-                if not is_master and not secrets.compare_digest(
-                        package_secret_hash(target.import_package) or '',
-                        game_traces.secret_hash(presented)):
-                    raise HTTPException(422, 'game_id does not match the '
-                        'game_addition_request_id_and_secret')
-            # The game must have passed the full /game-test flow with this
-            # secret, for exactly this payload, before it can be submitted.
-            from game_platform.service import InvalidRequestError
-            try:
+            async with asyncio.timeout(UPLOAD_TIMEOUT_SECONDS):
+                async for chunk in request.stream():
+                    if len(data) + len(chunk) > MAX_BODY_BYTES:
+                        raise HTTPException(413, 'Request exceeds 900000 bytes')
+                    data.extend(chunk)
+        except TimeoutError as exc:
+            raise HTTPException(408, 'Upload exceeded the 15 second limit') from exc
+        try:
+            return model.model_validate_json(data)
+        except ValidationError as exc:
+            raise HTTPException(422, [{'loc': ['body', *e['loc']], 'msg': e['msg'], 'type': e['type']}
+                                      for e in exc.errors(include_input=False, include_context=False)]) from exc
+
+    def is_master(request, presented):
+        password = request.app.state.master_password
+        return bool(password) and secrets.compare_digest(presented.encode(), password.encode())
+
+    @router.post('/games/declarative', status_code=201, response_model=GameOut,
+                 summary='Create a portable declarative game',
+                 openapi_extra={'requestBody': {'required': True, 'content': {
+                     'application/json': {'schema': _request_schema(GameImport)}}}})
+    @router.post('/games', status_code=201, response_model=GameOut,
+                 summary='Create a complete published game; use PATCH to update',
+                 openapi_extra={'requestBody': {'required': True, 'content': {
+                     'application/json': {'schema': _request_schema(GameImport)}}}})
+    async def import_game(request: Request, platform=Depends(platform_dependency),
+                          caller=Depends(caller_dependency), slot=Depends(validation_slot)):
+        body = await read_upload(request, GameImport)
+        if body.game_id is not None or is_master(request, body.game_addition_request_id_and_secret):
+            raise HTTPException(422, 'To update an existing game, use PATCH /games/{game_id} '
+                                'with the game secret or master password')
+        if len(body.game_addition_request_id_and_secret) < 16:
+            raise HTTPException(422, 'a new game secret must be 16 to 200 characters')
+        existing = await run_in_threadpool(platform.find_game_by_addition_request_id,
+                                           body.game_addition_request_id_and_secret)
+        if existing is not None:
+            raise HTTPException(409, f'This secret already belongs to a game; use PATCH /games/{existing.id}')
+        from game_platform import game_traces
+        try:
+            await run_in_threadpool(game_traces.assert_complete, platform, body)
+        except InvalidRequestError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        package = await run_in_threadpool(verify_submission, body)
+        game = await run_in_threadpool(platform.import_agent_game,
+            caller_id=caller if caller is not None else AGENT_IMPORT_OWNER_ID,
+            name=body.name, description=body.description, rules=body.game_rules(),
+            code=body.client_code, server_code=body.server_code,
+            game_schemas=body.game_schemas(), import_package=package,
+            request_id=body.game_addition_request_id_and_secret, _create_only=True,
+            _translations=_bundle_translations(body))
+        return GameOut.of(game)
+
+    @router.patch('/games/{game_id}', response_model=GameOut,
+                  summary='Update only supplied game fields using its secret or the master password',
+                  openapi_extra={'requestBody': {'required': True, 'content': {
+                      'application/json': {'schema': _request_schema(GameUpdate)}}}})
+    async def update_game(request: Request, game_id: str, platform=Depends(platform_dependency),
+                          slot=Depends(validation_slot)):
+        patch = await read_upload(request, GameUpdate)
+        target = await run_in_threadpool(platform.find_game_by_id, game_id)
+        if target is None:
+            raise HTTPException(404, 'game not found')
+        if patch.game_id is not None and patch.game_id != game_id:
+            raise HTTPException(422, 'game_id must match the PATCH path')
+        from game_platform import game_traces
+        presented = patch.game_addition_request_id_and_secret
+        if not is_master(request, presented) and not secrets.compare_digest(
+                package_secret_hash(target.import_package) or '', game_traces.secret_hash(presented)):
+            raise HTTPException(403, 'the game secret or master password is required')
+        try:
+            body, changed = await run_in_threadpool(merge_update, target, patch)
+            if not changed:
+                return GameOut.of(target)
+            if changed & PRESENTATION_FIELDS:
                 await run_in_threadpool(game_traces.assert_complete, platform, body)
-            except InvalidRequestError as exc:
-                raise HTTPException(422, str(exc)) from exc
-            package = await run_in_threadpool(verify_submission, body)
-            # Seed the portal bundle with the supplied translations first, so a failure
-            # here leaves nothing behind; the game itself is created right after.
-            await run_in_threadpool(platform.set_translations, translations=_bundle_translations(body))
-            # A resubmission with the same request id updates the game created with it
-            # instead of creating a duplicate; without one, every POST creates a game.
-            game = await run_in_threadpool(platform.import_agent_game,
-                caller_id=caller if caller is not None else AGENT_IMPORT_OWNER_ID,
-                name=body.name, description=body.description, rules=body.game_rules(),
-                code=body.client_code, server_code=body.server_code,
-                game_schemas=body.game_schemas(), import_package=package,
-                request_id=body.game_addition_request_id_and_secret,
-                existing_game_id=body.game_id if is_master else None,
-                preserve_secret=is_master)
-            return GameOut.of(game)
-        finally:
-            slots.release()
+            verified = await run_in_threadpool(verify_submission, body, changed_fields=changed)
+        except (InvalidRequestError, ValueError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+        # Preserve package extensions and the original secret, including when an
+        # administrator supplies the master password. Never persist that password.
+        package = copy.deepcopy(target.import_package or {})
+        for key, field in {
+            'language': 'language', 'translations': 'translations', 'rules_text': 'rules',
+            'ui_text': 'ui_instructions', 'tutorial': 'tutorial', 'images': 'images',
+            'unit_tests': 'unit_tests', 'declarative_ui': 'declarative_ui',
+        }.items():
+            if key in package or field in changed:
+                package[key] = verified[key]
+        # Older complete imports did not store their source language explicitly.
+        if package.get('translations'):
+            package['language'] = body.language
+        schemas = body.game_schemas() if changed & LOGIC_FIELDS else target.game_schemas
+        persisted_package = with_package_secret_hash(package, package_secret_hash(target.import_package))
+        if len(json.dumps(persisted_package).encode()) > MAX_PACKAGE_BYTES:
+            raise HTTPException(422, 'Combined metadata and images exceed 400000 bytes')
+        stored_content = {'import_package': persisted_package, 'game_schemas': schemas,
+                          'code': body.client_code, 'server_code': body.server_code,
+                          'name': body.name, 'description': body.description}
+        if len(json.dumps(stored_content).encode()) > MAX_BODY_BYTES:
+            raise HTTPException(422, 'Stored game package exceeds 900000 bytes; reduce code or schemas')
+        triples = _bundle_translations(body) if changed & {
+            'translations', 'name', 'description', 'declarative_ui', 'client_code'} else []
+        game = await run_in_threadpool(platform.import_agent_game,
+            caller_id=target.owner_user_id, name=body.name, description=body.description,
+            rules=body.game_rules(), code=body.client_code, server_code=body.server_code,
+            game_schemas=schemas, import_package=package, existing_game_id=game_id,
+            preserve_secret=True, _expected_version=target.version, _translations=triples)
+        return GameOut.of(game)
 
     @router.get('/games/schema')
     def schema(caller=Depends(caller_dependency)):
-        return GameImport.model_json_schema()
+        return _request_schema(GameImport)
 
     return router
 
@@ -373,7 +574,18 @@ def _bundle_translations(body):
 
 if __name__ == '__main__':
     try:
-        prepared = prepare(GameImport.model_validate_json(sys.stdin.buffer.read(MAX_BODY_BYTES + 1)))
+        # Update envelopes are created by the server after bounded PATCH parsing.
+        # Merging can expand a small PATCH beyond its upload size, so bound this
+        # internal representation separately from external request bodies.
+        submission = json.loads(sys.stdin.buffer.read(4 * MAX_BODY_BYTES + 1))
+        if 'body' in submission:
+            values = submission['body']
+            values['translations'] = {locale: GameTranslation.model_construct(**item)
+                                      for locale, item in values['translations'].items()}
+            prepared = prepare(GameImport.model_construct(**values),
+                               changed_fields=set(submission['changed_fields']))
+        else:
+            prepared = prepare(GameImport.model_validate(submission))
         print(json.dumps({'package': prepared}))
     except InvalidRequestError as exc:
         print(json.dumps({'error': str(exc)}))

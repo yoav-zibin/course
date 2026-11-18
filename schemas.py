@@ -426,30 +426,6 @@ class PushConfigOut(BaseModel):
     vapid_public_key: str
 
 
-class GameUpdate(_Request):
-    """Omitted fields are left unchanged."""
-
-    model_config = _example({"description": "Three in a row wins; draws are replayed"})
-
-    name: Name | None = None
-    description: str | None = None
-    allowed_player_counts: PlayerCounts | None = None
-    allows_leave_mid_match: bool | None = None
-    allows_join_mid_match: bool | None = None
-    code: str | None = None
-    # The v2 names for the two parts of a game.
-    client_code: str | None = None
-    server_code: str | None = None
-    game_schemas: GameSchemas | None = None
-
-    @model_validator(mode="after")
-    def _reject_explicit_nulls(self) -> "GameUpdate":
-        for field in sorted(self.model_fields_set):
-            if getattr(self, field) is None:
-                raise ValueError(f"{field} cannot be null")
-        return self
-
-
 class GameSummaryOut(BaseModel):
     """A game without its code: what a game list needs, at a fraction of the size."""
 

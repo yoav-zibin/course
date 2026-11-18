@@ -3,8 +3,8 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from game_platform.api import create_app
+from game_platform.agent_import import GameUpdate
 from game_platform.schemas import (
-    GameUpdate,
     InviteCreate,
     MatchCreate,
     MatchUpdate,
@@ -150,8 +150,11 @@ def test_debug_endpoints_are_not_in_the_api_schema(api: Api) -> None:
 def test_request_examples_shown_in_the_console_are_valid(
     api: Api, model: type[BaseModel]
 ) -> None:
-    schemas = api.ok("GET", "/openapi.json")["components"]["schemas"]
-    (example,) = schemas[model.__name__]["examples"]
+    document = api.ok("GET", "/openapi.json")
+    schema = (document["paths"]["/games/{game_id}"]["patch"]["requestBody"]
+              ["content"]["application/json"]["schema"] if model is GameUpdate
+              else document["components"]["schemas"][model.__name__])
+    (example,) = schema["examples"]
     model.model_validate(example)
 
 

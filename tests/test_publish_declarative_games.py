@@ -71,9 +71,9 @@ def test_resume_checks_actual_published_source_and_skips_unchanged_import(tmp_pa
     game = {"id": "published-game", "version": 1, "name": "Tic-tac-toe (Declarative)",
             "renderer_type": "declarative", "server_code": "reviewed rules"}
 
-    def request(base, path, body=None):
+    def request(base, path, body=None, *, method=None):
         nonlocal tested_body
-        calls.append((path, body))
+        calls.append((path, body, method))
         if path == "/game-test/submissions":
             # Simulate step 1 on a server with the prior platform-owned host.
             from game_platform.declarative_ui import _client_document
@@ -91,41 +91,50 @@ def test_resume_checks_actual_published_source_and_skips_unchanged_import(tmp_pa
         if path.startswith("/game-test/status?"):
             return {"steps": {"complete": True}}
         if path in ("/games/declarative", "/games/published-game"):
-            if path == "/games/declarative":
+            if body is not None:
                 assert body["client_code"] == tested_body["client_code"]
+                assert method == (None if path == "/games/declarative" else "PATCH")
+                if method == "PATCH":
+                    from game_platform.agent_import import GameUpdate
+                    GameUpdate.model_validate(body)
             return dict(game)
         raise AssertionError(path)
 
     monkeypatch.setattr(release, "request", request)
     path = tmp_path / "private-state.json"
     first = release.publish("https://example.test", path, ["tictactoe"])
-    assert sum(route == "/game-test/verify-match" for route, _ in calls) == 5
-    assert sum(route == "/game-test/moves" for route, _ in calls) == 2
+    assert sum(route == "/game-test/verify-match" for route, _, _ in calls) == 5
+    assert sum(route == "/game-test/moves" for route, _, _ in calls) == 2
     calls.clear()
     again = release.publish("https://example.test", path, ["tictactoe"])
     assert again == first
-    assert calls == [("/games/published-game", None)]
+    assert calls == [("/games/published-game", None, None)]
     # A changed remote record cannot be skipped merely because the local
-    # private file says it was once published. The existing import secret
-    # restores the reviewed package through the ordinary publication API.
+    # private file says it was once published. PATCH with the existing secret
+    # restores the reviewed package through the single update API.
     game["server_code"] = "different rules"
     calls.clear()
     release.publish("https://example.test", path, ["tictactoe"])
-    assert any(route == "/games/declarative" for route, _ in calls)
+    assert any(route == "/games/published-game" and method == "PATCH"
+               for route, _, method in calls)
+    assert all(route != "/games/declarative" for route, _, _ in calls)
 
 
-def test_idempotent_import_retries_a_concurrent_catalog_update(monkeypatch):
+@pytest.mark.parametrize("method,path", [(None, "/games/declarative"), ("PATCH", "/games/published-game")])
+def test_publication_retries_a_concurrent_catalog_update(monkeypatch, method, path):
     requests = []
 
     def opening(request, **kwargs):
-        requests.append(request.data)
+        requests.append((request.get_method(), request.data))
         if len(requests) == 1:
             raise urllib.error.HTTPError(request.full_url, 409, "concurrent update", {}, io.BytesIO(b'{}'))
         return io.BytesIO(b'{"id":"same-publication"}')
 
     monkeypatch.setattr(release.urllib.request, "urlopen", opening)
     monkeypatch.setattr(release.time, "sleep", lambda _: None)
-    result = release.request("https://example.test", "/games/declarative",
-                             {"game_addition_request_id_and_secret": "private-release-secret"})
+    result = release.request("https://example.test", path,
+                             {"game_addition_request_id_and_secret": "private-release-secret"},
+                             method=method)
     assert result == {"id": "same-publication"}
     assert len(requests) == 2 and requests[0] == requests[1]
+    assert requests[0][0] == (method or "POST")

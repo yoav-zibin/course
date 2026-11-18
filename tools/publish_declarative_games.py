@@ -3,7 +3,7 @@
 Runs real QuickJS rules and presentation events, then asks the server to replay
 every trace. This is protocol/rules evidence; run the browser suite separately
 for layout and gestures. It creates authoring traces and game records, never
-production accounts or matches. Private resubmission secrets stay in a mode-0600
+production accounts or matches. Private submission secrets stay in a mode-0600
 file outside the checkout. Re-running resumes the same publications.
 """
 from __future__ import annotations
@@ -167,18 +167,20 @@ def save_private(path, data):
         temporary.unlink(missing_ok=True)
 
 
-def request(base, path, data=None):
+def request(base, path, data=None, *, method=None):
     raw = None if data is None else json.dumps(data, ensure_ascii=False).encode()
     for attempt in range(5):
-        req = urllib.request.Request(base + path, data=raw, headers={"Content-Type": "application/json"})
+        req = urllib.request.Request(base + path, data=raw, method=method,
+                                     headers={"Content-Type": "application/json"})
         try:
             with urllib.request.urlopen(req, timeout=210) as response:
                 return json.load(response)
         except urllib.error.HTTPError as exc:
-            # The import secret makes publication an upsert. A concurrent
-            # catalog/translation update may reject its transaction before
-            # commit; retry that idempotent operation with the same secret.
-            retryable = exc.code == 429 or (exc.code == 409 and path == "/games/declarative")
+            # A concurrent catalog/translation write may reject the transaction
+            # before commit. PATCH retries retain the same target and payload;
+            # creation retries retain the same unique submission secret.
+            publication = path == "/games/declarative" or method == "PATCH"
+            retryable = exc.code == 429 or (exc.code == 409 and publication)
             if retryable and attempt < 4:
                 time.sleep(min(15, int(exc.headers.get("Retry-After", "5"))))
                 continue
@@ -269,8 +271,13 @@ def publish(base, state_path, kinds):
             recorded.model_dump(exclude={"client_code"}) != body.model_dump(exclude={"client_code"})
         ):
             raise RuntimeError(f"{kind}: the latest tested package changed; restart its authoring flow")
-        # Repeated imports with this private secret update the same game.
-        game = request(base, "/games/declarative", recorded.model_dump())
+        # Creation and updates share the tested payload, but updates always
+        # name the saved game explicitly and use the single PATCH endpoint.
+        if entry.get("id"):
+            game = request(base, f"/games/{urllib.parse.quote(entry['id'], safe='')}",
+                           recorded.model_dump(exclude_none=True), method="PATCH")
+        else:
+            game = request(base, "/games/declarative", recorded.model_dump(exclude_none=True))
         entry["id"] = game["id"]
         entry["version"] = game["version"]
         entry["published_source_hash"] = source_hash

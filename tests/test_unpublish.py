@@ -21,7 +21,8 @@ def test_unpublish_hides_public_routes_and_keeps_owner_library(api: Api):
         assert api.request('GET', f'/games/{game}/versions/1', as_user=caller).status_code == 404
     assert api.ok('GET', f'/games/{game}', as_user=owner) == hidden
     assert api.request('POST', '/matches', as_user=owner, json={'game_id':game}).status_code == 404
-    assert api.request('PATCH', f'/games/{game}', as_user=owner, json={'name':'private'}).status_code == 409
+    # An owner's login alone does not authorize game-content updates.
+    assert api.request('PATCH', f'/games/{game}', as_user=owner, json={'name':'private'}).status_code == 422
 
 
 def test_existing_participants_keep_playing_but_outsiders_cannot_read_or_join(api: Api):
@@ -56,7 +57,7 @@ def test_unpublish_then_resubmit_republishes_and_delete(api: Api):
     updated = payload(); updated['game_addition_request_id_and_secret'] = secret
     updated['description'] = 'Reach three by adding one, republished.'
     updated['translations'] = translations_for(updated)
-    second = api.ok('POST', '/games', as_user=owner, json=updated)
+    second = api.ok('PATCH', f"/games/{first['id']}", as_user=owner, json=updated)
     assert second['id'] == first['id'] and second['version'] == 2
     assert second['published'] is True
     assert api.ok('GET', f"/games/{first['id']}") == second

@@ -103,7 +103,7 @@ def test_resubmission_with_the_same_request_id_updates_the_game(api):
     updated['game_addition_request_id_and_secret'] = secret
     updated['description'] = 'Reach three by adding one, now with a twist.'
     updated['translations'] = translations_for(updated)
-    second = api.ok('POST', '/games', as_user=owner, json=updated)
+    second = api.ok('PATCH', f"/games/{first['id']}", as_user=owner, json=updated)
     assert second['id'] == first['id']
     assert second['version'] == 2
     assert second['description'] == updated['description']
@@ -148,7 +148,7 @@ def test_resubmission_may_redesign_the_state_shape(api):
     updated['client_code'] = client_document(updated['declarative_ui'])
     updated['unit_tests'] = rename(updated['unit_tests'])
     updated['translations'] = translations_for(updated)
-    second = api.ok('POST', '/games', as_user=owner, json=updated)
+    second = api.ok('PATCH', f"/games/{first['id']}", as_user=owner, json=updated)
     assert second['id'] == first['id'] and second['version'] == 2
     assert second['game_schemas']['state']['required'] == ['m']
 
@@ -157,7 +157,7 @@ def test_identical_resubmission_is_a_noop(api):
     owner = api.new_user('Owner')
     body = payload(); body['game_addition_request_id_and_secret'] = 'identical-secret-0123456789'
     first = api.ok('POST', '/games', as_user=owner, json=body)
-    second = api.ok('POST', '/games', as_user=owner, json=body)
+    second = api.ok('PATCH', f"/games/{first['id']}", as_user=owner, json=body)
     assert second['id'] == first['id'] and second['version'] == 1
     assert api.ok('GET', '/games') != [] and len(api.ok('GET', '/games')) == 1
 
@@ -195,7 +195,7 @@ def test_anonymous_resubmission_updates_an_ownerless_game(api):
     updated['game_addition_request_id_and_secret'] = secret
     updated['description'] = 'Reach three by adding one, anonymously updated.'
     updated['translations'] = translations_for(updated)
-    second = api.ok('POST', '/games', json=updated)
+    second = api.ok('PATCH', f"/games/{first['id']}", json=updated)
     assert second['id'] == first['id'] and second['version'] == 2
     assert second['owner_user_id'] == AGENT_IMPORT_OWNER_ID
 
@@ -209,7 +209,7 @@ def test_resubmission_by_another_user_updates_via_the_secret(api):
     updated['game_addition_request_id_and_secret'] = secret
     updated['description'] = 'Reach three by adding one, updated by another account.'
     updated['translations'] = translations_for(updated)
-    second = api.ok('POST', '/games', as_user=second_owner, json=updated)
+    second = api.ok('PATCH', f"/games/{first['id']}", as_user=second_owner, json=updated)
     assert second['id'] == first['id'] and second['version'] == 2
     assert second['owner_user_id'] == first_owner
 
@@ -438,10 +438,9 @@ def test_master_password_with_game_id_updates_the_named_game():
     first = api.ok('POST', '/games', json=body)
     updated = payload()
     updated['game_addition_request_id_and_secret'] = 'the-master-password-0123'
-    updated['game_id'] = first['id']
     updated['description'] = 'Refactored without knowing the secret.'
     updated['translations'] = translations_for(updated)
-    second = api.ok('POST', '/games', json=updated)
+    second = api.ok('PATCH', f"/games/{first['id']}", json=updated)
     assert second['id'] == first['id'] and second['version'] == 2
     assert second['description'] == updated['description']
     # The game kept its own secret: the stored hash is unchanged, and the
@@ -452,7 +451,7 @@ def test_master_password_with_game_id_updates_the_named_game():
     again = payload(); again['game_addition_request_id_and_secret'] = secret
     again['description'] = 'Updated with the real secret again.'
     again['translations'] = translations_for(again)
-    third = api.ok('POST', '/games', json=again)
+    third = api.ok('PATCH', f"/games/{first['id']}", json=again)
     assert third['id'] == first['id'] and third['version'] == 3
 
 
@@ -468,8 +467,7 @@ def test_master_password_with_an_unknown_game_id_is_rejected():
     api = master_api()
     body = payload()
     body['game_addition_request_id_and_secret'] = 'the-master-password-0123'
-    body['game_id'] = 'no-such-game'
-    assert api.request('POST', '/games', json=body).status_code == 422
+    assert api.request('PATCH', '/games/no-such-game', json=body).status_code == 404
     assert_no_games(api)
 
 
@@ -479,14 +477,12 @@ def test_game_id_must_belong_to_the_secret(api):
     first = api.ok('POST', '/games', json=body)
     wrong = payload()
     wrong['game_addition_request_id_and_secret'] = 'other-secret-0123456789'
-    wrong['game_id'] = first['id']
-    assert api.request('POST', '/games', json=wrong).status_code == 422
+    assert api.request('PATCH', f"/games/{first['id']}", json=wrong).status_code == 403
     assert api.ok('GET', f"/games/{first['id']}")['version'] == 1
     pinned = payload(); pinned['game_addition_request_id_and_secret'] = secret
-    pinned['game_id'] = first['id']
     pinned['description'] = 'Pinned update.'
     pinned['translations'] = translations_for(pinned)
-    second = api.ok('POST', '/games', json=pinned)
+    second = api.ok('PATCH', f"/games/{first['id']}", json=pinned)
     assert second['id'] == first['id'] and second['version'] == 2
 
 
@@ -508,7 +504,7 @@ def test_legacy_plaintext_package_still_matches_and_migrates(api):
     updated = payload(); updated['game_addition_request_id_and_secret'] = secret
     updated['description'] = 'Migrated on resubmission.'
     updated['translations'] = translations_for(updated)
-    second = api.ok('POST', '/games', json=updated)
+    second = api.ok('PATCH', f"/games/{first['id']}", json=updated)
     assert second['id'] == first['id'] and second['version'] == 2
     migrated = platform.find_game_by_id(first['id']).import_package
     assert 'game_addition_request_id_and_secret' not in migrated

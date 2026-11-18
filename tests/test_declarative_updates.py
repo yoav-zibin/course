@@ -1,12 +1,13 @@
 """Partial updates must not separate native presentation from its tested rules."""
 
 import copy
+import hashlib
 
 import pytest
 
 from game_platform.declarative_ui import client_document
 from game_platform.models import GameRules
-from game_platform.tests.helpers import ECHO_SERVER_CODE, TEST_GAME_SCHEMAS
+from game_platform.tests.helpers import ECHO_SERVER_CODE, TEST_GAME_SCHEMAS, TEST_GAME_SECRET
 
 
 @pytest.fixture
@@ -25,7 +26,10 @@ def declarative_game(api):
         rules=GameRules(allowed_player_counts=(2,), allows_leave_mid_match=False,
                         allows_join_mid_match=False),
         code=client_document(spec), server_code=ECHO_SERVER_CODE,
-        game_schemas=TEST_GAME_SCHEMAS, import_package={"declarative_ui": spec},
+        game_schemas=TEST_GAME_SCHEMAS, import_package={
+            "declarative_ui": spec,
+            "game_addition_request_secret_hash": hashlib.sha256(TEST_GAME_SECRET.encode()).hexdigest(),
+        },
     )
     return owner, game, spec
 
@@ -42,9 +46,11 @@ def declarative_game(api):
 ])
 def test_partial_behavior_changes_are_rejected_without_new_version(api, declarative_game, patch):
     owner, game, _ = declarative_game
-    response = api.request("PATCH", f"/games/{game.id}", as_user=owner, json=patch)
-    assert response.status_code == 400, response.text
-    assert "POST /games/declarative" in response.json()["detail"]
+    response = api.request("PATCH", f"/games/{game.id}", as_user=owner,
+                           json={**patch, "game_addition_request_id_and_secret": TEST_GAME_SECRET})
+    # These service fixtures have no complete unit-test contract. Behavior
+    # changes must supply the artifacts needed to validate the new behavior.
+    assert response.status_code == 422, response.text
     stored = api.client.get(f"/games/{game.id}").json()
     assert stored["version"] == 1
     assert stored["client_code"] == game.code
@@ -55,12 +61,14 @@ def test_metadata_changes_and_identical_behavior_remain_supported(api, declarati
     owner, game, spec = declarative_game
     unchanged = api.ok("PATCH", f"/games/{game.id}", as_user=owner, json={
         "client_code": game.code, "server_code": game.server_code,
-        "game_schemas": game.game_schemas, "allowed_player_counts": [2],
+        "allowed_player_counts": [2],
         "allows_join_mid_match": False, "allows_leave_mid_match": False,
+        "game_addition_request_id_and_secret": TEST_GAME_SECRET,
     })
     assert unchanged["version"] == 1
     renamed = api.ok("PATCH", f"/games/{game.id}", as_user=owner,
-                     json={"name": "Renamed", "description": "A new description"})
+                     json={"name": "Renamed", "description": "A new description",
+                           "game_addition_request_id_and_secret": TEST_GAME_SECRET})
     assert renamed["version"] == 2
     assert renamed["declarative_ui"] == spec
     assert api.client.get(f"/games/{game.id}/versions/1").json()["name"] == game.name

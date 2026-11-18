@@ -133,14 +133,19 @@ see [GAME_DEVELOPMENT_GUIDE.md](GAME_DEVELOPMENT_GUIDE.md).
 
 - Games are published through **POST /games** (see
   docs/agent-game-import.md): one call carries the server code, declarative UI
-  package, schemas, unit cases and all translations. Resubmitting with the
-  game's secret updates it to a new version; only the secret's hash is
-  stored server-side.
+  package, schemas, unit cases and all translations. Both POST creation
+  routes reject updates. **PATCH /games/{game_id}** is the single content
+  update API: provide the game's secret or the master password, and only
+  the content fields to change. Only the game's secret hash is stored.
 - Publication is gated by the **five-step game-test flow**: store the
   exact payload, pass the server checks, play and record verified
   matches in pass-and-play, against the computer, and online multiplayer
   across the reference resolutions and orientations. The submitted
-  payload must be byte-identical to the tested one.
+  payload must match the tested inputs. Updates that change declarative
+  presentation require this flow for the combined payload. Server-code,
+  unit-test or mechanical-rule changes run the relevant server checks and
+  random walks. Text, image and other metadata changes run lightweight
+  artifact and translation validation, without gameplay tests.
 - **Game proposals:** a player who misses a game can propose it from the
   Portal's game-selection page; AI agents review proposals and create
   the game within 24 hours (see docs/game-proposals.md).
