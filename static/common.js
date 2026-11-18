@@ -387,8 +387,11 @@ function setUpSidebarDrawer() {
   function render() {
     // Top navigation has no drawer. Clear its state when a layout
     // switch hides it, including the modal state that makes the main inert.
-    if (document.documentElement?.dataset.portalNavigation === 'modern') opened=false;
-    const visible=opened||pinned();
+    const immersive=document.body.classList.contains('match-immersive');
+    if (document.documentElement?.dataset.portalNavigation === 'modern'||immersive) opened=false;
+    // A docked drawer must not retain the main's second grid column while
+    // native play uses the whole screen. Clear modal/inert state as well.
+    const visible=!immersive&&(opened||pinned());
     const modal=visible && !wide.matches;
     document.body.classList.toggle('sidebar-open',visible);
     document.body.classList.toggle('sidebar-docked',wide.matches);
@@ -452,6 +455,7 @@ function setUpSidebarDrawer() {
   });
   wide.addEventListener('change',()=>{render();if(opened && !wide.matches)close.focus();});
   document.addEventListener('portal-layout-change',render);
+  document.addEventListener('portal-match-layout-change',render);
   setOpen(false);
 }
 if (document.readyState==='complete'||document.readyState==='interactive') setUpSidebarDrawer();

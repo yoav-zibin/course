@@ -26,6 +26,7 @@ window.PortalMatchLayout = (() => {
     const active = Boolean(match);
     const waiting = match?.status === "waiting_for_players";
     const boardOnly = active && !waiting && match.boardOnly === true;
+    const wasBoardOnly = document.body.classList.contains("match-immersive");
     const focused = boardOnly || (active && !waiting && (manualFocus ?? landscape.matches));
     const focusChanged = active && document.body.classList.contains("match-page") &&
       document.body.classList.contains("match-focus") !== focused;
@@ -33,6 +34,8 @@ window.PortalMatchLayout = (() => {
     document.body.classList.toggle("match-focus", focused);
     document.body.classList.toggle("match-lobby", active && waiting);
     document.body.classList.toggle("match-immersive", boardOnly);
+    if (boardOnly !== wasBoardOnly)
+      document.dispatchEvent(new CustomEvent("portal-match-layout-change"));
     document.body.classList.toggle("match-menu-open", boardOnly && (menuOpen || controlsOpen));
     $("match-menu-toggle").hidden = !boardOnly;
     $("match-menu-toggle").setAttribute("aria-expanded", String(menuOpen || controlsOpen));

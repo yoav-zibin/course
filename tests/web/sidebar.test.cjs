@@ -4,13 +4,13 @@ const vm=require('node:vm');
 const fs=require('node:fs');
 const path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../../static/common.js'),'utf8');
-function setup(mobile=true) {
+function setup(mobile=true,layout) {
   const events={},created=[],classes=new Set();
   const node=()=>({attrs:{},events:{},inert:false,children:[],setAttribute(k,v){this.attrs[k]=v;},removeAttribute(k){delete this.attrs[k];},addEventListener(k,fn){this.events[k]=fn;},prepend(n){this.children.unshift(n);},append(n){this.children.push(n);},focus(){this.focused=true;},querySelectorAll(){return this.children;},getClientRects(){return [1];}});
   const sidebar=node(),main=node(),toolbar=node(),body=node(),matchbar=node();
-  body.classList={toggle(k,v){v?classes.add(k):classes.delete(k);}};
+  body.classList={toggle(k,v){v?classes.add(k):classes.delete(k);},contains:k=>classes.has(k)};
   const media={matches:!mobile,addEventListener(k,fn){events.media=fn;}};
-  const document={body,querySelector(selector){return selector.includes('> .sidebar')?sidebar:selector==='.work'?main:selector==='.topbar'?toolbar:selector==='.match-toolbar'?matchbar:{};},addEventListener(k,fn){events[k]=fn;}};
+  const document={body,documentElement:{dataset:{portalLayout:layout}},querySelector(selector){return selector.includes('> .sidebar')?sidebar:selector==='.work'?main:selector==='.topbar'?toolbar:selector==='.match-toolbar'?matchbar:{};},addEventListener(k,fn){events[k]=fn;}};
   const ctx=vm.createContext({I18n:require('./i18n-stub.cjs'),document,window:{matchMedia:()=>media},el(tag,attrs){const n=node();Object.assign(n,attrs);if(attrs.onclick)n.events.click=attrs.onclick;created.push(n);return n;}});
   vm.runInContext(source.slice(source.indexOf('function setUpSidebarDrawer()'),source.indexOf("\nif (document.readyState")),ctx);
   vm.runInContext('setUpSidebarDrawer()',ctx);
@@ -48,4 +48,19 @@ test('resizing an open sidebar switches between docking and overlay without clos
   t.media.matches=true;t.events.media();
   assert.ok(t.classes.has('sidebar-open'));assert.equal(t.main.inert,false);
   assert.equal(t.classes.has('sidebar-modal'),false);assert.equal(t.sidebar.attrs['aria-modal'],undefined);
+});
+
+test('native play suspends a pinned drawer and restores navigation after leaving',()=>{
+  const t=setup(false,'left');assert.ok(t.classes.has('sidebar-open'));
+  t.classes.add('match-immersive');t.events['portal-match-layout-change']();
+  assert.equal(t.classes.has('sidebar-open'),false);assert.equal(t.sidebar.inert,true);assert.equal(t.main.inert,false);
+  t.classes.delete('match-immersive');t.events['portal-match-layout-change']();
+  assert.ok(t.classes.has('sidebar-open'));assert.equal(t.sidebar.inert,false);assert.equal(t.main.inert,false);
+});
+
+test('entering native play clears a modal drawer and its keyboard trap',()=>{
+  const t=setup(true,'hamburger');t.toolbar.children[0].events.click();assert.equal(t.main.inert,true);
+  t.classes.add('match-immersive');t.events['portal-match-layout-change']();
+  assert.equal(t.main.inert,false);assert.equal(t.sidebar.inert,true);assert.equal(t.classes.has('sidebar-modal'),false);
+  t.events.keydown({key:'Tab',preventDefault(){throw Error('Hidden sidebar trapped focus');}});
 });

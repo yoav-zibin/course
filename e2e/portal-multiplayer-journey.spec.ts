@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import fs from 'node:fs';
 import { createGame, createUser, loginAs, openMatchControls, showMatchMenu, uniqueName } from './helpers';
 
 declare const I18n: any;
@@ -82,7 +83,7 @@ test('friends create, share, join, play, rematch and leave through the portal', 
   }
 });
 
-test('the corner menu reveals navigation across layouts without remounting the board', async ({ page, request }) => {
+test('the corner menu reveals navigation across layouts without remounting the board', async ({ page, request }, testInfo) => {
   const owner = await createUser(request, uniqueName('Focus host'));
   const game = await createGame(request, uniqueName('Focus duel'));
   const headers = { 'X-User-Id': owner.id, 'X-User-Password': owner.password };
@@ -92,10 +93,33 @@ test('the corner menu reveals navigation across layouts without remounting the b
   await page.setViewportSize({ width: 1440, height: 900 });
   for (const layout of ['top', 'left', 'hamburger']) {
     await page.goto(`/static/portal.html?layout=${layout}#match=${match.id}`);
-    await expect(page.locator('#game-box .declarative-stage')).toBeVisible();
+    try {
+      await expect(page.locator('#game-box .declarative-stage')).toBeVisible();
+    } catch (error) {
+      const geometry = await page.locator('#game-box .declarative-stage').evaluate(node => {
+        const rows=[];
+        for(let element:Element|null=node;element;element=element.parentElement){
+          const style=getComputedStyle(element),rect=element.getBoundingClientRect();
+          rows.push({tag:element.tagName,id:element.id,classes:element.getAttribute('class'),hidden:element.hasAttribute('hidden'),
+            display:style.display,visibility:style.visibility,flex:style.flex,flexDirection:style.flexDirection,
+            height:style.height,minHeight:style.minHeight,overflow:style.overflow,width:rect.width,screenHeight:rect.height});
+        }
+        return {layout:document.documentElement.dataset.portalLayout,bodyClasses:document.body.className,rows};
+      });
+      const geometryPath=testInfo.outputPath('native-board-layout-'+layout+'.json');
+      fs.writeFileSync(geometryPath,JSON.stringify(geometry,null,2));
+      await testInfo.attach('native-board-layout-'+layout,{path:geometryPath,contentType:'application/json'});
+      await page.screenshot({path:testInfo.outputPath('native-board-layout-'+layout+'.png')});
+      throw error;
+    }
     await expect(page.locator('.invite-action')).toHaveText('Share match');
     await expect(page.locator('body')).toHaveClass(/match-focus/);
     await expect(page.locator('body')).toHaveClass(/match-immersive/);
+    await expect(page.locator('.portal-sidebar')).toBeHidden();
+    expect(await page.locator('.portal-main').evaluate(node=>(node as HTMLElement).inert)).toBe(false);
+    const extent=await page.locator('#game-box').boundingBox();
+    expect(extent!.width).toBeGreaterThanOrEqual(1438);
+    expect(extent!.height).toBeGreaterThanOrEqual(898);
     await expect(page.locator('#match-focus-toggle')).toBeHidden();
     const board = page.locator('#game-box .declarative-stage');
     await board.evaluate(node => { (window as any).originalMatchBoard = node; });
@@ -106,6 +130,13 @@ test('the corner menu reveals navigation across layouts without remounting the b
     await expect(page.locator('#match-menu-toggle')).toBeFocused();
     expect(await board.evaluate(node => node === (window as any).originalMatchBoard)).toBe(true);
     await expect(page.locator('body')).toHaveClass(/match-focus/);
+    if(layout==='left'){
+      await showMatchMenu(page);await page.locator('#match-back').click();
+      await expect(page.locator('body')).not.toHaveClass(/match-immersive/);
+      await expect(page.locator('.portal-sidebar')).toBeVisible();
+      await page.goto(`/static/portal.html?layout=${layout}#match=${match.id}`);
+      await expect(board).toBeVisible();
+    }
   }
   await page.evaluate(async () => {
     await I18n.choose('es');

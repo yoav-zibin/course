@@ -19,7 +19,8 @@ function setup(isLandscape = false) {
   media.addEventListener = (_, fn) => media.change = fn;
   const body = {classList:classes()};
   const context = {I18n:{t:(key,params,fallback)=>fallback??key},window:{matchMedia:()=>media,addEventListener(){}},navigator:{onLine:true},
-    document:{getElementById:node,body,addEventListener:(k,v)=>events[k]=v},
+    document:{getElementById:node,body,addEventListener:(k,v)=>events[k]=v,dispatchEvent:event=>events[event.type]?.(event)},
+    CustomEvent:class{constructor(type){this.type=type;}},
     MutationObserver:class{observe(){}}};
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../../static/portal-match-layout.js'),'utf8'), context);
   const layout = context.window.PortalMatchLayout;
