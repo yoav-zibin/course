@@ -20,7 +20,6 @@ def test_create_and_get_a_game(api: Api) -> None:
     assert game == {
         "id": game["id"],
         "version": 1,
-        "owner_user_id": alice,
         "name": "Poker",
         "description": "Texas hold'em",
         "allowed_player_counts": [2, 3, 6],
@@ -62,7 +61,7 @@ def test_optional_game_fields_have_defaults(api: Api) -> None:
     }
 
 
-def test_list_games_optionally_filtered_by_owner(api: Api) -> None:
+def test_game_catalog_has_no_user_owner_filter(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     for owner, name in [(alice, "Poker"), (bob, "Chess"), (alice, "Go")]:
         api.create_game({**POKER, "name": name}, owner)
@@ -71,8 +70,8 @@ def test_list_games_optionally_filtered_by_owner(api: Api) -> None:
         return [game["name"] for game in api.ok("GET", "/games", params=params)]
 
     assert names({}) == ["Poker", "Chess", "Go"]
-    assert names({"owner_user_id": alice}) == ["Poker", "Go"]
-    assert names({"owner_user_id": bob}) == ["Chess"]
+    assert names({"owner_user_id": alice}) == ["Poker", "Chess", "Go"]
+    assert names({"owner_user_id": bob}) == ["Poker", "Chess", "Go"]
 
 
 def test_unknown_game_is_not_found(api: Api) -> None:
@@ -82,7 +81,7 @@ def test_unknown_game_is_not_found(api: Api) -> None:
         api.request("PATCH", "/games/nope", as_user=alice,
                     json={"name": "x", "game_addition_request_id_and_secret": TEST_GAME_SECRET})
     ) == (404, "game not found")
-    assert error(api.request("DELETE", "/games/nope", as_user=alice)) == (
+    assert error(api.client.delete("/games/nope", auth=("admin", api.client.app.state.master_password))) == (
         404,
         "game not found",
     )
@@ -157,7 +156,7 @@ def test_other_users_cannot_update_or_delete_without_a_game_secret(api: Api) -> 
                         json={"name": "x", "game_addition_request_id_and_secret": "incorrect-secret-0123456789"})
     delete = api.request("DELETE", f"/games/{game_id}", as_user=bob)
     assert error(patch) == (403, "a game secret or master password is required")
-    assert error(delete) == (403, "a game secret or master password is required")
+    assert error(delete) == (401, "a game secret or master password is required")
     assert api.ok("GET", f"/games/{game_id}")["name"] == "Poker"
 
 
@@ -190,7 +189,7 @@ def test_matches_follow_the_game_version_they_were_created_with(api: Api) -> Non
     old_match_id = api.new_match(owner=alice, game_id=game_id, joiners=[bob])
     original = api.platform._store.get_game(game_id)
     api.platform.import_agent_game(
-        caller_id=alice, existing_game_id=game_id, name=original.name,
+         existing_game_id=game_id, name=original.name,
         description=original.description,
         rules=replace(original.rules, allowed_player_counts=(3,)),
         code=original.code, server_code=original.server_code,

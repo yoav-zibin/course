@@ -15,9 +15,9 @@ Run them with writers stopped, through ``scaling_tools merge`` /
 operations in query mode and points at these commands: a merge or deletion is
 finished only when its run reports ``complete``.
 
-Merge semantics mirror ``GamePlatform._merge_locked``: games (all versions),
-matches (owner, seats with their stable logic player IDs, hidden
-flags), move authors, push subscriptions and invites move to the survivor;
+Merge semantics mirror ``GamePlatform._merge_locked``: matches (owner, seats with
+their stable logic player IDs, hidden flags), move authors, push subscriptions
+and invites move to the survivor;
 linked accounts are re-reserved for the survivor; the source is marked
 ``replaced_by`` the survivor (never deleted, so its credentials keep working
 as an alias) and everyone the source had replaced is repointed directly at
@@ -25,8 +25,9 @@ the survivor. The shared-active-match guard runs as the first stage, before
 any mutation: if both accounts sit in a match that is not over, the job fails
 with ``shared_active_match`` and nothing has been rewritten yet.
 
-Deletion semantics mirror ``GamePlatform.admin_delete_user``: owned games are
-soft-deleted, owned matches are deleted with their invites, the user leaves
+Games belong to the platform and are never transferred or deleted by account
+maintenance. Deletion semantics mirror ``GamePlatform.admin_delete_user``: owned
+matches are deleted with their invites, the user leaves
 every other match that is not over (through the platform, so v2 payouts and
 computer takeovers keep their normal rules), push subscriptions /
 created invites are deleted, invitees are repointed at the deleted user's own
@@ -43,8 +44,6 @@ from game_platform.query_store import MOVE_ADAPTER
 
 MERGE_STAGES = (
     "check_matches",
-    "game_versions",
-    "games",
     "matches",
     "match_moves",
     "push_subscriptions",
@@ -55,7 +54,6 @@ MERGE_STAGES = (
 )
 
 DELETE_STAGES = (
-    "games",
     "matches_owned",
     "matches_leave",
     "push_subscriptions",
@@ -311,26 +309,6 @@ def _merge_stage_plan(stage, source_id, into_id):
             "matches",
             [("participants", "array_contains", source_id)],
             lambda store, record: _check_shared(store, record, source_id, into_id),
-        )
-    if stage == "game_versions":
-        return (
-            "game_versions",
-            (),
-            lambda store, record: (
-                store.put_game_version(replace(record, owner_user_id=into_id))
-                if record.owner_user_id == source_id
-                else None
-            ),
-        )
-    if stage == "games":
-        return (
-            "games",
-            (),
-            lambda store, record: (
-                store.put_game_version(replace(record, owner_user_id=into_id))
-                if record.owner_user_id == source_id
-                else None
-            ),
         )
     if stage == "matches":
         return (
@@ -732,14 +710,6 @@ def _delete_stage_plan(stage, user_id):
                 store.delete_experiment_event(record.id)
 
         return stage, (), remove
-    if stage == "games":
-        return (
-            "games",
-            [("owner_user_id", "==", user_id)],
-            lambda store, record, state: (
-                store.delete_game(record.id) if not record.deleted else None
-            ),
-        )
     if stage == "push_subscriptions":
         return (
             "push_subscriptions",

@@ -19,24 +19,19 @@ server-rule and recorded-test checks. The schema is at
 `GET /games/declarative/schema`; `POST /games/declarative/validate` is a
 non-persisting QuickJS presentation probe, not a publication/test-flow bypass.
 
-## Authentication and ownership
+## Platform games and authorization
 
-Credentials are optional. Send the existing account credentials in
-`X-User-Id` and `X-User-Password` to own the published game; without them the
-game is published ownerless (owner `agent-import`). Its submission secret still
-authorizes updates. Deletion and unpublishing require `X-Game-Secret` with that
-secret, or HTTP Basic authentication with the configured master password;
-account ownership alone does not authorize them. Credentials that are sent but
-invalid return 401. Use HTTPS
-except on loopback. Never put passwords in URLs, payload files or source
-control. All authenticated platform users (including guest accounts)
-can publish their own game. Ownership comes exclusively from
-authentication. Unknown fields, including `id`, owner, publication and approval
-flags, are rejected. Updates name their target in the PATCH URL and require
-the game secret or master password, as described below. Missing account
-credentials no longer return 401; invalid ones do,
-before reading the body. This does not introduce an admin-only policy or an
-independent API-key system.
+All games belong to the platform. Creating a game requires no user ID or account
+credentials, and no creator or owner user ID is stored or returned. Each new
+game requires a private submission secret. Keep that secret to authorize future
+updates. Deletion and unpublishing require `X-Game-Secret` with that secret, or
+HTTP Basic authentication with the configured master password. Game-content
+updates require the game secret or master password in the PATCH JSON body, as
+described below. User account credentials do not authorize game changes.
+
+Use HTTPS except on loopback. Never put passwords in URLs, payload files or
+source control. Unknown fields, including `id`, owner, publication and approval
+flags, are rejected. Updates name their target in the PATCH URL.
 
 ## Request
 
@@ -95,8 +90,8 @@ must identify an existing game. The JSON body must include
 `game_addition_request_id_and_secret`, containing either that game's original
 submission secret or the configured master password. A different game's
 secret is rejected. An optional body `game_id` must match the URL; it is useful
-when sending an already tested complete payload. Account ownership alone does not authorize a patch, and
-account credentials are not required when the update credential is valid.
+when sending an already tested complete payload. User account credentials do
+not authorize a patch; use the game secret or master password.
 A master-password update preserves the game's original secret.
 
 Every content field accepted by the complete import is optional in PATCH:
@@ -265,7 +260,6 @@ capped at 900,000 serialized bytes. Compressed uploads are rejected.
 Chunked requests have the same cumulative limit. Uploads have a 15-second deadline.
 
 - 201: complete `GameOut` for the newly published game, version 1; save its `id`.
-- 401: invalid credentials that were sent.
 - 400: malformed Content-Length.
 - 408: upload deadline exceeded.
 - 413: request too large.
@@ -296,13 +290,9 @@ import json, os
 import httpx
 
 base = os.environ['BUILDPLAY_BASE_URL'].rstrip('/')
-headers = {}
-if os.environ.get('BUILDPLAY_USER_ID'):
-    headers = {'X-User-Id': os.environ['BUILDPLAY_USER_ID'],
-               'X-User-Password': os.environ['BUILDPLAY_USER_PASSWORD']}
 with open('examples/agent-game.json') as f:
     game = json.load(f)
-response = httpx.post(base + '/games', headers=headers, json=game, timeout=35)
+response = httpx.post(base + '/games', json=game, timeout=35)
 response.raise_for_status()
 published = response.json()
 print(published['id'], published['version'])

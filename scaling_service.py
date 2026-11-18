@@ -212,7 +212,7 @@ class ScalablePlatform(GamePlatform):
             key = identity(caller_id, game_id)
             if saved:
                 game = self._get_live_game(game_id)
-                if not game.published and game.owner_user_id != caller_id:
+                if not game.published:
                     raise NotFoundError("game not found")
                 if self._store._get("libraries", key) is None:
                     self._store._put(
@@ -237,7 +237,7 @@ class ScalablePlatform(GamePlatform):
             if game
             and game.is_declarative
             and not game.deleted
-            and (game.published or game.owner_user_id == user.id)
+            and game.published
         ]
 
     def save_game(self, *, caller_id, game_id):
@@ -391,19 +391,10 @@ class ScalablePlatform(GamePlatform):
             raise ConflictError(
                 "large account merge requires the resumable maintenance job"
             )
-        for kind, field in (
-            ("game_versions", "owner_user_id"),
-            ("push_subscriptions", "user_id"),
+        for row in store._list_all(
+            "push_subscriptions", [("user_id", "==", source.id)]
         ):
-            for row in store._list_all(kind, [(field, "==", source.id)]):
-                updated = replace(row, **{field: into.id})
-                getattr(
-                    store,
-                    {
-                        "game_versions": "put_game_version",
-                        "push_subscriptions": "put_push_subscription",
-                    }[kind],
-                )(updated)
+            store.put_push_subscription(replace(row, user_id=into.id))
         for match in matches:
             jobs._merge_match(store, match, source.id, into.id)
             ref = store.ref("matches", match.id)
@@ -438,10 +429,6 @@ class ScalablePlatform(GamePlatform):
         with self._store.atomic():
             user = self._require_user(user_id)
             store = self._store
-            for game in store.list_games(
-                owner_user_id=user_id, include_unpublished=True
-            ):
-                store.delete_game(game.id)
             for match in store.list_matches_involving(user_id):
                 if match.owner_user_id == user_id:
                     self._delete_match_and_invites(match.id)

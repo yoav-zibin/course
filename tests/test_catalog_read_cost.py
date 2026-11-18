@@ -26,7 +26,7 @@ def test_catalog_api_does_not_open_transactions_or_load_game_code():
     assert not any('/body/' in path for path in store.client.read_paths)
 
 
-def test_popularity_metadata_read_preserves_private_game_visibility_without_transactions():
+def test_popularity_metadata_read_hides_unpublished_games_from_all_accounts():
     store = query_store()
     api = Api(store=store)
     owner = api.new_user('popularity owner')
@@ -39,7 +39,7 @@ def test_popularity_metadata_read_preserves_private_game_visibility_without_tran
     api.ok('POST', f'/games/{game_id}/unpublish', as_user=owner)
     with patch.object(store.client, 'transaction', side_effect=AssertionError('private popularity transaction')):
         assert api.request('GET', f'/games/{game_id}/popularity').status_code == 404
-        assert api.ok('GET', f'/games/{game_id}/popularity', as_user=owner)['score'] == 0
+        assert api.request('GET', f'/games/{game_id}/popularity', as_user=owner).status_code == 404
 
 
 def test_modern_game_metadata_does_not_decode_the_full_import_package_twice():

@@ -15,7 +15,6 @@ def test_export_contains_only_requested_game_logic_fields():
     game = Game(
         id="private-game-id",
         version=1,
-        owner_user_id="private-owner-id",
         name="Example",
         description="Example description",
         rules=GameRules(
@@ -54,7 +53,6 @@ def test_export_defaults_to_only_server_versions_missing_schemas():
         Game(
             id="missing",
             version=1,
-            owner_user_id="owner",
             name="Missing schema",
             description="",
             rules=GameRules(
@@ -71,7 +69,6 @@ def test_export_defaults_to_only_server_versions_missing_schemas():
         Game(
             id="already-schemaed",
             version=1,
-            owner_user_id="owner",
             name="Has schema",
             description="",
             rules=GameRules(
@@ -88,7 +85,6 @@ def test_export_defaults_to_only_server_versions_missing_schemas():
         Game(
             id="legacy",
             version=1,
-            owner_user_id="owner",
             name="Legacy",
             description="",
             rules=GameRules(

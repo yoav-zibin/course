@@ -22,12 +22,6 @@ MAX_IMAGE_BYTES = 120_000
 MAX_PACKAGE_BYTES = 400_000
 UPLOAD_TIMEOUT_SECONDS = 15
 
-# The owner recorded for a game imported without an account: no user can
-# authenticate as it (user ids are UUIDs). Its secret still authorizes updates;
-# account-only lifecycle operations such as unpublishing are unavailable.
-AGENT_IMPORT_OWNER_ID = "agent-import"
-
-
 class GameTranslation(BaseModel):
     """One language's translation of a game's player-facing texts, in the shape the
     Builder's final approval produces, so the published game serves them directly."""
@@ -408,7 +402,7 @@ def _request_schema(model):
     return inline(schema)
 
 
-def make_router(platform_dependency, caller_dependency):
+def make_router(platform_dependency):
     router = APIRouter()
 
     def validation_slot(request: Request):
@@ -463,7 +457,7 @@ def make_router(platform_dependency, caller_dependency):
                  openapi_extra={'requestBody': {'required': True, 'content': {
                      'application/json': {'schema': _request_schema(GameImport)}}}})
     async def import_game(request: Request, platform=Depends(platform_dependency),
-                          caller=Depends(caller_dependency), slot=Depends(validation_slot)):
+                          slot=Depends(validation_slot)):
         body = await read_upload(request, GameImport)
         if body.game_id is not None or is_master(request, body.game_addition_request_id_and_secret):
             raise HTTPException(422, 'To update an existing game, use PATCH /games/{game_id} '
@@ -481,7 +475,6 @@ def make_router(platform_dependency, caller_dependency):
             raise HTTPException(422, str(exc)) from exc
         package = await run_in_threadpool(verify_submission, body)
         game = await run_in_threadpool(platform.import_agent_game,
-            caller_id=caller if caller is not None else AGENT_IMPORT_OWNER_ID,
             name=body.name, description=body.description, rules=body.game_rules(),
             code=body.client_code, server_code=body.server_code,
             game_schemas=body.game_schemas(), import_package=package,
@@ -539,14 +532,14 @@ def make_router(platform_dependency, caller_dependency):
         # Authored translations stay inside the capability-protected package.
         # Global reviewed translation memory belongs to administrators.
         game = await run_in_threadpool(platform.import_agent_game,
-            caller_id=target.owner_user_id, name=body.name, description=body.description,
+            name=body.name, description=body.description,
             rules=body.game_rules(), code=body.client_code, server_code=body.server_code,
             game_schemas=schemas, import_package=package, existing_game_id=game_id,
             preserve_secret=True, _expected_version=target.version)
         return GameOut.of(game)
 
     @router.get('/games/schema')
-    def schema(caller=Depends(caller_dependency)):
+    def schema():
         return _request_schema(GameImport)
 
     return router

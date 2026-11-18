@@ -141,6 +141,8 @@ class Api:
         self.platform = platform
         self._names_by_user_id: dict[str, str] = {}
         self.passwords_by_user_id: dict[str, str] = {}
+        # Test-only fixture administrators; production games have no user owner.
+        self._game_fixture_admins: dict[str, str] = {}
 
     def request(
         self,
@@ -168,7 +170,7 @@ class Api:
         ):
             json = {**json, "game_schemas": TEST_GAME_SCHEMAS}
         # Mechanics tests explicitly use the fixture's administrator credential
-        # for backoffice calls and the acting owner's game changes. Security
+        # for backoffice calls and game fixture administrators. Security
         # tests use client directly to control every credential themselves.
         master = self.client.app.state.master_password
         use_master = path.startswith(("/admin/", "/v2/admin/")) or (
@@ -177,13 +179,25 @@ class Api:
         parts = path.split("/")
         if len(parts) >= 3 and parts[1] == "games" and method in ("PATCH", "DELETE", "POST"):
             game = self.platform._store.get_game(parts[2])
-            use_master = game is not None and game.owner_user_id == as_user
+            use_master = (
+                game is not None
+                and as_user is not None
+                and self._game_fixture_admins.get(game.id) == as_user
+            )
             if method == "PATCH" and use_master and isinstance(json, dict):
                 json = {"game_addition_request_id_and_secret": master or TEST_GAME_SECRET, **json}
         auth = ("test-admin", master) if use_master and master else None
-        return self.client.request(
+        response = self.client.request(
             method, path, headers=headers, json=json, params=params, auth=auth
         )
+        if (
+            method == "POST"
+            and path in ("/games", "/games/declarative")
+            and response.status_code == 201
+            and as_user is not None
+        ):
+            self._game_fixture_admins[response.json()["id"]] = as_user
+        return response
 
     def ok(
         self,
@@ -224,7 +238,6 @@ class Api:
         if server_code is not None and game_schemas is None:
             game_schemas = TEST_GAME_SCHEMAS
         game = self.platform.create_game(
-            caller_id=owner,
             name=body["name"],
             description=body.get("description", ""),
             rules=GameRules(
@@ -238,6 +251,7 @@ class Api:
             import_package={"declarative_ui": body.get("declarative_ui", TEST_DECLARATIVE_UI),
                             "game_addition_request_secret_hash": hashlib.sha256(TEST_GAME_SECRET.encode()).hexdigest()},
         )
+        self._game_fixture_admins[game.id] = owner
         return GameOut.of(game).model_dump(mode="json")
 
     def new_game(
@@ -249,7 +263,6 @@ class Api:
         allows_join_mid_match: bool = False,
     ) -> str:
         game = self.platform.create_game(
-            caller_id=owner,
             name="Poker",
             description="",
             rules=GameRules(
@@ -263,6 +276,7 @@ class Api:
             import_package={"declarative_ui": TEST_DECLARATIVE_UI,
                             "game_addition_request_secret_hash": hashlib.sha256(TEST_GAME_SECRET.encode()).hexdigest()},
         )
+        self._game_fixture_admins[game.id] = owner
         return game.id
 
     def new_match(

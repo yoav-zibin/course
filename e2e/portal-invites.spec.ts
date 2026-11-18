@@ -6,7 +6,7 @@ declare const I18n: any;
 
 test('a persistent private invite survives polling and reload, and a new guest joins and plays', async ({ page, browser, request }, testInfo) => {
   const owner = await createUser(request, uniqueName('Private host'));
-  const game = await createGame(request, owner, uniqueName('Private friends duel'));
+  const game = await createGame(request, uniqueName('Private friends duel'));
   await loginAs(page, owner);
   await page.addInitScript(() => Object.defineProperty(navigator, 'clipboard', {
     configurable: true, value: { writeText: async (link: string) => { (window as any).copiedInvite = link; } },
@@ -67,7 +67,7 @@ test('a persistent private invite survives polling and reload, and a new guest j
 
 test('clipboard denial opens a readable share dialog and returns focus after polling', async ({ page, request }) => {
   const owner = await createUser(request, uniqueName('Share host'));
-  const game = await createGame(request, owner, uniqueName('Shared computer duel'));
+  const game = await createGame(request, uniqueName('Shared computer duel'));
   const headers = { 'X-User-Id': owner.id, 'X-User-Password': owner.password };
   const match = await (await request.post('/matches', { headers, data: { game_id: game, num_computer_opponents: 1 } })).json();
   expect((await request.post(`/matches/${match.id}/start`, { headers, data: {} })).ok()).toBeTruthy();
@@ -91,7 +91,7 @@ test('clipboard denial opens a readable share dialog and returns focus after pol
 
 test('an invite failure waits for explicit Retry and denied clipboard keeps the link selectable', async ({ page, request }) => {
   const owner = await createUser(request, uniqueName('Retry host'));
-  const game = await createGame(request, owner, uniqueName('Invite retry duel'));
+  const game = await createGame(request, uniqueName('Invite retry duel'));
   const headers = { 'X-User-Id': owner.id, 'X-User-Password': owner.password };
   const match = await (await request.post('/matches', { headers, data: { game_id: game, private: true } })).json();
   await loginAs(page, owner);
@@ -124,7 +124,7 @@ test('an invite failure waits for explicit Retry and denied clipboard keeps the 
 test('a delayed invitation from a previous account cannot replace the current account link', async ({ page, request }) => {
   const first = await createUser(request, uniqueName('First host'));
   const second = await createUser(request, uniqueName('Second host'));
-  const game = await createGame(request, first, uniqueName('Account invite duel'));
+  const game = await createGame(request, uniqueName('Account invite duel'));
   const create = async (user: typeof first) => (await request.post('/matches', {
     headers: { 'X-User-Id': user.id, 'X-User-Password': user.password }, data: { game_id: game, private: true },
   })).json();

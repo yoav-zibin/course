@@ -39,7 +39,7 @@ def world(clock=None, store=None):
     ann = platform.create_user(display_name="ann").id
     bob = platform.create_user(display_name="bob").id
     game = platform.create_game(
-        caller_id=bob, name="Duel", description="",
+         name="Duel", description="",
         rules=GameRules(allowed_player_counts=(2,), allows_leave_mid_match=False, allows_join_mid_match=False),
         code="<div>duel</div>",
         server_code=ECHO_SERVER_CODE,
@@ -94,7 +94,7 @@ def test_what_cant_be_sent(api: Api) -> None:
     assert error(send(api, bob, "user", ann, text="x" * 1001)) == (400, "the feedback is too long: use at most 1000 characters")
     assert error(send(api, ann, "user", ann)) == (400, "you can't send feedback about yourself")
     for kind in ("bug", "suggestion", "problem"):
-        assert error(send(api, ann, "game", game, kind=kind)) == (400, "you can't send feedback about your own game")
+        assert send(api, ann, "game", game, kind=kind).status_code == 201
     assert send(api, ann, "planet", bob).status_code == 422
     assert send(api, ann, "platform", kind="praise").status_code == 422
     assert api.request("POST", "/feedback", as_user=ann,

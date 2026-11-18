@@ -37,12 +37,11 @@ def run(*, restart=False):
         assert response.is_success, (response.status_code, response.text)
         return response.json()
 
-    def game(owner, code):
+    def game(code):
         return ok(
             0,
             "POST",
             "/games",
-            user=owner,
             body={
                 "name": "Cross-process synthetic counter",
                 "allowed_player_counts": [2],
@@ -58,7 +57,7 @@ def run(*, restart=False):
             ok(process, "GET", "/health")
         alice = ok(0, "POST", "/users", body={"display_name": "HTTP synthetic Alice"})
         bob = ok(1, "POST", "/users", body={"display_name": "HTTP synthetic Bob"})
-        game_id = game(alice, COUNTER_GAME)
+        game_id = game(COUNTER_GAME)
         match_id = ok(
             0, "POST", "/matches", user=alice, body={"game_id": game_id, "max_loss": 10}
         )["id"]
@@ -133,7 +132,7 @@ def run(*, restart=False):
             )
         # Both workers poll the same durable computer-turn job. Exactly one move
         # must become visible to the human, even after several polling cycles.
-        computer_game = game(alice, COMPUTER_STARTS_GAME)
+        computer_game = game(COMPUTER_STARTS_GAME)
         computer_match = ok(
             0,
             "POST",

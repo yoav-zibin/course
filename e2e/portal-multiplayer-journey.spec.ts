@@ -8,7 +8,7 @@ test('friends create, share, join, play, rematch and leave through the portal', 
   const alice = await createUser(request, uniqueName('Lobby host'));
   const spectator = await createUser(request, uniqueName('Spectator'));
   const name = uniqueName('Friends duel');
-  const game = await createGame(request, alice, name);
+  const game = await createGame(request, name);
   const contexts = await Promise.all([0, 1, 2].map(() => browser.newContext(testInfo.project.use)));
   try {
     const [a, b, watching] = await Promise.all(contexts.map(context => context.newPage()));
@@ -84,7 +84,7 @@ test('friends create, share, join, play, rematch and leave through the portal', 
 
 test('the corner menu reveals navigation across skins and layouts without remounting the board', async ({ page, request }) => {
   const owner = await createUser(request, uniqueName('Focus host'));
-  const game = await createGame(request, owner, uniqueName('Focus duel'));
+  const game = await createGame(request, uniqueName('Focus duel'));
   const headers = { 'X-User-Id': owner.id, 'X-User-Password': owner.password };
   const match = await (await request.post('/matches', { headers, data: { game_id: game, num_computer_opponents: 1 } })).json();
   expect((await request.post(`/matches/${match.id}/start`, { headers, data: {} })).ok()).toBeTruthy();

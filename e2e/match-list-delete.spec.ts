@@ -5,7 +5,7 @@ import {contrast} from './contrast';
 test('a failed list deletion stays visible through polling and can be retried', async ({page, request}) => {
   const owner = await createUser(request, uniqueName('List delete'));
   const name = uniqueName('Delete game');
-  const game = await createGame(request, owner, name);
+  const game = await createGame(request, name);
   const headers = {'X-User-Id':owner.id, 'X-User-Password':owner.password};
   const created = await request.post('/matches', {headers,
     data:{game_id:game, num_computer_opponents:0, bet_per_player:0}});

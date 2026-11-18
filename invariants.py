@@ -26,7 +26,6 @@ class RulesRecord(Record):
 class GameRecord(Record):
     id: str
     version: StrictInt
-    owner_user_id: str
     rules: RulesRecord
     server_code: str | None = None
 
@@ -152,7 +151,6 @@ def check_invariants(data: InvariantRequest) -> InvariantReport:
 
     for i, g in enumerate(data.games):
         p = f"games[{i}]"
-        user_ref(g.owner_user_id, p + ".owner_user_id")
         counts = g.rules.allowed_player_counts
         if g.version < 1:
             add("game_version", p, "Game version must be positive.")

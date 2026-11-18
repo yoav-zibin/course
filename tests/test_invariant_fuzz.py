@@ -100,7 +100,7 @@ def test_seeded_merge_chains_flatten_and_preserve_ownership(seed: int) -> None:
             old = store.get_user(alias)
             assert old is not None and old.replaced_by_user_id == survivor, f"seed={seed}"
         for old_game in games[:len(replaced) + 1]:
-            assert api.ok("GET", f"/games/{old_game}")["owner_user_id"] == survivor
+            assert "owner_user_id" not in api.ok("GET", f"/games/{old_game}")
         for old_match in matches[:len(replaced) + 1]:
             match = api.ok("GET", f"/matches/{old_match}")
             assert match["owner_user_id"] == survivor

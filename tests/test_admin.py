@@ -24,23 +24,20 @@ def test_stats_count_users_games_and_matches(api: Api) -> None:
     stats = api.ok("GET", "/admin/stats")
 
     assert stats["users"]["total"] == 2
-    assert stats["users"]["who_built_a_game"] == 1
+    assert "who_built_a_game" not in stats["users"]
     assert stats["users"]["who_played_a_match"] == 2
-    assert stats["games"] | {"new_per_day": None, "per_game": None, "top_builders": None} == {
+    assert stats["games"] | {"new_per_day": None, "per_game": None} == {
         "total": 1,
         "live": 1,
         "deleted": 0,
         "versions": 2,
-        "builders": 1,
         "new_per_day": None,
         "per_game": None,
-        "top_builders": None,
     }
     assert stats["games"]["per_game"] == [
         {
             "game_id": game_id,
             "name": "Poker 2",
-            "owner": "alice",
             "versions": 2,
             "matches": 2,
             "deleted": False,
@@ -71,7 +68,7 @@ def test_the_stats_page_is_served_and_needs_the_master_password() -> None:
     assert client.delete("/admin/users/x").status_code == 401
 
 
-def test_admin_deletes_a_user_with_their_games_and_matches(api: Api) -> None:
+def test_admin_deletes_a_user_and_their_matches_preserving_platform_games(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game_id = api.new_game(owner=alice, allows_leave_mid_match=True)
     owned = api.new_match(owner=alice, game_id=game_id)
@@ -83,7 +80,7 @@ def test_admin_deletes_a_user_with_their_games_and_matches(api: Api) -> None:
     platform = api.client.app.state.platform
     assert [user.display_name for user in platform.all_data().users] == ["bob"]
     assert api.request("GET", f"/matches/{owned}").status_code == 404
-    assert api.request("GET", f"/games/{game_id}").json()["deleted"] is True
+    assert api.request("GET", f"/games/{game_id}").json()["deleted"] is False
     assert api.match_summary(joined)["players"] == ["bob", "alice"]
     assert api.match_summary(joined)["status"] == "over"
     assert api.request("DELETE", f"/admin/users/{alice}").status_code == 404

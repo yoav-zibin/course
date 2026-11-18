@@ -65,7 +65,7 @@ def test_links_use_the_configured_public_address() -> None:
     headers = {"X-User-Id": alice["id"], "X-User-Password": alice["password"]}
     game = GameOut.of(
         platform.create_game(
-            caller_id=alice["id"],
+
             name="Poker",
             description="",
             rules=GameRules(

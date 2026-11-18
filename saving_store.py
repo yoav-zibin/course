@@ -195,9 +195,9 @@ class SavingStore:
         with self._lock:
             return self._inner.get_game_version(game_id, version)
 
-    def list_games(self, *, owner_user_id: str | None, include_unpublished: bool = False) -> list[Game]:
+    def list_games(self, *, include_unpublished: bool = False) -> list[Game]:
         with self._lock:
-            return self._inner.list_games(owner_user_id=owner_user_id, include_unpublished=include_unpublished)
+            return self._inner.list_games(include_unpublished=include_unpublished)
 
     def set_game_published(self, game_id: str, published: bool) -> None:
         with self._lock:

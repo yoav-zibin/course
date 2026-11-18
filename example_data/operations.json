@@ -50,13 +50,11 @@
   {
     "op": "create_game",
     "id": "tictactoe",
-    "as": "user1",
     "package_file": "declarative/tictactoe.json"
   },
   {
     "op": "create_game",
     "id": "nim",
-    "as": "user1",
     "package_file": "declarative/nim.json"
   },
   {

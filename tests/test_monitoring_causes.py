@@ -350,7 +350,7 @@ def test_store_calls_are_timed_and_summarized_in_the_metrics_line(caplog: pytest
     store = TimedStore(InMemoryStore(), monitor)
     for _ in range(3):
         store.list_users()
-    store.list_games(owner_user_id=None)
+    store.list_games()
     clock.now += 61
     monitor.tick()
     (metrics,) = events(caplog, "metrics")

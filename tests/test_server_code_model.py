@@ -81,7 +81,7 @@ def test_complete_package_replaces_server_code_and_metadata_patch_preserves_it(a
     assert partial.status_code == 422
     original = api.platform._store.get_game(game['id'])
     changed = api.platform.import_agent_game(
-        caller_id=owner, existing_game_id=original.id, name=original.name,
+         existing_game_id=original.id, name=original.name,
         description=original.description, rules=original.rules,
         code=original.code, server_code=SERVER_CODE_V2,
         game_schemas=original.game_schemas, import_package=original.import_package,
@@ -133,7 +133,7 @@ def test_json_store_round_trips_the_new_fields(tmp_path: Path):
 
     now = dt.datetime(2026, 10, 26, tzinfo=dt.timezone.utc)
     game = Game(
-        id="g1", version=1, owner_user_id="u1", name="Stored", description="",
+        id="g1", version=1,  name="Stored", description="",
         rules=GameRules(allowed_player_counts=(2,), allows_leave_mid_match=False,
                         allows_join_mid_match=False),
         code=CLIENT_CODE, server_code=SERVER_CODE, created_at=now, updated_at=now,
@@ -177,7 +177,7 @@ def test_old_json_data_without_the_new_fields_still_loads(tmp_path: Path):
 
     now = dt.datetime(2026, 10, 20, tzinfo=dt.timezone.utc)
     game = Game(
-        id="g1", version=1, owner_user_id="u1", name="Old", description="",
+        id="g1", version=1,  name="Old", description="",
         rules=GameRules(allowed_player_counts=(2,), allows_leave_mid_match=False,
                         allows_join_mid_match=False),
         code="<p>old</p>", created_at=now, updated_at=now,

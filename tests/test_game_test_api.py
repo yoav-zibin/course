@@ -456,7 +456,7 @@ def test_short_master_can_complete_the_recorded_test_flow(api, master):
     api.client.app.state.master_password = master
     original = GameImport.model_validate(BODY)
     game = api.client.app.state.platform.import_agent_game(
-        caller_id="agent-import", name=original.name, description=original.description,
+         name=original.name, description=original.description,
         rules=original.game_rules(), code=original.client_code,
         server_code=original.server_code, game_schemas=original.game_schemas(),
         import_package=prepare(original, changed_fields=set()), request_id=SECRET,

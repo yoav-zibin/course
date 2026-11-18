@@ -1594,7 +1594,7 @@ function updateMatchSetup() {
   updateStakePreview();
   $("create").textContent = solo ? I18n.t("ui.portal.play_solo", {}, "Play solo ↗") : I18n.t("ui.portal.create_public_match", {}, "Create public match ↗");
   $("selected-game-card").hidden = !game;
-  const canGiveFeedback = Boolean(game && me() && game.owner_user_id && game.owner_user_id !== me().id && !isRandomGame(game));
+  const canGiveFeedback = Boolean(game && me() && !isRandomGame(game));
   $("feedback-game").hidden = !canGiveFeedback;
   $("feedback-game").onclick = canGiveFeedback ? () => openFeedback({type: "game", id: game.id, name: displayGameName(game)}) : null;
   $("selected-game-name").textContent = (game && displayGameName(game)) || I18n.t("ui.games.choose", {}, "Choose a game");
@@ -1966,7 +1966,7 @@ function renderMatch() {
     const gameName = game ? displayGameName(game) : I18n.t("ui.feedback.a_game", {}, "a game");
     secondaryActions.push(el("button", {type: "button", class: "feedback-action", textContent: I18n.t("ui.feedback.match", {}, "Send feedback about this match"),
       onclick: () => openFeedback({type: "match", id: match.id, name: gameName})}));
-    if (game && game.owner_user_id !== user.id)
+    if (game)
       secondaryActions.push(el("button", {type: "button", class: "feedback-action", textContent: I18n.t("ui.feedback.game", {}, "Feedback on this game"),
         onclick: () => openFeedback({type: "game", id: match.game_id, name: gameName})}));
   }

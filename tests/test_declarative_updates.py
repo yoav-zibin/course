@@ -22,7 +22,7 @@ def declarative_game(api):
         "ui_code": "var gameUI={reduce(){return {scene:{}}}}",
     }
     game = api.platform.create_game(
-        caller_id=owner, name="Native game", description="A scene",
+         name="Native game", description="A scene",
         rules=GameRules(allowed_player_counts=(2,), allows_leave_mid_match=False,
                         allows_join_mid_match=False),
         code=client_document(spec), server_code=ECHO_SERVER_CODE,
@@ -79,7 +79,7 @@ def test_complete_import_can_replace_presentation_as_one_pinned_package(api, dec
     updated = copy.deepcopy(spec)
     updated["piece_types"]["token"]["color"] = "#abcdef"
     replacement = api.platform.import_agent_game(
-        caller_id=owner, name=game.name, description=game.description,
+         name=game.name, description=game.description,
         rules=game.rules, code=client_document(updated), server_code=game.server_code,
         game_schemas=game.game_schemas,
         import_package={"declarative_ui": updated}, existing_game_id=game.id,

@@ -5,7 +5,7 @@ test('multiplayer lobby offers no computer opponents', async ({page, request}) =
   const alice = await createUser(request, uniqueName('Alice'));
   const bob = await createUser(request, uniqueName('Bob'));
   const auth = (u: typeof alice) => ({'X-User-Id':u.id,'X-User-Password':u.password});
-  const game = await createGame(request, alice, uniqueName('Human duel'));
+  const game = await createGame(request, uniqueName('Human duel'));
   const match = await (await request.post('/matches', {headers:auth(alice),data:{game_id:game}})).json();
   await loginAs(page,alice);
   await page.goto(`/static/portal.html#match=${match.id}`);
@@ -83,7 +83,7 @@ test('leave dialog quotes the game payout and ends without a replacement bot', a
     strings:{cash:'Cash out'},
     ui_code:'const gameUI={reduce(message){const m=message.type==="ui_event"?message.state_changed:message;return {scene:{labels:[{id:"cash",text:m.strings.cash,x:20,y:30}]}}}};',
   };
-  const game = await importGame(request, alice, {
+  const game = await importGame(request, {
     name: uniqueName('Cash out'),
     description: 'Cash out to end the match',
     allowedPlayerCounts: [2],

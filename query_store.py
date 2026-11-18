@@ -1222,19 +1222,15 @@ class QueryStore:
             else game
         )
 
-    def list_games(self, *, owner_user_id=None, include_unpublished=False):
+    def list_games(self, *, include_unpublished=False):
         filters = [("deleted", "==", False)]
-        if owner_user_id is not None:
-            filters.append(("owner_user_id", "==", owner_user_id))
         if not include_unpublished:
             filters.append(("published", "==", True))
         return self._list_all("games", filters)
 
-    def list_games_without_code(self, *, owner_user_id=None, include_unpublished=False):
+    def list_games_without_code(self, *, include_unpublished=False):
         """Like [list_games], but the games have no code: paged queries and no body reads."""
         filters = [("deleted", "==", False)]
-        if owner_user_id is not None:
-            filters.append(("owner_user_id", "==", owner_user_id))
         if not include_unpublished:
             filters.append(("published", "==", True))
         return self._list_all("games", filters, detail=False)

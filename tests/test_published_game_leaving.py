@@ -24,7 +24,7 @@ def test_every_published_game_leaves_through_the_shared_api(api, entry, mode):
     users = [api.new_user(f"player-{i}", tokens=0 if mode == "solo" else 10) for i in range(human_count)]
     game = Game(
         id=entry["name"], version=1, name=entry["name"],
-        owner_user_id=users[0], description="Published leave regression fixture",
+         description="Published leave regression fixture",
         rules=body.game_rules(), code=body.client_code, server_code=body.server_code,
         game_schemas=body.game_schemas(), import_package={"declarative_ui":body.declarative_ui},
         created_at=NOW, updated_at=NOW,

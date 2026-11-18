@@ -83,12 +83,12 @@ text, and `fillText`/`strokeText` with anything but `t()`.
 
 Games built before the rules above have no `i18n-strings` block, so only their name and description
 are translated. `games/community/` holds 21 of them, converted by hand (the list, with versions and
-the number of texts, is `games/community/manifest.json`; how the owner publishes them is
+the number of texts, is `games/community/manifest.json`; how to publish them with the game secret or master password is
 `tools/community_games_publish.md`). The same steps convert any other game:
 
 1. **Save the exact current code.** `GET /games/{id}` (public) returns the latest version's
    `client_code`. Keep it as `games/community/<id>.original.html` and record the version in the manifest:
-   a game in the database only changes when a new version is saved, and the owner may have saved one
+   a game in the database only changes when a new version is saved, and a new version may have been saved
    since (`tools/community_games_check.py` compares the file with production, read-only).
 2. **List every text the player reads**, in English, with `{placeholders}`: status lines, buttons,
    labels, hints, errors, results, `aria-label`s and placeholders, the page `<title>`, and the texts that are
@@ -208,8 +208,7 @@ delete the `<namespace>_translations` collection when you are happy.
                          "translatable": true, "strings": {"your_turn": "Tu turno"}}}}
 ```
 
-- It has the **published games' latest versions**. A viewer who may see other versions (their own
-  unpublished game, an older version of a running match) asks `GET /games/{id}/versions/{v}/strings`, which
+- It has the **published games' latest versions**. A viewer who may see other versions (an older version of a running match) asks `GET /games/{id}/versions/{v}/strings`, which
   is unchanged. The bundle is therefore the same for everybody and cacheable.
 - It has a strong `ETag` (a hash of the answer) and `Cache-Control: no-cache`: send the ETag in
   `If-None-Match` and an unchanged bundle answers `304` with no body. The ETag changes when a
@@ -401,8 +400,7 @@ python tools/publish_game_code.py --target https://buildplay.fun --password MAST
   new version, or translate the page's text from outside the game (which cannot work for text built from pieces).
   The built-in games are done (see above).
 
-- **Games that exist today have no block.** Those in `games/community/` are converted and wait for the owner to
-  publish them ("Converting an existing game"); for the others, ask the agent to "make this game translatable" as a
+- **Games that exist today have no block.** Those in `games/community/` are converted and await publication using the game secret or master password ("Converting an existing game"); for the others, ask the agent to "make this game translatable" as a
   new version, or convert them by hand the same way. Translating the page's text from outside the game cannot
   work for text built from pieces.
 - **The Google calls were written against Google's documentation and tested with a fake HTTP layer; they have

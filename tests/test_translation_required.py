@@ -23,7 +23,7 @@ def package(*, strings):
 
 def create(platform, spec):
     return platform.create_game(
-        caller_id='author', name='Portable game', description='',
+         name='Portable game', description='',
         rules=GameRules(allowed_player_counts=(2,), allows_leave_mid_match=False,
                         allows_join_mid_match=False),
         code=client_document(spec), server_code=SERVER,
@@ -50,7 +50,7 @@ def test_declarative_code_changes_require_complete_package_but_metadata_can_chan
     owner = api.new_user('Author')
     spec = package(strings={'server_choose': 'Choose one'})
     game = api.platform.create_game(
-        caller_id=owner, name='Portable game', description='',
+         name='Portable game', description='',
         rules=GameRules(allowed_player_counts=(2,), allows_leave_mid_match=False,
                         allows_join_mid_match=False),
         code=client_document(spec), server_code=SERVER,
@@ -72,7 +72,7 @@ def test_disabling_localization_check_keeps_declarative_package_requirement():
     assert create(api.platform, package(strings={})).is_declarative
     with pytest.raises(InvalidRequestError, match='HTML games are read-only'):
         api.platform.create_game(
-            caller_id='author', name='Old game', description='',
+             name='Old game', description='',
             rules=GameRules(allowed_player_counts=(2,), allows_leave_mid_match=False,
                             allows_join_mid_match=False),
             code='<html>Legacy code</html>', server_code=SERVER,

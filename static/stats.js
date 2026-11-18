@@ -264,7 +264,6 @@ function gamesPanel(games) {
       "tr",
       {},
       el("td", { textContent: g.deleted ? `${g.name} (deleted)` : g.name }),
-      el("td", { textContent: g.owner }),
       el("td", { class: "num", textContent: g.versions }),
       el("td", { class: "num", textContent: g.matches }),
     ),
@@ -283,7 +282,7 @@ function gamesPanel(games) {
             el(
               "tr",
               {},
-              ["Game", "Owner", "Versions", "Matches"].map((h, i) =>
+              ["Game", "Versions", "Matches"].map((h, i) =>
                 el("th", { class: i > 0 ? "num" : "", textContent: h }),
               ),
             ),
@@ -324,14 +323,12 @@ function render(stats, experiments) {
       [games.live, "live games"],
       [games.deleted, "deleted games"],
       [games.versions, "versions saved"],
-      [games.builders, "game creators"],
     ]),
     el(
       "div",
       { class: "panels" },
       barChart("New games per day", games.new_per_day),
       gamesPanel(games.per_game),
-      table("Top creators", ["User", "Live games"], games.top_builders.map((b) => [b.user, b.games])),
     ),
     el("h2", { textContent: "A/B experiments" }),
     el(

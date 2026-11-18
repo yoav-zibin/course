@@ -325,7 +325,7 @@ def test_updating_a_game_to_broken_server_code_is_refused(api: Api):
     original = api.platform._store.get_game(game['id'])
     with pytest.raises(InvalidRequestError, match="failed its tests"):
         api.platform.import_agent_game(
-            caller_id=owner, existing_game_id=original.id, name=original.name,
+             existing_game_id=original.id, name=original.name,
             description=original.description, rules=original.rules,
             code=original.code, server_code=CRASH_GAME,
             game_schemas=original.game_schemas, import_package=original.import_package,

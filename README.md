@@ -241,8 +241,8 @@ which is fine for development and useless for real users.
 #### Merging accounts
 
 `POST /users/{id}/merge` `{into_user_id, into_password}` merges one account into
-another: every game (all versions), match (owner, seats, hidden flags, and move authors),
-and linked login of the URL's user moves to `into_user_id`, then the URL's user is marked
+another: every match (owner, seats, hidden flags, and move authors),
+and linked login of the URL's user moves to `into_user_id`; platform games remain unchanged. The URL's user is marked
 as replaced (its old credentials keep working as an alias of the survivor). The caller
 must control both accounts: authenticate as the merged-away user, and send the surviving
 account's password as `into_password` (a wrong one is a 403). Otherwise anyone could
@@ -338,11 +338,11 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `GET /i18n/{locale}` |  | Every text in one language: UI labels, status labels, error messages |
 | `POST /users/{id}/merge` | yes | Merge this account into `into_user_id` (authenticate as this user and send `into_password`, the target's password) |
 | `GET /matches/open` |  | Matches anyone may join (waiting, or ongoing with mid-match joins) |
-| `POST /games` | optional | Create and publish a complete game; existing secrets are rejected (see GAME_DEVELOPMENT_GUIDE.md) |
-| `POST /games/declarative` | optional | Alias for creating a complete native-ready game with `declarative_ui` |
+| `POST /games` | | Create and publish a complete game; existing secrets are rejected (see GAME_DEVELOPMENT_GUIDE.md) |
+| `POST /games/declarative` | | Alias for creating a complete native-ready game with `declarative_ui` |
 | `GET /games/declarative/schema` | | Declarative package and scene JSON Schema |
 | `POST /games/declarative/validate` | optional | Execute one presentation message in bounded QuickJS, validate its scene, and return JSON without storing a game |
-| `GET /games?owner_user_id=&q=` |  | List published games that aren't deleted, optionally by owner. `q` searches names and descriptions (every word must match, ignoring case). The list never includes code, which is most of each game; load one game in full from `GET /games/{id}` |
+| `GET /games?q=` |  | List platform-owned published games that aren't deleted. `q` searches names and descriptions (every word must match, ignoring case). The list never includes code, which is most of each game; load one game in full from `GET /games/{id}` |
 | `GET /games/{id}` |  | Get the latest version of a game |
 | `GET /games/{id}/versions/{version}` |  | Get a specific version of a game |
 | `PATCH /games/{id}` | game secret/master in body | Single game-content update API; include `game_addition_request_id_and_secret`. Content fields are optional; only changed fields and their dependencies are validated |
@@ -439,7 +439,7 @@ Any logged-in user (guests included) can send feedback in their own words:
   (the website itself, with no `target_id`).
 - `text` is 5 to 1000 characters after trimming (400 otherwise). The target must exist and
   be visible to the sender (a private match they're not in counts as missing), and nobody
-  can send feedback about themselves (merged accounts included) or their own game.
+  can send feedback about themselves (merged accounts included). All games belong to the platform.
 - At most 20 messages per person in a rolling 24 hours (429 `feedback_daily_limit`).
   Sending the same kind of feedback on the same target again within 24 hours replaces that
   message's text (200) instead of adding one (201), and doesn't count again.
@@ -876,8 +876,8 @@ Once the server is running, open these pages in a browser:
   and their code) and match (expand for its state and moves), including deleted games
   and hidden matches. It has a filter box and optional auto-refresh.
 - `/stats`: backoffice statistics (needs the [master password](#master-password)): users
-  (total, guests vs. Google/email logins, who built a game, who played), games (live,
-  deleted, versions, builders, matches per game, top builders), matches (by status, moves,
+  (total, guests vs. Google/email logins, who played), games (live,
+  deleted, versions, matches per game), matches (by status, moves,
   computer seats, ended by leaving) and 14-day charts of new users, games and matches.
   The numbers come from `GET /admin/stats`.
 - `/invites`: referral dashboard (needs the [master password](#master-password)): who
@@ -907,7 +907,7 @@ don't need a user's credentials:
 | `GET /admin/invites` | The invite tree behind `/invites`: a summary, and per user their inviter, direct and total (transitive) invites and depth, sorted by total |
 | `GET /admin/feedback?kind=&target_type=&target_id=&status=` | Users' [feedback](#feedback), newest first (up to 200), and the 20 targets with the most "problem" reports |
 | `POST /admin/feedback/{id}/status {status}` | Mark one [feedback](#feedback) `"reviewed"` or `"dismissed"`, or reopen it (`"open"`), recording who (the name typed in the admin login box) and when; returns it as listed |
-| `DELETE /admin/users/{id}` | Delete a user and the matches they own; their games are marked deleted, and they leave the matches they're seated in |
+| `DELETE /admin/users/{id}` | Delete a user and the matches they own; platform games are retained, and they leave the matches they're seated in |
 | `DELETE /admin/games/{id}` | Delete a game and all of its matches (held pots are refunded, invites deleted); versions are kept |
 | `DELETE /admin/matches/{id}` | Delete a match |
 
@@ -968,7 +968,7 @@ Changing game content uses `PATCH /games/{id}` with the JSON body field
 configured master password. Deleting or unpublishing a game requires
 `X-Game-Secret: <the game_addition_request_id_and_secret>` or HTTP Basic
 authentication with the configured master password. A user password alone does
-not authorize these operations, including for the recorded creator. A valid game
+not authorize these operations. All games belong to the platform. A valid game
 secret authorizes only its own game. Complete imports create games through POST
 and must pass the publication tests; PATCH validates the changed fields and
 their dependencies as described in [the update contract](docs/agent-game-import.md#updating-a-game).

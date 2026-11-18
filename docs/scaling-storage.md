@@ -73,7 +73,7 @@ integration tests must pass before upgrading that SDK.
 `{items, next_cursor}` with a default page size of 50 and maximum 100:
 
 * `/v2/games`: published catalog, optional single word-prefix `q` (2–24 characters).
-* `/v2/builder/games` (legacy path name): the caller's published games. Drafts and `/v2/game-drafts` were removed with the Builder.
+* `/v2/builder/games` (legacy path name): an unauthenticated alias for the platform's published catalog. Games have no user owner. Drafts and `/v2/game-drafts` were removed with the Builder.
 * `/v2/users/me/referred-users` and `/v2/users/me/invites`: authenticated user's
   direct sign-ups and invite summaries, paginated. Existing screens still need to
   adopt these APIs. Individual invite acceptance histories remain embedded and
@@ -228,11 +228,11 @@ Known limits of the query release:
   normal project/database/namespace flags) repeatedly until `complete` is
   true. Each run rewrites a bounded number of records, one record and its
   progress checkpoint per transaction, and resumes by run ID after a crash.
-  Merge mirrors the original semantics (games, drafts, match seats with
+  Merge preserves platform games and rewrites account references (match seats with
   stable logic player IDs, move authors, invites, linked-account
   reservations; the source is marked replaced, never deleted) and refuses
   before any mutation when both accounts share a match that is not over.
-  Deletion mirrors `admin_delete_user` (owned games soft-deleted, owned
+  Deletion preserves platform games and mirrors `admin_delete_user` (owned
   matches deleted with their invites, other live matches left through the
   platform, invitees repointed, reservations released). UI flows for starting
   large maintenance jobs remain a follow-up; ordinary bounded sign-in merges

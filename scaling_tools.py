@@ -104,7 +104,6 @@ def seed(store, *, run_id, users, games, matches, moves_per_match, max_writes):
                 Game(
                     id=gid,
                     version=1,
-                    owner_user_id=identity("user", i % users),
                     name=f"Synthetic countdown {i}",
                     description="Synthetic capacity fixture",
                     rules=GameRules(

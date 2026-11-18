@@ -69,7 +69,7 @@ def test_pages_keep_encoder_json_without_python_response_traversal(paginated_api
     arguments = {"platform": api.platform, "limit": 1, "cursor": None}
     if path == "/v2/games":
         arguments["q"] = ""
-    elif path not in ("/v2/matches/open",):
+    elif path not in ("/v2/matches/open", "/v2/builder/games"):
         arguments["caller_id"] = owner
     if path == "/v2/matches":
         arguments.update(status=None, game_id=None)
@@ -86,9 +86,9 @@ def test_pages_keep_encoder_json_without_python_response_traversal(paginated_api
     assert all("code" not in item and "server_code" not in item for item in response["items"])
 
 
-def test_catalog_pages_preserve_visibility_and_caller_bound_cursors(paginated_api):
+def test_catalog_alias_preserves_public_visibility_and_shared_cursors(paginated_api):
     api, store, owner, other, games, _ = paginated_api
-    assert api.request("GET", "/v2/builder/games").status_code == 401
+    assert api.ok("GET", "/v2/builder/games")["items"]
     first = api.ok("GET", "/v2/builder/games", as_user=owner, params={"limit": "1"})
     assert first["next_cursor"]
     second = api.ok(
@@ -97,13 +97,13 @@ def test_catalog_pages_preserve_visibility_and_caller_bound_cursors(paginated_ap
     )
     assert {item["id"] for item in first["items"] + second["items"]} == set(games)
     assert second["next_cursor"] is None
-    assert api.request(
+    assert api.ok(
         "GET", "/v2/builder/games", as_user=other,
         params={"cursor": first["next_cursor"]},
-    ).status_code == 400
-    assert api.request(
+    )["items"] == second["items"]
+    assert api.ok(
         "GET", "/v2/games", params={"cursor": first["next_cursor"]},
-    ).status_code == 400
+    )["items"] == second["items"]
 
     # Warm public and library reads must still reflect a committed unpublish.
     api.ok("GET", "/v2/games")
@@ -112,7 +112,7 @@ def test_catalog_pages_preserve_visibility_and_caller_bound_cursors(paginated_ap
     store.put_game_version(replace(store.get_game(games[0]), published=False))
     assert [item["id"] for item in api.ok("GET", "/v2/games")["items"]] == [games[1]]
     assert api.ok("GET", "/v2/users/me/saved-games", as_user=other)["items"] == []
-    assert len(api.ok("GET", "/v2/builder/games", as_user=owner)["items"]) == 2
+    assert [item["id"] for item in api.ok("GET", "/v2/builder/games", as_user=owner)["items"]] == [games[1]]
     assert api.ok("GET", "/v2/matches/open")["items"] == []
 
 

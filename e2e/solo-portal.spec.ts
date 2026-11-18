@@ -4,7 +4,7 @@ import { createUser, loginAs, mockBatch, openMatchControls, showMatchMenu, uniqu
 // A declarative solo fixture exercises portal setup, replay and local controls.
 const star = {
   id:'declarative-solo-counter',name:'Solo Counter',version:1,
-  description:'Reach five points',owner_user_id:'solo-fixture-owner',
+  description:'Reach five points',
   allowed_player_counts:[1],published:true,renderer_type:'declarative',code:'',
   server_code:`const game={
     newMatch(ctx){return {state:{count:0},turn:[ctx.players[0].id]};},

@@ -20,7 +20,7 @@ def populated_store(store):
     for name in ("alice", "bob"):
         store.put_user(User(id=name, display_name=name, password=name,
                             token_balance=4, created_at=now, updated_at=now))
-    html = Game(id="migrating-game", version=1, owner_user_id="alice", name="Old game",
+    html = Game(id="migrating-game", version=1,  name="Old game",
                 description="", rules=GameRules(allowed_player_counts=(2,),
                 allows_leave_mid_match=True, allows_join_mid_match=False),
                 code="<html>legacy migration source</html>", server_code="retired rules",

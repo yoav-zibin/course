@@ -67,24 +67,13 @@ def install(app, *, debug_tools):
         }
 
     @app.get("/v2/builder/games", response_model=CursorPageOut[GameSummaryOut])
-    def owned_games(
+    def platform_games(
         platform: Platform,
-        caller_id: CallerId,
         limit: int = Query(50, ge=1, le=100),
         cursor: str | None = None,
     ):
-        result = page(
-            store_of(platform),
-            "games",
-            filters=[("owner_user_id", "==", caller_id), ("deleted", "==", False)],
-            limit=limit,
-            cursor=cursor,
-            scope=caller_id,
-        )
-        return {
-            "items": [GameSummaryOut.of(x) for x in result.items if x.is_declarative],
-            "next_cursor": result.next_cursor,
-        }
+        """Legacy catalog alias; all games belong to the platform."""
+        return games(platform=platform, limit=limit, cursor=cursor)
 
     @app.get("/v2/users/me/referred-users")
     def referred_users(
@@ -168,7 +157,7 @@ def install(app, *, debug_tools):
                 game
                 and game.is_declarative
                 and not game.deleted
-                and (game.published or game.owner_user_id == caller_id)
+                and game.published
             ):
                 items.append(GameSummaryOut.of(game))
         return {"items": items, "next_cursor": result.next_cursor}

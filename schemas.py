@@ -431,7 +431,6 @@ class GameSummaryOut(BaseModel):
 
     id: str
     version: int
-    owner_user_id: str
     name: str
     description: str
     allowed_player_counts: list[int]
@@ -453,7 +452,6 @@ class GameSummaryOut(BaseModel):
         return cls(
             id=game.id,
             version=game.version,
-            owner_user_id=game.owner_user_id,
             name=game.name,
             description=game.description,
             allowed_player_counts=list(game.rules.allowed_player_counts),

@@ -59,7 +59,7 @@ test('a guest can submit the login dialog by pressing Enter', async ({ page }) =
 test('Escape closes only the login dialog before reaching match controls', async ({ page, request }) => {
   test.setTimeout(60_000);
   const user = await createUser(request, uniqueName('Modal keyboard'));
-  const game = await createGame(request, user, uniqueName('Modal match'));
+  const game = await createGame(request, uniqueName('Modal match'));
   const headers = {'X-User-Id': user.id, 'X-User-Password': user.password};
   const match = await (await request.post('/matches', {headers, data: {game_id: game, num_computer_opponents: 1}})).json();
   expect((await request.post(`/matches/${match.id}/start`, {headers, data: {}})).ok()).toBeTruthy();

@@ -80,12 +80,11 @@ export interface ImportGameOptions {
   cases: unknown[];
 }
 
-/** Publishes a declarative game owned by [owner]. Builds the full import payload: schemas +
+/** Publishes a platform-owned declarative game. Builds the full import payload: schemas +
  * unit-test cases + tutorial + images + translations for all 7 non-English languages
  * (prefixed with the locale tag, the same trick the Python agent-import tests use). */
 export async function importGame(
   request: APIRequestContext,
-  owner: Account,
   opts: ImportGameOptions,
 ): Promise<string> {
   test.setTimeout(Math.max(test.info().timeout, 120_000));
@@ -130,14 +129,12 @@ export async function importGame(
   // The server validates at most two uploads at once and answers 429 "Validation
   // capacity is busy" with a Retry-After; parallel workers hit that, so wait and retry.
   let res = await request.post('/games/declarative', {
-    headers: { 'X-User-Id': owner.id, 'X-User-Password': owner.password },
     data,
   });
   for (let attempt = 0; res.status() === 429 && attempt < 20; attempt++) {
     const seconds = Number(res.headers()['retry-after']) || 2;
     await new Promise((resolve) => setTimeout(resolve, Math.min(seconds, 3) * 1000 * (0.5 + Math.random())));
     res = await request.post('/games/declarative', {
-      headers: { 'X-User-Id': owner.id, 'X-User-Password': owner.password },
       data,
     });
   }
@@ -146,18 +143,17 @@ export async function importGame(
 }
 
 /** Publishes a real declarative tic-tac-toe game through the normal validators. */
-export async function createGame(request: APIRequestContext, owner: Account, name: string): Promise<string> {
+export async function createGame(request: APIRequestContext, name: string): Promise<string> {
   // Complete declaration validation may queue behind another browser worker.
   test.setTimeout(Math.max(test.info().timeout, 120_000));
   const payload = structuredClone(DECLARATIVE_TICTACTOE);
   payload.name = name;
   payload.description = 'UI test game';
   payload.game_addition_request_id_and_secret = uniqueName('declarative-ui-test-secret');
-  const headers = { 'X-User-Id': owner.id, 'X-User-Password': owner.password };
-  let response = await request.post('/games/declarative', {headers, data:payload, timeout:210000});
+  let response = await request.post('/games/declarative', {data:payload, timeout:210000});
   for (let attempt=0; response.status()===429 && attempt<20; attempt++) {
     await new Promise(resolve=>setTimeout(resolve, 1000 + Math.random()*1500));
-    response = await request.post('/games/declarative', {headers, data:payload, timeout:210000});
+    response = await request.post('/games/declarative', {data:payload, timeout:210000});
   }
   expect(response.ok(), await response.text()).toBeTruthy();
   return (await response.json()).id;

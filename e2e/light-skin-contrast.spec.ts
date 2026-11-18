@@ -26,7 +26,7 @@ async function settledContrast(locator: Locator) {
 for (const skin of ['isaac-ui', 'lobby', 'library', 'white']) {
   test(`${skin} keeps discovery controls and game names readable`, async ({page, request}) => {
     const user = await createUser(request, uniqueName('Light skin'));
-    await createGame(request, user, uniqueName('Contrast game'));
+    await createGame(request, uniqueName('Contrast game'));
     await loginAs(page, user);
     await page.goto(`/static/portal.html?skin=${skin}#games`);
     await expect(page.locator('#portal-skin-picker option[value="' + skin + '"]')).toHaveCount(1);

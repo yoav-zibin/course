@@ -95,7 +95,7 @@ class World:
         self.bob = self.platform.create_user(display_name="bob").id
         self.cy = self.platform.create_user(display_name="cy").id
         self.game = self.platform.create_game(
-            caller_id=self.ann,
+
             name="Duel",
             description="",
             rules=GameRules(
@@ -305,7 +305,7 @@ def test_a_v2_timeout_ends_without_running_a_computer() -> None:
     # The declarative fixture's computer move is instant; this test concerns
     # scheduling rather than game-specific thinking time.
     game = platform.create_game(
-        caller_id=ann,
+
         name="Debug",
         description="",
         rules=GameRules(

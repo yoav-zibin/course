@@ -25,7 +25,7 @@ def imported_game(api, monkeypatch):
         seed.setattr(game_checks, "run_checks", lambda *args, **kwargs: {})
         package = agent_import.prepare(body)
     game = api.platform.import_agent_game(
-        caller_id=owner, name=body.name, description=body.description,
+         name=body.name, description=body.description,
         rules=body.game_rules(), code=body.client_code,
         server_code=body.server_code, game_schemas=body.game_schemas(),
         import_package=package, request_id=SECRET,
@@ -220,7 +220,7 @@ def test_master_password_preserves_secret_and_owner(api, imported_game, monkeypa
     })
     assert first.status_code == 200, first.text
     stored = api.platform.find_game_by_id(game.id)
-    assert stored.owner_user_id == owner
+    assert not hasattr(stored, "owner_user_id")
     assert stored.import_package["game_addition_request_secret_hash"] == hashlib.sha256(SECRET.encode()).hexdigest()
     assert "game_addition_request_id_and_secret" not in stored.import_package
     second = patch_game(api, game, description="Updated with the original secret")
@@ -248,7 +248,7 @@ def test_change_after_validation_started_cannot_be_overwritten(api, imported_gam
 
     def validate_and_change_saved_game(body, **kwargs):
         package = agent_import.prepare(body, **kwargs)
-        api.platform.update_game(caller_id=owner, game_id=game.id,
+        api.platform.update_game( game_id=game.id,
                                  name="Concurrent accepted name")
         return package
 

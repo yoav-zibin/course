@@ -4,7 +4,7 @@ import { createGame, createUser, loginAs, openMatchControls, uniqueName } from '
 test('computer play and pass-and-play appear together while the game source is downloading',async({page,request})=>{
   const owner=await createUser(request,uniqueName('Play option owner'));
   const name=uniqueName('Slow game download');
-  const game=await createGame(request,owner,name);
+  const game=await createGame(request, name);
   await loginAs(page,owner);
   const versionPath=`/games/${game}/versions/1`;
   const requestsVersion=(address:string)=>{
@@ -43,7 +43,7 @@ test('computer play and pass-and-play appear together while the game source is d
 test('local pass-and-play practice works after disconnect and reload, with no match writes', async ({page,request,context})=>{
   const owner=await createUser(request,uniqueName('Offline owner'));
   const name=uniqueName('Offline noughts');
-  await createGame(request,owner,name);
+  await createGame(request, name);
   await loginAs(page,owner);
   const writes:string[]=[];
   page.on('request',req=>{if(req.method()!=='GET' && new URL(req.url()).pathname.startsWith('/matches'))writes.push(req.url());});
@@ -85,7 +85,7 @@ test('local pass-and-play practice works after disconnect and reload, with no ma
 test('pass-and-play starts from a #game= link without searching, downloading the game first', async ({page,request})=>{
   const owner=await createUser(request,uniqueName('Deep link owner'));
   const name=uniqueName('Deep link noughts');
-  const game=await createGame(request,owner,name);
+  const game=await createGame(request, name);
   await loginAs(page,owner);
   await page.goto(`/static/portal.html#game=${game}`);
   await expect(page.locator('#practice')).toBeEnabled();
@@ -104,7 +104,7 @@ test('pass-and-play starts from a #game= link without searching, downloading the
 test('a logged-out visitor to a game link is sent to log in and returns to the game', async ({page,request})=>{
   const owner=await createUser(request,uniqueName('Redirect owner'));
   const name=uniqueName('Redirect noughts');
-  const game=await createGame(request,owner,name);
+  const game=await createGame(request, name);
   // No loginAs: this visitor has no account yet. Every account page sends
   // them to the login page first (a guest account is one step)...
   await page.goto(`/static/portal.html#game=${game}`);
@@ -146,7 +146,7 @@ test('local rules have no portal storage or network access, and a looping game t
 test('saved local practice can move while storage metadata is unresponsive',async({page,request})=>{
   const owner=await createUser(request,uniqueName('Local owner'));
   const name=uniqueName('Local responsive');
-  await createGame(request,owner,name);
+  await createGame(request, name);
   await loginAs(page,owner);
   await page.goto('/static/portal.html');
   await page.getByRole('combobox',{name:'Search games'}).fill(name);

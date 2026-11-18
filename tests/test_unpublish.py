@@ -4,11 +4,12 @@ from game_platform.json_file_store import JsonFileStore
 from game_platform.tests.helpers import Api
 
 
-def test_unpublish_hides_public_routes_and_keeps_owner_library(api: Api):
+def test_unpublish_hides_public_routes_and_all_user_libraries(api: Api):
     owner, other = api.new_user('owner'), api.new_user('other')
     game = api.new_game(owner=owner, allowed_player_counts=[1])
     assert api.request('POST', f'/games/{game}/unpublish').status_code == 401
-    assert api.request('POST', f'/games/{game}/unpublish', as_user=other).status_code == 403
+    assert api.request('POST', f'/games/{game}/unpublish', as_user=other).status_code == 401
+    api.ok('PUT', f'/users/me/saved-games/{game}', as_user=owner)
     before = api.ok('GET', f'/games/{game}')
     hidden = api.ok('POST', f'/games/{game}/unpublish', as_user=owner)
     assert not hidden['published']
@@ -16,16 +17,16 @@ def test_unpublish_hides_public_routes_and_keeps_owner_library(api: Api):
     assert hidden['code'] == before['code']
     assert api.ok('GET', '/games') == []
     assert api.ok('GET', '/games', params={'owner_user_id':owner}) == []
-    for caller in [None, other]:
+    for caller in [None, other, owner]:
         assert api.request('GET', f'/games/{game}', as_user=caller).status_code == 404
         assert api.request('GET', f'/games/{game}/versions/1', as_user=caller).status_code == 404
-    assert api.ok('GET', f'/games/{game}', as_user=owner) == hidden
+    assert api.ok('GET', '/users/me/saved-games', as_user=owner) == []
     assert api.request('POST', '/matches', as_user=owner, json={'game_id':game}).status_code == 404
-    # An owner's login alone does not authorize game-content updates.
+    # An account's login alone does not authorize game-content updates.
     assert api.client.patch(f'/games/{game}', headers={
         'X-User-Id': owner, 'X-User-Password': api.passwords_by_user_id[owner],
     }, json={'name':'private'}).status_code == 422
-    # The helper supplies the configured master capability for owned games;
+    # The helper supplies the configured master capability for fixture games;
     # an authenticated metadata-only patch republishes without replacing code.
     updated = api.request('PATCH', f'/games/{game}', as_user=owner, json={'name':'private'})
     assert updated.status_code == 200, updated.text
@@ -41,12 +42,12 @@ def test_existing_participants_keep_playing_but_outsiders_cannot_read_or_join(ap
     match = api.new_match(owner=a, game_id=game, joiners=[b], start=True)
     api.ok('POST', f'/games/{game}/unpublish', as_user=owner)
     assert api.ok('GET', '/matches/open') == []
-    for caller in [None, outsider]:
+    for caller in [None, outsider, owner]:
         assert api.request('GET', f'/matches/{match}', as_user=caller).status_code == 404
         assert api.request('GET', f'/matches/{match}/moves', as_user=caller).status_code == 404
         assert api.request('GET', f'/games/{game}/versions/1', as_user=caller).status_code == 404
     assert api.request('POST', f'/matches/{match}/join', as_user=outsider).status_code == 409
-    for participant in [a,b,owner]:
+    for participant in [a,b]:
         assert api.ok('GET', f'/games/{game}/versions/1', as_user=participant)['published'] is False
         assert api.ok('GET', f'/matches/{match}', as_user=participant)['status'] == 'ongoing'
     assert api.move(match, as_user=a, next_turn=1, state={'turn':1}).status_code == 201
@@ -90,8 +91,9 @@ def test_unpublish_survives_restart_without_exposing_source(tmp_path: Path):
         client.passwords_by_user_id = api.passwords_by_user_id
         assert client.ok('GET','/games') == []
         assert client.request('GET',f'/games/{game}').status_code == 404
-        hidden = client.ok('GET', f'/games/{game}', as_user=owner)
-        assert hidden['published'] is False
-        assert hidden['code'] == '<div>poker</div>'
+        assert client.request('GET', f'/games/{game}', as_user=owner).status_code == 404
+        hidden = restored.get_game(game)
+        assert hidden.published is False
+        assert hidden.code == '<div>poker</div>'
     finally:
         restored.close()

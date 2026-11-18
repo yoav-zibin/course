@@ -186,6 +186,28 @@ roughly 16 ms extra per uncached call. Repeated identical views retain the
 platform's existing result cache. This review prioritizes state isolation;
 it does not establish production load capacity or a formal security proof.
 
+## Platform-owned games follow-up
+
+Games no longer store or return a creator/owner user ID. Both creation APIs and
+creation schemas require no player account, and unrelated stale account headers
+do not block game capabilities. Secret/master authorization, publication gates,
+version checks and master-origin protection remain in place.
+
+User merges and deletion preserve every platform game version, including in
+resumable maintenance jobs. Unpublished games have no creator-only visibility;
+existing match participants retain access to their pinned game version. Creator
+statistics, owner catalog filters and game-owner feedback restrictions are removed.
+Legacy game owner fields are ignored when records are loaded and omitted on
+rewrite. This release does not bulk rewrite historical production documents or
+backups. No production data or configuration was modified during verification.
+
+Checks covered account-free creation and stale-header capability mutations,
+legacy snapshot/query records, account merge/deletion preservation, HTML migration,
+Firestore emulator operations, generated examples and browser behavior. Final
+post-integration backend checks passed (56 tests), as did 158 Portal/feedback/PWA
+unit checks. The separate real Firestore query suite passed 73 tests plus the
+new account-deletion regression; two real Chromium checks also passed.
+
 ## Daily incremental audit
 
 The user service `buildplay-security-audit.timer` runs every day at **08:00

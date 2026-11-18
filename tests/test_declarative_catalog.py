@@ -17,7 +17,7 @@ from game_platform.tests.test_agent_import import payload
 def archive_html(api, owner):
     body = GameImport.model_validate(payload())
     now = dt.datetime.now(dt.timezone.utc)
-    game = Game(id="legacy-counter", version=1, owner_user_id=owner,
+    game = Game(id="legacy-counter", version=1,
                 name="Legacy counter", description=body.description,
                 rules=body.game_rules(), code="<html>Archived counter</html>",
                 server_code=body.server_code, game_schemas=body.game_schemas(),
@@ -48,7 +48,7 @@ def test_html_games_are_archived_and_only_declarative_games_use_portal_apis(quer
     html = archive_html(api, owner)
     body = GameImport.model_validate(payload())
     native = api.platform.import_agent_game(
-        caller_id=owner, name="Declarative counter", description=body.description,
+         name="Declarative counter", description=body.description,
         rules=body.game_rules(), code=body.client_code, server_code=body.server_code,
         game_schemas=body.game_schemas(), import_package={"declarative_ui": body.declarative_ui})
     listed = api.ok("GET", "/games")
@@ -91,8 +91,8 @@ def test_html_games_are_archived_and_only_declarative_games_use_portal_apis(quer
                        json={"game_id": html.id}).status_code == 404
     # Supply the independent write capability so these requests reach the
     # legacy game's read-only validation instead of failing authentication.
-    assert api.request("POST", f"/games/{html.id}/unpublish", as_user=owner).status_code == 400
-    assert api.request("DELETE", f"/games/{html.id}", as_user=owner).status_code == 400
+    assert api.client.post(f"/games/{html.id}/unpublish", auth=("admin", TEST_GAME_SECRET)).status_code == 400
+    assert api.client.delete(f"/games/{html.id}", auth=("admin", TEST_GAME_SECRET)).status_code == 400
     api.client.app.state.master_password = None
     assert api.request("PUT", f"/users/me/saved-games/{html.id}", as_user=owner).status_code == 404
     assert api.request("POST", f"/users/me/recent-games/{html.id}", as_user=owner).status_code == 404
@@ -122,7 +122,7 @@ def test_migration_preserves_old_html_versions_in_legacy_detail(query_mode):
     html = archive_html(api, owner)
     body = GameImport.model_validate(payload())
     migrated = api.platform.import_agent_game(
-        caller_id=owner, existing_game_id=html.id, name=body.name,
+         existing_game_id=html.id, name=body.name,
         description=body.description, rules=body.game_rules(), code=body.client_code,
         server_code=body.server_code, game_schemas=body.game_schemas(),
         import_package={"declarative_ui": body.declarative_ui})
@@ -135,7 +135,7 @@ def test_migration_preserves_old_html_versions_in_legacy_detail(query_mode):
     assert api.platform._store.get_game_version(html.id, 1).code == html.code
 
 
-def test_unpublished_legacy_game_source_requires_owner(api):
+def test_unpublished_legacy_game_source_is_hidden_from_all_users(api):
     owner, stranger = api.new_user("Author"), api.new_user("Stranger")
     html = archive_html(api, owner)
     api.platform._store.set_game_published(html.id, False)
@@ -143,7 +143,7 @@ def test_unpublished_legacy_game_source_requires_owner(api):
     assert api.request("GET", f"/legacy/games/{html.id}").status_code == 404
     assert api.request("GET", f"/legacy/games/{html.id}", as_user=stranger).status_code == 404
     response = api.request("GET", f"/legacy/games/{html.id}", as_user=owner)
-    assert response.status_code == 200 and response.json()["code"] == html.code
+    assert response.status_code == 404
     assert response.headers["Cache-Control"] == "private, no-store"
 
 
@@ -156,7 +156,7 @@ def test_stale_html_match_records_cannot_be_read_joined_or_rematched(query_mode,
     html = archive_html(api, owner)
     body = GameImport.model_validate(payload())
     native = api.platform.import_agent_game(
-        caller_id=owner, name=body.name, description=body.description,
+         name=body.name, description=body.description,
         rules=body.game_rules(), code=body.client_code, server_code=body.server_code,
         game_schemas=body.game_schemas(), import_package={"declarative_ui": body.declarative_ui})
     current_id = api.new_match(owner=owner, game_id=native.id, start=True)

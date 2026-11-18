@@ -28,7 +28,7 @@ test.describe('Portal', () => {
 
   test('the All games link leaves a game page however it was opened', async ({ page, request }) => {
     const user = await createUser(request, uniqueName('Detail visitor'));
-    const game = await createGame(request, user, uniqueName('Detail noughts'));
+    const game = await createGame(request, uniqueName('Detail noughts'));
     await loginAs(page, user);
     // Both link forms land on the game's page: #game= from shared quick
     // links, ?game= from the catalog's game cards.
@@ -92,7 +92,7 @@ test.describe('Portal', () => {
       '/games': [
         {
           id: 'g1', name: 'Mock Chess', version: 1, description: 'A mocked game',
-          allowed_player_counts: [2], published: true, owner_user_id: 'u1',
+          allowed_player_counts: [2], published: true,
         },
       ],
     });

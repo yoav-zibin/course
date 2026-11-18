@@ -19,7 +19,7 @@ test('paged catalog keeps its controls usable after navigation and polling',asyn
         id: second ? 'page-two' : 'page-one',
         name: second ? 'Second page game' : 'First page game',
         description: 'Pagination fixture', version: 1, allowed_player_counts: [2],
-        published: true, owner_user_id: 'fixture',
+        published: true,
       };
       return { items: [game], next_cursor: second ? null : 'second-page' };
     },

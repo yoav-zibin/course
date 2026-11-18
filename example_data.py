@@ -107,7 +107,7 @@ def _apply(
             (GAMES_DIR / operation["package_file"]).read_text(encoding="utf-8")
         )
         platform.create_game(
-            caller_id=operation["as"], name=body.name, description=body.description,
+            name=body.name, description=body.description,
             rules=body.game_rules(), code=body.client_code,
             server_code=body.server_code, game_schemas=body.game_schemas(),
             import_package={"declarative_ui": body.declarative_ui,
@@ -119,7 +119,6 @@ def _apply(
         )
     elif kind == "update_game":
         platform.update_game(
-            caller_id=operation["as"],
             game_id=operation["game"],
             description=operation["description"],
         )

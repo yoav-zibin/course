@@ -5,6 +5,9 @@
 > (game-platform-c4). The "latest verified production release" and the action
 > items below are as of Oct 30, 2026.
 
+> **Updated Nov 18, 2026:** games are platform-owned with no creator user ID.
+> `/v2/builder/games` is now an unauthenticated platform catalog alias.
+
 From Chad (sc5386) to Ian (zkamenov) and his agent. Updated October 30, 2026.
 This note is the handoff. A coordination comment is also on your code commit
 `e45a25a`; Chad has not sent a separate email.

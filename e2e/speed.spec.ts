@@ -10,7 +10,7 @@ test('a 1-minute speed match: the player who doesn\'t move times out and the mat
   const alice = await createUser(request, uniqueName('Alice'));
   const bob = await createUser(request, uniqueName('Bob'));
   const auth = (u: typeof alice) => ({ 'X-User-Id': u.id, 'X-User-Password': u.password });
-  const gameId = await createGame(request, alice, uniqueName('Speed duel'));
+  const gameId = await createGame(request, uniqueName('Speed duel'));
   const created = await request.post('/matches', { headers: auth(alice), data: { game_id: gameId, turn_seconds: 60 } });
   expect(created.ok(), await created.text()).toBeTruthy();
   const match = await created.json();

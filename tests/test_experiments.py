@@ -32,7 +32,7 @@ def test_signup_experiment_events_do_not_consume_generated_ids() -> None:
     user = platform.create_user(display_name="alice")
 
     game = platform.create_game(
-        caller_id=user.id,
+
         name="game",
         description="",
         rules=GameRules(
@@ -63,7 +63,7 @@ def test_match_start_tracking_uses_match_timestamp_without_advancing_clock() -> 
     platform = GamePlatform(clock=clock, new_id=lambda: next(ids))
     user = platform.create_user(display_name="alice")
     game = platform.create_game(
-        caller_id=user.id,
+
         name="game",
         description="",
         rules=GameRules(

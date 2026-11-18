@@ -65,8 +65,8 @@ class User:
     linked_accounts: tuple[LinkedAccount, ...] = ()
     # Set when this account was merged into another one. A replaced user is
     # never deleted (so old credentials keep authenticating), but every use of
-    # it resolves to the surviving user. A replaced user holds no games,
-    # matches, seats, moves, or linked accounts. Defaults to None so older data
+    # it resolves to the surviving user. A replaced user holds no matches,
+    # seats, moves, or linked accounts. Defaults to None so older data
     # files still load.
     replaced_by_user_id: str | None = None
     # The ids of every user this account replaced, oldest first. Merges always
@@ -162,12 +162,11 @@ class GameRules:
 
 @dataclass(frozen=True, kw_only=True)
 class Game:
-    """One version of a game. Every update creates a new version."""
+    """One version of a platform-owned game. Every update creates a new version."""
 
     id: str
     # Starts at 1 and increases by one with every update.
     version: int
-    owner_user_id: str
     name: str
     description: str
     rules: GameRules

@@ -2,7 +2,7 @@ import subprocess
 
 import pytest
 
-from game_platform.agent_import import AGENT_IMPORT_OWNER_ID, MAX_BODY_BYTES, GameImport, prepare
+from game_platform.agent_import import MAX_BODY_BYTES, GameImport, prepare
 from game_platform.i18n import LOCALE_CODES as LANGUAGES
 
 
@@ -54,7 +54,7 @@ def test_authenticated_complete_import_is_published_and_translated(api):
     result = api.request('POST', '/games', as_user=owner, json=body)
     assert result.status_code == 201, result.text
     g = result.json()
-    assert g['owner_user_id'] == owner
+    assert 'owner_user_id' not in g
     assert g['version'] == 1 and g['published'] is True
     assert g['code'] == body['client_code']
     assert g['server_code'] == body['server_code']
@@ -85,12 +85,12 @@ def test_anonymous_import_publishes_an_ownerless_game(api):
     result = api.client.post('/games', json=body)
     assert result.status_code == 201, result.text
     g = result.json()
-    assert g['owner_user_id'] == AGENT_IMPORT_OWNER_ID
+    assert 'owner_user_id' not in g
     assert g['version'] == 1 and g['published'] is True
     assert api.request('GET', f"/games/{g['id']}").status_code == 200
-    # No account owns it, so no one can unpublish it.
+    # Account credentials alone cannot unpublish a platform game.
     owner = api.new_user('Owner')
-    assert api.request('POST', f"/games/{g['id']}/unpublish", as_user=owner).status_code == 403
+    assert api.request('POST', f"/games/{g['id']}/unpublish", as_user=owner).status_code == 401
 
 
 def test_resubmission_with_the_same_request_id_updates_the_game(api):
@@ -190,14 +190,14 @@ def test_anonymous_resubmission_updates_an_ownerless_game(api):
     secret = 'anonymous-secret-0123456789'
     body = payload(); body['game_addition_request_id_and_secret'] = secret
     first = api.ok('POST', '/games', json=body)
-    assert first['owner_user_id'] == AGENT_IMPORT_OWNER_ID
+    assert 'owner_user_id' not in first
     updated = payload()
     updated['game_addition_request_id_and_secret'] = secret
     updated['description'] = 'Reach three by adding one, anonymously updated.'
     updated['translations'] = translations_for(updated)
     second = api.ok('PATCH', f"/games/{first['id']}", json=updated)
     assert second['id'] == first['id'] and second['version'] == 2
-    assert second['owner_user_id'] == AGENT_IMPORT_OWNER_ID
+    assert 'owner_user_id' not in second
 
 
 def test_resubmission_by_another_user_updates_via_the_secret(api):
@@ -211,14 +211,14 @@ def test_resubmission_by_another_user_updates_via_the_secret(api):
     updated['translations'] = translations_for(updated)
     second = api.ok('PATCH', f"/games/{first['id']}", as_user=second_owner, json=updated)
     assert second['id'] == first['id'] and second['version'] == 2
-    assert second['owner_user_id'] == first_owner
+    assert 'owner_user_id' not in second
 
 
-def test_wrong_password_is_rejected_before_upload_parsing(api):
+def test_irrelevant_account_headers_do_not_skip_upload_validation(api):
     owner = api.new_user('Owner')
-    headers = {'X-User-Id': owner, 'X-User-Password': 'wrong'}
+    headers = {'X-User-Id': owner, 'X-User-Password': 'wrong', 'Content-Type': 'application/json'}
     response = api.client.post('/games', content=b'not json', headers=headers)
-    assert response.status_code == 401
+    assert response.status_code == 422
     assert_no_games(api)
 
 
@@ -369,7 +369,7 @@ def test_imported_game_roundtrips_existing_file_storage(tmp_path):
     from game_platform.store import InMemoryStore
     store = InMemoryStore(); platform = GamePlatform(store=store)
     owner = platform.create_user(display_name='Owner'); body = GameImport(**payload())
-    game = platform.import_agent_game(caller_id=owner.id, name=body.name,
+    game = platform.import_agent_game( name=body.name,
         description=body.description, rules=body.game_rules(),
         code=body.client_code, server_code=body.server_code,
         game_schemas=body.game_schemas(), import_package=prepare(body))

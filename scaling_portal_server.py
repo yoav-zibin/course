@@ -22,7 +22,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from game_platform.api import create_app, short_invite_link
 from game_platform.config import load_config
-from game_platform.models import Game, GameRules, User
+from game_platform.models import Game, GameRules
 from game_platform.query_store import QueryStore
 from game_platform.scaling_service import ScalablePlatform
 from game_platform.declarative_ui import client_document
@@ -50,17 +50,6 @@ class MonthClock:
 def copy_catalog(store, *, run_id, copies, now):
     if not 1 <= copies <= 1000 or not run_id:
         raise ValueError("choose a run ID and 1..1000 catalog copies")
-    owner_id = "portal-catalog-owner:" + run_id
-    if store.get_user(owner_id) is None:
-        store.put_user(
-            User(
-                id=owner_id,
-                display_name="Synthetic catalog owner",
-                password=secrets.token_urlsafe(32),
-                created_at=now,
-                updated_at=now,
-            )
-        )
     base = Path(__file__).parent / "games" / "declarative"
     result = []
     for name in ("tictactoe", "nim"):
@@ -85,7 +74,6 @@ def copy_catalog(store, *, run_id, copies, now):
                     Game(
                         id=game_id,
                         version=1,
-                        owner_user_id=owner_id,
                         name=f"Portal copy {name} {i}",
                         description="Duplicate of the shipped game; no AI generation",
                         rules=GameRules(

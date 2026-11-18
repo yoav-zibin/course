@@ -6,7 +6,7 @@ test.describe('Choosing and playing a game (logged in, real server)', () => {
     test(`quick play from the ${entry} starts the chosen game free against a computer`, async ({page, request}) => {
       const owner = await createUser(request, uniqueName('Quick play'));
       const name = uniqueName('Quick game');
-      const game = await createGame(request, owner, name);
+      const game = await createGame(request, name);
       await loginAs(page, owner);
       await page.goto(entry === 'card' ? '/static/portal.html#games' : `/static/portal.html#game=${game}`);
       const button = entry === 'card'
@@ -29,7 +29,7 @@ test.describe('Choosing and playing a game (logged in, real server)', () => {
   test('search for a game, open it and play a match against the computer', async ({ page, request }) => {
     const owner = await createUser(request, uniqueName('Owner'));
     const gameName = uniqueName('Noughts');
-    await createGame(request, owner, gameName);
+    await createGame(request, gameName);
     const player = await createUser(request, uniqueName('Player'));
     await loginAs(page, player);
 
@@ -54,7 +54,7 @@ test.describe('Choosing and playing a game (logged in, real server)', () => {
   test('create an online match and see it listed', async ({ page, request }) => {
     const owner = await createUser(request, uniqueName('Owner'));
     const gameName = uniqueName('OnlineGame');
-    await createGame(request, owner, gameName);
+    await createGame(request, gameName);
     await loginAs(page, owner);
 
     await page.goto('/static/portal.html');

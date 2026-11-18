@@ -15,7 +15,7 @@ def play(kind):
     choices = random.Random(0)
     body = GameImport.model_validate_json((Path(__file__).parents[1] / "games/declarative" / f"{kind}.json").read_text())
     owner = platform.create_user(display_name="owner")
-    game = platform.create_game(caller_id=owner.id, name=body.name, description=body.description,
+    game = platform.create_game( name=body.name, description=body.description,
         rules=body.game_rules(), code=body.client_code, server_code=body.server_code,
         game_schemas=body.game_schemas(), import_package={"declarative_ui":body.declarative_ui})
     match = platform.create_match(caller_id=owner.id, game_id=game.id, num_computer_opponents=1)

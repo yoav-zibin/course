@@ -518,8 +518,9 @@ Submit the resulting complete package to `POST /games/declarative`:
 ```
 
 Omit `client_code`: the platform derives it. `/games/declarative` requires the
-declarative package; `/games` accepts the same declarative form; HTML submissions are rejected. Authentication,
-ownership, translations in all supported languages,
+declarative package; `/games` accepts the same declarative form; HTML submissions
+are rejected. Platform ownership, secret authorization, translations in all
+supported languages,
 tutorials, cover/supporting images, JSON schemas, approved examples,
 determinism/random-walk checks and recorded test gates are the same as for
 other imported games. See [the import API reference](agent-game-import.md) for
@@ -553,9 +554,9 @@ asset leaves the original presentation in place. New publications use the
 complete updated package through the ordinary import flow below.
 
 Update game content only through `PATCH /games/{id}`. Include the game secret
-or configured master password in `game_addition_request_id_and_secret`; account
-ownership alone is insufficient. All content fields are optional, and omitted
-fields retain their current values. Presentation changes require recorded tests
+or configured master password in `game_addition_request_id_and_secret`; user
+account credentials do not authorize game changes. All content fields are
+optional, and omitted fields retain their current values. Presentation changes require recorded tests
 for the complete resulting package; server-code, unit-test and mechanical-rule
 changes run server checks and random walks. Text, images and other metadata
 edits use the relevant lightweight checks. The resulting presentation, tests

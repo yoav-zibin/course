@@ -4,7 +4,7 @@ import { createGame, createUser, E2E_ADMIN_CREDENTIALS, loginAs, openMatchContro
 test('a guest reports a player and sends feedback on the website; both show on the admin Feedback tab', async ({ browser, request }) => {
   const alice = await createUser(request, uniqueName('Alice'));
   const bob = await createUser(request, uniqueName('Bob'));
-  const gameId = await createGame(request, bob, uniqueName('Duel'));
+  const gameId = await createGame(request, uniqueName('Duel'));
   const auth = (u: typeof alice) => ({ 'X-User-Id': u.id, 'X-User-Password': u.password });
   const match = await (await request.post('/matches', { headers: auth(bob), data: { game_id: gameId } })).json();
   expect((await request.post(`/matches/${match.id}/join`, { headers: auth(alice) })).ok()).toBeTruthy();

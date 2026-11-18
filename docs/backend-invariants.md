@@ -10,7 +10,7 @@ This change adds a **pure, read-only** checker and two account-merge fixes. It i
 {
   "users": [{"id": "alice"}],
   "games": [{
-    "id": "puzzle", "version": 1, "owner_user_id": "alice",
+    "id": "puzzle", "version": 1,
     "rules": {"allowed_player_counts": [1]}
   }],
   "matches": [{
@@ -31,7 +31,7 @@ Successful validation returns HTTP 200:
 
 Semantic violations also return 200, with `valid: false` and stable `code`, `path`, and `message` entries. For example, a missing owner yields `missing_user` at `matches[0].owner_user_id`. Malformed request shapes/types return 422. Seat and move numbers reject booleans instead of treating `true` as seat 1.
 
-Use **snapshot-shaped records**, not the public catalog/MatchOut responses: games contain nested `rules`, matches contain `seats` and full `moves`. Raw snapshot records can include extra fields; they are ignored. Passwords, email addresses, display names, code (except the optional server-game marker described below), and opaque states are not needed and should be omitted. Supply all referenced users and every pinned game version, including retained deleted versions. A missing reference in a partial export is an error about that input, not evidence that production is corrupt.
+Use **snapshot-shaped records**, not the public catalog/MatchOut responses: games contain nested `rules`, matches contain `seats` and full `moves`. Raw snapshot records can include extra fields; they are ignored. Passwords, email addresses, display names, code (except the optional server-game marker described below), and opaque states are not needed and should be omitted. Games are platform-owned and have no user reference. Supply all referenced users and every pinned game version, including retained deleted versions. A missing reference in a partial export is an error about that input, not evidence that production is corrupt.
 
 Limits: 10,000 users, 10,000 game versions, 1,000 matches, 10 seats per match, 10,000 moves per match, 50,000 total moves. Reports stop at 1,000 findings and set `truncated: true`; a truncated report is never valid. These model limits do not replace a deployment's HTTP request-body size limit.
 
@@ -39,7 +39,7 @@ Limits: 10,000 users, 10,000 game versions, 1,000 matches, 10 seats per match, 1
 
 - Unique user IDs, game/version keys, and match IDs.
 - Replacement points directly to a different surviving user; forward/back links agree and replacement lists have no duplicates.
-- Replaced accounts have no linked accounts, replacement ownership, inaccessible token balance, game ownership, match ownership, seats, move authorship, hidden-match references, or timeout participation.
+- Replaced accounts have no linked accounts, replacement ownership, inaccessible token balance, match ownership, seats, move authorship, hidden-match references, or timeout participation.
 - Nonnegative token balances; valid game versions and unique allowed player counts in 1–10.
 - Referenced users and pinned game versions exist; ordered seat indices are contiguous; human seats have active owners and computers have no account owner.
 - Active matches do not seat the same human twice; completed matches may, after a legitimate account merge.

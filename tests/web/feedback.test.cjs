@@ -100,13 +100,13 @@ test('a player can be reported only by someone else, and only as a human in an o
   assert.equal(run(`canReportPlayer(${match},{kind:'human',user_id:'bob'},null)`),false); // logged out
 });
 
-test('a game can get feedback from its page, but not your own game',()=>{
+test('platform games can receive feedback without a user owner',()=>{
   const {node,run}=setupPortal({id:'ann'});
-  run('state.games=[{id:"g1",version:1,name:"Poker",owner_user_id:"bob",allowed_player_counts:[2,4]},{id:"g2",version:1,name:"Mine",owner_user_id:"ann",allowed_player_counts:[2]}]');
+  run('state.games=[{id:"g1",version:1,name:"Poker",allowed_player_counts:[2,4]},{id:"g2",version:1,name:"Another game",allowed_player_counts:[2]}]');
   node('new-game').value='g1';run('updateMatchSetup()');
   assert.equal(node('feedback-game').hidden,false);assert.equal(typeof node('feedback-game').onclick,'function');
   node('new-game').value='g2';run('updateMatchSetup()');
-  assert.equal(node('feedback-game').hidden,true);
+  assert.equal(node('feedback-game').hidden,false);
 });
 
 test('the page loads the feedback files, and the offline cache lists them',()=>{

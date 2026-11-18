@@ -7,7 +7,7 @@ test('referral match link survives switching accounts and opens the intended lob
   const alice = await createUser(request, uniqueName('Inviter'));
   const bob = await createUser(request, uniqueName('Joiner'));
   const auth = (u: typeof alice) => ({ 'X-User-Id': u.id, 'X-User-Password': u.password });
-  const gameId = await createGame(request, alice, uniqueName('Invited duel'));
+  const gameId = await createGame(request, uniqueName('Invited duel'));
   const created = await request.post('/matches', {headers: auth(alice), data: {game_id: gameId}});
   expect(created.ok()).toBeTruthy();
   const match = await created.json();
@@ -28,7 +28,7 @@ test('referral match link survives switching accounts and opens the intended lob
 test('two players in separate browsers: join an online match and see each other\'s moves', async ({ browser, request }) => {
   const alice = await createUser(request, uniqueName('Alice'));
   const bob = await createUser(request, uniqueName('Bob'));
-  const gameId = await createGame(request, alice, uniqueName('Duel'));
+  const gameId = await createGame(request, uniqueName('Duel'));
   const auth = (u: typeof alice) => ({ 'X-User-Id': u.id, 'X-User-Password': u.password });
 
   const created = await request.post('/matches', { headers: auth(alice), data: { game_id: gameId, num_computer_opponents: 0 } });

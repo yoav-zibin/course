@@ -4,7 +4,7 @@ import {createUser, createGame, loginAs, openMatchControls, uniqueName} from './
 test('avatars load, sound preference persists, and reduced motion disables transitions', async ({page, request}) => {
  const user=await createUser(request, uniqueName('Avatar'));
  const name=uniqueName('Avatar game');
- await createGame(request,user,name);
+ await createGame(request, name);
  await loginAs(page,user);
  await page.goto('/static/portal.html');
  await page.getByRole('combobox',{name:'Search games'}).fill(name);

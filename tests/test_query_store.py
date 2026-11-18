@@ -914,6 +914,7 @@ def test_merge_job_resumes_and_rewrites_everything(store):
         api.new_user("carol"),
     )
     game = api.new_game(owner=alice)
+    versions_before = store.list_all_game_versions()
     match = api.new_match(owner=alice, game_id=game, joiners=[carol], start=True)
     assert (
         api.move(match, as_user=alice, next_turn=1, state={"pot": 1}).status_code == 201
@@ -944,7 +945,8 @@ def test_merge_job_resumes_and_rewrites_everything(store):
         if result["complete"]:
             break
     assert result and result["complete"] and calls > 1  # resumable, not one shot
-    assert store.get_game(game).owner_user_id == bob
+    assert not hasattr(store.get_game(game), "owner_user_id")
+    assert store.list_all_game_versions() == versions_before
     merged = store.get_match(match)
     seat = merged.seat_of(bob)
     assert seat is not None and seat.logic_player_id == alice
@@ -971,6 +973,7 @@ def test_online_merge_preserves_signin_balances_library_and_logic_ids_without_gl
     api = api_for(store)
     alice, bob, carol = (api.new_user(x) for x in ("alice", "bob", "carol"))
     game = api.new_game(owner=alice)
+    versions_before = store.list_all_game_versions()
     match = api.new_match(owner=alice, game_id=game, joiners=[carol], start=True)
     assert (
         api.move(match, as_user=alice, next_turn=1, state={"turn": 1}).status_code
@@ -1016,7 +1019,8 @@ def test_online_merge_preserves_signin_balances_library_and_logic_ids_without_gl
     assert store.get_user(bob).token_balance == 28
     assert store.get_user(alice).token_balance == 0
     assert store.find_linked_account("email", "alice@example.com").id == bob
-    assert store.get_game(game).owner_user_id == bob
+    assert not hasattr(store.get_game(game), "owner_user_id")
+    assert store.list_all_game_versions() == versions_before
     result = store.get_match(match)
     assert result.seat_of(bob).logic_player_id == alice
     assert result.moves[0].made_by_user_id == bob
@@ -1037,7 +1041,7 @@ def test_online_merge_waits_for_shared_live_match_before_any_changes(store):
     assert response.status_code == 409
     assert "wait until shared matches end" in response.json()["detail"]
     assert store.get_user(alice).replaced_by_user_id is None
-    assert store.get_game(game).owner_user_id == alice
+    assert not hasattr(store.get_game(game), "owner_user_id")
 
 
 def test_merge_job_waits_for_shared_active_match_without_mutating(store):
@@ -1056,7 +1060,7 @@ def test_merge_job_waits_for_shared_active_match_without_mutating(store):
         max_records=3,
     )
     assert result["failed"] == "shared_active_match"
-    assert store.get_game(game).owner_user_id == alice
+    assert not hasattr(store.get_game(game), "owner_user_id")
     assert store.get_user(alice).replaced_by_user_id is None
 
 
@@ -1072,6 +1076,7 @@ def test_delete_job_resumes_and_removes_the_user(store):
     game = api.new_game(owner=carol)
     owned_match = api.new_match(owner=carol, game_id=game)
     other_game = api.new_game(owner=erin)
+    versions_before = store.list_all_game_versions()
     shared_match = api.new_match(
         owner=erin, game_id=other_game, joiners=[carol], start=True
     )
@@ -1088,7 +1093,8 @@ def test_delete_job_resumes_and_removes_the_user(store):
     )
     assert result["complete"]
     assert store.get_user(carol) is None
-    assert store.get_game(game).deleted
+    assert not store.get_game(game).deleted
+    assert store.list_all_game_versions() == versions_before
     assert store.get_match(owned_match) is None
     # Carol leaving Erin's live match ends it (the game forbids mid-match
     # leaves), exactly as the snapshot admin deletion does via leave_match.
@@ -1099,6 +1105,21 @@ def test_delete_job_resumes_and_removes_the_user(store):
     assert delete_user(store, run_id="delete-1", max_records=1)["processed"] == 0
     assert not any(x.user_id == carol for x in store.list_experiment_assignments())
     assert not any(x.user_id == carol for x in store.list_experiment_events())
+
+
+def test_online_account_deletion_preserves_platform_game_versions(store):
+    api = api_for(store)
+    creator = api.new_user("Former creator")
+    game_id = api.new_game(owner=creator)
+    first = store.get_game(game_id)
+    store.add_game_version(replace(first, version=2, name="Updated platform game"))
+    versions_before = store.list_all_game_versions()
+    platform = api.client.app.state.platform
+    with patch.object(store, "list_games", side_effect=AssertionError("account queried games")):
+        platform.admin_delete_user(creator)
+    assert store.get_user(creator) is None
+    assert not store.get_game(game_id).deleted
+    assert store.list_all_game_versions() == versions_before
 
 
 def test_experiment_hooks_do_not_scan_all_users_or_events(store):
@@ -1518,7 +1539,7 @@ def test_agent_import_roundtrips_query_store(store):
     restarted = QueryStore(store.client, namespace=store.namespace)
     saved = restarted.get_game(game['id'])
     assert saved is not None
-    assert saved.owner_user_id == owner
+    assert not hasattr(saved, "owner_user_id")
     assert saved.code == body['client_code']
     assert saved.published is True
     assert saved.import_package is not None

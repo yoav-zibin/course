@@ -160,16 +160,12 @@ def _get_caller_id_or_anonymous(
     x_user_id: Annotated[str | None, Header()] = None,
     x_user_password: Annotated[str | None, Header()] = None,
 ) -> str | None:
-    """The caller's id when credentials were sent and authenticate, else None. Unlike
-    [_get_caller_id_or_none], credentials that are sent but invalid are rejected
-    (401) instead of silently becoming anonymous: the agent import endpoint must not
-    publish an ownerless game for a caller who mistyped their password."""
+    """The caller's id when supplied credentials authenticate, otherwise anonymous.
+    Invalid supplied credentials are rejected instead of silently ignored."""
     if x_user_id is None and x_user_password is None:
         return None
     return platform.authenticate(user_id=x_user_id, password=x_user_password).id
 
-
-AnonymousCallerId = Annotated[str | None, Depends(_get_caller_id_or_anonymous)]
 
 _MASTER_PASSWORD_REALM: Final = "Game platform debug tools"
 _basic_auth = HTTPBasic(auto_error=False, realm=_MASTER_PASSWORD_REALM)
@@ -217,21 +213,14 @@ def _check_master_write_origin(request: Request) -> None:
         raise denied
 
 
-def _get_game_write_owner(
+def _require_game_write_capability(
     request: Request,
     platform: Platform,
     game_id: str,
-    caller_id: AnonymousCallerId,
     credentials: Annotated[HTTPBasicCredentials | None, Depends(_basic_auth)],
     x_game_secret: Annotated[str | None, Header(max_length=200)] = None,
-) -> str:
-    """A game secret or configured master password authorizes global game writes.
-
-    Account ownership alone is insufficient: a stolen player credential must not
-    become a credential for changing globally shared game definitions. Return the
-    recorded owner for the service's existing ownership checks only after the
-    independent game capability has been checked.
-    """
+) -> None:
+    """A game secret or configured master password authorizes platform game writes."""
     from game_platform.models import package_secret_hash
 
     master = request.app.state.master_password
@@ -239,7 +228,7 @@ def _get_game_write_owner(
     is_master = bool(master) and presented_master is not None and secrets.compare_digest(
         presented_master.encode(), master.encode()
     )
-    if not is_master and caller_id is None and x_game_secret is None:
+    if credentials is None and x_game_secret is None:
         raise UnauthorizedError("a game secret or master password is required")
     game = platform._store.get_game(game_id)
     if game is None:
@@ -252,10 +241,9 @@ def _get_game_write_owner(
         raise ForbiddenError("a game secret or master password is required")
     if is_master and not is_game_secret:
         _check_master_write_origin(request)
-    return game.owner_user_id
 
 
-GameWriteOwner = Annotated[str, Depends(_get_game_write_owner)]
+GameWriteCapability = Annotated[None, Depends(_require_game_write_capability)]
 
 router = APIRouter()
 
@@ -881,7 +869,6 @@ def email_verify(
 @router.get("/legacy/games")
 def list_legacy_games(
     platform: Platform,
-    owner_user_id: str | None = None,
     q: str = "",
     limit: int = 50,
     cursor: str | None = None,
@@ -891,11 +878,9 @@ def list_legacy_games(
         raise InvalidRequestError("limit must be between 1 and 100")
     store = platform._store
     words = q.casefold().split()
-    scope = ["legacy-html", owner_user_id, words]
+    scope = ["legacy-html", words]
     if getattr(store, "scalable", False):
         filters = [("deleted", "==", False), ("published", "==", True)]
-        if owner_user_id is not None:
-            filters.append(("owner_user_id", "==", owner_user_id))
         try:
             result = store.page("games", filters=filters, limit=limit,
                                 cursor=cursor, scope=scope)
@@ -909,7 +894,7 @@ def list_legacy_games(
             after = decode_cursor(scope, cursor)
         except ValueError as exc:
             raise InvalidRequestError(str(exc)) from exc
-        games = sorted((game for game in store.list_games(owner_user_id=owner_user_id)
+        games = sorted((game for game in store.list_games()
                         if game.id > (after or "")), key=lambda game: game.id)
         next_cursor = encode_cursor(scope, games[limit - 1].id) if len(games) > limit else None
         games = games[:limit]
@@ -937,14 +922,13 @@ def get_legacy_game(
 @router.get("/games")
 def list_games(
     platform: Platform,
-    owner_user_id: str | None = None,
     q: str = "",
 ) -> list[GameSummaryOut]:
     """Published games, oldest first. `q` searches names and descriptions (every word
     must match, ignoring case). The list never includes code: with every game's
     client and server code included, it was over a megabyte, and nobody reads
     code from a list. Load one game in full from /games/{id}/versions/{version}."""
-    games = platform.list_games(owner_user_id=owner_user_id, query=q, include_code=False)
+    games = platform.list_games(query=q, include_code=False)
     return [GameSummaryOut.of(game) for game in games]
 
 
@@ -1001,8 +985,8 @@ def list_game_versions(
 
 
 @router.post("/games/{game_id}/unpublish")
-def unpublish_game(platform: Platform, caller_id: GameWriteOwner, game_id: str) -> GameOut:
-    return GameOut.of(platform.unpublish_game(caller_id=caller_id, game_id=game_id))
+def unpublish_game(platform: Platform, capability: GameWriteCapability, game_id: str) -> GameOut:
+    return GameOut.of(platform.unpublish_game(game_id=game_id))
 
 
 @router.get("/games/{game_id}")
@@ -1063,8 +1047,8 @@ def get_game_cover(
 
 
 @router.delete("/games/{game_id}", status_code=HTTPStatus.NO_CONTENT)
-def delete_game(platform: Platform, caller_id: GameWriteOwner, game_id: str) -> None:
-    platform.delete_game(caller_id=caller_id, game_id=game_id)
+def delete_game(platform: Platform, capability: GameWriteCapability, game_id: str) -> None:
+    platform.delete_game(game_id=game_id)
 
 
 # Matches
@@ -2269,7 +2253,7 @@ def create_app(
     app.state.verify_client = verify_client
     app.state.email_sender = email_sender if email_sender is not None else LogSender()
     from game_platform.agent_import import make_router as make_import_router
-    app.include_router(make_import_router(_get_platform, _get_caller_id_or_anonymous))
+    app.include_router(make_import_router(_get_platform))
     from game_platform.declarative_ui import make_router as make_declarative_router
     app.include_router(make_declarative_router(_get_caller_id_or_anonymous))
     from game_platform.game_traces import make_router as make_game_test_router

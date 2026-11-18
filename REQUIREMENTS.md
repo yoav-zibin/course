@@ -27,7 +27,7 @@ see [GAME_DEVELOPMENT_GUIDE.md](GAME_DEVELOPMENT_GUIDE.md).
 - **Hidden information is a first-class concept.** The server state is
   never sent to a client; each player receives only their own view of it,
   and spectators receive a spectator view. Match history likewise returns
-  per-caller views, never raw states — not even to the game's owner.
+  per-caller views, never raw states. Games belong to the platform.
 - **Simultaneous turns are allowed in multiplayer** (the turn is a set of
   players). Single-player play (pass-and-play, against the computer)
   requires one player at a time in the turn.

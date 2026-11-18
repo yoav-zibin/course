@@ -35,7 +35,7 @@ def test_account_ownership_does_not_authorize_global_game_changes(method, suffix
     path = f"/games/{game_id}{suffix}"
     for user in (owner, other):
         result = api.client.request(method, path, headers=credentials(api, user), json=body)
-        assert result.status_code == (422 if method == "PATCH" else 403)
+        assert result.status_code == (422 if method == "PATCH" else 401)
     wrong = {**body, "game_addition_request_id_and_secret": "wrong-secret"} if method == "PATCH" else body
     result = api.client.request(method, path, headers={"X-Game-Secret": "wrong-secret"}, json=wrong)
     assert result.status_code == 403

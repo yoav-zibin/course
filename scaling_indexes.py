@@ -20,8 +20,6 @@ def index_config(namespace):
         "experiment_events": [(["user_id", "experiment_id", "kind"], None)],
         "games": [
             (["deleted", "published"], None),
-            (["owner_user_id", "deleted"], None),
-            (["owner_user_id", "deleted", "published"], None),
             (["deleted", "published"], "search_tokens"),
         ],
         "matches": [
@@ -49,9 +47,8 @@ def index_config(namespace):
         "libraries": {"user_id": "order"},
         "experiment_assignments": {"user_id": "order"},
         "experiment_events": {"user_id": "order"},
-        "games": {"deleted": "order", "published": "order", "owner_user_id": "order"},
+        "games": {"deleted": "order", "published": "order"},
         "game_popularity": {"score": "desc"},
-        "game_versions": {"owner_user_id": "order"},
         "matches": {
             "joinable": "order",
             "participants": "array",

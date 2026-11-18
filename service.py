@@ -1691,11 +1691,6 @@ class GamePlatform:
             self._store.delete_experiment_assignment(
                 user_id=from_user_id, experiment_id=assignment.experiment_id
             )
-        for game in self._store.list_all_game_versions():
-            if game.owner_user_id == from_user_id:
-                self._store.put_game_version(
-                    replace(game, owner_user_id=into_user_id)
-                )
         for match in self._store.list_all_matches():
             updated = match
             if match.owner_user_id == from_user_id:
@@ -1876,7 +1871,6 @@ class GamePlatform:
     def create_game(
         self,
         *,
-        caller_id: str,
         name: str,
         description: str,
         rules: GameRules,
@@ -1904,7 +1898,6 @@ class GamePlatform:
             game = Game(
                 id=self._new_id(),
                 version=1,
-                owner_user_id=caller_id,
                 name=name,
                 description=description,
                 rules=rules,
@@ -1921,7 +1914,6 @@ class GamePlatform:
     def import_agent_game(
         self,
         *,
-        caller_id: str,
         name: str,
         description: str,
         rules: GameRules,
@@ -1938,9 +1930,9 @@ class GamePlatform:
         """Creates a published game, or updates the one imported with [request_id]
         (see agent_import). The find and the create/update happen under one lock, so
         two concurrent resubmissions with the same id — a retry while the first is
-        still running, say — cannot create a duplicate. An update runs as the game's
-        owner: possession of the request id is the authorization, so the caller need
-        not be the owner. A resubmission that changes nothing returns the game as is.
+        still running, say — cannot create a duplicate. Games belong to the
+        platform: possession of the request id is the authorization; games have no
+        user owner. A resubmission that changes nothing returns the game as is.
         A resubmission of an unpublished game re-publishes it: the import publishes.
 
         [existing_game_id] names the update target directly instead of finding
@@ -1976,7 +1968,6 @@ class GamePlatform:
                 import_package = with_package_secret_hash(import_package, digest)
             if existing is not None:
                 game = self.update_game(
-                    caller_id=existing.owner_user_id,
                     game_id=existing.id,
                     name=name,
                     description=description,
@@ -1994,7 +1985,6 @@ class GamePlatform:
                     game = replace(game, published=True)
             else:
                 game = self.create_game(
-                    caller_id=caller_id,
                     name=name,
                     description=description,
                     rules=rules,
@@ -2018,7 +2008,7 @@ class GamePlatform:
         digest = hashlib.sha256(request_id.encode("utf-8")).hexdigest()
         reader = getattr(self._store, 'list_games_without_code', self._store.list_games)
         with self._lock:
-            for game in reader(owner_user_id=None, include_unpublished=True):
+            for game in reader(include_unpublished=True):
                 stored = package_secret_hash(game.import_package)
                 if stored is not None and secrets.compare_digest(stored, digest):
                     return self._store.get_game(game.id)
@@ -2038,7 +2028,7 @@ class GamePlatform:
         """Retained HTML versions for migration, including a migrated game's history."""
         with self._lock:
             current = self._get_game(game_id)
-            if not current.published and caller_id != current.owner_user_id:
+            if not current.published:
                 raise NotFoundError("game not found")
             versions = [
                 game for version in range(1, current.version + 1)
@@ -2060,7 +2050,7 @@ class GamePlatform:
             game = reader(game_id)
             if game is None or not game.is_declarative:
                 raise NotFoundError('game not found')
-            if not game.published and caller_id != game.owner_user_id:
+            if not game.published:
                 raise NotFoundError("game not found")
             return game
 
@@ -2084,7 +2074,7 @@ class GamePlatform:
             game = reader(game_id, version)
             if game is None or not game.is_declarative:
                 raise NotFoundError("game version not found")
-            if not game.published and caller_id != game.owner_user_id:
+            if not game.published:
                 if caller_id is None or not (self._store.has_game_membership(caller_id, game_id, version)
                     if getattr(self._store, "scalable", False) else any(
                     match.game_id == game_id and match.game_version == version
@@ -2288,7 +2278,7 @@ class GamePlatform:
         # Games without their code where the store can: the code is only needed for the
         # string table, which is remembered per version.
         lister = getattr(self._store, "list_games_without_code", None) or self._store.list_games
-        games = [game for game in self._plain_read(lambda: lister(owner_user_id=None))
+        games = [game for game in self._plain_read(lambda: lister())
                  if game.is_declarative]
         self._bundle_games = (now + self._bundle_games_ttl_seconds, games)
         return games
@@ -2408,7 +2398,7 @@ class GamePlatform:
         """(status, {game id: {"name", "description"}}) for the published games, in [locale]:
         what a portal shows on its game cards. Like [game_strings], it never fails because
         of the translator."""
-        games = self.list_games(owner_user_id=None, include_code=False)
+        games = self.list_games(include_code=False)
         code = i18n.normalize_locale(locale) or i18n.DEFAULT_LOCALE
         prepared = {game.id: self._prepared_translation(game, code) for game in games}
         fallback = [game for game in games if prepared[game.id] is None]
@@ -2428,11 +2418,11 @@ class GamePlatform:
             for game in games
         }
 
-    def unpublish_game(self, *, caller_id: str, game_id: str) -> Game:
+    def unpublish_game(self, *, game_id: str) -> Game:
         # No drafts anymore: unpublishing is a pure flag flip. Re-publishing
         # happens through the authenticated PATCH update path.
         with self._lock:
-            game = self._get_owned_game(caller_id=caller_id, game_id=game_id)
+            game = self._get_writable_game(game_id)
             if not game.is_declarative:
                 raise InvalidRequestError("HTML games are read-only; submit a declarative_ui package")
             if game.deleted:
@@ -2441,15 +2431,15 @@ class GamePlatform:
             return self._get_game(game_id)
 
     def list_games(
-        self, *, owner_user_id: str | None, query: str = '', include_code: bool = True,
+        self, *, query: str = '', include_code: bool = True,
     ) -> list[Game]:
-        """Published games, optionally one owner's. A [query] keeps the games whose
+        """Published platform games. A [query] keeps the games whose
         name or description contains every one of its words, ignoring case."""
         words = query.casefold().split()
         reader = self._store.list_games
         if not include_code:
             reader = getattr(self._store, 'list_games_without_code', reader)
-        games = self._plain_read(lambda: reader(owner_user_id=owner_user_id))
+        games = self._plain_read(lambda: reader())
         return [game for game in games
                 if game.is_declarative and all(word in f'{game.name} {game.description}'.casefold() for word in words)]
 
@@ -2508,7 +2498,6 @@ class GamePlatform:
     def update_game(
         self,
         *,
-        caller_id: str,
         game_id: str,
         name: str | None = None,
         description: str | None = None,
@@ -2528,7 +2517,7 @@ class GamePlatform:
         removed — every game runs its logic on the server.
         """
         with self._lock:
-            game = self._get_owned_game(caller_id=caller_id, game_id=game_id)
+            game = self._get_writable_game(game_id)
             if not game.published and not _publishing:
                 raise ConflictError("game is unpublished; use PATCH /games/{game_id} to publish it")
             server_code_value = (
@@ -2619,9 +2608,9 @@ class GamePlatform:
             self._store.add_game_version(updated)
             return updated
 
-    def delete_game(self, *, caller_id: str, game_id: str) -> None:
+    def delete_game(self, *, game_id: str) -> None:
         with self._lock:
-            game = self._get_owned_game(caller_id=caller_id, game_id=game_id)
+            game = self._get_writable_game(game_id)
             if not game.is_declarative:
                 raise InvalidRequestError("HTML games are read-only; submit a declarative_ui package")
             self._store.delete_game(game_id)
@@ -2722,7 +2711,7 @@ class GamePlatform:
         with self._lock:
             match = self._get_match(match_id)
             game = self._get_game(match.game_id)
-            if not game.published and caller_id != game.owner_user_id and (
+            if not game.published and (
                 caller_id is None or not match.involves(caller_id)
             ):
                 raise NotFoundError("match not found")
@@ -3290,7 +3279,6 @@ class GamePlatform:
             "game_id": game.id,
             "game_version": game.version,
             "game_name": game.name,
-            "owner_user_id": game.owner_user_id,
             "function": function,
         }
         if match is not None:
@@ -3728,7 +3716,7 @@ class GamePlatform:
         """The state a caller may see of a match: the game's own viewFor
         for that caller, so private information (another player's cards)
         never leaves the server. A seated player sees their own view;
-        anyone without a seat — a spectator, the game owner included —
+        anyone without a seat, including a spectator,
         sees the game's spectator view (viewFor with no player), which
         every game must define for exactly this purpose. The full state
         itself is never shown to anyone. A failing viewFor is recorded
@@ -4438,7 +4426,7 @@ class GamePlatform:
         """Adds a game to the caller's library (idempotent); returns the library."""
         with self._lock:
             game = self._get_live_game(game_id)
-            if not game.published and game.owner_user_id != caller_id:
+            if not game.published:
                 raise NotFoundError("game not found")
             user = self._require_user(caller_id)
             if game_id not in user.saved_game_ids:
@@ -4492,7 +4480,7 @@ class GamePlatform:
         """Records a local practice game in the user's server-side history."""
         with self._lock:
             game = self._get_live_game(game_id)
-            if not game.published and game.owner_user_id != caller_id:
+            if not game.published:
                 raise NotFoundError("game not found")
             self._require_user(caller_id)
             self._record_recent_game_for_user(caller_id, game.id)
@@ -4509,7 +4497,7 @@ class GamePlatform:
             if game is not None
             and game.is_declarative
             and not game.deleted
-            and (game.published or game.owner_user_id == user.id)
+            and game.published
         ]
 
     # Web push notifications
@@ -4698,7 +4686,6 @@ class GamePlatform:
 
         latest = {game.id: game for game in versions}  # later versions overwrite
         live = [game for game in latest.values() if not game.deleted]
-        builders = {game.owner_user_id for game in latest.values()}
         players = {uid for match in matches for uid in match.human_user_ids}
         owners = {match.owner_user_id for match in matches}
         by_status = {"waiting_for_players": 0, "ongoing": 0, "over": 0}
@@ -4706,12 +4693,6 @@ class GamePlatform:
         for match in matches:
             by_status[match.status] += 1
             matches_per_game[match.game_id] = matches_per_game.get(match.game_id, 0) + 1
-        games_per_builder: dict[str, int] = {}
-        for game in live:
-            games_per_builder[game.owner_user_id] = (
-                games_per_builder.get(game.owner_user_id, 0) + 1
-            )
-        names = {user.id: user.display_name for user in users}
         total_moves = sum(len(match.moves) for match in matches)
         finished = [m for m in matches if m.status == "over"]
         return {
@@ -4734,7 +4715,6 @@ class GamePlatform:
                         collections.Counter(u.locale for u in users).items()
                     )
                 },
-                "who_built_a_game": len(builders),
                 "who_played_a_match": len(players | owners),
                 "new_per_day": last_days([u.created_at for u in users]),
             },
@@ -4743,7 +4723,6 @@ class GamePlatform:
                 "live": len(live),
                 "deleted": len(latest) - len(live),
                 "versions": len(versions),
-                "builders": len(builders),
                 "new_per_day": last_days(
                     [g.created_at for g in versions if g.version == 1]
                 ),
@@ -4751,7 +4730,6 @@ class GamePlatform:
                     {
                         "game_id": game.id,
                         "name": game.name,
-                        "owner": names.get(game.owner_user_id, game.owner_user_id),
                         "versions": game.version,
                         "matches": matches_per_game.get(game.id, 0),
                         "deleted": game.deleted,
@@ -4760,12 +4738,6 @@ class GamePlatform:
                         latest.values(),
                         key=lambda g: -matches_per_game.get(g.id, 0),
                     )
-                ],
-                "top_builders": [
-                    {"user": names.get(uid, uid), "games": n}
-                    for uid, n in sorted(
-                        games_per_builder.items(), key=lambda kv: -kv[1]
-                    )[:10]
                 ],
             },
             "matches": {
@@ -4947,12 +4919,8 @@ class GamePlatform:
                 raise InvalidRequestError("you can't send feedback about yourself")
             return user.id, user.display_name, {}
         if target_type == "game":
-            if not isinstance(record, Game) or record.deleted or (
-                not record.published and record.owner_user_id != caller.id
-            ):
+            if not isinstance(record, Game) or record.deleted or not record.published:
                 raise missing
-            if record.owner_user_id == caller.id:
-                raise InvalidRequestError("you can't send feedback about your own game")
             return record.id, record.name, {"game_version": record.version}
         if target_type == "match":
             if not isinstance(record, Match) or (record.private and not record.involves(caller.id)):
@@ -5100,12 +5068,10 @@ class GamePlatform:
         }
 
     def admin_delete_user(self, user_id: str) -> None:
-        """Deletes a user, the matches they own and the games they own (soft-deleted,
-        like a creator's delete). Elsewhere, they leave the matches they're seated in."""
+        """Deletes a user and their owned matches, preserving all platform games.
+        Elsewhere, they leave the matches they're seated in."""
         with self._lock:
             self._require_user(user_id)
-            for game in self._store.list_games(owner_user_id=user_id, include_unpublished=True):
-                self._store.delete_game(game.id)
             for match in self._store.list_matches_involving(user_id):
                 if match.owner_user_id == user_id:
                     self._delete_match_and_invites(match.id)
@@ -5182,10 +5148,9 @@ class GamePlatform:
             raise NotFoundError("game not found")
         return game
 
-    def _get_owned_game(self, *, caller_id: str, game_id: str) -> Game:
+    def _get_writable_game(self, game_id: str) -> Game:
+        """Load a game for a capability-authorized write, including HTML migration."""
         game = self._get_game(game_id)
-        if game.owner_user_id != caller_id:
-            raise ForbiddenError("only the game's creator can change it")
         if game.deleted:
             raise ConflictError("the game has been deleted")
         return game

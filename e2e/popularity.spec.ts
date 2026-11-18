@@ -5,7 +5,7 @@ test('selected game shows its score and refreshes after a start from another cli
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   const owner = await createUser(request, uniqueName('Popularity'));
-  const game = await createGame(request, owner, uniqueName('Ranked game'));
+  const game = await createGame(request, uniqueName('Ranked game'));
   await loginAs(page, owner);
   await page.goto(`/static/portal.html?game=${game}`);
   const score = page.locator('#selected-game-popularity');

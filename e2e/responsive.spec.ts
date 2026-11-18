@@ -50,7 +50,7 @@ test.describe('Layout at different screen sizes', () => {
   test('match page: the game frame stays usable when the screen is rotated', async ({ page, request }) => {
     const owner = await createUser(request, uniqueName('Rotate'));
     const gameName = uniqueName('RotateGame');
-    await createGame(request, owner, gameName);
+    await createGame(request, gameName);
     await loginAs(page, owner);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/static/portal.html');

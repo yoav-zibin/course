@@ -65,7 +65,7 @@ class Store(Protocol):
 
     def put_game_version(self, game: Game) -> None:
         """Replaces an existing game version in place, keeping its version number
-        (for ownership changes; new content goes through [add_game_version])."""
+        (new content goes through [add_game_version])."""
         ...
 
     def get_game(self, game_id: str) -> Game | None:
@@ -76,7 +76,7 @@ class Store(Protocol):
         """A specific version of a game, including deleted games."""
         ...
 
-    def list_games(self, *, owner_user_id: str | None, include_unpublished: bool = False) -> list[Game]:
+    def list_games(self, *, include_unpublished: bool = False) -> list[Game]:
         """Latest versions of games that weren't deleted, oldest game first."""
         ...
 
@@ -537,7 +537,7 @@ class InMemoryStore:
         return replace(game, deleted=game.id in self._deleted_game_ids,
                        published=game.id not in self._unpublished_game_ids)
 
-    def list_games(self, *, owner_user_id: str | None, include_unpublished: bool = False) -> list[Game]:
+    def list_games(self, *, include_unpublished: bool = False) -> list[Game]:
         games = []
         for game_id, versions in self._game_versions.items():
             latest = self._latest_version(game_id)
@@ -545,7 +545,7 @@ class InMemoryStore:
                 continue
             if game_id not in self._deleted_game_ids and (
                 include_unpublished or game_id not in self._unpublished_game_ids
-            ) and (owner_user_id is None or latest.owner_user_id == owner_user_id):
+            ):
                 games.append(self._with_deleted_flag(latest))
         return games
 

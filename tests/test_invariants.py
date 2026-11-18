@@ -6,7 +6,7 @@ from game_platform.invariants import InvariantRequest, check_invariants
 
 def snapshot():
     return dict(users=[dict(id="a"), dict(id="b")], games=[dict(id="g", version=1,
-        owner_user_id="a", rules=dict(allowed_player_counts=[2]))], matches=[dict(
+        rules=dict(allowed_player_counts=[2]))], matches=[dict(
         id="m", game_id="g", game_version=1, owner_user_id="a", status="ongoing",
         seats=[dict(player_index=0, kind="human", user_id="a"), dict(player_index=1, kind="human", user_id="b")],
         initial_turn_player_indices=[0], turn_of_player_indices=[1],
@@ -123,3 +123,11 @@ def test_report_never_echoes_private_fields(api):
     assert not response.json()['valid']
     assert 'private-test-secret' not in response.text
     assert 'private@example.invalid' not in response.text
+
+
+def test_platform_games_need_no_user_reference_and_ignore_legacy_owners():
+    data = snapshot()
+    data["games"][0]["owner_user_id"] = "deleted-legacy-user"
+    parsed = InvariantRequest.model_validate(data)
+    assert "owner_user_id" not in parsed.games[0].model_dump()
+    assert check_invariants(parsed).valid

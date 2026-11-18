@@ -386,7 +386,7 @@ def test_linking_a_login_owned_by_someone_else_merges_the_accounts(
     # Bob's account was not deleted: every use of it resolves to the survivor.
     assert api.ok("GET", f"/users/{bob}")["id"] == google_id
     assert api.ok("GET", "/auth/me", as_user=bob)["user_id"] == google_id
-    assert api.ok("GET", f"/games/{game_id}")["owner_user_id"] == google_id
+    assert "owner_user_id" not in api.ok("GET", f"/games/{game_id}")
     assert api.ok("GET", f"/matches/{match_id}")["owner_user_id"] == google_id
     assert ("google", "sub-1") in [
         (account["kind"], account["identifier"])
@@ -414,8 +414,8 @@ def test_merge_moves_everything_and_marks_the_source_replaced(
     # Bob's account was not deleted: it resolves to Ann and his stuff moved over.
     assert api.ok("GET", f"/users/{bob}")["id"] == ann
     assert api.ok("GET", "/auth/me", as_user=bob)["user_id"] == ann
-    assert api.ok("GET", f"/games/{game_id}")["owner_user_id"] == ann
-    assert api.ok("GET", f"/games/{bob_game_id}")["owner_user_id"] == ann
+    assert "owner_user_id" not in api.ok("GET", f"/games/{game_id}")
+    assert "owner_user_id" not in api.ok("GET", f"/games/{bob_game_id}")
     match = api.ok("GET", f"/matches/{match_id}")
     assert match["owner_user_id"] == ann
     assert match["players"][0]["user_id"] == ann
@@ -543,7 +543,7 @@ def test_merge_works_through_the_file_backed_store(tmp_path: Path) -> None:
         ann = platform.create_user(display_name="ann")
         bob = platform.create_user(display_name="bob")
         game = platform.create_game(
-            caller_id=ann.id,
+
             name="g",
             description="",
             rules=GameRules(
@@ -561,7 +561,7 @@ def test_merge_works_through_the_file_backed_store(tmp_path: Path) -> None:
         into_password=bob.password
         )
         assert merged.id == bob.id
-        assert store.get_game(game.id).owner_user_id == bob.id  # type: ignore[union-attr]
+        assert store.get_game(game.id) == game  # Platform games do not move on account merges.
         raw_ann = store.get_user(ann.id)
         assert raw_ann is not None
         assert raw_ann.replaced_by_user_id == bob.id
@@ -672,8 +672,8 @@ def test_replaced_user_holds_no_data_but_keeps_working_credentials() -> None:
     assert raw.linked_accounts == ()
     assert raw.password == ann_password
     assert raw.display_name == ann_name
-    assert not any(
-        game.owner_user_id == ann.id
+    assert all(
+        not hasattr(game, "owner_user_id")
         for game in platform._store.list_all_game_versions()
     )
     assert not any(
