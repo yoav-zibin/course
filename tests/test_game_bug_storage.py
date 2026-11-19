@@ -212,14 +212,18 @@ def test_incomplete_evidence_is_never_returned_as_a_valid_reproduction():
         store.close()
 
 
-def test_only_bug_queue_filter_is_indexed_and_evidence_chunks_are_unindexed():
+def test_only_bug_queue_and_purge_filters_are_indexed_and_evidence_chunks_are_unindexed():
     from game_platform.scaling_indexes import index_config
 
     overrides = index_config("bugs")["fieldOverrides"]
     queue_fields = [entry for entry in overrides
                     if entry["collectionGroup"] == "bugs_game_server_bugs"]
-    assert {entry["fieldPath"] for entry in queue_fields} == {"*", "examined"}
+    assert {entry["fieldPath"] for entry in queue_fields} == {"*", "examined", "match_id"}
     assert next(entry for entry in queue_fields if entry["fieldPath"] == "*")["indexes"] == []
+    for field in ("examined", "match_id"):
+        assert next(entry for entry in queue_fields if entry["fieldPath"] == field)["indexes"] == [
+            {"queryScope": "COLLECTION", "order": "ASCENDING"},
+        ]
     assert {"collectionGroup": "evidence", "fieldPath": "*", "indexes": []} in overrides
 
 

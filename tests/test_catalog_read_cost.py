@@ -37,9 +37,15 @@ def test_popularity_metadata_read_hides_unpublished_games_from_all_accounts():
         assert api.ok('GET', f'/games/{game_id}/popularity')['score'] == 0
     assert not any('/body/' in path for path in store.client.read_paths)
     api.ok('POST', f'/games/{game_id}/unpublish', as_user=owner)
+    store.client.read_paths.clear()
     with patch.object(store.client, 'transaction', side_effect=AssertionError('private popularity transaction')):
         assert api.request('GET', f'/games/{game_id}/popularity').status_code == 404
+    # Supplied credentials must be checked freshly, even for metadata reads,
+    # so a separate purge worker cannot leave cached credentials authenticated.
+    with patch.object(store.client, 'transaction', wraps=store.client.transaction) as transaction:
         assert api.request('GET', f'/games/{game_id}/popularity', as_user=owner).status_code == 404
+    transaction.assert_called_once_with()
+    assert not any('/body/' in path for path in store.client.read_paths)
 
 
 def test_modern_game_metadata_does_not_decode_the_full_import_package_twice():

@@ -127,6 +127,7 @@ def test_debug_endpoints_are_not_in_the_api_schema(api: Api) -> None:
         "/push/subscriptions/{subscription_id}",
         "/push/test",
         "/users",
+        "/users/me/deletion-request",
         "/users/me/invites",
         "/users/me/notifications",
         "/users/me/notifications/{notification_id}/read",
@@ -139,6 +140,7 @@ def test_debug_endpoints_are_not_in_the_api_schema(api: Api) -> None:
         "/users/{user_id}/merge",
         "/validation/invariants",
     ]
+    assert set(paths["/users/me/deletion-request"]) == {"post", "delete"}
 
 
 @pytest.mark.parametrize(

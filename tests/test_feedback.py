@@ -397,7 +397,7 @@ def query_mode():
     return admin(platform), client, store, sent
 
 
-def test_query_mode_changes_a_status_with_one_read_and_under_a_second() -> None:
+def test_query_mode_changes_a_status_with_bounded_reads_and_under_a_second() -> None:
     import time
 
     http, client, store, sent = query_mode()
@@ -410,14 +410,19 @@ def test_query_mode_changes_a_status_with_one_read_and_under_a_second() -> None:
         took = time.perf_counter() - started
         assert response.status_code == 200, response.text
         assert response.json()["status"] == status and response.json()["status_changed_by"] == "Marcelle"
-        # Round trips: one query by id (no document gets), well within the 1-2 limit.
-        assert client.queries + len(client.read_paths) <= 2, (client.queries, client.read_paths)
-        assert client.queries == 1 and client.read_paths == []
+        # One indexed feedback lookup plus fresh reporter fence/account reads
+        # prevent a late status write from resurrecting purged feedback.
+        assert client.queries == 1
+        assert client.read_paths == [
+            store.ref("account_deletion_fences", sent[1].reporter_user_id).path,
+            store.ref("users", sent[1].reporter_user_id).path,
+        ]
+        assert client.reads == 3
         assert took < 1, took
     client.queries = 0
     client.read_paths.clear()
     assert http.post("/admin/feedback/nope/status", json={"status": "reviewed"}, auth=auth).status_code == 404
-    assert client.queries + len(client.read_paths) <= 2
+    assert client.queries == 1 and client.read_paths == []
 
 
 def test_query_mode_status_filter_and_listing_order() -> None:

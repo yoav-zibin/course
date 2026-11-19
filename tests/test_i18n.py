@@ -57,6 +57,7 @@ def _error_messages_in_the_code() -> list[tuple[str, int, str]]:
     for f-string values."""
     client_errors = {
         "UnauthorizedError",
+        "AccountDeletionInProgressError",
         "ForbiddenError",
         "NotFoundError",
         "InvalidRequestError",
@@ -74,7 +75,7 @@ def _error_messages_in_the_code() -> list[tuple[str, int, str]]:
         return None
 
     found = []
-    for name in ("service.py", "api.py"):
+    for name in ("service.py", "api.py", "account_deletion.py"):
         tree = ast.parse((PACKAGE_DIR / name).read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if not (isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call)):
