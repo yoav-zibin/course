@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Rect
 import android.os.Build
 import android.util.Base64
+import android.util.Log
 import android.view.View
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
@@ -40,16 +41,24 @@ class LegacyPortalModule : Module() {
       } catch (_: Exception) {
         // A modal can disappear before its layout callback reaches this queue.
         null
-      } ?: return@AsyncFunction false
+      } ?: run {
+        Log.d("BuildPlayBugGesture", "view missing tag=$viewTag")
+        return@AsyncFunction false
+      }
       // This API is deliberately restricted to the small floating control,
       // never an Activity or Modal window's entire navigation edge.
       val maximum = (64 * view.resources.displayMetrics.density).toInt()
-      if (view.width <= 0 || view.height <= 0 || view.width > maximum || view.height > maximum) {
+      if (!view.isAttachedToWindow || view.width <= 0 || view.height <= 0 || view.width > maximum || view.height > maximum) {
+        Log.d("BuildPlayBugGesture", "not ready tag=$viewTag size=${view.width}x${view.height} attached=${view.isAttachedToWindow}")
         return@AsyncFunction false
       }
-      // Refresh after layout even when a drag changed position but not size.
-      view.systemGestureExclusionRects = emptyList()
-      view.systemGestureExclusionRects = listOf(Rect(0, 0, view.width, view.height))
+      // Android tracks this View's movement. Avoid re-registering/logging the
+      // same local rectangle on every frame while the control is dragged.
+      val exclusions = listOf(Rect(0, 0, view.width, view.height))
+      if (view.systemGestureExclusionRects != exclusions) {
+        view.systemGestureExclusionRects = exclusions
+        Log.d("BuildPlayBugGesture", "protected tag=$viewTag size=${view.width}x${view.height}")
+      }
       true
     }.runOnQueue(Queues.MAIN)
 

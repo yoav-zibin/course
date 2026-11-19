@@ -103,9 +103,11 @@ jobs:
           path: buildplay-build.log
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: BuildPlay-android-apk
           path: BuildPlay.apk
+          if-no-files-found: warn
           retention-days: 90
   android-publish:
     name: Update rolling APK download

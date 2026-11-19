@@ -434,6 +434,20 @@ def main():
         smoke.capture("game-failure")
         print(f"Native gameplay failed: {error}. Inspect {arguments.output}/game-failure.xml and .png", file=sys.stderr)
         return 1
+    finally:
+        # These CI launches use synthetic, offline data. Keep the view setup
+        # and OS exclusion evidence even when a physical gesture exits the app.
+        for filename, command in (
+            ("bug-gesture.log", ("logcat", "-d", "-s", "BuildPlayBugGesture:V", "*:S")),
+            ("bug-gesture-region.txt", ("shell", "dumpsys", "window")),
+        ):
+            try:
+                output = smoke.command(*command)
+                if filename.endswith(".txt"):
+                    output = "\n".join(line for line in output.splitlines() if "gestureexclusion" in line.lower())
+                (arguments.output / filename).write_text(output)
+            except Exception:
+                pass  # Evidence collection must preserve the actual test result.
     return 0
 
 

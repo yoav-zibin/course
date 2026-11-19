@@ -6,16 +6,32 @@ import {bugButtonLabel,openBugReport} from './bugControl';
 import {BUG_HEIGHT,BUG_WIDTH,bugBounds,isBugDrag,normalizedBugPoint,resolveBugPoint,setBugPosition,useBugPosition} from './bugPosition';
 import {recordDiagnosticEvent,recordDiagnosticLog} from '../core/diagnostics';
 import {protectBugControlGesture} from '../platform/legacy';
+import {createBugGestureProtection} from './bugGestureProtection';
 export function BugButton(){
   const insets=useSafeAreaInsets(),{width,height}=useWindowDimensions(),saved=useBugPosition();
   const bounds=bugBounds(width,height,insets),point=resolveBugPoint(saved,bounds);
   const current=useRef({bounds,point});current.current={bounds,point};
   const nativeView=useRef<React.ComponentRef<typeof View>>(null);
-  const protectGesture=()=>{
-    if(Platform.OS!=='android')return;
-    const tag=findNodeHandle(nativeView.current);
-    if(typeof tag==='number')void protectBugControlGesture(tag).catch(error=>recordDiagnosticLog('warn','bug_gesture_exclusion',error));
-  };
+  const protectionReported=useRef<boolean|undefined>(undefined);
+  const protection=useRef<ReturnType<typeof createBugGestureProtection>|null>(null);
+  useEffect(()=>{
+    if(Platform.OS!=='android'||Number(Platform.Version)<29)return;
+    const registration=createBugGestureProtection({
+      getTag:()=>findNodeHandle(nativeView.current)??null,protect:protectBugControlGesture,
+      afterFrame:callback=>{const id=requestAnimationFrame(callback);return()=>cancelAnimationFrame(id);},
+      later:callback=>{const id=setTimeout(callback,50);return()=>clearTimeout(id);},
+      onResult:result=>{
+        if(protectionReported.current===result.protected)return;
+        protectionReported.current=result.protected;
+        if(result.protected)recordDiagnosticEvent('bug_control_gesture_protected',{attempts:result.attempts});
+        else recordDiagnosticLog('warn','bug_gesture_exclusion',result);
+      },
+    });
+    protection.current=registration;
+    registration.register();
+    return()=>{registration.dispose();protection.current=null;};
+  },[]);
+  const protectGesture=()=>protection.current?.register();
   const start=useRef(point),dragged=useRef(false),releaseTimer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
   const responder=useMemo(()=>PanResponder.create({
     onStartShouldSetPanResponder:()=>false,
