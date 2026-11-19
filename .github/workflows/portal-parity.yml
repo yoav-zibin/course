@@ -1,0 +1,67 @@
+name: Portal runtime parity audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Existing successful 600 simulator build run
+        type: string
+        required: true
+        default: '44502113490'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  ios-runtime:
+    name: Genuine iOS pages and computer-game interactions
+    runs-on: macos-26-intel
+    timeout-minutes: 55
+    env:
+      MAESTRO_CLI_NO_ANALYTICS: '1'
+      SIMCTL_CHILD_BUILDPLAY_LOCAL_UI_TEST: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.6'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Verify existing simulator artifact provenance
+        id: provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RUN: ${{ inputs.build_run }}
+        run: python3 scripts/portal-parity-ios.py provenance "$BUILD_RUN" parity-ios/provenance.json
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: yoav-zibin/course
+          run-id: ${{ inputs.build_run }}
+          artifact-ids: ${{ steps.provenance.outputs.artifact_id }}
+          merge-multiple: true
+          path: parity-ios/input
+      - name: Install the pinned local XCTest UI driver
+        run: |
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/maestro.zip" https://github.com/mobile-dev-inc/Maestro/releases/download/cli-2.12.1/maestro.zip
+          printf '%s  %s\n' '54dbb0716425626604973cbb374c585ca30272375d9ce15177a1152765ddd9d7' "$RUNNER_TEMP/maestro.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP/portal-maestro"
+          chmod +x "$RUNNER_TEMP/portal-maestro/maestro/bin/maestro"
+          "$RUNNER_TEMP/portal-maestro/maestro/bin/maestro" --version
+      - name: Audit real pages and moves on a fresh isolated simulator
+        run: |
+          ditto -x -k parity-ios/input/BuildPlay-simulator.zip parity-ios/app
+          python3 scripts/portal-parity-ios.py audit parity-ios/app/BuildPlay.app parity-ios/results \
+            --maestro "$RUNNER_TEMP/portal-maestro/maestro/bin/maestro"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: BuildPlay-600-ios-runtime-parity
+          path: |
+            parity-ios/provenance.json
+            parity-ios/results/
+          if-no-files-found: warn
+          retention-days: 7

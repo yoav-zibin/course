@@ -1,0 +1,647 @@
+[
+  {
+    "slug": "connect4",
+    "source": "https://buildplay.fun/games/e299b14e-480d-44f3-8132-74282a46cebc/versions/3",
+    "game": {
+      "id": "e299b14e-480d-44f3-8132-74282a46cebc",
+      "version": 3,
+      "name": "Connect Four",
+      "description": "Choose a column to drop a disc. Connect four horizontally, vertically or diagonally. A full board is a draw.",
+      "allowed_player_counts": [
+        2
+      ],
+      "supports_local_practice": true,
+      "renderer_type": "declarative",
+      "server_code": "const KIND=\"connect4\";\n// Shared rules for the ten declarative examples. The generated package prefixes\n// this file with a constant KIND. No rendering, network or device APIs are used.\nfunction fresh() {\n  const sizes = {tictactoe:9, connect4:42, reversi:64, gomoku:81, hex:49, domineering:36, memory:16};\n  const s = {board:Array(sizes[KIND] || 0).fill(-1), turn:0, scores:[0,0],\n    disc_ids:Array(42).fill(-1), selected:[], matched:[], roll:0, total:0, winner:-1, turns:0, over:false};\n  if (KIND === 'reversi') {s.board[27]=1;s.board[28]=0;s.board[35]=0;s.board[36]=1;}\n  if (KIND === 'nim') s.board = [15];\n  if (KIND === 'mancala') s.board = [4,4,4,4,4,4,0,4,4,4,4,4,4,0];\n  return s;\n}\nfunction flips(s, cell, seat) {\n  if (s.board[cell] !== -1) return [];\n  const out=[], r=Math.floor(cell/8), c=cell%8;\n  for (let dr=-1;dr<=1;dr++) for (let dc=-1;dc<=1;dc++) {\n    if (!dr && !dc) continue;\n    let rr=r+dr,cc=c+dc,path=[];\n    while (rr>=0&&rr<8&&cc>=0&&cc<8&&s.board[rr*8+cc]===1-seat) {\n      path.push(rr*8+cc);rr+=dr;cc+=dc;\n    }\n    if (path.length&&rr>=0&&rr<8&&cc>=0&&cc<8&&s.board[rr*8+cc]===seat) out.push(...path);\n  }\n  return out;\n}\nfunction legal(s) {\n  if (s.over) return [];\n  if (KIND === 'pig') return [{action:'roll'},...(s.total ? [{action:'hold'}] : [])];\n  if (KIND === 'nim') return [1,2,3].filter(n=>n<=s.board[0]).map(take=>({take}));\n  if (KIND === 'mancala') return s.board.flatMap((n,pit)=>n&&pit>=(s.turn?7:0)&&pit<(s.turn?13:6)?[{pit}]:[]);\n  if (KIND === 'connect4') return Array.from({length:7},(_,column)=>({column})).filter(m=>s.board[m.column]===-1);\n  if (KIND === 'reversi') return s.board.flatMap((_,cell)=>flips(s,cell,s.turn).length?[{cell}]:[]);\n  if (KIND === 'domineering') return s.board.flatMap((v,cell)=>v===-1&&\n    (s.turn ? cell%6<5&&s.board[cell+1]===-1 : cell<30&&s.board[cell+6]===-1)?[{cell}]:[]);\n  if (KIND === 'memory') return s.board.flatMap((_,cell)=>!s.matched.includes(cell)&&\n    !(s.selected.length===1&&s.selected.includes(cell))?[{cell}]:[]);\n  return s.board.flatMap((v,cell)=>v===-1?[{cell}]:[]);\n}\nfunction lineWon(s, cell, n, need) {\n  const r=Math.floor(cell/n),c=cell%n,seat=s.turn;\n  return [[0,1],[1,0],[1,1],[1,-1]].some(([dr,dc])=>{\n    let count=1;\n    for (const sign of [-1,1]) {\n      let rr=r+dr*sign,cc=c+dc*sign;\n      while(rr>=0&&rr<Math.ceil(s.board.length/n)&&cc>=0&&cc<n&&s.board[rr*n+cc]===seat) {\n        count++;rr+=dr*sign;cc+=dc*sign;\n      }\n    }\n    return count>=need;\n  });\n}\nfunction hexWon(s) {\n  const n=7,seen=new Set(),todo=[];\n  for(let i=0;i<n;i++){const cell=s.turn?i*n:i;if(s.board[cell]===s.turn){seen.add(cell);todo.push(cell);}}\n  while(todo.length) {\n    const cell=todo.pop(),r=Math.floor(cell/n),c=cell%n;\n    if(s.turn?c===n-1:r===n-1)return true;\n    for(const [dr,dc] of [[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0]]) {\n      const rr=r+dr,cc=c+dc,k=rr*n+cc;\n      if(rr>=0&&rr<n&&cc>=0&&cc<n&&s.board[k]===s.turn&&!seen.has(k)){seen.add(k);todo.push(k);}\n    }\n  }\n  return false;\n}\nfunction finish(s,winner){s.over=true;s.winner=winner;}\nfunction majority(s,a,b){finish(s,a===b?-1:a>b?0:1);}\nfunction payout(s,ctx) {\n  const humans=ctx.players.filter(p=>p.kind==='human'&&p.active!==false),winner=ctx.players[s.winner];\n  const recipients=winner&&winner.kind==='human'&&winner.active!==false?[winner]:humans;\n  const out={};if(!recipients.length)return out;\n  recipients.forEach((p,i)=>out[p.id]=Math.floor(ctx.pot/recipients.length)+(i<ctx.pot%recipients.length?1:0));\n  return out;\n}\nfunction apply(s,move,ctx) {\n  const seat=s.turn;s.turns++;\n  if(KIND==='nim') {s.board[0]-=move.take;if(!s.board[0])finish(s,seat);}\n  else if(KIND==='pig') {\n    if(move.action==='roll') {s.roll=1+Math.floor(ctx.random()*6);if(s.roll===1){s.total=0;s.turn=1-seat;}else s.total+=s.roll;}\n    else{s.scores[seat]+=s.total;s.total=0;s.turn=1-seat;if(s.scores[seat]>=30)finish(s,seat);}\n    // A finite match even when both random opponents keep rolling.\n    if(!s.over&&s.turns>=300)majority(s,s.scores[0],s.scores[1]);\n    return;\n  } else if(KIND==='memory') {\n    if(s.selected.length===2)s.selected=[];\n    s.selected.push(move.cell);\n    if(s.selected.length===2) {\n      if(s.board[s.selected[0]]===s.board[s.selected[1]]){s.matched.push(...s.selected);s.scores[seat]++;s.selected=[];}\n      else s.turn=1-seat;\n      if(s.matched.length===16)majority(s,s.scores[0],s.scores[1]);\n    }\n    return;\n  } else if(KIND==='mancala') {\n    let i=move.pit,stones=s.board[i];s.board[i]=0;\n    while(stones){i=(i+1)%14;if(i===(seat?6:13))continue;s.board[i]++;stones--;}\n    const store=seat?13:6,own=i>=(seat?7:0)&&i<(seat?13:6);\n    if(own&&s.board[i]===1&&s.board[12-i]){s.board[store]+=1+s.board[12-i];s.board[i]=s.board[12-i]=0;}\n    if(s.board.slice(0,6).every(n=>!n)||s.board.slice(7,13).every(n=>!n)||s.turns>=300) {\n      for(let j=0;j<6;j++){s.board[6]+=s.board[j];s.board[j]=0;s.board[13]+=s.board[j+7];s.board[j+7]=0;}\n      majority(s,s.board[6],s.board[13]);\n    } else s.turn=i===store?seat:1-seat;\n    return;\n  } else if(KIND==='reversi') {\n    for(const cell of flips(s,move.cell,seat))s.board[cell]=seat;\n    s.board[move.cell]=seat;s.turn=1-seat;\n    if(!legal(s).length){s.turn=seat;if(!legal(s).length)majority(s,s.board.filter(v=>v===0).length,s.board.filter(v=>v===1).length);}\n    return;\n  } else if(KIND==='domineering') {\n    s.board[move.cell]=seat;s.board[move.cell+(seat?1:6)]=seat;\n    s.turn=1-seat;if(!legal(s).length)finish(s,seat);return;\n  } else {\n    let cell=move.cell;\n    if(KIND==='connect4'){cell=move.column;while(cell+7<42&&s.board[cell+7]===-1)cell+=7;}\n    s.board[cell]=seat;if(KIND==='connect4')s.disc_ids[cell]=s.turns-1;\n    const won=KIND==='hex'?hexWon(s):lineWon(s,cell,KIND==='tictactoe'?3:KIND==='connect4'?7:9,KIND==='tictactoe'?3:KIND==='connect4'?4:5);\n    if(won)finish(s,seat);else if(s.board.every(v=>v!==-1))finish(s,-1);\n  }\n  s.turn=1-seat;\n}\nconst game={\n  newMatch(ctx){const s=fresh();if(KIND==='memory'){s.board=Array.from({length:16},(_,i)=>i%8);for(let i=15;i>0;i--){const j=Math.floor(ctx.random()*(i+1));[s.board[i],s.board[j]]=[s.board[j],s.board[i]];}}return {state:s,turn:[ctx.players[0].id]};},\n  applyMove(state,id,move,ctx){\n    if(state.over||ctx.players[state.turn].id!==id||!move||typeof move!=='object'||Array.isArray(move))throw new InvalidMove('Illegal move');\n    const options=legal(state),keys=Object.keys(move);\n    if(!options.some(m=>Object.keys(m).length===keys.length&&keys.every(k=>Object.prototype.hasOwnProperty.call(m,k)&&m[k]===move[k])))throw new InvalidMove('Illegal move');\n    const s=JSON.parse(JSON.stringify(state));apply(s,move,ctx);\n    return s.over?{state:s,turn:null,payouts:payout(s,ctx)}:{state:s,turn:[ctx.players[s.turn].id]};\n  },\n  viewFor(state,id,ctx){\n    const s=JSON.parse(JSON.stringify(state));\n    if(KIND==='memory')s.board=s.board.map((v,i)=>s.matched.includes(i)||s.selected.includes(i)?v:-1);\n    // Only the active viewer receives interactive affordances. Spectators see\n    // the same public board, with no legal targets or private card values.\n    s.legal=id===ctx.players[state.turn].id&&!state.over?legal(state):[];return s;\n  },\n  randomMove(s,id,ctx){const options=legal(s);return options[Math.floor(ctx.random()*options.length)];},\n  computerMove(s,id,ctx){\n    const options=legal(s);\n    if(KIND==='pig')return {action:s.total>=10?'hold':'roll'};\n    return options[Math.floor(ctx.random()*options.length)];\n  }\n};\n",
+      "game_schemas": {
+        "state": {
+          "additionalProperties": false,
+          "properties": {
+            "board": {
+              "items": {
+                "maximum": 1,
+                "minimum": -1,
+                "type": "integer"
+              },
+              "maxItems": 42,
+              "minItems": 42,
+              "type": "array"
+            },
+            "disc_ids": {
+              "items": {
+                "maximum": 41,
+                "minimum": -1,
+                "type": "integer"
+              },
+              "maxItems": 42,
+              "minItems": 42,
+              "type": "array"
+            },
+            "matched": {
+              "items": {
+                "maximum": 15,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "maxItems": 16,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "over": {
+              "type": "boolean"
+            },
+            "roll": {
+              "maximum": 6,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "scores": {
+              "items": {
+                "maximum": 2000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "selected": {
+              "items": {
+                "maximum": 15,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "maxItems": 2,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "total": {
+              "maximum": 2000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "turn": {
+              "enum": [
+                0,
+                1
+              ]
+            },
+            "turns": {
+              "maximum": 10000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "winner": {
+              "enum": [
+                -1,
+                0,
+                1
+              ]
+            }
+          },
+          "required": [
+            "board",
+            "turn",
+            "scores",
+            "selected",
+            "matched",
+            "roll",
+            "total",
+            "winner",
+            "turns",
+            "over",
+            "disc_ids"
+          ],
+          "type": "object"
+        },
+        "move": {
+          "additionalProperties": false,
+          "properties": {
+            "column": {
+              "maximum": 6,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "column"
+          ],
+          "type": "object"
+        },
+        "view": {
+          "additionalProperties": false,
+          "properties": {
+            "board": {
+              "items": {
+                "maximum": 1,
+                "minimum": -1,
+                "type": "integer"
+              },
+              "maxItems": 42,
+              "minItems": 42,
+              "type": "array"
+            },
+            "disc_ids": {
+              "items": {
+                "maximum": 41,
+                "minimum": -1,
+                "type": "integer"
+              },
+              "maxItems": 42,
+              "minItems": 42,
+              "type": "array"
+            },
+            "legal": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "column": {
+                    "maximum": 6,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "column"
+                ],
+                "type": "object"
+              },
+              "maxItems": 81,
+              "type": "array"
+            },
+            "matched": {
+              "items": {
+                "maximum": 15,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "maxItems": 16,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "over": {
+              "type": "boolean"
+            },
+            "roll": {
+              "maximum": 6,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "scores": {
+              "items": {
+                "maximum": 2000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "selected": {
+              "items": {
+                "maximum": 15,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "maxItems": 2,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "total": {
+              "maximum": 2000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "turn": {
+              "enum": [
+                0,
+                1
+              ]
+            },
+            "turns": {
+              "maximum": 10000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "winner": {
+              "enum": [
+                -1,
+                0,
+                1
+              ]
+            }
+          },
+          "required": [
+            "board",
+            "turn",
+            "scores",
+            "selected",
+            "matched",
+            "roll",
+            "total",
+            "winner",
+            "turns",
+            "over",
+            "legal",
+            "disc_ids"
+          ],
+          "type": "object"
+        }
+      },
+      "declarative_ui": {
+        "assets": {
+          "column0": {
+            "media_type": "image/svg+xml",
+            "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0MCI+PHBhdGggZD0iTTQgMkg0NEwyNCAzNloiIGZpbGw9IiNmZmRjNDUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLXdpZHRoPSIyIi8+PC9zdmc+"
+          },
+          "column1": {
+            "media_type": "image/svg+xml",
+            "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0MCI+PHBhdGggZD0iTTQgMkg0NEwyNCAzNloiIGZpbGw9IiNmMDQ4NWIiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLXdpZHRoPSIyIi8+PC9zdmc+"
+          },
+          "disc0": {
+            "media_type": "image/svg+xml",
+            "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+PGNpcmNsZSBjeD0iMjQiIGN5PSIyNCIgcj0iMjMiIGZpbGw9IiNmZmRjNDUiIHN0cm9rZT0iIzhmNjUxMSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjQiIGN5PSIyNCIgcj0iMTgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii41NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTExIDE3UTI0IDUgMzcgMTciIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii41IiBzdHJva2Utd2lkdGg9IjMiLz48L3N2Zz4="
+          },
+          "disc1": {
+            "media_type": "image/svg+xml",
+            "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+PGNpcmNsZSBjeD0iMjQiIGN5PSIyNCIgcj0iMjMiIGZpbGw9IiNmMDQ4NWIiIHN0cm9rZT0iIzhlMTYzMCIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjQiIGN5PSIyNCIgcj0iMTgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii41NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTExIDE3UTI0IDUgMzcgMTciIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii41IiBzdHJva2Utd2lkdGg9IjMiLz48L3N2Zz4="
+          },
+          "rack": {
+            "media_type": "image/svg+xml",
+            "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzNzQgMzI4Ij48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9InJhY2siIHgyPSIwIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iIzI3NzVlZiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzEwNDRiMSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHg9IjMiIHk9IjMiIHdpZHRoPSIzNjgiIGhlaWdodD0iMzA2IiByeD0iMTIiIGZpbGw9InVybCgjcmFjaykiIHN0cm9rZT0iIzA3MWU1MCIgc3Ryb2tlLXdpZHRoPSI1Ii8+PHBhdGggZD0iTTEyIDMwOUwyIDMyNUg2NEw3NiAzMDlNMjk4IDMwOUwzMTAgMzI1SDM3MkwzNjIgMzA5IiBmaWxsPSIjMTc1OGNjIiBzdHJva2U9IiMwNjFjNDkiIHN0cm9rZS13aWR0aD0iMyIvPjxjaXJjbGUgY3g9IjM3IiBjeT0iMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjM3IiBjeT0iMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9Ijg3IiBjeT0iMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9Ijg3IiBjeT0iMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjEzNyIgY3k9IjM0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxMzciIGN5PSIzNCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMTg3IiBjeT0iMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjE4NyIgY3k9IjM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyMzciIGN5PSIzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjM3IiBjeT0iMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjI4NyIgY3k9IjM0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyODciIGN5PSIzNCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMzM3IiBjeT0iMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjMzNyIgY3k9IjM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzNyIgY3k9Ijg0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzNyIgY3k9Ijg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSI4NyIgY3k9Ijg0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSI4NyIgY3k9Ijg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxMzciIGN5PSI4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMTM3IiBjeT0iODQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjE4NyIgY3k9Ijg0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxODciIGN5PSI4NCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjM3IiBjeT0iODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjIzNyIgY3k9Ijg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyODciIGN5PSI4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjg3IiBjeT0iODQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjMzNyIgY3k9Ijg0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzMzciIGN5PSI4NCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMzciIGN5PSIxMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjM3IiBjeT0iMTM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSI4NyIgY3k9IjEzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iODciIGN5PSIxMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjEzNyIgY3k9IjEzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMTM3IiBjeT0iMTM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxODciIGN5PSIxMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjE4NyIgY3k9IjEzNCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjM3IiBjeT0iMTM0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyMzciIGN5PSIxMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjI4NyIgY3k9IjEzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjg3IiBjeT0iMTM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzMzciIGN5PSIxMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjMzNyIgY3k9IjEzNCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMzciIGN5PSIxODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjM3IiBjeT0iMTg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSI4NyIgY3k9IjE4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iODciIGN5PSIxODQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjEzNyIgY3k9IjE4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMTM3IiBjeT0iMTg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxODciIGN5PSIxODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjE4NyIgY3k9IjE4NCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjM3IiBjeT0iMTg0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyMzciIGN5PSIxODQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjI4NyIgY3k9IjE4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjg3IiBjeT0iMTg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzMzciIGN5PSIxODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjMzNyIgY3k9IjE4NCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMzciIGN5PSIyMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjM3IiBjeT0iMjM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSI4NyIgY3k9IjIzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iODciIGN5PSIyMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjEzNyIgY3k9IjIzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMTM3IiBjeT0iMjM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxODciIGN5PSIyMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjE4NyIgY3k9IjIzNCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjM3IiBjeT0iMjM0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyMzciIGN5PSIyMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjI4NyIgY3k9IjIzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjg3IiBjeT0iMjM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzMzciIGN5PSIyMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjMzNyIgY3k9IjIzNCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMzciIGN5PSIyODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjM3IiBjeT0iMjg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSI4NyIgY3k9IjI4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iODciIGN5PSIyODQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjEzNyIgY3k9IjI4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMTM3IiBjeT0iMjg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxODciIGN5PSIyODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjE4NyIgY3k9IjI4NCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjM3IiBjeT0iMjg0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyMzciIGN5PSIyODQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjI4NyIgY3k9IjI4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjg3IiBjeT0iMjg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzMzciIGN5PSIyODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjMzNyIgY3k9IjI4NCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTE3IDhIMzU3IiBzdHJva2U9IiM5NmM5ZmYiIHN0cm9rZS13aWR0aD0iMyIvPjwvc3ZnPg=="
+          }
+        },
+        "boards": [
+          {
+            "background_asset": "rack",
+            "color": "#102c49",
+            "height": 328,
+            "id": "rack",
+            "kind": "zone",
+            "line_color": "#102c49",
+            "width": 374,
+            "x": 12,
+            "y": 90
+          },
+          {
+            "alternate_color": "#00000000",
+            "color": "#00000000",
+            "columns": 7,
+            "height": 328,
+            "id": "main",
+            "kind": "grid",
+            "line_color": "#00000000",
+            "rows": 1,
+            "width": 350,
+            "x": 24,
+            "y": 90
+          },
+          {
+            "color": "#102039",
+            "height": 70,
+            "id": "reserve",
+            "kind": "zone",
+            "line_color": "#365274",
+            "width": 374,
+            "x": 12,
+            "y": 12
+          }
+        ],
+        "format": "buildplay-ui",
+        "motion": {
+          "animate_own": true,
+          "easing": "ease-out",
+          "move_ms": 1440
+        },
+        "piece_types": {
+          "arrow0": {
+            "asset": "column0",
+            "height": 40,
+            "shape": "image",
+            "width": 44
+          },
+          "arrow1": {
+            "asset": "column1",
+            "height": 40,
+            "shape": "image",
+            "width": 44
+          },
+          "p0": {
+            "action_outline": "ellipse",
+            "asset": "disc0",
+            "font_size": 22,
+            "height": 44,
+            "shape": "image",
+            "text_color": "#102039",
+            "width": 44
+          },
+          "p1": {
+            "action_outline": "ellipse",
+            "asset": "disc1",
+            "font_size": 22,
+            "height": 44,
+            "shape": "image",
+            "text_color": "#102039",
+            "width": 44
+          }
+        },
+        "strings": {
+          "disc_at": "Player {n} disc, row {r}, column {c}",
+          "draw": "Draw: no four in a row",
+          "drop_column": "Drop player {n} disc in column {c}",
+          "early": "Match ended early",
+          "goal": "Connect four in a row. Drag the disc to a column, or tap a column.",
+          "history": "History: read only",
+          "reserve": "Player {n} reserve disc",
+          "server_invalid": "Illegal move",
+          "title": "Connect Four",
+          "turn": "Turn: {n}",
+          "waiting": "Waiting: {n}",
+          "wins": "Player {n} wins"
+        },
+        "ui_code": "// Original native presentation inspired by the reference's physical rack and column interaction.\nconst SOURCE_STRINGS={\"server_invalid\":\"Illegal move\",\"title\":\"Connect Four\",\"turn\":\"Turn: {n}\",\"waiting\":\"Waiting: {n}\",\"wins\":\"Player {n} wins\",\"draw\":\"Draw: no four in a row\",\"early\":\"Match ended early\",\"history\":\"History: read only\",\"goal\":\"Connect four in a row. Drag the disc to a column, or tap a column.\",\"reserve\":\"Player {n} reserve disc\",\"disc_at\":\"Player {n} disc, row {r}, column {c}\",\"drop_column\":\"Drop player {n} disc in column {c}\"};\nconst gameUI={reduce(message,localState){\n const m=message.type==='ui_event'?message.state_changed:message,s=m.view||m.state;\n const dict=Object.assign({},SOURCE_STRINGS,m.strings||{}),t=(k,a={})=>dict[k].replace(/\\{(\\w+)\\}/g,(_,x)=>String(a[x]??''));\n const active=m.status==='ongoing'&&!s.over&&!m.replay&&Number.isInteger(m.my_player_index)&&m.my_player_index===m.acting_for_player_index&&(m.turn_of_player_indices||[]).includes(m.my_player_index);\n const legal=active?(s.legal||[]):[],pieces=[],targets=[],labels=[],paths=[],labelX=m.direction==='rtl'?370:88;\n let status=m.status==='over'&&!s.over?t('early'):s.over?s.winner===-1?t('draw'):t('wins',{n:s.winner+1}):m.replay?t('history'):t(active?'turn':'waiting',{n:s.turn+1});\n // Keep source identity and instructional content available without shortening player names.\n labels.push({id:'title',text:t('title'),x:labelX,y:20,font_size:20,color:'#ffffff'});\n // Status wraps across two lines in all source dictionaries; independent aria names carry full descriptions.\n const clusters=text=>{const a=[];for(const ch of Array.from(text)){const prior=a[a.length-1]||'';if(a.length&&(/\\p{Mark}/u.test(ch)||ch==='\\u200d'||prior.endsWith('\\u200d')||prior.endsWith('\\u094d')))a[a.length-1]+=ch;else a.push(ch);}return a;};\n let chars=clusters(status),line=0;while(chars.length){labels.push({id:'status_'+line,text:chars.splice(0,22).join(''),x:labelX,y:45+line*20,font_size:16,color:'#ffffff'});line++;}\n labels.push({id:'goal',text:t('goal'),x:12,y:425,font_size:18,color:'#ffffff'});\n s.board.forEach((seat,cell)=>{if(seat!==-1)pieces.push({id:'disc_'+s.disc_ids[cell],type:'p'+seat,board:'main',position:{x:25+50*(cell%7),y:34+50*Math.floor(cell/7)},text:String(seat+1),aria_label:t('disc_at',{n:seat+1,r:Math.floor(cell/7)+1,c:cell%7+1}),actions:[]});});\n if(!s.over&&m.status==='ongoing')pieces.push({id:'disc_'+s.turns,type:'p'+s.turn,board:'reserve',position:{x:37,y:38},text:String(s.turn+1),aria_label:t('reserve',{n:s.turn+1}),actions:legal.length?['move']:[],...(legal.length?{move_targets:legal.map(x=>'column_'+x.column)}:{})});\n for(const option of legal){const aria=t('drop_column',{n:s.turn+1,c:option.column+1});targets.push({id:'column_'+option.column,board:'main',position:{x:25+50*option.column,y:144},color:s.turn===0?'#ffdc4508':'#f0485b08',aria_label:aria,hit_area:{x:-25,y:-164,width:50,height:328}});pieces.push({id:'hint_'+option.column,type:'arrow'+s.turn,board:'main',position:{x:25+50*option.column,y:6},aria_label:aria,actions:[]});}\n // Highlight every winning disc; lines are derived only from the public terminal board.\n if(s.over&&s.winner>=0)for(let cell=0;cell<42;cell++)for(const[dr,dc]of[[0,1],[1,0],[1,1],[1,-1]]){const r=Math.floor(cell/7),c=cell%7,rr=r+3*dr,cc=c+3*dc;if(rr<6&&cc>=0&&cc<7&&[0,1,2,3].every(i=>s.board[(r+i*dr)*7+c+i*dc]===s.winner))paths.push({id:'win_'+cell+'_'+dr+'_'+(dc+1),points:[{x:12+37+50*c,y:90+34+50*r},{x:12+37+50*cc,y:90+34+50*rr}],width:5,color:'#ffffff'});}\n const out={scene:{pieces,targets,labels,paths,controls:[]},local_state:{}};\n if(message.type==='ui_event'&&active){const e=message.event;let id=null;if(e.type==='tap'&&e.id.startsWith('column_'))id=e.id;if(e.type==='drop'&&e.piece_id==='disc_'+s.turns&&e.id===e.piece_id)id=e.target_id;const option=legal.find(x=>'column_'+x.column===id);if(option){out.make_move={column:option.column};const reserve=pieces.find(x=>x.id==='disc_'+s.turns);if(reserve){reserve.board='main';reserve.position={x:25+50*option.column,y:6};}}}\n return out;\n}};\n",
+        "version": 1,
+        "viewport": {
+          "height": 432,
+          "width": 400
+        }
+      },
+      "game_logic_rules": "Two players alternate on a board of six rows and seven columns. Player 1 uses yellow discs marked 1; player 2 uses red discs marked 2. Player 1 starts.\n\nOn your turn, choose any column that is not full. One disc drops to the lowest empty space in that column. You cannot move or remove discs already placed.\n\nThe first player with at least four of their own discs in an unbroken horizontal, vertical or diagonal line wins immediately. A full board with no winning line is a draw.",
+      "game_ui_rules": "Drag the reserve disc to a highlighted column, or tap a highlighted column directly. Placed discs are read only. Use the platform camera to zoom and pan; history and spectators cannot play.",
+      "tutorial_text": "Two players alternate on a board of six rows and seven columns. Player 1 uses yellow discs marked 1; player 2 uses red discs marked 2. Player 1 starts.\n\nOn your turn, choose any column that is not full. One disc drops to the lowest empty space in that column. You cannot move or remove discs already placed.\n\nThe first player with at least four of their own discs in an unbroken horizontal, vertical or diagonal line wins immediately. A full board with no winning line is a draw."
+    }
+  },
+  {
+    "slug": "checkers",
+    "source": "https://buildplay.fun/games/04aad4ba-8cf6-4dd5-8d65-9dead4dab5ee/versions/1",
+    "game": {
+      "id": "04aad4ba-8cf6-4dd5-8d65-9dead4dab5ee",
+      "version": 1,
+      "name": "Checkers (Declarative)",
+      "description": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
+      "allowed_player_counts": [
+        2
+      ],
+      "supports_local_practice": true,
+      "renderer_type": "declarative",
+      "server_code": "const game = {\n  newMatch(ctx) {\n    const board = Array.from({length:8},()=>Array(8).fill(null));\n    for(let r=0;r<3;r++) for(let c=0;c<8;c++) if((r+c)%2===1) board[r][c]={c:1,k:false};\n    for(let r=5;r<8;r++) for(let c=0;c<8;c++) if((r+c)%2===1) board[r][c]={c:0,k:false};\n    const state={board,toMove:0,chain:null,winner:null,draw:false,noCap:0,lastMove:null};\n    return {state, turn:[ctx.players[0].id]};\n  },\n  inB(r,c){return r>=0&&r<8&&c>=0&&c<8;},\n  dirs(p){ if(p.k) return [[-1,-1],[-1,1],[1,-1],[1,1]]; return p.c===0?[[-1,-1],[-1,1]]:[[1,-1],[1,1]]; },\n  jumps(board,r,c){\n    const p=board[r][c]; if(!p) return [];\n    const out=[];\n    const ds=game.dirs(p);\n    for(let i=0;i<ds.length;i++){const dr=ds[i][0],dc=ds[i][1];\n      const mr=r+dr,mc=c+dc,tr=r+2*dr,tc=c+2*dc;\n      if(!game.inB(tr,tc)||!game.inB(mr,mc)) continue;\n      if(board[tr][tc]!==null) continue;\n      const m=board[mr][mc];\n      if(m&&m.c!==p.c) out.push({from:{r:r,c:c},to:{r:tr,c:tc},cap:{r:mr,c:mc}});\n    }\n    return out;\n  },\n  steps(board,r,c){\n    const p=board[r][c]; if(!p) return [];\n    const out=[];\n    const ds=game.dirs(p);\n    for(let i=0;i<ds.length;i++){const tr=r+ds[i][0],tc=c+ds[i][1];\n      if(!game.inB(tr,tc)) continue;\n      if(board[tr][tc]===null) out.push({from:{r:r,c:c},to:{r:tr,c:tc},cap:null});\n    }\n    return out;\n  },\n  legal(state){\n    const b=state.board, pl=state.toMove;\n    if(state.chain){\n      const r=state.chain.r,c=state.chain.c;\n      if(b[r]&&b[r][c]&&b[r][c].c===pl) return game.jumps(b,r,c);\n      return [];\n    }\n    let jumps=[];\n    for(let r=0;r<8;r++) for(let c=0;c<8;c++) if(b[r][c]&&b[r][c].c===pl) jumps.push.apply(jumps,game.jumps(b,r,c));\n    if(jumps.length) return jumps;\n    let steps=[];\n    for(let r=0;r<8;r++) for(let c=0;c<8;c++) if(b[r][c]&&b[r][c].c===pl) steps.push.apply(steps,game.steps(b,r,c));\n    return steps;\n  },\n  count(b){ let a=[0,0]; for(let r=0;r<8;r++) for(let c=0;c<8;c++) if(b[r][c]) a[b[r][c].c]++; return a; },\n  turnId(state,ctx){ return ctx.players[state.toMove].id; },\n  payoutsFor(state,ctx){\n    const humans=ctx.players.filter(function(p){return p.kind==='human';});\n    const pot=ctx.pot;\n    const pay={};\n    if(humans.length===0) return pay;\n    function split(){\n      const each=Math.floor(pot/humans.length);\n      let rem=pot-each*humans.length;\n      for(let i=0;i<humans.length;i++){ pay[humans[i].id]=each; if(rem>0){pay[humans[i].id]++;rem--;} }\n    }\n    if(state.draw){ split(); return pay; }\n    if(state.winner!==null&&state.winner!==undefined){\n      const w=ctx.players[state.winner];\n      const wId=w?w.id:null;\n      let wIsHuman=false;\n      for(let i=0;i<humans.length;i++) if(humans[i].id===wId) wIsHuman=true;\n      if(wIsHuman){ for(let i=0;i<humans.length;i++) pay[humans[i].id]=0; pay[wId]=pot; return pay; }\n      split(); return pay;\n    }\n    split(); return pay;\n  },\n  applyMove(state,playerId,move,ctx){\n    if(state.winner!==null&&state.winner!==undefined||state.draw) throw new InvalidMove('Game is over');\n    const expect=game.turnId(state,ctx);\n    if(playerId!==expect) throw new InvalidMove('Not your turn');\n    if(!move||!move.from||!move.to) throw new InvalidMove('Bad move');\n    const fr=move.from.r,fc=move.from.c,tr=move.to.r,tc=move.to.c;\n    if(!Number.isInteger(fr)||!Number.isInteger(fc)||!Number.isInteger(tr)||!Number.isInteger(tc)) throw new InvalidMove('Bad move');\n    if(!game.inB(fr,fc)||!game.inB(tr,tc)) throw new InvalidMove('Off board');\n    const legal=game.legal(state);\n    let found=null;\n    for(let i=0;i<legal.length;i++){const m=legal[i]; if(m.from.r===fr&&m.from.c===fc&&m.to.r===tr&&m.to.c===tc){found=m;break;}}\n    if(!found) throw new InvalidMove(legal.length&&legal[0].cap?'You must capture':'Illegal move');\n    const b=state.board.map(function(row){return row.map(function(p){return p?{c:p.c,k:p.k}:null;});});\n    const p=b[fr][fc];\n    b[fr][fc]=null;\n    let promoted=false;\n    if(!p.k){ if(p.c===0&&tr===0){p.k=true;promoted=true;} if(p.c===1&&tr===7){p.k=true;promoted=true;} }\n    b[tr][tc]=p;\n    // A man advancing toward promotion is progress, just like a capture.\n    let noCap=(found.cap||!state.board[fr][fc].k)?0:state.noCap+1;\n    let toMove=state.toMove, chain=null;\n    if(found.cap){\n      b[found.cap.r][found.cap.c]=null;\n      if(!promoted){\n        const more=game.jumps(b,tr,tc);\n        if(more.length){ chain={r:tr,c:tc}; toMove=state.toMove; }\n        else toMove=1-state.toMove;\n      } else toMove=1-state.toMove;\n    } else toMove=1-state.toMove;\n    const ns={board:b,toMove:toMove,chain:chain,winner:null,draw:false,noCap:noCap,lastMove:{from:{r:fr,c:fc},to:{r:tr,c:tc}}};\n    const cnt=game.count(b);\n    if(cnt[0]===0){ ns.winner=1; return {state:ns,turn:null,payouts:game.payoutsFor(ns,ctx)}; }\n    if(cnt[1]===0){ ns.winner=0; return {state:ns,turn:null,payouts:game.payoutsFor(ns,ctx)}; }\n    const oppMoves=game.legal({board:b,toMove:toMove,chain:chain});\n    if(oppMoves.length===0){ ns.winner=state.toMove; return {state:ns,turn:null,payouts:game.payoutsFor(ns,ctx)}; }\n    if(noCap>=80){ ns.draw=true; return {state:ns,turn:null,payouts:game.payoutsFor(ns,ctx)}; }\n    const nextId=ctx.players[ns.toMove].id;\n    return {state:ns,turn:[nextId]};\n  },\n  computerMove(state,playerId,ctx){\n    const legal=game.legal(state);\n    if(!legal.length) return {from:{r:0,c:1},to:{r:0,c:1}};\n    let best=legal[0],bestScore=-1e9;\n    for(let i=0;i<legal.length;i++){\n      const m=legal[i];\n      let s=ctx.random()*2;\n      const p=state.board[m.from.r][m.from.c];\n      if(m.cap){\n        const v=state.board[m.cap.r][m.cap.c];\n        s+=10+(v&&v.k?4:0);\n        if(!p.k){ if(p.c===0&&m.to.r===0)s+=5; if(p.c===1&&m.to.r===7)s+=5; }\n        s+=(3-Math.abs(3.5-m.to.c))*0.3;\n      } else {\n        if(!p.k){ if(p.c===0&&m.to.r===0)s+=6; if(p.c===1&&m.to.r===7)s+=6; }\n        s+=(p.k?0:1)+(3-Math.abs(3.5-m.to.c))*0.2+ctx.random();\n      }\n      if(s>bestScore){bestScore=s;best=m;}\n    }\n    return {from:{r:best.from.r,c:best.from.c},to:{r:best.to.r,c:best.to.c}};\n  },\n  randomMove(state,playerId,ctx){\n    const legal=game.legal(state);\n    if(!legal.length) return {from:{r:0,c:1},to:{r:0,c:1}};\n    const i=Math.floor(ctx.random()*legal.length);\n    const m=legal[i];\n    return {from:{r:m.from.r,c:m.from.c},to:{r:m.to.r,c:m.to.c}};\n  },\n  viewFor(state,playerId,ctx){\n    return {board:state.board.map(function(row){return row.map(function(p){return p?{c:p.c,k:p.k}:null;});}),toMove:state.toMove,chain:state.chain?{r:state.chain.r,c:state.chain.c}:null,winner:state.winner,draw:state.draw,noCap:state.noCap,lastMove:state.lastMove?{from:{r:state.lastMove.from.r,c:state.lastMove.from.c},to:{r:state.lastMove.to.r,c:state.lastMove.to.c}}:null,moves:game.legal(state)};\n  }\n};",
+      "game_schemas": {
+        "state": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": true,
+          "properties": {
+            "board": {
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "chain": {
+              "type": [
+                "null",
+                "object"
+              ]
+            },
+            "draw": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "lastMove": {
+              "type": [
+                "null",
+                "object"
+              ]
+            },
+            "noCap": {
+              "type": [
+                "null",
+                "number"
+              ]
+            },
+            "toMove": {
+              "type": [
+                "null",
+                "number"
+              ]
+            },
+            "winner": {
+              "type": [
+                "null",
+                "number"
+              ]
+            }
+          },
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "move": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": true,
+          "properties": {
+            "from": {
+              "type": [
+                "null",
+                "object"
+              ]
+            },
+            "to": {
+              "type": [
+                "null",
+                "object"
+              ]
+            }
+          },
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "view": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": true,
+          "properties": {
+            "board": {
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "chain": {
+              "type": [
+                "null",
+                "object"
+              ]
+            },
+            "draw": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "lastMove": {
+              "type": [
+                "null",
+                "object"
+              ]
+            },
+            "moves": {
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "noCap": {
+              "type": [
+                "null",
+                "number"
+              ]
+            },
+            "toMove": {
+              "type": [
+                "null",
+                "number"
+              ]
+            },
+            "winner": {
+              "type": [
+                "null",
+                "number"
+              ]
+            }
+          },
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "declarative_ui": {
+        "boards": [
+          {
+            "alternate_color": "#8ea1b8",
+            "color": "#dbe4ef",
+            "columns": 8,
+            "height": 560,
+            "id": "main",
+            "kind": "grid",
+            "line_color": "#64748b",
+            "rows": 8,
+            "width": 560,
+            "x": 20,
+            "y": 96
+          }
+        ],
+        "format": "buildplay-ui",
+        "piece_types": {
+          "king_p0": {
+            "color": "#4aa3ff",
+            "height": 50,
+            "shape": "circle",
+            "text_color": "#ffffff",
+            "width": 50
+          },
+          "king_p1": {
+            "color": "#fb7185",
+            "height": 50,
+            "shape": "circle",
+            "text_color": "#ffffff",
+            "width": 50
+          },
+          "p0": {
+            "color": "#4aa3ff",
+            "height": 50,
+            "shape": "circle",
+            "text_color": "#10243d",
+            "width": 50
+          },
+          "p1": {
+            "color": "#fb7185",
+            "height": 50,
+            "shape": "circle",
+            "text_color": "#39101c",
+            "width": 50
+          }
+        },
+        "strings": {
+          "server_bad_move": "Bad move",
+          "server_game_is_over": "Game is over",
+          "server_illegal_move": "Illegal move",
+          "server_not_your_turn": "Not your turn",
+          "server_off_board": "Off board",
+          "server_you_must_capture": "You must capture",
+          "text_0": "Declarative",
+          "text_1": "Player {n}",
+          "text_10": "Continue the capture with the highlighted checker.",
+          "text_11": "A capture is required.",
+          "text_12": "Move diagonally; kings move either direction.",
+          "text_13": "queen",
+          "text_14": "rook",
+          "text_15": "bishop",
+          "text_16": "knight",
+          "text_17": "Promote at {square} to {piece}",
+          "text_18": "Eliminate this army",
+          "text_19": "Pass (no legal move)",
+          "text_2": "Your turn · {name}",
+          "text_20": "Resign",
+          "text_21": "Move pawn",
+          "text_22": "Place wall",
+          "text_23": "Walls remaining · {counts}",
+          "text_24": "Top card {card} · suit {suit} · {n} cards to draw",
+          "text_25": "Play {card} as {suit}",
+          "text_26": "Play {card}",
+          "text_27": "Draw a card ({n} left)",
+          "text_28": "Ask {name} for {rank}",
+          "text_29": "Draw cards",
+          "text_3": "{name} to play",
+          "text_30": "Pass",
+          "text_31": "{name} · books {ranks}",
+          "text_32": "Collect trick",
+          "text_33": "Your character: {name}",
+          "text_34": "Your character is private",
+          "text_35": "Ask: {question}",
+          "text_36": "Yes",
+          "text_37": "No",
+          "text_38": "{name}: guessed {character} · {result}",
+          "text_39": "correct",
+          "text_4": "Game over",
+          "text_40": "incorrect",
+          "text_41": "Are they wearing glasses?",
+          "text_42": "Are they wearing a hat?",
+          "text_43": "Do they have facial hair?",
+          "text_44": "Are their ears showing?",
+          "text_45": "Do they have blonde hair?",
+          "text_46": "Do they have brown hair?",
+          "text_47": "Do they have black hair?",
+          "text_48": "Do they have red hair?",
+          "text_49": "Do they have gray hair?",
+          "text_5": "Winner: {name}",
+          "text_50": "Do they have long hair?",
+          "text_51": "Do they have short hair?",
+          "text_52": "Do they have blue eyes?",
+          "text_53": "Do they have brown eyes?",
+          "text_54": "Do they have green eyes?",
+          "text_55": "Select piece at row {r}, column {c}",
+          "text_56": "Move to row {r}, column {c}",
+          "text_6": "Your fleet",
+          "text_7": "Target waters",
+          "text_8": "Place fleet and start battle",
+          "text_9": "Places a valid fleet with clear water between ships.",
+          "title": "Checkers (Declarative)"
+        },
+        "ui_code": "const KIND=\"checkers\";\nconst SOURCE_STRINGS={\"title\":\"Checkers (Declarative)\"};\nconst SOURCE_KEYS={\"Declarative\":\"text_0\",\"Player {n}\":\"text_1\",\"Your turn · {name}\":\"text_2\",\"{name} to play\":\"text_3\",\"Game over\":\"text_4\",\"Winner: {name}\":\"text_5\",\"Your fleet\":\"text_6\",\"Target waters\":\"text_7\",\"Place fleet and start battle\":\"text_8\",\"Places a valid fleet with clear water between ships.\":\"text_9\",\"Continue the capture with the highlighted checker.\":\"text_10\",\"A capture is required.\":\"text_11\",\"Move diagonally; kings move either direction.\":\"text_12\",\"queen\":\"text_13\",\"rook\":\"text_14\",\"bishop\":\"text_15\",\"knight\":\"text_16\",\"Promote at {square} to {piece}\":\"text_17\",\"Eliminate this army\":\"text_18\",\"Pass (no legal move)\":\"text_19\",\"Resign\":\"text_20\",\"Move pawn\":\"text_21\",\"Place wall\":\"text_22\",\"Walls remaining · {counts}\":\"text_23\",\"Top card {card} · suit {suit} · {n} cards to draw\":\"text_24\",\"Play {card} as {suit}\":\"text_25\",\"Play {card}\":\"text_26\",\"Draw a card ({n} left)\":\"text_27\",\"Ask {name} for {rank}\":\"text_28\",\"Draw cards\":\"text_29\",\"Pass\":\"text_30\",\"{name} · books {ranks}\":\"text_31\",\"Collect trick\":\"text_32\",\"Your character: {name}\":\"text_33\",\"Your character is private\":\"text_34\",\"Ask: {question}\":\"text_35\",\"Yes\":\"text_36\",\"No\":\"text_37\",\"{name}: guessed {character} · {result}\":\"text_38\",\"correct\":\"text_39\",\"incorrect\":\"text_40\",\"Are they wearing glasses?\":\"text_41\",\"Are they wearing a hat?\":\"text_42\",\"Do they have facial hair?\":\"text_43\",\"Are their ears showing?\":\"text_44\",\"Do they have blonde hair?\":\"text_45\",\"Do they have brown hair?\":\"text_46\",\"Do they have black hair?\":\"text_47\",\"Do they have red hair?\":\"text_48\",\"Do they have gray hair?\":\"text_49\",\"Do they have long hair?\":\"text_50\",\"Do they have short hair?\":\"text_51\",\"Do they have blue eyes?\":\"text_52\",\"Do they have brown eyes?\":\"text_53\",\"Do they have green eyes?\":\"text_54\",\"Select piece at row {r}, column {c}\":\"text_55\",\"Move to row {r}, column {c}\":\"text_56\"};\n// Shared presentation for HTML games converted to the portable declarative UI.\n// Rules and private information remain in each game's existing server module.\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state || {};\n    const active = m.status === 'ongoing' && !m.replay &&\n      m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const legal = active;\n    const scene = {pieces: [], targets: [], controls: [], labels: [], paths: []};\n    const offers = [];\n    let selectedMode = 'pawn';\n    let selectedFrom = null;\n    const text = (source, values = {}) => String(m.strings?.[SOURCE_KEYS[source]] ?? source).replace(/\\{(\\w+)\\}/g, (match, key) => values[key] == null ? match : String(values[key]));\n    const playerNames = (m.players || []).map((p, i) => p.name || text('Player {n}', {n:i + 1}));\n    const mySeat = Number.isInteger(m.my_player_index) ? m.my_player_index : 0;\n    const title = m.strings?.title || SOURCE_STRINGS.title || KIND;\n    const turnSeat = Number.isInteger(s.turnIdx) ? s.turnIdx :\n      Number.isInteger(s.current) ? s.current : Number.isInteger(s.toMove) ? s.toMove : null;\n    scene.labels.push({id: 'title', text: title, x: 22, y: 16, font_size: 26});\n    if (turnSeat !== null) {\n      scene.labels.push({id: 'status', text: active ? text('Your turn · {name}', {name:playerNames[turnSeat] || text('Player {n}', {n:turnSeat + 1})}) :\n        (m.status === 'over' ? text('Game over') : text('{name} to play', {name:playerNames[turnSeat] || text('Player {n}', {n:turnSeat + 1})})),\n        x: 22, y: 52, font_size: 17});\n    }\n    if (m.status === 'over' && Number.isInteger(s.winner)) {\n      scene.labels.push({id: 'winner', text: text('Winner: {name}', {name:playerNames[s.winner] || text('Player {n}', {n:s.winner + 1})}),\n        x: 22, y: 78, font_size: 16});\n    }\n    const intent = (move, label, surface, position, presentation, aria_label) => {\n      if (!active) return null;\n      const id = `intent_${offers.length}`;\n      offers.push(move);\n      if (presentation === 'piece' || presentation?.startsWith('person_')) {\n        scene.pieces.push({id, type: presentation === 'piece' ? 'card' : presentation, board: surface, position, text: label,\n          actions: ['tap'], ...(aria_label ? {aria_label} : {})});\n      } else if (presentation === 'target') {\n        const destination = move.to || (Number.isInteger(move.tr) ? {r:move.tr,c:move.tc} : null);\n        scene.targets.push({id, board: surface, position, label: label || '•', ...(destination ? {aria_label:text('Move to row {r}, column {c}', {r:destination.r+1,c:destination.c+1})} : {})});\n      } else {\n        scene.controls.push({id, kind: 'button', label});\n      }\n      return id;\n    };\n    const staticPiece = (id, type, board, position, extra = {}) =>\n      scene.pieces.push(Object.assign({id, type, board, position, actions: []}, extra));\n    const label = (id, text, x, y, size = 14) =>\n      scene.labels.push({id, text: String(text), x, y, font_size: size});\n    const cardText = card => String(card || '').replace(/S$/, '♠').replace(/H$/, '♥')\n      .replace(/D$/, '♦').replace(/C$/, '♣');\n    const cardPos = index => ({x: 34 + (index % 8) * 66, y: 120 + Math.floor(index / 8) * 92});\n    const eventId = message.type === 'ui_event' && message.event?.type === 'tap' ? String(message.event.id || '') : '';\n    const intentMatch = /^intent_(\\d+)$/.exec(eventId);\n    const selectFrom = (moves, from, position) => {\n      const origins = new Map(moves.map(move => {const cell=from(move);return [`${cell.r}_${cell.c}`,cell];}));\n      const requested = /^select_(\\d+_\\d+)$/.exec(eventId)?.[1];\n      const retained = localState?.move_count === m.move_count && localState?.viewer === mySeat ? localState.selectedFrom : null;\n      selectedFrom = origins.has(requested) ? requested : origins.has(retained) ? retained : null;\n      for (const [key, cell] of origins) scene.targets.push({id:`select_${key}`,board:'main',position:position(cell),label:key===selectedFrom?'◉':'◇',aria_label:text('Select piece at row {r}, column {c}', {r:cell.r+1,c:cell.c+1})});\n      return moves.filter(move => {const cell=from(move);return `${cell.r}_${cell.c}`===selectedFrom;});\n    };\n\n    if (KIND === 'battleship') {\n      const left = {x: 20, y: 120}, right = {x: 435, y: 120};\n      scene.labels.push({id: 'own-title', text: text('Your fleet'), x: left.x, y: 84, font_size: 18});\n      scene.labels.push({id: 'target-title', text: text('Target waters'), x: right.x, y: 84, font_size: 18});\n      const me = mySeat, opponent = 1 - me;\n      const ownShips = (s.boards && s.boards[me] && s.boards[me].ships) || [];\n      const ownCells = new Set();\n      for (const ship of ownShips) for (const c of ship.cells || []) ownCells.add(`${c[0]},${c[1]}`);\n      for (let r = 0; r < 10; r++) for (let c = 0; c < 10; c++) {\n        const pos = {cell: String(r * 10 + c)};\n        const ownAttack = s.attacks && s.attacks[me] ? s.attacks[me][r][c] : 0;\n        const enemyAttack = s.attacks && s.attacks[opponent] ? s.attacks[opponent][r][c] : 0;\n        const ownMark = ownAttack === 2 ? '✹' : ownAttack === 1 ? '·' : ownCells.has(`${c},${r}`) ? '■' : '';\n        const ownType = ownAttack === 2 ? 'mark_hit' : ownAttack === 1 ? 'mark_miss' :\n          ownCells.has(`${c},${r}`) ? 'mark_ship' : 'mark_water';\n        staticPiece(`own_${r}_${c}`, ownType, 'own', pos, {text: ownMark});\n        const targetMark = enemyAttack === 2 ? '✹' : enemyAttack === 1 ? '·' : '';\n        if (active && s.phase === 'BATTLE' && enemyAttack === 0) {\n          intent({type: 'fire', x: c, y: r}, '•', 'target', pos, 'target');\n        } else {\n          staticPiece(`target_${r}_${c}`, enemyAttack === 2 ? 'mark_hit' : enemyAttack === 1 ? 'mark_miss' : 'mark_water',\n            'target', pos, {text: targetMark});\n        }\n      }\n      if (active && s.phase === 'SETUP') {\n        const ships = [\n          {name: 'Carrier', cells: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]]},\n          {name: 'Battleship', cells: [[0, 2], [1, 2], [2, 2], [3, 2]]},\n          {name: 'Cruiser', cells: [[0, 4], [1, 4], [2, 4]]},\n          {name: 'Submarine', cells: [[0, 6], [1, 6], [2, 6]]},\n          {name: 'Destroyer', cells: [[0, 8], [1, 8]]}\n        ];\n        intent({type: 'place', ships}, text('Place fleet and start battle'), null, null, 'control');\n        label('setup-help', text('Places a valid fleet with clear water between ships.'), 22, 594, 14);\n      }\n    } else if (KIND === 'checkers') {\n      const board = s.board || [];\n      const moves = legal ? (s.moves || []) : [];\n      board.forEach((row, r) => row.forEach((piece, c) => {\n        if (!piece) return;\n        const owner = piece.c === 0 ? 'p0' : 'p1';\n        staticPiece(`piece_${r}_${c}`, piece.k ? 'king_' + owner : owner, 'main',\n          {cell: String(r * 8 + c)}, {text: piece.k ? '♛' : ''});\n      }));\n      selectFrom(moves,move=>move.from,cell=>({cell:String(cell.r*8+cell.c)})).forEach(move => intent({from: move.from, to: move.to}, move.cap ? '×' : '•', 'main',\n        {cell: String(move.to.r * 8 + move.to.c)}, 'target'));\n      label('chain', s.chain ? text('Continue the capture with the highlighted checker.') :\n        (moves.some(mv => mv.cap) ? text('A capture is required.') : text('Move diagonally; kings move either direction.')), 22, 670);\n    } else if (KIND === 'chess' || KIND === 'four_player_chess') {\n      const size = KIND === 'chess' ? 8 : 14;\n      const boardId = 'main';\n      const board = KIND === 'chess' ? (s.bd || []) : s.board || {};\n      const symbols = {wK:'♔',wQ:'♕',wR:'♖',wB:'♗',wN:'♘',wP:'♙',bK:'♚',bQ:'♛',bR:'♜',bB:'♝',bN:'♞',bP:'♟'};\n      const fourSymbols = {K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙'};\n      if (KIND === 'chess') {\n        const pieceNames = {1:'P', 2:'N', 3:'B', 4:'R', 5:'Q', 6:'K'};\n        board.forEach((piece, index) => {\n          if (!piece) return;\n          const r = Math.floor(index / 8), c = index % 8;\n          const name = pieceNames[Math.abs(piece)] || 'P';\n          const code = `${piece > 0 ? 'w' : 'b'}${name}`;\n          staticPiece(`piece_${r}_${c}`, piece > 0 ? 'white_piece' : 'black_piece', boardId,\n            {cell: String(index)}, {text: symbols[code] || name});\n        });\n      } else {\n        for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {\n          if (KIND === 'four_player_chess' && !((r >= 3 && r <= 10) || (c >= 3 && c <= 10))) continue;\n          const pos = KIND === 'chess' ? {cell: String(r * size + c)} : {x: 21 + c * 42, y: 21 + r * 42};\n          const squareType = (r + c) % 2 ? 'square_dark' : 'square_light';\n          if (KIND === 'four_player_chess') staticPiece(`square_${r}_${c}`, squareType, boardId, pos);\n        }\n        for (const [square, piece] of Object.entries(board)) {\n          const [r, c] = square.split(',').map(Number);\n          if (!Number.isInteger(r) || !Number.isInteger(c)) continue;\n          const type = Number(piece.o) || 0;\n          staticPiece(`piece_${r}_${c}`, `seat_${type}`, boardId, {x: 21 + c * 42, y: 21 + r * 42},\n            {text: fourSymbols[piece.t] || piece.t});\n        }\n      }\n      const legalMoves = legal ? (s.legalMoves || []) : [];\n      const selectedMoves = selectFrom(legalMoves,move=>({r:move.fr,c:move.fc}),cell=>KIND==='chess'?{cell:String(cell.r*size+cell.c)}:{x:21+cell.c*42,y:21+cell.r*42});\n      for (const mv of selectedMoves) {\n        const move = KIND === 'chess'\n          ? {fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc, ...(mv.promo ? {promo: mv.promo} : {})}\n          : {kind: 'move', fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc};\n        const position = KIND === 'chess' ? {cell: String(mv.tr * size + mv.tc)} :\n          {x: 21 + mv.tc * 42, y: 21 + mv.tr * 42};\n        if (KIND === 'chess' && mv.promo) {\n          const files = 'abcdefgh';\n          const promotionNames = {Q: text('queen'), R: text('rook'), B: text('bishop'), N: text('knight')};\n          intent(move, text('Promote at {square} to {piece}', {square:files[mv.tc]+(size-mv.tr),piece:promotionNames[mv.promo]||mv.promo}),\n            null, null, 'control');\n        } else intent(move, '•', boardId, position, 'target');\n      }\n      if (KIND === 'four_player_chess' && active && !(s.legalMoves || []).length && s.winnerTeam === null) {\n        intent({kind: s.inCheck ? 'elim' : 'pass'}, s.inCheck ? text('Eliminate this army') : text('Pass (no legal move)'),\n          null, null, 'control');\n      }\n      if (KIND === 'chess' && s.winner === null && active) {\n        intent({resign: true}, text('Resign'), null, null, 'control');\n      }\n    } else if (KIND === 'quoridor') {\n      const cells = [];\n      for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {\n        const x = 44 + c * 54, y = 112 + r * 54;\n        cells.push({r, c, x, y});\n        staticPiece(`square_${r}_${c}`, 'square', 'main', {x, y}, {text: ''});\n      }\n      (s.walls || []).forEach((w, i) => {\n        if (w.o === 'H') scene.paths.push({id: `wall_${i}`, points: [\n          {x: 44 + w.c * 54, y: 112 + (w.r + 0.5) * 54},\n          {x: 44 + (w.c + 2) * 54, y: 112 + (w.r + 0.5) * 54}], color: '#fbbf24', width: 10});\n        else scene.paths.push({id: `wall_${i}`, points: [\n          {x: 44 + (w.c + 0.5) * 54, y: 112 + w.r * 54},\n          {x: 44 + (w.c + 0.5) * 54, y: 112 + (w.r + 2) * 54}], color: '#fbbf24', width: 10});\n      });\n      for (let seat = 0; seat < (s.pawns || []).length; seat++) {\n        const p = s.pawns[seat];\n        staticPiece(`pawn_${seat}`, seat === 0 ? 'p0' : 'p1', 'main',\n          {x: 44 + p.c * 54, y: 112 + p.r * 54}, {text: seat === 0 ? '1' : '2'});\n      }\n      const mode = eventId === 'mode_wall' ? 'wall' : eventId === 'mode_pawn' ? 'pawn' :\n        localState && localState.move_count === m.move_count && localState.mode === 'wall' ? 'wall' : 'pawn';\n      selectedMode = mode;\n      if (active) {\n        scene.controls.push({id: 'mode_pawn', kind: 'button', label: (mode === 'pawn' ? '✓ ' : '') + text('Move pawn')});\n        scene.controls.push({id: 'mode_wall', kind: 'button', label: (mode === 'wall' ? '✓ ' : '') + text('Place wall')});\n        if (mode === 'pawn') (s.legalMoves || []).forEach(([r, c]) =>\n          intent({type: 'pawn', r, c}, '•', 'main', {x: 44 + c * 54, y: 112 + r * 54}, 'target'));\n        else (s.legalWalls || []).forEach(w => intent({type: 'wall', r: w.r, c: w.c, o: w.o},\n          w.o === 'H' ? '—' : '│', 'main', w.o === 'H'\n            ? {x: 44 + (w.c + 1) * 54, y: 112 + (w.r + 0.5) * 54}\n            : {x: 44 + (w.c + 0.5) * 54, y: 112 + (w.r + 1) * 54}, 'target'));\n      }\n      label('walls-left', text('Walls remaining · {counts}', {counts:s.wallsLeft ? s.wallsLeft.join(' / ') : ''}), 22, 614);\n      if (message.type === 'ui_event' && active && (eventId === 'mode_pawn' || eventId === 'mode_wall')) {\n        selectedMode = eventId === 'mode_wall' ? 'wall' : 'pawn';\n        return {scene, local_state: {mode:selectedMode,move_count:m.move_count,\n          intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move}))}};\n      }\n    } else if (KIND === 'crazy_eights') {\n      label('table', text('Top card {card} · suit {suit} · {n} cards to draw', {card:cardText(cardFromNumber(s.top)),suit:SUITS[s.suit]||'',n:s.deckCount||0}), 22, 94, 16);\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      const playable = new Set(s.playable || []);\n      hand.forEach((card, i) => {\n        const r = card % 13 + 1, labelText = cardText(cardFromNumber(card));\n        if (playable.has(card)) {\n          if (r === 8) {\n            staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: labelText});\n            for (let chosenSuit = 0; chosenSuit < 4; chosenSuit++)\n              intent({card, chosenSuit}, text('Play {card} as {suit}', {card:labelText,suit:SUITS[chosenSuit]}), null, null, 'control');\n          } else intent({card}, text('Play {card}', {card:labelText}), 'table', cardPos(i), 'piece');\n        } else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: labelText});\n      });\n      if (active) intent('draw', text('Draw a card ({n} left)', {n:s.deckCount||0}), null, null, 'control');\n    } else if (KIND === 'go_fish') {\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      hand.forEach((card, i) => staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: cardText(card)}));\n      const rankSet = [...new Set(hand.map(card => String(card).replace(/[♠♥♦♣]$/, '')))].sort((a, b) => RANKS.indexOf(a) - RANKS.indexOf(b));\n      for (let seat = 0; seat < playerNames.length; seat++) if (active && seat !== mySeat) {\n        for (const rank of rankSet) intent({target: seat, rank}, text('Ask {name} for {rank}', {name:playerNames[seat],rank}), null, null, 'control');\n      }\n      if (active && hand.length === 0) {\n        if (s.deckCount > 0) intent({draw: true}, text('Draw cards'), null, null, 'control');\n        else intent({pass: true}, text('Pass'), null, null, 'control');\n      }\n      (s.books || []).forEach((books, seat) => label(`books_${seat}`, text('{name} · books {ranks}', {name:playerNames[seat]||text('Player {n}', {n:seat+1}),ranks:(books||[]).join(', ')||'—'}),\n        24, 460 + seat * 25, 14));\n    } else if (KIND === 'hearts' || KIND === 'spades') {\n      const isHearts = KIND === 'hearts';\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      const current = isHearts ? s.cur : s.current;\n      const trick = s.trick || [];\n      const legalCards = isHearts ? new Set(s.legal || []) :\n        (s.pendingWin !== null && s.pendingWin !== undefined ? new Set() : new Set(hand));\n      hand.forEach((card, i) => {\n        const moves = legalCards.has(card) ? [{card}] : [];\n        if (moves.length) intent(moves[0], cardText(card), 'table', cardPos(i), 'piece');\n        else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: cardText(card)});\n      });\n      trick.forEach((play, i) => staticPiece(`trick_${i}`, 'played', 'table',\n        {x: 300 + (play.player ?? play.seat) * 72, y: 400}, {text: cardText(play.card)}));\n      if (KIND === 'spades' && s.pendingWin !== null && s.pendingWin !== undefined && active)\n        intent({collect: true}, text('Collect trick'), null, null, 'control');\n      const scores = isHearts ? s.taken : s.tricksWon;\n      if (Array.isArray(scores)) scores.forEach((score, seat) =>\n        label(`score_${seat}`, `${playerNames[seat] || text('Player {n}', {n:seat + 1})} · ${score}`, 22 + seat * 170, 92, 14));\n    } else if (KIND === 'guess_who') {\n      const names = CHARACTER_NAMES;\n      const secret = Number.isInteger(s.mySecret) ? text('Your character: {name}', {name:names[s.mySecret]}) : text('Your character is private');\n      label('your-secret', secret, 22, 88, 18);\n      for (let i = 0; i < names.length; i++) {\n        const description = names[i]+': '+QUESTIONS.map((question,q)=>text(question)+' '+text(SOURCE_CHARACTER_ANSWERS[i][q]?'Yes':'No')).join('; ');\n        if (active) intent({kind:'guess',idx:i}, names[i], 'main', {cell:String(i)}, `person_${i}`, description);\n        else staticPiece(`person_${i}`, `person_${i}`, 'main', {cell:String(i)}, {text:names[i],aria_label:description});\n      }\n      const asked = new Set((s.hist || []).filter(item => item.by === mySeat && Number.isInteger(item.q)).map(item => item.q));\n      if (active) QUESTIONS.forEach((question, q) => {\n        if (!asked.has(q)) intent({kind: 'ask', q}, text('Ask: {question}', {question:text(question)}), null, null, 'control');\n      });\n      (s.hist || []).slice(-8).forEach((item, i) => {\n        const who = playerNames[item.by] || text('Player {n}', {n:item.by + 1});\n        const historyText = Number.isInteger(item.q) ? `${who}: ${text(QUESTIONS[item.q])} · ${item.ans ? text('Yes') : text('No')}` :\n          text('{name}: guessed {character} · {result}', {name:who,character:names[item.guess]||'—',result:item.correct?text('correct'):text('incorrect')});\n        label(`history_${i}`, historyText, 22, 520 + i * 18, 13);\n      });\n    }\n\n    const emitted = intentMatch && legal ? offers[Number(intentMatch[1])] : undefined;\n    if (message.type === 'ui_event' && active && emitted !== undefined) {\n      const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move})),selectedFrom,move_count:m.move_count,viewer:mySeat};\n      if (KIND === 'quoridor') Object.assign(nextLocal,{mode:selectedMode,move_count:m.move_count});\n      return {scene, local_state: nextLocal, make_move: emitted};\n    }\n    const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move})),selectedFrom,move_count:m.move_count,viewer:mySeat};\n    if (KIND === 'quoridor') Object.assign(nextLocal,{mode:selectedMode,move_count:m.move_count});\n    return {scene, local_state: nextLocal};\n  }\n};\n\nconst SUITS = ['♠', '♥', '♦', '♣'];\nconst RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];\nfunction cardFromNumber(value) {\n  const suit = Math.floor(Number(value) / 13), rank = Number(value) % 13 + 1;\n  return `${RANKS[(rank + 12) % 13]}${SUITS[suit] || ''}`;\n}\nconst QUESTIONS = ['Are they wearing glasses?', 'Are they wearing a hat?', 'Do they have facial hair?',\n  'Are their ears showing?', 'Do they have blonde hair?', 'Do they have brown hair?',\n  'Do they have black hair?', 'Do they have red hair?', 'Do they have gray hair?',\n  'Do they have long hair?', 'Do they have short hair?', 'Do they have blue eyes?',\n  'Do they have brown eyes?', 'Do they have green eyes?'];\nconst CHARACTER_NAMES = ['Ava', 'Ben', 'Cleo', 'Dan', 'Eli', 'Fay', 'Gus', 'Hana', 'Ivan', 'Jade', 'Kai', 'Lena',\n  'Max', 'Nora', 'Omar', 'Pia', 'Quinn', 'Rosa', 'Sam', 'Tara', 'Umar', 'Vera', 'Will', 'Yuki'];\n",
+        "version": 1,
+        "viewport": {
+          "height": 680,
+          "width": 600
+        }
+      },
+      "game_logic_rules": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
+      "game_ui_rules": "Select a highlighted piece, then tap its legal destination. Crowns, required captures, and continuing jumps are shown from the server view.",
+      "tutorial_text": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed."
+    }
+  }
+]
