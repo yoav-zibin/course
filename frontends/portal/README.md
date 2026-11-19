@@ -42,6 +42,9 @@ builds and CI artifacts. Generated `android/`, `ios/` and web bundles are ignore
 - Local pass-and-play and computer practice use downloaded pinned rules and a
   separate local state/seed. They work offline. Bundled Tic-tac-toe is available
   on a fresh installation. A handoff hides the next player's board until confirmed.
+  Game details let computer practice use any supported player count and human
+  seat. The selected seat keeps its own view and controls after restart, history
+  review and Play again; saved matches retain their original player positions.
 - Credentials use SecureStore on native platforms and the established account
   storage keys on web, keeping the admin pages and player app compatible.
 - Read-only native modules recover the old Android Keystore and iOS Keychain,

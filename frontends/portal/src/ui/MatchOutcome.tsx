@@ -8,7 +8,7 @@ export function MatchOutcome({match}:{match:Match}) {
   const {p}=useApp();
   // A shared local device names the winner. A computer practice has one human
   // viewer even when that player is using the app without an account.
-  const viewer=match.localMode==='pass'?null:p.account?.id||(match.localMode==='computer'?match.players[0]?.user_id:null);
+  const viewer=match.localMode==='pass'?null:match.localMode==='computer'?match.players.find(player=>player.kind==='human')?.user_id:p.account?.id;
   const outcome=matchOutcome(match,viewer);if(!outcome)return null;
   const labels={win:['ui.match.you_won','You won'],loss:['ui.match.you_lost','You lost'],draw:['ui.match.draw','Draw'],early:['ui.match.ended_early','Ended early'],unknown:['ui.match.result_unavailable','Result unavailable'],finished:['status.over','Finished'],winner:['ui.match.won','{name} won']} as const;
   const [key,fallback]=labels[outcome.kind],player=match.players.find(seat=>seat.player_index===outcome.winner);

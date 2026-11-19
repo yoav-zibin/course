@@ -50,11 +50,11 @@ export function Catalog() {
 export function GameDetail() {
   const {p,run,openAccount,openMatch} = useApp(),t=useText();
   const game=p.selectedGame;
-  const [computers,setComputers]=useState(0),[humans,setHumans]=useState(2),[stake,setStake]=useState(0),[speed,setSpeed]=useState(0),[privateMatch,setPrivate]=useState(true);
-  useEffect(()=>{if(game){const min=Math.min(...game.allowed_player_counts);setHumans(min);setComputers(min===1?0:Math.max(0,min-1));}},[game?.id]);
+  const [computers,setComputers]=useState(0),[humans,setHumans]=useState(2),[humanSeat,setHumanSeat]=useState(0),[stake,setStake]=useState(0),[speed,setSpeed]=useState(0),[privateMatch,setPrivate]=useState(true);
+  useEffect(()=>{if(game){const min=Math.min(...game.allowed_player_counts);setHumans(min);setHumanSeat(0);setComputers(min===1?0:Math.max(0,min-1));}},[game?.id]);
   if(!game)return <Empty>{copyText("Loading game…")}</Empty>;
   const solo=game.allowed_player_counts.length===1&&game.allowed_player_counts[0]===1;
-  const start=async(local=false,computer=false)=>{let match;if(local){match=await p.actions.startPractice(game.id,{humans:computer?1:humans,computers:computer?Math.max(0,Math.min(...game.allowed_player_counts)-1):0});}else{if(!p.account){openAccount();return;}match=await p.actions.createMatch({game_id:game.id,num_computer_opponents:computers,private:privateMatch,bet_per_player:solo?0:stake,turn_seconds:solo||!speed?null:speed});}await openMatch(match.id);};
+  const start=async(local=false,computer=false)=>{let match;if(local){match=await p.actions.startPractice(game.id,{humans:computer?1:humans,computers:computer?humans-1:0,humanSeat:computer?humanSeat:0});}else{if(!p.account){openAccount();return;}match=await p.actions.createMatch({game_id:game.id,num_computer_opponents:computers,private:privateMatch,bet_per_player:solo?0:stake,turn_seconds:solo||!speed?null:speed});}await openMatch(match.id);};
   return <>
     <Row><Button secondary compact onPress={()=>p.actions.clearGame()}>← {t('ui.portal.back_to_games','All games')}</Button></Row>
     <Card style={{borderTopWidth:3,borderTopColor:colors.purple}}><Title>{game.name}</Title><Copy muted>{game.description}</Copy><Copy small style={{color:colors.blue}}>{game.allowed_player_counts.join(', ')} {copyText("players · v")}{game.version}</Copy></Card>
@@ -69,8 +69,9 @@ export function GameDetail() {
         {!solo&&<Button secondary disabled={!p.network} onPress={()=>run(async()=>{if(!p.account){openAccount();return;}const match=await p.actions.quickMatch(game.id,Math.min(...game.allowed_player_counts));await openMatch(match.id);})}>{t('ui.portal.quick_match','Find an open match')}</Button>}
       </Card>
       <Card style={s.column}><Title small>{t('ui.practice.on_device','Play on this device')}</Title><Copy muted>{t('ui.practice.explainer','Play a downloaded game offline. Local matches stay on this device and do not change online matches.')}</Copy>
-        {!solo&&<Choices label={t('ui.practice.humans','People sharing this device')} value={humans} options={game.allowed_player_counts.map(value=>({value,label:String(value)}))} onChange={setHumans}/>}
+        {!solo&&<Choices label={t('ui.match.players','Players')} value={humans} options={game.allowed_player_counts.map(value=>({value,label:String(value)}))} onChange={value=>{setHumans(value);setHumanSeat(seat=>Math.min(seat,value-1));}}/>}
         <Button onPress={()=>run(()=>start(true,false))}>{solo?t('ui.practice.start','Start local game'):t('ui.practice.pass','Pass and play')}</Button>
+        {!solo&&<Choices label={copyText('Your seat against computers')} value={humanSeat} options={Array.from({length:humans},(_,index)=>({value:index,label:text(p,'ui.match.player_n','Player {number}',{number:index+1})}))} onChange={setHumanSeat}/>}
         {!solo&&<Button secondary onPress={()=>run(()=>start(true,true))}>{t('ui.practice.computer','Practice with computers')}</Button>}
         {!p.network&&!game.server_code&&<Copy small muted>{copyText("Connect once to download this game before playing offline.")}</Copy>}
       </Card>

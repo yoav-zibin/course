@@ -5,6 +5,7 @@ export interface Player { player_index: number; kind: 'human' | 'computer'; user
 export interface Game { id: string; version: number; name: string; description: string; allowed_player_counts: number[]; renderer_type?: string; declarative_ui?: any; server_code?: string; game_schemas?: any; [key: string]: any }
 export interface Match { id: string; game_id: string; game_version: number; owner_user_id: string; status: string; state?: any; players: Player[]; turn_of_player_indices: number[] | null; move_count: number; created_at: string; [key: string]: any }
 export interface LocalMatch extends Match { localMode: 'pass' | 'computer'; logicState: any; practiceSeed: number; moves: any[]; initialState: any; initialTurn: number[] | null; awaitingHandoff?: boolean }
+export interface PracticeOptions { humans?: number; computers?: number; names?: string[]; humanSeat?: number }
 export interface QueueEntry { requestId: string; body: { move: any; expected_move_count: number }; baseState: any; baseTurn: number[] | null; savedAt?: string }
 export interface Conflict { message: string; remote?: Match | null }
 export interface AccountData { version: 1; responses: Record<string, any>; responseRecency?: Record<string, number>; cacheClock?: number; queues: Record<string, QueueEntry[]>; conflicts: Record<string, Conflict>; local: Record<string, LocalMatch>; archives: any[]; archivedMatches: any[]; selectedId: string | null; imported?: boolean }

@@ -2680,5 +2680,23 @@
     "zh": "报告将包含屏幕截图、近期应用日志、错误、API 耗时、浏览页面、设备详情及账户身份。诊断信息不包含密码或 API 请求正文。",
     "hi": "आपका स्क्रीनशॉट, हाल के ऐप लॉग, त्रुटियां, API का समय, पेज, डिवाइस की जानकारी और खाते की पहचान शामिल होगी। निदान में पासवर्ड और API अनुरोधों की सामग्री शामिल नहीं होती।",
     "ar": "سيتم تضمين لقطة الشاشة وسجلات التطبيق والأخطاء الأخيرة وأوقات واجهة API والصفحات وتفاصيل الجهاز وهوية الحساب. لا تتضمن بيانات التشخيص كلمات المرور أو محتويات طلبات API."
+  },
+  "Your seat against computers": {
+    "es": "Tu puesto contra los ordenadores",
+    "fr": "Votre place contre les ordinateurs",
+    "de": "Dein Platz gegen Computer",
+    "pt": "Sua posição contra os computadores",
+    "zh": "对战电脑时的席位",
+    "hi": "कंप्यूटर के विरुद्ध आपकी सीट",
+    "ar": "مقعدك أمام الكمبيوتر"
+  },
+  "Choose valid local player counts and a human seat.": {
+    "es": "Elige un número válido de jugadores locales y un puesto para la persona.",
+    "fr": "Choisissez un nombre valide de joueurs locaux et une place pour le joueur humain.",
+    "de": "Wähle gültige lokale Spielerzahlen und einen Platz für einen Menschen.",
+    "pt": "Escolha quantidades válidas de jogadores locais e uma posição para o jogador humano.",
+    "zh": "请选择有效的本地玩家人数和真人席位。",
+    "hi": "स्थानीय खिलाड़ियों की मान्य संख्या और मानव खिलाड़ी की सीट चुनें।",
+    "ar": "اختر أعدادًا صالحة للاعبين المحليين ومقعدًا للاعب البشري."
   }
 }

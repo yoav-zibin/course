@@ -8,6 +8,7 @@ import { AccountRepository } from '../src/core/repository';
 import { redactedNativeArchive } from '../src/core/native-migration';
 import { setLocale, localizeGame, gameTexts, getDirection, t } from '../src/platform/i18n';
 import { ApiError } from '../src/core/api';
+import { matchOutcome } from '../src/core/results';
 
 function browserStorage() {
   const values: Record<string,string> = {};
@@ -125,6 +126,48 @@ test('real bundled computer turns advance using the same shared offline engine',
     assert.equal(match.move_count, 2); assert.deepEqual(match.turn_of_player_indices, [0]); assert.equal(match.state.board.filter((v: number) => v !== -1).length, 2);
     assert.equal(match.awaitingHandoff, undefined); assert.equal(store.actions.presentationMessage().acting_for_player_index, 0);
   } finally { restore(); }
+});
+test('computer practice keeps the chosen human view, identity and turn through restart and history', async () => {
+  const fixture = { id: 'practice-seats', version: 1, name: 'Practice seats', description: '', allowed_player_counts: [2,3,4], renderer_type: 'declarative',
+    declarative_ui: {format:'buildplay-ui',version:1,viewport:{width:400,height:300},boards:[{id:'board',kind:'zone',x:0,y:0,width:400,height:300}],piece_types:{},ui_code:'const gameUI={reduce(){return {scene:{}};}};'}, server_code: `
+    const game={
+      newMatch(ctx){return {state:{turn:0,moves:[],winner:-1},turn:[ctx.players[0].id]};},
+      applyMove(s,id,m,ctx){if(id!==ctx.players[s.turn].id||m.go!==true)throw new InvalidMove('Wrong player');s.moves.push(s.turn);s.turn=(s.turn+1)%ctx.players.length;const done=s.moves.length===ctx.players.length;if(done)s.winner=ctx.players.length-1;return {state:s,turn:done?null:[ctx.players[s.turn].id]};},
+      viewFor(s,id,ctx){return {...s,private_for:id};},computerMove(){return {go:true};}
+    };` };
+  for (const count of [2,3,4]) for (const humanSeat of [0,count-1]) for (const signedIn of [false,true]) {
+    const saved=browserStorage();
+    if(signedIn){saved['game-platform.accounts.v1']=JSON.stringify([{id:'alice',password:'credential-never-in-game',display_name:'Alice'}]);saved['game-platform.current-account.v1']='alice';}
+    const restore=mockedFetch(url=>url.pathname.startsWith('/games/practice-seats')?fixture:undefined);
+    try {
+      const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');
+      await store.actions.startPractice(fixture.id,{humans:1,computers:count-1,humanSeat});
+      const match=store.getSnapshot().selectedMatch!,id=match.id;
+      assert.equal(match.players[humanSeat].kind,'human');assert.equal(match.players[humanSeat].user_id,signedIn?'alice':'visitor');
+      assert.equal(match.players[humanSeat].name,signedIn?'Alice':`Player ${humanSeat+1}`);
+      assert.equal(match.players.filter(player=>player.kind==='computer').length,count-1);
+      assert.equal(match.move_count,humanSeat);assert.equal(match.state.private_for,`local-player-${humanSeat}`);
+      assert.equal(store.actions.presentationMessage().my_player_index,humanSeat);assert.equal(store.actions.presentationMessage().acting_for_player_index,humanSeat);
+      const restarted=new PortalStore(testRuntime());await restarted.bootstrap('https://local.test');
+      assert.equal(restarted.getSnapshot().selectedMatch!.id,id);assert.equal(restarted.actions.presentationMessage().acting_for_player_index,humanSeat);
+      await restarted.actions.submitMove({go:true});const ended=restarted.getSnapshot().selectedMatch!;
+      assert.equal(ended.status,'over');assert.equal(ended.move_count,count);assert.equal(ended.state.private_for,`local-player-${humanSeat}`);
+      assert.equal(matchOutcome(ended,signedIn?'alice':'visitor')?.kind,humanSeat===count-1?'win':'loss');
+      await restarted.actions.replay(0);assert.equal(restarted.actions.presentationMessage().acting_for_player_index,null);
+      assert.equal(restarted.actions.presentationMessage().view.private_for,`local-player-${humanSeat}`);
+      for(const frame of (ended as any).moves)assert.equal(frame.new_state.private_for,`local-player-${humanSeat}`);
+    } finally {restore();}
+  }
+});
+test('invalid local counts and human positions cannot create a saved match',async()=>{
+  browserStorage();const restore=mockedFetch();
+  try{
+    const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');
+    for(const options of [{humans:0,computers:2},{humans:1.5,computers:.5},{humans:1,computers:-1},{humans:1,computers:1,humanSeat:-1},{humans:1,computers:1,humanSeat:2},{humans:1,computers:1,humanSeat:.5}]){
+      await assert.rejects(store.actions.startPractice('bundled-tictactoe',options),/valid local player counts and a human seat/);
+      assert.equal(store.getSnapshot().localMatches.length,0);
+    }
+  }finally{restore();}
 });
 test('history cannot reveal the next player board before the device handoff is confirmed', async () => {
   browserStorage(); const restore = mockedFetch();

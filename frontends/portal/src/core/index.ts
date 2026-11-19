@@ -12,7 +12,7 @@ import { configureI18n, setLocale, getLocale, getDirection, gameTexts, localizeG
 import bundled from './bundled-tictactoe.json';
 import { browserLogin } from '../platform/browser-login';
 import { rememberUrlAttribution, newAccountAttribution, forgetInviter } from './attribution';
-import type { Account, AccountData, Game, Match, LocalMatch, ListKind, PortalState } from './types';
+import type { Account, AccountData, Game, Match, LocalMatch, ListKind, PortalState, PracticeOptions } from './types';
 export * from './types';
 export { t } from '../platform/i18n';
 
@@ -20,6 +20,7 @@ const initial = (): PortalState => ({ ready: false, baseUrl: '', account: null, 
 const listPaths: Record<ListKind, string> = { games: '/games', myMatches: '/matches', openMatches: '/matches/open', savedGames: '/users/me/saved-games', invites: '/users/me/invites' };
 const unique = <T extends { id?: string; token?: string }>(values: T[]): T[] => [...new Map(values.map(v => [v.id || v.token, v])).values()];
 const savedList = <T>(value: unknown): T[] => Array.isArray(value) ? value : [];
+const localHumanSeat = (match: Match) => match.players.find(player => player.kind === 'human' && player.active !== false)?.player_index ?? 0;
 
 export class PortalStore {
   constructor(private rulesExecutor: (game: { server_code: string; game_schemas?: unknown }, name: string, args: unknown[], ctx: unknown, seed: number | string, now: number) => Promise<any> = async (...args) => (await import('../game/runtime')).executeGame(...args), private loginBrowser: (baseUrl: string) => Promise<any> = browserLogin, private writeCurrentAccount: (id: string) => Promise<void> = id => storage.setItem(CURRENT_KEY, id)) {}
@@ -329,7 +330,7 @@ export class PortalStore {
     if (!result || !Object.hasOwn(result, 'state') || !(result.turn === null || Array.isArray(result.turn) && result.turn.length && new Set(result.turn).size === result.turn.length && result.turn.every((id: string) => ids.includes(id)))) throw new Error('Local game returned an invalid state or turn');
     match.logicState = result.state; match.turn_of_player_indices = result.turn === null ? null : result.turn.map((id: string) => ids.indexOf(id)); match.status = result.turn === null ? 'over' : 'ongoing'; match.end_reason = result.turn === null ? 'finished' : null;
     if (record) { match.move_count++; match.last_move_player_index = actor; }
-    const seat = match.localMode === 'pass' ? match.turn_of_player_indices?.find(i => match.players[i].kind === 'human') ?? 0 : 0;
+    const seat = match.localMode === 'pass' ? match.turn_of_player_indices?.find(i => match.players[i].kind === 'human') ?? localHumanSeat(match) : localHumanSeat(match);
     match.state = await this.callGame(game, 'viewFor', [match.logicState, ids[seat]], match);
     if (record) match.moves = [...(match.moves || []), { move_number: match.move_count, player_index: actor, new_state: match.state, next_turn_player_indices: match.turn_of_player_indices }];
   }
@@ -341,12 +342,16 @@ export class PortalStore {
       await this.practiceResult(game, match, await this.callGame(game, 'applyMove', [match.logicState, computer.id, move], match), true, computer.player_index);
     }
   }
-  async startPractice(gameId: string, options: { humans?: number; computers?: number; names?: string[] } = {}) {
-    const guard = this.capture(); const game = await this.pinnedGame(gameId); const total = (options.humans ?? 1) + (options.computers ?? 1);
+  async startPractice(gameId: string, options: PracticeOptions = {}) {
+    const guard = this.capture(); const game = await this.pinnedGame(gameId);
+    const humans = options.humans ?? 1, computers = options.computers ?? 1, humanSeat = options.humanSeat ?? 0, total = humans + computers;
+    if (!Number.isInteger(humans) || humans < 1 || !Number.isInteger(computers) || computers < 0 || !Number.isInteger(humanSeat) || humanSeat < 0 || humanSeat + humans > total) throw new Error(copyText('Choose valid local player counts and a human seat.'));
     if (!game.allowed_player_counts.includes(total)) throw new Error(`This game supports ${game.allowed_player_counts.join(', ')} players`);
-    const humans = options.humans ?? 1; if (humans < 1) throw new Error('Local play needs at least one human');
     const id = `local-${requestId()}`; const owner = this.identity();
-    const match = { id, game_id: game.id, game_version: game.version, owner_user_id: owner, players: Array.from({ length: total }, (_, i) => ({ player_index: i, id: `local-player-${i}`, kind: i < humans ? 'human' : 'computer', user_id: i === 0 ? owner : null, active: true, name: options.names?.[i] || (i === 0 ? this.state.account?.display_name || 'Player 1' : i < humans ? `Player ${i + 1}` : `Computer ${i + 1}`) })), status: 'ongoing', state: null, logicState: null, turn_of_player_indices: [0], move_count: 0, created_at: new Date().toISOString(), localMode: humans > 1 ? 'pass' : 'computer', practiceSeed: Math.floor(Math.random() * 4294967296), moves: [], initialState: null, initialTurn: [0], token_pot: 0, bet_per_player: 0 } as LocalMatch;
+    const match = { id, game_id: game.id, game_version: game.version, owner_user_id: owner, players: Array.from({ length: total }, (_, i) => {
+      const human = i >= humanSeat && i < humanSeat + humans;
+      return { player_index: i, id: `local-player-${i}`, kind: human ? 'human' : 'computer', user_id: i === humanSeat ? owner : null, active: true, name: options.names?.[i] || (i === humanSeat ? this.state.account?.display_name || `Player ${i + 1}` : human ? `Player ${i + 1}` : `Computer ${i + 1}`) };
+    }), status: 'ongoing', state: null, logicState: null, turn_of_player_indices: [0], move_count: 0, created_at: new Date().toISOString(), localMode: humans > 1 ? 'pass' : 'computer', practiceSeed: Math.floor(Math.random() * 4294967296), moves: [], initialState: null, initialTurn: [0], token_pot: 0, bet_per_player: 0 } as LocalMatch;
     await this.practiceResult(game, match, await this.callGame(game, 'newMatch', [], match), false); match.initialState = match.state; match.initialTurn = match.turn_of_player_indices; await this.practiceComputers(game, match); guard();
     const gamePackage=this.exactPackage(game.id,game.version);if(!gamePackage)throw new Error('Exact downloaded game rules are unavailable for offline play.');
     await this.repository.mutate(owner, data => { data.local[id] = match; data.responses[`/games/${game.id}/versions/${game.version}`] = gamePackage; data.selectedId = id; }); guard(); await this.reloadData(); ++this.selection; this.patch({ selectedMatch: match, game, selectedGameId: game.id, history: null, replayIndex: null });
@@ -360,7 +365,7 @@ export class PortalStore {
       const data = await this.repository.read(owner); const original = data.local[selected.id];
       if (!original || original.move_count !== selected.move_count || original.status !== 'ongoing' || original.awaitingHandoff) throw new Error('Local match changed. Refresh before moving.');
       const next: LocalMatch = JSON.parse(JSON.stringify(original)); const game = data.responses[`/games/${next.game_id}/versions/${next.game_version}`]; if (!game?.server_code) throw new Error('Download this game once before playing offline');
-      const actor = next.localMode === 'pass' ? next.turn_of_player_indices?.find(i => next.players[i].kind === 'human') : 0;
+      const actor = next.localMode === 'pass' ? next.turn_of_player_indices?.find(i => next.players[i].kind === 'human') : localHumanSeat(next);
       if (actor === undefined || !next.turn_of_player_indices?.includes(actor)) throw new Error('It is not your turn');
       await this.practiceResult(game, next, await this.callGame(game, 'applyMove', [next.logicState, next.players[actor].id, move], next), true, actor); await this.practiceComputers(game, next); guard();
       if (next.localMode === 'pass' && next.status === 'ongoing' && next.turn_of_player_indices?.[0] !== actor) next.awaitingHandoff = true;
@@ -412,7 +417,7 @@ export class PortalStore {
     const match = this.state.selectedMatch; if (!match) return null;
     const replay = this.state.replayIndex; const history = this.state.history; let view = match; let replayActor: number | null = null;
     if (replay !== null && history) { const move = replay === 0 ? { new_state: history.initial_state, next_turn_player_indices: history.initial_turn_player_indices } : history.moves?.[replay - 1 - (history.offset || 0)]; if (move) { view = { ...match, state: move.new_state, turn_of_player_indices: move.next_turn_player_indices, move_count: replay, status: move.next_turn_player_indices === null ? 'over' : 'ongoing' }; replayActor = Number.isInteger(move.player_index) ? move.player_index : null; } }
-    const local = this.data.local[match.id]; const seat = local?.localMode === 'pass' ? match.turn_of_player_indices?.find(i => match.players[i].kind === 'human') ?? 0 : match.players.find(p => p.user_id === this.state.account?.id && p.active !== false)?.player_index ?? (local ? 0 : null);
+    const local = this.data.local[match.id]; const seat = local ? local.localMode === 'pass' ? match.turn_of_player_indices?.find(i => match.players[i].kind === 'human') ?? localHumanSeat(match) : localHumanSeat(match) : match.players.find(p => p.user_id === this.state.account?.id && p.active !== false)?.player_index ?? null;
     const allowed = replay === null && !match.pending && !match.conflict && !local?.awaitingHandoff && view.status === 'ongoing' && seat !== null && view.turn_of_player_indices?.includes(seat);
     const texts = this.state.game ? gameTexts(this.state.game) : null;
     return { type: 'state_changed', state: view.state ?? null, view: view.state ?? null, players: match.players.map(p => ({ player_index: p.player_index, player_id: p.id, kind: p.kind, name: p.name || (p.user_id ? this.state.profiles[p.user_id]?.display_name || (p.user_id === this.state.account?.id ? this.state.account.display_name : `Player ${p.player_index + 1}`) : `Computer ${p.player_index + 1}`), picture_url: p.user_id ? this.state.profiles[p.user_id]?.picture_url || '' : '' })), turn_of_player_indices: view.turn_of_player_indices, turn_of_player_index: view.turn_of_player_indices?.[0] ?? null, my_player_index: seat, acting_for_player_index: allowed ? seat : null, status: view.status, end_reason: view.end_reason, move_count: view.move_count, last_move_player_index: replay === null ? match.last_move_player_index ?? null : replayActor, token_pot: view.token_pot || 0, replay: replay === null ? null : { index: replay, total: match.move_count }, presentation_history: replay === null ? this.observations.get(match.id) || [] : [], locale: getLocale(), direction: getDirection(), strings: texts?.strings || this.state.game?.declarative_ui?.strings || {} };
@@ -431,7 +436,7 @@ export class PortalStore {
     createMatch: (options: any) => this.perform(() => this.createMatch(options)), quickMatch: (gameId?: string, count?: number) => this.perform(() => this.quickMatch(gameId, count)),
     matchAction: (action: 'join' | 'start' | 'leave' | 'rematch' | 'maybeLeave' | 'playerLeft', body?: any) => this.perform(() => this.matchAction(action, body)), addBots: (count: number) => this.perform(() => this.addBots(count)), removePlayer: (id: string) => this.perform(() => this.removePlayer(id)),
     deleteMatch: () => this.perform(() => this.deleteMatch()), archiveMatch: (id: string) => this.perform(() => this.archiveMatch(id)), submitMove: (move: any) => this.perform(() => this.submitMove(move), false), resolveConflict: (id: string) => this.perform(() => this.resolveConflict(id)),
-    startPractice: (id: string, options?: { humans?: number; computers?: number; names?: string[] }) => this.perform(() => this.startPractice(id, options)), practiceMove: (move: any) => this.perform(() => this.practiceMove(move), false), revealLocal: () => this.perform(() => this.revealLocal()), deleteLocal: (id: string) => this.perform(() => this.archiveMatch(id)),
+    startPractice: (id: string, options?: PracticeOptions) => this.perform(() => this.startPractice(id, options)), practiceMove: (move: any) => this.perform(() => this.practiceMove(move), false), revealLocal: () => this.perform(() => this.revealLocal()), deleteLocal: (id: string) => this.perform(() => this.archiveMatch(id)),
     loadHistory: () => this.perform(() => this.loadHistory()), replay: (index: number | null) => this.perform(() => this.replay(index), false), presentationMessage: () => this.presentationMessage(),
     saveGame: (id: string, saved: boolean) => this.perform(async () => { await this.request(saved ? 'PUT' : 'DELETE', `${this.paginated ? '/v2' : ''}/users/me/saved-games/${encodeURIComponent(id)}`); await this.list('savedGames'); }),
     createInvite: (options: any = {}) => this.perform(async () => { const id = this.state.selectedMatch?.id; if (!id) throw new Error('Choose a match first'); return this.request('POST', `/matches/${encodeURIComponent(id)}/invites`, options); }),
