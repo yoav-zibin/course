@@ -38,11 +38,13 @@ jobs:
       - name: Write upload keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
         run: |
           set -euo pipefail
           umask 077
           test -n "$KEYSTORE_BASE64" || { echo 'Android upload keystore secret is missing.' >&2; exit 1; }
           printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.keystore"
+          keytool -list -keystore "$RUNNER_TEMP/upload.keystore" -storepass "$KEYSTORE_PASSWORD" -alias upload
       - run: npx expo prebuild --platform android --no-install --no-clean
       - name: Build signed AAB for Play
         env:
