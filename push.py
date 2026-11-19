@@ -369,8 +369,12 @@ class RoutedPushNotifier:
         else:
             self.browser.deliver(message)
 
+    @property
+    def receipts_enabled(self) -> bool:
+        return self.config.native_enabled
+
     def run_receipts(self, limit: int = 10) -> None:
-        if self.config.native_enabled:
+        if self.receipts_enabled:
             self.native.run_receipts(limit)
 
     def _work(self) -> None:

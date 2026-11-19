@@ -30,7 +30,13 @@ def build_report(fixture_path, evidence, output):
     fixture = json.loads(fixture_path.read_text())
     output.mkdir(parents=True, exist_ok=True)
     shutil.copy2(fixture_path,output / "common-fixture.json")
-    rows = [(f'board-{game["slug"]}',f'{game["name"]} — board after three human turns',None) for game in fixture["games"]]
+    # The drivers produce full screenshots. Include manually prepared board
+    # crops only when supplied; a partial crop set still reports missing files.
+    rows = []
+    for game in fixture["games"]:
+        stage = f'board-{game["slug"]}'
+        if any(any((evidence / platform).rglob(stage + ".png")) for platform in PLATFORMS):
+            rows.append((stage, f'{game["name"]} — board after three human turns', None))
     rows.extend((f"page-{page}", page.replace("local", "On this device").capitalize(), None) for page in PAGES)
     for game in fixture["games"]:
         rows.append((f'{game["slug"]}-initial', f'{game["name"]} — initial', game["initial"]))

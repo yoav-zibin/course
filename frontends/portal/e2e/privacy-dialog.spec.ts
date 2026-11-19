@@ -38,6 +38,7 @@ test('the privacy dialog translates offline from the bundled policy copy',async(
   await page.getByRole('button').filter({hasText:'Français'}).last().click();
   await expect(page.locator('html')).toHaveAttribute('lang','fr');
   await page.getByRole('button',{name:copy['Close dialog'].fr,exact:true}).click();
+  await expect(page.getByRole('button',{name:copy['Close dialog'].fr,exact:true})).toHaveCount(0);
   await context.setOffline(true);
   await page.getByRole('button',{name:copy.Privacy.fr,exact:true}).click();
   const content=page.getByTestId('privacy-policy-content');

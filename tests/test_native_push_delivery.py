@@ -151,3 +151,47 @@ def test_router_delivers_to_native_and_browser(monkeypatch):
         notifier.close()
     assert native == [message]
     assert browser == [web_message]
+
+
+def test_disabled_native_receipts_do_not_reschedule_the_durable_worker(monkeypatch):
+    from unittest.mock import Mock
+    from game_platform.scaling_service import ScalablePlatform
+    from game_platform.tests.fake_firestore import FakeClient, query_store
+
+    store = query_store("disabled_native_receipts", FakeClient())
+    notifier = RoutedPushNotifier(config=PushConfig(native_enabled=False), store=store, browser=Mock())
+    platform = ScalablePlatform(store=store, push_notifier=notifier)
+    receipt = store.ref("push_receipts", "old-ticket")
+    store.raw_put(receipt, {"due_at": dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=1)})
+    wakeups, processed = [], []
+    monkeypatch.setattr(platform, "_wake_after", lambda delay=0.1: wakeups.append(delay))
+    passes = 0
+
+    def wait(_timeout):
+        nonlocal passes
+        passes += 1
+        if passes == 2:
+            platform._stop_workers.set()
+
+    def drain(limit=10):
+        processed.append(limit)
+        store.raw_put(receipt, None)
+
+    monkeypatch.setattr(platform._worker_event, "wait", wait)
+    monkeypatch.setattr(notifier.native, "run_receipts", drain)
+    try:
+        platform._work_loop()
+        assert processed == []
+        assert store.raw_get(receipt) is not None
+        assert wakeups == [], "disabled receipt delivery must not cause a 100ms Firestore polling loop"
+        # Re-enabling delivery processes the retained receipt normally.
+        notifier.config = PushConfig(native_enabled=True)
+        passes = 0
+        platform._stop_workers.clear()
+        platform._work_loop()
+        assert processed == [10]
+        assert store.raw_get(receipt) is None
+        assert wakeups == []
+    finally:
+        notifier.close()
+        store.close()

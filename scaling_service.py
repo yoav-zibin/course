@@ -546,13 +546,16 @@ class ScalablePlatform(GamePlatform):
             try:
                 self.run_due_jobs()
                 self.run_outbox()
-                if hasattr(self._delivery, "run_receipts"):
+                receipts_enabled = hasattr(self._delivery, "run_receipts") and getattr(
+                    self._delivery, "receipts_enabled", True
+                )
+                if receipts_enabled:
                     self._delivery.run_receipts(limit=10)
                 due = []
                 for kind in ("jobs", "outbox", "push_receipts"):
                     if kind == "outbox" and self._delivery is None:
                         continue
-                    if kind == "push_receipts" and not hasattr(self._delivery, "run_receipts"):
+                    if kind == "push_receipts" and not receipts_enabled:
                         continue
                     rows = list(
                         self._store.collection(kind)

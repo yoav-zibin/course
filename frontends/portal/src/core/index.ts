@@ -187,7 +187,9 @@ export class PortalStore {
     if (this.notificationPromise) return this.notificationPromise;
     if (more && !this.state.notificationCursor) return;
     const guard = this.capture(), cursor = more ? this.state.notificationCursor : null;
-    const query = new URLSearchParams({limit: '50'}); if (cursor) query.set('cursor', cursor);
+    // Once both pages are loaded, refresh the whole bounded inbox. Reusing the
+    // old tail loses entries shifted across page 50 and retains evicted ones.
+    const query = new URLSearchParams({limit: !more && this.state.notifications.length > 50 ? '100' : '50'}); if (cursor) query.set('cursor', cursor);
     const pending = (async () => {
       const result = await this.request('GET', `/users/me/notifications?${query}`); guard();
       if (!more) await this.refreshProfile().catch(() => {}); guard();
@@ -195,9 +197,8 @@ export class PortalStore {
       const read = new Map(this.state.notifications.filter(item => item.read_at).map(item => [item.id, item.read_at]));
       const acknowledged = result.items.filter((item: InAppNotification) => !item.read_at && read.has(item.id)).length;
       const incoming = (result.items as InAppNotification[]).map(item => read.has(item.id) ? {...item, read_at: read.get(item.id)!} : item);
-      const preserveTail = !more && this.state.notifications.length > 50;
-      const notifications = more ? unique([...this.state.notifications, ...incoming]) : preserveTail ? unique([...incoming, ...this.state.notifications.slice(50)]) : incoming;
-      this.patch({notifications, notificationCursor: preserveTail ? this.state.notificationCursor : result.next_cursor || null, unreadNotifications: result.unread_count === undefined ? notifications.filter(item => !item.read_at).length : Math.max(0,result.unread_count-acknowledged)});
+      const notifications = more ? unique([...this.state.notifications, ...incoming]) : incoming;
+      this.patch({notifications, notificationCursor: result.next_cursor || null, unreadNotifications: result.unread_count === undefined ? notifications.filter(item => !item.read_at).length : Math.max(0,result.unread_count-acknowledged)});
     })().finally(() => {if (this.notificationPromise === pending) this.notificationPromise = null;});
     this.notificationPromise = pending; return pending;
   }

@@ -32,7 +32,7 @@ function browserStorage() {
 async function fixture() {
   browserStorage(); const original=globalThis.fetch;
   let match={...before},failMove=false,retainTurn=false;
-  let onFeed:((user:string)=>Promise<any>)|null=null;
+  let onFeed:((user:string,query:URLSearchParams)=>Promise<any>)|null=null;
   const profiles:Record<string,any>=Object.fromEntries(['alice','bob'].map(id=>[id,{id,display_name:id,token_balance:0,notifications_enabled:true,notification_prompt_seen:false}]));
   const patches:any[]=[];
   globalThis.fetch=(async(input:RequestInfo|URL,init:RequestInit={})=>{
@@ -44,14 +44,32 @@ async function fixture() {
     else if(url.pathname==='/matches/m/moves'&&method==='POST') {if(failMove)throw new TypeError('Connection lost');match={...match,move_count:match.move_count+1,turn_of_player_indices:retainTurn?[0]:[1]};value=match;}
     else if(url.pathname==='/matches/m') value=match;
     else if(url.pathname==='/matches') value=[match];
-    else if(url.pathname==='/users/me/notifications') value=onFeed?await onFeed(id):{items:[event(id)],next_cursor:null,unread_count:1};
+    else if(url.pathname==='/users/me/notifications') value=onFeed?await onFeed(id,url.searchParams):{items:[event(id)],next_cursor:null,unread_count:1};
     else if(url.pathname.endsWith('/read')) value={...event(id),read_at:'2026-01-01T00:01:00Z'};
     else if(url.pathname===`/users/${id}`){if(method==='PATCH'){const patch=JSON.parse(String(init.body));patches.push(patch);Object.assign(profiles[id],patch);}value=profiles[id];}
     return new Response(JSON.stringify(value),{status:200});
   }) as typeof fetch;
   const store=new PortalStore();await store.bootstrap('https://local.test');await store.actions.selectMatch('m');
-  return {store,profiles,patches,restore:()=>{globalThis.fetch=original;},setFailure:(value:boolean)=>{failMove=value;},setRetain:(value:boolean)=>{retainTurn=value;},setMatch:(value:Match)=>{match=value;},setFeed:(fn:(user:string)=>Promise<any>)=>{onFeed=fn;}};
+  return {store,profiles,patches,restore:()=>{globalThis.fetch=original;},setFailure:(value:boolean)=>{failMove=value;},setRetain:(value:boolean)=>{retainTurn=value;},setMatch:(value:Match)=>{match=value;},setFeed:(fn:(user:string,query:URLSearchParams)=>Promise<any>)=>{onFeed=fn;}};
 }
+
+test('refreshing a fully loaded inbox includes shifted entries and removes server-evicted history',async()=>{
+  const f=await fixture(),feed=Array.from({length:100},(_,i)=>event(`notice-${i}`));
+  try{
+    f.setFeed(async(_id,query)=>{
+      const cursor=query.get('cursor'),start=cursor?feed.findIndex(item=>item.id===cursor)+1:0;
+      const items=feed.slice(start,start+Number(query.get('limit')));
+      return {items,next_cursor:start+items.length<feed.length?items.at(-1)!.id:null,unread_count:feed.length};
+    });
+    await f.store.actions.refreshNotifications();await f.store.actions.refreshNotifications(true);
+    assert.equal(f.store.getSnapshot().notifications.length,100);
+    feed.unshift(event('newest'));feed.length=100;
+    await f.store.actions.refreshNotifications();
+    assert.deepEqual(f.store.getSnapshot().notifications.map(item=>item.id),feed.map(item=>item.id));
+    assert.equal(f.store.getSnapshot().notificationCursor,null);
+    assert.equal(f.store.getSnapshot().unreadNotifications,100);
+  }finally{f.restore();}
+});
 
 test('the first confirmed multiplayer handoff prompts once and persists the account decision',async()=>{
   const f=await fixture();try{
