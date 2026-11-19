@@ -1688,6 +1688,11 @@ def privacy() -> FileResponse:
     return FileResponse(_STATIC_DIR / "privacy.html")
 
 
+@debug_router.get("/delete-account")
+def delete_account() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "delete-account.html")
+
+
 @debug_router.get("/admin/game-input-metrics", dependencies=[MasterPassword])
 def admin_game_input_metrics() -> list[dict[str, str | int]]:
     """Process-local counts of per-game JSON Schema input failures."""
