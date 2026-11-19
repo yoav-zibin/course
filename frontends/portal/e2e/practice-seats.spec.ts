@@ -18,6 +18,30 @@ async function savedMatch(page:Page,id:string){
   },id);
 }
 
+test('computer batch playback keeps the full host queue outside the twelve-entry reducer history',async({page})=>{
+  const batch={...fixture,id:'practice-batch',server_code:`const game={
+    newMatch(ctx){return {state:{n:0,seat:0,left:0},turn:[ctx.players[0].id]};},
+    applyMove(s,id,m,ctx){if(id!==ctx.players[s.seat].id||m.go!==true)throw new InvalidMove('Wrong player');s.n++;s.left--;if(s.seat===0||s.left===0){s.seat=(s.seat+1)%ctx.players.length;s.left=4;}return {state:s,turn:[ctx.players[s.seat].id]};},
+    viewFor(s,id){return {...s,private_for:id};},computerMove(){return {go:true};}
+  };`,declarative_ui:{...fixture.declarative_ui,motion:{move_ms:120},ui_code:`const gameUI={reduce(message){const m=message.type==='ui_event'?message.state_changed:message;return {scene:{pieces:[{id:'token',type:'token',board:'board',position:{x:40+(m.view.n%8)*40,y:140},aria_label:'Batch token',actions:[]}],labels:[{id:'step',x:10,y:30,text:'Accepted step '+m.view.n},{id:'history',x:10,y:65,text:'Reducer history '+m.presentation_history.length}],controls:m.acting_for_player_index===0?[{id:'advance',kind:'button',label:'Advance'}]:[]},...(message.type==='ui_event'?{make_move:{go:true}}:{})};}};`}};
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  await page.route(url=>/^\/games\/practice-batch(?:\/versions\/1)?$/.test(url.pathname),route=>route.fulfill({json:batch}));
+  await page.goto('/portal#game=practice-batch');await page.getByRole('button',{name:'Players: 4',exact:true}).click();
+  await page.getByRole('button',{name:'Practice with computers',exact:true}).click();
+  await expect(page.getByText('Accepted step 0',{exact:true})).toBeVisible();
+  await page.evaluate(()=>{
+    (window as any).__batchPaint=[];
+    new MutationObserver(()=>{const labels=[...document.querySelectorAll('[data-testid="game-stage"] svg text')];const n=Number(labels.find(node=>node.textContent?.startsWith('Accepted step '))?.textContent?.slice(14)),history=Number(labels.find(node=>node.textContent?.startsWith('Reducer history '))?.textContent?.slice(16)),seen=(window as any).__batchPaint;if(Number.isInteger(n)&&n!==seen.at(-1)?.n)seen.push({n,history});}).observe(document.body,{subtree:true,childList:true,characterData:true});
+  });
+  await page.getByRole('button',{name:'Advance',exact:true}).click();
+  await expect(page.getByText('Accepted step 13',{exact:true})).toBeVisible();
+  const frames=await page.evaluate(()=>(window as any).__batchPaint as {n:number;history:number}[]);
+  expect(frames.filter(frame=>frame.n>=2).map(frame=>frame.n)).toEqual(Array.from({length:12},(_,i)=>i+2));
+  expect(frames.every(frame=>frame.history<=12)).toBe(true);
+  const id=new URLSearchParams(new URL(page.url()).hash.slice(1)).get('match')!;
+  expect((await savedMatch(page,id)).moves).toHaveLength(13);
+});
+
 test('pass-and-play replay keeps each private hand attributed to its frame viewer after reload',async({page},info)=>{
   await page.route(url=>/^\/games\/practice-seat-fixture(?:\/versions\/1)?$/.test(url.pathname),route=>route.fulfill({json:fixture}));
   await page.goto('/portal#game=practice-seat-fixture');await page.getByRole('button',{name:'Players: 4',exact:true}).click();

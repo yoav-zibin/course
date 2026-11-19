@@ -111,5 +111,5 @@ export function presentationSteps(previous: StateMessage | null, next: StateMess
   if (ordered.length !== next.move_count!-previous.move_count!-1 || ordered.some((item,index)=>item.move_count!==previous.move_count!+index+1))return [];
   return ordered.map(item=>({...next,view:item.view as StateMessage['view'],state:item.view as StateMessage['state'],
     move_count:item.move_count,last_move_player_index:item.last_move_player_index,acting_for_player_index:null,status:'ongoing',
-    presentation_history:observations.filter(observation=>observation.move_count<=item.move_count)}));
+    presentation_history:observations.filter(observation=>observation.move_count<=item.move_count).slice(-12)}));
 }

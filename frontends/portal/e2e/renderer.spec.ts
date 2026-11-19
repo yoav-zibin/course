@@ -34,7 +34,7 @@ test('a coalesced computer batch paints its intermediate accepted boards in orde
       if(Number.isInteger(value)&&value!==seen.at(-1))seen.push(value);
     });observer.observe(document.body,{subtree:true,childList:true,characterData:true});
   });
-  await send(page,state({move_count:13,view:{n:13},last_move_player_index:1,presentation_history:Array.from({length:13},(_,i)=>({view:{n:i+1},move_count:i+1,last_move_player_index:i===0?0:1}))}));
+  await send(page,state({move_count:13,view:{n:13},last_move_player_index:1,presentation_history:Array.from({length:12},(_,i)=>({view:{n:i+1},move_count:i+1,last_move_player_index:i===0?0:1}))}));
   await expect(page.getByText('Accepted step 13',{exact:true})).toBeVisible();
   const painted=await page.evaluate(()=>(window as any).__acceptedSteps as number[]);
   expect(painted.filter(n=>n>=2)).toEqual(Array.from({length:12},(_,i)=>i+2));

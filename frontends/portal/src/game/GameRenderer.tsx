@@ -12,6 +12,7 @@ import { runPresentation } from './runtime';
 export type GameRendererProps = {
   spec: unknown;
   message: StateMessage;
+  presentationHistory?: {view:Json;move_count:number;last_move_player_index?:number|null}[];
   onMove: (move: Json) => unknown | Promise<unknown>;
   onError?: (error: Error) => void;
   contextKey?: string;
@@ -45,7 +46,7 @@ type Gesture = {
 };
 type Display = {scene: Scene; previous: Scene; animate: boolean; serial: number; replay:boolean;ghosts:Piece[]};
 
-function Renderer({spec, message, onMove, onError, deliveryKey,onAnimationStateChange,onScene}: GameRendererProps & {spec: GameSpec}) {
+function Renderer({spec, message, presentationHistory, onMove, onError, deliveryKey,onAnimationStateChange,onScene}: GameRendererProps & {spec: GameSpec}) {
   const [display, setDisplay] = useState<Display>({scene: {}, previous: {}, animate: false, serial: 0,replay:false,ghosts:[]});
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
@@ -141,6 +142,7 @@ function Renderer({spec, message, onMove, onError, deliveryKey,onAnimationStateC
   },[spec,report]);
 
   const messageJSON = JSON.stringify(message);
+  const historyJSON = JSON.stringify(presentationHistory??null);
   useEffect(()=>{
     const incoming=copy(message);latest.current=incoming;
     revision.current++;const atRevision=revision.current;
@@ -152,7 +154,7 @@ function Renderer({spec, message, onMove, onError, deliveryKey,onAnimationStateC
       };
       await waitForMotion();
       if(!alive.current||atRevision!==revision.current)return;
-      const steps=presentationSteps(lastPaint.current,incoming);
+      const steps=presentationSteps(lastPaint.current,presentationHistory?{...incoming,presentation_history:copy(presentationHistory)}:incoming);
       for(const step of steps){
         if(!alive.current||atRevision!==revision.current)return;
         latest.current=step;await apply(step,atRevision,true);await waitForMotion();
@@ -160,7 +162,7 @@ function Renderer({spec, message, onMove, onError, deliveryKey,onAnimationStateC
       if(!alive.current||atRevision!==revision.current)return;
       latest.current=incoming;await apply(incoming,atRevision,true);
     }).catch(report);
-  },[messageJSON,deliveryKey,apply,report]);
+  },[messageJSON,historyJSON,deliveryKey,apply,report]);
 
   const dispatch = useCallback((event: UIEvent) => {
     if(!alive.current || Date.now()<motionUntil.current || !canMove(latest.current,sent.current) || renderedRevision.current!==revision.current || !validEvent(sceneRef.current,event))return;

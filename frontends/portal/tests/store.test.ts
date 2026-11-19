@@ -189,9 +189,11 @@ test('local computer batches deliver every accepted intermediate view before pub
       assert.equal(next.move_count,total);assert.equal(next.view.private_for,'local-player-0');
       assert.ok(published.length);
       for(const message of published){
-        const steps=presentationSteps(previous,message);
+        assert.ok(message.presentation_history.length<=12);
+        const steps=presentationSteps(previous,{...message,presentation_history:store.actions.presentationHistory()});
         assert.deepEqual(steps.map(step=>step.move_count),Array.from({length:total-1},(_,i)=>i+1));
         assert.ok(steps.every(step=>step.acting_for_player_index===null&&(step.view as any).private_for==='local-player-0'));
+        assert.ok(steps.every(step=>(step.presentation_history as unknown[]).length<=12));
         assert.deepEqual(steps.map(step=>step.last_move_player_index),Array.from({length:total-1},(_,i)=>i===0?0:1+Math.floor((i-1)/actions)));
       }
       const saved=await new AccountRepository('https://local.test').read('visitor');
