@@ -27,6 +27,34 @@ def api_for(store):
     return api
 
 
+def test_game_attribution_cleanup_preserves_real_firestore_content_and_typed_backup(store, tmp_path):
+    from game_platform.platform_game_cleanup import cleanup, digest
+    from game_platform.tests.test_platform_game_cleanup import legacy
+
+    # Exercise retired artifacts as well as active version headers; no models
+    # are loaded or rewritten by the maintenance operation.
+    records = [legacy(store, kind, "legacy-game")
+               for kind in ("games", "game_versions", "game_drafts", "game_test_sessions")]
+    directory = tmp_path / "private-cleanup"
+    result = cleanup(store, directory, apply=True, page_size=1)
+    assert result["complete"]
+    assert all(counts["updated"] == 1 for counts in result["counts"].values())
+    backups = [json.loads(path.read_text()) for path in (directory / "preimages").glob("*.json")]
+    assert len(backups) == 4
+    for ref, before in records:
+        after = ref.get().to_dict()
+        assert after["revision"] == before["revision"]
+        assert after["unknown_metadata"] == before["unknown_metadata"]
+        assert after["timestamp"] == before["timestamp"]
+        assert "owner_user_id" not in after
+        assert "owner_user_id" not in json.loads(after["json"])
+        assert json.loads(after["json"])["unknown"]["owner_user_id"] == "part of game data"
+        assert ref.collection("body").document("000000").get().to_dict() == {"text": "exact code and server_code"}
+        assert next(b for b in backups if b["path"] == ref.path)["after_sha256"] == digest(after)
+    verified = cleanup(store, tmp_path / "fresh-verification", page_size=1)
+    assert verified["complete"] and all(c["legacy"] == 0 for c in verified["counts"].values())
+
+
 def test_notification_inbox_rolls_back_and_reloads_without_collection_queries(store):
     api = api_for(store)
     platform = api.client.app.state.platform

@@ -201,6 +201,11 @@ Legacy game owner fields are ignored when records are loaded and omitted on
 rewrite. This release does not bulk rewrite historical production documents or
 backups. No production data or configuration was modified during verification.
 
+The subsequently authorized [explicit attribution cleanup](platform-game-attribution-cleanup.md)
+removes those obsolete fields from live game/version records and retained Builder
+artifacts with private preimages and a fresh verification scan. Historical
+recovery namespaces and backups remain separate recovery artifacts.
+
 Checks covered account-free creation and stale-header capability mutations,
 legacy snapshot/query records, account merge/deletion preservation, HTML migration,
 Firestore emulator operations, generated examples and browser behavior. Final
