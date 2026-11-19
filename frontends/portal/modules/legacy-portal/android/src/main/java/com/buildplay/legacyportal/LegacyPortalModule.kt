@@ -4,7 +4,7 @@ import android.content.Context
 import android.graphics.Rect
 import android.os.Build
 import android.util.Base64
-import com.facebook.react.uimanager.UIManagerHelper
+import android.view.View
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -35,9 +35,8 @@ class LegacyPortalModule : Module() {
 
     AsyncFunction("protectBugControlGesture") { viewTag: Int ->
       if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return@AsyncFunction false
-      val context = appContext.reactContext ?: return@AsyncFunction false
       val view = try {
-        UIManagerHelper.getUIManagerForReactTag(context, viewTag)?.resolveView(viewTag)
+        appContext.findView<View>(viewTag)
       } catch (_: Exception) {
         // A modal can disappear before its layout callback reaches this queue.
         null
