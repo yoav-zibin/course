@@ -84,10 +84,14 @@ def scene_event(ui, message, frame, move, *, budget=4000, depth=8):
     best-first search over distinct local states. Events whose IDs mention the
     move's values are tried first; the reducer must still emit the exact move.
     """
-    likely_ids = {"_".join(f"{key}_{value}" for key, value in move.items())}
-    if isinstance(move.get("action"), str):
+    likely_ids = set()
+    if isinstance(move, dict):
+        likely_ids.add("_".join(f"{key}_{value}" for key, value in move.items()))
+    elif isinstance(move, str):
+        likely_ids.add(move)
+    if isinstance(move, dict) and isinstance(move.get("action"), str):
         likely_ids.add(move["action"])
-    if "to" in move:
+    if isinstance(move, dict) and "to" in move:
         likely_ids.add(f"to_{move['to']}")
     tokens = _move_tokens(move)
 

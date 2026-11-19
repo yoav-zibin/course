@@ -58,6 +58,32 @@ const TITLE_TRANSLATIONS = {
   guess_who: ['Adivina quién', 'Qui est-ce ?', 'Wer ist es?', 'Quem é?', '猜猜我是谁', 'कौन है?', 'من أنا؟']
 };
 
+// Keep server-authored messages in the package string table so the portal can
+// translate the errors and status messages emitted by each existing ruleset.
+const SERVER_TEMPLATES = {
+  battleship: ['unknown player','game over','bad move','place your ships','setup done','not your setup turn','fire with x,y','not your turn','off board','already shot there','bad phase','Battle start! P1 fires. HIT keeps your turn!'],
+  checkers: ['Game is over','Not your turn','Bad move','Off board','You must capture','Illegal move'],
+  chess: ['game over','unknown player','not your turn','not your piece','illegal move','Checkmate','Stalemate','50-move rule','Insufficient material','Move limit','Threefold repetition','Resignation — no possible mate','Resignation'],
+  four_player_chess: ['unknown player','game over','illegal move','moves available','unknown move'],
+  quoridor: ['game over','not seated','not your turn','bad move','bad square','illegal pawn move','bad wall','no walls left','illegal wall','unknown move'],
+  crazy_eights: ['Match is over','Not your turn','Illegal card','Choose a suit','Card not in hand','Unknown move'],
+  go_fish: ['unknown player','empty hand: refill first','you have no cards: pass','pick a rank and opponent','bad opponent','cannot ask yourself','bad rank','you hold no {p1}s','{p1} refilled +{p2}','{p1} passes','{p1} got {p2} {p3} from {p4}','{p1} asked {p2} for {p3}s — Go Fish!','📊 Book(s): {p1}','got {p1} {p2}','fished the {p1}','go fish','go fish (empty)'],
+  hearts: ['game over','unknown player','not your turn','pick a card','card not in hand','illegal play'],
+  spades: ['game over','unknown player','bad move','bad ai mode','not your collect','must collect','nothing to collect','not your turn','trick full','pick a card','not your card'],
+  guess_who: ['unknown player','game over','bad move','bad question','already asked','bad guess','unknown move']
+};
+
+function sourceStrings(entry) {
+  const strings = {title:entry.source + ' (Declarative)'};
+  for (const text of SERVER_TEMPLATES[entry.kind] || []) {
+    const base = `server_${text.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')}`;
+    let key = base, suffix = 2;
+    while (Object.hasOwn(strings,key) && strings[key] !== text) key = `${base}_${suffix++}`;
+    strings[key] = text;
+  }
+  return strings;
+}
+
 const COLORS = ['#e45757', '#4388d1', '#9b65c9', '#35a979', '#dc8b39', '#21a8a0'];
 const TYPES = {
   p0:{shape:'circle',width:50,height:50,color:'#4aa3ff',text_color:'#10243d'},
@@ -127,15 +153,16 @@ function makeSpec(entry) {
   const typeNames = entry.kind === 'checkers' ? ['p0','p1','king_p0','king_p1'] :
     entry.kind === 'chess' ? ['white_piece','black_piece'] :
     entry.kind === 'four_player_chess' ? ['seat_0','seat_1','seat_2','seat_3','square_light','square_dark'] :
-    entry.kind === 'quoridor' ? ['square','p0','pawn_red'] :
+    entry.kind === 'quoridor' ? ['square','p0','p1'] :
     entry.kind === 'battleship' ? ['mark_water','mark_ship','mark_hit','mark_miss'] :
     entry.kind === 'guess_who' ? CHARACTER_TYPES : ['card','played'];
   const typeValues = {};
   for (const name of typeNames) typeValues[name] = TYPES[name];
-  if (entry.kind === 'quoridor') { typeValues.p0 = TYPES.pawn; typeValues.pawn_red = TYPES.pawn_red; }
+  if (entry.kind === 'quoridor') { typeValues.p0 = TYPES.pawn; typeValues.p1 = TYPES.pawn_red; }
+  const strings = sourceStrings(entry);
   return {format:'buildplay-ui',version:1,viewport:layout.viewport,boards:layout.boards,
-    piece_types:typeValues,strings:{title:entry.source + ' (Declarative)'},
-    ui_code:`const KIND=${JSON.stringify(entry.kind)};\nconst SOURCE_STRINGS=${JSON.stringify({title:entry.source + ' (Declarative)'})};\n` + SOURCE_UI};
+    piece_types:typeValues,strings,
+    ui_code:`const KIND=${JSON.stringify(entry.kind)};\nconst SOURCE_STRINGS=${JSON.stringify({title:strings.title})};\n` + SOURCE_UI};
 }
 
 const CHARACTER_TYPES = ['person_0','person_1','person_2','person_3','person_4','person_5'];

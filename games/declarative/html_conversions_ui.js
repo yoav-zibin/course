@@ -222,13 +222,8 @@ const gameUI = {
       const hand = Array.isArray(s.hand) ? s.hand : [];
       const current = isHearts ? s.cur : s.current;
       const trick = s.trick || [];
-      const legalCards = isHearts ? new Set(s.legal || []) : (() => {
-        if (s.pendingWin !== null && s.pendingWin !== undefined) return new Set();
-        if (!trick.length) return new Set(hand);
-        const led = String(trick[0].card || '').slice(-1);
-        const follow = hand.filter(card => String(card).slice(-1) === led);
-        return new Set(follow.length ? follow : hand);
-      })();
+      const legalCards = isHearts ? new Set(s.legal || []) :
+        (s.pendingWin !== null && s.pendingWin !== undefined ? new Set() : new Set(hand));
       hand.forEach((card, i) => {
         const moves = legalCards.has(card) ? [{card}] : [];
         if (moves.length) intent(moves[0], cardText(card), 'table', cardPos(i), 'piece');
