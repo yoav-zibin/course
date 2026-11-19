@@ -114,11 +114,15 @@ following setup with the account that should own BuildPlay:
    writes the file to its temporary directory before prebuild. Local builds use
    `BUILDPLAY_GOOGLE_SERVICES_FILE=/absolute/path/google-services.json`.
 3. Configure the Firebase FCM v1 service account in the Expo project using
-   `npx --yes eas-cli credentials --platform android`, with
-   `EXPO_PUBLIC_EAS_PROJECT_ID` exported. The client `google-services.json` and
+   `BUILDPLAY_VARIANT=debug npx --yes eas-cli credentials --platform android`, with
+   `EXPO_PUBLIC_EAS_PROJECT_ID` exported. Verify the selected Android Application
+   identifier is `com.dapillah.gameportal.debug`. Repeat without the debug variant
+   for `com.dapillah.gameportal` when distributing production builds; Expo assigns
+   FCM credentials to each application identifier. The client `google-services.json` and
    the FCM service-account credential serve different purposes; keep private
    service-account keys outside source.
-4. For iOS, use `npx --yes eas-cli credentials --platform ios` to configure an
+4. For iOS, export `IOS_PORTAL_BUNDLE_ID` with the same value as the GitHub Actions
+   variable, then use `npx --yes eas-cli credentials --platform ios` to configure an
    APNs key for the Apple team and existing `IOS_PORTAL_BUNDLE_ID`. Enable the
    Push Notifications capability and ensure the distribution provisioning
    profile includes it. After the Expo APNs credentials are ready, set the
