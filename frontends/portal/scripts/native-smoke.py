@@ -38,12 +38,43 @@ def intersection(*rectangles: tuple[int, int, int, int]) -> tuple[int, int, int,
     return (left, top, right, bottom) if right > left and bottom > top else None
 
 
+def fixture_viewport(spec: dict) -> tuple[float, float, float, float]:
+    """Bundled Tic-tac-toe's pieces/targets remain inside its declared boards."""
+    boxes = [(0, 0, spec["viewport"]["width"], spec["viewport"]["height"])]
+    boxes.extend((board.get("x", 0), board.get("y", 0), board["width"], board["height"]) for board in spec["boards"])
+    left, top = min(box[0] for box in boxes), min(box[1] for box in boxes)
+    return left, top, max(box[0] + box[2] for box in boxes) - left, max(box[1] + box[3] for box in boxes) - top
+
+
+def fixture_cell_point(spec: dict, number: int, canvas: tuple[int, int, int, int]) -> tuple[int, int]:
+    """Project the real grid center through SVG's default xMidYMid/meet fit.
+
+    Android SVG accessibility groups can report their un-fitted translated
+    positions. The declared viewport includes instructions around the board;
+    treating the entire canvas as a 3x3 board would tap a different legal cell.
+    This only computes a physical touch coordinate, never a game move.
+    """
+    board = next(board for board in spec["boards"] if board["id"] == "main")
+    if board.get("kind") != "grid" or board.get("rows") != 3 or board.get("columns") != 3 or not 1 <= number <= 9:
+        raise ValueError("Native gameplay smoke requires the bundled 3x3 grid")
+    left, top, right, bottom = canvas
+    vx, vy, vw, vh = fixture_viewport(spec)
+    scale = min((right - left) / vw, (bottom - top) / vh)
+    world_x = board.get("x", 0) + (((number - 1) % 3) + .5) * board["width"] / 3
+    world_y = board.get("y", 0) + (((number - 1) // 3) + .5) * board["height"] / 3
+    return (round(left + ((right - left) - vw * scale) / 2 + (world_x - vx) * scale),
+            round(top + ((bottom - top) - vh * scale) / 2 + (world_y - vy) * scale))
+
+
 class NativeSmoke:
     def __init__(self, package: str, output: Path, adb: str):
         self.package, self.output, self.adb = package, output, adb
         output.mkdir(parents=True, exist_ok=True)
         self.last_xml = ""
         self.events: list[dict] = []
+        self.played_cells: list[int] = []
+        fixture = Path(__file__).resolve().parents[1] / "src/core/bundled-tictactoe.json"
+        self.fixture = json.loads(fixture.read_text())["declarative_ui"]
         sizes = re.findall(r"(\d+)x(\d+)", self.command("shell", "wm", "size"))
         if not sizes:
             raise RuntimeError("Android did not report its display size")
@@ -153,45 +184,71 @@ class NativeSmoke:
             raise RuntimeError("The standalone BuildPlay launch activity was not found")
         self.command("shell", "am", "start", "-W", "-n", component, "--ez", "buildplayLocalUiTest", "true")
 
+    def fitted_canvas(self) -> tuple[ET.Element, tuple[int, int, int, int]]:
+        """Reveal a full canvas before using its dimensions for SVG projection."""
+        for _ in range(12):
+            tree = self.dump()
+            canvas = self.find(tree, "Game board.", contains=True)
+            box = bounds(canvas) if canvas is not None else None
+            if box is None:
+                self.wait("Game board.", contains=True, timeout=20, scroll=True)
+                continue
+            parents = {child: parent for parent in tree.iter() for child in parent}
+            parent, viewport = canvas, (0, 0, self.width, self.height)
+            while parent in parents:
+                parent = parents[parent]
+                if parent.get("class") == "android.widget.ScrollView" and bounds(parent):
+                    viewport = bounds(parent)
+                    break
+            _, _, world_width, world_height = fixture_viewport(self.fixture)
+            fitted_height = (box[2] - box[0]) * world_height / world_width
+            # A fully visible shorter/wider canvas may have letterboxing. If
+            # an edge touches the ScrollView, a shorter XML rectangle may be
+            # clipped, and its origin/height cannot safely define the viewBox.
+            if box[3] - box[1] >= fitted_height - 3 or box[1] > viewport[1] + 3 and box[3] < viewport[3] - 3:
+                return tree, box
+            upward = box[3] >= viewport[3] - 3 and box[1] > viewport[1] + 3
+            self.events.append({"action": "reveal-canvas", "bounds": box, "viewport": viewport, "upwards": upward})
+            self.scroll_outside_canvas(box, viewport, upwards=upward, distance=round(fitted_height - (box[3] - box[1]) + 24))
+        raise RuntimeError("Could not reveal the complete bundled game canvas for a physical touch")
+
+    def scroll_outside_canvas(self, canvas: tuple[int, int, int, int], viewport: tuple[int, int, int, int], *, upwards: bool, distance: int):
+        # Narrow phones render the board all the way to both screen edges.
+        # An edge swipe there pans the game instead of scrolling its parent.
+        # Use visible page content above/below the board for the real gesture.
+        regions = [(viewport[1] + 12, canvas[1] - 12), (canvas[3] + 12, viewport[3] - 12)]
+        top, bottom = max(regions, key=lambda region: region[1] - region[0])
+        if bottom - top < 60:
+            raise RuntimeError("No page area outside the game canvas is available for scrolling")
+        distance = min(max(60, distance), bottom - top)
+        x = (viewport[0] + viewport[2]) // 2
+        self.command("shell", "input", "swipe", str(x), str(bottom if upwards else top), str(x), str(bottom - distance if upwards else top + distance), "700")
+
     def tap_cell(self, number: int, *, finished: bool = False):
         expected = "Finished" if finished else "I'm ready"
+        # Exercise the normal camera control so the projection has a known
+        # fitted view even if an earlier scrolling gesture moved the camera.
+        self.tap("Reset board view")
         for attempt in range(4):
-            tree = self.dump()
-            if self.find(tree, expected, contains=finished) is not None:
+            if attempt and self.find(self.dump(), expected, contains=finished) is not None:
+                self.played_cells.append(number)
                 return
-            # SVG groups expose screen bounds even though their Android
-            # `clickable` flag is false. Climbing to a clickable ancestor here
-            # would replace the individual target with the entire game board.
-            cell = self.find(tree, f"Cell {number}")
-            cell_box = bounds(cell) if cell is not None else None
-            if cell is not None and cell_box is not None and cell_box[2] - cell_box[0] < self.width * .6:
-                canvas = self.find(tree, "Game board.", contains=True)
-                canvas_box = bounds(canvas) if canvas is not None else None
-                visible = intersection(cell_box, canvas_box or (0, 0, self.width, self.height), (0, 0, self.width, self.height))
-                if visible is None or visible[3] - visible[1] < min(44, (cell_box[3] - cell_box[1]) * .35):
-                    # A sticky header or parent ScrollView can clip a virtual
-                    # SVG target. Reveal it instead of tapping the header or
-                    # rejecting the whole board because its rectangle is cut.
-                    self.events.append({"action": "reveal-cell", "cell": number, "bounds": cell_box, "canvas": canvas_box})
-                    self.scroll(upwards=cell_box[1] >= (canvas_box[1] if canvas_box else 0))
-                    continue
-                x, y = (visible[0] + visible[2]) // 2, (visible[1] + visible[3]) // 2
-                self.command("shell", "input", "tap", str(x), str(y))
-            else:
-                # Native SVG releases can expose different virtual-node bounds.
-                # This fallback still performs a physical
-                # tap on the rendered native board, not a protocol/API call.
-                canvas = self.wait("Game board.", contains=True, timeout=20, scroll=True)
-                box = bounds(canvas)
-                assert box is not None
-                left, top, right, bottom = box
-                side = min(right - left, bottom - top)
-                x = left + (right - left - side) / 2 + ((number - 1) % 3 + .5) * side / 3
-                y = top + (bottom - top - side) / 2 + ((number - 1) // 3 + .5) * side / 3
-                self.command("shell", "input", "tap", str(round(x)), str(round(y)))
-            self.events.append({"action": "native-cell-tap", "cell": number, "attempt": attempt + 1, "x": round(x), "y": round(y)})
+            tree, canvas = self.fitted_canvas()
+            labels = {label for node in tree.iter("node") for label in self.labels(node)}
+            for played in self.played_cells:
+                if normalized(f"Cell {played}") in labels:
+                    raise RuntimeError(f"The previous physical tap did not occupy Cell {played}")
+            if normalized(f"Cell {number}") not in labels:
+                self.wait(f"Cell {number}", timeout=12)
+                continue
+            if number == 1 and attempt == 0:
+                self.capture("game-00-fitted-board")
+            x, y = fixture_cell_point(self.fixture, number, canvas)
+            self.command("shell", "input", "tap", str(x), str(y))
+            self.events.append({"action": "native-cell-tap", "cell": number, "attempt": attempt + 1, "x": x, "y": y, "canvas": canvas})
             try:
                 self.wait(expected, contains=finished, timeout=8, scroll=True)
+                self.played_cells.append(number)
                 return
             except RuntimeError:
                 pass

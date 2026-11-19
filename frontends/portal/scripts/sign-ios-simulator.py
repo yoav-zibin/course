@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Ad-hoc sign the universal simulator artifact with an isolated Keychain group.
+"""Verify simulated linker entitlements and ad-hoc sign the macOS host safely.
 
 Never use these synthetic entitlements for a device archive or TestFlight.
 """
 
 import argparse
+import importlib.util
 import json
 from pathlib import Path
 import plistlib
@@ -18,6 +19,17 @@ CODESIGN = "/usr/bin/codesign"
 LIPO = "/usr/bin/lipo"
 SIMULATOR_PREFIX = "TESTTEAM00"
 ARCHITECTURES = ("arm64", "x86_64")
+
+
+def load_helper(name):
+    spec = importlib.util.spec_from_file_location(name.replace('-', '_'), Path(__file__).with_name(name + '.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+simulated_entitlements = load_helper('prepare-ios-simulator-entitlements').simulated_entitlements
+entitlement_sections = load_helper('ios-simulator-macho').entitlement_sections
 
 
 def simulator_metadata(app):
@@ -79,14 +91,25 @@ def sign_simulator(app, run=subprocess.run):
     architectures = command([LIPO, "-archs", str(binary)]).stdout.split()
     if set(architectures) != set(ARCHITECTURES):
         raise ValueError("Expected the arm64 and x86_64 simulator slices before signing")
-    group = f"{SIMULATOR_PREFIX}.{identifier}"
-    entitlements = {
-        "application-identifier": group,
-        "keychain-access-groups": [group],
-    }
+    expected = simulated_entitlements(identifier)
+    sections = entitlement_sections(binary)
     with tempfile.TemporaryDirectory(prefix="buildplay-simulator-sign-") as temporary:
+        simulated_path = Path(temporary) / 'simulated.xcent'
+        simulated_der = Path(temporary) / 'simulated.xcent.der'
+        simulated_path.write_bytes(plistlib.dumps(expected))
+        command(['/usr/bin/derq', 'query', '-f', 'xml', '-i', str(simulated_path), '-o', str(simulated_der), '--raw'])
+        expected_der = simulated_der.read_bytes()
+        if not expected_der:
+            raise ValueError('Missing simulated DER entitlement encoding')
+        for architecture in ARCHITECTURES:
+            actual = plistlib.loads(sections[architecture]['__entitlements'].rstrip(b'\0'))
+            if actual != expected or sections[architecture]['__ents_der'] != expected_der:
+                raise ValueError(f'The {architecture} linker-embedded simulator entitlements do not match')
         entitlement_path = Path(temporary) / "simulator.entitlements"
-        entitlement_path.write_bytes(plistlib.dumps(entitlements))
+        # The simulator executable is a macOS host process: putting iOS App ID
+        # entitlements in its real signature makes AMFI reject an ad-hoc binary.
+        # Xcode supplies iOS permissions through the two linker sections above.
+        entitlement_path.write_bytes(plistlib.dumps({}))
         # Sign from the inside out. Frameworks and dylibs get no application
         # entitlements; --deep is reserved for verification, never signing.
         for target in targets:
@@ -100,10 +123,14 @@ def sign_simulator(app, run=subprocess.run):
                 CODESIGN, "--display", "--arch", architecture,
                 "--entitlements", "-", "--xml", str(app),
             ]))
-            if actual != entitlements:
-                raise ValueError(f"The {architecture} simulator signature has unexpected Keychain entitlements")
+            if actual != {}:
+                raise ValueError(f"The {architecture} host signature must not claim restricted iOS entitlements")
+        if entitlement_sections(binary) != sections:
+            raise ValueError('Host signing changed the simulated entitlement sections')
     return {"bundle_identifier": identifier, "architectures": list(ARCHITECTURES),
-            "simulator_keychain_group": group, "nested_code_signed": len(targets)}
+            "simulator_keychain_group": expected['application-identifier'],
+            "simulated_entitlements_embedded": True, "host_entitlements": {},
+            "nested_code_signed": len(targets)}
 
 
 def main():

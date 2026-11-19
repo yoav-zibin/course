@@ -265,5 +265,5 @@ elif args[:2]==['simctl','spawn'] and 'launchctl' in args:
         assert launch["local_only"] is True
         assert (results / "screenshots" / "portal-launch.png").exists()
         assert {phase["phase"]: phase["deadline_seconds"] for phase in phases} == {
-            "list-devices": 60, "boot": 600, "install": 120, "launch": 360, "screenshot": 45, "processes": 30,
+            "list-devices": 60, "boot": 600, "install": 300, "launch": 360, "screenshot": 45, "processes": 30,
         }

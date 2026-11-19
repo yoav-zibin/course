@@ -36,7 +36,7 @@ jobs:
     needs: shared-client
     timeout-minutes: 60
     permissions:
-      contents: write
+      contents: read
     env:
       BUILDPLAY_VARIANT: debug
       EXPO_PUBLIC_API_URL: https://buildplay.fun
@@ -102,29 +102,32 @@ jobs:
           name: BuildPlay-android-apk
           path: BuildPlay.apk
           retention-days: 90
-      - name: Update rolling APK download
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
+  android-publish:
+    name: Update rolling APK download
+    needs: android-portal
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: portal-apps-android-download
+      cancel-in-progress: false
+      queue: max
+    steps:
+      - uses: actions/checkout@v4
         with:
-          tag_name: portal-apps
-          name: BuildPlay apps (latest builds)
-          body: |
-            BuildPlay uses one React Native application for Android, iOS and web.
-            Source: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }}).
-            Download BuildPlay.apk to install the standalone Android app with embedded JavaScript.
-            It connects to https://buildplay.fun and supports arm64-v8a, armeabi-v7a, x86 and x86_64.
-
-            **Existing APK users: preserve your current installation and saved data.**
-            Previous rolling APKs used unavailable ephemeral signing keys, so Android cannot
-            install this APK as an in-place update. If you have guest-only credentials or saved
-            games, **do not uninstall the old app to try this update**. Keep the old installation
-            and preserve access to that account and its data. This APK uses the deterministic
-            Expo development signer; it is a development distribution, not a Play Store release.
-
-            BuildPlayFun.apk, if shown below, is an older legacy build.
-          prerelease: true
-          make_latest: false
-          files: BuildPlay.apk
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: BuildPlay-android-apk
+          path: android-publish-input
+      - name: Publish without replacing a newer source revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/publish-android-apk.py android-publish-input/BuildPlay.apk \
+            --source '${{ github.sha }}' --repo '${{ github.repository }}'
 
   ios-portal:
     # Expo's Swift dependencies also fail under macOS15's older Xcode26.3.
@@ -151,6 +154,12 @@ jobs:
       - run: npx expo prebuild --platform ios --no-install --no-clean
       - working-directory: frontends/portal/ios
         run: pod install
+      - name: Prepare app-target simulator entitlement sections
+        run: |
+          python3 scripts/prepare-ios-simulator-entitlements.py \
+            "$GITHUB_WORKSPACE/ios-simulator-entitlements" edu.columbia.gameportal.starter
+          node scripts/configure-ios-simulator-entitlements.js \
+            ios/BuildPlay.xcodeproj/project.pbxproj "$GITHUB_WORKSPACE/ios-simulator-entitlements"
       - name: Build standalone simulator app
         run: |
           mkdir -p "$GITHUB_WORKSPACE/ios-build-results"
@@ -217,7 +226,7 @@ jobs:
           { time xcrun simctl runtime dyld_shared_cache update --all; } 2>&1 | tee -a "$GITHUB_WORKSPACE/ios-smoke-results/prewarm.log"
           date -u '+%Y-%m-%dT%H:%M:%SZ simulator runtime caches ready' | tee -a "$GITHUB_WORKSPACE/ios-smoke-results/prewarm.log"
       - name: Launch simulator and capture screen
-        timeout-minutes: 25
+        timeout-minutes: 30
         run: |
           bash scripts/smoke-ios-simulator.sh \
             "$GITHUB_WORKSPACE/ios-smoke-app/BuildPlay.app" \

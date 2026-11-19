@@ -71,7 +71,7 @@ PY
 
 # -b boots when needed and waits through migration; no ignored boot errors.
 run_phase boot 600 "$results_path/boot.log" xcrun simctl bootstatus "$simulator_id" -b
-run_phase install 120 "$results_path/install.log" xcrun simctl install "$simulator_id" "$app_path"
+run_phase install 300 "$results_path/install.log" xcrun simctl install "$simulator_id" "$app_path"
 # Apple documents 3–5 minute launch stalls while GateKeeper scans dyld caches:
 # https://developer.apple.com/documentation/xcode-release-notes/xcode-16_2-release-notes
 SIMCTL_CHILD_BUILDPLAY_LOCAL_UI_TEST=1 run_phase launch 360 "$results_path/launch.log" \

@@ -10,7 +10,8 @@
     "ios": "expo run:ios",
     "build:web": "node ../../tools/build-portal.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "postinstall": "node scripts/apply-svg-accessibility-patch.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~58.0.17",

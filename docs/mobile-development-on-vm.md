@@ -170,15 +170,21 @@ launch diagnostics are in `BuildPlay-android-test-results`. Successful pushes to
 Manual runs provide artifacts without replacing that download. The ad-hoc-signed
 simulator ZIP needs a Mac with Xcode; it cannot be installed on an iPhone.
 
-Before packaging the universal simulator app, CI runs
-`frontends/portal/scripts/sign-ios-simulator.py`. It refuses device-platform
-bundles, signs embedded frameworks and libraries before the app, and verifies
-both arm64 and x86_64 signatures and Keychain entitlements. Its temporary
-`TESTTEAM00.<bundle-identifier>` access group lets simulator Keychain migration
-and SecureStore run without production Apple secrets. Simulator upgrade fixtures
-must use the same synthetic group for the old and new app. **This helper and its
-synthetic entitlements never apply to real-device or TestFlight archives.** Real
-upgrades must retain their original App ID prefix, bundle identifier and team.
+CI prepares simulated entitlements for the generated BuildPlay application
+target, using linker flags qualified to `iphonesimulator` SDKs. Following Xcode's
+simulator convention, its `TESTTEAM00.<bundle-identifier>` application identifier
+and private Keychain group are embedded in `__TEXT,__entitlements` (XML) and
+`__TEXT,__ents_der` (DER). They are not permissions in the macOS host signature:
+AMFI rejects ad-hoc host signatures that claim these restricted iOS entitlements.
+
+Before packaging, `frontends/portal/scripts/sign-ios-simulator.py` refuses
+device-platform bundles, verifies both embedded sections in arm64 and x86_64,
+signs nested libraries before the app with empty host entitlements, and verifies
+the signatures and unchanged sections. Simulator Keychain migration fixtures
+must use the same embedded synthetic group for the old and new app.
+**These simulator-only flags and synthetic entitlements never apply to
+real-device or TestFlight archives.** Real upgrades must retain their original
+App ID prefix, bundle identifier and team.
 
 Use `macos-26-intel` for this Expo version. Its Xcode26.6 toolchain compiled the
 shared app successfully. The macOS15 image's Xcode26.3 failed Swift concurrency

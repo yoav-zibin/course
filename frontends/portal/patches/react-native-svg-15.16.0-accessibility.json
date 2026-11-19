@@ -1,0 +1,87 @@
+{
+  "package": "react-native-svg",
+  "version": "15.16.0",
+  "reason": "Android accessibility bounds must use the actual Canvas transform; preserve existing render, layout and hit-test matrices.",
+  "files": [
+    {
+      "path": "android/src/main/java/com/horcrux/svg/VirtualView.java",
+      "before_sha256": "d21c62f90c7af7551274504fc09232ebf8e5b2672d7ffa80253158a5d2ecef08",
+      "after_sha256": "176fd2a4cb78e8db888ef6a425306a3a7d586c808db0503ad99c0b1d6090c916",
+      "replacements": [
+        {
+          "before": "  private RectF mClientRect;",
+          "after": "  private RectF mClientRect;\n  private RectF mAccessibilityClientRect;"
+        },
+        {
+          "before": "    if (mClientRect != null) {\n\n      SvgView root = getSvgView();",
+          "after": "    RectF accessibilityRect = getAccessibilityClientRect();\n    if (accessibilityRect != null) {\n\n      SvgView root = getSvgView();"
+        },
+        {
+          "before": "rootPositionOnScreen[0] + (int) Math.floor(mClientRect.left)",
+          "after": "rootPositionOnScreen[0] + (int) Math.floor(accessibilityRect.left)"
+        },
+        {
+          "before": "rootPositionOnScreen[1] + (int) Math.floor(mClientRect.top)",
+          "after": "rootPositionOnScreen[1] + (int) Math.floor(accessibilityRect.top)"
+        },
+        {
+          "before": "infoBoundsInScreen.left + (int) Math.ceil(mClientRect.width())",
+          "after": "infoBoundsInScreen.left + (int) Math.ceil(accessibilityRect.width())"
+        },
+        {
+          "before": "infoBoundsInScreen.top + (int) Math.ceil(mClientRect.height())",
+          "after": "infoBoundsInScreen.top + (int) Math.ceil(accessibilityRect.height())"
+        },
+        {
+          "before": "  void setClientRect(RectF rect) {",
+          "after": "  void setClientRect(RectF rect) {\n    mAccessibilityClientRect = null;"
+        },
+        {
+          "before": "  RectF getClientRect() {\n    return mClientRect;\n  }",
+          "after": "  RectF getClientRect() {\n    return mClientRect;\n  }\n\n  // Keep Canvas-derived accessibility bounds separate from render/hit-test geometry.\n  void setAccessibilityClientRect(RectF rect) {\n    mAccessibilityClientRect = rect;\n  }\n\n  RectF getAccessibilityClientRect() {\n    return mAccessibilityClientRect != null ? mAccessibilityClientRect : mClientRect;\n  }"
+        }
+      ]
+    },
+    {
+      "path": "android/src/main/java/com/horcrux/svg/RenderableView.java",
+      "before_sha256": "493591247d7b138bce99234496f3fc3374d333441e8e234472fe6cba53be7e4e",
+      "after_sha256": "8cf84efd1656da15fdf5e9052b8c0a53d676a3e9f4e49084210c175cce44b321",
+      "replacements": [
+        {
+          "before": "    this.setClientRect(clientRect);\n\n    clip(canvas, paint);",
+          "after": "    this.setClientRect(clientRect);\n    RectF accessibilityRect = new RectF(mBox);\n    canvas.getMatrix().mapRect(accessibilityRect);\n    this.setAccessibilityClientRect(accessibilityRect);\n\n    clip(canvas, paint);"
+        }
+      ]
+    },
+    {
+      "path": "android/src/main/java/com/horcrux/svg/ImageView.java",
+      "before_sha256": "f10f0cd5898884e963620d7f8005fa48f1c2c66c626fd0207626343962eb3f20",
+      "after_sha256": "6db3b632333b2798ba86eec8efd92b1cc1f1ea0e0ca41fb0d24c38d3228774d8",
+      "replacements": [
+        {
+          "before": "    mCTM.mapRect(vbRect);\n    this.setClientRect(vbRect);",
+          "after": "    RectF accessibilityRect = new RectF(vbRect);\n    canvas.getMatrix().mapRect(accessibilityRect);\n    mCTM.mapRect(vbRect);\n    this.setClientRect(vbRect);\n    this.setAccessibilityClientRect(accessibilityRect);"
+        }
+      ]
+    },
+    {
+      "path": "android/src/main/java/com/horcrux/svg/GroupView.java",
+      "before_sha256": "95ccce4c4ebaa19c1189f3a89dc677f0497bc9f85e23060341f226a45baf78e7",
+      "after_sha256": "d23165090d7dfdccf2fcdae650d994da09968f4991fcc6d713a54db8f8aeaa3e",
+      "replacements": [
+        {
+          "before": "    final RectF groupRect = new RectF();",
+          "after": "    final RectF groupRect = new RectF();\n    final RectF accessibilityGroupRect = new RectF();"
+        },
+        {
+          "before": "        if (r != null) {\n          groupRect.union(r);\n        }",
+          "after": "        if (r != null) {\n          groupRect.union(r);\n        }\n        RectF accessibilityRect = node.getAccessibilityClientRect();\n        if (accessibilityRect != null) {\n          accessibilityGroupRect.union(accessibilityRect);\n        }"
+        },
+        {
+          "before": "    this.setClientRect(groupRect);",
+          "after": "    this.setClientRect(groupRect);\n    this.setAccessibilityClientRect(accessibilityGroupRect);"
+        }
+      ]
+    }
+  ]
+}
