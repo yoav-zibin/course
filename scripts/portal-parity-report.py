@@ -13,6 +13,9 @@ PAGES = ("catalog", "matches", "local", "preferences", "account")
 MATCH_FIELDS = ("game_id", "game_version", "status", "localMode", "practiceSeed", "created_at",
                 "players", "logicState", "state", "turn_of_player_indices", "move_count",
                 "moves", "initialState", "initialTurn", "last_move_player_index", "awaitingHandoff")
+PROOF_FILES = ("summary.json", "manifest.json", "visual-findings.json", "connect4-centers.json",
+               "connect4-pixel-alignment.json", "board-crops.json", "audit-metadata.json",
+               "provenance.json", "page-refresh.json", "responsive-findings.json", "seed-proof.json")
 
 
 def compare_match(actual, expected):
@@ -24,6 +27,45 @@ def one_file(directory, name):
     if len(candidates) != 1:
         raise ValueError(f"Expected one {name} in {directory}, found {len(candidates)}")
     return candidates[0]
+
+
+def copy_proofs(directory, destination, source_sha):
+    """Keep available driver evidence and reject conflicting source claims.
+
+    Older evidence without these optional metadata files is still accepted;
+    source provenance is never inferred from a platform's pass flag.
+    """
+    checked, errors = [], []
+    for name in PROOF_FILES:
+        candidates = list(directory.rglob(name))
+        if not candidates:
+            continue
+        if len(candidates) != 1:
+            errors.append(f"Ambiguous {name} in {directory}: found {len(candidates)}")
+            continue
+        source = candidates[0]
+        destination.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination / name)
+        try:
+            metadata = json.loads(source.read_text())
+            if not isinstance(metadata, dict):
+                raise ValueError("expected a JSON object")
+            claims = {}
+            if "sourceSha" in metadata:
+                claims["sourceSha"] = metadata["sourceSha"]
+            if name == "provenance.json":
+                if isinstance(metadata.get("run"), dict) and "head_sha" in metadata["run"]:
+                    claims["run.head_sha"] = metadata["run"]["head_sha"]
+                workflow = metadata.get("artifact", {}).get("workflow_run", {}) if isinstance(metadata.get("artifact"), dict) else {}
+                if isinstance(workflow, dict) and "head_sha" in workflow:
+                    claims["artifact.workflow_run.head_sha"] = workflow["head_sha"]
+            for field, actual in claims.items():
+                checked.append({"file":name,"field":field,"value":actual})
+                if actual != source_sha:
+                    errors.append(f"{source}: {field} is {actual!r}; expected {source_sha}")
+        except (ValueError, OSError) as error:
+            errors.append(f"Unreadable metadata {source}: {error}")
+    return checked, errors
 
 
 def build_report(fixture_path, evidence, output):
@@ -75,34 +117,38 @@ def build_report(fixture_path, evidence, output):
         cross_equal = len(actuals) == 3 and all(not compare_match(actuals["web"], actuals[p]) for p in ("android", "ios")) if expected is not None else None
         badge = "Page screenshots" if expected is None else "Matching saved position on all three" if cross_equal else "Position comparison incomplete or different"
         rendered.append(f'<section id="{html.escape(stage)}"><h2>{html.escape(title)}</h2><p class="badge">{badge}</p><div class="grid">'+''.join(f'<figure><figcaption>{p.title()}</figcaption>{cell}</figure>' for p,cell in zip(PLATFORMS,cells))+'</div></section>')
-    passed = not missing and all(result["passed"] for result in results)
+    state_passed = all(result["passed"] for result in results)
     summary = {"sourceSha":fixture["sourceSha"],"createdAt":datetime.now(timezone.utc).isoformat(),
                "viewport":fixture["viewport"],"comparisonFields":MATCH_FIELDS,"checks":results,
-               "missing":missing,"passed":passed,"scope":"Chromium, Android emulator and iOS Simulator. Signed-out pages and local single-human versus computer games; synthetic data only."}
+               "missing":missing,"stateComparisonsPassed":state_passed,"scope":"Chromium, Android emulator and iOS Simulator. Signed-out pages and local single-human versus computer games; synthetic data only."}
     findings_path=evidence / "findings.json"
     findings=json.loads(findings_path.read_text()) if findings_path.is_file() else {"findings":[],"visualReviewComplete":False}
     summary["visualReview"]=findings
+    summary["visualReviewComplete"]=findings.get("visualReviewComplete") is True
+    metadata_checks, metadata_errors = [], []
     for platform in PLATFORMS:
-        for name in ("summary.json","manifest.json","visual-findings.json","connect4-centers.json","connect4-pixel-alignment.json","board-crops.json"):
-            source=evidence / platform / name
-            if source.is_file():
-                target=output / "proof" / platform / name
-                target.parent.mkdir(parents=True,exist_ok=True)
-                shutil.copy2(source,target)
+        checked, errors = copy_proofs(evidence / platform, output / "proof" / platform, fixture["sourceSha"])
+        metadata_checks.extend({"platform":platform,**item} for item in checked)
+        metadata_errors.extend(errors)
     desktop=[]
     if (evidence / "web-desktop").is_dir():
         desktop_dir=evidence / "web-desktop"
         for stage,title in [(f"page-{page}",page.title()) for page in PAGES]+[(f'{game["slug"]}-step3',game["name"]) for game in fixture["games"]]:
-            source=one_file(desktop_dir,stage+".png")
-            target=output / "images" / "web-desktop" / source.name
-            target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source,target)
-            desktop.append((title,target.relative_to(output).as_posix()))
-        for name in ("summary.json","responsive-findings.json"):
-            source=desktop_dir / name
-            if source.is_file():
-                target=output / "proof" / "web-desktop" / name
+            try:
+                source=one_file(desktop_dir,stage+".png")
+                target=output / "images" / "web-desktop" / source.name
                 target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source,target)
-        summary["desktop"]={"viewport":{"width":1440,"height":1000},"screenshots":len(desktop),"proof":"proof/web-desktop/summary.json"}
+                desktop.append((title,target.relative_to(output).as_posix()))
+            except ValueError as error:
+                missing.append(str(error));desktop.append((title,None))
+        checked, errors = copy_proofs(desktop_dir, output / "proof" / "web-desktop", fixture["sourceSha"])
+        metadata_checks.extend({"platform":"web-desktop",**item} for item in checked)
+        metadata_errors.extend(errors)
+        summary["desktop"]={"viewport":{"width":1440,"height":1000},"screenshots":sum(file is not None for _,file in desktop),"proof":"proof/web-desktop/summary.json"}
+    summary["sourceMetadataChecks"]=metadata_checks
+    summary["metadataErrors"]=metadata_errors
+    passed = not missing and state_passed and not metadata_errors
+    summary["passed"]=passed
     (output / "comparison.json").write_text(json.dumps(summary,indent=2)+"\n")
     document = '''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BuildPlay: web, Android and iOS comparison</title><style>
@@ -110,14 +156,19 @@ body{font-family:system-ui,sans-serif;background:#10141f;color:#edf1fa;margin:0;
 </style><main><h1>BuildPlay: web · Android · iOS</h1>'''
     document += f'<p>Application source <code>{html.escape(fixture["sourceSha"])}</code> · 402 × 874 logical viewport.</p>'
     document += '<p class="scope">Actual screenshots from Chromium, the native Android app in an emulator, and the native app in iOS Simulator. UI taps and clicks drive gameplay. The three games start from the same legally generated position, game version, seed and clock. Platform fonts and system bars can differ. Click a screenshot for its original resolution.</p>'
-    document += f'<p><strong>{"All saved-position comparisons passed" if passed else "Comparison has missing evidence or differences"}</strong> · <a href="comparison.json">Detailed state checks</a></p>'
+    document += f'<p><strong>{"All saved-position comparisons passed" if state_passed else "Saved-position comparisons are incomplete or different"}</strong> · <a href="comparison.json">Detailed state checks</a></p>'
+    document += '<p><strong>Visual review: '+ ('Complete' if summary["visualReviewComplete"] else 'Pending final three-platform review') + '.</strong> Saved-state equality does not establish visual equivalence.</p>'
+    if missing or metadata_errors:
+        document += '<p class="missing">Evidence is incomplete or has conflicting source metadata; this is a partial report.</p>'
+    if metadata_errors:
+        document += '<ul class="missing">'+''.join(f'<li>{html.escape(error)}</li>' for error in metadata_errors)+'</ul>'
     if findings.get("findings"):
         document+='<h2>Visual findings</h2><ul>'+''.join(f'<li><strong>{html.escape(item["title"])}</strong>: {html.escape(item["description"])}</li>' for item in findings["findings"])+'</ul>'
     document+='<nav>Jump to: '+ ' · '.join(f'<a href="#{html.escape(stage)}">{html.escape(title)}</a>' for stage,title,_ in rows if stage.startswith(('page-','board-')))+'</nav>'
     document += ''.join(rendered)
     if desktop:
         document+='<section><h2>Desktop website: 1440 × 1000</h2><p>Additional wide-layout checks, with the same game positions. Navigation and the catalog adapt to the larger screen.</p>'
-        document+=''.join(f'<details><summary>{html.escape(title)}</summary><a href="{html.escape(file)}"><img loading="lazy" src="{html.escape(file)}" alt="Desktop: {html.escape(title)}"></a></details>' for title,file in desktop)+'</section>'
+        document+=''.join(f'<details><summary>{html.escape(title)}</summary>'+ (f'<a href="{html.escape(file)}"><img loading="lazy" src="{html.escape(file)}" alt="Desktop: {html.escape(title)}"></a>' if file is not None else '<p class="missing">Screenshot missing</p>')+'</details>' for title,file in desktop)+'</section>'
     document+='</main></html>'
     (output / "index.html").write_text(document)
     archive = output.parent / "BuildPlay-three-platform-comparison.zip"

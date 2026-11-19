@@ -8,6 +8,14 @@ on:
         type: string
         required: true
         default: '44502113490'
+      audit_scope:
+        description: All pages and games, or only the two remaining games
+        type: choice
+        required: true
+        default: all
+        options:
+          - all
+          - remaining-games
 
 permissions:
   contents: read
@@ -53,10 +61,19 @@ jobs:
           chmod +x "$RUNNER_TEMP/portal-maestro/maestro/bin/maestro"
           "$RUNNER_TEMP/portal-maestro/maestro/bin/maestro" --version
       - name: Audit real pages and moves on a fresh isolated simulator
+        env:
+          AUDIT_SCOPE: ${{ inputs.audit_scope }}
         run: |
           ditto -x -k parity-ios/input/BuildPlay-simulator.zip parity-ios/app
+          audit_args=()
+          if [[ "$AUDIT_SCOPE" == remaining-games ]]; then
+            audit_args+=(--skip-pages --games connect4,checkers)
+          elif [[ "$AUDIT_SCOPE" != all ]]; then
+            echo "Unsupported audit scope" >&2
+            exit 1
+          fi
           python3 scripts/portal-parity-ios.py audit parity-ios/app/BuildPlay.app parity-ios/results \
-            --maestro "$RUNNER_TEMP/portal-maestro/maestro/bin/maestro"
+            --maestro "$RUNNER_TEMP/portal-maestro/maestro/bin/maestro" "${audit_args[@]}"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

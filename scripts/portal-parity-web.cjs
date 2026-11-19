@@ -16,6 +16,7 @@ if(requestedViewport&&!/^\d{3,4}x\d{3,4}$/.test(requestedViewport))throw Error('
 const viewport=requestedViewport?Object.fromEntries(requestedViewport.split('x').map((value,index)=>[index?'height':'width',Number(value)])):fixture.viewport;
 if(viewport.width<300||viewport.width>4096||viewport.height<300||viewport.height>4096)throw Error('Parity viewport is outside the supported audit range');
 const touch=viewport.width<800;
+const pagesOnly=process.env.PORTAL_PARITY_PAGES_ONLY==='1';
 const key=`buildplay.shared.v1.${encodeURIComponent(base)}.visitor`;
 const canonical=value=>JSON.stringify(value,(_key,child)=>child&&typeof child==='object'&&!Array.isArray(child)?Object.fromEntries(Object.entries(child).sort(([a],[b])=>a.localeCompare(b))):child);
 const digest=value=>crypto.createHash('sha256').update(canonical(value)).digest('hex');
@@ -36,7 +37,7 @@ async function main(){
       if(request.method()!=='GET'||url.origin!==base){summary.network.push({method:request.method(),url:request.url(),action:'blocked'});return route.abort('blockedbyclient');}
       const endpoint=url.pathname+url.search;
       if(url.pathname==='/storage/capabilities')return route.fulfill({json:{pagination:false}});
-      if(url.pathname==='/i18n/locales')return route.fulfill({json:{locales:[{code:'en',name:'English',native_name:'English',direction:'ltr'}]}});
+      if(url.pathname==='/i18n/locales')return route.fulfill({json:{locales:[['en','English'],['es','Español'],['fr','Français'],['de','Deutsch'],['pt','Português'],['zh','中文（简体）'],['hi','हिन्दी'],['ar','العربية']].map(([code,name])=>({code,name,direction:code==='ar'?'rtl':'ltr'}))}});
       if(url.pathname==='/i18n/bundle/en')return route.fulfill({json:{catalog:{messages:{},direction:'ltr'},games:{}}});
       if(Object.hasOwn(fixture.accountData.responses,endpoint))return route.fulfill({json:fixture.accountData.responses[endpoint]});
       if(!['/portal','/health','/portal-worker.js','/'].includes(url.pathname)&&!url.pathname.startsWith('/static/')){
@@ -84,6 +85,42 @@ async function main(){
     fs.writeFileSync(path.join(output,name+'.a11y.yml'),await page.locator('body').ariaSnapshot());
     const geometry=await details(page);save(name+'.geometry.json',geometry);return geometry;
   }
+  async function scrollState(page){
+    return page.evaluate(()=>[...document.querySelectorAll('*')].filter(node=>node.scrollHeight>node.clientHeight+1&&['auto','scroll'].includes(getComputedStyle(node).overflowY)).map(node=>{const box=node.getBoundingClientRect();return{scrollTop:node.scrollTop,scrollHeight:node.scrollHeight,clientHeight:node.clientHeight,bbox:{x:box.x,y:box.y,width:box.width,height:box.height}};}));
+  }
+  async function viewportRatio(locator){
+    return locator.evaluate(node=>new Promise(resolve=>{const observer=new IntersectionObserver(entries=>{observer.disconnect();resolve(entries[0].intersectionRatio);});observer.observe(node);}));
+  }
+  async function scrollUp(page){
+    // Wheel events follow the ordinary browser input path; no DOM scrollTop
+    // assignment or application navigation hook is used to repair the capture.
+    await page.mouse.move(viewport.width/2,viewport.height*.55);
+    for(let attempt=0;attempt<5;attempt++){await page.mouse.wheel(0,-viewport.height*2);await delay(120);}
+  }
+  async function preferencesAndAccount(page,errors){
+    const heading=page.getByRole('heading',{name:'Preferences',exact:true});
+    const layout=page.getByText('Navigation layout',{exact:true});
+    const record={sourceSha:fixture.sourceSha,viewport,input:touch?'phone emulation with ordinary wheel scroll':'mouse and wheel',startedAt:new Date().toISOString(),localeChoices:8};
+    await page.mouse.move(viewport.width/2,viewport.height*.55);await page.mouse.wheel(0,viewport.height*3);await delay(150);
+    record.beforeNavigation=await scrollState(page);
+    const footer=page.getByRole('button',{name:'Preferences',exact:true}).first();await expect(footer).toBeInViewport();await footer.click();
+    await expect(heading).toBeVisible();
+    record.retainedOffset={scroll:await scrollState(page),headingBox:await heading.boundingBox(),headingViewportRatio:await viewportRatio(heading),layoutViewportRatio:await viewportRatio(layout)};
+    await capture(page,'page-preferences-retained-scroll');
+    await scrollUp(page);await expect(heading).toBeInViewport({ratio:1});await expect(layout).toBeInViewport({ratio:1});
+    await expect(page.getByRole('button',{name:'Navigation layout: Top navigation',exact:true})).toBeInViewport({ratio:1});
+    record.afterScrollingUp={scroll:await scrollState(page),headingBox:await heading.boundingBox(),headingViewportRatio:await viewportRatio(heading),layoutViewportRatio:await viewportRatio(layout)};
+    await capture(page,'page-preferences');save('page-refresh.json',{...record,phase:'Preferences capture complete; account pending'});
+    await page.getByRole('button',{name:'Log in',exact:true}).first().click();
+    const dialog=page.getByRole('dialog'),close=dialog.getByRole('button',{name:'Close dialog',exact:true}),english=dialog.getByRole('button',{name:'Language: English',exact:true});
+    await expect(dialog.getByRole('button',{name:/^Language: /})).toHaveCount(8);
+    await expect(close).toBeVisible();record.accountBeforeScroll=await scrollState(page);await scrollUp(page);
+    await expect(close).toBeInViewport({ratio:1});await expect(english).toBeInViewport({ratio:1});
+    record.accountAfterScroll=await scrollState(page);await capture(page,'page-account');
+    assert.deepEqual(errors,[]);record.pageErrors=errors;record.network=summary.network;record.finishedAt=new Date().toISOString();record.result='passed after normal scrolling';record.finding=record.retainedOffset.headingViewportRatio<1?{title:'Navigation retains the previous page scroll offset',description:'Navigating through the footer leaves Preferences scrolled away from its heading and navigation controls. Ordinary scrolling restores the top.'}:null;save('page-refresh.json',record);
+    for(const name of ['page-refresh-failure.json','page-refresh-failure.png'])fs.rmSync(path.join(output,name),{force:true});
+    return record;
+  }
   async function storedMatch(page,id){return page.evaluate(({key,id})=>JSON.parse(localStorage.getItem(key)).local[id],{key,id});}
   async function settled(page,game,expected,scene,name){
     await expect.poll(async()=>canonical(await storedMatch(page,game.matchId)),{timeout:30000,message:`${name} durable state`}).toBe(canonical(expected));
@@ -101,13 +138,17 @@ async function main(){
     return {name,moveCount:expected.move_count,matchSha256:digest(expected),sceneSha256:digest(scene),board:geometry.svg?.bbox,actualSceneCount:geometry.scenes.length,actualPaintedFrames:geometry.painted.length,svgFonts:[...new Set(geometry.nodes.filter(node=>node.font).map(node=>node.font.family))],clippedText:geometry.clippedText};
   }
   try{
+    if(pagesOnly){
+      const {context,page,errors}=await session();await page.getByRole('button',{name:'On this device',exact:true}).click();
+      const record=await preferencesAndAccount(page,errors);await context.close();
+      console.log(JSON.stringify({result:'passed',scope:'preferences/account page refresh only; game proofs preserved',viewport,retainedHeadingRatio:record.retainedOffset.headingViewportRatio,output}));return;
+    }
     const {context,page,errors}=await session();
     for(const [slug,label]of [['catalog','Games'],['matches','Matches'],['local','On this device']]){
       await page.getByRole('button',{name:label,exact:true}).click();await delay(150);
       await capture(page,'page-'+slug);summary.pages.push({name:slug,errorCount:errors.length});
     }
-    await page.getByRole('button',{name:'Preferences',exact:true}).first().click();await expect(page.getByRole('heading',{name:'Preferences',exact:true})).toBeVisible();await capture(page,'page-preferences');summary.pages.push({name:'preferences',errorCount:errors.length});
-    await page.getByRole('button',{name:'Log in',exact:true}).first().click();await expect(page.getByRole('button',{name:'Close dialog',exact:true})).toBeVisible();await capture(page,'page-account');summary.pages.push({name:'account',errorCount:errors.length});
+    await preferencesAndAccount(page,errors);summary.pages.push({name:'preferences',errorCount:errors.length},{name:'account',errorCount:errors.length});
     assert.deepEqual(errors,[]);await context.close();
     for(const game of fixture.games){
       const {context,page,errors}=await session();
@@ -151,7 +192,7 @@ async function main(){
     summary.assertionsScope='Actual touch gameplay, exact saved matches and final reducer scenes; visual findings are recorded separately and are not considered a clean visual pass.';
     summary.visualFindings=findings;save('visual-findings.json',{sourceSha:fixture.sourceSha,findings});
     summary.finishedAt=new Date().toISOString();summary.result='passed';save('summary.json',summary);fs.rmSync(path.join(output,'failure.png'),{force:true});console.log(JSON.stringify({result:'passed',output,games:summary.games.length,pages:summary.pages.length,visualFindings:findings.length}));
-  }catch(error){summary.result='failed';summary.error=error.stack||String(error);save('summary.json',summary);if(active&&!active.isClosed())await active.screenshot({path:path.join(output,'failure.png')}).catch(()=>{});throw error;}
+  }catch(error){summary.result='failed';summary.error=error.stack||String(error);save(pagesOnly?'page-refresh-failure.json':'summary.json',summary);if(active&&!active.isClosed())await active.screenshot({path:path.join(output,pagesOnly?'page-refresh-failure.png':'failure.png')}).catch(()=>{});throw error;}
   finally{await browser.close();}
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

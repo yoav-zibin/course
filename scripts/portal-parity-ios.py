@@ -200,6 +200,19 @@ def selector(text):
     return {"text": "^" + re.escape(text) + "$"}
 
 
+def saved_card_title(name):
+    # iOS exposes MatchCard's Pressable as one comma-joined accessible label;
+    # Android can expose its title separately. Both anchor the same saved card.
+    return {"text": "^" + re.escape(name) + r"(?:,.*)?$"}
+
+
+def parse_game_slugs(text):
+    values = text.split(",")
+    if not values or len(set(values)) != len(values) or not set(values) <= {"tictactoe", "connect4", "checkers"}:
+        raise ValueError("Audit games must be unique reviewed slugs: tictactoe,connect4,checkers")
+    return values
+
+
 def expand_compact_hierarchy(value):
     schema = value.get("ui_schema", {})
     abbreviations = schema.get("abbreviations", {})
@@ -331,17 +344,22 @@ def preserve_driver_logs(output, started, *, home=None, device=None, max_bytes=5
 
 
 class Audit:
-    def __init__(self, output, maestro):
+    def __init__(self, output, maestro, *, game_slugs=None, skip_pages=False):
         self.output, self.maestro = output.resolve(), str(maestro)
         self.phase = helper("run-ios-smoke-phase")
         self.fixture = load_fixture()
+        self.game_slugs = [game["slug"] for game in self.fixture["games"]] if game_slugs is None else parse_game_slugs(",".join(game_slugs))
+        self.skip_pages = skip_pages
         self.device = None
         self.container = None
         self.first = True
         self.mcp = None
         self.started = time.time()
         self.report = {"sourceSha": SOURCE, "fixtureSha256": FIXTURE_SHA256, "platform": "ios",
-                       "viewport": self.fixture["viewport"], "stages": [], "actions": [], "passed": False}
+                       "viewport": self.fixture["viewport"], "stages": [], "actions": [], "passed": False,
+                       "auditRunId": os.environ.get("GITHUB_RUN_ID"),
+                       "requestedScope": {"pages": not skip_pages, "games": self.game_slugs,
+                                          "extraPractice": "tictactoe" in self.game_slugs}}
 
     def run(self, name, command, timeout=120, required=True):
         code = self.phase.run_phase(name, timeout, self.output / (name + ".log"), list(map(str, command)))
@@ -499,8 +517,10 @@ class Audit:
 
     def games(self):
         for game in self.fixture["games"]:
+            if game["slug"] not in self.game_slugs:
+                continue
             package = self.fixture["accountData"]["responses"][f'/games/{game["gameId"]}/versions/{game["gameVersion"]}']
-            open_selector = {**selector("Open match"), "below": selector(package["name"]), "index": 0}
+            open_selector = {**selector("Open match"), "below": saved_card_title(package["name"]), "index": 0}
             self.flow(game["slug"] + "-open", [
                 {"tapOn": selector("On this device")},
                 {"scrollUntilVisible": {"element": selector("Practice with a computer"), "direction": "UP", "timeout": 30000}},
@@ -598,9 +618,13 @@ class Audit:
             self.run("install", ["xcrun", "simctl", "install", self.device, app], 300)
             self.container = seed(self.device, self.output)
             self.run("launch", ["xcrun", "simctl", "launch", self.device, BUNDLE], 360)
-            self.pages()
+            if not self.skip_pages:
+                self.pages()
             self.games()
-            self.extra_practice()
+            if "tictactoe" in self.game_slugs:
+                self.extra_practice()
+            else:
+                self.report["extraPractice"] = {"skipped": True, "reason": "outside the requested game scope"}
             self.report["passed"] = True
         except Exception as error:
             self.report["error"] = str(error)
@@ -633,12 +657,13 @@ def main():
     subs = parser.add_subparsers(dest="command", required=True)
     p = subs.add_parser("provenance"); p.add_argument("run_id", type=int); p.add_argument("output", type=Path)
     p = subs.add_parser("audit"); p.add_argument("app", type=Path); p.add_argument("output", type=Path); p.add_argument("--maestro", required=True, type=Path)
+    p.add_argument("--games", type=parse_game_slugs); p.add_argument("--skip-pages", action="store_true")
     args = parser.parse_args()
     try:
         if args.command == "provenance":
             provenance(args.run_id, args.output)
         else:
-            Audit(args.output, args.maestro).execute(args.app.resolve())
+            Audit(args.output, args.maestro, game_slugs=args.games, skip_pages=args.skip_pages).execute(args.app.resolve())
     except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError) as error:
         print(f"iOS parity audit failed: {error}", file=sys.stderr)
         return 1

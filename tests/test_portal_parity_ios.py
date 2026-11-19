@@ -114,6 +114,27 @@ def test_board_scroll_uses_real_far_edge_swipe_until_target_is_in_safe_viewport(
     assert runner.report["scrollActions"][0]["driver"] == "Maestro/XCTest physical swipe"
 
 
+def test_saved_card_title_matches_observed_ios_grouping_and_android_title_only():
+    import re
+    for name in ("Tic-tac-toe", "Connect Four", "Checkers (Declarative)"):
+        pattern = audit.saved_card_title(name)["text"]
+        assert re.fullmatch(pattern, name)
+        assert re.fullmatch(pattern, name + ", On this device, 2 players · 0 moves")
+        assert not re.fullmatch(pattern, name + " Other")
+    assert not re.fullmatch(audit.saved_card_title("Checkers (Declarative)")["text"], "Checkers Declarative")
+
+
+def test_remaining_game_scope_is_explicit_and_cannot_claim_skipped_pages(tmp_path):
+    remaining = audit.parse_game_slugs("connect4,checkers")
+    runner = audit.Audit(tmp_path, "maestro", game_slugs=remaining, skip_pages=True)
+    assert runner.game_slugs == ["connect4", "checkers"]
+    assert runner.report["requestedScope"] == {"pages": False, "games": remaining, "extraPractice": False}
+    assert not runner.report["passed"]
+    for invalid in ("", "checkers,checkers", "private-game", "connect4,"):
+        with pytest.raises(ValueError, match="reviewed slugs"):
+            audit.parse_game_slugs(invalid)
+
+
 @pytest.mark.parametrize("change", ["source", "fork", "workflow", "artifact", "expired", "digest", "build"])
 def test_untrusted_or_unsuccessful_artifact_rejected(change):
     run, artifact, jobs = provenance()
