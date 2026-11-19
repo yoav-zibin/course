@@ -22,7 +22,8 @@ EDIT = APP + "/edits/123"
 class API:
     def __init__(self):
         self.calls = []
-        self.tracks = [{"track": "internal", "releases": []}, {"track": "production", "releases": []}]
+        self.tracks = [{"track": "internal", "releases": []},
+                       {"track": "production", "releases": [{"versionCodes": ["1"], "status": "completed"}]}]
         self.bundles = [{"versionCode": 2, "sha256": "c" * 64}]
         self.apks = []
         self.production = [{"releaseLifecycleState": "RELEASE_LIFECYCLE_STATE_PUBLISHED"}]
@@ -148,12 +149,39 @@ def test_divergent_release_source_is_not_overwritten():
 
 @pytest.mark.parametrize("state", ["RELEASE_LIFECYCLE_STATE_IN_REVIEW", "RELEASE_LIFECYCLE_STATE_NOT_SENT_FOR_REVIEW",
                                    "RELEASE_LIFECYCLE_STATE_APPROVED_NOT_PUBLISHED", "UNKNOWN"])
-def test_pending_production_changes_block_before_any_edit(state):
+def test_pending_production_changes_block_before_upload(state):
     api = API()
     api.production = [{"releaseLifecycleState": state}]
     with pytest.raises(publication.PlayError, match="Production has pending"):
         publish(api)
-    assert len(api.calls) == 1
+    assert not any(path.startswith("/upload/") for _, path, _, _ in api.calls)
+    assert api.calls[-1][:2] == ("DELETE", EDIT)
+
+
+def test_explicitly_empty_production_track_does_not_need_new_lifecycle_endpoint():
+    api = API()
+    api.tracks[1] = {"track": "production"}
+    api.production = None
+    assert publish(api)["status"] == "committed"
+    assert not any(path == APP + "/tracks/production/releases" for _, path, _, _ in api.calls)
+
+
+@pytest.mark.parametrize("tracks", [[{"track": "internal"}],
+                                    [{"track": "internal"}, {"track": "production", "releases": None}]])
+def test_missing_or_malformed_production_state_is_not_treated_as_empty(tracks):
+    api = API()
+    api.tracks = tracks
+    with pytest.raises(publication.PlayError, match="production track state"):
+        publish(api)
+    assert not committed(api)
+
+
+def test_existing_production_release_requires_lifecycle_endpoint():
+    api = API()
+    api.production = []
+    with pytest.raises(publication.PlayError, match="verify lifecycle"):
+        publish(api)
+    assert not committed(api)
 
 
 def test_failed_commit_is_not_retried_with_review_cancellation_or_draft_fallback():

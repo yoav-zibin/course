@@ -17,9 +17,10 @@ The dedicated publishing service account is:
 buildplay-play-ci@buildplay-101e9.iam.gserviceaccount.com
 ```
 
-The real publishing-access probe returned HTTP `403`: the credential can
-authenticate, but its required Play Console access has not been verified. A
-successful upload or internal tester rollout is therefore still pending.
+The initial publishing-access probe returned HTTP `403`. After the Console grant,
+creating an edit and reading tracks both returned HTTP `200`; the existing
+internal release has version code `2`. The first automatic upload is being
+verified separately from this access check.
 
 An owner or administrator must invite this service account through **Play
 Console → Users and permissions** and grant it access to `fun.buildplay` with:
@@ -79,6 +80,10 @@ and never falls back to a production track. Its release requests use
 `status: completed`; it does not silently change a rejected release to `draft`.
 Pending production review or publication can block the commit. The commit uses
 `changesInReviewBehavior=ERROR_IF_IN_REVIEW` to avoid canceling an existing review.
+An explicitly empty production track is checked through the stable edits API.
+Existing production releases additionally require the newer lifecycle API; an
+unavailable lifecycle API cannot bypass that check. The production track is
+checked again before committing.
 
 A successful commit means Google accepted the internal release change. Google
 review, processing, tester eligibility and opt-in still determine when a tester

@@ -87,12 +87,24 @@ def internal_track(tracks):
     return candidates[0]
 
 
-def production_clear(request):
+def production_clear(request, tracks):
+    production = [track for track in tracks if track.get("track") == "production"]
+    if len(production) != 1 or not isinstance(production[0].get("releases", []), list):
+        raise PlayError("Cannot establish the production track state.")
+    releases = production[0].get("releases", [])
+    # The newer release-lifecycle endpoint is not available for every app yet.
+    # An explicitly empty production track has no production release to submit;
+    # use the stable edits API for that case, without weakening other checks.
+    if not releases:
+        return releases
     state = request("GET", APP + "/tracks/production/releases")
     if any(release.get("releaseLifecycleState") not in
            ("RELEASE_LIFECYCLE_STATE_PUBLISHED", "RELEASE_LIFECYCLE_STATE_DRAFT")
            for release in state.get("releases", [])):
         raise PlayError("Production has pending review/publication changes; finish them in Play Console before retrying.")
+    if not state.get("releases"):
+        raise PlayError("Cannot verify lifecycle state for existing production releases.")
+    return releases
 
 
 def publish(bundle, source, repo, version, *, request, validator=validate_bundle,
@@ -106,7 +118,6 @@ def publish(bundle, source, repo, version, *, request, validator=validate_bundle
     digest = validator(bundle, version)
     if not is_current(source):
         return {"status": "superseded", "source": source, "versionCode": version}
-    production_clear(request)
     edit = request("POST", APP + "/edits", {})["id"]
     if not re.fullmatch(r"[A-Za-z0-9_-]+", edit):
         raise PlayError("Google Play returned an invalid edit identifier.")
@@ -114,6 +125,7 @@ def publish(bundle, source, repo, version, *, request, validator=validate_bundle
     committed = False
     try:
         tracks = request("GET", endpoint + "/tracks").get("tracks", [])
+        production = production_clear(request, tracks)
         target = internal_track(tracks)
         bundles = request("GET", endpoint + "/bundles").get("bundles", [])
         apks = request("GET", endpoint + "/apks").get("apks", [])
@@ -151,7 +163,9 @@ def publish(bundle, source, repo, version, *, request, validator=validate_bundle
                 {"track": target["track"], "releases": [release]})
         request("POST", endpoint + ":validate")
         # Recheck immediately before committing; never cancel a Console review.
-        production_clear(request)
+        latest_tracks = request("GET", endpoint + "/tracks").get("tracks", [])
+        if production_clear(request, latest_tracks) != production:
+            raise PlayError("Production track changed during upload; retry after checking Play Console.")
         if not is_current(source):
             return {"status": "superseded", "source": source, "versionCode": version}
         request("POST", endpoint + ":commit", params={"changesInReviewBehavior": "ERROR_IF_IN_REVIEW"})
