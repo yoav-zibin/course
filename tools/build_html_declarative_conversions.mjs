@@ -10,7 +10,7 @@ import {fileURLToPath} from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'games', 'declarative');
 const SOURCE_UI = fs.readFileSync(path.join(ROOT, 'games/declarative/html_conversions_ui.js'), 'utf8');
-const COPY = JSON.parse(fs.readFileSync(path.join(OUT,'html_conversions_i18n.json'),'utf8'));
+const COPY = JSON.parse(fs.readFileSync(path.join(OUT,'locales/html_conversions.json'),'utf8'));
 const STRING_KEYS = Object.fromEntries(Object.keys(COPY.strings).map((text,index)=>[text,`text_${index}`]));
 const ENGLISH = Object.fromEntries(Object.entries(STRING_KEYS).map(([text,key])=>[key,text]));
 const languages = ['es', 'fr', 'de', 'pt', 'zh', 'hi', 'ar'];

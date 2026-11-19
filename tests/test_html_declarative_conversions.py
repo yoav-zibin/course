@@ -155,9 +155,10 @@ def test_generator_rebuilds_from_tracked_inputs_only_and_is_repeatable(tmp_path)
     (tmp_path / 'tools').mkdir()
     destination = tmp_path / 'games/declarative'
     destination.mkdir(parents=True)
+    (destination / 'locales').mkdir()
     shutil.copy(ROOT / 'tools/build_html_declarative_conversions.mjs', tmp_path / 'tools')
-    for name in ['html_conversions_ui.js', 'html_conversions_i18n.json', *(kind+'.json' for kind in KINDS)]:
-        shutil.copy(DIRECTORY / name, destination)
+    for name in ['html_conversions_ui.js', 'locales/html_conversions.json', *(kind+'.json' for kind in KINDS)]:
+        shutil.copy(DIRECTORY / name, destination / name)
     expected = {kind: (destination / (kind+'.json')).read_bytes() for kind in KINDS}
     for _ in range(2):
         subprocess.run(['node', 'tools/build_html_declarative_conversions.mjs'], cwd=tmp_path,

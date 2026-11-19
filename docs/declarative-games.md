@@ -649,7 +649,7 @@ translations and schematic SVG illustrations. Those illustrations are not
 captured gameplay screenshots.
 
 The ten HTML conversions use `html_conversions_ui.js` and
-`html_conversions_i18n.json` for presentation and all seven translations.
+`locales/html_conversions.json` for presentation and all seven translations.
 Their checked-in packages retain the authoritative rules and schemas, so
 regeneration needs no private legacy export. The generator records opening,
 intermediate and finishing moves from real matches. Checkers and both chess
