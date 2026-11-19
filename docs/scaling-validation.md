@@ -1,5 +1,10 @@
 # Scaling validation evidence
 
+> Current platform model: games belong to the platform and have no creator or
+> owner user ID. Historical validation results below describe the model tested
+> at the time; references to user-owned games or drafts are not current product
+> behavior.
+
 Recorded October 29, 2026. This is an isolated test release, not a production
 cutover or a completed billion-match capacity test. See `scaling-storage.md` for
 the remaining feature and release gates. The Oct 30, 2026 cutover superseded

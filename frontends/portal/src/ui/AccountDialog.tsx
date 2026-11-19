@@ -8,18 +8,26 @@ import {NotificationPreferences} from './Notifications';
 import {getLocales} from '../platform/i18n';
 import {accountDeletion} from '../core/account-deletion';
 import {AccountDeletionStatus} from './AccountDeletion';
+import {InactiveSignInError} from '../core/api';
 
 export function AccountDialog({visible,onClose}: {visible:boolean;onClose:()=>void}) {
-  const {p,run,notify}=useApp(), t=(key:string,fallback:string)=>text(p,key,fallback);
-  const [method,setMethod]=useState('guest'),[name,setName]=useState(''),[identifier,setIdentifier]=useState(''),[code,setCode]=useState(''),[verification,setVerification]=useState('');
-  const [link,setLink]=useState('link'),[editing,setEditing]=useState(false),[error,setError]=useState('');
+  const {p}=useApp(), t=(key:string,fallback:string)=>text(p,key,fallback);
+  const [method,setMethod]=useState('google'),[name,setName]=useState(''),[identifier,setIdentifier]=useState(''),[code,setCode]=useState(''),[verification,setVerification]=useState('');
+  const [editing,setEditing]=useState(false),[error,setError]=useState(''),[confirmLink,setConfirmLink]=useState<number|null>(null),[approvedLink,setApprovedLink]=useState<number|null>(null);
   const [confirmDeletion,setConfirmDeletion]=useState(false);
-  const scope=JSON.stringify([p.baseUrl,p.account?.id]),current=useRef(scope);current.current=scope;
-  useEffect(()=>{setName(p.account?.display_name||'');setVerification('');setCode('');setError('');setConfirmDeletion(false);},[visible,scope]);
+  const scope=JSON.stringify([p.baseUrl,p.account?.id]),current=useRef({scope,visible,epoch:0,dialog:0}),revision=useRef(0);
+  if(current.current.scope!==scope||current.current.visible!==visible)current.current={scope,visible,epoch:current.current.epoch+1,dialog:current.current.dialog+(current.current.visible!==visible?1:0)};
+  const epoch=current.current.epoch;
+  useEffect(()=>{++revision.current;setMethod('google');setName(p.account?.display_name||'');setIdentifier('');setVerification('');setCode('');setError('');setConfirmDeletion(false);setConfirmLink(null);setApprovedLink(null);},[visible,scope]);
   const deletion=accountDeletion(p.account,p.profile);
-  const close=()=>{setConfirmDeletion(false);onClose();};
-  const methods=[{value:'guest',label:t('ui.auth.guest','Guest')},...(p.authConfig?.email_login_enabled?[{value:'email',label:t('ui.auth.email','Email')}]:[]),...(p.authConfig?.phone_login_enabled?[{value:'phone',label:t('ui.auth.phone','Phone')}]:[])];
-  const act=async(task:()=>Promise<unknown>)=>{const own=scope;setError('');try{await task();}catch(e){if(current.current===own)setError(e instanceof Error?e.message:String(e));}};
+  const close=()=>{++revision.current;setConfirmDeletion(false);setConfirmLink(null);setApprovedLink(null);onClose();};
+  const verifiedMethods=[...(p.authConfig?.google_client_id?[{value:'google',label:'Google'}]:[]),...(p.authConfig?.email_login_enabled?[{value:'email',label:t('ui.auth.email','Email')}]:[]),...(p.authConfig?.phone_login_enabled?[{value:'phone',label:t('ui.auth.phone','Phone')}]:[])];
+  const methods=[...verifiedMethods,...(!p.account?[{value:'guest',label:t('ui.auth.guest','Guest')}]:[])];
+  const selected=methods.some(item=>item.value===method)?method:methods[0]?.value;
+  const allowed=!p.account||approvedLink===epoch;
+  const act=async(task:()=>Promise<unknown>)=>{const own=current.current,rev=revision.current;setError('');try{await task();}catch(e){if(current.current===own&&current.current.visible&&revision.current===rev)setError(e instanceof Error?e.message:String(e));}};
+  const authGuard=()=>{const own=current.current,rev=revision.current;return()=>{if(current.current!==own||!own.visible||revision.current!==rev||p.account&&approvedLink!==own.epoch)throw new InactiveSignInError(copyText('This sign-in request is no longer active. Try again.'));};};
+  const authenticate=(task:(guard:()=>void)=>Promise<unknown>)=>{const dialog=current.current.dialog,guard=authGuard();return act(async()=>{guard();await task(guard);if(current.current.visible&&current.current.dialog===dialog)onClose();});};
   return <Dialog visible={visible} title={p.account?t('ui.auth.account','Your account'):t('ui.auth.log_in','Welcome to BuildPlay')} onClose={close}>
     {error&&<Notice error>{error}</Notice>}
     <Choices label={t('ui.language.label','Language')} value={p.locale} options={getLocales().map(item=>({value:item.code,label:item.native_name||item.name||item.code}))} onChange={value=>act(()=>p.actions.setLocale(value))}/>
@@ -28,24 +36,29 @@ export function AccountDialog({visible,onClose}: {visible:boolean;onClose:()=>vo
       {deletion.pending?<AccountDeletionStatus onUndo={()=>act(()=>p.actions.cancelAccountDeletion())}/>:confirmDeletion?<View testID="account-deletion-confirmation" style={{gap:14}}>
         <Title small>{copyText('Delete this account?')}</Title>
         <Copy>{copyText('Deleting this account is permanent.')}</Copy>
-        <Copy>{copyText('Your account, profile and every match you participated in will be removed, including shared and completed matches. Published games will remain available.')}</Copy>
+        <Copy>{copyText('Your account, profile and every match you participated in will be removed, including shared and completed matches.')}</Copy>
         <Copy>{copyText('You can undo for 24 hours. Permanent deletion may take up to another hour.')}</Copy>
         {!p.network&&<Copy>{copyText('Connect to the internet to update account deletion.')}</Copy>}
-        <Button danger disabled={!p.network||p.deletionUpdating} onPress={()=>act(async()=>{await p.actions.requestAccountDeletion();if(current.current===scope)setConfirmDeletion(false);})}>{copyText('Confirm account deletion')}</Button>
+        <Button danger disabled={!p.network||p.deletionUpdating} onPress={()=>act(async()=>{await p.actions.requestAccountDeletion();if(current.current.scope===scope)setConfirmDeletion(false);})}>{copyText('Confirm account deletion')}</Button>
         <Button secondary disabled={p.deletionUpdating} onPress={()=>setConfirmDeletion(false)}>{copyText('Keep my account')}</Button>
       </View>:<Button compact secondary danger disabled={!p.network||p.deletionUpdating} onPress={()=>setConfirmDeletion(true)}>{copyText('Request account deletion')}</Button>}
       {editing&&<><Field label={t('ui.auth.display_name','Display name')} value={name} onChangeText={setName} maxLength={200}/><Button disabled={!name.trim()} onPress={()=>act(async()=>{await p.actions.updateProfile({display_name:name.trim()});setEditing(false);})}>{t('ui.action.save','Save')}</Button></>}
     </Card>}
     {p.account&&<>{(p.profile?.referral_code||p.account.referral_code)&&<Copy selectable small>{copyText('Your player code: {v0}',{v0:p.profile?.referral_code||p.account.referral_code})}</Copy>}<NotificationPreferences/></>}
-    {p.accounts.length>1&&<View style={{gap:10}}><Copy small muted>{t('ui.auth.switch','Switch account')}</Copy>{p.accounts.filter(a=>a.id!==p.account?.id).map(a=><Button key={a.id} secondary onPress={()=>act(async()=>{await p.actions.switchAccount(a.id);onClose();})}>{a.display_name}</Button>)}</View>}
-    {p.account&&<><Title small>{t('ui.auth.add_login','Add a login or use another account')}</Title><Choices label={copyText("Account to use")} value={link} options={[{value:'link',label:copyText("Link to this account")},{value:'new',label:copyText("Use another account")}]} onChange={setLink}/></>}
-    {p.authConfig?.google_client_id&&<GoogleLogin clientId={p.authConfig.google_client_id} link={Boolean(p.account&&link==='link')} onToken={token=>act(async()=>{await p.actions.google(token,Boolean(p.account&&link==='link'));onClose();})}/>}
-    <Choices label={t('ui.auth.login_method','Continue with')} value={method} options={methods} onChange={value=>{setMethod(value);setVerification('');setCode('');setError('');}}/>
-    {method==='guest'?<><Field label={t('ui.auth.display_name','Your name')} value={name} onChangeText={setName} maxLength={200} autoComplete="name"/><Button disabled={!name.trim()||!p.network} onPress={()=>act(async()=>{await p.actions.guest(name.trim());onClose();})}>{t('ui.auth.continue_guest','Continue as guest')}</Button></>
-      :<><Field label={method==='phone'?t('ui.auth.phone','Phone number'):t('ui.auth.email','Email')} value={identifier} onChangeText={setIdentifier} keyboardType={method==='phone'?'phone-pad':'email-address'} autoComplete={method==='phone'?'tel':'email'} autoCapitalize="none" editable={!verification}/>
-        {!verification?<Row><Button disabled={!identifier.trim()||!p.network} onPress={()=>act(async()=>{const result=await p.actions.requestCode(method as 'email'|'phone',identifier.trim());setVerification(result.verification_id||result.id||identifier.trim());})}>{t('ui.auth.send_code','Send verification code')}</Button>{method==='phone'&&p.authConfig.phone_call_enabled&&<Button secondary disabled={!identifier.trim()} onPress={()=>act(async()=>{const result=await p.actions.requestCode('phone',identifier.trim(),'call');setVerification(result.verification_id||result.id||identifier.trim());})}>{copyText("Call me")}</Button>}</Row>
-          :<><Field label={t('ui.auth.code','Verification code')} secureTextEntry value={code} onChangeText={setCode} keyboardType="number-pad" autoComplete="one-time-code" maxLength={12}/><Button disabled={!code.trim()||!p.network} onPress={()=>act(async()=>{await p.actions.verifyCode(method as 'email'|'phone',verification,code.trim(),name.trim()||'Player',Boolean(p.account&&link==='link'));onClose();})}>{t('ui.auth.verify','Verify and continue')}</Button><Button secondary onPress={()=>{setVerification('');setCode('');}}>{copyText("Use another address or resend")}</Button></>}
-        <Copy small muted>{t('ui.auth.verified_bonus','Get 1,000 tokens once with your first verified login. Repeat logins do not grant another bonus.')}</Copy>
+    {!p.account&&p.accounts.length>0&&<View style={{gap:10}}><Copy small muted>{copyText('Saved accounts on this device')}</Copy>{p.accounts.map(a=><Button key={a.id} secondary onPress={()=>authenticate(guard=>p.actions.switchAccount(a.id,guard))}>{copyText('Sign in as {v0}',{v0:a.display_name})}</Button>)}</View>}
+    {p.account&&<><Title small>{copyText('Link a verified login')}</Title><Copy small muted>{copyText('To use a different BuildPlay account, log out first.')}</Copy>
+      {verifiedMethods.length>0&&!allowed&&<>{confirmLink===epoch?<Card testID="confirm-login-link"><Title small>{copyText('Link this login to your current account?')}</Title><Copy>{copyText('All linked login methods open the same BuildPlay account, with the same profile, matches and tokens.')}</Copy><Row><Button onPress={()=>{if(current.current.epoch===epoch&&current.current.visible){setApprovedLink(epoch);setConfirmLink(null);}}}>{copyText('Confirm link')}</Button><Button secondary onPress={()=>setConfirmLink(null)}>{copyText('Cancel')}</Button></Row></Card>:<Button secondary onPress={()=>setConfirmLink(epoch)}>{copyText('Link a verified login')}</Button>}</>}
+      {verifiedMethods.length===0&&<Copy muted>{copyText('Verified login methods are unavailable right now.')}</Copy>}
+    </>}
+    {(!p.account||!p.account.linked?.length)&&<Copy small muted testID="verified-login-bonus">{t('ui.auth.verified_bonus','Get 1,000 tokens once with your first verified login. Repeat logins do not grant another bonus.')}</Copy>}
+    {allowed&&methods.length>0&&<>
+      <Choices label={t('ui.auth.login_method','Continue with')} value={selected} options={methods} onChange={value=>{++revision.current;setMethod(value);setIdentifier('');setVerification('');setCode('');setError('');}}/>
+      {selected==='google'?<GoogleLogin clientId={p.authConfig.google_client_id} onToken={token=>authenticate(guard=>p.actions.google(token,Boolean(p.account),guard))} onBrowserLogin={()=>authenticate(guard=>p.actions.browserLogin(Boolean(p.account),guard,true))}/>
+      :selected==='guest'?<><Field label={t('ui.auth.display_name','Your name')} value={name} onChangeText={setName} maxLength={200} autoComplete="name"/><Button disabled={!name.trim()||!p.network} onPress={()=>authenticate(guard=>p.actions.guest(name.trim(),guard))}>{t('ui.auth.continue_guest','Continue as guest')}</Button></>
+      :<><Field label={selected==='phone'?t('ui.auth.phone','Phone number'):t('ui.auth.email','Email')} value={identifier} onChangeText={setIdentifier} keyboardType={selected==='phone'?'phone-pad':'email-address'} autoComplete={selected==='phone'?'tel':'email'} autoCapitalize="none" editable={!verification}/>
+        {!verification?<Row><Button disabled={!identifier.trim()||!p.network} onPress={()=>{const guard=authGuard();return act(async()=>{guard();const result=await p.actions.requestCode(selected as 'email'|'phone',identifier.trim());guard();setVerification(result.verification_id||result.id||identifier.trim());});}}>{t('ui.auth.send_code','Send verification code')}</Button>{selected==='phone'&&p.authConfig.phone_call_enabled&&<Button secondary disabled={!identifier.trim()} onPress={()=>{const guard=authGuard();return act(async()=>{guard();const result=await p.actions.requestCode('phone',identifier.trim(),'call');guard();setVerification(result.verification_id||result.id||identifier.trim());});}}>{copyText('Call me')}</Button>}</Row>
+          :<><Field label={t('ui.auth.code','Verification code')} secureTextEntry value={code} onChangeText={setCode} keyboardType="number-pad" autoComplete="one-time-code" maxLength={12}/><Button disabled={!code.trim()||!p.network} onPress={()=>authenticate(guard=>p.actions.verifyCode(selected as 'email'|'phone',verification,code.trim(),name.trim()||'Player',Boolean(p.account),guard))}>{t('ui.auth.verify','Verify and continue')}</Button><Button secondary onPress={()=>{++revision.current;setVerification('');setCode('');}}>{copyText('Use another address or resend')}</Button></>}
       </>}
+    </>}
   </Dialog>;
 }

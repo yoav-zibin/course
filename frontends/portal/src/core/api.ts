@@ -2,6 +2,7 @@ import {rememberDiagnosticSecrets,startDiagnosticRequest} from './diagnostics';
 import type { Account } from './types';
 import { readCampaignCode } from './attribution';
 export class ApiError extends Error { constructor(public status: number, message: string, public detail?: any) { super(message); } }
+export class InactiveSignInError extends Error { name='InactiveSignInError'; }
 export class PortalApi {
   constructor(public baseUrl: string, private locale: () => string = () => 'en', public fetcher: typeof fetch = fetch) {}
   async request<T = any>(method: string, path: string, body?: any, account?: Account | null, requestId?: string): Promise<T> {

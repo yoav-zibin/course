@@ -12,6 +12,9 @@ An in-memory REST backend for a multiplayer turn-based games platform, built wit
 > (game builder, `/builder`, builder tests, builder emulator) are stale and describe
 > removed code; they are kept for history until the README is rewritten.
 
+Games belong to the platform and have no creator or owner user ID. Players
+create and participate in matches; game publication is managed by the platform.
+
 > Writing a game for the platform: see [GAME_DEVELOPMENT_GUIDE.md](GAME_DEVELOPMENT_GUIDE.md)
 > — the complete guide to the `POST /games` import API, the server and client
 > contracts, and the checks every game must pass.

@@ -1,3 +1,4 @@
+import {verifiedSignInFixtures,logoutAndSignIn} from './auth-fixtures';
 import {test,expect,type APIRequestContext,type Page} from '@playwright/test';
 import {createUser,loginAs,uniqueName} from './helpers';
 import copy from '../src/platform/ui-copy.json';
@@ -65,17 +66,18 @@ test('confirmation dismissals do not mutate and a confirmed request survives rel
 
 test('a saved request and its confirmation remain isolated to the selected account',async({page,request})=>{
   const alice=await createUser(request,uniqueName('Deletion Alice')),bob=await createUser(request,uniqueName('Deletion Bob'));
+  await verifiedSignInFixtures(page,[alice,bob]);
   await page.addInitScript(({alice,bob})=>{localStorage.setItem('game-platform.accounts.v1',JSON.stringify([alice,bob]));localStorage.setItem('game-platform.current-account.v1',alice.id);},{alice,bob});
   await page.goto('/portal');let dialog=await openAccount(page);
   await dialog.getByRole('button',{name:'Request account deletion',exact:true}).click();
   const accepted=deletionResponse(page,'POST');await dialog.getByRole('button',{name:'Confirm account deletion',exact:true}).click();expect((await accepted).status()).toBe(200);
-  await dialog.getByRole('button',{name:bob.display_name,exact:true}).click();
+  await logoutAndSignIn(page,bob);
   await expect(dialog).toHaveCount(0);dialog=await openAccount(page);
   await expect(dialog.getByRole('heading',{name:bob.display_name,exact:true})).toBeVisible();
   await expect(dialog.getByTestId('account-deletion-status')).toHaveCount(0);
   await dialog.getByRole('button',{name:'Request account deletion',exact:true}).click();
   await expect(dialog.getByTestId('account-deletion-confirmation')).toBeVisible();
-  await dialog.getByRole('button',{name:alice.display_name,exact:true}).click();
+  await logoutAndSignIn(page,alice);
   await expect(dialog).toHaveCount(0);dialog=await openAccount(page);
   await expect(dialog.getByTestId('account-deletion-confirmation')).toHaveCount(0);
   await expect(dialog.getByTestId('account-deletion-status')).toBeVisible();

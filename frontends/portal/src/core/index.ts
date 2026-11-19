@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { PortalApi, ApiError } from './api';
+import { PortalApi, ApiError,InactiveSignInError } from './api';
 import {setDiagnosticScope} from './diagnostics';
 import { AccountRepository, emptyAccountData, equal, requestId } from './repository';
 import {protectedResponsePaths} from './cache-policy';
@@ -63,7 +63,7 @@ export class PortalStore {
     const guard=()=>{if(epoch!==this.generation)throw new Error('Account changed; refresh to continue.');};
     if (loading) this.patch({ loading: true }); this.patch({ error: null });
     try { return await run(); }
-    catch (error) { guard(); this.patch({ error: error instanceof Error ? error.message : String(error) }); throw error; }
+    catch (error) { guard();if(!(error instanceof InactiveSignInError))this.patch({ error: error instanceof Error ? error.message : String(error) }); throw error; }
     finally { if (loading) { try { guard(); this.patch({ loading: false }); } catch { /* The new account owns its loading state. */ } } }
   }
   private awaitingLocalHandoff(match: LocalMatch | undefined, data = this.data): boolean {
@@ -159,7 +159,10 @@ export class PortalStore {
       let accounts: Account[];
       try { accounts = await loadAccounts(base); accounts = await importNativeLegacy(base || 'https://buildplay.fun', this.repository, accounts); await saveAccounts(accounts, base); await finishNativeImport(base || 'https://buildplay.fun'); }
       catch (error) { accounts = await loadAccounts(base).catch(() => []); this.patch({ storageError: `Saved data needs attention: ${(error as Error).message}. Existing saves were kept.` }); }
-      const id = await loadCurrentAccount(base).catch(() => null); const account = accounts.find(a => a.id === id) || accounts[0] || null;
+      const id = await loadCurrentAccount(base).catch(() => null);
+      // Only old installs without a selection may restore their first login.
+      // An explicit visitor marker or a removed selected account stays out.
+      const account = (id === null ? accounts[0] : accounts.find(a => a.id === id)) || null;
       this.patch({ accounts, account }); await this.reloadData();
       const incoming=initialUrl??(typeof location!=='undefined'?location.href:null);if(incoming)await rememberUrlAttribution(incoming,base,accounts);
       const snapshot = this.data;
@@ -299,8 +302,21 @@ export class PortalStore {
   }
   clearMatch() { ++this.selection; this.patch({ selectedMatch: null, history: null, replayIndex: null }); void this.repository.mutate(this.identity(), data => { data.selectedId = null; }).catch(() => {}); }
   clearGame() { this.clearMatch(); this.repository.protectGame(this.identity(),null);this.patch({ selectedGameId: null, game: null }); }
-  private async saveLogin(response: any, removeIds: string[] = []) {
-    const guard = this.capture();
+  private writeSelection(id:string,guard:()=>void) {
+    const write=this.accountSelectionWrites.then(async()=>{
+      guard();const previous=this.identity(),base=this.state.baseUrl;
+      await this.writeCurrentAccount(id,base);
+      try{guard();}catch(error){
+        // A closed sign-in form must not leave a late persisted selection.
+        // Newer switches/logout wait behind this rollback and write last.
+        await this.writeCurrentAccount(previous,base).catch(()=>{});throw error;
+      }
+    });
+    this.accountSelectionWrites=write.catch(()=>{});return write;
+  }
+  private async saveLogin(response: any, removeIds: string[] = [], intentGuard?:()=>void) {
+    let selectionCommitted=false;
+    const sessionGuard = this.capture(),guard=()=>{sessionGuard();if(!selectionCommitted)intentGuard?.();};guard();
     const id = response.user_id || response.id; if (!id || !response.password) throw new Error('Invalid account response');
     const account: Account = { ...response, id, linked: response.linked_accounts ?? response.linked ?? [] };
     const sourceIds = [...new Set([...removeIds, response.merged_from_user_id].filter((value): value is string => typeof value === 'string' && !!value && value !== id))];
@@ -313,8 +329,8 @@ export class PortalStore {
       if (sourceIds.length) {
         // Keep aliases during the two-key credential/index commit. Failure at
         // any point leaves them selectable until the next successful login.
-        await saveAccounts([...this.state.accounts.filter(a => a.id !== id), account], this.state.baseUrl); guard(); await storage.setItem(currentAccountKey(this.state.baseUrl), id); guard(); await saveAccounts(accounts, this.state.baseUrl);
-      } else { await saveAccounts(accounts, this.state.baseUrl); guard(); await storage.setItem(currentAccountKey(this.state.baseUrl), id); }
+        await saveAccounts([...this.state.accounts.filter(a => a.id !== id), account], this.state.baseUrl); guard(); await this.writeSelection(id,guard);selectionCommitted=true;guard();await saveAccounts(accounts, this.state.baseUrl);
+      } else { await saveAccounts(accounts, this.state.baseUrl); guard(); await this.writeSelection(id,guard);selectionCommitted=true; }
     } catch (error) {
       guard();
       if (sourceIds.length) { this.patch({ storageError: 'Linked credentials could not be saved. Previous account entries and their saved data remain available.' }); throw error; }
@@ -322,43 +338,49 @@ export class PortalStore {
     }
     guard(); await forgetInviter();guard(); this.patch({ accounts }); await this.switchAccount(id);
   }
-  async switchAccount(id: string) {
+  async switchAccount(id: string,intentGuard?:()=>void) {
+    intentGuard?.();
     const account = this.state.accounts.find(a => a.id === id); if (!account) throw new Error('Account not found on this device');
     const transition = ++this.generation; ++this.selection; this.refreshPromise = null; this.syncPromise = null; this.notificationPromise = null; this.notificationPromptClaim = null; this.observations.clear();
-    const write = this.accountSelectionWrites.then(async () => { if (transition === this.generation) await this.writeCurrentAccount(id, this.state.baseUrl); }); this.accountSelectionWrites = write.catch(() => {});
-    await write.catch(() => {}); if (transition !== this.generation) throw new Error('Account changed; refresh to continue.');
+    const current=()=>{if(transition!==this.generation)throw new Error('Account changed; refresh to continue.');intentGuard?.();};
+    await this.writeSelection(id,current).catch(()=>{});current();
     const { ready, baseUrl, accounts, authConfig, locale, storageError } = this.state;
     this.data = emptyAccountData(); this.patch({ ...initial(), ready, baseUrl, accounts, authConfig, account, locale, storageError, network: !this.localOnly && isOnline() }); const guard = this.capture(); await this.reloadData(); guard();
     this.patch({ games: savedList(this.data.responses['/games']), myMatches: savedList(this.data.responses['/matches']), openMatches: savedList(this.data.responses['/matches/open']) }); await this.refresh(); guard();
   }
   async logout(id = this.state.account?.id) {
-    const guard = this.capture(); const accounts = this.state.accounts.filter(a => a.id !== id); await saveAccounts(accounts, this.state.baseUrl).catch(() => { guard(); this.patch({ storageError: 'Device storage could not be updated. This session was logged out; saved credentials may remain on this device.' }); }); guard(); this.patch({ accounts });
-    if (id !== this.state.account?.id) return;
-    if (accounts.length) return this.switchAccount(accounts[0].id);
+    const accounts = this.state.accounts.filter(a => a.id !== id);
+    if(id!==this.state.account?.id){const guard=this.capture();await saveAccounts(accounts,this.state.baseUrl);guard();this.patch({accounts});return;}
     const transition = ++this.generation; ++this.selection; this.refreshPromise = null; this.syncPromise = null; this.notificationPromise = null; this.notificationPromptClaim = null; this.observations.clear();
-    await storage.removeItem(currentAccountKey(this.state.baseUrl)).catch(() => {}); if (transition !== this.generation) throw new Error('Account changed; refresh to continue.'); const { ready, baseUrl, authConfig, locale } = this.state;
-    this.data = emptyAccountData(); this.patch({ ...initial(), ready, baseUrl, authConfig, locale, network: !this.localOnly && isOnline() }); await this.reloadData(); await this.refresh();
+    const guard=()=>{if(transition!==this.generation)throw new Error('Account changed; refresh to continue.');};
+    const warning=()=>{guard();this.patch({storageError:'Device storage could not be updated. This session was logged out; saved credentials may remain on this device.'});};
+    await saveAccounts(accounts,this.state.baseUrl).catch(warning);guard();
+    // Follow any older selection write; it must not resurrect another login.
+    await this.writeSelection('visitor',guard).catch(warning);guard();const { ready, baseUrl, authConfig, locale,storageError } = this.state;
+    this.data = emptyAccountData(); this.patch({ ...initial(), ready, baseUrl, accounts,authConfig, locale,storageError, network: !this.localOnly && isOnline() }); await this.reloadData();guard();await this.refresh();guard();
   }
   private async attribution(): Promise<any> {if(this.bootstrapPromise&&!this.state.ready)await this.bootstrapPromise;return newAccountAttribution(this.state.accounts);}
-  async guest(name: string) { const guard = this.capture(); const attribution = await this.attribution(); guard(); const result = await this.api.request('POST', '/users', { display_name: name.trim() || 'Player', locale: getLocale(), ...attribution }); guard(); await this.saveLogin(result); }
+  async guest(name: string,intentGuard?:()=>void) { const guard = this.capture();intentGuard?.(); const attribution = await this.attribution(); guard();intentGuard?.(); const result = await this.api.request('POST', '/users', { display_name: name.trim() || 'Player', locale: getLocale(), ...attribution }); guard();intentGuard?.(); await this.saveLogin(result,[],intentGuard); }
   async requestCode(method: 'email' | 'phone', value: string, delivery = 'sms') { return this.api.request('POST', `/auth/${method}/start`, method === 'email' ? { email: value } : { phone_number: value, delivery_method: delivery }); }
-  async verifyCode(method: 'email' | 'phone', verificationId: string, code: string, name?: string, link = false) { const guard = this.capture(); const account = this.state.account; const attribution = await this.attribution(); guard(); const result = await this.api.request('POST', `/auth/${method}/verify`, { verification_id: verificationId, code, ...(name ? { display_name: name } : {}), ...attribution }, link ? account : null); guard(); await this.saveLogin(result); }
-  async google(idToken: string, link = false) { const guard = this.capture(); const account = this.state.account; const attribution = await this.attribution(); guard(); const result = await this.api.request('POST', '/auth/google', { id_token: idToken, ...attribution }, link ? account : null); guard(); await this.saveLogin(result); }
-  async browserLogin(link = false) {
+  async verifyCode(method: 'email' | 'phone', verificationId: string, code: string, name?: string, link = false,intentGuard?:()=>void) { const guard = this.capture();intentGuard?.();const account = this.state.account; const attribution = await this.attribution(); guard();intentGuard?.(); const result = await this.api.request('POST', `/auth/${method}/verify`, { verification_id: verificationId, code, ...(name ? { display_name: name } : {}), ...attribution }, link ? account : null); guard();intentGuard?.(); await this.saveLogin(result,[],intentGuard); }
+  async google(idToken: string, link = false,intentGuard?:()=>void) { const guard = this.capture();intentGuard?.(); const account = this.state.account; const attribution = await this.attribution(); guard();intentGuard?.(); const result = await this.api.request('POST', '/auth/google', { id_token: idToken, ...attribution }, link ? account : null); guard();intentGuard?.(); await this.saveLogin(result,[],intentGuard); }
+  async browserLogin(link = false,intentGuard?:()=>void,verifiedOnly=false) {
     if (this.localOnly) throw new Error('This test launch runs entirely on this device.');
-    const guard = this.capture(); const previous = this.state.account;
-    let response = await this.loginBrowser(this.state.baseUrl); guard();
+    const guard = this.capture();intentGuard?.(); const previous = this.state.account;
+    let response = await this.loginBrowser(this.state.baseUrl); guard();intentGuard?.();
     const id = response.user_id || response.id;
     if (!id || typeof response.password !== 'string' || !response.password) throw new Error('Invalid browser account response');
+    const linked=response.linked_accounts??response.linked;
+    if(verifiedOnly&&(!Array.isArray(linked)||!linked.some((item:any)=>['google','email','phone'].includes(item?.kind))))throw new Error(copyText('Use a verified login in your browser to continue.'));
     if (link && previous && previous.id !== id) {
       // The browser handoff proves the newly verified account. Explicit linking
       // also proves the original guest through headers; no credential enters a URL.
-      await this.api.request('POST', `/users/${encodeURIComponent(previous.id)}/merge`, { into_user_id: id, into_password: response.password }, previous); guard();
+      await this.api.request('POST', `/users/${encodeURIComponent(previous.id)}/merge`, { into_user_id: id, into_password: response.password }, previous); guard();intentGuard?.();
       // The backend chooses the stronger login as survivor. Either input's
       // credentials remain an alias; ask for the canonical account before saving.
-      response = await this.api.request('GET', '/auth/me', undefined, { ...response, id }); guard();
-      await this.saveLogin(response, [previous.id, id]);
-    } else await this.saveLogin(response);
+      response = await this.api.request('GET', '/auth/me', undefined, { ...response, id }); guard();intentGuard?.();
+      await this.saveLogin(response, [previous.id, id],intentGuard);
+    } else await this.saveLogin(response,[],intentGuard);
   }
   async updateProfile(patch: any) { const guard = this.capture(); const account = this.state.account; if (!account) throw new Error('Log in first'); const profile = await this.request('PATCH', `/users/${encodeURIComponent(account.id)}`, patch); const accounts = this.state.accounts.map(a => a.id === account.id ? { ...a, ...profile, id: a.id, password: a.password, canonical_user_id: profile.id } : a); await saveAccounts(accounts, this.state.baseUrl); guard(); this.patch({ account: accounts.find(a => a.id === account.id)!, accounts, profile }); }
   private async refreshProfile() { const account = this.state.account; if (!account) return; const guard = this.capture(), revision = this.profileRevision; const profile = await this.read(`/users/${encodeURIComponent(account.id)}`); guard(); if (revision === this.profileRevision) this.patch({ profile, account: {...this.state.account!, canonical_user_id: profile?.id} }); }
@@ -555,11 +577,11 @@ export class PortalStore {
     searchGames: (query: string) => this.perform(async () => { this.patch({ query, games: [], cursors: { ...this.state.cursors, games: null } }); await this.list('games'); }),
     loadMore: (kind: ListKind) => this.perform(() => this.list(kind, true)),
     selectGame: (id: string) => this.perform(() => this.selectGame(id)), selectMatch: (id: string) => this.perform(() => this.selectMatch(id)), clearMatch: () => this.clearMatch(), clearGame: () => this.clearGame(), importLogin: (response: any) => this.perform(() => this.saveLogin(response)),
-    guest: (name: string) => this.perform(() => this.guest(name)), requestCode: (method: 'email' | 'phone', value: string, delivery?: string) => this.perform(() => this.requestCode(method, value, delivery)),
-    browserLogin: (link = false) => this.perform(() => this.browserLogin(link)),
-    verifyCode: (method: 'email' | 'phone', id: string, code: string, name?: string, link?: boolean) => this.perform(() => this.verifyCode(method, id, code, name, link)), google: (token: string, link?: boolean) => this.perform(() => this.google(token, link)),
+    guest: (name: string,intentGuard?:()=>void) => this.perform(() => this.guest(name,intentGuard)), requestCode: (method: 'email' | 'phone', value: string, delivery?: string) => this.perform(() => this.requestCode(method, value, delivery)),
+    browserLogin: (link = false,intentGuard?:()=>void,verifiedOnly=false) => this.perform(() => this.browserLogin(link,intentGuard,verifiedOnly)),
+    verifyCode: (method: 'email' | 'phone', id: string, code: string, name?: string, link?: boolean,intentGuard?:()=>void) => this.perform(() => this.verifyCode(method, id, code, name, link,intentGuard)), google: (token: string, link?: boolean,intentGuard?:()=>void) => this.perform(() => this.google(token, link,intentGuard)),
     requestAccountDeletion: () => this.perform(() => this.changeAccountDeletion(true), false), cancelAccountDeletion: () => this.perform(() => this.changeAccountDeletion(false), false),
-    switchAccount: (id: string) => this.perform(() => this.switchAccount(id)), logout: (id?: string) => this.perform(() => this.logout(id)), updateProfile: (patch: any) => this.perform(() => this.updateProfile(patch)),
+    switchAccount: (id: string,intentGuard?:()=>void) => this.perform(() => this.switchAccount(id,intentGuard)), logout: (id?: string) => this.perform(() => this.logout(id)), updateProfile: (patch: any) => this.perform(() => this.updateProfile(patch)),
     createMatch: (options: any) => this.perform(() => this.createMatch(options)), quickMatch: (gameId?: string, count?: number) => this.perform(() => this.quickMatch(gameId, count)),
     matchAction: (action: 'join' | 'start' | 'leave' | 'rematch' | 'maybeLeave' | 'playerLeft', body?: any) => this.perform(() => this.matchAction(action, body)), addBots: (count: number) => this.perform(() => this.addBots(count)), removePlayer: (id: string) => this.perform(() => this.removePlayer(id)),
     deleteMatch: () => this.perform(() => this.deleteMatch()), archiveMatch: (id: string) => this.perform(() => this.archiveMatch(id)), submitMove: (move: any) => this.perform(() => this.submitMove(move), false), resolveConflict: (id: string) => this.perform(() => this.resolveConflict(id)),

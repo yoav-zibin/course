@@ -24,6 +24,7 @@ const Auth = (() => {
   // still works and online play is unaffected; only persistence is lost.
   let memoryAccounts = null;
   let memoryCurrentId = undefined;
+  let selectionRevision = 0;
 
   function load() {
     try {
@@ -71,6 +72,8 @@ const Auth = (() => {
     } catch {
       memoryCurrentId = id ?? null;
     }
+    selectionRevision++;
+    closeDialog();
     changed();
   }
 
@@ -117,16 +120,18 @@ const Auth = (() => {
     save(accounts);
   }
 
-  /** Forgets an account (log out). Falls back to another remembered account. */
+  /** Forgets one login without choosing another remembered account. */
   function remove(id) {
+    const wasCurrent = current()?.id === id;
     const rest = load().filter((account) => account.id !== id);
     save(rest);
-    setCurrent(rest[0]?.id ?? null);
+    if (wasCurrent) setCurrent("visitor");
+    else changed();
   }
 
   function removeAll() {
     save([]);
-    setCurrent(null);
+    setCurrent("visitor");
   }
 
   /** Headers for apiRequest's {user}: the account itself works. */
@@ -243,8 +248,22 @@ const Auth = (() => {
   // The dialog being filled in, for the Google callback.
   let pendingDialog = null;
 
+  function dialogActive(dialog) {
+    return pendingDialog === dialog && dialog.revision === selectionRevision
+      && (current()?.id ?? null) === (dialog.account?.id ?? null);
+  }
+
+  window.addEventListener?.("storage", event => {
+    if (event.key === CURRENT_KEY || event.key === null ||
+        (event.key === ACCOUNTS_KEY && pendingDialog && !dialogActive(pendingDialog))) {
+      selectionRevision++;
+      closeDialog();
+      changed();
+    }
+  });
+
   let googleLoading = null;
-  function ensureGoogle(clientId) {
+  function ensureGoogle(clientId, dialog) {
     googleLoading ??= new Promise((resolve, reject) => {
       if (window.google?.accounts?.id) return resolve();
       const script = document.createElement("script");
@@ -256,9 +275,10 @@ const Auth = (() => {
       document.head.appendChild(script);
     });
     return googleLoading.then(() => {
+      if (!dialogActive(dialog)) return;
       window.google.accounts.id.initialize({
         client_id: clientId,
-        callback: (response) => pendingDialog?.onGoogle(response.credential),
+        callback: (response) => { if (dialogActive(dialog)) return dialog.onGoogle(response.credential); },
         auto_select: false,
       });
     });
@@ -295,10 +315,14 @@ const Auth = (() => {
   function openDialog(mode = "login") {
     closeDialog();
     const account = current();
-    if (mode === "link" && !account) mode = "login";
+    const revision = selectionRevision;
+    mode = account ? "link" : "login";
+    if (account && !window.confirm(I18n.t("ui.auth.confirm_link", {}, "All linked login methods open the same BuildPlay account, with the same profile, matches and tokens. Continue?"))) return;
+    if (revision !== selectionRevision || (current()?.id ?? null) !== (account?.id ?? null)) return;
     const dialog = {
       mode,
       account,
+      revision,
       returnFocus: document.activeElement,
       root: el("div", { class: "auth-dialog-backdrop" }),
       message: el("div", { class: "message", role: "alert" }),
@@ -324,6 +348,7 @@ const Auth = (() => {
       // Old remembered accounts lack the flag, and another device may have
       // claimed it since our last login. Keep the offer hidden until checked.
       apiRequest("GET", "/auth/me", { user: account }).then(profile => {
+        if (!dialogActive(dialog)) return;
         const granted = profile.verified_login_bonus_granted;
         if (typeof granted !== "boolean") return;
         const all = load(), stored = all.find(user => user.id === account.id);
@@ -369,6 +394,7 @@ const Auth = (() => {
     document.addEventListener("keydown", dialog.onKeydown, true);
 
     dialog.onGoogle = async (idToken) => {
+      if (!dialogActive(dialog)) return;
       try {
         const response = await apiRequest("POST", "/auth/google", {
           user: mode === "link" ? account : null,
@@ -382,18 +408,19 @@ const Auth = (() => {
 
 
     authConfig().then((config) => {
-      if (pendingDialog !== dialog) return; // closed while loading
+      if (!dialogActive(dialog)) return;
       if (config.google_client_id) {
         const holder = el("div", { class: "auth-method" });
         methods.append(holder);
-        ensureGoogle(config.google_client_id)
-          .then(() =>
+        ensureGoogle(config.google_client_id, dialog)
+          .then(() => {
+            if (!dialogActive(dialog)) return;
             window.google.accounts.id.renderButton(holder, {
               theme: "outline",
               size: "large",
               width: 280,
-            })
-          )
+            });
+          })
           .catch((error) => dialogFailed(dialog, error));
       }
       if (config.phone_login_enabled) {
@@ -424,16 +451,17 @@ const Auth = (() => {
     else document.querySelector(".auth-menu-button")?.focus({ preventScroll: true });
   }
 
-  function dialogFailed(dialog, error) {
-    dialog.message.textContent =
+  function dialogFailed(dialog, error, message = dialog.message) {
+    if (!dialogActive(dialog)) return;
+    message.textContent =
       error instanceof ApiError ? error.message : String(error?.message ?? error);
-    dialog.message.className = "message error";
+    message.className = "message error";
   }
 
   function finishLogin(dialog, response) {
-    if (pendingDialog !== dialog) return;
+    if (!dialogActive(dialog)) return;
     upsert(response);
-    closeDialog();
+    if (pendingDialog === dialog) closeDialog();
     if (response.merged_from_user_id) {
       toast(I18n.t("ui.auth.merged_toast", { name: response.display_name }, `Merged your other account into ${response.display_name}.`));
     }
@@ -447,7 +475,7 @@ const Auth = (() => {
     let verificationId = null;
 
     const send = async (channel = "sms") => {
-      if (sendButton.disabled) return;
+      if (!dialogActive(dialog) || sendButton.disabled) return;
       sendButton.disabled = true;
       if (callButton) callButton.disabled = true;
       codeInput.disabled = true;
@@ -462,6 +490,7 @@ const Auth = (() => {
             ...(kind === "phone" ? { delivery_method: channel } : {}),
           },
         });
+        if (!dialogActive(dialog)) return;
         verificationId = started.verification_id;
         codeInput.hidden = false;
         verifyButton.hidden = false;
@@ -470,13 +499,15 @@ const Auth = (() => {
         message.className = "message ok";
         sent = true;
       } catch (error) {
-        dialogFailed({ message }, error);
+        dialogFailed(dialog, error, message);
       } finally {
-        sendButton.disabled = false;
-        if (callButton) callButton.disabled = false;
-        codeInput.disabled = false;
-        verifyButton.disabled = false;
-        if (sent) codeInput.focus();
+        if (dialogActive(dialog)) {
+          sendButton.disabled = false;
+          if (callButton) callButton.disabled = false;
+          codeInput.disabled = false;
+          verifyButton.disabled = false;
+          if (sent) codeInput.focus();
+        }
       }
     };
     const sendButton = el("button", {
@@ -492,6 +523,7 @@ const Auth = (() => {
       : null;
     const verifyButton = el("button", { type: "button", class: "primary", textContent: I18n.t("ui.auth.verify", {}, "Verify"), hidden: true });
     verifyButton.onclick = async () => {
+      if (!dialogActive(dialog)) return;
       message.textContent = "";
       message.className = "message";
       try {
@@ -502,7 +534,7 @@ const Auth = (() => {
         });
         finishLogin(dialog, response);
       } catch (error) {
-        dialogFailed({ message }, error);
+        dialogFailed(dialog, error, message);
       }
     };
     const form = el("form", { class: "auth-method" },
@@ -537,7 +569,7 @@ const Auth = (() => {
     );
     form.addEventListener("submit", async event => {
       event.preventDefault();
-      if (button.disabled) return;
+      if (!dialogActive(dialog) || button.disabled) return;
       button.disabled = true;
       try {
         finishLogin(dialog, await createGuest(input.value));
@@ -710,7 +742,7 @@ const Auth = (() => {
         }) : null
       );
     }
-    if (all.length > 1 || (all.length === 1 && !account)) {
+    if (!account && all.length > 0) {
       panel.append(el("div", { class: "auth-menu-heading", textContent: I18n.t("ui.auth.switch_account", {}, "Switch account") }));
       for (const other of all) {
         if (account && other.id === account.id) continue;
@@ -724,8 +756,8 @@ const Auth = (() => {
         );
       }
     }
-    panel.append(
-      el("button", { type: "button", "data-auth-action": "login", textContent: account ? I18n.t("ui.auth.add_account", {}, "Add another account") : I18n.t("ui.auth.log_in", {}, "Log in"), onclick: () => { hidePanel(); openDialog("login"); } })
+    if (!account) panel.append(
+      el("button", { type: "button", "data-auth-action": "login", textContent: I18n.t("ui.auth.log_in", {}, "Log in"), onclick: () => { hidePanel(); openDialog("login"); } })
     );
     if (account) {
       panel.append(

@@ -168,7 +168,6 @@ def main(argv=None):
     parser.add_argument("--page-size", type=int, default=50)
     parser.add_argument("--max-documents", type=int, default=10000)
     args = parser.parse_args(argv)
-    os.umask(0o077)
     try:
         from game_platform.config import load_config
         from game_platform.account_deletion_worker import open_store
@@ -194,4 +193,5 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    os.umask(0o077)
     raise SystemExit(main())

@@ -11,7 +11,7 @@
     },
     {
       "kind": "paragraph",
-      "text": "BuildPlay ({link0}) is a platform for creating and playing board games online. This policy explains what information we collect and how we use it.",
+      "text": "BuildPlay ({link0}) is a platform for playing board games online. This policy explains what information we collect and how we use it.",
       "links": [
         {
           "placeholder": "link0",
@@ -30,7 +30,7 @@
     },
     {
       "kind": "bullet",
-      "text": "Game activity. We store the games you create and the matches you play, including moves, so the site can function."
+      "text": "Game activity. We store the matches you play, including moves, so the site can function."
     },
     {
       "kind": "bullet",
@@ -57,7 +57,7 @@
     },
     {
       "kind": "paragraph",
-      "text": "We use this information only to operate BuildPlay: to keep you logged in, to show you your games and matches, and to let you play with others. Usage analytics help us understand and improve the site. We do not sell your personal information, and we do not share it with third parties except the login and messaging providers needed to verify you (Google, Twilio, or our email provider), Google Analytics for usage measurement, and OpenAI Codex for reviewing and repairing submitted bug reports, and only for those purposes. Bug reports are available to platform administrators and the authorized repair workflow, rather than other players."
+      "text": "We use this information only to operate BuildPlay: to keep you logged in, to show you available games and your matches, and to let you play with others. Usage analytics help us understand and improve the site. We do not sell your personal information, and we do not share it with third parties except the login and messaging providers needed to verify you (Google, Twilio, or our email provider), Google Analytics for usage measurement, and OpenAI Codex for reviewing and repairing submitted bug reports, and only for those purposes. Bug reports are available to platform administrators and the authorized repair workflow, rather than other players."
     },
     {
       "kind": "heading",
