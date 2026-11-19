@@ -3,7 +3,7 @@ import { PortalApi, ApiError } from './api';
 import {setDiagnosticScope} from './diagnostics';
 import { AccountRepository, emptyAccountData, equal, requestId } from './repository';
 import {protectedResponsePaths} from './cache-policy';
-import {utf8Size} from '../platform/recoverable-cache';
+import {isQuotaError,utf8Size} from '../platform/recoverable-cache';
 import { syncAccount } from './sync';
 import {handsTurnToOpponent} from './notifications';
 import { importNativeLegacy, finishNativeImport } from './native-migration';
@@ -267,7 +267,11 @@ export class PortalStore {
     // Clear the previous match before any await. A restored match must never be
     // displayed with the unrelated package requested by an incoming game URL.
     this.patch({ selectedMatch: null, selectedGameId: id, game: null, history: null, replayIndex: null });
-    await this.repository.mutate(owner, data => { guard(); if (token === this.selection) data.selectedId = null; }); guard(); if (token !== this.selection) return;
+    // Remembering the last open view is optional. A full device must still
+    // display downloaded content without discarding saved games or moves.
+    try { await this.repository.mutate(owner, data => { guard(); if (token === this.selection) data.selectedId = null; }); }
+    catch (error) { guard(); if (!isQuotaError(error)) throw error; }
+    guard(); if (token !== this.selection) return;
     const game = await this.pinnedGame(id); guard(); if (token === this.selection) this.patch({ selectedGameId: id, game }); return game;
   }
   async selectMatch(id: string) {
@@ -275,7 +279,9 @@ export class PortalStore {
     const match = this.data.local[id] || await this.read(`/matches/${encodeURIComponent(id)}`); guard(); if (token !== this.selection) return;
     const packageMatches = this.state.game?.id === match.game_id && this.state.game.version === match.game_version;
     this.patch({ selectedMatch: this.decorate(match), game: packageMatches ? this.state.game : null, selectedGameId: match.game_id, replayIndex: null, history: null });
-    await this.repository.mutate(this.identity(), data => { guard(); if (token === this.selection) {data.selectedId = id; if(!data.local[id])data.responses[`/matches/${id}`]=match;} });
+    try { await this.repository.mutate(this.identity(), data => { guard(); if (token === this.selection) {data.selectedId = id; if(!data.local[id])data.responses[`/matches/${id}`]=match;} }); }
+    catch (error) { guard(); if (!isQuotaError(error)) throw error; }
+    guard(); if (token !== this.selection) return;
     this.repository.protectGame(this.identity(),match.game_id,match.game_version);
     const game = await this.pinnedGame(match.game_id, match.game_version); guard(); if (token === this.selection) this.patch({ game, selectedGameId: game.id });
     await this.loadProfiles().catch(() => {});

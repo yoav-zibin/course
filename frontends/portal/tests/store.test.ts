@@ -109,6 +109,32 @@ test('a quota failure updating a pinned pending download only skips optional cac
   }finally{restore();}
 });
 
+test('full device storage still opens online matches and games while keeping saved play intact',async()=>{
+  const saved=browserStorage();
+  const game={...JSON.parse(readFileSync(new URL('../src/core/bundled-tictactoe.json',import.meta.url),'utf8')),id:'online-quota-game',version:7};
+  const match={id:'online-quota-match',game_id:game.id,game_version:game.version,players:[],status:'ongoing',state:{exact:true},turn_of_player_indices:[0],move_count:0};
+  const restore=mockedFetch(url=>url.pathname===`/matches/${match.id}`?match:url.pathname.startsWith(`/games/${game.id}`)?game:undefined);
+  try{
+    const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');
+    await store.actions.startPractice('bundled-tictactoe',{humans:2,computers:0});
+    const localId=store.getSnapshot().selectedMatch!.id,repo=new AccountRepository('https://local.test');
+    await repo.mutate('visitor',data=>{data.responses['/matches/pending']={...match,id:'pending'};data.queues.pending=[{requestId:'keep-exact-request',body:{move:{cell:2},expected_move_count:0},baseState:{exact:true},baseTurn:[0]}];});
+    const original=saved[repo.key('visitor')],set=(saved as any).setItem;
+    (saved as any).setItem=(key:string,value:string)=>{if(key===repo.key('visitor'))throw new DOMException('The quota has been exceeded.','QuotaExceededError');set(key,value);};
+    await store.actions.selectMatch(match.id);
+    assert.equal(store.getSnapshot().selectedMatch!.id,match.id);assert.equal(store.getSnapshot().game!.id,game.id);
+    assert.equal(store.getSnapshot().error,null);assert.equal(store.getSnapshot().storageError,null);assert.equal(store.getSnapshot().network,true);
+    await store.actions.selectGame(game.id);
+    assert.equal(store.getSnapshot().selectedMatch,null);assert.equal(store.getSnapshot().game!.id,game.id);assert.equal(store.getSnapshot().error,null);
+    assert.equal(saved[repo.key('visitor')],original);
+    const durable=await repo.read('visitor');assert.ok(durable.local[localId]);assert.equal(durable.queues.pending[0].requestId,'keep-exact-request');
+    // New local play still requires a durable save; optional navigation cannot
+    // turn a failed game or move write into apparent success.
+    await assert.rejects(store.actions.startPractice('bundled-tictactoe',{humans:2,computers:0}),error=>(error as Error).name==='QuotaExceededError');
+    assert.equal(saved[repo.key('visitor')],original);
+  }finally{restore();}
+});
+
 test('an exact RAM-only package is committed atomically with a durable pending action',async()=>{
   const saved=browserStorage();saved['game-platform.accounts.v1']=JSON.stringify([{id:'alice',password:'alice-secret',display_name:'Alice'}]);saved['game-platform.current-account.v1']='alice';
   const game={...JSON.parse(readFileSync(new URL('../src/core/bundled-tictactoe.json',import.meta.url),'utf8')),id:'quota-package',version:7};
