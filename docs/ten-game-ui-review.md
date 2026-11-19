@@ -240,3 +240,22 @@ typecheck and rebuilt web assets passed after the repair. The next full CI run
 must pass before deployment/publication. The user's explicit release-and-repairs
 approval authorizes the staged CI/index changes; no credential-helper token was
 accessed.
+
+## User-requested rollback and publication pause
+
+The user clarified that existing games must remain untouched, paused publication,
+and requested rollback of our shared changes. The shared GameRenderer and CI/CD
+workflow are restored byte-for-byte to their pre-change `3d31ce1` versions. This
+restores original action badges, typography, animations and sizing, and removes
+the automatic production authoring-index repair. Other contributors' header
+work and pointer-target regression tests remain in place. The ten staged game
+packages and local review work are retained; their previous appearance depended
+on the now-reverted renderer changes. They are not a released set of games.
+
+The live web revision was checked during rollback and remained `3d31ce1`: our
+shared renderer changes had not deployed. No game content was published or
+replaced. The earlier nine-update/one-create publication mapping is withdrawn
+and must not be executed. Future work requires a separately reviewed plan that
+adds the user's ten editions without overwriting existing entries or changing
+shared presentation for other games. After restoration, TypeScript and all 182
+shared-client tests passed.

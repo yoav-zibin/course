@@ -106,7 +106,6 @@ jobs:
     runs-on: ubuntu-latest
     concurrency: deploy
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: BuildPlay-web
@@ -133,9 +132,6 @@ jobs:
           printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
           ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
-          scp -i ~/.ssh/id_deploy tools/repair_authoring_indexes.py "$VM_USER@$VM_HOST:/tmp/buildplay-authoring-indexes-$GITHUB_SHA.py"
-          ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" \
-            "cd /opt/game-platform && sudo env PYTHONPATH=/opt/game-platform /opt/game-platform/.venv/bin/python /tmp/buildplay-authoring-indexes-$GITHUB_SHA.py --config /opt/game-platform/config.json --allow-production && rm -f /tmp/buildplay-authoring-indexes-$GITHUB_SHA.py"
           scp -i ~/.ssh/id_deploy portal-web.tar.gz "$VM_USER@$VM_HOST:/tmp/buildplay-web-$GITHUB_SHA.tar.gz"
           ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" \
             "sudo mkdir -p /opt/game-platform/web-builds/$GITHUB_SHA && sudo tar -xzf /tmp/buildplay-web-$GITHUB_SHA.tar.gz -C /opt/game-platform/web-builds/$GITHUB_SHA && if [ -d /opt/game-platform/game_platform/static/app ] && [ ! -L /opt/game-platform/game_platform/static/app ]; then sudo mv /opt/game-platform/game_platform/static/app /opt/game-platform/web-builds/$GITHUB_SHA/previous-app; fi && sudo ln -sfnT /opt/game-platform/web-builds/$GITHUB_SHA/app /opt/game-platform/game_platform/static/app"

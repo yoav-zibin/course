@@ -41,7 +41,7 @@
   "web_build": "passed",
   "diff_whitespace": "passed",
   "screenshots": "/private/tmp/card-table-user-revision",
-  "renderer_sha256": "a037d43ad6d7678dd7c1d3a3b39f22afd41d8cdb49cccb32e1bbb09ce7b5a75c",
+  "renderer_sha256": "b32d0494a1f7fd2af2d1b618ec199174f71026066a3cbe4d5f69f1a45b976d33",
   "limits": [
     "No native-device execution",
     "Not exhaustive over locales, rosters or deals",
@@ -103,5 +103,16 @@
     "web_build": "passed",
     "direct_svg_semantic_click": "passed",
     "initial_ci_ui_result": "151 passed; 12 pointer-target timeouts; repaired before next push"
+  },
+  "rollback": {
+    "requested_by_user": true,
+    "shared_renderer_restored_to": "3d31ce1",
+    "automatic_index_deployment_removed": true,
+    "production_web_revision_at_check": "3d31ce13d7ce6887c6c21391acba8c54aacbd811",
+    "typecheck": "passed",
+    "shared_client_tests_passed": 182,
+    "game_publications": 0,
+    "publication_plan_status": "withdrawn; publishing paused",
+    "game_packages_retained": true
   }
 }
