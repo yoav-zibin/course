@@ -1,0 +1,3506 @@
+{
+  "all_state_public": true,
+  "name": "Quoridor (Declarative)",
+  "description": "Race your pawn to the opposite edge. Move one square or place a wall each turn; walls may slow a rival but may never block every route.",
+  "allowed_player_counts": [
+    2
+  ],
+  "allows_leave_mid_match": true,
+  "allows_join_mid_match": false,
+  "server_code": "const game={\nnewMatch(ctx){const state={pawns:[{r:8,c:4},{r:0,c:4}],walls:[],wallsLeft:[10,10],winner:null,turnIdx:0};return{state,turn:[ctx.players[0].id]};},\nidxOf(state,playerId,ctx){for(let i=0;i<ctx.players.length;i++)if(ctx.players[i].id===playerId)return i;return -1;},\nblocked(walls,r1,c1,r2,c2){for(const w of walls){if(r2===r1-1&&c2===c1){if(w.o==='H'&&w.r===r2&&(w.c===c1||w.c===c1-1))return true;}else if(r2===r1+1&&c2===c1){if(w.o==='H'&&w.r===r1&&(w.c===c1||w.c===c1-1))return true;}else if(c2===c1-1&&r2===r1){if(w.o==='V'&&w.c===c2&&(w.r===r1||w.r===r1-1))return true;}else if(c2===c1+1&&r2===r1){if(w.o==='V'&&w.c===c1&&(w.r===r1||w.r===r1-1))return true;}}return false;},\nlegalMoves(state,pi){const p=state.pawns[pi],o=state.pawns[1-pi],res=[];const dirs=[[-1,0],[1,0],[0,-1],[0,1]];for(const dd of dirs){const dr=dd[0],dc=dd[1];let nr=p.r+dr,nc=p.c+dc;if(nr<0||nr>8||nc<0||nc>8)continue;if(this.blocked(state.walls,p.r,p.c,nr,nc))continue;if(nr===o.r&&nc===o.c){let jr=o.r+dr,jc=o.c+dc;if(jr>=0&&jr<=8&&jc>=0&&jc<=8&&!this.blocked(state.walls,o.r,o.c,jr,jc)){res.push([jr,jc]);}else{const perps=dr!==0?[[0,-1],[0,1]]:[[-1,0],[1,0]];for(const pp of perps){let sr=o.r+pp[0],sc=o.c+pp[1];if(sr<0||sr>8||sc<0||sc>8)continue;if(this.blocked(state.walls,o.r,o.c,sr,sc))continue;res.push([sr,sc]);}}}else res.push([nr,nc]);}return res;},\nbfsDist(walls,sr,sc,goal){const vis=[];for(let i=0;i<9;i++)vis.push([false,false,false,false,false,false,false,false,false]);const q=[[sr,sc,0]];vis[sr][sc]=true;let h=0;while(h<q.length){const cur=q[h++];const r=cur[0],c=cur[1],d=cur[2];if(r===goal)return d;const dirs=[[-1,0],[1,0],[0,-1],[0,1]];for(const dd of dirs){let nr=r+dd[0],nc=c+dd[1];if(nr<0||nr>8||nc<0||nc>8)continue;if(vis[nr][nc])continue;if(this.blocked(walls,r,c,nr,nc))continue;vis[nr][nc]=true;q.push([nr,nc,d+1]);}}return Infinity;},\nwallFits(state,wr,wc,o){if(wr<0||wr>7||wc<0||wc>7)return false;for(const w of state.walls){if(w.r===wr&&w.c===wc)return false;if(o==='H'){if(w.o==='H'&&w.r===wr&&(w.c===wc-1||w.c===wc+1))return false;}else{if(w.o==='V'&&w.c===wc&&(w.r===wr-1||w.r===wr+1))return false;}}const sim=state.walls.concat([{r:wr,c:wc,o:o}]);if(this.bfsDist(sim,state.pawns[0].r,state.pawns[0].c,0)===Infinity)return false;if(this.bfsDist(sim,state.pawns[1].r,state.pawns[1].c,8)===Infinity)return false;return true;},\npayoutsFor(winnerIdx,ctx){const pot=ctx.pot||0;const humans=ctx.players.filter(p=>p.kind==='human');const out={};if(humans.length===0)return out;if(pot<=0){for(const h of humans)out[h.id]=0;return out;}const wPlayer=ctx.players[winnerIdx];if(wPlayer&&wPlayer.kind==='human'){for(const h of humans)out[h.id]=0;out[wPlayer.id]=pot;}else{const each=Math.floor(pot/humans.length);let rem=pot-each*humans.length;for(const h of humans)out[h.id]=each;for(const h of humans){if(rem<=0)break;out[h.id]++;rem--;}}return out;},\nturnFor(state,ctx){if(state.winner!=null)return null;const p=ctx.players[state.turnIdx];return p?[p.id]:null;},\napplyMove(state,playerId,move,ctx){if(state.winner!=null)throw new InvalidMove('game over');const pi=this.idxOf(state,playerId,ctx);if(pi<0)throw new InvalidMove('not seated');if(pi!==state.turnIdx)throw new InvalidMove('not your turn');if(!move||typeof move!=='object')throw new InvalidMove('bad move');\nif(move.type==='pawn'){const nr=move.r,nc=move.c;if(!Number.isInteger(nr)||!Number.isInteger(nc))throw new InvalidMove('bad square');const lm=this.legalMoves(state,pi);let ok=false;for(const m of lm)if(m[0]===nr&&m[1]===nc){ok=true;break;}if(!ok)throw new InvalidMove('illegal pawn move');state.pawns[pi]={r:nr,c:nc};const win=(pi===0&&nr===0)||(pi===1&&nr===8);if(win){state.winner=pi;return{state,turn:null,payouts:this.payoutsFor(pi,ctx)};}state.turnIdx=1-pi;return{state,turn:this.turnFor(state,ctx)};}\nif(move.type==='wall'){const wr=move.r,wc=move.c,o=move.o;if((o!=='H'&&o!=='V')||!Number.isInteger(wr)||!Number.isInteger(wc))throw new InvalidMove('bad wall');if((state.wallsLeft[pi]||0)<=0)throw new InvalidMove('no walls left');if(!this.wallFits(state,wr,wc,o))throw new InvalidMove('illegal wall');state.walls.push({r:wr,c:wc,o:o});state.wallsLeft[pi]--;state.turnIdx=1-pi;return{state,turn:this.turnFor(state,ctx)};}\nthrow new InvalidMove('unknown move');},\ncomputerMove(state,playerId,ctx){const pi=this.idxOf(state,playerId,ctx);const seat=pi<0?state.turnIdx:pi;const goal=seat===0?0:8,opp=1-seat,oppGoal=opp===0?0:8;const lm=this.legalMoves(state,seat);for(const m of lm)if(m[0]===goal)return{type:'pawn',r:m[0],c:m[1]};\nlet bestD=Infinity,best=[];for(const m of lm){const d=this.bfsDist(state.walls,m[0],m[1],goal);if(d<bestD){bestD=d;best=[m];}else if(d===bestD)best.push(m);}\nconst wl=state.wallsLeft[seat];const sp=state.pawns[seat],op=state.pawns[opp];const sd0=this.bfsDist(state.walls,sp.r,sp.c,goal),od0=this.bfsDist(state.walls,op.r,op.c,oppGoal);\nif(wl>0&&(od0<sd0||ctx.random()<0.3)){let bw=null,bs=0;for(let t=0;t<30;t++){const wr=Math.floor(ctx.random()*8),wc=Math.floor(ctx.random()*8),o=ctx.random()<0.5?'H':'V';if(!this.wallFits(state,wr,wc,o))continue;const sw=state.walls.concat([{r:wr,c:wc,o:o}]);const sd=this.bfsDist(sw,sp.r,sp.c,goal),od=this.bfsDist(sw,op.r,op.c,oppGoal);if(sd===Infinity||od===Infinity)continue;const s=(od-od0)-(sd-sd0)*0.8;if(s>bs){bs=s;bw={r:wr,c:wc,o:o};}}\nif(bw&&bs>=2&&ctx.random()<0.85)return{type:'wall',r:bw.r,c:bw.c,o:bw.o};}\nconst pick=best[Math.floor(ctx.random()*best.length)];return{type:'pawn',r:pick[0],c:pick[1]};},\nrandomMove(state,playerId,ctx){const pi=this.idxOf(state,playerId,ctx);const seat=pi<0?state.turnIdx:pi;const lm=this.legalMoves(state,seat);const pick=lm[Math.floor(ctx.random()*lm.length)];return{type:'pawn',r:pick[0],c:pick[1]};},\nviewFor(state,playerId,ctx){let pi=-1;if(playerId!=null)pi=this.idxOf(state,playerId,ctx);const tIdx=state.turnIdx;return{pawns:state.pawns.map(p=>({r:p.r,c:p.c})),walls:state.walls.map(w=>({r:w.r,c:w.c,o:w.o})),wallsLeft:state.wallsLeft.slice(),winner:state.winner,turnIdx:state.turnIdx,legalMoves:(state.winner==null)?this.legalMoves(state,(pi>=0&&pi===tIdx)?pi:tIdx):[]};},\nplayerLeft(state,playerId,ctx){const pi=this.idxOf(state,playerId,ctx);if(pi<0)return{state,turn:this.turnFor(state,ctx)};if(state.winner!=null){let payout=0;try{payout=Math.floor((ctx.pot||0)*ctx.estimateWinChance(state,playerId));}catch(e){payout=0;}return{state,turn:null,payout:payout};}\nlet payout=0;try{payout=Math.floor((ctx.pot||0)*ctx.estimateWinChance(state,playerId));}catch(e){payout=0;}return{state,turn:this.turnFor(state,ctx),payout:payout};}\n};\n;(() => {\n  const original = game.viewFor;\n  game.viewFor = function(state, playerId, ctx) {\n    const view = original.call(this,state,playerId,ctx);\n    const seat = playerId == null ? -1 : this.idxOf(state,playerId,ctx);\n    view.legalWalls = [];\n    if (seat >= 0 && seat === state.turnIdx && state.winner == null && (state.wallsLeft[seat] || 0) > 0) {\n      for (let r=0;r<8;r++) for (let c=0;c<8;c++) for (const o of ['H','V'])\n        if (this.wallFits(state,r,c,o)) view.legalWalls.push({r,c,o});\n    }\n    return view;\n  };\n})();\n// declarative-quoridor-settlement\n;(() => {\n  const legacy = game.playerLeft;\n  game.playerLeft = function(state, playerId, ctx) {\n    let recorded = state._declarative_leave_payouts;\n    if (!recorded && state.winner != null) recorded = this.payoutsFor(state.winner,ctx);\n    if (!recorded) {\n      const result = legacy.call(this,state,playerId,ctx);\n      const humans = ctx.players.filter(p=>p.kind==='human' && p.active!==false);\n      const others = humans.filter(p=>p.id!==playerId);\n      const amount = others.length ? Math.max(0,Math.min(ctx.pot,result.payout||0)) : ctx.pot;\n      recorded = {[playerId]:amount};\n      const share = others.length ? Math.floor((ctx.pot-amount)/others.length) : 0;\n      const extra = ctx.pot-amount-share*others.length;\n      others.forEach((p,i)=>{recorded[p.id]=share+(i<extra?1:0);});\n      state = {...result.state,winner:this.idxOf(state,playerId,ctx)===0?1:0,_declarative_leave_payouts:recorded};\n    }\n    // A later leave preserves the terminal snapshot and never reprices it.\n    const active = ctx.players.filter(p=>p.kind==='human' && p.active!==false);\n    const payouts = Object.fromEntries(active.map(p=>[p.id,recorded[p.id]||0]));\n    const remaining = ctx.pot-Object.values(payouts).reduce((sum,value)=>sum+value,0);\n    if (active.length) {\n      const share = Math.floor(remaining/active.length),extra = remaining-share*active.length;\n      active.forEach((p,i)=>{payouts[p.id]+=share+(i<extra?1:0);});\n    }\n    return {state,turn:null,payouts};\n  };\n})();",
+  "rules": "Race your pawn to the opposite edge. Move one square or place a wall each turn; walls may slow a rival but may never block every route.",
+  "ui_instructions": "Choose Move pawn or Place wall, then tap a highlighted legal square or wall anchor. The board shows both pawns and all placed walls.",
+  "tutorial": {
+    "text": "Race your pawn to the opposite edge. Move one square or place a wall each turn; walls may slow a rival but may never block every route.",
+    "html": "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><main><h1>Quoridor (Declarative)</h1><p>Race your pawn to the opposite edge. Move one square or place a wall each turn; walls may slow a rival but may never block every route.</p><p>Choose Move pawn or Place wall, then tap a highlighted legal square or wall anchor. The board shows both pawns and all placed walls.</p></main>"
+  },
+  "images": [
+    {
+      "caption": "Quoridor (Declarative) cover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 450\"><rect width=\"800\" height=\"450\" fill=\"#e2c08d\"/><rect x=\"190\" y=\"15\" width=\"420\" height=\"420\" rx=\"8\" fill=\"#a78050\"/><rect x=\"204\" y=\"29\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"248\" y=\"29\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"292\" y=\"29\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"336\" y=\"29\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"380\" y=\"29\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"424\" y=\"29\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"468\" y=\"29\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"512\" y=\"29\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"556\" y=\"29\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"204\" y=\"73\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"248\" y=\"73\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"292\" y=\"73\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"336\" y=\"73\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"380\" y=\"73\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"424\" y=\"73\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"468\" y=\"73\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"512\" y=\"73\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"556\" y=\"73\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"204\" y=\"117\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"248\" y=\"117\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"292\" y=\"117\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"336\" y=\"117\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"380\" y=\"117\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"424\" y=\"117\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"468\" y=\"117\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"512\" y=\"117\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"556\" y=\"117\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"204\" y=\"161\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"248\" y=\"161\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"292\" y=\"161\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"336\" y=\"161\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"380\" y=\"161\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"424\" y=\"161\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"468\" y=\"161\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"512\" y=\"161\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"556\" y=\"161\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"204\" y=\"205\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"248\" y=\"205\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"292\" y=\"205\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"336\" y=\"205\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"380\" y=\"205\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"424\" y=\"205\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"468\" y=\"205\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"512\" y=\"205\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"556\" y=\"205\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"204\" y=\"249\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"248\" y=\"249\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"292\" y=\"249\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"336\" y=\"249\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"380\" y=\"249\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"424\" y=\"249\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"468\" y=\"249\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"512\" y=\"249\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"556\" y=\"249\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"204\" y=\"293\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"248\" y=\"293\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"292\" y=\"293\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"336\" y=\"293\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"380\" y=\"293\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"424\" y=\"293\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"468\" y=\"293\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"512\" y=\"293\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"556\" y=\"293\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"204\" y=\"337\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"248\" y=\"337\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"292\" y=\"337\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"336\" y=\"337\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"380\" y=\"337\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"424\" y=\"337\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"468\" y=\"337\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"512\" y=\"337\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"556\" y=\"337\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"204\" y=\"381\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"248\" y=\"381\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"292\" y=\"381\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"336\" y=\"381\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"380\" y=\"381\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"424\" y=\"381\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"468\" y=\"381\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"512\" y=\"381\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"556\" y=\"381\" width=\"38\" height=\"38\" rx=\"3\" fill=\"#e2c08d\"/><rect x=\"240\" y=\"157\" width=\"83\" height=\"8\" rx=\"2\" fill=\"#493520\"/><rect x=\"372\" y=\"289\" width=\"83\" height=\"8\" rx=\"2\" fill=\"#493520\"/><rect x=\"460\" y=\"113\" width=\"8\" height=\"83\" rx=\"2\" fill=\"#493520\"/><rect x=\"284\" y=\"289\" width=\"8\" height=\"83\" rx=\"2\" fill=\"#493520\"/><circle cx=\"400\" cy=\"356\" r=\"17\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"4\"/><circle cx=\"444\" cy=\"92\" r=\"17\" fill=\"#20312b\" stroke=\"#20312b\" stroke-width=\"4\"/></svg>"
+    },
+    {
+      "caption": "Initial board",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+    },
+    {
+      "caption": "Playable choices",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#56c9b4\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#ffbf66\" stroke-width=\"26\"/></svg>"
+    },
+    {
+      "caption": "Game in progress",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#ffbf66\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#17324f\" stroke-width=\"26\"/></svg>"
+    }
+  ],
+  "unit_tests": {
+    "state_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "pawns": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "turnIdx": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "walls": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "wallsLeft": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "winner": {
+          "type": [
+            "null",
+            "number"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "move_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "c": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "r": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "type": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "view_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "legalMoves": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "pawns": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "turnIdx": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "walls": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "wallsLeft": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "winner": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "legalWalls": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "type": "object",
+            "required": [
+              "r",
+              "c",
+              "o"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "r": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              },
+              "c": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              },
+              "o": {
+                "enum": [
+                  "H",
+                  "V"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "cases": [
+      {
+        "name": "Opening move",
+        "description": "Race your pawn to the opposite edge. Move one square or place a wall each turn; walls may slow a rival but may never block every route.",
+        "kind": "initial",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "kind": "human",
+              "display_name": "Bob",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 0,
+          "seed": 11
+        },
+        "state": {
+          "pawns": [
+            {
+              "r": 8,
+              "c": 4
+            },
+            {
+              "r": 0,
+              "c": 4
+            }
+          ],
+          "walls": [],
+          "wallsLeft": [
+            10,
+            10
+          ],
+          "winner": null,
+          "turnIdx": 0
+        },
+        "view_of_mover": {
+          "pawns": [
+            {
+              "r": 8,
+              "c": 4
+            },
+            {
+              "r": 0,
+              "c": 4
+            }
+          ],
+          "walls": [],
+          "wallsLeft": [
+            10,
+            10
+          ],
+          "winner": null,
+          "turnIdx": 0,
+          "legalMoves": [
+            [
+              7,
+              4
+            ],
+            [
+              8,
+              3
+            ],
+            [
+              8,
+              5
+            ]
+          ],
+          "legalWalls": [
+            {
+              "r": 0,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 7,
+              "o": "V"
+            }
+          ]
+        },
+        "view_of_other": {
+          "pawns": [
+            {
+              "r": 8,
+              "c": 4
+            },
+            {
+              "r": 0,
+              "c": 4
+            }
+          ],
+          "walls": [],
+          "wallsLeft": [
+            10,
+            10
+          ],
+          "winner": null,
+          "turnIdx": 0,
+          "legalMoves": [
+            [
+              7,
+              4
+            ],
+            [
+              8,
+              3
+            ],
+            [
+              8,
+              5
+            ]
+          ],
+          "legalWalls": []
+        },
+        "player_id": "u1",
+        "other_player_id": null,
+        "move": {
+          "type": "pawn",
+          "r": 7,
+          "c": 4
+        },
+        "expected_state": {
+          "pawns": [
+            {
+              "r": 7,
+              "c": 4
+            },
+            {
+              "r": 0,
+              "c": 4
+            }
+          ],
+          "walls": [],
+          "wallsLeft": [
+            10,
+            10
+          ],
+          "winner": null,
+          "turnIdx": 1
+        },
+        "expected_turn": [
+          "u2"
+        ],
+        "expected_view_of_mover": {
+          "pawns": [
+            {
+              "r": 7,
+              "c": 4
+            },
+            {
+              "r": 0,
+              "c": 4
+            }
+          ],
+          "walls": [],
+          "wallsLeft": [
+            10,
+            10
+          ],
+          "winner": null,
+          "turnIdx": 1,
+          "legalMoves": [
+            [
+              1,
+              4
+            ],
+            [
+              0,
+              3
+            ],
+            [
+              0,
+              5
+            ]
+          ],
+          "legalWalls": []
+        },
+        "expected_view_of_other": {
+          "pawns": [
+            {
+              "r": 7,
+              "c": 4
+            },
+            {
+              "r": 0,
+              "c": 4
+            }
+          ],
+          "walls": [],
+          "wallsLeft": [
+            10,
+            10
+          ],
+          "winner": null,
+          "turnIdx": 1,
+          "legalMoves": [
+            [
+              1,
+              4
+            ],
+            [
+              0,
+              3
+            ],
+            [
+              0,
+              5
+            ]
+          ],
+          "legalWalls": []
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Continuing match",
+        "description": "Race your pawn to the opposite edge. Move one square or place a wall each turn; walls may slow a rival but may never block every route.",
+        "kind": "intermediate",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "kind": "human",
+              "display_name": "Bob",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 1,
+          "seed": 12
+        },
+        "state": {
+          "pawns": [
+            {
+              "r": 7,
+              "c": 4
+            },
+            {
+              "r": 0,
+              "c": 4
+            }
+          ],
+          "walls": [],
+          "wallsLeft": [
+            10,
+            10
+          ],
+          "winner": null,
+          "turnIdx": 1
+        },
+        "view_of_mover": {
+          "pawns": [
+            {
+              "r": 7,
+              "c": 4
+            },
+            {
+              "r": 0,
+              "c": 4
+            }
+          ],
+          "walls": [],
+          "wallsLeft": [
+            10,
+            10
+          ],
+          "winner": null,
+          "turnIdx": 1,
+          "legalMoves": [
+            [
+              1,
+              4
+            ],
+            [
+              0,
+              3
+            ],
+            [
+              0,
+              5
+            ]
+          ],
+          "legalWalls": [
+            {
+              "r": 0,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 7,
+              "o": "V"
+            }
+          ]
+        },
+        "view_of_other": {
+          "pawns": [
+            {
+              "r": 7,
+              "c": 4
+            },
+            {
+              "r": 0,
+              "c": 4
+            }
+          ],
+          "walls": [],
+          "wallsLeft": [
+            10,
+            10
+          ],
+          "winner": null,
+          "turnIdx": 1,
+          "legalMoves": [
+            [
+              1,
+              4
+            ],
+            [
+              0,
+              3
+            ],
+            [
+              0,
+              5
+            ]
+          ],
+          "legalWalls": []
+        },
+        "player_id": "u2",
+        "other_player_id": null,
+        "move": {
+          "type": "pawn",
+          "r": 1,
+          "c": 4
+        },
+        "expected_state": {
+          "pawns": [
+            {
+              "r": 7,
+              "c": 4
+            },
+            {
+              "r": 1,
+              "c": 4
+            }
+          ],
+          "walls": [],
+          "wallsLeft": [
+            10,
+            10
+          ],
+          "winner": null,
+          "turnIdx": 0
+        },
+        "expected_turn": [
+          "u1"
+        ],
+        "expected_view_of_mover": {
+          "pawns": [
+            {
+              "r": 7,
+              "c": 4
+            },
+            {
+              "r": 1,
+              "c": 4
+            }
+          ],
+          "walls": [],
+          "wallsLeft": [
+            10,
+            10
+          ],
+          "winner": null,
+          "turnIdx": 0,
+          "legalMoves": [
+            [
+              6,
+              4
+            ],
+            [
+              8,
+              4
+            ],
+            [
+              7,
+              3
+            ],
+            [
+              7,
+              5
+            ]
+          ],
+          "legalWalls": []
+        },
+        "expected_view_of_other": {
+          "pawns": [
+            {
+              "r": 7,
+              "c": 4
+            },
+            {
+              "r": 1,
+              "c": 4
+            }
+          ],
+          "walls": [],
+          "wallsLeft": [
+            10,
+            10
+          ],
+          "winner": null,
+          "turnIdx": 0,
+          "legalMoves": [
+            [
+              6,
+              4
+            ],
+            [
+              8,
+              4
+            ],
+            [
+              7,
+              3
+            ],
+            [
+              7,
+              5
+            ]
+          ],
+          "legalWalls": []
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Finishing move",
+        "description": "Race your pawn to the opposite edge. Move one square or place a wall each turn; walls may slow a rival but may never block every route.",
+        "kind": "terminal",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "kind": "human",
+              "display_name": "Bob",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 13,
+          "seed": 24
+        },
+        "state": {
+          "pawns": [
+            {
+              "r": 1,
+              "c": 4
+            },
+            {
+              "r": 7,
+              "c": 4
+            }
+          ],
+          "walls": [],
+          "wallsLeft": [
+            10,
+            10
+          ],
+          "winner": null,
+          "turnIdx": 1
+        },
+        "view_of_mover": {
+          "pawns": [
+            {
+              "r": 1,
+              "c": 4
+            },
+            {
+              "r": 7,
+              "c": 4
+            }
+          ],
+          "walls": [],
+          "wallsLeft": [
+            10,
+            10
+          ],
+          "winner": null,
+          "turnIdx": 1,
+          "legalMoves": [
+            [
+              6,
+              4
+            ],
+            [
+              8,
+              4
+            ],
+            [
+              7,
+              3
+            ],
+            [
+              7,
+              5
+            ]
+          ],
+          "legalWalls": [
+            {
+              "r": 0,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 0,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 0,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 1,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 1,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 2,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 2,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 3,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 3,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 4,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 4,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 5,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 5,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 6,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 6,
+              "c": 7,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 0,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 0,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 1,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 1,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 2,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 2,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 3,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 3,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 4,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 4,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 5,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 5,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 6,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 6,
+              "o": "V"
+            },
+            {
+              "r": 7,
+              "c": 7,
+              "o": "H"
+            },
+            {
+              "r": 7,
+              "c": 7,
+              "o": "V"
+            }
+          ]
+        },
+        "view_of_other": {
+          "pawns": [
+            {
+              "r": 1,
+              "c": 4
+            },
+            {
+              "r": 7,
+              "c": 4
+            }
+          ],
+          "walls": [],
+          "wallsLeft": [
+            10,
+            10
+          ],
+          "winner": null,
+          "turnIdx": 1,
+          "legalMoves": [
+            [
+              6,
+              4
+            ],
+            [
+              8,
+              4
+            ],
+            [
+              7,
+              3
+            ],
+            [
+              7,
+              5
+            ]
+          ],
+          "legalWalls": []
+        },
+        "player_id": "u2",
+        "other_player_id": null,
+        "move": {
+          "type": "pawn",
+          "r": 8,
+          "c": 4
+        },
+        "expected_state": {
+          "pawns": [
+            {
+              "r": 1,
+              "c": 4
+            },
+            {
+              "r": 8,
+              "c": 4
+            }
+          ],
+          "walls": [],
+          "wallsLeft": [
+            10,
+            10
+          ],
+          "winner": 1,
+          "turnIdx": 1
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "pawns": [
+            {
+              "r": 1,
+              "c": 4
+            },
+            {
+              "r": 8,
+              "c": 4
+            }
+          ],
+          "walls": [],
+          "wallsLeft": [
+            10,
+            10
+          ],
+          "winner": 1,
+          "turnIdx": 1,
+          "legalMoves": [],
+          "legalWalls": []
+        },
+        "expected_view_of_other": {
+          "pawns": [
+            {
+              "r": 1,
+              "c": 4
+            },
+            {
+              "r": 8,
+              "c": 4
+            }
+          ],
+          "walls": [],
+          "wallsLeft": [
+            10,
+            10
+          ],
+          "winner": 1,
+          "turnIdx": 1,
+          "legalMoves": [],
+          "legalWalls": []
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          }
+        ],
+        "expected_payouts": {
+          "u1": 0,
+          "u2": 0
+        }
+      }
+    ]
+  },
+  "translations": {
+    "es": {
+      "display_name": "Quoridor (Declarativo)",
+      "short_description": "Lleva tu peón al borde opuesto. En cada turno muévelo una casilla o coloca un muro; los muros pueden frenar al rival, pero nunca bloquear todas las rutas.",
+      "game_logic_rules": "Lleva tu peón al borde opuesto. En cada turno muévelo una casilla o coloca un muro; los muros pueden frenar al rival, pero nunca bloquear todas las rutas.",
+      "game_ui_rules": "Elige Mover peón o Colocar muro y toca una casilla o anclaje legal resaltado. El tablero muestra ambos peones y todos los muros.",
+      "tutorial_strings": {
+        "Race your pawn to the opposite edge. Move one square or place a wall each turn; walls may slow a rival but may never block every route.": "Lleva tu peón al borde opuesto. En cada turno muévelo una casilla o coloca un muro; los muros pueden frenar al rival, pero nunca bloquear todas las rutas.",
+        "Choose Move pawn or Place wall, then tap a highlighted legal square or wall anchor. The board shows both pawns and all placed walls.": "Elige Mover peón o Colocar muro y toca una casilla o anclaje legal resaltado. El tablero muestra ambos peones y todos los muros.",
+        "Quoridor (Declarative)": "Quoridor (Declarativo)"
+      },
+      "client_strings": {
+        "text_0": "Declarativo",
+        "text_1": "Jugador {n}",
+        "text_2": "Tu turno · {name}",
+        "text_3": "Turno de {name}",
+        "text_4": "Fin de la partida",
+        "text_5": "Ganador: {name}",
+        "text_6": "Tu flota",
+        "text_7": "Aguas enemigas",
+        "text_8": "Colocar flota e iniciar batalla",
+        "text_9": "Coloca una flota válida con agua libre entre barcos.",
+        "text_10": "Continúa la captura con la ficha resaltada.",
+        "text_11": "Debes capturar.",
+        "text_12": "Mueve en diagonal; las damas se mueven en ambas direcciones.",
+        "text_13": "reina",
+        "text_14": "torre",
+        "text_15": "alfil",
+        "text_16": "caballo",
+        "text_17": "Promocionar en {square} a {piece}",
+        "text_18": "Eliminar este ejército",
+        "text_19": "Pasar (sin jugada legal)",
+        "text_20": "Rendirse",
+        "text_21": "Mover peón",
+        "text_22": "Colocar muro",
+        "text_23": "Muros restantes · {counts}",
+        "text_24": "Carta superior {card} · palo {suit} · {n} cartas por robar",
+        "text_25": "Jugar {card} como {suit}",
+        "text_26": "Jugar {card}",
+        "text_27": "Robar carta (quedan {n})",
+        "text_28": "Pedir {rank} a {name}",
+        "text_29": "Robar cartas",
+        "text_30": "Pasar",
+        "text_31": "{name} · grupos {ranks}",
+        "text_32": "Recoger baza",
+        "text_33": "Tu personaje: {name}",
+        "text_34": "Tu personaje es privado",
+        "text_35": "Preguntar: {question}",
+        "text_36": "Sí",
+        "text_37": "No",
+        "text_38": "{name}: adivinó {character} · {result}",
+        "text_39": "correcto",
+        "text_40": "incorrecto",
+        "text_41": "¿Lleva gafas?",
+        "text_42": "¿Lleva sombrero?",
+        "text_43": "¿Tiene vello facial?",
+        "text_44": "¿Se le ven las orejas?",
+        "text_45": "¿Tiene pelo rubio?",
+        "text_46": "¿Tiene pelo castaño?",
+        "text_47": "¿Tiene pelo negro?",
+        "text_48": "¿Tiene pelo rojo?",
+        "text_49": "¿Tiene pelo gris?",
+        "text_50": "¿Tiene pelo largo?",
+        "text_51": "¿Tiene pelo corto?",
+        "text_52": "¿Tiene ojos azules?",
+        "text_53": "¿Tiene ojos marrones?",
+        "text_54": "¿Tiene ojos verdes?",
+        "text_55": "Seleccionar pieza en fila {r}, columna {c}",
+        "text_56": "Mover a fila {r}, columna {c}",
+        "server_game_over": "partida terminada",
+        "server_not_seated": "no ocupas un asiento",
+        "server_not_your_turn": "no es tu turno",
+        "server_bad_move": "jugada no válida",
+        "server_bad_square": "casilla no válida",
+        "server_illegal_pawn_move": "movimiento de peón no válido",
+        "server_bad_wall": "muro no válido",
+        "server_no_walls_left": "no quedan muros",
+        "server_illegal_wall": "muro ilegal",
+        "server_unknown_move": "jugada desconocida",
+        "title": "Quoridor (Declarativo)"
+      }
+    },
+    "fr": {
+      "display_name": "Quoridor (Déclaratif)",
+      "short_description": "Amenez votre pion au bord opposé. À chaque tour, avancez d’une case ou placez un mur ; un mur peut ralentir l’adversaire mais jamais bloquer tous les chemins.",
+      "game_logic_rules": "Amenez votre pion au bord opposé. À chaque tour, avancez d’une case ou placez un mur ; un mur peut ralentir l’adversaire mais jamais bloquer tous les chemins.",
+      "game_ui_rules": "Choisissez Déplacer le pion ou Placer un mur, puis touchez une case ou un ancrage légal surligné. Les deux pions et tous les murs sont visibles.",
+      "tutorial_strings": {
+        "Race your pawn to the opposite edge. Move one square or place a wall each turn; walls may slow a rival but may never block every route.": "Amenez votre pion au bord opposé. À chaque tour, avancez d’une case ou placez un mur ; un mur peut ralentir l’adversaire mais jamais bloquer tous les chemins.",
+        "Choose Move pawn or Place wall, then tap a highlighted legal square or wall anchor. The board shows both pawns and all placed walls.": "Choisissez Déplacer le pion ou Placer un mur, puis touchez une case ou un ancrage légal surligné. Les deux pions et tous les murs sont visibles.",
+        "Quoridor (Declarative)": "Quoridor (Déclaratif)"
+      },
+      "client_strings": {
+        "text_0": "Déclaratif",
+        "text_1": "Joueur {n}",
+        "text_2": "À vous · {name}",
+        "text_3": "À {name} de jouer",
+        "text_4": "Partie terminée",
+        "text_5": "Gagnant : {name}",
+        "text_6": "Votre flotte",
+        "text_7": "Eaux adverses",
+        "text_8": "Placer la flotte et commencer",
+        "text_9": "Place une flotte valide avec de l’eau entre les navires.",
+        "text_10": "Continuez la prise avec le pion surligné.",
+        "text_11": "Une prise est obligatoire.",
+        "text_12": "Déplacez-vous en diagonale ; les dames vont dans les deux sens.",
+        "text_13": "dame",
+        "text_14": "tour",
+        "text_15": "fou",
+        "text_16": "cavalier",
+        "text_17": "Promouvoir en {square} en {piece}",
+        "text_18": "Éliminer cette armée",
+        "text_19": "Passer (aucun coup légal)",
+        "text_20": "Abandonner",
+        "text_21": "Déplacer le pion",
+        "text_22": "Placer un mur",
+        "text_23": "Murs restants · {counts}",
+        "text_24": "Carte du dessus {card} · couleur {suit} · {n} cartes à piocher",
+        "text_25": "Jouer {card} en {suit}",
+        "text_26": "Jouer {card}",
+        "text_27": "Piocher une carte ({n} restantes)",
+        "text_28": "Demander des {rank} à {name}",
+        "text_29": "Piocher des cartes",
+        "text_30": "Passer",
+        "text_31": "{name} · carrés {ranks}",
+        "text_32": "Ramasser le pli",
+        "text_33": "Votre personnage : {name}",
+        "text_34": "Votre personnage est privé",
+        "text_35": "Demander : {question}",
+        "text_36": "Oui",
+        "text_37": "Non",
+        "text_38": "{name} : a proposé {character} · {result}",
+        "text_39": "correct",
+        "text_40": "incorrect",
+        "text_41": "Porte-t-il des lunettes ?",
+        "text_42": "Porte-t-il un chapeau ?",
+        "text_43": "A-t-il des poils au visage ?",
+        "text_44": "Voit-on ses oreilles ?",
+        "text_45": "A-t-il les cheveux blonds ?",
+        "text_46": "A-t-il les cheveux bruns ?",
+        "text_47": "A-t-il les cheveux noirs ?",
+        "text_48": "A-t-il les cheveux roux ?",
+        "text_49": "A-t-il les cheveux gris ?",
+        "text_50": "A-t-il les cheveux longs ?",
+        "text_51": "A-t-il les cheveux courts ?",
+        "text_52": "A-t-il les yeux bleus ?",
+        "text_53": "A-t-il les yeux bruns ?",
+        "text_54": "A-t-il les yeux verts ?",
+        "text_55": "Choisir la pièce en ligne {r}, colonne {c}",
+        "text_56": "Aller en ligne {r}, colonne {c}",
+        "server_game_over": "partie terminée",
+        "server_not_seated": "vous n’occupez pas de place",
+        "server_not_your_turn": "ce n’est pas votre tour",
+        "server_bad_move": "coup invalide",
+        "server_bad_square": "case invalide",
+        "server_illegal_pawn_move": "déplacement de pion illégal",
+        "server_bad_wall": "mur invalide",
+        "server_no_walls_left": "il ne reste aucun mur",
+        "server_illegal_wall": "mur illégal",
+        "server_unknown_move": "coup inconnu",
+        "title": "Quoridor (Déclaratif)"
+      }
+    },
+    "de": {
+      "display_name": "Quoridor (Deklarativ)",
+      "short_description": "Bringe deinen Bauern zum gegenüberliegenden Rand. Ziehe pro Zug ein Feld oder setze eine Wand. Wände dürfen den Gegner bremsen, aber niemals alle Wege versperren.",
+      "game_logic_rules": "Bringe deinen Bauern zum gegenüberliegenden Rand. Ziehe pro Zug ein Feld oder setze eine Wand. Wände dürfen den Gegner bremsen, aber niemals alle Wege versperren.",
+      "game_ui_rules": "Wähle Bauern ziehen oder Wand platzieren und tippe auf ein markiertes gültiges Feld oder einen Wandpunkt. Das Brett zeigt beide Bauern und alle Wände.",
+      "tutorial_strings": {
+        "Race your pawn to the opposite edge. Move one square or place a wall each turn; walls may slow a rival but may never block every route.": "Bringe deinen Bauern zum gegenüberliegenden Rand. Ziehe pro Zug ein Feld oder setze eine Wand. Wände dürfen den Gegner bremsen, aber niemals alle Wege versperren.",
+        "Choose Move pawn or Place wall, then tap a highlighted legal square or wall anchor. The board shows both pawns and all placed walls.": "Wähle Bauern ziehen oder Wand platzieren und tippe auf ein markiertes gültiges Feld oder einen Wandpunkt. Das Brett zeigt beide Bauern und alle Wände.",
+        "Quoridor (Declarative)": "Quoridor (Deklarativ)"
+      },
+      "client_strings": {
+        "text_0": "Deklarativ",
+        "text_1": "Spieler {n}",
+        "text_2": "Dein Zug · {name}",
+        "text_3": "{name} ist am Zug",
+        "text_4": "Spiel beendet",
+        "text_5": "Gewinner: {name}",
+        "text_6": "Deine Flotte",
+        "text_7": "Zielgewässer",
+        "text_8": "Flotte platzieren und starten",
+        "text_9": "Platziert eine gültige Flotte mit Abstand zwischen den Schiffen.",
+        "text_10": "Setze den Schlagzug mit dem markierten Stein fort.",
+        "text_11": "Schlagen ist Pflicht.",
+        "text_12": "Ziehe diagonal; Damen ziehen in beide Richtungen.",
+        "text_13": "Dame",
+        "text_14": "Turm",
+        "text_15": "Läufer",
+        "text_16": "Springer",
+        "text_17": "Auf {square} in {piece} umwandeln",
+        "text_18": "Diese Armee entfernen",
+        "text_19": "Passen (kein gültiger Zug)",
+        "text_20": "Aufgeben",
+        "text_21": "Bauern ziehen",
+        "text_22": "Wand platzieren",
+        "text_23": "Verbleibende Wände · {counts}",
+        "text_24": "Oberste Karte {card} · Farbe {suit} · {n} Karten im Stapel",
+        "text_25": "{card} als {suit} spielen",
+        "text_26": "{card} spielen",
+        "text_27": "Karte ziehen ({n} übrig)",
+        "text_28": "{name} nach {rank} fragen",
+        "text_29": "Karten ziehen",
+        "text_30": "Passen",
+        "text_31": "{name} · Quartette {ranks}",
+        "text_32": "Stich einsammeln",
+        "text_33": "Deine Figur: {name}",
+        "text_34": "Deine Figur ist geheim",
+        "text_35": "Fragen: {question}",
+        "text_36": "Ja",
+        "text_37": "Nein",
+        "text_38": "{name}: hat {character} geraten · {result}",
+        "text_39": "richtig",
+        "text_40": "falsch",
+        "text_41": "Trägt die Person eine Brille?",
+        "text_42": "Trägt die Person einen Hut?",
+        "text_43": "Hat die Person einen Bart?",
+        "text_44": "Sind die Ohren sichtbar?",
+        "text_45": "Hat die Person blonde Haare?",
+        "text_46": "Hat die Person braune Haare?",
+        "text_47": "Hat die Person schwarze Haare?",
+        "text_48": "Hat die Person rote Haare?",
+        "text_49": "Hat die Person graue Haare?",
+        "text_50": "Hat die Person lange Haare?",
+        "text_51": "Hat die Person kurze Haare?",
+        "text_52": "Hat die Person blaue Augen?",
+        "text_53": "Hat die Person braune Augen?",
+        "text_54": "Hat die Person grüne Augen?",
+        "text_55": "Figur in Zeile {r}, Spalte {c} wählen",
+        "text_56": "Nach Zeile {r}, Spalte {c} ziehen",
+        "server_game_over": "Spiel beendet",
+        "server_not_seated": "du hast keinen Spielplatz",
+        "server_not_your_turn": "du bist nicht dran",
+        "server_bad_move": "ungültiger Zug",
+        "server_bad_square": "ungültiges Feld",
+        "server_illegal_pawn_move": "ungültiger Bauernzug",
+        "server_bad_wall": "ungültige Wand",
+        "server_no_walls_left": "keine Wände mehr übrig",
+        "server_illegal_wall": "unzulässige Wand",
+        "server_unknown_move": "unbekannter Zug",
+        "title": "Quoridor (Deklarativ)"
+      }
+    },
+    "pt": {
+      "display_name": "Quoridor (Declarativo)",
+      "short_description": "Leve seu peão à borda oposta. Em cada turno, mova uma casa ou coloque uma parede; paredes podem atrasar o rival, mas nunca bloquear todas as rotas.",
+      "game_logic_rules": "Leve seu peão à borda oposta. Em cada turno, mova uma casa ou coloque uma parede; paredes podem atrasar o rival, mas nunca bloquear todas as rotas.",
+      "game_ui_rules": "Escolha Mover peão ou Colocar parede e toque numa casa ou âncora válida destacada. O tabuleiro mostra os dois peões e todas as paredes.",
+      "tutorial_strings": {
+        "Race your pawn to the opposite edge. Move one square or place a wall each turn; walls may slow a rival but may never block every route.": "Leve seu peão à borda oposta. Em cada turno, mova uma casa ou coloque uma parede; paredes podem atrasar o rival, mas nunca bloquear todas as rotas.",
+        "Choose Move pawn or Place wall, then tap a highlighted legal square or wall anchor. The board shows both pawns and all placed walls.": "Escolha Mover peão ou Colocar parede e toque numa casa ou âncora válida destacada. O tabuleiro mostra os dois peões e todas as paredes.",
+        "Quoridor (Declarative)": "Quoridor (Declarativo)"
+      },
+      "client_strings": {
+        "text_0": "Declarativo",
+        "text_1": "Jogador {n}",
+        "text_2": "Sua vez · {name}",
+        "text_3": "Vez de {name}",
+        "text_4": "Partida encerrada",
+        "text_5": "Vencedor: {name}",
+        "text_6": "Sua frota",
+        "text_7": "Águas inimigas",
+        "text_8": "Posicionar frota e iniciar batalha",
+        "text_9": "Posiciona uma frota válida com água livre entre os navios.",
+        "text_10": "Continue a captura com a peça destacada.",
+        "text_11": "É obrigatório capturar.",
+        "text_12": "Mova na diagonal; damas movem nos dois sentidos.",
+        "text_13": "rainha",
+        "text_14": "torre",
+        "text_15": "bispo",
+        "text_16": "cavalo",
+        "text_17": "Promover em {square} para {piece}",
+        "text_18": "Eliminar este exército",
+        "text_19": "Passar (sem jogada válida)",
+        "text_20": "Desistir",
+        "text_21": "Mover peão",
+        "text_22": "Colocar parede",
+        "text_23": "Paredes restantes · {counts}",
+        "text_24": "Carta do topo {card} · naipe {suit} · {n} cartas para comprar",
+        "text_25": "Jogar {card} como {suit}",
+        "text_26": "Jogar {card}",
+        "text_27": "Comprar carta (restam {n})",
+        "text_28": "Pedir {rank} a {name}",
+        "text_29": "Comprar cartas",
+        "text_30": "Passar",
+        "text_31": "{name} · conjuntos {ranks}",
+        "text_32": "Recolher vaza",
+        "text_33": "Seu personagem: {name}",
+        "text_34": "Seu personagem é privado",
+        "text_35": "Perguntar: {question}",
+        "text_36": "Sim",
+        "text_37": "Não",
+        "text_38": "{name}: adivinhou {character} · {result}",
+        "text_39": "correto",
+        "text_40": "incorreto",
+        "text_41": "Usa óculos?",
+        "text_42": "Usa chapéu?",
+        "text_43": "Tem pelos no rosto?",
+        "text_44": "As orelhas estão visíveis?",
+        "text_45": "Tem cabelo loiro?",
+        "text_46": "Tem cabelo castanho?",
+        "text_47": "Tem cabelo preto?",
+        "text_48": "Tem cabelo ruivo?",
+        "text_49": "Tem cabelo grisalho?",
+        "text_50": "Tem cabelo comprido?",
+        "text_51": "Tem cabelo curto?",
+        "text_52": "Tem olhos azuis?",
+        "text_53": "Tem olhos castanhos?",
+        "text_54": "Tem olhos verdes?",
+        "text_55": "Selecionar peça na linha {r}, coluna {c}",
+        "text_56": "Mover para linha {r}, coluna {c}",
+        "server_game_over": "jogo encerrado",
+        "server_not_seated": "você não ocupa um lugar",
+        "server_not_your_turn": "não é sua vez",
+        "server_bad_move": "jogada inválida",
+        "server_bad_square": "casa inválida",
+        "server_illegal_pawn_move": "movimento de peão inválido",
+        "server_bad_wall": "parede inválida",
+        "server_no_walls_left": "não restam paredes",
+        "server_illegal_wall": "parede ilegal",
+        "server_unknown_move": "jogada desconhecida",
+        "title": "Quoridor (Declarativo)"
+      }
+    },
+    "zh": {
+      "display_name": "Quoridor (声明式)",
+      "short_description": "让兵到达对面边缘。每回合移动一格或放置一堵墙；墙可以阻挡对手，但不能封死所有路径。",
+      "game_logic_rules": "让兵到达对面边缘。每回合移动一格或放置一堵墙；墙可以阻挡对手，但不能封死所有路径。",
+      "game_ui_rules": "选择“移动兵”或“放置墙”，再点击高亮的合法方格或墙锚点。棋盘会显示双方的兵及所有已放置的墙。",
+      "tutorial_strings": {
+        "Race your pawn to the opposite edge. Move one square or place a wall each turn; walls may slow a rival but may never block every route.": "让兵到达对面边缘。每回合移动一格或放置一堵墙；墙可以阻挡对手，但不能封死所有路径。",
+        "Choose Move pawn or Place wall, then tap a highlighted legal square or wall anchor. The board shows both pawns and all placed walls.": "选择“移动兵”或“放置墙”，再点击高亮的合法方格或墙锚点。棋盘会显示双方的兵及所有已放置的墙。",
+        "Quoridor (Declarative)": "Quoridor (声明式)"
+      },
+      "client_strings": {
+        "text_0": "声明式",
+        "text_1": "玩家 {n}",
+        "text_2": "轮到您 · {name}",
+        "text_3": "轮到 {name}",
+        "text_4": "游戏结束",
+        "text_5": "获胜者：{name}",
+        "text_6": "您的舰队",
+        "text_7": "目标海域",
+        "text_8": "部署舰队并开始战斗",
+        "text_9": "部署合法舰队，舰船之间留有空隙。",
+        "text_10": "使用高亮棋子继续连跳。",
+        "text_11": "必须吃子。",
+        "text_12": "沿斜线移动；王棋可以双向移动。",
+        "text_13": "后",
+        "text_14": "车",
+        "text_15": "象",
+        "text_16": "马",
+        "text_17": "在 {square} 升变为{piece}",
+        "text_18": "淘汰此军队",
+        "text_19": "跳过（无合法走法）",
+        "text_20": "认输",
+        "text_21": "移动兵",
+        "text_22": "放置墙",
+        "text_23": "剩余墙数 · {counts}",
+        "text_24": "顶牌 {card} · 花色 {suit} · 余牌 {n} 张",
+        "text_25": "打出 {card}，指定花色 {suit}",
+        "text_26": "打出 {card}",
+        "text_27": "抽一张牌（剩余 {n} 张）",
+        "text_28": "向 {name} 要 {rank}",
+        "text_29": "抽牌",
+        "text_30": "跳过",
+        "text_31": "{name} · 成套牌 {ranks}",
+        "text_32": "收取此墩",
+        "text_33": "您的角色：{name}",
+        "text_34": "您的角色是保密的",
+        "text_35": "提问：{question}",
+        "text_36": "是",
+        "text_37": "否",
+        "text_38": "{name}：猜测 {character} · {result}",
+        "text_39": "正确",
+        "text_40": "错误",
+        "text_41": "戴眼镜吗？",
+        "text_42": "戴帽子吗？",
+        "text_43": "有胡须吗？",
+        "text_44": "耳朵露出来了吗？",
+        "text_45": "是金发吗？",
+        "text_46": "是棕发吗？",
+        "text_47": "是黑发吗？",
+        "text_48": "是红发吗？",
+        "text_49": "是灰发吗？",
+        "text_50": "是长发吗？",
+        "text_51": "是短发吗？",
+        "text_52": "是蓝眼睛吗？",
+        "text_53": "是棕眼睛吗？",
+        "text_54": "是绿眼睛吗？",
+        "text_55": "选择第 {r} 行第 {c} 列的棋子",
+        "text_56": "移至第 {r} 行第 {c} 列",
+        "server_game_over": "游戏结束",
+        "server_not_seated": "您未入座",
+        "server_not_your_turn": "未轮到你",
+        "server_bad_move": "走法无效",
+        "server_bad_square": "方格无效",
+        "server_illegal_pawn_move": "兵的走法不合法",
+        "server_bad_wall": "墙无效",
+        "server_no_walls_left": "没有剩余的墙",
+        "server_illegal_wall": "墙的位置不合法",
+        "server_unknown_move": "未知着法",
+        "title": "Quoridor (声明式)"
+      }
+    },
+    "hi": {
+      "display_name": "क्वोरिडोर (घोषणात्मक)",
+      "short_description": "अपने प्यादे को दूसरी ओर पहुँचाएँ। हर बारी एक खाना चलें या दीवार रखें; दीवार विरोधी को धीमा कर सकती है, पर सभी रास्ते बंद नहीं कर सकती।",
+      "game_logic_rules": "अपने प्यादे को दूसरी ओर पहुँचाएँ। हर बारी एक खाना चलें या दीवार रखें; दीवार विरोधी को धीमा कर सकती है, पर सभी रास्ते बंद नहीं कर सकती।",
+      "game_ui_rules": "प्यादा चलें या दीवार रखें चुनें, फिर चिह्नित वैध खाने या दीवार के स्थान पर टैप करें। बोर्ड पर दोनों प्यादे और सभी दीवारें दिखती हैं।",
+      "tutorial_strings": {
+        "Race your pawn to the opposite edge. Move one square or place a wall each turn; walls may slow a rival but may never block every route.": "अपने प्यादे को दूसरी ओर पहुँचाएँ। हर बारी एक खाना चलें या दीवार रखें; दीवार विरोधी को धीमा कर सकती है, पर सभी रास्ते बंद नहीं कर सकती।",
+        "Choose Move pawn or Place wall, then tap a highlighted legal square or wall anchor. The board shows both pawns and all placed walls.": "प्यादा चलें या दीवार रखें चुनें, फिर चिह्नित वैध खाने या दीवार के स्थान पर टैप करें। बोर्ड पर दोनों प्यादे और सभी दीवारें दिखती हैं।",
+        "Quoridor (Declarative)": "क्वोरिडोर (घोषणात्मक)"
+      },
+      "client_strings": {
+        "text_0": "घोषणात्मक",
+        "text_1": "खिलाड़ी {n}",
+        "text_2": "आपकी बारी · {name}",
+        "text_3": "{name} की बारी",
+        "text_4": "खेल समाप्त",
+        "text_5": "विजेता: {name}",
+        "text_6": "आपका बेड़ा",
+        "text_7": "लक्ष्य जलक्षेत्र",
+        "text_8": "बेड़ा रखें और युद्ध शुरू करें",
+        "text_9": "जहाज़ों के बीच खाली पानी छोड़कर मान्य बेड़ा रखता है।",
+        "text_10": "चिह्नित गोटी से अगली मार जारी रखें।",
+        "text_11": "मारना अनिवार्य है।",
+        "text_12": "तिरछा चलें; राजा दोनों दिशाओं में चल सकता है।",
+        "text_13": "वज़ीर",
+        "text_14": "हाथी",
+        "text_15": "ऊँट",
+        "text_16": "घोड़ा",
+        "text_17": "{square} पर {piece} में पदोन्नत करें",
+        "text_18": "इस सेना को हटाएँ",
+        "text_19": "पास करें (कोई वैध चाल नहीं)",
+        "text_20": "हार मानें",
+        "text_21": "प्यादा चलें",
+        "text_22": "दीवार रखें",
+        "text_23": "बची दीवारें · {counts}",
+        "text_24": "ऊपर का पत्ता {card} · रंग {suit} · खींचने के लिए {n} पत्ते",
+        "text_25": "{card} को {suit} के रूप में खेलें",
+        "text_26": "{card} खेलें",
+        "text_27": "एक पत्ता खींचें ({n} बचे)",
+        "text_28": "{name} से {rank} माँगें",
+        "text_29": "पत्ते खींचें",
+        "text_30": "पास करें",
+        "text_31": "{name} · पूरे समूह {ranks}",
+        "text_32": "हाथ समेटें",
+        "text_33": "आपका पात्र: {name}",
+        "text_34": "आपका पात्र गोपनीय है",
+        "text_35": "पूछें: {question}",
+        "text_36": "हाँ",
+        "text_37": "नहीं",
+        "text_38": "{name}: {character} का अनुमान · {result}",
+        "text_39": "सही",
+        "text_40": "गलत",
+        "text_41": "क्या चश्मा पहने हैं?",
+        "text_42": "क्या टोपी पहने हैं?",
+        "text_43": "क्या चेहरे पर दाढ़ी या मूँछ है?",
+        "text_44": "क्या कान दिखाई दे रहे हैं?",
+        "text_45": "क्या बाल सुनहरे हैं?",
+        "text_46": "क्या बाल भूरे हैं?",
+        "text_47": "क्या बाल काले हैं?",
+        "text_48": "क्या बाल लाल हैं?",
+        "text_49": "क्या बाल सफ़ेद या स्लेटी हैं?",
+        "text_50": "क्या बाल लंबे हैं?",
+        "text_51": "क्या बाल छोटे हैं?",
+        "text_52": "क्या आँखें नीली हैं?",
+        "text_53": "क्या आँखें भूरी हैं?",
+        "text_54": "क्या आँखें हरी हैं?",
+        "text_55": "पंक्ति {r}, स्तंभ {c} की गोटी चुनें",
+        "text_56": "पंक्ति {r}, स्तंभ {c} पर चलें",
+        "server_game_over": "खेल समाप्त",
+        "server_not_seated": "आप खेल में बैठे नहीं हैं",
+        "server_not_your_turn": "आपकी बारी नहीं",
+        "server_bad_move": "अमान्य चाल",
+        "server_bad_square": "अमान्य खाना",
+        "server_illegal_pawn_move": "प्यादे की अवैध चाल",
+        "server_bad_wall": "अमान्य दीवार",
+        "server_no_walls_left": "कोई दीवार नहीं बची",
+        "server_illegal_wall": "अवैध दीवार",
+        "server_unknown_move": "अज्ञात चाल",
+        "title": "क्वोरिडोर (घोषणात्मक)"
+      }
+    },
+    "ar": {
+      "display_name": "كوريدور (تصريحي)",
+      "short_description": "أوصل بيدقك إلى الحافة المقابلة. في كل دور تحرك مربعًا أو ضع جدارًا؛ يمكن للجدران إبطاء الخصم لكن لا يجوز إغلاق كل المسارات.",
+      "game_logic_rules": "أوصل بيدقك إلى الحافة المقابلة. في كل دور تحرك مربعًا أو ضع جدارًا؛ يمكن للجدران إبطاء الخصم لكن لا يجوز إغلاق كل المسارات.",
+      "game_ui_rules": "اختر تحريك البيدق أو وضع جدار ثم اضغط مربعًا أو موضع جدار قانونيًا مظللًا. تعرض اللوحة البيدقين وجميع الجدران.",
+      "tutorial_strings": {
+        "Race your pawn to the opposite edge. Move one square or place a wall each turn; walls may slow a rival but may never block every route.": "أوصل بيدقك إلى الحافة المقابلة. في كل دور تحرك مربعًا أو ضع جدارًا؛ يمكن للجدران إبطاء الخصم لكن لا يجوز إغلاق كل المسارات.",
+        "Choose Move pawn or Place wall, then tap a highlighted legal square or wall anchor. The board shows both pawns and all placed walls.": "اختر تحريك البيدق أو وضع جدار ثم اضغط مربعًا أو موضع جدار قانونيًا مظللًا. تعرض اللوحة البيدقين وجميع الجدران.",
+        "Quoridor (Declarative)": "كوريدور (تصريحي)"
+      },
+      "client_strings": {
+        "text_0": "تصريحي",
+        "text_1": "اللاعب {n}",
+        "text_2": "دورك · {name}",
+        "text_3": "دور {name}",
+        "text_4": "انتهت اللعبة",
+        "text_5": "الفائز: {name}",
+        "text_6": "أسطولك",
+        "text_7": "مياه الهدف",
+        "text_8": "وضع الأسطول وبدء المعركة",
+        "text_9": "يضع أسطولًا صالحًا مع مياه فاصلة بين السفن.",
+        "text_10": "تابع الأسر بالقطعة المظللة.",
+        "text_11": "الأسر إجباري.",
+        "text_12": "تحرك قطريًا؛ تتحرك الملوك في الاتجاهين.",
+        "text_13": "وزير",
+        "text_14": "رخ",
+        "text_15": "فيل",
+        "text_16": "حصان",
+        "text_17": "ترقية في {square} إلى {piece}",
+        "text_18": "إقصاء هذا الجيش",
+        "text_19": "تمرير (لا حركة قانونية)",
+        "text_20": "استسلام",
+        "text_21": "تحريك البيدق",
+        "text_22": "وضع جدار",
+        "text_23": "الجدران المتبقية · {counts}",
+        "text_24": "الورقة العليا {card} · النوع {suit} · {n} أوراق للسحب",
+        "text_25": "العب {card} بنوع {suit}",
+        "text_26": "العب {card}",
+        "text_27": "اسحب ورقة (متبقي {n})",
+        "text_28": "اطلب {rank} من {name}",
+        "text_29": "سحب أوراق",
+        "text_30": "تمرير",
+        "text_31": "{name} · المجموعات {ranks}",
+        "text_32": "جمع اللمة",
+        "text_33": "شخصيتك: {name}",
+        "text_34": "شخصيتك سرية",
+        "text_35": "اسأل: {question}",
+        "text_36": "نعم",
+        "text_37": "لا",
+        "text_38": "{name}: خمن {character} · {result}",
+        "text_39": "صحيح",
+        "text_40": "غير صحيح",
+        "text_41": "هل ترتدي نظارة؟",
+        "text_42": "هل ترتدي قبعة؟",
+        "text_43": "هل لديها شعر في الوجه؟",
+        "text_44": "هل أذناها ظاهرتان؟",
+        "text_45": "هل شعرها أشقر؟",
+        "text_46": "هل شعرها بني؟",
+        "text_47": "هل شعرها أسود؟",
+        "text_48": "هل شعرها أحمر؟",
+        "text_49": "هل شعرها رمادي؟",
+        "text_50": "هل شعرها طويل؟",
+        "text_51": "هل شعرها قصير؟",
+        "text_52": "هل عيناها زرقاوان؟",
+        "text_53": "هل عيناها بنيتان؟",
+        "text_54": "هل عيناها خضراوان؟",
+        "text_55": "اختر قطعة الصف {r} والعمود {c}",
+        "text_56": "تحرك إلى الصف {r} والعمود {c}",
+        "server_game_over": "انتهت اللعبة",
+        "server_not_seated": "لست جالسًا في اللعبة",
+        "server_not_your_turn": "ليس دورك",
+        "server_bad_move": "حركة غير صالحة",
+        "server_bad_square": "مربع غير صالح",
+        "server_illegal_pawn_move": "حركة بيدق غير قانونية",
+        "server_bad_wall": "جدار غير صالح",
+        "server_no_walls_left": "لم تبق جدران",
+        "server_illegal_wall": "جدار غير قانوني",
+        "server_unknown_move": "نقلة غير معروفة",
+        "title": "كوريدور (تصريحي)"
+      }
+    }
+  },
+  "game_addition_request_id_and_secret": "example-only-html-to-declarative-quoridor-replace-before-publishing",
+  "declarative_ui": {
+    "format": "buildplay-ui",
+    "version": 1,
+    "viewport": {
+      "width": 480,
+      "height": 700,
+      "camera_enabled": false
+    },
+    "motion": {
+      "move_ms": 650,
+      "turn_pause_ms": 0,
+      "animate_own": true
+    },
+    "boards": [
+      {
+        "id": "table",
+        "kind": "free",
+        "x": 0,
+        "y": 0,
+        "width": 480,
+        "height": 700,
+        "background_asset": "board"
+      }
+    ],
+    "piece_types": {
+      "pawn0": {
+        "shape": "circle",
+        "width": 30,
+        "height": 30,
+        "color": "#397b72",
+        "text_color": "#fff8ec"
+      },
+      "pawn1": {
+        "shape": "circle",
+        "width": 30,
+        "height": 30,
+        "color": "#bf6657",
+        "text_color": "#fff8ec"
+      },
+      "wallH": {
+        "shape": "rect",
+        "width": 90,
+        "height": 10,
+        "color": "#ae8052"
+      },
+      "wallV": {
+        "shape": "rect",
+        "width": 10,
+        "height": 90,
+        "color": "#ae8052"
+      }
+    },
+    "assets": {
+      "board": {
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0ODAgNzAwIj48cmVjdCB3aWR0aD0iNDgwIiBoZWlnaHQ9IjcwMCIgZmlsbD0iIzE4MmEyOCIvPjxyZWN0IHg9IjE5IiB5PSIxMjQiIHdpZHRoPSI0NDIiIGhlaWdodD0iNDQyIiByeD0iMjAiIGZpbGw9IiM5ZDc1NTEiLz48cmVjdCB4PSIyNyIgeT0iMTMyIiB3aWR0aD0iNDI2IiBoZWlnaHQ9IjQyNiIgcng9IjE0IiBmaWxsPSIjZTdkOGMxIi8+PHJlY3QgeD0iMjciIHk9IjEzMiIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzRiMzQ0NSIvPjxyZWN0IHg9Ijc1IiB5PSIxMzIiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiM0YjM0NDUiLz48cmVjdCB4PSIxMjMiIHk9IjEzMiIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzRiMzQ0NSIvPjxyZWN0IHg9IjE3MSIgeT0iMTMyIiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjNGIzNDQ1Ii8+PHJlY3QgeD0iMjE5IiB5PSIxMzIiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiM0YjM0NDUiLz48cmVjdCB4PSIyNjciIHk9IjEzMiIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzRiMzQ0NSIvPjxyZWN0IHg9IjMxNSIgeT0iMTMyIiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjNGIzNDQ1Ii8+PHJlY3QgeD0iMzYzIiB5PSIxMzIiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiM0YjM0NDUiLz48cmVjdCB4PSI0MTEiIHk9IjEzMiIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzRiMzQ0NSIvPjxyZWN0IHg9IjI3IiB5PSIxODAiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSI3NSIgeT0iMTgwIiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iMTIzIiB5PSIxODAiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSIxNzEiIHk9IjE4MCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzI1MzQ0ZSIvPjxyZWN0IHg9IjIxOSIgeT0iMTgwIiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iMjY3IiB5PSIxODAiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSIzMTUiIHk9IjE4MCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzI1MzQ0ZSIvPjxyZWN0IHg9IjM2MyIgeT0iMTgwIiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iNDExIiB5PSIxODAiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSIyNyIgeT0iMjI4IiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iNzUiIHk9IjIyOCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzI1MzQ0ZSIvPjxyZWN0IHg9IjEyMyIgeT0iMjI4IiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iMTcxIiB5PSIyMjgiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSIyMTkiIHk9IjIyOCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzI1MzQ0ZSIvPjxyZWN0IHg9IjI2NyIgeT0iMjI4IiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iMzE1IiB5PSIyMjgiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSIzNjMiIHk9IjIyOCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzI1MzQ0ZSIvPjxyZWN0IHg9IjQxMSIgeT0iMjI4IiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iMjciIHk9IjI3NiIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzI1MzQ0ZSIvPjxyZWN0IHg9Ijc1IiB5PSIyNzYiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSIxMjMiIHk9IjI3NiIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzI1MzQ0ZSIvPjxyZWN0IHg9IjE3MSIgeT0iMjc2IiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iMjE5IiB5PSIyNzYiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSIyNjciIHk9IjI3NiIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzI1MzQ0ZSIvPjxyZWN0IHg9IjMxNSIgeT0iMjc2IiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iMzYzIiB5PSIyNzYiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSI0MTEiIHk9IjI3NiIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzI1MzQ0ZSIvPjxyZWN0IHg9IjI3IiB5PSIzMjQiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSI3NSIgeT0iMzI0IiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iMTIzIiB5PSIzMjQiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSIxNzEiIHk9IjMyNCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzI1MzQ0ZSIvPjxyZWN0IHg9IjIxOSIgeT0iMzI0IiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iMjY3IiB5PSIzMjQiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSIzMTUiIHk9IjMyNCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzI1MzQ0ZSIvPjxyZWN0IHg9IjM2MyIgeT0iMzI0IiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iNDExIiB5PSIzMjQiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSIyNyIgeT0iMzcyIiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iNzUiIHk9IjM3MiIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzI1MzQ0ZSIvPjxyZWN0IHg9IjEyMyIgeT0iMzcyIiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iMTcxIiB5PSIzNzIiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSIyMTkiIHk9IjM3MiIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzI1MzQ0ZSIvPjxyZWN0IHg9IjI2NyIgeT0iMzcyIiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iMzE1IiB5PSIzNzIiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSIzNjMiIHk9IjM3MiIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzI1MzQ0ZSIvPjxyZWN0IHg9IjQxMSIgeT0iMzcyIiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iMjciIHk9IjQyMCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzI1MzQ0ZSIvPjxyZWN0IHg9Ijc1IiB5PSI0MjAiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSIxMjMiIHk9IjQyMCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzI1MzQ0ZSIvPjxyZWN0IHg9IjE3MSIgeT0iNDIwIiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iMjE5IiB5PSI0MjAiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSIyNjciIHk9IjQyMCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzI1MzQ0ZSIvPjxyZWN0IHg9IjMxNSIgeT0iNDIwIiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iMzYzIiB5PSI0MjAiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSI0MTEiIHk9IjQyMCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzI1MzQ0ZSIvPjxyZWN0IHg9IjI3IiB5PSI0NjgiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSI3NSIgeT0iNDY4IiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iMTIzIiB5PSI0NjgiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSIxNzEiIHk9IjQ2OCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzI1MzQ0ZSIvPjxyZWN0IHg9IjIxOSIgeT0iNDY4IiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iMjY3IiB5PSI0NjgiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSIzMTUiIHk9IjQ2OCIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzI1MzQ0ZSIvPjxyZWN0IHg9IjM2MyIgeT0iNDY4IiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMjUzNDRlIi8+PHJlY3QgeD0iNDExIiB5PSI0NjgiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMyNTM0NGUiLz48cmVjdCB4PSIyNyIgeT0iNTE2IiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMzM0NDVkIi8+PHJlY3QgeD0iNzUiIHk9IjUxNiIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzMzNDQ1ZCIvPjxyZWN0IHg9IjEyMyIgeT0iNTE2IiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMzM0NDVkIi8+PHJlY3QgeD0iMTcxIiB5PSI1MTYiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMzMzQ0NWQiLz48cmVjdCB4PSIyMTkiIHk9IjUxNiIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzMzNDQ1ZCIvPjxyZWN0IHg9IjI2NyIgeT0iNTE2IiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMzM0NDVkIi8+PHJlY3QgeD0iMzE1IiB5PSI1MTYiIHdpZHRoPSI0MiIgaGVpZ2h0PSI0MiIgcng9IjUiIGZpbGw9IiMzMzQ0NWQiLz48cmVjdCB4PSIzNjMiIHk9IjUxNiIgd2lkdGg9IjQyIiBoZWlnaHQ9IjQyIiByeD0iNSIgZmlsbD0iIzMzNDQ1ZCIvPjxyZWN0IHg9IjQxMSIgeT0iNTE2IiB3aWR0aD0iNDIiIGhlaWdodD0iNDIiIHJ4PSI1IiBmaWxsPSIjMzM0NDVkIi8+PC9zdmc+",
+        "media_type": "image/svg+xml",
+        "width": 480,
+        "height": 700,
+        "alt": "Quoridor board with goal rows, move instructions and wall counts"
+      },
+      "wall-target-h": {
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzNiAxMiI+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjM0IiBoZWlnaHQ9IjEwIiByeD0iNSIgZmlsbD0iIzg2YzdhNCIgc3Ryb2tlPSIjMzQ1NDRhIiBzdHJva2Utd2lkdGg9IjIiLz48L3N2Zz4=",
+        "media_type": "image/svg+xml",
+        "width": 36,
+        "height": 12,
+        "alt": "Horizontal wall placement"
+      },
+      "wall-target-v": {
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMiAzNiI+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjEwIiBoZWlnaHQ9IjM0IiByeD0iNSIgZmlsbD0iIzg2YzdhNCIgc3Ryb2tlPSIjMzQ1NDRhIiBzdHJva2Utd2lkdGg9IjIiLz48L3N2Zz4=",
+        "media_type": "image/svg+xml",
+        "width": 12,
+        "height": 36,
+        "alt": "Vertical wall placement"
+      }
+    },
+    "strings": {
+      "text_0": "Declarative",
+      "text_1": "Player {n}",
+      "text_2": "Your turn · {name}",
+      "text_3": "{name} to play",
+      "text_4": "Game over",
+      "text_5": "Winner: {name}",
+      "text_6": "Your fleet",
+      "text_7": "Target waters",
+      "text_8": "Place fleet and start battle",
+      "text_9": "Places a valid fleet with clear water between ships.",
+      "text_10": "Continue the capture with the highlighted checker.",
+      "text_11": "A capture is required.",
+      "text_12": "Move diagonally; kings move either direction.",
+      "text_13": "queen",
+      "text_14": "rook",
+      "text_15": "bishop",
+      "text_16": "knight",
+      "text_17": "Promote at {square} to {piece}",
+      "text_18": "Eliminate this army",
+      "text_19": "Pass (no legal move)",
+      "text_20": "Resign",
+      "text_21": "Move pawn",
+      "text_22": "Place wall",
+      "text_23": "Walls remaining · {counts}",
+      "text_24": "Top card {card} · suit {suit} · {n} cards to draw",
+      "text_25": "Play {card} as {suit}",
+      "text_26": "Play {card}",
+      "text_27": "Draw a card ({n} left)",
+      "text_28": "Ask {name} for {rank}",
+      "text_29": "Draw cards",
+      "text_30": "Pass",
+      "text_31": "{name} · books {ranks}",
+      "text_32": "Collect trick",
+      "text_33": "Your character: {name}",
+      "text_34": "Your character is private",
+      "text_35": "Ask: {question}",
+      "text_36": "Yes",
+      "text_37": "No",
+      "text_38": "{name}: guessed {character} · {result}",
+      "text_39": "correct",
+      "text_40": "incorrect",
+      "text_41": "Are they wearing glasses?",
+      "text_42": "Are they wearing a hat?",
+      "text_43": "Do they have facial hair?",
+      "text_44": "Are their ears showing?",
+      "text_45": "Do they have blonde hair?",
+      "text_46": "Do they have brown hair?",
+      "text_47": "Do they have black hair?",
+      "text_48": "Do they have red hair?",
+      "text_49": "Do they have gray hair?",
+      "text_50": "Do they have long hair?",
+      "text_51": "Do they have short hair?",
+      "text_52": "Do they have blue eyes?",
+      "text_53": "Do they have brown eyes?",
+      "text_54": "Do they have green eyes?",
+      "text_55": "Select piece at row {r}, column {c}",
+      "text_56": "Move to row {r}, column {c}",
+      "title": "Quoridor (Declarative)",
+      "server_game_over": "game over",
+      "server_not_seated": "not seated",
+      "server_not_your_turn": "not your turn",
+      "server_bad_move": "bad move",
+      "server_bad_square": "bad square",
+      "server_illegal_pawn_move": "illegal pawn move",
+      "server_bad_wall": "bad wall",
+      "server_no_walls_left": "no walls left",
+      "server_illegal_wall": "illegal wall",
+      "server_unknown_move": "unknown move"
+    },
+    "ui_code": "const SOURCE_STRINGS = {\n  title: \"Quoridor\",\n  rules: \"Race your pawn to the far row. Each turn, move one square or place one of your 10 walls to slow your rival. A wall can never block the last path to either goal. Jump over the other pawn when possible; if a wall blocks the jump, move to either open side. Player 1 starts at the bottom and heads up; Player 2 starts at the top and heads down.\",\n  waiting_platform: \"Waiting for the platform…\",\n  waiting: \"Waiting for the match…\",\n  player_n: \"Player {n}\",\n  move_pawn: \"Move pawn\",\n  place_wall: \"Place wall\",\n  wall_horizontal: \"Horizontal wall\",\n  wall_vertical: \"Vertical wall\",\n  walls_left: \"Walls — P1: {walls0} · P2: {walls1}\",\n  wins: \"{name} wins!\",\n  saving: \"Saving move…\",\n  your_turn_move: \"Tap a highlighted square to move\",\n  your_turn_wall: \"Tap a highlighted gap to place a wall\",\n  waiting_for: \"Waiting for {name}…\",\n  goal_player_0: \"Player 1 goal\",\n  goal_player_1: \"Player 2 goal\",\n  server_game_over: \"game over\",\n  server_not_seated: \"not seated\",\n  server_not_your_turn: \"not your turn\",\n  server_bad_move: \"bad move\",\n  server_bad_square: \"bad square\",\n  server_illegal_pawn_move: \"illegal pawn move\",\n  server_bad_wall: \"bad wall\",\n  server_no_walls_left: \"no walls left\",\n  server_illegal_wall: \"illegal wall\",\n  server_unknown_move: \"unknown move\"\n};\n\nfunction gameUIText(message, key, values) {\n  const source = SOURCE_STRINGS[key] || key;\n  const text = (message.strings || {})[key] || source;\n  return text.replace(/\\{(\\w+)\\}/g, (match, name) => values && name in values ? String(values[name]) : match);\n}\n\nfunction quoridorBlocked(walls, r1, c1, r2, c2) {\n  for (const wall of walls) {\n    if (c1 === c2 && wall.o === \"H\" && wall.r === Math.min(r1, r2) && (wall.c === c1 || wall.c === c1 - 1)) return true;\n    if (r1 === r2 && wall.o === \"V\" && wall.c === Math.min(c1, c2) && (wall.r === r1 || wall.r === r1 - 1)) return true;\n  }\n  return false;\n}\n\nfunction quoridorHasPath(walls, pawn, goal) {\n  const queue = [[pawn.r, pawn.c]], seen = new Set([pawn.r + \",\" + pawn.c]);\n  for (let head = 0; head < queue.length; head++) {\n    const [r, c] = queue[head];\n    if (r === goal) return true;\n    for (const [dr, dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {\n      const nr = r + dr, nc = c + dc, key = nr + \",\" + nc;\n      if (nr < 0 || nr > 8 || nc < 0 || nc > 8 || seen.has(key) || quoridorBlocked(walls, r, c, nr, nc)) continue;\n      seen.add(key); queue.push([nr, nc]);\n    }\n  }\n  return false;\n}\n\nfunction quoridorWallFits(view, r, c, orientation) {\n  if(Array.isArray(view.legalWalls))return view.legalWalls.some(w=>w.r===r&&w.c===c&&w.o===orientation);\n  if (!view || !Number.isInteger(r) || !Number.isInteger(c) || r < 0 || r > 7 || c < 0 || c > 7 ||\n      (orientation !== \"H\" && orientation !== \"V\") || view.wallsLeft[view.turnIdx] <= 0) return false;\n  for (const wall of view.walls) {\n    if (wall.r === r && wall.c === c) return false;\n    if (orientation === \"H\" && wall.o === \"H\" && wall.r === r && Math.abs(wall.c - c) === 1) return false;\n    if (orientation === \"V\" && wall.o === \"V\" && wall.c === c && Math.abs(wall.r - r) === 1) return false;\n  }\n  const walls = view.walls.concat([{r, c, o: orientation}]);\n  return quoridorHasPath(walls, view.pawns[0], 0) && quoridorHasPath(walls, view.pawns[1], 8);\n}\n\nfunction gameUIBoardAsset() {\n  const cells = [];\n  for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {\n    const x = 27 + c * 48, y = 132 + r * 48;\n    const fill = r === 0 ? \"#4b3445\" : r === 8 ? \"#33445d\" : \"#25344e\";\n    cells.push(`<rect x=\"${x}\" y=\"${y}\" width=\"42\" height=\"42\" rx=\"5\" fill=\"${fill}\"/>`);\n  }\n  return `<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 480 700\"><rect width=\"480\" height=\"700\" fill=\"#111d30\"/><rect x=\"27\" y=\"132\" width=\"426\" height=\"426\" rx=\"12\" fill=\"#1d2942\"/>${cells.join(\"\")}</svg>`;\n}\n\nvar gameUI = {\n  reduce: function (message, localState) {\n    const prior = localState && typeof localState === \"object\" ? localState : {};\n    let mode = prior.mode === \"wall\" ? \"wall\" : \"move\";\n    let orientation = prior.orientation === \"V\" ? \"V\" : \"H\";\n    const latest = message.type === \"ui_event\" ? (message.state_changed || {}) : message;\n    const view = latest.view || latest.state || {};\n    const event = message.type === \"ui_event\" ? (message.event || {}) : {};\n    const canAct = latest.status === \"ongoing\" && Number.isInteger(latest.acting_for_player_index) && view.winner == null;\n    let make_move;\n\n    if (event.type === \"tap\" && event.id === \"mode-move\") mode = \"move\";\n    if (event.type === \"tap\" && event.id === \"mode-wall\") mode = \"wall\";\n    if (event.type === \"tap\" && event.id === \"wall-orientation\") orientation = orientation === \"H\" ? \"V\" : \"H\";\n    if (canAct && event.type === \"drop\" && typeof event.target_id === \"string\") {\n      const match = /^pawn-(\\d+)-(\\d+)$/.exec(event.target_id);\n      if (match && mode === \"move\") {\n        const r = Number(match[1]), c = Number(match[2]);\n        if ((view.legalMoves || []).some(move => move[0] === r && move[1] === c)) make_move = {type: \"pawn\", r, c};\n      }\n    }\n    if (canAct && event.type === \"tap\" && typeof event.id === \"string\") {\n      const pawnTarget = /^pawn-(\\d+)-(\\d+)$/.exec(event.id);\n      if (pawnTarget && mode === \"move\") {\n        const r = Number(pawnTarget[1]), c = Number(pawnTarget[2]);\n        if ((view.legalMoves || []).some(move => move[0] === r && move[1] === c)) make_move = {type: \"pawn\", r, c};\n      }\n      const wallTarget = /^wall-([HV])-(\\d+)-(\\d+)$/.exec(event.id);\n      if (wallTarget && mode === \"wall\") {\n        const r = Number(wallTarget[2]), c = Number(wallTarget[3]), o = wallTarget[1];\n        if (quoridorWallFits(view, r, c, o)) make_move = {type: \"wall\", r, c, o};\n      }\n    }\n\n    const playerName = i => latest.players && latest.players[i] && latest.players[i].name || gameUIText(latest, \"player_n\", {n: i + 1});\n    const wallTypes = {pawn0: \"pawn0\", pawn1: \"pawn1\", wallH: \"wallH\", wallV: \"wallV\"};\n    const pieces = [];\n    const targets = [];\n    const walls = view.walls || [];\n    const pawns = view.pawns || [{r:8,c:4},{r:0,c:4}];\n    const legal = canAct && mode === \"move\" ? (view.legalMoves || []) : [];\n    const legalIDs = legal.map(move => `pawn-${move[0]}-${move[1]}`);\n    const tile = 42, gap = 6, step = 48;\n    const xy = (r, c) => ({x: 27 + tile / 2 + c * step, y: 132 + tile / 2 + r * step});\n\n    for (let i = 0; i < 2; i++) {\n      const p = pawns[i], point = xy(p.r, p.c), active = canAct && view.turnIdx === i;\n      const piece = {id: `pawn-${i}`, type: wallTypes[`pawn${i}`], board: \"table\",\n        position: point, text: String(i + 1), z: 5, actions: [],\n        aria_label: gameUIText(latest, \"player_n\", {n: i + 1}) + \" pawn\"};\n      if (active && mode === \"move\" && legalIDs.length) {\n        piece.actions = [\"move\"]; piece.draggable = true; piece.move_targets = legalIDs;\n      }\n      pieces.push(piece);\n    }\n    walls.forEach((wall, index) => {\n      const point = {x: 27 + tile + wall.c * step + gap / 2, y: 132 + tile + wall.r * step + gap / 2};\n      pieces.push({id: `wall-${wall.o}-${wall.r}-${wall.c}`, type: wall.o === \"H\" ? \"wallH\" : \"wallV\",\n        board: \"table\", position: point, z: 4, actions: [], aria_label: `Wall ${index + 1}, ${wall.o === \"H\" ? \"horizontal\" : \"vertical\"}`});\n    });\n\n    if (canAct && mode === \"move\") {\n      for (const move of legal) {\n        const [r, c] = move, point = xy(r, c), id = `pawn-${r}-${c}`;\n        targets.push({id, board: \"table\", position: point, aria_label: `Move pawn to row ${r + 1}, column ${c + 1}`,\n          color: \"#42df9b\", hit_area: {x:-22,y:-22,width:44,height:44}});\n      }\n    } else if (canAct && mode === \"wall\" && (view.wallsLeft || [0,0])[view.turnIdx] > 0) {\n      for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {\n        if (!quoridorWallFits(view, r, c, orientation)) continue;\n        const point = {x: 27 + tile + c * step + gap / 2, y: 132 + tile + r * step + gap / 2};\n        targets.push({id: `wall-${orientation}-${r}-${c}`, board: \"table\", position: point,\n          aria_label: `Place ${orientation === \"H\" ? \"horizontal\" : \"vertical\"} wall, row ${r + 1}, column ${c + 1}`,\n          asset: orientation === \"H\" ? \"wall-target-h\" : \"wall-target-v\",\n          hit_area: {x:-22,y:-22,width:44,height:44}});\n      }\n    }\n\n    const winner = view.winner;\n    let statusText = gameUIText(latest, \"waiting\", {});\n    if (latest.status === \"waiting_for_players\") statusText = gameUIText(latest, \"waiting_platform\", {});\n    else if (latest.status === \"over\" || winner != null) statusText = winner == null ? gameUIText(latest, \"waiting\", {}) : gameUIText(latest, \"wins\", {name: playerName(winner)});\n    else if (canAct && mode === \"wall\") statusText = gameUIText(latest, \"your_turn_wall\", {name: playerName(latest.acting_for_player_index)});\n    else if (canAct) statusText = gameUIText(latest, \"your_turn_move\", {name: playerName(latest.acting_for_player_index)});\n    else if (latest.turn_of_player_indices && latest.turn_of_player_indices.length) statusText = gameUIText(latest, \"waiting_for\", {name: playerName(latest.turn_of_player_indices[0])});\n\n    const controls = [];\n    if (canAct) {\n      controls.push({id:\"mode-move\",kind:\"button\",label:(mode === \"move\" ? \"✓ \" : \"\") + gameUIText(latest,\"move_pawn\")});\n      controls.push({id:\"mode-wall\",kind:\"button\",label:(mode === \"wall\" ? \"✓ \" : \"\") + gameUIText(latest,\"place_wall\")});\n      if (mode === \"wall\") controls.push({id:\"wall-orientation\",kind:\"button\",label:gameUIText(latest, orientation === \"H\" ? \"wall_horizontal\" : \"wall_vertical\")});\n    }\n    const lines = [];\n    for (let i = 1; i < 9; i++) {\n      const offset = i * step - gap / 2;\n      lines.push({id:`board-v-${i}`,points:[{x:27+offset,y:132},{x:27+offset,y:558}],color:\"#71809a\",width:1.5});\n      lines.push({id:`board-h-${i}`,points:[{x:27,y:132+offset},{x:453,y:132+offset}],color:\"#71809a\",width:1.5});\n    }\n    const labels = [\n      {id:\"title\",text:gameUIText(latest,\"title\"),x:32,y:22,font_size:24,color:\"#ffffff\"},\n      {id:\"status\",text:statusText,x:32,y:58,font_size:15,color:canAct?\"#8ee7cd\":\"#c5d0e0\"},\n      {id:\"walls\",text:gameUIText(latest,\"walls_left\",{name0:playerName(0),walls0:(view.wallsLeft||[0,0])[0],name1:playerName(1),walls1:(view.wallsLeft||[0,0])[1]}),x:32,y:86,font_size:14,color:\"#d0d9e8\"},\n      {id:\"goal-top\",text:gameUIText(latest,\"goal_player_0\"),x:32,y:114,font_size:12,color:\"#ff9dca\"},\n      {id:\"goal-bottom\",text:gameUIText(latest,\"goal_player_1\"),x:32,y:566,font_size:12,color:\"#a7c8ff\"}\n    ];\n    const scene = {paths:lines,pieces,targets,labels,controls};\n    const nextLocal = {mode,orientation};\n    const result = {scene,local_state:nextLocal};\n    if (make_move) result.make_move = make_move;\n    return result;\n  }\n};\n"
+  }
+}

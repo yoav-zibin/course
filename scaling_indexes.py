@@ -84,6 +84,9 @@ def index_config(namespace):
         "token_ledger": {"user_id": "order"},
         "account_deletions": {"due_at": "order"},
         "cleanup": {"path": "order"},
+        "game_test_traces": {
+            "secret_hash": "order", "kind": "order", "submission_id": "order",
+        },
     }
     overrides = []
     for kind in sorted(COLLECTIONS):

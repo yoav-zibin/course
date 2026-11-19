@@ -1,0 +1,121 @@
+{
+  "base_url": "https://buildplay.fun",
+  "renderer_commit": "6558bff",
+  "games": [
+    {
+      "kind": "six-card-golf",
+      "id": "c435beb6-12d7-427e-80ba-2ebb619cabfa",
+      "method": "PATCH",
+      "expected_configurations": 13,
+      "allowed_player_counts": [
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "kind": "war",
+      "id": "42d06892-449c-44d2-9251-7b9448ce4ddc",
+      "method": "PATCH",
+      "expected_configurations": 9,
+      "allowed_player_counts": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "kind": "crazy-eights",
+      "id": "af765df8-d2c2-4074-959d-dbd1a6f0c621",
+      "method": "PATCH",
+      "expected_configurations": 9,
+      "allowed_player_counts": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "kind": "hearts",
+      "id": "c5ef8730-9876-4874-8a4d-0cf4065d5a9c",
+      "method": "PATCH",
+      "expected_configurations": 5,
+      "allowed_player_counts": [
+        4
+      ]
+    },
+    {
+      "kind": "michigan",
+      "id": "a6669442-7d52-40c4-ab67-aa515ccc7ec4",
+      "method": "PATCH",
+      "expected_configurations": 17,
+      "allowed_player_counts": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "kind": "quoridor",
+      "id": "ef602ade-7aa1-472e-879f-5813291017e3",
+      "method": "PATCH",
+      "expected_configurations": 5,
+      "allowed_player_counts": [
+        2
+      ]
+    },
+    {
+      "kind": "concentration",
+      "id": null,
+      "method": "POST",
+      "expected_configurations": 5,
+      "allowed_player_counts": [
+        2
+      ]
+    },
+    {
+      "kind": "casino-war",
+      "id": "07415b38-c214-424a-9a38-a38bf7806c79",
+      "method": "PATCH",
+      "expected_configurations": 5,
+      "allowed_player_counts": [
+        2
+      ]
+    },
+    {
+      "kind": "old-maid",
+      "id": "f6fd77da-3b3d-41b7-8bb0-b094f7a5ee73",
+      "method": "PATCH",
+      "expected_configurations": 17,
+      "allowed_player_counts": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "kind": "blackjack",
+      "id": "f56aedfa-bc90-4b73-8bbc-e9706a444e71",
+      "method": "PATCH",
+      "expected_configurations": 15,
+      "allowed_player_counts": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    }
+  ]
+}

@@ -1,0 +1,2444 @@
+{
+  "name": "Blackjack",
+  "description": "Players place a bet, then choose Hit or Stand to get as close to 21 as possible without going over. The dealer draws to 17; the best hand wins the round.",
+  "game_addition_request_id_and_secret": "example-only-blackjack-replace-before-publishing",
+  "allowed_player_counts": [
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "server_code": "const game={newMatch(ctx){let n=ctx.players.length;let st={phase:'setup',customNames:[],six:false,chips:[],round:1,dealer:[],hands:[],deck:[],curP:0,curH:0,results:[],pendingBets:{},needBet:[],winners:null,freshMsg:''};for(let i=0;i<n;i++){st.customNames.push('');st.chips.push(1000);st.hands.push([]);st.results.push('');st.needBet.push(true);}return{state:st,turn:ctx.players.map(p=>p.id)};},viewFor(state,playerId,ctx){let hide=(state.phase==='betting'||state.phase==='play');let dw=state.dealer||[];let dout=hide?(dw.length?[dw[0]]:[]):dw.slice();return{phase:state.phase,customNames:state.customNames.slice(),six:state.six,chips:state.chips.slice(),round:state.round,dealer:dout,holeHidden:hide&&dw.length>1,hands:state.hands.map(hs=>hs.map(h=>({cards:h.cards.map(c=>({r:c.r,s:c.s})),bet:h.bet,stood:!!h.stood,done:!!h.done}))),curP:state.curP,curH:state.curH,results:state.results.slice(),pendingBets:Object.assign({},state.pendingBets),needBet:state.needBet.slice(),winners:state.winners,freshMsg:state.freshMsg||'',deckCount:(state.deck||[]).length};},computerMove(state,playerId,ctx){return randMove(state,playerId,ctx);},randomMove(state,playerId,ctx){return randMove(state,playerId,ctx);},applyMove(state,playerId,move,ctx){let n=ctx.players.length;let st=cloneState(state);while(st.chips.length<n){st.chips.push(1000);st.customNames.push('');st.hands.push([]);st.results.push('');st.needBet.push(true);}let idx=0;let found=false;for(let i=0;i<n;i++)if(ctx.players[i].id===playerId){idx=i;found=true;break;}if(!found)throw new InvalidMove('unknown player');move=move||{};if(st.phase==='setup'){if(move.kind!=='start')throw new InvalidMove('expect start');if(move.names&&move.names.length)for(let i=0;i<n&&i<move.names.length;i++)if(move.names[i])st.customNames[i]=String(move.names[i]).slice(0,12);st.six=!!move.six;st.chips=[];for(let i=0;i<n;i++)st.chips.push(1000);st.round=1;st.winners=null;startBetting(st,ctx);return{state:st,turn:[ctx.players[st.curP].id]};}if(st.phase==='betting'){if(move.kind!=='bet')throw new InvalidMove('expect bet');if(st.curP!==idx)throw new InvalidMove('not your bet');if(!st.needBet[idx])throw new InvalidMove('already bet');let amt=Math.floor(Number(move.amount));if(!isFinite(amt)||amt<1)throw new InvalidMove('bad amount');if(amt>st.chips[idx])amt=st.chips[idx];if(st.chips[idx]>=10&&amt<10)throw new InvalidMove('min 10');if(amt<1)amt=1;st.chips[idx]-=amt;st.pendingBets[idx]=(st.pendingBets[idx]||0)+amt;st.needBet[idx]=false;let nxt=-1;for(let i=0;i<n;i++)if(st.needBet[i]){nxt=i;break;}if(nxt===-1){dealAll(st,ctx);if(st.phase==='roundOver')return{state:st,turn:ctx.players.map(p=>p.id)};return{state:st,turn:[ctx.players[st.curP].id]};}st.curP=nxt;return{state:st,turn:[ctx.players[nxt].id]};}if(st.phase==='play'){if(st.curP!==idx)throw new InvalidMove('not your turn');let hs=st.hands[idx]||[];let h=hs[st.curH];if(!h||h.done)throw new InvalidMove('no hand');if(move.kind==='hit'){h.cards.push(draw(st,ctx));if(handVal(h.cards)>21)h.done=true;else return{state:st,turn:[playerId]};}else if(move.kind==='stand'){h.stood=true;h.done=true;}else if(move.kind==='double'){if(!(h.cards.length===2&&st.chips[idx]>=h.bet))throw new InvalidMove('no double');st.chips[idx]-=h.bet;h.bet*=2;h.cards.push(draw(st,ctx));h.done=true;}else if(move.kind==='split'){if(!(h.cards.length===2&&h.cards[0].r===h.cards[1].r&&st.chips[idx]>=h.bet&&hs.length<4))throw new InvalidMove('no split');st.chips[idx]-=h.bet;let h1={cards:[h.cards[0],draw(st,ctx)],bet:h.bet,stood:false,done:false};let h2={cards:[h.cards[1],draw(st,ctx)],bet:h.bet,stood:false,done:false};hs.splice(st.curH,1,h1,h2);st.hands[idx]=hs;return{state:st,turn:[playerId]};}else throw new InvalidMove('bad action');if(!nextAfter(st)){settle(st);return{state:st,turn:ctx.players.map(p=>p.id)};}return{state:st,turn:[ctx.players[st.curP].id]};}if(st.phase==='roundOver'){if(move.kind!=='next')throw new InvalidMove('expect next');if(st.round>=10||(n===1?st.chips[0]<=0:st.chips.filter(c=>c>0).length<=1)){st.phase='gameOver';let best=0;for(let i=1;i<n;i++)if(st.chips[i]>st.chips[best])best=i;let alive=[];for(let i=0;i<n;i++)if(st.chips[i]>0)alive.push(i);st.winners=alive.length===1?alive[0]:best;let humans=[];for(let i=0;i<n;i++)if(ctx.players[i].kind==='human')humans.push(i);let pot=ctx.pot||0;let payouts={};if(!humans.length)return{state:st,turn:null,payouts:{}};let total=0;for(let k=0;k<humans.length;k++)total+=st.chips[humans[k]];if(total<=0){let eq=Math.floor(pot/humans.length);let rem=pot-eq*humans.length;for(let k=0;k<humans.length;k++)payouts[ctx.players[humans[k]].id]=eq+(k===0?rem:0);}else{let acc=0;for(let k=0;k<humans.length;k++){let v=k===humans.length-1?pot-acc:Math.floor(pot*st.chips[humans[k]]/total);acc+=v;payouts[ctx.players[humans[k]].id]=v;}}return{state:st,turn:null,payouts:payouts};}st.round++;startBetting(st,ctx);return{state:st,turn:[ctx.players[st.curP].id]};}throw new InvalidMove('game over');}};function cardVal(c){if(c.r===1)return 11;if(c.r>=10)return 10;return c.r;}function handVal(cards){let t=0,a=0;for(let i=0;i<cards.length;i++){t+=cardVal(cards[i]);if(cards[i].r===1)a++;}while(t>21&&a>0){t-=10;a--;}return t;}function isBJ(c){return c.length===2&&handVal(c)===21;}function cloneState(s){return{cards0:0,phase:s.phase,customNames:s.customNames.slice(),six:!!s.six,chips:s.chips.slice(),round:s.round|0,dealer:s.dealer.map(c=>({r:c.r,s:c.s})),hands:s.hands.map(hs=>hs.map(h=>({cards:h.cards.map(c=>({r:c.r,s:c.s})),bet:h.bet,stood:!!h.stood,done:!!h.done}))),deck:s.deck.map(c=>({r:c.r,s:c.s})),curP:s.curP|0,curH:s.curH|0,results:s.results.slice(),pendingBets:Object.assign({},s.pendingBets),needBet:s.needBet.slice(),winners:s.winners==null?null:s.winners,freshMsg:s.freshMsg||''};}function mkDeck(six,rand){let d=[],k2=six?6:1;for(let k=0;k<k2;k++)for(let s=0;s<4;s++){let su=s===0?'C':s===1?'D':s===2?'H':'S';for(let r=1;r<=13;r++)d.push({r:r,s:su});}for(let i=d.length-1;i>0;i--){let j=Math.floor(rand()*(i+1));let t=d[i];d[i]=d[j];d[j]=t;}return d;}function draw(st,ctx){if(!st.deck||!st.deck.length)st.deck=mkDeck(true,ctx.random);return st.deck.pop();}function startBetting(st,ctx){st.deck=mkDeck(st.six,ctx.random);st.dealer=[];st.hands=[];st.results=[];for(let i=0;i<st.chips.length;i++){st.hands.push([]);st.results.push('');}st.pendingBets={};st.needBet=st.chips.map(c=>c>0);st.phase='betting';st.curP=0;st.curH=0;for(let i=0;i<st.needBet.length;i++)if(st.needBet[i]){st.curP=i;break;}st.freshMsg='Fresh '+(st.six?'6-deck shoe':'52-card deck')+' shuffled for Round '+st.round+'!';}function dealAll(st,ctx){for(let i=0;i<st.chips.length;i++){let b=st.pendingBets[i]||0;if(!b)continue;st.hands[i]=[{cards:[draw(st,ctx),draw(st,ctx)],bet:b,stood:false,done:false}];}st.dealer=[draw(st,ctx),draw(st,ctx)];st.phase='play';for(let i=0;i<st.hands.length;i++){let hs=st.hands[i];for(let k=0;k<hs.length;k++)if(isBJ(hs[k].cards))hs[k].done=true;}if(!advance(st))settle(st);}function advance(st){for(let p=0;p<st.hands.length;p++){let hs=st.hands[p];for(let h=0;h<hs.length;h++)if(!hs[h].done){st.curP=p;st.curH=h;return true;}}return false;}function nextAfter(st){for(let p=st.curP;p<st.hands.length;p++){let hs=st.hands[p];let s=p===st.curP?st.curH+1:0;for(let h=s;h<hs.length;h++)if(!hs[h].done){st.curP=p;st.curH=h;return true;}}return false;}function settle(st){let dv=handVal(st.dealer);let guard=0;while(dv<17&&guard++<30){if(!st.deck.length)break;st.dealer.push(st.deck.pop());dv=handVal(st.dealer);}let dBJ=isBJ(st.dealer);for(let p=0;p<st.hands.length;p++){let hs=st.hands[p];if(!hs||!hs.length){st.results[p]=st.chips[p]<=0?'(out)':'';continue;}let msgs=[];for(let k=0;k<hs.length;k++){let h=hs[k];let pv=handVal(h.cards);let bj=isBJ(h.cards)&&hs.length===1;if(pv>21)msgs.push('Bust(-'+h.bet+')');else if(bj&&!dBJ){st.chips[p]+=Math.floor(h.bet*2.5);msgs.push('BLACKJACK! +'+Math.floor(h.bet*1.5));}else if(dBJ&&!bj)msgs.push('Dealer BJ (-'+h.bet+')');else if(bj&&dBJ){st.chips[p]+=h.bet;msgs.push('Push BJ');}else if(dv>21){st.chips[p]+=h.bet*2;msgs.push('Dealer bust Win +'+h.bet);}else if(pv>dv){st.chips[p]+=h.bet*2;msgs.push('Win '+pv+'v'+dv+' +'+h.bet);}else if(pv===dv){st.chips[p]+=h.bet;msgs.push('Push '+pv);}else msgs.push('Lose '+pv+'v'+dv+' (-'+h.bet+')');}st.results[p]=msgs.join(' | ');}st.phase='roundOver';}function randMove(state,playerId,ctx){let n=ctx.players.length;let idx=-1;for(let i=0;i<n;i++)if(ctx.players[i].id===playerId){idx=i;break;}if(idx<0)idx=state.curP|0;if(!state.phase||state.phase==='setup')return{kind:'start',names:[],six:ctx.random()<0.5};if(state.phase==='betting'){if(state.curP!==idx)return{kind:'bet',amount:10};let mx=state.chips[idx];if(!(mx>0))return{kind:'bet',amount:1};if(mx<10)return{kind:'bet',amount:mx};let opts=[];if(10<=mx)opts.push(10);if(25<=mx)opts.push(25);if(50<=mx)opts.push(50);if(100<=mx)opts.push(100);return{kind:'bet',amount:opts[Math.floor(ctx.random()*opts.length)]};}if(state.phase==='play'){if(state.curP!==idx)return{kind:'stand'};let hs=state.hands[idx]||[];let h=hs[state.curH];if(!h||h.done)return{kind:'stand'};let t=handVal(h.cards);let canD=h.cards.length===2&&state.chips[idx]>=h.bet;let canS=h.cards.length===2&&h.cards[0].r===h.cards[1].r&&state.chips[idx]>=h.bet&&hs.length<4;if(canS&&(h.cards[0].r===1||h.cards[0].r===8))return{kind:'split'};if(canD){let d0=(state.dealer&&state.dealer[0])?cardVal(state.dealer[0]):10;if(t===11||(t===10&&d0<10))return{kind:'double'};}if(t<12)return{kind:'hit'};if(t>=17)return{kind:'stand'};return ctx.random()<0.4?{kind:'hit'}:{kind:'stand'};}if(state.phase==='roundOver')return{kind:'next'};return{kind:'stand'};}",
+  "declarative_ui": {
+    "format": "buildplay-ui",
+    "version": 1,
+    "viewport": {
+      "width": 600,
+      "height": 740,
+      "camera_enabled": true
+    },
+    "motion": {
+      "move_ms": 440,
+      "turn_pause_ms": 650,
+      "animate_own": true
+    },
+    "boards": [
+      {
+        "id": "table",
+        "kind": "free",
+        "x": 0,
+        "y": 0,
+        "width": 600,
+        "height": 740,
+        "color": "#164b3d",
+        "line_color": "#a58a55"
+      }
+    ],
+    "piece_types": {
+      "card": {
+        "shape": "card",
+        "width": 78,
+        "height": 104,
+        "color": "#fff6df",
+        "text_color": "#202c42",
+        "border_color": "#d3ad62"
+      },
+      "red-card": {
+        "shape": "card",
+        "width": 78,
+        "height": 104,
+        "color": "#fff6df",
+        "text_color": "#b72f4c",
+        "border_color": "#d3ad62"
+      },
+      "black-card": {
+        "shape": "card",
+        "width": 78,
+        "height": 104,
+        "color": "#fff6df",
+        "text_color": "#202c42",
+        "border_color": "#d3ad62"
+      },
+      "back": {
+        "shape": "image",
+        "width": 78,
+        "height": 104,
+        "back_asset": "back"
+      }
+    },
+    "assets": {
+      "back": {
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MCAxMTAiPjxyZWN0IHg9IjEiIHk9IjEiIHdpZHRoPSI3OCIgaGVpZ2h0PSIxMDgiIHJ4PSI5IiBmaWxsPSIjMjQzZDY4IiBzdHJva2U9IiNlNGM0NzciIHN0cm9rZS13aWR0aD0iMiIvPjxyZWN0IHg9IjYiIHk9IjYiIHdpZHRoPSI2OCIgaGVpZ2h0PSI5OCIgcng9IjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZjFkNiIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTEyIDU1IDQwIDE0IDY4IDU1IDQwIDk2WiIgZmlsbD0iI2I5NDY1YSIgc3Ryb2tlPSIjZmZmMWQ2IiBzdHJva2Utd2lkdGg9IjMiLz48Y2lyY2xlIGN4PSI0MCIgY3k9IjU1IiByPSI2IiBmaWxsPSIjZjJjZjdiIi8+PC9zdmc+",
+        "media_type": "image/svg+xml",
+        "width": 80,
+        "height": 110,
+        "alt": "Decorative card back"
+      }
+    },
+    "strings": {
+      "title": "Blackjack",
+      "server_message_1": "unknown player",
+      "server_message_2": "expect start",
+      "server_message_3": "expect bet",
+      "server_message_4": "not your bet",
+      "server_message_5": "already bet",
+      "server_message_6": "bad amount",
+      "server_message_7": "min 10",
+      "server_message_8": "not your turn",
+      "server_message_9": "no hand",
+      "server_message_10": "no double",
+      "server_message_11": "no split",
+      "server_message_12": "bad action",
+      "server_message_13": "expect next",
+      "server_message_14": "game over",
+      "server_message_15": "Bust(-{p1})",
+      "server_message_16": "BLACKJACK! +{p1}",
+      "server_message_17": "Dealer BJ (-{p1})",
+      "server_message_18": "Push BJ",
+      "server_message_19": "Dealer bust Win +{p1}",
+      "server_message_20": "Win {p1}v{p2} +{p3}",
+      "server_message_21": "Push {p1}",
+      "server_message_22": "Lose {p1}v{p2} (-{p3})"
+    },
+    "ui_code": "const GAME=\"blackjack\";\nconst TITLE=\"Blackjack\";\nfunction cardName(c){if(typeof c==='string'){const m=/^(10|[2-9]|A|J|Q|K)([CDSH])$/i.exec(c);if(!m)return c;return m[1].toUpperCase()+({C:'♣',D:'♦',S:'♠',H:'♥'}[m[2].toUpperCase()]||'');}if(c&&typeof c==='object'){const suit={C:'♣',D:'♦',S:'♠',H:'♥'}[c.s]||'♣';return ['?','A','2','3','4','5','6','7','8','9','10','J','Q','K'][c.r]+suit;}const r=c%13+1;return ['A','2','3','4','5','6','7','8','9','10','J','Q','K'][r-1]+['♣','♦','♠','♥'][Math.floor(c/13)];}\nfunction cardType(c){let suit;if(typeof c==='string'){const m=/([CDSH])$/i.exec(c);suit=m?m[1].toUpperCase():'C';}else if(c&&typeof c==='object')suit=String(c.s||'C').toUpperCase();else suit=['C','D','S','H'][Math.floor(Number(c)/13)]||'C';return suit==='D'||suit==='H'?'red-card':'black-card';}\nfunction centeredX(text,font,center=300){return Math.max(16,center-String(text).length*font*.27);}\nfunction shortName(name){return String(name||'Player').length>16?String(name).slice(0,15)+'…':String(name||'Player');}\nvar gameUI={reduce(message,localState){\nconst m=message.type==='ui_event'?(message.state_changed||{}):message,v=m.view||m.state||{},e=message.type==='ui_event'?(message.event||{}):{};\nconst active=m.status==='ongoing'&&!m.replay&&Number.isInteger(m.acting_for_player_index),seat=Number.isInteger(m.acting_for_player_index)?m.acting_for_player_index:(m.my_player_index||0);\nconst pieces=[],labels=[],controls=[],suits=['♣','♦','♠','♥'],names=(m.players||[]).map(p=>shortName(p.name||p.display_name));\nlet make_move, next={};\nconst label=(id,text,y,size=20,x=300,color='#dfede5')=>labels.push({id,text:String(text),x:centeredX(text,size,x),y,font_size:size,color});\nconst button=(id,text)=>controls.push({id,kind:'button',label:text});\nconst card=(id,c,x,y,ok=false,extra={})=>pieces.push({id,type:cardType(c),board:'table',position:{x,y},text:cardName(c),face:'front',actions:ok?['tap']:[],aria_label:(ok?'Play ':'')+cardName(c),animation:{kind:'move',key:id+'-'+String(c&&typeof c==='object'?JSON.stringify(c):c).replace(/[^A-Za-z0-9_.:-]/g,'_'),duration_ms:380},...extra});\nconst hand=(cards,legal,y=490)=>{const cols=Math.min(6,cards.length),rows=Math.ceil(cards.length/6);cards.forEach((c,i)=>{const row=Math.floor(i/6),count=Math.min(6,cards.length-row*6);card('hand-'+c,c,300+(i%6-(count-1)/2)*88,y+row*112,active&&legal.includes(c));});return rows;};\nlabel('title',TITLE,24,30,300,'#fff1d6');\nlabel('turn',m.status==='over'?(GAME==='old-maid'?(names[v.loser]==='You'?'You hold the Old Maid':`${names[v.loser]||'Player'} holds the Old Maid`):Number.isInteger(v.winner)?(names[v.winner]==='You'?'You win':`${names[v.winner]||'Player'} wins`):'Round complete'):active?'Your turn':`Waiting for ${names[v.turnIdx??v.turn??v.cur??(m.turn_of_player_indices||[])[0]]||'player'}`,70);\nif(GAME==='crazy-eights'){\n const cards=v.hand||[],legal=v.playable||[];let pending=localState&&localState.moveCount===m.move_count?localState.pendingEight:null;\n if(!legal.includes(pending))pending=null;\n if(active&&e.type==='tap'){\n  if(e.id&&e.id.startsWith('hand-')){const c=Number(e.id.slice(5));if(legal.includes(c)){if(c%13+1===8)pending=c;else{make_move={card:c};pending=null;}}}\n  if(e.id==='cancel-suit')pending=null;\n  if(/^suit-[0-3]$/.test(e.id||'')&&pending!=null){make_move={card:pending,chosenSuit:Number(e.id.slice(5))};pending=null;}\n  if((e.id==='draw'||e.id==='stock')&&!legal.length)make_move='draw';\n }\n names.forEach((name,i)=>label('score-'+i,`${name} · ${(v.counts||[])[i]||0}`,110+Math.floor(i/3)*26,17,300+(i%3-(Math.min(3,names.length-Math.floor(i/3)*3)-1)/2)*190));\n pieces.push({id:'stock',type:'back',board:'table',position:{x:205,y:270},face:'back',actions:active&&!legal.length&&v.deckCount>0?['tap']:[],aria_label:'Draw a card'});\n card('hand-'+v.top,v.top,395,270,false,{animation:{kind:'move',key:'discard-'+v.top,duration_ms:440}});\n label('stock-label',`Draw · ${v.deckCount||0}`,343,18,205);label('discard-label','Discard',343,18,395);\n label('suit',`Match ${suits[v.suit??v.currentSuit??Math.floor(v.top/13)]||''} or rank · 8 is wild`,385,19,300,'#ffe28a');\n label('hand-label',`Your hand · ${cards.length} cards`,415,20);\n hand(cards,legal,505);label('hint',m.status==='over'?'Round complete · the winning hand is empty.':pending!=null?'Choose a suit below to play your 8.':'Tap a highlighted card to play.',690,19,300,'#ffe28a');\n if(active&&!legal.length)button('draw','Draw a card');\n if(pending!=null){for(let s=0;s<4;s++)button('suit-'+s,suits[s]+' '+['Clubs','Diamonds','Spades','Hearts'][s]);button('cancel-suit','Cancel suit choice');}\n next={moveCount:m.move_count,pendingEight:pending};\n}else if(GAME==='hearts'){\n const cards=v.hand||[],legal=v.legal||[],trick=(v.trick||[]).length?v.trick:(v.lastTrick||[]),low=Math.min(...(v.taken||[0])),leaders=(v.taken||[]).map((score,i)=>score===low?i:-1).filter(i=>i>=0);\n if(m.status==='over'&&leaders.length>1){const turn=labels.find(l=>l.id==='turn');turn.text=`Tie · ${low} points`;turn.x=centeredX(turn.text,turn.font_size);}\n names.forEach((name,i)=>label('score-'+i,`${name} · ${(v.taken||[])[i]||0} pts`,112+Math.floor(i/2)*28,18,155+(i%2)*290,m.status==='over'&&leaders.includes(i)?'#ffe28a':'#dfede5'));\n label('trick-label',`Trick ${Math.min(13,(v.trickNum||0)+1)} of 13`,185,20,300,'#ffe28a');\n const places=[[190,265],[410,265],[190,380],[410,380]];\n trick.forEach(t=>{const [x,y]=places[t.player%4];card('hand-'+t.card,t.card,x,y,false,{scale:.8});label('played-'+t.player,names[t.player]||'Player',y+48,16,x);});\n label('hand-label','Your hand · follow the suit led',460,20);hand(cards,legal,560);\n if(active&&e.type==='tap'&&legal.includes(e.id?.slice(5))&&e.id.startsWith('hand-'))make_move={card:e.id.slice(5)};\n label('hint',m.status==='over'?(leaders.length>1?`Shared lowest score · ${low} points`:`Winner · ${names[v.winner]||'—'}`):'One round · ♥ = 1 · Q♠ = 13 · lowest score wins',860,18,300,'#ffe28a');\n}else if(GAME==='michigan'){\n const cards=v.hand||[],legal=v.legal||[],rows=v.rows||[],symbols=['♣','♦','♥','♠'];\n label('objective','Build each suit outward from 7',110,20,300,'#ffe28a');for(let r=1;r<=13;r++)label('rank-'+r,['A','2','3','4','5','6','7','8','9','10','J','Q','K'][r-1],137,14,82+(r-1)*38,'#9abcae');\n rows.forEach((row,s)=>{label('suit-'+s,symbols[s],163+s*72,24,35);for(let r=1;r<=13;r++){const x=82+(r-1)*38,y=180+s*72;if(row.low!==null&&r>=row.low&&r<=row.high)card('hand-'+(s*13+r-1),s*13+r-1,x,y,false,{scale:.43,text:['A','2','3','4','5','6','7','8','9','10','J','Q','K'][r-1]+symbols[s],type:s===1||s===2?'red-card':'black-card'});}});\n label('hand-label',`Your hand · ${cards.length} cards`,430,20);hand(cards,legal,520);for(const piece of pieces.filter(p=>p.id.startsWith('hand-'))){const c=Number(piece.id.slice(5)),s=Math.floor(c/13);piece.text=['A','2','3','4','5','6','7','8','9','10','J','Q','K'][c%13]+symbols[s];piece.type=s===1||s===2?'red-card':'black-card';piece.aria_label=(piece.actions.length?'Play ':'')+piece.text;}\n label('hint',m.status==='over'?'Round complete · the sequences remain on the table.':'Tap a highlighted card to extend a sequence.',1065,18,300,'#ffe28a');\n if(active&&!legal.length)button('pass','Pass · no playable cards');\n if(active&&e.type==='tap'){const c=Number((e.id||'').slice(5));if(e.id?.startsWith('hand-')&&legal.includes(c))make_move={card:c};if(e.id==='pass'&&!legal.length)make_move={pass:true};}\n}else if(GAME==='casino-war'){\n label('round',`Hand ${v.round||1} of 10`,110,21);label('score',`You ${v.playerWins||0} · Dealer ${v.dealerWins||0} · Ties ${v.ties||0}`,150,20,300,'#ffe28a');\n label('you','You',220,22,170);label('dealer','Dealer',220,22,430);\n for(const [who,c,x] of [['player',v.playerCard,170],['dealer',v.dealerCard,430]]){\n if(c)card(who+'-card',c,x,330,false,{type:c.suit===1||c.suit===3?'red-card':'black-card',text:['A','2','3','4','5','6','7','8','9','10','J','Q','K'][c.rank-1]+suits[c.suit],aria_label:who+' '+['A','2','3','4','5','6','7','8','9','10','J','Q','K'][c.rank-1]+suits[c.suit],animation:{kind:'move',key:`${v.round}-${c.rank}-${c.suit}`,duration_ms:560}});\n else pieces.push({id:who+'-card',type:'back',board:'table',position:{x,y:330},face:'back',actions:[]});\n }\n const high=c=>c.rank===1?14:c.rank;\n const result=v.phase==='result'?(high(v.playerCard)>high(v.dealerCard)?'You win the hand':high(v.playerCard)<high(v.dealerCard)?'Dealer wins the hand':'Tie · no winner this hand'):v.phase==='over'?(v.winner==null?'Match tied':v.winner===0?'You win!':'Dealer wins!'):v.phase==='dealer'?'Your card is revealed. Flip the dealer.':'Higher card wins the hand.';\n label('result',result,455,23,300,'#ffe28a');\n if(active){if(v.phase==='deal')button('deal','Deal your card');if(v.phase==='dealer')button('dealer-flip','Reveal dealer');if(v.phase==='result')button('next','Next hand');\n if(e.type==='tap'){if(e.id==='deal'&&v.phase==='deal')make_move={kind:'deal'};if(e.id==='dealer-flip'&&v.phase==='dealer')make_move={kind:'flip'};if(e.id==='next'&&v.phase==='result')make_move={kind:'next'};}}\n}else if(GAME==='old-maid'){\n const cards=v.hand||[],opponents=v.opponents||[],cols=opponents.length===1?1:2,rows=Math.ceil(opponents.length/cols);\n opponents.forEach((opp,k)=>{const ok=active&&(v.legalTargets||[]).includes(opp.seat),cx=300,cy=310,gap=Math.min(50,460/Math.max(1,opp.count-1));\n label('opp-name-'+opp.seat,`${names[opp.seat]||'Player'} · ${opp.count}`,110+Math.floor(k/2)*28,18,cols===1?300:155+(k%2)*290,ok?'#ffe28a':'#dfede5');\n if(ok||(!active&&k===0))for(let j=0;j<opp.count;j++)pieces.push({id:`opp-${opp.seat}-${j}`,type:'back',board:'table',position:{x:cx+(j-(opp.count-1)/2)*gap,y:cy},scale:.8,face:'back',actions:ok?['tap']:[],aria_label:`Draw card ${j+1} from ${names[opp.seat]||'opponent'}`});\n if(ok&&e.type==='tap'&&e.id?.startsWith(`opp-${opp.seat}-`)){const i=Number(e.id.split('-')[2]);if(Number.isInteger(i)&&i>=0&&i<opp.count)make_move={target:opp.seat,cardIndex:i};}\n });\n const y=450;label('hand-label',`Your hand · ${cards.length} cards`,y-30,20);hand(cards,[],y+50);\n label('hint',m.status==='over'?'Round complete · pairs have been cleared.':'Draw one hidden card · matching pairs clear automatically.',y+Math.max(1,Math.ceil(cards.length/6))*112+38,18,300,'#ffe28a');\n}else if(GAME==='blackjack'){\n const hs=(v.hands||[])[seat]||[],hi=v.curP===seat&&Number.isInteger(v.curH)?Math.max(0,Math.min(v.curH,hs.length-1)):0,h=hs[hi]||hs[0]||{},cards=h.cards||[],dealer=v.dealer||[];\n const value=cs=>{let t=0,a=0;cs.forEach(c=>{t+=c.r===1?11:Math.min(c.r,10);if(c.r===1)a++;});while(t>21&&a-->0)t-=10;return t;};\n const leaders=(v.chips||[]).map((chips,i)=>chips===Math.max(...(v.chips||[0]))?i:-1).filter(i=>i>=0);\n const phase={setup:'Ready to play',betting:'Place your bet',play:active?'Hit or stand':'Waiting for the other hand',roundOver:'Round complete',gameOver:leaders.length>1?'Game over · tied chip totals':v.winners===seat?'Game over · You win':`Game over · ${names[v.winners]||'Winner'} wins`}[v.phase]||'';\n labels.splice(1,1);label('phase',phase,70,22);label('bank',`Round ${v.round||1} · Chips ${(v.chips||[])[seat]||0} · Bet ${h.bet||(v.pendingBets||{})[seat]||0}`,115,19,300,'#ffe28a');\n label('dealer-label',v.holeHidden?'Dealer · one card hidden':`Dealer · ${dealer.length?value(dealer):'—'}`,170,21);\n const dc=dealer.length+(v.holeHidden?1:0),step=Math.min(90,480/Math.max(1,dc-1));\n dealer.forEach((c,i)=>card('dealer-'+i,c,300+(i-(dc-1)/2)*step,265,false,{animation:{kind:'move',key:`${v.round}-${i}-${c.r}-${c.s}`,duration_ms:560}}));\n if(v.holeHidden)pieces.push({id:'dealer-1',type:'back',board:'table',position:{x:300+(dc-1)/2*step,y:265},face:'back',actions:[]});\n label('hand-label',`${names[seat]||'You'} · Hand ${hi+1} of ${Math.max(1,hs.length)}`,370,21);label('hand-value',cards.length?`Value ${value(cards)}${value(cards)>21?' · Bust':''}`:'Get as close to 21 as you can.',406,20,300,'#ffe28a');\n const ps=Math.min(90,480/Math.max(1,cards.length-1));cards.forEach((c,i)=>card(`player-${seat}-${hi}-${i}`,c,300+(i-(cards.length-1)/2)*ps,510));\n ((v.results||[])[seat]||'Dealer draws to 17').split(' | ').forEach((text,i)=>label('result-'+i,hs.length>1?`Hand ${i+1} · ${value((hs[i]||{}).cards||[])} · ${text}`:text,610+i*26,18,300,'#ffe28a'));\n if(v.phase==='play'&&hs.length>1)hs.forEach((other,i)=>label('split-hand-'+i,`Hand ${i+1} · ${value(other.cards||[])} · Bet ${other.bet} · ${i===hi?'Playing':other.done?'Done':'Waiting'}`,640+i*24,16));\n const available=[];if(active){if(v.phase==='setup')available.push(['start','Start game']);if(v.phase==='betting'){const chips=(v.chips||[])[seat]||0;if(chips>0)available.push(['bet',`Bet ${Math.min(10,chips)}`]);for(const amount of [25,50,100])if(chips>=amount)available.push(['bet-'+amount,`Bet ${amount}`]);}if(v.phase==='roundOver')available.push(['next','Next round']);if(v.phase==='play'){\n available.push(['hit','Hit'],['stand','Stand']);const afford=(v.chips||[])[seat]>=h.bet;\n if(cards.length===2&&afford)available.push(['double','Double']);if(cards.length===2&&afford&&cards[0].r===cards[1].r&&hs.length<4)available.push(['split','Split']);\n }}available.forEach(([id,text])=>button(id,text));if(e.type==='tap'&&available.some(([id])=>id===e.id))make_move=e.id==='bet'?{kind:'bet',amount:Math.min(10,(v.chips||[])[seat]||10)}:e.id.startsWith('bet-')?{kind:'bet',amount:Number(e.id.slice(4))}:{kind:e.id};\n}\nconst out={scene:{pieces,labels,controls,targets:[]},local_state:next};if(make_move!==undefined)out.make_move=make_move;return out;\n}};\n"
+  },
+  "rules": "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips.",
+  "ui_instructions": "Choose an affordable bet, then use Hit or Stand. Double and Split appear only when affordable and legal. When splitting, the active hand and every hand value/bet are shown separately. Review each hand result before Next round.",
+  "tutorial": {
+    "text": "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips.",
+    "html": "<!doctype html><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><h1>Blackjack</h1><p>Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips.</p>"
+  },
+  "images": [
+    {
+      "caption": "Blackjack cover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 450\"><rect width=\"800\" height=\"450\" fill=\"#0b5136\"/><g transform=\"translate(330 213) rotate(-10) scale(1)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(0 0) scale(0.9)\"/></g><g transform=\"translate(464 213) rotate(10) scale(1)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(-24 -54) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(-24 -27) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(-24 0) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(-24 27) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(-24 54) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(24 -54) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(24 -27) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(24 0) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(24 27) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(24 54) scale(0.48333333333333334)\"/></g><g transform=\"translate(365 370)\"><ellipse rx=\"35\" ry=\"13\" fill=\"#ef4444\" stroke=\"#20312b\" stroke-width=\"4\"/><ellipse cy=\"-7\" rx=\"35\" ry=\"13\" fill=\"#ef4444\" stroke=\"#20312b\" stroke-width=\"4\"/><ellipse cy=\"-7\" rx=\"21\" ry=\"7\" fill=\"none\" stroke=\"#fffdf3\" stroke-width=\"3\"/></g><g transform=\"translate(390 361)\"><ellipse rx=\"35\" ry=\"13\" fill=\"#ffe143\" stroke=\"#20312b\" stroke-width=\"4\"/><ellipse cy=\"-7\" rx=\"35\" ry=\"13\" fill=\"#ffe143\" stroke=\"#20312b\" stroke-width=\"4\"/><ellipse cy=\"-7\" rx=\"21\" ry=\"7\" fill=\"none\" stroke=\"#fffdf3\" stroke-width=\"3\"/></g><g transform=\"translate(415 352)\"><ellipse rx=\"35\" ry=\"13\" fill=\"#ef4444\" stroke=\"#20312b\" stroke-width=\"4\"/><ellipse cy=\"-7\" rx=\"35\" ry=\"13\" fill=\"#ef4444\" stroke=\"#20312b\" stroke-width=\"4\"/><ellipse cy=\"-7\" rx=\"21\" ry=\"7\" fill=\"none\" stroke=\"#fffdf3\" stroke-width=\"3\"/></g></svg>"
+    },
+    {
+      "caption": "Your hand",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+    },
+    {
+      "caption": "A card in play",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+    },
+    {
+      "caption": "Round result",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+    }
+  ],
+  "unit_tests": {
+    "state_schema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "move_schema": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": true
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "view_schema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "cases": [
+      {
+        "name": "Blackjack initial",
+        "description": "Players place a bet, then choose Hit or Stand to get as close to 21 as possible without going over. The dealer draws to 17; the best hand wins the round.",
+        "kind": "initial",
+        "ctx": {
+          "players": [
+            {
+              "id": "p0",
+              "kind": "human",
+              "display_name": "Player 1",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "p1",
+              "kind": "human",
+              "display_name": "Player 2",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 0,
+          "seed": 20
+        },
+        "state": {
+          "phase": "setup",
+          "customNames": [
+            "",
+            ""
+          ],
+          "six": false,
+          "chips": [
+            1000,
+            1000
+          ],
+          "round": 1,
+          "dealer": [],
+          "hands": [
+            [],
+            []
+          ],
+          "deck": [],
+          "curP": 0,
+          "curH": 0,
+          "results": [
+            "",
+            ""
+          ],
+          "pendingBets": {},
+          "needBet": [
+            true,
+            true
+          ],
+          "winners": null,
+          "freshMsg": ""
+        },
+        "view_of_mover": {
+          "phase": "setup",
+          "customNames": [
+            "",
+            ""
+          ],
+          "six": false,
+          "chips": [
+            1000,
+            1000
+          ],
+          "round": 1,
+          "dealer": [],
+          "holeHidden": false,
+          "hands": [
+            [],
+            []
+          ],
+          "curP": 0,
+          "curH": 0,
+          "results": [
+            "",
+            ""
+          ],
+          "pendingBets": {},
+          "needBet": [
+            true,
+            true
+          ],
+          "winners": null,
+          "freshMsg": "",
+          "deckCount": 0
+        },
+        "view_of_other": {
+          "phase": "setup",
+          "customNames": [
+            "",
+            ""
+          ],
+          "six": false,
+          "chips": [
+            1000,
+            1000
+          ],
+          "round": 1,
+          "dealer": [],
+          "holeHidden": false,
+          "hands": [
+            [],
+            []
+          ],
+          "curP": 0,
+          "curH": 0,
+          "results": [
+            "",
+            ""
+          ],
+          "pendingBets": {},
+          "needBet": [
+            true,
+            true
+          ],
+          "winners": null,
+          "freshMsg": "",
+          "deckCount": 0
+        },
+        "player_id": "p0",
+        "other_player_id": null,
+        "move": {
+          "kind": "start",
+          "names": [],
+          "six": false
+        },
+        "expected_state": {
+          "cards0": 0,
+          "phase": "betting",
+          "customNames": [
+            "",
+            ""
+          ],
+          "six": false,
+          "chips": [
+            1000,
+            1000
+          ],
+          "round": 1,
+          "dealer": [],
+          "hands": [
+            [],
+            []
+          ],
+          "deck": [
+            {
+              "r": 12,
+              "s": "H"
+            },
+            {
+              "r": 5,
+              "s": "D"
+            },
+            {
+              "r": 5,
+              "s": "H"
+            },
+            {
+              "r": 9,
+              "s": "S"
+            },
+            {
+              "r": 3,
+              "s": "D"
+            },
+            {
+              "r": 5,
+              "s": "S"
+            },
+            {
+              "r": 1,
+              "s": "C"
+            },
+            {
+              "r": 4,
+              "s": "D"
+            },
+            {
+              "r": 2,
+              "s": "H"
+            },
+            {
+              "r": 10,
+              "s": "S"
+            },
+            {
+              "r": 6,
+              "s": "S"
+            },
+            {
+              "r": 13,
+              "s": "C"
+            },
+            {
+              "r": 12,
+              "s": "S"
+            },
+            {
+              "r": 11,
+              "s": "S"
+            },
+            {
+              "r": 2,
+              "s": "S"
+            },
+            {
+              "r": 1,
+              "s": "D"
+            },
+            {
+              "r": 2,
+              "s": "C"
+            },
+            {
+              "r": 6,
+              "s": "H"
+            },
+            {
+              "r": 3,
+              "s": "C"
+            },
+            {
+              "r": 10,
+              "s": "D"
+            },
+            {
+              "r": 11,
+              "s": "D"
+            },
+            {
+              "r": 6,
+              "s": "C"
+            },
+            {
+              "r": 7,
+              "s": "H"
+            },
+            {
+              "r": 7,
+              "s": "S"
+            },
+            {
+              "r": 11,
+              "s": "H"
+            },
+            {
+              "r": 3,
+              "s": "H"
+            },
+            {
+              "r": 12,
+              "s": "D"
+            },
+            {
+              "r": 13,
+              "s": "D"
+            },
+            {
+              "r": 1,
+              "s": "H"
+            },
+            {
+              "r": 13,
+              "s": "S"
+            },
+            {
+              "r": 8,
+              "s": "S"
+            },
+            {
+              "r": 4,
+              "s": "C"
+            },
+            {
+              "r": 10,
+              "s": "H"
+            },
+            {
+              "r": 5,
+              "s": "C"
+            },
+            {
+              "r": 4,
+              "s": "S"
+            },
+            {
+              "r": 9,
+              "s": "H"
+            },
+            {
+              "r": 8,
+              "s": "C"
+            },
+            {
+              "r": 9,
+              "s": "C"
+            },
+            {
+              "r": 9,
+              "s": "D"
+            },
+            {
+              "r": 12,
+              "s": "C"
+            },
+            {
+              "r": 7,
+              "s": "C"
+            },
+            {
+              "r": 11,
+              "s": "C"
+            },
+            {
+              "r": 3,
+              "s": "S"
+            },
+            {
+              "r": 6,
+              "s": "D"
+            },
+            {
+              "r": 13,
+              "s": "H"
+            },
+            {
+              "r": 8,
+              "s": "H"
+            },
+            {
+              "r": 10,
+              "s": "C"
+            },
+            {
+              "r": 8,
+              "s": "D"
+            },
+            {
+              "r": 2,
+              "s": "D"
+            },
+            {
+              "r": 4,
+              "s": "H"
+            },
+            {
+              "r": 7,
+              "s": "D"
+            },
+            {
+              "r": 1,
+              "s": "S"
+            }
+          ],
+          "curP": 0,
+          "curH": 0,
+          "results": [
+            "",
+            ""
+          ],
+          "pendingBets": {},
+          "needBet": [
+            true,
+            true
+          ],
+          "winners": null,
+          "freshMsg": "Fresh 52-card deck shuffled for Round 1!"
+        },
+        "expected_turn": [
+          "p0"
+        ],
+        "expected_view_of_mover": {
+          "phase": "betting",
+          "customNames": [
+            "",
+            ""
+          ],
+          "six": false,
+          "chips": [
+            1000,
+            1000
+          ],
+          "round": 1,
+          "dealer": [],
+          "holeHidden": false,
+          "hands": [
+            [],
+            []
+          ],
+          "curP": 0,
+          "curH": 0,
+          "results": [
+            "",
+            ""
+          ],
+          "pendingBets": {},
+          "needBet": [
+            true,
+            true
+          ],
+          "winners": null,
+          "freshMsg": "Fresh 52-card deck shuffled for Round 1!",
+          "deckCount": 52
+        },
+        "expected_view_of_other": {
+          "phase": "betting",
+          "customNames": [
+            "",
+            ""
+          ],
+          "six": false,
+          "chips": [
+            1000,
+            1000
+          ],
+          "round": 1,
+          "dealer": [],
+          "holeHidden": false,
+          "hands": [
+            [],
+            []
+          ],
+          "curP": 0,
+          "curH": 0,
+          "results": [
+            "",
+            ""
+          ],
+          "pendingBets": {},
+          "needBet": [
+            true,
+            true
+          ],
+          "winners": null,
+          "freshMsg": "Fresh 52-card deck shuffled for Round 1!",
+          "deckCount": 52
+        },
+        "images": [
+          {
+            "caption": "before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          },
+          {
+            "caption": "mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          },
+          {
+            "caption": "spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          },
+          {
+            "caption": "after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Blackjack intermediate",
+        "description": "Players place a bet, then choose Hit or Stand to get as close to 21 as possible without going over. The dealer draws to 17; the best hand wins the round.",
+        "kind": "intermediate",
+        "ctx": {
+          "players": [
+            {
+              "id": "p0",
+              "kind": "human",
+              "display_name": "Player 1",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "p1",
+              "kind": "human",
+              "display_name": "Player 2",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 1,
+          "seed": 21
+        },
+        "state": {
+          "cards0": 0,
+          "phase": "betting",
+          "customNames": [
+            "",
+            ""
+          ],
+          "six": false,
+          "chips": [
+            1000,
+            1000
+          ],
+          "round": 1,
+          "dealer": [],
+          "hands": [
+            [],
+            []
+          ],
+          "deck": [
+            {
+              "r": 12,
+              "s": "H"
+            },
+            {
+              "r": 5,
+              "s": "D"
+            },
+            {
+              "r": 5,
+              "s": "H"
+            },
+            {
+              "r": 9,
+              "s": "S"
+            },
+            {
+              "r": 3,
+              "s": "D"
+            },
+            {
+              "r": 5,
+              "s": "S"
+            },
+            {
+              "r": 1,
+              "s": "C"
+            },
+            {
+              "r": 4,
+              "s": "D"
+            },
+            {
+              "r": 2,
+              "s": "H"
+            },
+            {
+              "r": 10,
+              "s": "S"
+            },
+            {
+              "r": 6,
+              "s": "S"
+            },
+            {
+              "r": 13,
+              "s": "C"
+            },
+            {
+              "r": 12,
+              "s": "S"
+            },
+            {
+              "r": 11,
+              "s": "S"
+            },
+            {
+              "r": 2,
+              "s": "S"
+            },
+            {
+              "r": 1,
+              "s": "D"
+            },
+            {
+              "r": 2,
+              "s": "C"
+            },
+            {
+              "r": 6,
+              "s": "H"
+            },
+            {
+              "r": 3,
+              "s": "C"
+            },
+            {
+              "r": 10,
+              "s": "D"
+            },
+            {
+              "r": 11,
+              "s": "D"
+            },
+            {
+              "r": 6,
+              "s": "C"
+            },
+            {
+              "r": 7,
+              "s": "H"
+            },
+            {
+              "r": 7,
+              "s": "S"
+            },
+            {
+              "r": 11,
+              "s": "H"
+            },
+            {
+              "r": 3,
+              "s": "H"
+            },
+            {
+              "r": 12,
+              "s": "D"
+            },
+            {
+              "r": 13,
+              "s": "D"
+            },
+            {
+              "r": 1,
+              "s": "H"
+            },
+            {
+              "r": 13,
+              "s": "S"
+            },
+            {
+              "r": 8,
+              "s": "S"
+            },
+            {
+              "r": 4,
+              "s": "C"
+            },
+            {
+              "r": 10,
+              "s": "H"
+            },
+            {
+              "r": 5,
+              "s": "C"
+            },
+            {
+              "r": 4,
+              "s": "S"
+            },
+            {
+              "r": 9,
+              "s": "H"
+            },
+            {
+              "r": 8,
+              "s": "C"
+            },
+            {
+              "r": 9,
+              "s": "C"
+            },
+            {
+              "r": 9,
+              "s": "D"
+            },
+            {
+              "r": 12,
+              "s": "C"
+            },
+            {
+              "r": 7,
+              "s": "C"
+            },
+            {
+              "r": 11,
+              "s": "C"
+            },
+            {
+              "r": 3,
+              "s": "S"
+            },
+            {
+              "r": 6,
+              "s": "D"
+            },
+            {
+              "r": 13,
+              "s": "H"
+            },
+            {
+              "r": 8,
+              "s": "H"
+            },
+            {
+              "r": 10,
+              "s": "C"
+            },
+            {
+              "r": 8,
+              "s": "D"
+            },
+            {
+              "r": 2,
+              "s": "D"
+            },
+            {
+              "r": 4,
+              "s": "H"
+            },
+            {
+              "r": 7,
+              "s": "D"
+            },
+            {
+              "r": 1,
+              "s": "S"
+            }
+          ],
+          "curP": 0,
+          "curH": 0,
+          "results": [
+            "",
+            ""
+          ],
+          "pendingBets": {},
+          "needBet": [
+            true,
+            true
+          ],
+          "winners": null,
+          "freshMsg": "Fresh 52-card deck shuffled for Round 1!"
+        },
+        "view_of_mover": {
+          "phase": "betting",
+          "customNames": [
+            "",
+            ""
+          ],
+          "six": false,
+          "chips": [
+            1000,
+            1000
+          ],
+          "round": 1,
+          "dealer": [],
+          "holeHidden": false,
+          "hands": [
+            [],
+            []
+          ],
+          "curP": 0,
+          "curH": 0,
+          "results": [
+            "",
+            ""
+          ],
+          "pendingBets": {},
+          "needBet": [
+            true,
+            true
+          ],
+          "winners": null,
+          "freshMsg": "Fresh 52-card deck shuffled for Round 1!",
+          "deckCount": 52
+        },
+        "view_of_other": {
+          "phase": "betting",
+          "customNames": [
+            "",
+            ""
+          ],
+          "six": false,
+          "chips": [
+            1000,
+            1000
+          ],
+          "round": 1,
+          "dealer": [],
+          "holeHidden": false,
+          "hands": [
+            [],
+            []
+          ],
+          "curP": 0,
+          "curH": 0,
+          "results": [
+            "",
+            ""
+          ],
+          "pendingBets": {},
+          "needBet": [
+            true,
+            true
+          ],
+          "winners": null,
+          "freshMsg": "Fresh 52-card deck shuffled for Round 1!",
+          "deckCount": 52
+        },
+        "player_id": "p0",
+        "other_player_id": null,
+        "move": {
+          "kind": "bet",
+          "amount": 25
+        },
+        "expected_state": {
+          "cards0": 0,
+          "phase": "betting",
+          "customNames": [
+            "",
+            ""
+          ],
+          "six": false,
+          "chips": [
+            975,
+            1000
+          ],
+          "round": 1,
+          "dealer": [],
+          "hands": [
+            [],
+            []
+          ],
+          "deck": [
+            {
+              "r": 12,
+              "s": "H"
+            },
+            {
+              "r": 5,
+              "s": "D"
+            },
+            {
+              "r": 5,
+              "s": "H"
+            },
+            {
+              "r": 9,
+              "s": "S"
+            },
+            {
+              "r": 3,
+              "s": "D"
+            },
+            {
+              "r": 5,
+              "s": "S"
+            },
+            {
+              "r": 1,
+              "s": "C"
+            },
+            {
+              "r": 4,
+              "s": "D"
+            },
+            {
+              "r": 2,
+              "s": "H"
+            },
+            {
+              "r": 10,
+              "s": "S"
+            },
+            {
+              "r": 6,
+              "s": "S"
+            },
+            {
+              "r": 13,
+              "s": "C"
+            },
+            {
+              "r": 12,
+              "s": "S"
+            },
+            {
+              "r": 11,
+              "s": "S"
+            },
+            {
+              "r": 2,
+              "s": "S"
+            },
+            {
+              "r": 1,
+              "s": "D"
+            },
+            {
+              "r": 2,
+              "s": "C"
+            },
+            {
+              "r": 6,
+              "s": "H"
+            },
+            {
+              "r": 3,
+              "s": "C"
+            },
+            {
+              "r": 10,
+              "s": "D"
+            },
+            {
+              "r": 11,
+              "s": "D"
+            },
+            {
+              "r": 6,
+              "s": "C"
+            },
+            {
+              "r": 7,
+              "s": "H"
+            },
+            {
+              "r": 7,
+              "s": "S"
+            },
+            {
+              "r": 11,
+              "s": "H"
+            },
+            {
+              "r": 3,
+              "s": "H"
+            },
+            {
+              "r": 12,
+              "s": "D"
+            },
+            {
+              "r": 13,
+              "s": "D"
+            },
+            {
+              "r": 1,
+              "s": "H"
+            },
+            {
+              "r": 13,
+              "s": "S"
+            },
+            {
+              "r": 8,
+              "s": "S"
+            },
+            {
+              "r": 4,
+              "s": "C"
+            },
+            {
+              "r": 10,
+              "s": "H"
+            },
+            {
+              "r": 5,
+              "s": "C"
+            },
+            {
+              "r": 4,
+              "s": "S"
+            },
+            {
+              "r": 9,
+              "s": "H"
+            },
+            {
+              "r": 8,
+              "s": "C"
+            },
+            {
+              "r": 9,
+              "s": "C"
+            },
+            {
+              "r": 9,
+              "s": "D"
+            },
+            {
+              "r": 12,
+              "s": "C"
+            },
+            {
+              "r": 7,
+              "s": "C"
+            },
+            {
+              "r": 11,
+              "s": "C"
+            },
+            {
+              "r": 3,
+              "s": "S"
+            },
+            {
+              "r": 6,
+              "s": "D"
+            },
+            {
+              "r": 13,
+              "s": "H"
+            },
+            {
+              "r": 8,
+              "s": "H"
+            },
+            {
+              "r": 10,
+              "s": "C"
+            },
+            {
+              "r": 8,
+              "s": "D"
+            },
+            {
+              "r": 2,
+              "s": "D"
+            },
+            {
+              "r": 4,
+              "s": "H"
+            },
+            {
+              "r": 7,
+              "s": "D"
+            },
+            {
+              "r": 1,
+              "s": "S"
+            }
+          ],
+          "curP": 1,
+          "curH": 0,
+          "results": [
+            "",
+            ""
+          ],
+          "pendingBets": {
+            "0": 25
+          },
+          "needBet": [
+            false,
+            true
+          ],
+          "winners": null,
+          "freshMsg": "Fresh 52-card deck shuffled for Round 1!"
+        },
+        "expected_turn": [
+          "p1"
+        ],
+        "expected_view_of_mover": {
+          "phase": "betting",
+          "customNames": [
+            "",
+            ""
+          ],
+          "six": false,
+          "chips": [
+            975,
+            1000
+          ],
+          "round": 1,
+          "dealer": [],
+          "holeHidden": false,
+          "hands": [
+            [],
+            []
+          ],
+          "curP": 1,
+          "curH": 0,
+          "results": [
+            "",
+            ""
+          ],
+          "pendingBets": {
+            "0": 25
+          },
+          "needBet": [
+            false,
+            true
+          ],
+          "winners": null,
+          "freshMsg": "Fresh 52-card deck shuffled for Round 1!",
+          "deckCount": 52
+        },
+        "expected_view_of_other": {
+          "phase": "betting",
+          "customNames": [
+            "",
+            ""
+          ],
+          "six": false,
+          "chips": [
+            975,
+            1000
+          ],
+          "round": 1,
+          "dealer": [],
+          "holeHidden": false,
+          "hands": [
+            [],
+            []
+          ],
+          "curP": 1,
+          "curH": 0,
+          "results": [
+            "",
+            ""
+          ],
+          "pendingBets": {
+            "0": 25
+          },
+          "needBet": [
+            false,
+            true
+          ],
+          "winners": null,
+          "freshMsg": "Fresh 52-card deck shuffled for Round 1!",
+          "deckCount": 52
+        },
+        "images": [
+          {
+            "caption": "before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          },
+          {
+            "caption": "mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          },
+          {
+            "caption": "spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          },
+          {
+            "caption": "after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Blackjack terminal",
+        "description": "Players place a bet, then choose Hit or Stand to get as close to 21 as possible without going over. The dealer draws to 17; the best hand wins the round.",
+        "kind": "terminal",
+        "ctx": {
+          "players": [
+            {
+              "id": "p0",
+              "kind": "human",
+              "display_name": "Player 1",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "p1",
+              "kind": "human",
+              "display_name": "Player 2",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 52,
+          "seed": 72
+        },
+        "state": {
+          "cards0": 0,
+          "phase": "roundOver",
+          "customNames": [
+            "",
+            ""
+          ],
+          "six": false,
+          "chips": [
+            1020,
+            677
+          ],
+          "round": 10,
+          "dealer": [
+            {
+              "r": 3,
+              "s": "D"
+            },
+            {
+              "r": 10,
+              "s": "H"
+            },
+            {
+              "r": 11,
+              "s": "D"
+            }
+          ],
+          "hands": [
+            [
+              {
+                "cards": [
+                  {
+                    "r": 13,
+                    "s": "S"
+                  },
+                  {
+                    "r": 9,
+                    "s": "D"
+                  }
+                ],
+                "bet": 25,
+                "stood": true,
+                "done": true
+              }
+            ],
+            [
+              {
+                "cards": [
+                  {
+                    "r": 3,
+                    "s": "H"
+                  },
+                  {
+                    "r": 10,
+                    "s": "D"
+                  }
+                ],
+                "bet": 100,
+                "stood": true,
+                "done": true
+              }
+            ]
+          ],
+          "deck": [
+            {
+              "r": 1,
+              "s": "S"
+            },
+            {
+              "r": 1,
+              "s": "H"
+            },
+            {
+              "r": 2,
+              "s": "C"
+            },
+            {
+              "r": 4,
+              "s": "D"
+            },
+            {
+              "r": 9,
+              "s": "C"
+            },
+            {
+              "r": 8,
+              "s": "D"
+            },
+            {
+              "r": 8,
+              "s": "S"
+            },
+            {
+              "r": 6,
+              "s": "D"
+            },
+            {
+              "r": 12,
+              "s": "H"
+            },
+            {
+              "r": 10,
+              "s": "C"
+            },
+            {
+              "r": 3,
+              "s": "S"
+            },
+            {
+              "r": 13,
+              "s": "C"
+            },
+            {
+              "r": 2,
+              "s": "H"
+            },
+            {
+              "r": 2,
+              "s": "S"
+            },
+            {
+              "r": 11,
+              "s": "H"
+            },
+            {
+              "r": 6,
+              "s": "C"
+            },
+            {
+              "r": 5,
+              "s": "C"
+            },
+            {
+              "r": 4,
+              "s": "C"
+            },
+            {
+              "r": 7,
+              "s": "S"
+            },
+            {
+              "r": 11,
+              "s": "S"
+            },
+            {
+              "r": 5,
+              "s": "S"
+            },
+            {
+              "r": 4,
+              "s": "S"
+            },
+            {
+              "r": 1,
+              "s": "C"
+            },
+            {
+              "r": 6,
+              "s": "H"
+            },
+            {
+              "r": 12,
+              "s": "S"
+            },
+            {
+              "r": 10,
+              "s": "S"
+            },
+            {
+              "r": 4,
+              "s": "H"
+            },
+            {
+              "r": 8,
+              "s": "H"
+            },
+            {
+              "r": 9,
+              "s": "S"
+            },
+            {
+              "r": 9,
+              "s": "H"
+            },
+            {
+              "r": 13,
+              "s": "H"
+            },
+            {
+              "r": 7,
+              "s": "D"
+            },
+            {
+              "r": 6,
+              "s": "S"
+            },
+            {
+              "r": 11,
+              "s": "C"
+            },
+            {
+              "r": 3,
+              "s": "C"
+            },
+            {
+              "r": 12,
+              "s": "D"
+            },
+            {
+              "r": 1,
+              "s": "D"
+            },
+            {
+              "r": 8,
+              "s": "C"
+            },
+            {
+              "r": 12,
+              "s": "C"
+            },
+            {
+              "r": 7,
+              "s": "H"
+            },
+            {
+              "r": 2,
+              "s": "D"
+            },
+            {
+              "r": 13,
+              "s": "D"
+            },
+            {
+              "r": 7,
+              "s": "C"
+            },
+            {
+              "r": 5,
+              "s": "H"
+            },
+            {
+              "r": 5,
+              "s": "D"
+            }
+          ],
+          "curP": 1,
+          "curH": 0,
+          "results": [
+            "Dealer bust Win +25",
+            "Dealer bust Win +100"
+          ],
+          "pendingBets": {
+            "0": 25,
+            "1": 100
+          },
+          "needBet": [
+            false,
+            false
+          ],
+          "winners": null,
+          "freshMsg": "Fresh 52-card deck shuffled for Round 10!"
+        },
+        "view_of_mover": {
+          "phase": "roundOver",
+          "customNames": [
+            "",
+            ""
+          ],
+          "six": false,
+          "chips": [
+            1020,
+            677
+          ],
+          "round": 10,
+          "dealer": [
+            {
+              "r": 3,
+              "s": "D"
+            },
+            {
+              "r": 10,
+              "s": "H"
+            },
+            {
+              "r": 11,
+              "s": "D"
+            }
+          ],
+          "holeHidden": false,
+          "hands": [
+            [
+              {
+                "cards": [
+                  {
+                    "r": 13,
+                    "s": "S"
+                  },
+                  {
+                    "r": 9,
+                    "s": "D"
+                  }
+                ],
+                "bet": 25,
+                "stood": true,
+                "done": true
+              }
+            ],
+            [
+              {
+                "cards": [
+                  {
+                    "r": 3,
+                    "s": "H"
+                  },
+                  {
+                    "r": 10,
+                    "s": "D"
+                  }
+                ],
+                "bet": 100,
+                "stood": true,
+                "done": true
+              }
+            ]
+          ],
+          "curP": 1,
+          "curH": 0,
+          "results": [
+            "Dealer bust Win +25",
+            "Dealer bust Win +100"
+          ],
+          "pendingBets": {
+            "0": 25,
+            "1": 100
+          },
+          "needBet": [
+            false,
+            false
+          ],
+          "winners": null,
+          "freshMsg": "Fresh 52-card deck shuffled for Round 10!",
+          "deckCount": 45
+        },
+        "view_of_other": {
+          "phase": "roundOver",
+          "customNames": [
+            "",
+            ""
+          ],
+          "six": false,
+          "chips": [
+            1020,
+            677
+          ],
+          "round": 10,
+          "dealer": [
+            {
+              "r": 3,
+              "s": "D"
+            },
+            {
+              "r": 10,
+              "s": "H"
+            },
+            {
+              "r": 11,
+              "s": "D"
+            }
+          ],
+          "holeHidden": false,
+          "hands": [
+            [
+              {
+                "cards": [
+                  {
+                    "r": 13,
+                    "s": "S"
+                  },
+                  {
+                    "r": 9,
+                    "s": "D"
+                  }
+                ],
+                "bet": 25,
+                "stood": true,
+                "done": true
+              }
+            ],
+            [
+              {
+                "cards": [
+                  {
+                    "r": 3,
+                    "s": "H"
+                  },
+                  {
+                    "r": 10,
+                    "s": "D"
+                  }
+                ],
+                "bet": 100,
+                "stood": true,
+                "done": true
+              }
+            ]
+          ],
+          "curP": 1,
+          "curH": 0,
+          "results": [
+            "Dealer bust Win +25",
+            "Dealer bust Win +100"
+          ],
+          "pendingBets": {
+            "0": 25,
+            "1": 100
+          },
+          "needBet": [
+            false,
+            false
+          ],
+          "winners": null,
+          "freshMsg": "Fresh 52-card deck shuffled for Round 10!",
+          "deckCount": 45
+        },
+        "player_id": "p0",
+        "other_player_id": null,
+        "move": {
+          "kind": "next"
+        },
+        "expected_state": {
+          "cards0": 0,
+          "phase": "gameOver",
+          "customNames": [
+            "",
+            ""
+          ],
+          "six": false,
+          "chips": [
+            1020,
+            677
+          ],
+          "round": 10,
+          "dealer": [
+            {
+              "r": 3,
+              "s": "D"
+            },
+            {
+              "r": 10,
+              "s": "H"
+            },
+            {
+              "r": 11,
+              "s": "D"
+            }
+          ],
+          "hands": [
+            [
+              {
+                "cards": [
+                  {
+                    "r": 13,
+                    "s": "S"
+                  },
+                  {
+                    "r": 9,
+                    "s": "D"
+                  }
+                ],
+                "bet": 25,
+                "stood": true,
+                "done": true
+              }
+            ],
+            [
+              {
+                "cards": [
+                  {
+                    "r": 3,
+                    "s": "H"
+                  },
+                  {
+                    "r": 10,
+                    "s": "D"
+                  }
+                ],
+                "bet": 100,
+                "stood": true,
+                "done": true
+              }
+            ]
+          ],
+          "deck": [
+            {
+              "r": 1,
+              "s": "S"
+            },
+            {
+              "r": 1,
+              "s": "H"
+            },
+            {
+              "r": 2,
+              "s": "C"
+            },
+            {
+              "r": 4,
+              "s": "D"
+            },
+            {
+              "r": 9,
+              "s": "C"
+            },
+            {
+              "r": 8,
+              "s": "D"
+            },
+            {
+              "r": 8,
+              "s": "S"
+            },
+            {
+              "r": 6,
+              "s": "D"
+            },
+            {
+              "r": 12,
+              "s": "H"
+            },
+            {
+              "r": 10,
+              "s": "C"
+            },
+            {
+              "r": 3,
+              "s": "S"
+            },
+            {
+              "r": 13,
+              "s": "C"
+            },
+            {
+              "r": 2,
+              "s": "H"
+            },
+            {
+              "r": 2,
+              "s": "S"
+            },
+            {
+              "r": 11,
+              "s": "H"
+            },
+            {
+              "r": 6,
+              "s": "C"
+            },
+            {
+              "r": 5,
+              "s": "C"
+            },
+            {
+              "r": 4,
+              "s": "C"
+            },
+            {
+              "r": 7,
+              "s": "S"
+            },
+            {
+              "r": 11,
+              "s": "S"
+            },
+            {
+              "r": 5,
+              "s": "S"
+            },
+            {
+              "r": 4,
+              "s": "S"
+            },
+            {
+              "r": 1,
+              "s": "C"
+            },
+            {
+              "r": 6,
+              "s": "H"
+            },
+            {
+              "r": 12,
+              "s": "S"
+            },
+            {
+              "r": 10,
+              "s": "S"
+            },
+            {
+              "r": 4,
+              "s": "H"
+            },
+            {
+              "r": 8,
+              "s": "H"
+            },
+            {
+              "r": 9,
+              "s": "S"
+            },
+            {
+              "r": 9,
+              "s": "H"
+            },
+            {
+              "r": 13,
+              "s": "H"
+            },
+            {
+              "r": 7,
+              "s": "D"
+            },
+            {
+              "r": 6,
+              "s": "S"
+            },
+            {
+              "r": 11,
+              "s": "C"
+            },
+            {
+              "r": 3,
+              "s": "C"
+            },
+            {
+              "r": 12,
+              "s": "D"
+            },
+            {
+              "r": 1,
+              "s": "D"
+            },
+            {
+              "r": 8,
+              "s": "C"
+            },
+            {
+              "r": 12,
+              "s": "C"
+            },
+            {
+              "r": 7,
+              "s": "H"
+            },
+            {
+              "r": 2,
+              "s": "D"
+            },
+            {
+              "r": 13,
+              "s": "D"
+            },
+            {
+              "r": 7,
+              "s": "C"
+            },
+            {
+              "r": 5,
+              "s": "H"
+            },
+            {
+              "r": 5,
+              "s": "D"
+            }
+          ],
+          "curP": 1,
+          "curH": 0,
+          "results": [
+            "Dealer bust Win +25",
+            "Dealer bust Win +100"
+          ],
+          "pendingBets": {
+            "0": 25,
+            "1": 100
+          },
+          "needBet": [
+            false,
+            false
+          ],
+          "winners": 0,
+          "freshMsg": "Fresh 52-card deck shuffled for Round 10!"
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "phase": "gameOver",
+          "customNames": [
+            "",
+            ""
+          ],
+          "six": false,
+          "chips": [
+            1020,
+            677
+          ],
+          "round": 10,
+          "dealer": [
+            {
+              "r": 3,
+              "s": "D"
+            },
+            {
+              "r": 10,
+              "s": "H"
+            },
+            {
+              "r": 11,
+              "s": "D"
+            }
+          ],
+          "holeHidden": false,
+          "hands": [
+            [
+              {
+                "cards": [
+                  {
+                    "r": 13,
+                    "s": "S"
+                  },
+                  {
+                    "r": 9,
+                    "s": "D"
+                  }
+                ],
+                "bet": 25,
+                "stood": true,
+                "done": true
+              }
+            ],
+            [
+              {
+                "cards": [
+                  {
+                    "r": 3,
+                    "s": "H"
+                  },
+                  {
+                    "r": 10,
+                    "s": "D"
+                  }
+                ],
+                "bet": 100,
+                "stood": true,
+                "done": true
+              }
+            ]
+          ],
+          "curP": 1,
+          "curH": 0,
+          "results": [
+            "Dealer bust Win +25",
+            "Dealer bust Win +100"
+          ],
+          "pendingBets": {
+            "0": 25,
+            "1": 100
+          },
+          "needBet": [
+            false,
+            false
+          ],
+          "winners": 0,
+          "freshMsg": "Fresh 52-card deck shuffled for Round 10!",
+          "deckCount": 45
+        },
+        "expected_view_of_other": {
+          "phase": "gameOver",
+          "customNames": [
+            "",
+            ""
+          ],
+          "six": false,
+          "chips": [
+            1020,
+            677
+          ],
+          "round": 10,
+          "dealer": [
+            {
+              "r": 3,
+              "s": "D"
+            },
+            {
+              "r": 10,
+              "s": "H"
+            },
+            {
+              "r": 11,
+              "s": "D"
+            }
+          ],
+          "holeHidden": false,
+          "hands": [
+            [
+              {
+                "cards": [
+                  {
+                    "r": 13,
+                    "s": "S"
+                  },
+                  {
+                    "r": 9,
+                    "s": "D"
+                  }
+                ],
+                "bet": 25,
+                "stood": true,
+                "done": true
+              }
+            ],
+            [
+              {
+                "cards": [
+                  {
+                    "r": 3,
+                    "s": "H"
+                  },
+                  {
+                    "r": 10,
+                    "s": "D"
+                  }
+                ],
+                "bet": 100,
+                "stood": true,
+                "done": true
+              }
+            ]
+          ],
+          "curP": 1,
+          "curH": 0,
+          "results": [
+            "Dealer bust Win +25",
+            "Dealer bust Win +100"
+          ],
+          "pendingBets": {
+            "0": 25,
+            "1": 100
+          },
+          "needBet": [
+            false,
+            false
+          ],
+          "winners": 0,
+          "freshMsg": "Fresh 52-card deck shuffled for Round 10!",
+          "deckCount": 45
+        },
+        "images": [
+          {
+            "caption": "before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          },
+          {
+            "caption": "mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          },
+          {
+            "caption": "spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          },
+          {
+            "caption": "after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          }
+        ],
+        "expected_payouts": {
+          "p0": 0,
+          "p1": 0
+        }
+      }
+    ]
+  },
+  "translations": {
+    "es": {
+      "display_name": "Veintiuno",
+      "short_description": "Players place a bet, then choose Hit or Stand to get as close to 21 as possible without going over. The dealer draws to 17; the best hand wins the round.",
+      "game_logic_rules": "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips.",
+      "game_ui_rules": "Choose an affordable bet, then use Hit or Stand. Double and Split appear only when affordable and legal. When splitting, the active hand and every hand value/bet are shown separately. Review each hand result before Next round.",
+      "tutorial_strings": {
+        "Blackjack": "Blackjack",
+        "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips.": "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips."
+      },
+      "client_strings": {
+        "title": "Veintiuno",
+        "server_message_1": "unknown player",
+        "server_message_2": "expect start",
+        "server_message_3": "expect bet",
+        "server_message_4": "not your bet",
+        "server_message_5": "already bet",
+        "server_message_6": "bad amount",
+        "server_message_7": "min 10",
+        "server_message_8": "not your turn",
+        "server_message_9": "no hand",
+        "server_message_10": "no double",
+        "server_message_11": "no split",
+        "server_message_12": "bad action",
+        "server_message_13": "expect next",
+        "server_message_14": "game over",
+        "server_message_15": "Bust(-{p1})",
+        "server_message_16": "BLACKJACK! +{p1}",
+        "server_message_17": "Dealer BJ (-{p1})",
+        "server_message_18": "Push BJ",
+        "server_message_19": "Dealer bust Win +{p1}",
+        "server_message_20": "Win {p1}v{p2} +{p3}",
+        "server_message_21": "Push {p1}",
+        "server_message_22": "Lose {p1}v{p2} (-{p3})"
+      }
+    },
+    "fr": {
+      "display_name": "Blackjack",
+      "short_description": "Players place a bet, then choose Hit or Stand to get as close to 21 as possible without going over. The dealer draws to 17; the best hand wins the round.",
+      "game_logic_rules": "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips.",
+      "game_ui_rules": "Choose an affordable bet, then use Hit or Stand. Double and Split appear only when affordable and legal. When splitting, the active hand and every hand value/bet are shown separately. Review each hand result before Next round.",
+      "tutorial_strings": {
+        "Blackjack": "Blackjack",
+        "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips.": "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips."
+      },
+      "client_strings": {
+        "title": "Blackjack",
+        "server_message_1": "unknown player",
+        "server_message_2": "expect start",
+        "server_message_3": "expect bet",
+        "server_message_4": "not your bet",
+        "server_message_5": "already bet",
+        "server_message_6": "bad amount",
+        "server_message_7": "min 10",
+        "server_message_8": "not your turn",
+        "server_message_9": "no hand",
+        "server_message_10": "no double",
+        "server_message_11": "no split",
+        "server_message_12": "bad action",
+        "server_message_13": "expect next",
+        "server_message_14": "game over",
+        "server_message_15": "Bust(-{p1})",
+        "server_message_16": "BLACKJACK! +{p1}",
+        "server_message_17": "Dealer BJ (-{p1})",
+        "server_message_18": "Push BJ",
+        "server_message_19": "Dealer bust Win +{p1}",
+        "server_message_20": "Win {p1}v{p2} +{p3}",
+        "server_message_21": "Push {p1}",
+        "server_message_22": "Lose {p1}v{p2} (-{p3})"
+      }
+    },
+    "de": {
+      "display_name": "Blackjack",
+      "short_description": "Players place a bet, then choose Hit or Stand to get as close to 21 as possible without going over. The dealer draws to 17; the best hand wins the round.",
+      "game_logic_rules": "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips.",
+      "game_ui_rules": "Choose an affordable bet, then use Hit or Stand. Double and Split appear only when affordable and legal. When splitting, the active hand and every hand value/bet are shown separately. Review each hand result before Next round.",
+      "tutorial_strings": {
+        "Blackjack": "Blackjack",
+        "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips.": "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips."
+      },
+      "client_strings": {
+        "title": "Blackjack",
+        "server_message_1": "unknown player",
+        "server_message_2": "expect start",
+        "server_message_3": "expect bet",
+        "server_message_4": "not your bet",
+        "server_message_5": "already bet",
+        "server_message_6": "bad amount",
+        "server_message_7": "min 10",
+        "server_message_8": "not your turn",
+        "server_message_9": "no hand",
+        "server_message_10": "no double",
+        "server_message_11": "no split",
+        "server_message_12": "bad action",
+        "server_message_13": "expect next",
+        "server_message_14": "game over",
+        "server_message_15": "Bust(-{p1})",
+        "server_message_16": "BLACKJACK! +{p1}",
+        "server_message_17": "Dealer BJ (-{p1})",
+        "server_message_18": "Push BJ",
+        "server_message_19": "Dealer bust Win +{p1}",
+        "server_message_20": "Win {p1}v{p2} +{p3}",
+        "server_message_21": "Push {p1}",
+        "server_message_22": "Lose {p1}v{p2} (-{p3})"
+      }
+    },
+    "pt": {
+      "display_name": "Blackjack",
+      "short_description": "Players place a bet, then choose Hit or Stand to get as close to 21 as possible without going over. The dealer draws to 17; the best hand wins the round.",
+      "game_logic_rules": "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips.",
+      "game_ui_rules": "Choose an affordable bet, then use Hit or Stand. Double and Split appear only when affordable and legal. When splitting, the active hand and every hand value/bet are shown separately. Review each hand result before Next round.",
+      "tutorial_strings": {
+        "Blackjack": "Blackjack",
+        "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips.": "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips."
+      },
+      "client_strings": {
+        "title": "Blackjack",
+        "server_message_1": "unknown player",
+        "server_message_2": "expect start",
+        "server_message_3": "expect bet",
+        "server_message_4": "not your bet",
+        "server_message_5": "already bet",
+        "server_message_6": "bad amount",
+        "server_message_7": "min 10",
+        "server_message_8": "not your turn",
+        "server_message_9": "no hand",
+        "server_message_10": "no double",
+        "server_message_11": "no split",
+        "server_message_12": "bad action",
+        "server_message_13": "expect next",
+        "server_message_14": "game over",
+        "server_message_15": "Bust(-{p1})",
+        "server_message_16": "BLACKJACK! +{p1}",
+        "server_message_17": "Dealer BJ (-{p1})",
+        "server_message_18": "Push BJ",
+        "server_message_19": "Dealer bust Win +{p1}",
+        "server_message_20": "Win {p1}v{p2} +{p3}",
+        "server_message_21": "Push {p1}",
+        "server_message_22": "Lose {p1}v{p2} (-{p3})"
+      }
+    },
+    "zh": {
+      "display_name": "二十一点",
+      "short_description": "Players place a bet, then choose Hit or Stand to get as close to 21 as possible without going over. The dealer draws to 17; the best hand wins the round.",
+      "game_logic_rules": "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips.",
+      "game_ui_rules": "Choose an affordable bet, then use Hit or Stand. Double and Split appear only when affordable and legal. When splitting, the active hand and every hand value/bet are shown separately. Review each hand result before Next round.",
+      "tutorial_strings": {
+        "Blackjack": "Blackjack",
+        "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips.": "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips."
+      },
+      "client_strings": {
+        "title": "二十一点",
+        "server_message_1": "unknown player",
+        "server_message_2": "expect start",
+        "server_message_3": "expect bet",
+        "server_message_4": "not your bet",
+        "server_message_5": "already bet",
+        "server_message_6": "bad amount",
+        "server_message_7": "min 10",
+        "server_message_8": "not your turn",
+        "server_message_9": "no hand",
+        "server_message_10": "no double",
+        "server_message_11": "no split",
+        "server_message_12": "bad action",
+        "server_message_13": "expect next",
+        "server_message_14": "game over",
+        "server_message_15": "Bust(-{p1})",
+        "server_message_16": "BLACKJACK! +{p1}",
+        "server_message_17": "Dealer BJ (-{p1})",
+        "server_message_18": "Push BJ",
+        "server_message_19": "Dealer bust Win +{p1}",
+        "server_message_20": "Win {p1}v{p2} +{p3}",
+        "server_message_21": "Push {p1}",
+        "server_message_22": "Lose {p1}v{p2} (-{p3})"
+      }
+    },
+    "hi": {
+      "display_name": "ब्लैकजैक",
+      "short_description": "Players place a bet, then choose Hit or Stand to get as close to 21 as possible without going over. The dealer draws to 17; the best hand wins the round.",
+      "game_logic_rules": "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips.",
+      "game_ui_rules": "Choose an affordable bet, then use Hit or Stand. Double and Split appear only when affordable and legal. When splitting, the active hand and every hand value/bet are shown separately. Review each hand result before Next round.",
+      "tutorial_strings": {
+        "Blackjack": "Blackjack",
+        "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips.": "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips."
+      },
+      "client_strings": {
+        "title": "ब्लैकजैक",
+        "server_message_1": "unknown player",
+        "server_message_2": "expect start",
+        "server_message_3": "expect bet",
+        "server_message_4": "not your bet",
+        "server_message_5": "already bet",
+        "server_message_6": "bad amount",
+        "server_message_7": "min 10",
+        "server_message_8": "not your turn",
+        "server_message_9": "no hand",
+        "server_message_10": "no double",
+        "server_message_11": "no split",
+        "server_message_12": "bad action",
+        "server_message_13": "expect next",
+        "server_message_14": "game over",
+        "server_message_15": "Bust(-{p1})",
+        "server_message_16": "BLACKJACK! +{p1}",
+        "server_message_17": "Dealer BJ (-{p1})",
+        "server_message_18": "Push BJ",
+        "server_message_19": "Dealer bust Win +{p1}",
+        "server_message_20": "Win {p1}v{p2} +{p3}",
+        "server_message_21": "Push {p1}",
+        "server_message_22": "Lose {p1}v{p2} (-{p3})"
+      }
+    },
+    "ar": {
+      "display_name": "بلاك جاك",
+      "short_description": "Players place a bet, then choose Hit or Stand to get as close to 21 as possible without going over. The dealer draws to 17; the best hand wins the round.",
+      "game_logic_rules": "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips.",
+      "game_ui_rules": "Choose an affordable bet, then use Hit or Stand. Double and Split appear only when affordable and legal. When splitting, the active hand and every hand value/bet are shown separately. Review each hand result before Next round.",
+      "tutorial_strings": {
+        "Blackjack": "Blackjack",
+        "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips.": "Aces count as 1 or 11 and face cards as 10. Place a bet, then Hit or Stand to get close to 21 without going over. A natural two-card 21 pays 3:2, ordinary wins pay 1:1, and ties return the bet. Double adds an equal bet and takes exactly one card. Split equal ranks into up to four hands; a split 21 pays as an ordinary hand. The dealer stands on all 17s, including soft 17. Highest chips wins after ten rounds or when at most one player has chips."
+      },
+      "client_strings": {
+        "title": "بلاك جاك",
+        "server_message_1": "unknown player",
+        "server_message_2": "expect start",
+        "server_message_3": "expect bet",
+        "server_message_4": "not your bet",
+        "server_message_5": "already bet",
+        "server_message_6": "bad amount",
+        "server_message_7": "min 10",
+        "server_message_8": "not your turn",
+        "server_message_9": "no hand",
+        "server_message_10": "no double",
+        "server_message_11": "no split",
+        "server_message_12": "bad action",
+        "server_message_13": "expect next",
+        "server_message_14": "game over",
+        "server_message_15": "Bust(-{p1})",
+        "server_message_16": "BLACKJACK! +{p1}",
+        "server_message_17": "Dealer BJ (-{p1})",
+        "server_message_18": "Push BJ",
+        "server_message_19": "Dealer bust Win +{p1}",
+        "server_message_20": "Win {p1}v{p2} +{p3}",
+        "server_message_21": "Push {p1}",
+        "server_message_22": "Lose {p1}v{p2} (-{p3})"
+      }
+    }
+  }
+}
