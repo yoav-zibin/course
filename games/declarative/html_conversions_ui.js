@@ -85,14 +85,7 @@ const gameUI = {
         }
       }
       if (active && s.phase === 'SETUP') {
-        const ships = [
-          {name: 'Carrier', cells: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]]},
-          {name: 'Battleship', cells: [[0, 2], [1, 2], [2, 2], [3, 2]]},
-          {name: 'Cruiser', cells: [[0, 4], [1, 4], [2, 4]]},
-          {name: 'Submarine', cells: [[0, 6], [1, 6], [2, 6]]},
-          {name: 'Destroyer', cells: [[0, 8], [1, 8]]}
-        ];
-        intent({type: 'place', ships}, text('Place fleet and start battle'), null, null, 'control');
+        intent({type: 'auto_place'}, text('Place fleet and start battle'), null, null, 'control');
         label('setup-help', text('Places a valid fleet with clear water between ships.'), 22, 594, 14);
       }
     } else if (KIND === 'checkers') {

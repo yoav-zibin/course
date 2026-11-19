@@ -31,7 +31,10 @@ char *bp_runtime_evaluate(const char *source, int *failed) {
   if (JS_IsException(result)) {
     JSValue error = JS_GetException(context);
     const char *message = JS_ToCString(context, error);
-    output = strdup(message ? message : "Game exceeded its time or memory limit");
+    // Exception strings cross the host boundary too. Do not hand megabytes of
+    // attacker-controlled text to a native error dialog or diagnostic report.
+    output = strdup(!message ? "Game exceeded its time or memory limit" :
+                    strlen(message) > 500 ? "Game error exceeds its size limit" : message);
     if (message) JS_FreeCString(context, message);
     JS_FreeValue(context, error);
   } else if (!JS_IsString(result)) {

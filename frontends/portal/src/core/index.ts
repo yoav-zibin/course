@@ -1,12 +1,13 @@
 import { useSyncExternalStore } from 'react';
 import { PortalApi, ApiError } from './api';
+import {setDiagnosticScope} from './diagnostics';
 import { AccountRepository, emptyAccountData, equal, requestId } from './repository';
 import {protectedResponsePaths} from './cache-policy';
 import {utf8Size} from '../platform/recoverable-cache';
 import { syncAccount } from './sync';
 import { importNativeLegacy, finishNativeImport } from './native-migration';
 import * as storage from '../platform/storage';
-import { loadAccounts, saveAccounts, CURRENT_KEY } from '../platform/credentials';
+import { loadAccounts, saveAccounts, loadCurrentAccount, currentAccountKey } from '../platform/credentials';
 import { isOnline, watchConnectivity } from '../platform/connectivity';
 import { configureI18n, setLocale, getLocale, getDirection, gameTexts, localizeGame, subscribeI18n, t, copyText } from '../platform/i18n';
 import bundled from './bundled-tictactoe.json';
@@ -23,7 +24,7 @@ const savedList = <T>(value: unknown): T[] => Array.isArray(value) ? value : [];
 const localHumanSeat = (match: Match) => match.players.find(player => player.kind === 'human' && player.active !== false)?.player_index ?? 0;
 
 export class PortalStore {
-  constructor(private rulesExecutor: (game: { server_code: string; game_schemas?: unknown }, name: string, args: unknown[], ctx: unknown, seed: number | string, now: number) => Promise<any> = async (...args) => (await import('../game/runtime')).executeGame(...args), private loginBrowser: (baseUrl: string) => Promise<any> = browserLogin, private writeCurrentAccount: (id: string) => Promise<void> = id => storage.setItem(CURRENT_KEY, id)) {}
+  constructor(private rulesExecutor: (game: { server_code: string; game_schemas?: unknown }, name: string, args: unknown[], ctx: unknown, seed: number | string, now: number) => Promise<any> = async (...args) => (await import('../game/runtime')).executeGame(...args), private loginBrowser: (baseUrl: string) => Promise<any> = browserLogin, private writeCurrentAccount: (id: string, base?: string) => Promise<void> = (id, base) => storage.setItem(currentAccountKey(base), id)) {}
   private state = initial();
   private listeners = new Set<() => void>();
   private data = emptyAccountData();
@@ -45,11 +46,17 @@ export class PortalStore {
   private volatileResponses = new Map<string,Map<string,any>>();
   getSnapshot = () => this.state;
   subscribe = (fn: () => void) => { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; };
-  private patch(update: Partial<PortalState>) { if (Object.hasOwn(update, 'selectedMatch')) update.selected = update.selectedMatch; if (Object.hasOwn(update, 'game')) update.selectedGame = update.game; this.state = { ...this.state, ...update }; this.listeners.forEach(fn => fn()); }
+  private patch(update: Partial<PortalState>) { if (Object.hasOwn(update, 'selectedMatch')) update.selected = update.selectedMatch; if (Object.hasOwn(update, 'game')) update.selectedGame = update.game; this.state = { ...this.state, ...update }; setDiagnosticScope(JSON.stringify([this.state.baseUrl, this.identity()])); this.listeners.forEach(fn => fn()); }
   private localize() { this.patch({ locale: getLocale(), games: this.state.games.map(localizeGame), savedGames: this.state.savedGames.map(localizeGame), popularGames: this.state.popularGames.map(localizeGame), recentGames: this.state.recentGames.map(localizeGame), game: this.state.game ? localizeGame(this.state.game) : null }); }
   private identity() { return this.state.account?.id || 'visitor'; }
   private capture() { const epoch = this.generation, account = this.identity(), base = this.state.baseUrl; return () => { if (epoch !== this.generation || account !== this.identity() || base !== this.state.baseUrl) throw new Error('Account changed; refresh to continue.'); }; }
-  private async perform<T>(run: () => Promise<T>, loading = true): Promise<T> { if (loading) this.patch({ loading: true }); this.patch({ error: null }); try { return await run(); } catch (error) { this.patch({ error: error instanceof Error ? error.message : String(error) }); throw error; } finally { if (loading) this.patch({ loading: false }); } }
+  private async perform<T>(run: () => Promise<T>, loading = true): Promise<T> {
+    const guard=this.capture();
+    if (loading) this.patch({ loading: true }); this.patch({ error: null });
+    try { return await run(); }
+    catch (error) { guard(); this.patch({ error: error instanceof Error ? error.message : String(error) }); throw error; }
+    finally { if (loading) { try { guard(); this.patch({ loading: false }); } catch { /* The new account owns its loading state. */ } } }
+  }
   private decorate(match: Match | null): Match | null { return match ? { ...match, pending: this.data.queues[match.id]?.length || 0, conflict: this.data.conflicts[match.id] || null } : null; }
   private publishData(data: AccountData) {
     this.mergeVolatile(data);this.data = data; const selected = this.state.selectedMatch;
@@ -92,7 +99,7 @@ export class PortalStore {
     const game=this.data.responses[`/games/${id}/versions/${version}`]||this.data.responses[`/games/${encodeURIComponent(id)}/versions/${version}`]||(bundled.id===id&&bundled.version===version?bundled:undefined);
     return game?.id===id&&game.version===version?game:undefined;
   }
-  async request(method: string, path: string, body?: any): Promise<any> { if (this.localOnly) throw new Error('This test launch runs entirely on this device.'); const guard = this.capture(); const result = await this.api.request(method, path, body, this.state.account); guard(); return result; }
+  async request(method: string, path: string, body?: any): Promise<any> { if (this.localOnly) throw new Error('This test launch runs entirely on this device.'); const guard = this.capture(); try { const result = await this.api.request(method, path, body, this.state.account); guard(); return result; } catch (error) { guard(); throw error; } }
   private async read(path: string, allowCached = true): Promise<any> {
     const guard = this.capture();
     if (this.localOnly) { if (allowCached && Object.hasOwn(this.data.responses, path)) return this.cached(path); throw new TypeError('This device launch is offline.'); }
@@ -127,9 +134,9 @@ export class PortalStore {
       this.localOnly = localOnly;
       this.api = new PortalApi(base, getLocale, localOnly ? async () => { throw new Error('This test launch runs entirely on this device.'); } : fetch); this.repository = new AccountRepository(base); this.patch({ baseUrl: base, network: !localOnly && isOnline() });
       let accounts: Account[];
-      try { accounts = await loadAccounts(); accounts = await importNativeLegacy(base || 'https://buildplay.fun', this.repository, accounts); await saveAccounts(accounts); await finishNativeImport(base || 'https://buildplay.fun'); }
-      catch (error) { accounts = await loadAccounts().catch(() => []); this.patch({ storageError: `Saved data needs attention: ${(error as Error).message}. Existing saves were kept.` }); }
-      const id = await storage.getItem(CURRENT_KEY).catch(() => null); const account = accounts.find(a => a.id === id) || accounts[0] || null;
+      try { accounts = await loadAccounts(base); accounts = await importNativeLegacy(base || 'https://buildplay.fun', this.repository, accounts); await saveAccounts(accounts, base); await finishNativeImport(base || 'https://buildplay.fun'); }
+      catch (error) { accounts = await loadAccounts(base).catch(() => []); this.patch({ storageError: `Saved data needs attention: ${(error as Error).message}. Existing saves were kept.` }); }
+      const id = await loadCurrentAccount(base).catch(() => null); const account = accounts.find(a => a.id === id) || accounts[0] || null;
       this.patch({ accounts, account }); await this.reloadData();
       const incoming=initialUrl??(typeof location!=='undefined'?location.href:null);if(incoming)await rememberUrlAttribution(incoming,base,accounts);
       const snapshot = this.data;
@@ -227,8 +234,8 @@ export class PortalStore {
       if (sourceIds.length) {
         // Keep aliases during the two-key credential/index commit. Failure at
         // any point leaves them selectable until the next successful login.
-        await saveAccounts([...this.state.accounts.filter(a => a.id !== id), account]); guard(); await storage.setItem(CURRENT_KEY, id); guard(); await saveAccounts(accounts);
-      } else { await saveAccounts(accounts); guard(); await storage.setItem(CURRENT_KEY, id); }
+        await saveAccounts([...this.state.accounts.filter(a => a.id !== id), account], this.state.baseUrl); guard(); await storage.setItem(currentAccountKey(this.state.baseUrl), id); guard(); await saveAccounts(accounts, this.state.baseUrl);
+      } else { await saveAccounts(accounts, this.state.baseUrl); guard(); await storage.setItem(currentAccountKey(this.state.baseUrl), id); }
     } catch (error) {
       guard();
       if (sourceIds.length) { this.patch({ storageError: 'Linked credentials could not be saved. Previous account entries and their saved data remain available.' }); throw error; }
@@ -239,18 +246,18 @@ export class PortalStore {
   async switchAccount(id: string) {
     const account = this.state.accounts.find(a => a.id === id); if (!account) throw new Error('Account not found on this device');
     const transition = ++this.generation; ++this.selection; this.refreshPromise = null; this.syncPromise = null; this.observations.clear();
-    const write = this.accountSelectionWrites.then(async () => { if (transition === this.generation) await this.writeCurrentAccount(id); }); this.accountSelectionWrites = write.catch(() => {});
+    const write = this.accountSelectionWrites.then(async () => { if (transition === this.generation) await this.writeCurrentAccount(id, this.state.baseUrl); }); this.accountSelectionWrites = write.catch(() => {});
     await write.catch(() => {}); if (transition !== this.generation) throw new Error('Account changed; refresh to continue.');
     const { ready, baseUrl, accounts, authConfig, locale, storageError } = this.state;
     this.data = emptyAccountData(); this.patch({ ...initial(), ready, baseUrl, accounts, authConfig, account, locale, storageError, network: !this.localOnly && isOnline() }); const guard = this.capture(); await this.reloadData(); guard();
     this.patch({ games: savedList(this.data.responses['/games']), myMatches: savedList(this.data.responses['/matches']), openMatches: savedList(this.data.responses['/matches/open']) }); await this.refresh(); guard();
   }
   async logout(id = this.state.account?.id) {
-    const guard = this.capture(); const accounts = this.state.accounts.filter(a => a.id !== id); await saveAccounts(accounts).catch(() => { guard(); this.patch({ storageError: 'Device storage could not be updated. This session was logged out; saved credentials may remain on this device.' }); }); guard(); this.patch({ accounts });
+    const guard = this.capture(); const accounts = this.state.accounts.filter(a => a.id !== id); await saveAccounts(accounts, this.state.baseUrl).catch(() => { guard(); this.patch({ storageError: 'Device storage could not be updated. This session was logged out; saved credentials may remain on this device.' }); }); guard(); this.patch({ accounts });
     if (id !== this.state.account?.id) return;
     if (accounts.length) return this.switchAccount(accounts[0].id);
     const transition = ++this.generation; ++this.selection; this.refreshPromise = null; this.syncPromise = null; this.observations.clear();
-    await storage.removeItem(CURRENT_KEY).catch(() => {}); if (transition !== this.generation) throw new Error('Account changed; refresh to continue.'); const { ready, baseUrl, authConfig, locale } = this.state;
+    await storage.removeItem(currentAccountKey(this.state.baseUrl)).catch(() => {}); if (transition !== this.generation) throw new Error('Account changed; refresh to continue.'); const { ready, baseUrl, authConfig, locale } = this.state;
     this.data = emptyAccountData(); this.patch({ ...initial(), ready, baseUrl, authConfig, locale, network: !this.localOnly && isOnline() }); await this.reloadData(); await this.refresh();
   }
   private async attribution(): Promise<any> {if(this.bootstrapPromise&&!this.state.ready)await this.bootstrapPromise;return newAccountAttribution(this.state.accounts);}
@@ -274,7 +281,7 @@ export class PortalStore {
       await this.saveLogin(response, [previous.id, id]);
     } else await this.saveLogin(response);
   }
-  async updateProfile(patch: any) { const guard = this.capture(); const account = this.state.account; if (!account) throw new Error('Log in first'); const profile = await this.request('PATCH', `/users/${encodeURIComponent(account.id)}`, patch); const accounts = this.state.accounts.map(a => a.id === account.id ? { ...a, ...profile } : a); await saveAccounts(accounts); guard(); this.patch({ account: accounts.find(a => a.id === account.id)!, accounts, profile }); }
+  async updateProfile(patch: any) { const guard = this.capture(); const account = this.state.account; if (!account) throw new Error('Log in first'); const profile = await this.request('PATCH', `/users/${encodeURIComponent(account.id)}`, patch); const accounts = this.state.accounts.map(a => a.id === account.id ? { ...a, ...profile } : a); await saveAccounts(accounts, this.state.baseUrl); guard(); this.patch({ account: accounts.find(a => a.id === account.id)!, accounts, profile }); }
   private async refreshProfile() { const account = this.state.account; if (!account) return; const guard = this.capture(); const profile = await this.read(`/users/${encodeURIComponent(account.id)}`); guard(); this.patch({ profile }); }
   async createMatch(options: any) { const match = await this.request('POST', '/matches', options); await this.cache(`/matches/${match.id}`, match); await this.selectMatch(match.id); return match; }
   async quickMatch(gameId = '', numPlayers?: number) { const match = await this.request('POST', '/matchmaking/quick-match', { game_id: gameId, ...(numPlayers ? { num_players: numPlayers } : {}) }); await this.cache(`/matches/${match.id}`, match); await this.selectMatch(match.id); return match; }

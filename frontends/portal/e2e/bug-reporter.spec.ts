@@ -1,8 +1,106 @@
 import {test,expect} from '@playwright/test';
-import {E2E_ADMIN_HEADERS} from './helpers';
+import {createUser,E2E_ADMIN_HEADERS,uniqueName} from './helpers';
 
 test.beforeEach(async({baseURL})=>{if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Bug reporter tests require a disposable loopback server.');});
 const label='Report a bug or request a feature';
+
+test('switching accounts keeps an earlier private report and diagnostics out of the new report',async({page,request})=>{
+  const alice=await createUser(request,uniqueName('Private Alice'));
+  const bob=await createUser(request,uniqueName('Private Bob'));
+  await page.addInitScript(accounts=>{
+    localStorage.setItem('game-platform.accounts.v1',JSON.stringify(accounts));
+    localStorage.setItem('game-platform.current-account.v1',accounts[0].id);
+  },[alice,bob]);
+  await page.goto('/portal');
+  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toContainText(alice.display_name);
+  await page.evaluate(()=>console.error('private-account-alice-diagnostic-marker'));
+  const bug=page.getByRole('button',{name:label,exact:true});
+  const input=page.getByRole('textbox',{name:'Bug or feature request'});
+  await bug.click();await input.fill('Alice private match report must stay with Alice.');
+  const earlierScreenshot=await page.getByRole('img',{name:'Screenshot captured before opening this report'}).getAttribute('src');
+  await page.getByRole('button',{name:'Close dialog',exact:true}).click();
+  await page.getByRole('button',{name:'Account menu',exact:true}).click();
+  await page.getByRole('button',{name:bob.display_name,exact:true}).click();
+  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toContainText(bob.display_name);
+  await bug.click();await expect(input).toHaveValue('');
+  expect(await page.getByRole('img',{name:'Screenshot captured before opening this report'}).getAttribute('src')).not.toBe(earlierScreenshot);
+  await input.fill('Bob has a different report for his own session.');
+  const sent=page.waitForRequest(request=>request.method()==='POST'&&new URL(request.url()).pathname==='/bug-reports');
+  await page.getByRole('button',{name:'Send report',exact:true}).click();
+  const submitted=await sent,body=submitted.postDataJSON();
+  expect(submitted.headers()['x-user-id']).toBe(bob.id);
+  expect(body.diagnostics.context.user.id).toBe(bob.id);
+  expect(JSON.stringify(body.diagnostics)).not.toContain('private-account-alice-diagnostic-marker');
+  expect(JSON.stringify(body)).not.toContain('Alice private match report');
+  await expect(page.getByText('Thanks! Your report was sent.')).toBeVisible();
+  await page.getByRole('button',{name:'Close',exact:true}).click();
+  await page.getByRole('button',{name:'Account menu',exact:true}).click();
+  await page.getByRole('button',{name:alice.display_name,exact:true}).click();
+  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toContainText(alice.display_name);
+  await bug.click();await expect(input).toHaveValue('Alice private match report must stay with Alice.');
+});
+
+test('an account change cancels a screenshot captured for the previous account',async({page,request})=>{
+  const alice=await createUser(request,uniqueName('Capture Alice'));
+  const bob=await createUser(request,uniqueName('Capture Bob'));
+  await page.addInitScript(accounts=>{
+    localStorage.setItem('game-platform.accounts.v1',JSON.stringify(accounts));
+    localStorage.setItem('game-platform.current-account.v1',accounts[0].id);
+  },[alice,bob]);
+  await page.goto('/portal');
+  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toContainText(alice.display_name);
+  await page.evaluate(()=>{
+    const decode=HTMLImageElement.prototype.decode;
+    HTMLImageElement.prototype.decode=function(){
+      if(this.src.startsWith('data:image/svg+xml'))return new Promise<void>((resolve,reject)=>{
+        (window as any).__releasePrivateCapture=()=>decode.call(this).then(resolve,reject);
+      });
+      return decode.call(this);
+    };
+  });
+  await page.getByRole('button',{name:label,exact:true}).click();
+  await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releasePrivateCapture)).toBe('function');
+  await page.getByRole('button',{name:'Account menu',exact:true}).click();
+  await page.getByRole('button',{name:bob.display_name,exact:true}).click();
+  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toContainText(bob.display_name);
+  await page.evaluate(()=>(window as any).__releasePrivateCapture());
+  await expect(page.getByRole('textbox',{name:'Bug or feature request'})).toHaveCount(0);
+});
+
+test('a rejected capture from a previous account cannot enter the next report diagnostics',async({page,request})=>{
+  const alice=await createUser(request,uniqueName('Rejected capture Alice'));
+  const bob=await createUser(request,uniqueName('Rejected capture Bob'));
+  await page.addInitScript(accounts=>{
+    localStorage.setItem('game-platform.accounts.v1',JSON.stringify(accounts));
+    localStorage.setItem('game-platform.current-account.v1',accounts[0].id);
+  },[alice,bob]);
+  await page.goto('/portal');
+  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toContainText(alice.display_name);
+  await page.evaluate(()=>{
+    const decode=HTMLImageElement.prototype.decode;let hold=true;
+    HTMLImageElement.prototype.decode=function(){
+      if(hold&&this.src.startsWith('data:image/svg+xml')){
+        hold=false;return new Promise<void>((_resolve,reject)=>{
+          (window as any).__rejectPrivateCapture=()=>reject(new Error('alice-private-capture-failure-marker'));
+        });
+      }
+      return decode.call(this);
+    };
+  });
+  const bug=page.getByRole('button',{name:label,exact:true});await bug.click();
+  await expect.poll(()=>page.evaluate(()=>typeof(window as any).__rejectPrivateCapture)).toBe('function');
+  await page.getByRole('button',{name:'Account menu',exact:true}).click();
+  await page.getByRole('button',{name:bob.display_name,exact:true}).click();
+  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toContainText(bob.display_name);
+  await page.evaluate(()=>(window as any).__rejectPrivateCapture());
+  await bug.click();
+  await page.getByRole('textbox',{name:'Bug or feature request'}).fill('Bob report must exclude the old capture failure.');
+  const sent=page.waitForRequest(request=>request.method()==='POST'&&new URL(request.url()).pathname==='/bug-reports');
+  await page.getByRole('button',{name:'Send report',exact:true}).click();
+  const submitted=await sent;expect(submitted.headers()['x-user-id']).toBe(bob.id);
+  expect(JSON.stringify(submitted.postDataJSON().diagnostics)).not.toContain('alice-private-capture-failure-marker');
+  await expect(page.getByText('Thanks! Your report was sent.')).toBeVisible();
+});
 
 test('a late report success preserves a newer reopened draft',async({page})=>{
   let respond:(()=>Promise<void>)|undefined;

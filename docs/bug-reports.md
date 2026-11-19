@@ -79,7 +79,8 @@ per 24 hours and commit atomically with the report.
 The trimmed description must be 5–10,000 characters. `screenshot` can be null;
 otherwise it must be a valid PNG or JPEG data URL, at most 500,000 characters.
 Diagnostics are at most 180,000 UTF-8 JSON bytes. The entire streamed body is
-limited to 760,000 bytes, including requests without `Content-Length`.
+limited to 760,000 bytes, including requests without `Content-Length`. Incomplete
+uploads time out after 15 seconds without storing evidence or consuming a quota slot.
 Success is HTTP 201 with `{id,status,created_at}`. Invalid or excessive data
 receives 422 or 413 without echoing its private input; rate limiting returns 429.
 

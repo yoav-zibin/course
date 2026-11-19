@@ -10,6 +10,9 @@ import {diagnosticPath,diagnosticSnapshot,recordDiagnosticEvent,recordDiagnostic
 import type {PortalState} from '../core/types';
 
 type Portal=PortalState&{actions:{request:(method:string,path:string,body?:unknown)=>Promise<any>}};
+// Unsent text remains recoverable when returning to an account in this app
+// session. Images and diagnostics are always captured again for that account.
+const accountDrafts=new Map<string,{current:string}>();
 
 // Native reports are presented inside the already-open Modal. Keep the input's
 // state in that rendered tree: relaying each controlled value through the
@@ -35,17 +38,23 @@ function BugReportForm({p,screenshot,captureError,captured,draft,onClose,onSent}
 
 export function BugReporter({p,screen}: {p:Portal;screen:string}) {
   const [visible,setVisible]=useState(false),[screenshot,setScreenshot]=useState<string|null>(null),[captureError,setCaptureError]=useState('');
-  const draft=useRef(''),submitted=useRef(false);
+  const scope=JSON.stringify([p.baseUrl,p.account?.id??'visitor']);
+  if(!accountDrafts.has(scope))accountDrafts.set(scope,{current:''});
+  const draft=useRef(accountDrafts.get(scope)!).current,submitted=useRef(false);
   const busy=useRef(false),opened=useRef(false),captured=useRef<Record<string,unknown>>({});
   const current=useRef({p,screen});current.current={p,screen};
+  const mounted=useRef(true);
+  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
   const dimensions=useWindowDimensions();
   useEffect(()=>configureBugControl(()=>{
     if(busy.current||opened.current)return;
     busy.current=true;recordDiagnosticEvent('bug_capture_started');
     const context=current.current;
     void (async()=>{
-      let image:string|null=null,failure='';
-      try{let timer:ReturnType<typeof setTimeout>;try{image=await Promise.race([captureBugScreenshot(),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('Screenshot capture timed out. You can still send the report.')),8000);})]);}finally{clearTimeout(timer!);}}catch(e){failure=e instanceof Error?e.message:String(e);recordDiagnosticLog('error','screenshot_capture',e);}
+      let image:string|null=null,failure='',captureFailed=false,failureDetail:unknown;
+      try{let timer:ReturnType<typeof setTimeout>;try{image=await Promise.race([captureBugScreenshot(),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('Screenshot capture timed out. You can still send the report.')),8000);})]);}finally{clearTimeout(timer!);}}catch(e){failure=e instanceof Error?e.message:String(e);captureFailed=true;failureDetail=e;}
+      if(!mounted.current||context.p.baseUrl!==current.current.p.baseUrl||context.p.account?.id!==current.current.p.account?.id){busy.current=false;return;}
+      if(captureFailed)recordDiagnosticLog('error','screenshot_capture',failureDetail);
       captured.current=diagnosticSnapshot({platform:Platform.OS,platformVersion:Platform.Version,appVersion:Constants.expoConfig?.version,expoSdk:Constants.expoConfig?.sdkVersion,
         nativeBuild:Platform.OS==='ios'?Constants.platform?.ios?.buildNumber:Platform.OS==='android'?Constants.platform?.android?.versionCode:undefined,
         user:context.p.account?{id:context.p.account.id,displayName:context.p.account.display_name}:null,locale:context.p.locale,screen:context.screen,

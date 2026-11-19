@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AccountRepository, emptyAccountData, type StorageAdapter } from '../src/core/repository';
+import { AccountRepository, emptyAccountData, LEGACY_ORIGIN_KEY, type StorageAdapter } from '../src/core/repository';
 import { PortalApi } from '../src/core/api';
 import { syncAccount } from '../src/core/sync';
 import type { Account, Match } from '../src/core/types';
@@ -59,6 +59,43 @@ test('failed durable mutation cannot publish a provisional move or discard a que
 test('accounts and nonproduction backends have independent data namespaces', async () => {
   const { storage, repository } = await fixture(); assert.deepEqual((await repository.read('bob')).queues, {});
   const otherServer = new AccountRepository('https://example.test', storage); assert.deepEqual((await otherServer.read('alice')).queues, {});
+});
+test('legacy production snapshots and split queues never migrate into another API origin',async()=>{
+  const storage=new MemoryStorage(),original=emptyAccountData();
+  original.responses['/matches/m']={...match,state:{hand:'private production hand'}};
+  original.selectedId='m';
+  storage.values.set('game-platform.portal.v1.alice',JSON.stringify(original));
+  storage.values.set('game-platform.portal.v1.alice.q.m',JSON.stringify([{requestId:'production-only',body:{move:{card:'private card'},expected_move_count:0},baseState:match.state,baseTurn:[0]}]));
+  const before=new Map(storage.values),foreign=new AccountRepository('https://different.test',storage);
+  const data=await foreign.read('alice');
+  assert.deepEqual(data,emptyAccountData());
+  await foreign.write('alice',data);
+  assert.doesNotMatch(storage.values.get(foreign.key('alice'))!,/private production|private card|production-only/);
+  for(const [key,value] of before)assert.equal(storage.values.get(key),value);
+  const production=await new AccountRepository('https://buildplay.fun',storage).read('alice');
+  assert.equal(production.responses['/matches/m'].state.hand,'private production hand');
+  assert.equal(production.queues.m[0].requestId,'production-only');
+});
+test('an explicit legacy origin marker permits only the matching server migration',async()=>{
+  const storage=new MemoryStorage(),data=emptyAccountData();data.responses['/matches/m']=match;
+  storage.values.set('game-platform.portal.v1.alice',JSON.stringify(data));
+  storage.values.set(LEGACY_ORIGIN_KEY,'https://private.test/');
+  assert.deepEqual(await new AccountRepository('https://buildplay.fun',storage).read('alice'),emptyAccountData());
+  assert.deepEqual(await new AccountRepository('https://different.test',storage).read('alice'),emptyAccountData());
+  assert.equal((await new AccountRepository('https://private.test',storage).read('alice')).responses['/matches/m'].id,'m');
+});
+test('a browser upgrade keeps its own custom-origin legacy saves without importing them into another API',async()=>{
+  const previous=Object.getOwnPropertyDescriptor(globalThis,'location');
+  Object.defineProperty(globalThis,'location',{configurable:true,value:new URL('https://custom-browser.test/portal')});
+  try{
+    const storage=new MemoryStorage(),original=emptyAccountData();
+    original.responses['/matches/m']={...match,state:{hand:'custom-origin-private-hand'}};
+    storage.values.set('game-platform.portal.v1.alice',JSON.stringify(original));
+    storage.values.set('game-platform.portal.v1.alice.q.m',JSON.stringify([{requestId:'custom-origin-queue',body:{move:{cell:3},expected_move_count:0},baseState:match.state,baseTurn:[0]}]));
+    const same=await new AccountRepository('https://custom-browser.test',storage).read('alice');
+    assert.equal(same.responses['/matches/m'].state.hand,'custom-origin-private-hand');assert.equal(same.queues.m[0].requestId,'custom-origin-queue');
+    for(const origin of ['https://buildplay.fun','https://different.test'])assert.deepEqual(await new AccountRepository(origin,storage).read('alice'),emptyAccountData());
+  }finally{if(previous)Object.defineProperty(globalThis,'location',previous);else delete(globalThis as any).location;}
 });
 test('fresh action posts once using the original key and captured account headers', async () => {
   const { repository } = await fixture(); const calls: string[] = [];

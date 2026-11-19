@@ -3,7 +3,15 @@
 type Entry = Record<string, unknown>;
 const logs: Entry[] = [], apiCalls: Entry[] = [], events: Entry[] = [], pages: Entry[] = [];
 const secrets = new Set<string>();
-const sessionId = `portal-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
+const newSessionId = () => `portal-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
+let sessionId = newSessionId(), scope: string | null = null;
+/** A report belongs to the current account and API origin. Keep knowledge of
+ * old credentials for redaction, but never include another account's activity. */
+export function setDiagnosticScope(next: string) {
+  if (next === scope) return;
+  scope = next; sessionId = newSessionId();
+  for (const entries of [logs, apiCalls, events, pages]) entries.length = 0;
+}
 const stamp = () => new Date().toISOString();
 function append(list: Entry[], entry: Entry, limit: number) {list.push(entry);if(list.length>limit)list.splice(0,list.length-limit);}
 export function rememberDiagnosticSecrets(values: Iterable<string>) {for(const value of values)if(value)secrets.add(value);}

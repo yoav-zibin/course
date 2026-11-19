@@ -467,43 +467,45 @@ def create_session(store, *, secret, submission_id, session_id, mode, config, pl
     is abandoned — the page plays one match at a time, and a fresh start
     supersedes the match it replaces (a reload instead resumes the open
     session, see open_session)."""
-    ref = _session_ref(store, session_id)
-    if store.raw_get(ref) is not None:
-        raise ValueError("a session with this id already exists")
-    for other in _query_all(
-        store,
-        (
-            ("kind", "==", "session"),
-            ("submission_id", "==", submission_id),
-            ("status", "==", "open"),
-        ),
-    ):
-        if other["session_id"] == session_id:
-            continue
-        stale = dict(other)
-        stale["status"] = "abandoned"
-        store.raw_put(_session_ref(store, other["session_id"]), stale)
-    row = {
-        "kind": "session",
-        "session_id": session_id,
-        "secret_hash": secret_hash(secret),
-        "submission_id": submission_id,
-        "mode": mode,
-        "num_players": config["num_players"],
-        "resolution": config["resolution"],
-        "orientation": config["orientation"],
-        "human_player_index": config.get("human_player_index"),
-        "players": players,
-        "pot": pot,
-        "match_seed": match_seed,
-        "initial_turn": initial_turn,
-        "move_count": 0,
-        "status": "open",
-        "created_at": _now(),
-        "created_ns": time.time_ns(),
-        "updated_ns": time.time_ns(),
-    }
+    # A cached miss is not authority to create a globally keyed session.
+    # Check existence and write the initial evidence in the same transaction.
     with store.atomic():
+        ref = _session_ref(store, session_id)
+        if store.raw_get(ref) is not None:
+            raise ValueError("a session with this id already exists")
+        for other in _query_all(
+            store,
+            (
+                ("kind", "==", "session"),
+                ("submission_id", "==", submission_id),
+                ("status", "==", "open"),
+            ),
+        ):
+            if other["session_id"] == session_id:
+                continue
+            stale = dict(other)
+            stale["status"] = "abandoned"
+            store.raw_put(_session_ref(store, other["session_id"]), stale)
+        row = {
+            "kind": "session",
+            "session_id": session_id,
+            "secret_hash": secret_hash(secret),
+            "submission_id": submission_id,
+            "mode": mode,
+            "num_players": config["num_players"],
+            "resolution": config["resolution"],
+            "orientation": config["orientation"],
+            "human_player_index": config.get("human_player_index"),
+            "players": players,
+            "pot": pot,
+            "match_seed": match_seed,
+            "initial_turn": initial_turn,
+            "move_count": 0,
+            "status": "open",
+            "created_at": _now(),
+            "created_ns": time.time_ns(),
+            "updated_ns": time.time_ns(),
+        }
         row["initial_chunks"] = _write_chunks(
             store, ref, canonical_json(initial_state)
         )

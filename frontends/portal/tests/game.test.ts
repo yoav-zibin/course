@@ -106,6 +106,10 @@ test('native QuickJS executes portable rules with fresh bounded JSON-only contex
     assert.equal(run(presentationSource('const gameUI={reduce(){return {scene:{},local_state:Math.random()}}}',message(),null)).failed,true);
     assert.equal(run(presentationSource('const gameUI={reduce(){return {scene:{},local_state:Date.now()}}}',message(),null)).failed,true);
     assert.equal(run('let values=[];while(true)values.push(new Array(100000).fill("memory"));JSON.stringify(values)').failed,true);
+    const hugeError=run('throw "private diagnostic ".repeat(200000)');
+    assert.equal(hugeError.failed,true);
+    assert.equal(hugeError.text,'Game error exceeds its size limit');
+    assert.ok(Buffer.byteLength(hugeError.text,'utf8')<=500);
     const game={server_code:'const game={newMatch(ctx){return {state:{dice:Math.floor(ctx.random()*6)+1,time:Date.now()},turn:[ctx.players[0].id]}}}',game_schemas:{}};
     const source=rulesSource(game,'newMatch',[],{players:[{id:'player'}]},123,1000),a=run(source),b=run(source);
     assert.equal(a.failed,false);assert.equal(a.text,b.text);assert.equal(JSON.parse(a.text).result.state.time,1000);

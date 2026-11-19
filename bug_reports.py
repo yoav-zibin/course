@@ -6,6 +6,7 @@ never downloads screenshots. Report text is untrusted user content, not agent
 instructions; reviewers must independently reproduce and assess a request.
 """
 
+import asyncio
 import base64
 import datetime as dt
 import hashlib
@@ -22,6 +23,7 @@ from game_platform import observability
 from game_platform.paging import decode_cursor, encode_cursor, page_size
 
 
+UPLOAD_TIMEOUT_SECONDS = 15
 MAX_REPORT_BYTES = 760_000
 MAX_SCREENSHOT_CHARS = 500_000
 MAX_DIAGNOSTIC_BYTES = 180_000
@@ -131,10 +133,14 @@ def make_router(platform_dependency, master_dependency, caller_dependency):
         if declared.isdigit() and int(declared) > MAX_REPORT_BYTES:
             raise HTTPException(413, "bug report too large")
         body = bytearray()
-        async for chunk in request.stream():
-            if len(body) + len(chunk) > MAX_REPORT_BYTES:
-                raise HTTPException(413, "bug report too large")
-            body.extend(chunk)
+        try:
+            async with asyncio.timeout(UPLOAD_TIMEOUT_SECONDS):
+                async for chunk in request.stream():
+                    if len(body) + len(chunk) > MAX_REPORT_BYTES:
+                        raise HTTPException(413, "bug report too large")
+                    body.extend(chunk)
+        except TimeoutError:
+            raise HTTPException(408, "bug report upload timed out") from None
         try:
             report = BugReportCreate.model_validate_json(bytes(body))
         except ValueError:

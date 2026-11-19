@@ -275,6 +275,28 @@ test('an earlier delayed account switch cannot replace a newer selection or pers
   const older=assert.rejects(store.actions.switchAccount('bob'),/Account changed/);await Promise.resolve();await Promise.resolve();const latest=store.actions.switchAccount('charlie');release();await latest;await older;
   assert.equal(store.getSnapshot().account!.id,'charlie');assert.equal(saved['game-platform.current-account.v1'],'charlie');
 });
+
+test('a late API failure cannot publish the previous account private error to the next account',async()=>{
+  const saved=browserStorage();
+  saved['game-platform.accounts.v1']=JSON.stringify(['alice','bob'].map(id=>({id,password:`${id}-secret`,display_name:id})));
+  saved['game-platform.current-account.v1']='alice';
+  let release!:()=>void,started!:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;}),begin=new Promise<void>(resolve=>{started=resolve;});
+  const restore=mockedFetch(async(url,init)=>{
+    if(url.pathname==='/private-action'){
+      assert.equal((init.headers as any)['X-User-Id'],'alice');started();await gate;
+      throw new ApiError(400,'alice-private-error-and-hand');
+    }
+  });
+  try{
+    const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');
+    const pending=store.actions.request('POST','/private-action');
+    await begin;await store.actions.switchAccount('bob');release();
+    await assert.rejects(pending,/Account changed/);
+    assert.equal(store.getSnapshot().account!.id,'bob');
+    assert.doesNotMatch(store.getSnapshot().error||'',/alice-private/);
+  }finally{restore();}
+});
 test('actual Backgammon package runs through shared practice and persists a legal move', async () => {
   browserStorage();
   const source = JSON.parse(readFileSync(new URL('../../../games/declarative/backgammon.json', import.meta.url), 'utf8'));

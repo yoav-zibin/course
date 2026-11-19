@@ -47,9 +47,16 @@ builds and CI artifacts. Generated `android/`, `ios/` and web bundles are ignore
   review and Play again; saved matches retain their original player positions.
 - Credentials use SecureStore on native platforms and the established account
   storage keys on web, keeping the admin pages and player app compatible.
+  Native account indexes, selected accounts and secure password slots are scoped
+  to the canonical API origin. Only production adopts the former unscoped native
+  credentials, copying them into new slots while retaining the originals.
 - Read-only native modules recover the old Android Keystore and iOS Keychain,
   local Tic-tac-toe saves and cached branches. Old encrypted files are retained.
   Retired HTML pending branches are archived rather than submitted as new moves.
+  Legacy browser saves belong to their serving origin; native unscoped saves
+  default to production. A retained `game-platform.portal.origin.v1` value can
+  explicitly identify a different legacy origin for recovery. Other API origins
+  never adopt those private views or pending actions merely by sharing a user ID.
 - Existing bookmarks, invite links, installed PWA identity and old generated game
   documents retain narrow compatibility bridges. Those documents render through
   the shared React Native web renderer; there is no second board implementation.

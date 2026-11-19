@@ -5,6 +5,8 @@ import {isQuotaError,utf8Size} from '../platform/recoverable-cache';
 export {utf8Size} from '../platform/recoverable-cache';
 import {originEvictions} from '../platform/origin-cache';
 import {protectedResponsePaths} from './cache-policy';
+import {apiOrigin,DEFAULT_API_ORIGIN} from '../platform/credential-vault';
+export const LEGACY_ORIGIN_KEY='game-platform.portal.origin.v1';
 export interface StorageAdapter { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<void>; removeItem?(key: string): Promise<void>; keys(): Promise<string[]>; exclusive<T>(name: string, run: () => Promise<T>): Promise<T> }
 export const emptyAccountData = (): AccountData => ({ version: 1, responses: {}, queues: {}, conflicts: {}, local: {}, archives: [], archivedMatches: [], selectedId: null });
 export function equal(a: any, b: any): boolean {
@@ -47,6 +49,11 @@ export class AccountRepository {
   async read(id: string): Promise<AccountData> {
     const text = await this.adapter.getItem(this.key(id));
     if (text) { const parsed = JSON.parse(text); if (parsed?.version !== 1 || !parsed.responses || !parsed.queues || !parsed.local) throw new Error('Saved portal data needs recovery; the original data was kept.'); return parsed; }
+    // Browser storage already proves the old serving origin. Native unscoped
+    // saves belong to production; an explicit retained marker can override it.
+    const legacyOrigin=await this.adapter.getItem(LEGACY_ORIGIN_KEY);
+    const originalOrigin=typeof globalThis.location?.origin==='string'?globalThis.location.origin:DEFAULT_API_ORIGIN;
+    if(apiOrigin(this.backend)!==apiOrigin(legacyOrigin??originalOrigin))return emptyAccountData();
     const base = `game-platform.portal.v1.${id}`;
     const legacyText = await this.adapter.getItem(base);
     let raw = legacyText ? JSON.parse(legacyText) : {};

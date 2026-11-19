@@ -6,7 +6,7 @@
   ],
   "allows_leave_mid_match": false,
   "allows_join_mid_match": false,
-  "server_code": "const game = {\n  FLEET: [{name:\"Carrier\",size:5},{name:\"Battleship\",size:4},{name:\"Cruiser\",size:3},{name:\"Submarine\",size:3},{name:\"Destroyer\",size:2}],\n  emptyAtk: function(){ const a=[]; for(let y=0;y<10;y++){a.push([0,0,0,0,0,0,0,0,0,0]);} return a; },\n  setupIdx: function(state){ if(!state.boards[0].ready) return 0; if(!state.boards[1].ready) return 1; return -1; },\n  idxOf: function(state, playerId, ctx){ for(let i=0;i<ctx.players.length;i++) if(ctx.players[i].id===playerId) return i; return -1; },\n  validShips: function(ships){\n    const F=this.FLEET;\n    if(!Array.isArray(ships)||ships.length!==5) return \"need 5 ships\";\n    const byName=Object.create(null);\n    for(const s of ships){ if(!s||typeof s.name!==\"string\"||!Array.isArray(s.cells)) return \"bad ship\"; byName[s.name]=s; }\n    for(const f of F){ const s=byName[f.name]; if(!s) return \"missing \"+f.name; if(s.cells.length!==f.size) return f.name+\" wrong size\"; }\n    const occ=new Set();\n    for(const s of ships){ for(const c of s.cells){ if(!Array.isArray(c)||c.length!==2) return \"bad cell\"; const x=c[0],y=c[1]; if(!Number.isInteger(x)||!Number.isInteger(y)||x<0||x>9||y<0||y>9) return \"off board\"; const k=x+\",\"+y; if(occ.has(k)) return \"overlap\"; occ.add(k); } }\n    const occ2=new Set(occ);\n    for(const s of ships){ for(const c of s.cells){ occ2.delete(c[0]+\",\"+c[1]); } }\n    // check straight + contiguous + no-touch using full occupancy\n    for(const s of ships){\n      const cells=s.cells.slice().sort((a,b)=>(a[1]-b[1])||(a[0]-b[0]));\n      const sameX=cells.every(c=>c[0]===cells[0][0]), sameY=cells.every(c=>c[1]===cells[0][1]);\n      if(!sameX&&!sameY) return s.name+\" must be straight\";\n      for(let i=1;i<cells.length;i++){ const dx=Math.abs(cells[i][0]-cells[i-1][0]), dy=Math.abs(cells[i][1]-cells[i-1][1]); if(dx+dy!==1) return s.name+\" must be contiguous\"; }\n    }\n    const full=new Set(); ships.forEach(s=>s.cells.forEach(c=>full.add(c[0]+\",\"+c[1])));\n    for(const s of ships){ for(const c of s.cells){ for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){ if(!dx&&!dy) continue; const k=(c[0]+dx)+\",\"+(c[1]+dy); if(full.has(k)){ let own=false; for(const cc of s.cells){ if(cc[0]===c[0]+dx&&cc[1]===c[1]+dy){own=true;break;} } if(!own) return \"ships can't touch\"; } } } }\n    return null;\n  },\n  isSunk: function(ship, atk){ if(!ship.cells||!ship.cells.length) return false; for(let i=0;i<ship.cells.length;i++){ const c=ship.cells[i]; if(atk[c[1]][c[0]]!==2) return false; } return true; },\n  allSunk: function(ships, atk){ if(!ships||ships.length!==5) return false; for(let i=0;i<ships.length;i++) if(!this.isSunk(ships[i],atk)) return false; return true; },\n  payoutsFor: function(winnerIdx, ctx){\n    const pot=ctx.pot||0;\n    const humans=ctx.players.filter(p=>p.kind===\"human\");\n    if(humans.length===0) return {};\n    const m={}; humans.forEach(h=>{m[h.id]=0;});\n    if(winnerIdx===0||winnerIdx===1){\n      const w=ctx.players[winnerIdx];\n      if(w&&w.kind===\"human\"){ m[w.id]=pot; return m; }\n    }\n    const share=Math.floor(pot/humans.length); let rem=pot-share*humans.length;\n    humans.forEach(h=>{ m[h.id]=share+(rem>0?1:0); if(rem>0) rem--; });\n    return m;\n  },\n  newMatch: function(ctx){\n    const state={phase:\"SETUP\",boards:[{ships:[],ready:false},{ships:[],ready:false}],attacks:[this.emptyAtk(),this.emptyAtk()],turnIdx:0,winnerIdx:null,last:null,moves:0};\n    return {state:state, turn:[ctx.players[0].id]};\n  },\n  applyMove: function(state, playerId, move, ctx){\n    const idx=this.idxOf(state,playerId,ctx);\n    if(idx!==0&&idx!==1) throw new InvalidMove(\"unknown player\");\n    if(state.winnerIdx===0||state.winnerIdx===1) throw new InvalidMove(\"game over\");\n    if(!move||typeof move.type!==\"string\") throw new InvalidMove(\"bad move\");\n    if(state.phase===\"SETUP\"){\n      if(move.type!==\"place\") throw new InvalidMove(\"place your ships\");\n      const sp=this.setupIdx(state);\n      if(sp<0) throw new InvalidMove(\"setup done\");\n      if(idx!==sp) throw new InvalidMove(\"not your setup turn\");\n      const err=this.validShips(move.ships);\n      if(err) throw new InvalidMove(err);\n      const ships=move.ships.map(s=>({name:s.name,size:this.FLEET.find(f=>f.name===s.name).size,cells:s.cells.map(c=>[c[0],c[1]])}));\n      state.boards[idx].ships=ships;\n      state.boards[idx].ready=true;\n      state.moves++;\n      if(state.boards[0].ready&&state.boards[1].ready){\n        state.phase=\"BATTLE\"; state.turnIdx=0; state.last={msg:\"Battle start! P1 fires. HIT keeps your turn!\"};\n        return {state:state, turn:[ctx.players[0].id]};\n      }\n      const nx=this.setupIdx(state);\n      return {state:state, turn:[ctx.players[nx].id]};\n    }\n    if(state.phase===\"BATTLE\"){\n      if(move.type!==\"fire\") throw new InvalidMove(\"fire with x,y\");\n      if(idx!==state.turnIdx) throw new InvalidMove(\"not your turn\");\n      const x=move.x, y=move.y;\n      if(!Number.isInteger(x)||!Number.isInteger(y)||x<0||x>9||y<0||y>9) throw new InvalidMove(\"off board\");\n      const opp=1-idx;\n      if(state.attacks[opp][y][x]!==0) throw new InvalidMove(\"already shot there\");\n      let hit=false;\n      for(const s of state.boards[opp].ships){ for(const c of s.cells){ if(c[0]===x&&c[1]===y){hit=true;break;} } if(hit) break; }\n      state.attacks[opp][y][x]=hit?2:1;\n      state.moves++;\n      let sunkName=null;\n      if(hit){ for(const s of state.boards[opp].ships){ let on=false; for(const c of s.cells){ if(c[0]===x&&c[1]===y){on=true;break;} } if(on){ if(this.isSunk(s,state.attacks[opp])) sunkName=s.name; break; } } }\n      if(hit&&this.allSunk(state.boards[opp].ships,state.attacks[opp])){\n        state.winnerIdx=idx; state.turnIdx=idx; state.last={by:idx,x:x,y:y,hit:true,sunk:sunkName,gameOver:true};\n        return {state:state, turn:null, payouts:this.payoutsFor(idx,ctx)};\n      }\n      if(state.moves>500){\n        let h0=0,h1=0;\n        state.attacks[0].forEach(r=>r.forEach(c=>{if(c===2)h0++;}));\n        state.attacks[1].forEach(r=>r.forEach(c=>{if(c===2)h1++;}));\n        let w=h0===h1?idx:(h1>h0?1:0);\n        // h1 = hits on P1 = scored by P0; h0 scored by P1. winner is higher scorer\n        w=(h1>=h0)?0:1; if(h0===h1) w=idx;\n        state.winnerIdx=w; state.turnIdx=w; state.last={by:idx,x:x,y:y,hit:hit,sunk:sunkName,gameOver:true,cap:true};\n        return {state:state, turn:null, payouts:this.payoutsFor(w,ctx)};\n      }\n      if(hit){ state.last={by:idx,x:x,y:y,hit:true,sunk:sunkName,extra:true}; state.turnIdx=idx; return {state:state, turn:[ctx.players[idx].id]}; }\n      state.last={by:idx,x:x,y:y,hit:false,sunk:null,extra:false}; state.turnIdx=opp; return {state:state, turn:[ctx.players[opp].id]};\n    }\n    throw new InvalidMove(\"bad phase\");\n  },\n  genFleet: function(rand){\n    const F=this.FLEET;\n    const cellsFor=(sx,sy,size,h)=>{const c=[];for(let i=0;i<size;i++)c.push([h?sx+i:sx,h?sy:sy+i]);return c;};\n    for(let r=0;r<30;r++){\n      const ships=[]; const occ=new Set();\n      const ok=(cells)=>{ for(const cc of cells){ const x=cc[0],y=cc[1]; if(x<0||x>9||y<0||y>9) return false; if(occ.has(x+\",\"+y)) return false; for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){ if(!dx&&!dy) continue; if(occ.has((x+dx)+\",\"+(y+dy))) return false; } } return true; };\n      let fail=false;\n      for(const f of F){\n        let placed=false;\n        for(let t=0;t<60&&!placed;t++){ const h=rand()<0.5; const x=Math.floor(rand()*10), y=Math.floor(rand()*10); const cells=cellsFor(x,y,f.size,h); if(ok(cells)){ ships.push({name:f.name,size:f.size,cells:cells}); cells.forEach(c=>occ.add(c[0]+\",\"+c[1])); placed=true; } }\n        if(!placed){fail=true;break;}\n      }\n      if(!fail&&ships.length===5) return ships;\n    }\n    return [{name:\"Carrier\",size:5,cells:cellsFor(0,0,5,true)},{name:\"Battleship\",size:4,cells:cellsFor(0,2,4,true)},{name:\"Cruiser\",size:3,cells:cellsFor(0,4,3,true)},{name:\"Submarine\",size:3,cells:cellsFor(0,6,3,true)},{name:\"Destroyer\",size:2,cells:cellsFor(0,8,2,true)}];\n  },\n  pickShot: function(state, idx, rand, smart){\n    const opp=1-idx; const atk=state.attacks[opp]; const ships=state.boards[opp].ships;\n    const sunk=new Set();\n    ships.forEach(sh=>{ let all=sh.cells.length>0; for(const c of sh.cells){ if(atk[c[1]][c[0]]!==2){all=false;break;} } if(all) sh.cells.forEach(c=>sunk.add(c[0]+\",\"+c[1])); });\n    if(smart){\n      const hits=[];\n      for(let y=0;y<10;y++) for(let x=0;x<10;x++) if(atk[y][x]===2&&!sunk.has(x+\",\"+y)) hits.push([x,y]);\n      const cand=[]; const seen=new Set();\n      const add=(x,y)=>{ if(x>=0&&x<10&&y>=0&&y<10&&atk[y][x]===0){ const k=x+\",\"+y; if(!seen.has(k)){seen.add(k);cand.push([x,y]);} } };\n      if(hits.length>=2){\n        const sameR=hits.every(c=>c[1]===hits[0][1]), sameC=hits.every(c=>c[0]===hits[0][0]);\n        if(sameR||sameC){\n          const s=hits.slice().sort((a,b)=>sameR?a[0]-b[0]:a[1]-b[1]);\n          const ends=[s[0],s[s.length-1]];\n          for(const e of ends){ if(sameR){add(e[0]+1,e[1]);add(e[0]-1,e[1]);} else {add(e[0],e[1]+1);add(e[0],e[1]-1);} }\n          if(cand.length) return cand[Math.floor(rand()*cand.length)];\n        }\n      }\n      for(const h of hits){ add(h[0]+1,h[1]);add(h[0]-1,h[1]);add(h[0],h[1]+1);add(h[0],h[1]-1); }\n      if(cand.length) return cand[Math.floor(rand()*cand.length)];\n    }\n    const pool=[];\n    for(let y=0;y<10;y++) for(let x=0;x<10;x++) if(atk[y][x]===0) pool.push([x,y]);\n    if(!pool.length) return [0,0];\n    return pool[Math.floor(rand()*pool.length)];\n  },\n  computerMove: function(state, playerId, ctx){\n    const idx=this.idxOf(state,playerId,ctx);\n    const rand=ctx.random;\n    if(state.phase===\"SETUP\") return {type:\"place\",ships:this.genFleet(rand)};\n    const p=this.pickShot(state,idx,rand,true);\n    return {type:\"fire\",x:p[0],y:p[1]};\n  },\n  randomMove: function(state, playerId, ctx){\n    const idx=this.idxOf(state,playerId,ctx);\n    const rand=ctx.random;\n    if(state.phase===\"SETUP\") return {type:\"place\",ships:this.genFleet(rand)};\n    const p=this.pickShot(state,idx,rand,false);\n    return {type:\"fire\",x:p[0],y:p[1]};\n  },\n  viewFor: function(state, playerId, ctx){\n    let me=-1;\n    if(playerId!==null&&playerId!==undefined){ for(let i=0;i<ctx.players.length;i++) if(ctx.players[i].id===playerId){me=i;break;} }\n    const atkCopy=[this.emptyAtk(),this.emptyAtk()];\n    for(let b=0;b<2;b++) for(let y=0;y<10;y++) for(let x=0;x<10;x++) atkCopy[b][y][x]=state.attacks[b][y][x];\n    const filt=(bi)=>{\n      const sh=state.boards[bi].ships||[];\n      if(me===bi||(state.winnerIdx===0||state.winnerIdx===1)) return sh.map(s=>({name:s.name,size:s.size,cells:s.cells.map(c=>[c[0],c[1]])}));\n      const atk=state.attacks[bi];\n      const out=[];\n      for(const s of sh){ let all=s.cells.length>0; for(const c of s.cells){ if(atk[c[1]][c[0]]!==2){all=false;break;} } if(all) out.push({name:s.name,size:s.size,cells:s.cells.map(c=>[c[0],c[1]])}); }\n      return out;\n    };\n    return {phase:state.phase,turnIdx:state.turnIdx,winnerIdx:state.winnerIdx,last:state.last?JSON.parse(JSON.stringify(state.last)):null,moves:state.moves,boards:[{ships:filt(0),ready:!!state.boards[0].ready},{ships:filt(1),ready:!!state.boards[1].ready}],attacks:atkCopy};\n  }\n};\n;(() => {\n  const original = game.computerMove;\n  game.computerMove = function(state, playerId, ctx) {\n    if (state.phase === 'SETUP') return {type:'place',ships:[\n      {name:'Carrier',cells:[[0,0],[1,0],[2,0],[3,0],[4,0]]},\n      {name:'Battleship',cells:[[0,2],[1,2],[2,2],[3,2]]},\n      {name:'Cruiser',cells:[[0,4],[1,4],[2,4]]},\n      {name:'Submarine',cells:[[0,6],[1,6],[2,6]]},\n      {name:'Destroyer',cells:[[0,8],[1,8]]}]};\n    return original.call(this,state,playerId,ctx);\n  };\n})();",
+  "server_code": "const game = {\n  FLEET: [{name:\"Carrier\",size:5},{name:\"Battleship\",size:4},{name:\"Cruiser\",size:3},{name:\"Submarine\",size:3},{name:\"Destroyer\",size:2}],\n  emptyAtk: function(){ const a=[]; for(let y=0;y<10;y++){a.push([0,0,0,0,0,0,0,0,0,0]);} return a; },\n  setupIdx: function(state){ if(!state.boards[0].ready) return 0; if(!state.boards[1].ready) return 1; return -1; },\n  idxOf: function(state, playerId, ctx){ for(let i=0;i<ctx.players.length;i++) if(ctx.players[i].id===playerId) return i; return -1; },\n  validShips: function(ships){\n    const F=this.FLEET;\n    if(!Array.isArray(ships)||ships.length!==5) return \"need 5 ships\";\n    const byName=Object.create(null);\n    for(const s of ships){ if(!s||typeof s.name!==\"string\"||!Array.isArray(s.cells)) return \"bad ship\"; byName[s.name]=s; }\n    for(const f of F){ const s=byName[f.name]; if(!s) return \"missing \"+f.name; if(s.cells.length!==f.size) return f.name+\" wrong size\"; }\n    const occ=new Set();\n    for(const s of ships){ for(const c of s.cells){ if(!Array.isArray(c)||c.length!==2) return \"bad cell\"; const x=c[0],y=c[1]; if(!Number.isInteger(x)||!Number.isInteger(y)||x<0||x>9||y<0||y>9) return \"off board\"; const k=x+\",\"+y; if(occ.has(k)) return \"overlap\"; occ.add(k); } }\n    const occ2=new Set(occ);\n    for(const s of ships){ for(const c of s.cells){ occ2.delete(c[0]+\",\"+c[1]); } }\n    // check straight + contiguous + no-touch using full occupancy\n    for(const s of ships){\n      const cells=s.cells.slice().sort((a,b)=>(a[1]-b[1])||(a[0]-b[0]));\n      const sameX=cells.every(c=>c[0]===cells[0][0]), sameY=cells.every(c=>c[1]===cells[0][1]);\n      if(!sameX&&!sameY) return s.name+\" must be straight\";\n      for(let i=1;i<cells.length;i++){ const dx=Math.abs(cells[i][0]-cells[i-1][0]), dy=Math.abs(cells[i][1]-cells[i-1][1]); if(dx+dy!==1) return s.name+\" must be contiguous\"; }\n    }\n    const full=new Set(); ships.forEach(s=>s.cells.forEach(c=>full.add(c[0]+\",\"+c[1])));\n    for(const s of ships){ for(const c of s.cells){ for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){ if(!dx&&!dy) continue; const k=(c[0]+dx)+\",\"+(c[1]+dy); if(full.has(k)){ let own=false; for(const cc of s.cells){ if(cc[0]===c[0]+dx&&cc[1]===c[1]+dy){own=true;break;} } if(!own) return \"ships can't touch\"; } } } }\n    return null;\n  },\n  isSunk: function(ship, atk){ if(!ship.cells||!ship.cells.length) return false; for(let i=0;i<ship.cells.length;i++){ const c=ship.cells[i]; if(atk[c[1]][c[0]]!==2) return false; } return true; },\n  allSunk: function(ships, atk){ if(!ships||ships.length!==5) return false; for(let i=0;i<ships.length;i++) if(!this.isSunk(ships[i],atk)) return false; return true; },\n  payoutsFor: function(winnerIdx, ctx){\n    const pot=ctx.pot||0;\n    const humans=ctx.players.filter(p=>p.kind===\"human\");\n    if(humans.length===0) return {};\n    const m={}; humans.forEach(h=>{m[h.id]=0;});\n    if(winnerIdx===0||winnerIdx===1){\n      const w=ctx.players[winnerIdx];\n      if(w&&w.kind===\"human\"){ m[w.id]=pot; return m; }\n    }\n    const share=Math.floor(pot/humans.length); let rem=pot-share*humans.length;\n    humans.forEach(h=>{ m[h.id]=share+(rem>0?1:0); if(rem>0) rem--; });\n    return m;\n  },\n  newMatch: function(ctx){\n    const state={phase:\"SETUP\",boards:[{ships:[],ready:false},{ships:[],ready:false}],attacks:[this.emptyAtk(),this.emptyAtk()],turnIdx:0,winnerIdx:null,last:null,moves:0};\n    return {state:state, turn:[ctx.players[0].id]};\n  },\n  applyMove: function(state, playerId, move, ctx){\n    const idx=this.idxOf(state,playerId,ctx);\n    if(idx!==0&&idx!==1) throw new InvalidMove(\"unknown player\");\n    if(state.winnerIdx===0||state.winnerIdx===1) throw new InvalidMove(\"game over\");\n    if(!move||typeof move.type!==\"string\") throw new InvalidMove(\"bad move\");\n    if(state.phase===\"SETUP\"){\n      // Generate an automatic fleet from server-only randomness. A public\n      // presentation must never prescribe the same hidden layout to everyone.\n      if(move.type===\"auto_place\") move={type:\"place\",ships:this.genFleet(ctx.random)};\n      if(move.type!==\"place\") throw new InvalidMove(\"place your ships\");\n      const sp=this.setupIdx(state);\n      if(sp<0) throw new InvalidMove(\"setup done\");\n      if(idx!==sp) throw new InvalidMove(\"not your setup turn\");\n      const err=this.validShips(move.ships);\n      if(err) throw new InvalidMove(err);\n      const ships=move.ships.map(s=>({name:s.name,size:this.FLEET.find(f=>f.name===s.name).size,cells:s.cells.map(c=>[c[0],c[1]])}));\n      state.boards[idx].ships=ships;\n      state.boards[idx].ready=true;\n      state.moves++;\n      if(state.boards[0].ready&&state.boards[1].ready){\n        state.phase=\"BATTLE\"; state.turnIdx=0; state.last={msg:\"Battle start! P1 fires. HIT keeps your turn!\"};\n        return {state:state, turn:[ctx.players[0].id]};\n      }\n      const nx=this.setupIdx(state);\n      return {state:state, turn:[ctx.players[nx].id]};\n    }\n    if(state.phase===\"BATTLE\"){\n      if(move.type!==\"fire\") throw new InvalidMove(\"fire with x,y\");\n      if(idx!==state.turnIdx) throw new InvalidMove(\"not your turn\");\n      const x=move.x, y=move.y;\n      if(!Number.isInteger(x)||!Number.isInteger(y)||x<0||x>9||y<0||y>9) throw new InvalidMove(\"off board\");\n      const opp=1-idx;\n      if(state.attacks[opp][y][x]!==0) throw new InvalidMove(\"already shot there\");\n      let hit=false;\n      for(const s of state.boards[opp].ships){ for(const c of s.cells){ if(c[0]===x&&c[1]===y){hit=true;break;} } if(hit) break; }\n      state.attacks[opp][y][x]=hit?2:1;\n      state.moves++;\n      let sunkName=null;\n      if(hit){ for(const s of state.boards[opp].ships){ let on=false; for(const c of s.cells){ if(c[0]===x&&c[1]===y){on=true;break;} } if(on){ if(this.isSunk(s,state.attacks[opp])) sunkName=s.name; break; } } }\n      if(hit&&this.allSunk(state.boards[opp].ships,state.attacks[opp])){\n        state.winnerIdx=idx; state.turnIdx=idx; state.last={by:idx,x:x,y:y,hit:true,sunk:sunkName,gameOver:true};\n        return {state:state, turn:null, payouts:this.payoutsFor(idx,ctx)};\n      }\n      if(state.moves>500){\n        let h0=0,h1=0;\n        state.attacks[0].forEach(r=>r.forEach(c=>{if(c===2)h0++;}));\n        state.attacks[1].forEach(r=>r.forEach(c=>{if(c===2)h1++;}));\n        let w=h0===h1?idx:(h1>h0?1:0);\n        // h1 = hits on P1 = scored by P0; h0 scored by P1. winner is higher scorer\n        w=(h1>=h0)?0:1; if(h0===h1) w=idx;\n        state.winnerIdx=w; state.turnIdx=w; state.last={by:idx,x:x,y:y,hit:hit,sunk:sunkName,gameOver:true,cap:true};\n        return {state:state, turn:null, payouts:this.payoutsFor(w,ctx)};\n      }\n      if(hit){ state.last={by:idx,x:x,y:y,hit:true,sunk:sunkName,extra:true}; state.turnIdx=idx; return {state:state, turn:[ctx.players[idx].id]}; }\n      state.last={by:idx,x:x,y:y,hit:false,sunk:null,extra:false}; state.turnIdx=opp; return {state:state, turn:[ctx.players[opp].id]};\n    }\n    throw new InvalidMove(\"bad phase\");\n  },\n  genFleet: function(rand){\n    const F=this.FLEET;\n    const cellsFor=(sx,sy,size,h)=>{const c=[];for(let i=0;i<size;i++)c.push([h?sx+i:sx,h?sy:sy+i]);return c;};\n    for(let r=0;r<30;r++){\n      const ships=[]; const occ=new Set();\n      const ok=(cells)=>{ for(const cc of cells){ const x=cc[0],y=cc[1]; if(x<0||x>9||y<0||y>9) return false; if(occ.has(x+\",\"+y)) return false; for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){ if(!dx&&!dy) continue; if(occ.has((x+dx)+\",\"+(y+dy))) return false; } } return true; };\n      let fail=false;\n      for(const f of F){\n        let placed=false;\n        for(let t=0;t<60&&!placed;t++){ const h=rand()<0.5; const x=Math.floor(rand()*10), y=Math.floor(rand()*10); const cells=cellsFor(x,y,f.size,h); if(ok(cells)){ ships.push({name:f.name,size:f.size,cells:cells}); cells.forEach(c=>occ.add(c[0]+\",\"+c[1])); placed=true; } }\n        if(!placed){fail=true;break;}\n      }\n      if(!fail&&ships.length===5) return ships;\n    }\n    // Bounded constructive fallback: keep one clear row between ships, but\n    // still choose their rows, offsets and orientation with private randomness.\n    const rows=[0,2,4,6,8];\n    for(let i=rows.length-1;i>0;i--){const j=Math.floor(rand()*(i+1));const t=rows[i];rows[i]=rows[j];rows[j]=t;}\n    const offset=Math.floor(rand()*2), transpose=rand()<0.5;\n    return F.map((f,i)=>{\n      const cells=cellsFor(Math.floor(rand()*(11-f.size)),rows[i]+offset,f.size,true);\n      return {name:f.name,size:f.size,cells:transpose?cells.map(c=>[c[1],c[0]]):cells};\n    });\n  },\n  pickShot: function(state, idx, rand, smart){\n    const opp=1-idx; const atk=state.attacks[opp]; const ships=state.boards[opp].ships;\n    const sunk=new Set();\n    ships.forEach(sh=>{ let all=sh.cells.length>0; for(const c of sh.cells){ if(atk[c[1]][c[0]]!==2){all=false;break;} } if(all) sh.cells.forEach(c=>sunk.add(c[0]+\",\"+c[1])); });\n    if(smart){\n      const hits=[];\n      for(let y=0;y<10;y++) for(let x=0;x<10;x++) if(atk[y][x]===2&&!sunk.has(x+\",\"+y)) hits.push([x,y]);\n      const cand=[]; const seen=new Set();\n      const add=(x,y)=>{ if(x>=0&&x<10&&y>=0&&y<10&&atk[y][x]===0){ const k=x+\",\"+y; if(!seen.has(k)){seen.add(k);cand.push([x,y]);} } };\n      if(hits.length>=2){\n        const sameR=hits.every(c=>c[1]===hits[0][1]), sameC=hits.every(c=>c[0]===hits[0][0]);\n        if(sameR||sameC){\n          const s=hits.slice().sort((a,b)=>sameR?a[0]-b[0]:a[1]-b[1]);\n          const ends=[s[0],s[s.length-1]];\n          for(const e of ends){ if(sameR){add(e[0]+1,e[1]);add(e[0]-1,e[1]);} else {add(e[0],e[1]+1);add(e[0],e[1]-1);} }\n          if(cand.length) return cand[Math.floor(rand()*cand.length)];\n        }\n      }\n      for(const h of hits){ add(h[0]+1,h[1]);add(h[0]-1,h[1]);add(h[0],h[1]+1);add(h[0],h[1]-1); }\n      if(cand.length) return cand[Math.floor(rand()*cand.length)];\n    }\n    const pool=[];\n    for(let y=0;y<10;y++) for(let x=0;x<10;x++) if(atk[y][x]===0) pool.push([x,y]);\n    if(!pool.length) return [0,0];\n    return pool[Math.floor(rand()*pool.length)];\n  },\n  computerMove: function(state, playerId, ctx){\n    const idx=this.idxOf(state,playerId,ctx);\n    const rand=ctx.random;\n    if(state.phase===\"SETUP\") return {type:\"auto_place\"};\n    const p=this.pickShot(state,idx,rand,true);\n    return {type:\"fire\",x:p[0],y:p[1]};\n  },\n  randomMove: function(state, playerId, ctx){\n    const idx=this.idxOf(state,playerId,ctx);\n    const rand=ctx.random;\n    if(state.phase===\"SETUP\") return {type:\"auto_place\"};\n    const p=this.pickShot(state,idx,rand,false);\n    return {type:\"fire\",x:p[0],y:p[1]};\n  },\n  viewFor: function(state, playerId, ctx){\n    let me=-1;\n    if(playerId!==null&&playerId!==undefined){ for(let i=0;i<ctx.players.length;i++) if(ctx.players[i].id===playerId){me=i;break;} }\n    const atkCopy=[this.emptyAtk(),this.emptyAtk()];\n    for(let b=0;b<2;b++) for(let y=0;y<10;y++) for(let x=0;x<10;x++) atkCopy[b][y][x]=state.attacks[b][y][x];\n    const filt=(bi)=>{\n      const sh=state.boards[bi].ships||[];\n      if(me===bi||(state.winnerIdx===0||state.winnerIdx===1)) return sh.map(s=>({name:s.name,size:s.size,cells:s.cells.map(c=>[c[0],c[1]])}));\n      const atk=state.attacks[bi];\n      const out=[];\n      for(const s of sh){ let all=s.cells.length>0; for(const c of s.cells){ if(atk[c[1]][c[0]]!==2){all=false;break;} } if(all) out.push({name:s.name,size:s.size,cells:s.cells.map(c=>[c[0],c[1]])}); }\n      return out;\n    };\n    return {phase:state.phase,turnIdx:state.turnIdx,winnerIdx:state.winnerIdx,last:state.last?JSON.parse(JSON.stringify(state.last)):null,moves:state.moves,boards:[{ships:filt(0),ready:!!state.boards[0].ready},{ships:filt(1),ready:!!state.boards[1].ready}],attacks:atkCopy};\n  }\n};",
   "rules": "Place a fleet of five ships, then take turns firing at hidden waters. A hit earns another shot; sink the opposing fleet to win.",
   "ui_instructions": "Place the offered valid fleet, then tap an untried target cell. Your fleet and shots remain visible on separate boards.",
   "tutorial": {
@@ -990,102 +990,7 @@
         "player_id": "u1",
         "other_player_id": null,
         "move": {
-          "type": "place",
-          "ships": [
-            {
-              "name": "Carrier",
-              "cells": [
-                [
-                  0,
-                  0
-                ],
-                [
-                  1,
-                  0
-                ],
-                [
-                  2,
-                  0
-                ],
-                [
-                  3,
-                  0
-                ],
-                [
-                  4,
-                  0
-                ]
-              ]
-            },
-            {
-              "name": "Battleship",
-              "cells": [
-                [
-                  0,
-                  2
-                ],
-                [
-                  1,
-                  2
-                ],
-                [
-                  2,
-                  2
-                ],
-                [
-                  3,
-                  2
-                ]
-              ]
-            },
-            {
-              "name": "Cruiser",
-              "cells": [
-                [
-                  0,
-                  4
-                ],
-                [
-                  1,
-                  4
-                ],
-                [
-                  2,
-                  4
-                ]
-              ]
-            },
-            {
-              "name": "Submarine",
-              "cells": [
-                [
-                  0,
-                  6
-                ],
-                [
-                  1,
-                  6
-                ],
-                [
-                  2,
-                  6
-                ]
-              ]
-            },
-            {
-              "name": "Destroyer",
-              "cells": [
-                [
-                  0,
-                  8
-                ],
-                [
-                  1,
-                  8
-                ]
-              ]
-            }
-          ]
+          "type": "auto_place"
         },
         "expected_state": {
           "phase": "SETUP",
@@ -1097,24 +1002,24 @@
                   "size": 5,
                   "cells": [
                     [
-                      0,
-                      0
+                      8,
+                      5
                     ],
                     [
-                      1,
-                      0
+                      8,
+                      6
                     ],
                     [
-                      2,
-                      0
+                      8,
+                      7
                     ],
                     [
-                      3,
-                      0
+                      8,
+                      8
                     ],
                     [
-                      4,
-                      0
+                      8,
+                      9
                     ]
                   ]
                 },
@@ -1123,10 +1028,6 @@
                   "size": 4,
                   "cells": [
                     [
-                      0,
-                      2
-                    ],
-                    [
                       1,
                       2
                     ],
@@ -1136,6 +1037,10 @@
                     ],
                     [
                       3,
+                      2
+                    ],
+                    [
+                      4,
                       2
                     ]
                   ]
@@ -1145,16 +1050,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      4
+                      3,
+                      5
                     ],
                     [
-                      1,
-                      4
+                      4,
+                      5
                     ],
                     [
-                      2,
-                      4
+                      5,
+                      5
                     ]
                   ]
                 },
@@ -1164,15 +1069,15 @@
                   "cells": [
                     [
                       0,
-                      6
+                      7
                     ],
                     [
                       1,
-                      6
+                      7
                     ],
                     [
                       2,
-                      6
+                      7
                     ]
                   ]
                 },
@@ -1181,12 +1086,12 @@
                   "size": 2,
                   "cells": [
                     [
-                      0,
-                      8
+                      8,
+                      1
                     ],
                     [
-                      1,
-                      8
+                      8,
+                      2
                     ]
                   ]
                 }
@@ -1466,24 +1371,24 @@
                   "size": 5,
                   "cells": [
                     [
-                      0,
-                      0
+                      8,
+                      5
                     ],
                     [
-                      1,
-                      0
+                      8,
+                      6
                     ],
                     [
-                      2,
-                      0
+                      8,
+                      7
                     ],
                     [
-                      3,
-                      0
+                      8,
+                      8
                     ],
                     [
-                      4,
-                      0
+                      8,
+                      9
                     ]
                   ]
                 },
@@ -1492,10 +1397,6 @@
                   "size": 4,
                   "cells": [
                     [
-                      0,
-                      2
-                    ],
-                    [
                       1,
                       2
                     ],
@@ -1505,6 +1406,10 @@
                     ],
                     [
                       3,
+                      2
+                    ],
+                    [
+                      4,
                       2
                     ]
                   ]
@@ -1514,16 +1419,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      4
+                      3,
+                      5
                     ],
                     [
-                      1,
-                      4
+                      4,
+                      5
                     ],
                     [
-                      2,
-                      4
+                      5,
+                      5
                     ]
                   ]
                 },
@@ -1533,15 +1438,15 @@
                   "cells": [
                     [
                       0,
-                      6
+                      7
                     ],
                     [
                       1,
-                      6
+                      7
                     ],
                     [
                       2,
-                      6
+                      7
                     ]
                   ]
                 },
@@ -1550,12 +1455,12 @@
                   "size": 2,
                   "cells": [
                     [
-                      0,
-                      8
+                      8,
+                      1
                     ],
                     [
-                      1,
-                      8
+                      8,
+                      2
                     ]
                   ]
                 }
@@ -2133,24 +2038,24 @@
                   "size": 5,
                   "cells": [
                     [
-                      0,
-                      0
+                      8,
+                      5
                     ],
                     [
-                      1,
-                      0
+                      8,
+                      6
                     ],
                     [
-                      2,
-                      0
+                      8,
+                      7
                     ],
                     [
-                      3,
-                      0
+                      8,
+                      8
                     ],
                     [
-                      4,
-                      0
+                      8,
+                      9
                     ]
                   ]
                 },
@@ -2159,10 +2064,6 @@
                   "size": 4,
                   "cells": [
                     [
-                      0,
-                      2
-                    ],
-                    [
                       1,
                       2
                     ],
@@ -2172,6 +2073,10 @@
                     ],
                     [
                       3,
+                      2
+                    ],
+                    [
+                      4,
                       2
                     ]
                   ]
@@ -2181,16 +2086,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      4
+                      3,
+                      5
                     ],
                     [
-                      1,
-                      4
+                      4,
+                      5
                     ],
                     [
-                      2,
-                      4
+                      5,
+                      5
                     ]
                   ]
                 },
@@ -2200,15 +2105,15 @@
                   "cells": [
                     [
                       0,
-                      6
+                      7
                     ],
                     [
                       1,
-                      6
+                      7
                     ],
                     [
                       2,
-                      6
+                      7
                     ]
                   ]
                 },
@@ -2217,12 +2122,12 @@
                   "size": 2,
                   "cells": [
                     [
-                      0,
-                      8
+                      8,
+                      1
                     ],
                     [
-                      1,
-                      8
+                      8,
+                      2
                     ]
                   ]
                 }
@@ -3014,102 +2919,7 @@
         "player_id": "u2",
         "other_player_id": null,
         "move": {
-          "type": "place",
-          "ships": [
-            {
-              "name": "Carrier",
-              "cells": [
-                [
-                  0,
-                  0
-                ],
-                [
-                  1,
-                  0
-                ],
-                [
-                  2,
-                  0
-                ],
-                [
-                  3,
-                  0
-                ],
-                [
-                  4,
-                  0
-                ]
-              ]
-            },
-            {
-              "name": "Battleship",
-              "cells": [
-                [
-                  0,
-                  2
-                ],
-                [
-                  1,
-                  2
-                ],
-                [
-                  2,
-                  2
-                ],
-                [
-                  3,
-                  2
-                ]
-              ]
-            },
-            {
-              "name": "Cruiser",
-              "cells": [
-                [
-                  0,
-                  4
-                ],
-                [
-                  1,
-                  4
-                ],
-                [
-                  2,
-                  4
-                ]
-              ]
-            },
-            {
-              "name": "Submarine",
-              "cells": [
-                [
-                  0,
-                  6
-                ],
-                [
-                  1,
-                  6
-                ],
-                [
-                  2,
-                  6
-                ]
-              ]
-            },
-            {
-              "name": "Destroyer",
-              "cells": [
-                [
-                  0,
-                  8
-                ],
-                [
-                  1,
-                  8
-                ]
-              ]
-            }
-          ]
+          "type": "auto_place"
         },
         "expected_state": {
           "phase": "BATTLE",
@@ -3121,24 +2931,24 @@
                   "size": 5,
                   "cells": [
                     [
-                      0,
-                      0
+                      8,
+                      5
                     ],
                     [
-                      1,
-                      0
+                      8,
+                      6
                     ],
                     [
-                      2,
-                      0
+                      8,
+                      7
                     ],
                     [
-                      3,
-                      0
+                      8,
+                      8
                     ],
                     [
-                      4,
-                      0
+                      8,
+                      9
                     ]
                   ]
                 },
@@ -3147,10 +2957,6 @@
                   "size": 4,
                   "cells": [
                     [
-                      0,
-                      2
-                    ],
-                    [
                       1,
                       2
                     ],
@@ -3160,6 +2966,10 @@
                     ],
                     [
                       3,
+                      2
+                    ],
+                    [
+                      4,
                       2
                     ]
                   ]
@@ -3169,16 +2979,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      4
+                      3,
+                      5
                     ],
                     [
-                      1,
-                      4
+                      4,
+                      5
                     ],
                     [
-                      2,
-                      4
+                      5,
+                      5
                     ]
                   ]
                 },
@@ -3188,15 +2998,15 @@
                   "cells": [
                     [
                       0,
-                      6
+                      7
                     ],
                     [
                       1,
-                      6
+                      7
                     ],
                     [
                       2,
-                      6
+                      7
                     ]
                   ]
                 },
@@ -3205,12 +3015,12 @@
                   "size": 2,
                   "cells": [
                     [
-                      0,
-                      8
+                      8,
+                      1
                     ],
                     [
-                      1,
-                      8
+                      8,
+                      2
                     ]
                   ]
                 }
@@ -3225,23 +3035,23 @@
                   "cells": [
                     [
                       0,
-                      0
+                      5
                     ],
                     [
                       1,
-                      0
+                      5
                     ],
                     [
                       2,
-                      0
+                      5
                     ],
                     [
                       3,
-                      0
+                      5
                     ],
                     [
                       4,
-                      0
+                      5
                     ]
                   ]
                 },
@@ -3250,20 +3060,20 @@
                   "size": 4,
                   "cells": [
                     [
-                      0,
-                      2
+                      1,
+                      0
+                    ],
+                    [
+                      1,
+                      1
                     ],
                     [
                       1,
                       2
                     ],
                     [
-                      2,
-                      2
-                    ],
-                    [
-                      3,
-                      2
+                      1,
+                      3
                     ]
                   ]
                 },
@@ -3272,16 +3082,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      4
+                      6,
+                      5
                     ],
                     [
-                      1,
-                      4
+                      6,
+                      6
                     ],
                     [
-                      2,
-                      4
+                      6,
+                      7
                     ]
                   ]
                 },
@@ -3290,16 +3100,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      6
+                      5,
+                      1
                     ],
                     [
-                      1,
-                      6
+                      5,
+                      2
                     ],
                     [
-                      2,
-                      6
+                      5,
+                      3
                     ]
                   ]
                 },
@@ -3308,12 +3118,12 @@
                   "size": 2,
                   "cells": [
                     [
-                      0,
-                      8
+                      7,
+                      3
                     ],
                     [
-                      1,
-                      8
+                      8,
+                      3
                     ]
                   ]
                 }
@@ -3598,23 +3408,23 @@
                   "cells": [
                     [
                       0,
-                      0
+                      5
                     ],
                     [
                       1,
-                      0
+                      5
                     ],
                     [
                       2,
-                      0
+                      5
                     ],
                     [
                       3,
-                      0
+                      5
                     ],
                     [
                       4,
-                      0
+                      5
                     ]
                   ]
                 },
@@ -3623,20 +3433,20 @@
                   "size": 4,
                   "cells": [
                     [
-                      0,
-                      2
+                      1,
+                      0
+                    ],
+                    [
+                      1,
+                      1
                     ],
                     [
                       1,
                       2
                     ],
                     [
-                      2,
-                      2
-                    ],
-                    [
-                      3,
-                      2
+                      1,
+                      3
                     ]
                   ]
                 },
@@ -3645,16 +3455,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      4
+                      6,
+                      5
                     ],
                     [
-                      1,
-                      4
+                      6,
+                      6
                     ],
                     [
-                      2,
-                      4
+                      6,
+                      7
                     ]
                   ]
                 },
@@ -3663,16 +3473,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      6
+                      5,
+                      1
                     ],
                     [
-                      1,
-                      6
+                      5,
+                      2
                     ],
                     [
-                      2,
-                      6
+                      5,
+                      3
                     ]
                   ]
                 },
@@ -3681,12 +3491,12 @@
                   "size": 2,
                   "cells": [
                     [
-                      0,
-                      8
+                      7,
+                      3
                     ],
                     [
-                      1,
-                      8
+                      8,
+                      3
                     ]
                   ]
                 }
@@ -4249,8 +4059,8 @@
             }
           ],
           "pot": 0,
-          "move_count": 73,
-          "seed": 84
+          "move_count": 63,
+          "seed": 74
         },
         "state": {
           "phase": "BATTLE",
@@ -4262,24 +4072,24 @@
                   "size": 5,
                   "cells": [
                     [
-                      0,
-                      0
+                      8,
+                      5
                     ],
                     [
-                      1,
-                      0
+                      8,
+                      6
                     ],
                     [
-                      2,
-                      0
+                      8,
+                      7
                     ],
                     [
-                      3,
-                      0
+                      8,
+                      8
                     ],
                     [
-                      4,
-                      0
+                      8,
+                      9
                     ]
                   ]
                 },
@@ -4288,10 +4098,6 @@
                   "size": 4,
                   "cells": [
                     [
-                      0,
-                      2
-                    ],
-                    [
                       1,
                       2
                     ],
@@ -4301,6 +4107,10 @@
                     ],
                     [
                       3,
+                      2
+                    ],
+                    [
+                      4,
                       2
                     ]
                   ]
@@ -4310,16 +4120,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      4
+                      3,
+                      5
                     ],
                     [
-                      1,
-                      4
+                      4,
+                      5
                     ],
                     [
-                      2,
-                      4
+                      5,
+                      5
                     ]
                   ]
                 },
@@ -4329,15 +4139,15 @@
                   "cells": [
                     [
                       0,
-                      6
+                      7
                     ],
                     [
                       1,
-                      6
+                      7
                     ],
                     [
                       2,
-                      6
+                      7
                     ]
                   ]
                 },
@@ -4346,12 +4156,12 @@
                   "size": 2,
                   "cells": [
                     [
-                      0,
-                      8
+                      8,
+                      1
                     ],
                     [
-                      1,
-                      8
+                      8,
+                      2
                     ]
                   ]
                 }
@@ -4366,23 +4176,23 @@
                   "cells": [
                     [
                       0,
-                      0
+                      5
                     ],
                     [
                       1,
-                      0
+                      5
                     ],
                     [
                       2,
-                      0
+                      5
                     ],
                     [
                       3,
-                      0
+                      5
                     ],
                     [
                       4,
-                      0
+                      5
                     ]
                   ]
                 },
@@ -4391,20 +4201,20 @@
                   "size": 4,
                   "cells": [
                     [
-                      0,
-                      2
+                      1,
+                      0
+                    ],
+                    [
+                      1,
+                      1
                     ],
                     [
                       1,
                       2
                     ],
                     [
-                      2,
-                      2
-                    ],
-                    [
-                      3,
-                      2
+                      1,
+                      3
                     ]
                   ]
                 },
@@ -4413,16 +4223,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      4
+                      6,
+                      5
                     ],
                     [
-                      1,
-                      4
+                      6,
+                      6
                     ],
                     [
-                      2,
-                      4
+                      6,
+                      7
                     ]
                   ]
                 },
@@ -4431,16 +4241,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      6
+                      5,
+                      1
                     ],
                     [
-                      1,
-                      6
+                      5,
+                      2
                     ],
                     [
-                      2,
-                      6
+                      5,
+                      3
                     ]
                   ]
                 },
@@ -4449,12 +4259,12 @@
                   "size": 2,
                   "cells": [
                     [
-                      0,
-                      8
+                      7,
+                      3
                     ],
                     [
-                      1,
-                      8
+                      8,
+                      3
                     ]
                   ]
                 }
@@ -4465,22 +4275,34 @@
           "attacks": [
             [
               [
-                2,
-                2,
-                2,
-                2,
-                2,
+                0,
+                0,
+                0,
                 1,
                 0,
                 0,
                 1,
+                0,
+                0,
+                0
+              ],
+              [
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
                 0
               ],
               [
                 0,
                 0,
                 0,
-                1,
+                0,
                 0,
                 0,
                 0,
@@ -4489,57 +4311,33 @@
                 0
               ],
               [
-                2,
-                2,
-                2,
-                2,
-                1,
                 0,
                 0,
-                0,
-                0,
-                1
-              ],
-              [
-                0,
-                0,
-                1,
                 1,
                 0,
                 0,
                 1,
                 0,
                 1,
+                0,
                 0
               ],
               [
-                2,
-                2,
-                2,
+                0,
+                0,
+                1,
+                1,
                 0,
                 0,
                 0,
                 0,
                 0,
-                0,
-                1
+                0
               ],
               [
                 1,
-                0,
                 1,
                 0,
-                0,
-                0,
-                0,
-                1,
-                0,
-                1
-              ],
-              [
-                2,
-                2,
-                2,
                 0,
                 0,
                 0,
@@ -4551,49 +4349,121 @@
               [
                 0,
                 1,
-                0,
-                0,
-                0,
                 1,
                 0,
                 0,
                 0,
-                1
+                0,
+                0,
+                0,
+                0
               ],
               [
-                0,
                 2,
-                1,
-                0,
-                0,
-                0,
+                2,
+                2,
                 0,
                 1,
+                1,
+                1,
+                0,
                 0,
                 0
               ],
               [
                 0,
+                0,
+                0,
+                0,
+                1,
+                0,
                 1,
                 0,
                 0,
+                0
+              ],
+              [
                 0,
                 0,
                 0,
                 0,
+                0,
+                1,
+                0,
+                1,
                 0,
                 1
               ]
             ],
             [
               [
+                0,
                 2,
+                0,
+                0,
+                0,
+                1,
+                1,
+                0,
+                0,
+                0
+              ],
+              [
+                1,
                 2,
-                2,
-                2,
+                0,
+                1,
+                1,
                 2,
                 1,
                 0,
+                0,
+                0
+              ],
+              [
+                0,
+                2,
+                1,
+                0,
+                0,
+                2,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                2,
+                0,
+                0,
+                0,
+                0,
+                0,
+                2,
+                2,
+                1
+              ],
+              [
+                1,
+                1,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                1,
+                0
+              ],
+              [
+                2,
+                2,
+                2,
+                2,
+                2,
+                0,
+                2,
                 0,
                 0,
                 1
@@ -4603,9 +4473,9 @@
                 0,
                 0,
                 0,
-                0,
                 1,
                 0,
+                2,
                 0,
                 0,
                 1
@@ -4617,8 +4487,20 @@
                 0,
                 1,
                 0,
+                2,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
                 0,
                 1,
+                1,
+                0,
                 1,
                 0
               ],
@@ -4632,107 +4514,35 @@
                 0,
                 0,
                 0,
-                0
-              ],
-              [
-                2,
-                2,
-                2,
-                1,
-                0,
-                0,
-                0,
-                1,
-                0,
-                1
-              ],
-              [
-                0,
-                0,
-                1,
-                0,
-                1,
-                0,
-                0,
-                1,
-                0,
-                1
-              ],
-              [
-                0,
-                0,
-                0,
-                0,
-                1,
-                0,
-                0,
-                0,
-                0,
-                1
-              ],
-              [
-                0,
-                1,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                1
-              ],
-              [
-                2,
-                2,
-                0,
-                0,
-                0,
-                1,
-                1,
-                0,
-                0,
-                0
-              ],
-              [
-                0,
-                0,
-                0,
-                1,
-                0,
-                0,
-                0,
-                0,
-                1,
                 0
               ]
             ]
           ],
-          "turnIdx": 1,
+          "turnIdx": 0,
           "winnerIdx": null,
           "last": {
             "by": 0,
-            "x": 3,
-            "y": 9,
-            "hit": false,
+            "x": 5,
+            "y": 2,
+            "hit": true,
             "sunk": null,
-            "extra": false
+            "extra": true
           },
-          "moves": 73
+          "moves": 63
         },
         "view_of_mover": {
           "phase": "BATTLE",
-          "turnIdx": 1,
+          "turnIdx": 0,
           "winnerIdx": null,
           "last": {
             "by": 0,
-            "x": 3,
-            "y": 9,
-            "hit": false,
+            "x": 5,
+            "y": 2,
+            "hit": true,
             "sunk": null,
-            "extra": false
+            "extra": true
           },
-          "moves": 73,
+          "moves": 63,
           "boards": [
             {
               "ships": [
@@ -4741,24 +4551,24 @@
                   "size": 5,
                   "cells": [
                     [
-                      0,
-                      0
+                      8,
+                      5
                     ],
                     [
-                      1,
-                      0
+                      8,
+                      6
                     ],
                     [
-                      2,
-                      0
+                      8,
+                      7
                     ],
                     [
-                      3,
-                      0
+                      8,
+                      8
                     ],
                     [
-                      4,
-                      0
+                      8,
+                      9
                     ]
                   ]
                 },
@@ -4767,10 +4577,6 @@
                   "size": 4,
                   "cells": [
                     [
-                      0,
-                      2
-                    ],
-                    [
                       1,
                       2
                     ],
@@ -4780,6 +4586,10 @@
                     ],
                     [
                       3,
+                      2
+                    ],
+                    [
+                      4,
                       2
                     ]
                   ]
@@ -4789,16 +4599,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      4
+                      3,
+                      5
                     ],
                     [
-                      1,
-                      4
+                      4,
+                      5
                     ],
                     [
-                      2,
-                      4
+                      5,
+                      5
                     ]
                   ]
                 },
@@ -4808,15 +4618,29 @@
                   "cells": [
                     [
                       0,
-                      6
+                      7
                     ],
                     [
                       1,
-                      6
+                      7
                     ],
                     [
                       2,
-                      6
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "name": "Destroyer",
+                  "size": 2,
+                  "cells": [
+                    [
+                      8,
+                      1
+                    ],
+                    [
+                      8,
+                      2
                     ]
                   ]
                 }
@@ -4831,23 +4655,23 @@
                   "cells": [
                     [
                       0,
-                      0
+                      5
                     ],
                     [
                       1,
-                      0
+                      5
                     ],
                     [
                       2,
-                      0
+                      5
                     ],
                     [
                       3,
-                      0
+                      5
                     ],
                     [
                       4,
-                      0
+                      5
                     ]
                   ]
                 },
@@ -4856,20 +4680,20 @@
                   "size": 4,
                   "cells": [
                     [
-                      0,
-                      2
+                      1,
+                      0
+                    ],
+                    [
+                      1,
+                      1
                     ],
                     [
                       1,
                       2
                     ],
                     [
-                      2,
-                      2
-                    ],
-                    [
-                      3,
-                      2
+                      1,
+                      3
                     ]
                   ]
                 },
@@ -4878,34 +4702,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      4
+                      6,
+                      5
                     ],
                     [
-                      1,
-                      4
-                    ],
-                    [
-                      2,
-                      4
-                    ]
-                  ]
-                },
-                {
-                  "name": "Submarine",
-                  "size": 3,
-                  "cells": [
-                    [
-                      0,
+                      6,
                       6
                     ],
                     [
-                      1,
-                      6
-                    ],
-                    [
-                      2,
-                      6
+                      6,
+                      7
                     ]
                   ]
                 },
@@ -4914,12 +4720,12 @@
                   "size": 2,
                   "cells": [
                     [
-                      0,
-                      8
+                      7,
+                      3
                     ],
                     [
-                      1,
-                      8
+                      8,
+                      3
                     ]
                   ]
                 }
@@ -4930,22 +4736,34 @@
           "attacks": [
             [
               [
-                2,
-                2,
-                2,
-                2,
-                2,
+                0,
+                0,
+                0,
                 1,
                 0,
                 0,
                 1,
+                0,
+                0,
+                0
+              ],
+              [
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
                 0
               ],
               [
                 0,
                 0,
                 0,
-                1,
+                0,
                 0,
                 0,
                 0,
@@ -4954,57 +4772,33 @@
                 0
               ],
               [
-                2,
-                2,
-                2,
-                2,
-                1,
                 0,
                 0,
-                0,
-                0,
-                1
-              ],
-              [
-                0,
-                0,
-                1,
                 1,
                 0,
                 0,
                 1,
                 0,
                 1,
+                0,
                 0
               ],
               [
-                2,
-                2,
-                2,
+                0,
+                0,
+                1,
+                1,
                 0,
                 0,
                 0,
                 0,
                 0,
-                0,
-                1
+                0
               ],
               [
                 1,
-                0,
                 1,
                 0,
-                0,
-                0,
-                0,
-                1,
-                0,
-                1
-              ],
-              [
-                2,
-                2,
-                2,
                 0,
                 0,
                 0,
@@ -5016,49 +4810,121 @@
               [
                 0,
                 1,
-                0,
-                0,
-                0,
                 1,
                 0,
                 0,
                 0,
-                1
+                0,
+                0,
+                0,
+                0
               ],
               [
-                0,
                 2,
-                1,
-                0,
-                0,
-                0,
+                2,
+                2,
                 0,
                 1,
+                1,
+                1,
+                0,
                 0,
                 0
               ],
               [
                 0,
+                0,
+                0,
+                0,
+                1,
+                0,
                 1,
                 0,
                 0,
+                0
+              ],
+              [
                 0,
                 0,
                 0,
                 0,
+                0,
+                1,
+                0,
+                1,
                 0,
                 1
               ]
             ],
             [
               [
+                0,
                 2,
+                0,
+                0,
+                0,
+                1,
+                1,
+                0,
+                0,
+                0
+              ],
+              [
+                1,
                 2,
-                2,
-                2,
+                0,
+                1,
+                1,
                 2,
                 1,
                 0,
+                0,
+                0
+              ],
+              [
+                0,
+                2,
+                1,
+                0,
+                0,
+                2,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                2,
+                0,
+                0,
+                0,
+                0,
+                0,
+                2,
+                2,
+                1
+              ],
+              [
+                1,
+                1,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                1,
+                0
+              ],
+              [
+                2,
+                2,
+                2,
+                2,
+                2,
+                0,
+                2,
                 0,
                 0,
                 1
@@ -5068,9 +4934,9 @@
                 0,
                 0,
                 0,
-                0,
                 1,
                 0,
+                2,
                 0,
                 0,
                 1
@@ -5082,8 +4948,20 @@
                 0,
                 1,
                 0,
+                2,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
                 0,
                 1,
+                1,
+                0,
                 1,
                 0
               ],
@@ -5097,78 +4975,6 @@
                 0,
                 0,
                 0,
-                0
-              ],
-              [
-                2,
-                2,
-                2,
-                1,
-                0,
-                0,
-                0,
-                1,
-                0,
-                1
-              ],
-              [
-                0,
-                0,
-                1,
-                0,
-                1,
-                0,
-                0,
-                1,
-                0,
-                1
-              ],
-              [
-                0,
-                0,
-                0,
-                0,
-                1,
-                0,
-                0,
-                0,
-                0,
-                1
-              ],
-              [
-                0,
-                1,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                1
-              ],
-              [
-                2,
-                2,
-                0,
-                0,
-                0,
-                1,
-                1,
-                0,
-                0,
-                0
-              ],
-              [
-                0,
-                0,
-                0,
-                1,
-                0,
-                0,
-                0,
-                0,
-                1,
                 0
               ]
             ]
@@ -5176,101 +4982,35 @@
         },
         "view_of_other": {
           "phase": "BATTLE",
-          "turnIdx": 1,
+          "turnIdx": 0,
           "winnerIdx": null,
           "last": {
             "by": 0,
-            "x": 3,
-            "y": 9,
-            "hit": false,
+            "x": 5,
+            "y": 2,
+            "hit": true,
             "sunk": null,
-            "extra": false
+            "extra": true
           },
-          "moves": 73,
+          "moves": 63,
           "boards": [
             {
               "ships": [
-                {
-                  "name": "Carrier",
-                  "size": 5,
-                  "cells": [
-                    [
-                      0,
-                      0
-                    ],
-                    [
-                      1,
-                      0
-                    ],
-                    [
-                      2,
-                      0
-                    ],
-                    [
-                      3,
-                      0
-                    ],
-                    [
-                      4,
-                      0
-                    ]
-                  ]
-                },
-                {
-                  "name": "Battleship",
-                  "size": 4,
-                  "cells": [
-                    [
-                      0,
-                      2
-                    ],
-                    [
-                      1,
-                      2
-                    ],
-                    [
-                      2,
-                      2
-                    ],
-                    [
-                      3,
-                      2
-                    ]
-                  ]
-                },
-                {
-                  "name": "Cruiser",
-                  "size": 3,
-                  "cells": [
-                    [
-                      0,
-                      4
-                    ],
-                    [
-                      1,
-                      4
-                    ],
-                    [
-                      2,
-                      4
-                    ]
-                  ]
-                },
                 {
                   "name": "Submarine",
                   "size": 3,
                   "cells": [
                     [
                       0,
-                      6
+                      7
                     ],
                     [
                       1,
-                      6
+                      7
                     ],
                     [
                       2,
-                      6
+                      7
                     ]
                   ]
                 }
@@ -5285,23 +5025,45 @@
                   "cells": [
                     [
                       0,
-                      0
+                      5
                     ],
+                    [
+                      1,
+                      5
+                    ],
+                    [
+                      2,
+                      5
+                    ],
+                    [
+                      3,
+                      5
+                    ],
+                    [
+                      4,
+                      5
+                    ]
+                  ]
+                },
+                {
+                  "name": "Battleship",
+                  "size": 4,
+                  "cells": [
                     [
                       1,
                       0
                     ],
                     [
-                      2,
-                      0
+                      1,
+                      1
                     ],
                     [
-                      3,
-                      0
+                      1,
+                      2
                     ],
                     [
-                      4,
-                      0
+                      1,
+                      3
                     ]
                   ]
                 },
@@ -5310,16 +5072,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      4
+                      6,
+                      5
                     ],
                     [
-                      1,
-                      4
+                      6,
+                      6
                     ],
                     [
-                      2,
-                      4
+                      6,
+                      7
                     ]
                   ]
                 },
@@ -5328,12 +5090,12 @@
                   "size": 2,
                   "cells": [
                     [
-                      0,
-                      8
+                      7,
+                      3
                     ],
                     [
-                      1,
-                      8
+                      8,
+                      3
                     ]
                   ]
                 }
@@ -5344,22 +5106,34 @@
           "attacks": [
             [
               [
-                2,
-                2,
-                2,
-                2,
-                2,
+                0,
+                0,
+                0,
                 1,
                 0,
                 0,
                 1,
+                0,
+                0,
+                0
+              ],
+              [
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
                 0
               ],
               [
                 0,
                 0,
                 0,
-                1,
+                0,
                 0,
                 0,
                 0,
@@ -5368,57 +5142,33 @@
                 0
               ],
               [
-                2,
-                2,
-                2,
-                2,
-                1,
                 0,
                 0,
-                0,
-                0,
-                1
-              ],
-              [
-                0,
-                0,
-                1,
                 1,
                 0,
                 0,
                 1,
                 0,
                 1,
+                0,
                 0
               ],
               [
-                2,
-                2,
-                2,
+                0,
+                0,
+                1,
+                1,
                 0,
                 0,
                 0,
                 0,
                 0,
-                0,
-                1
+                0
               ],
               [
                 1,
-                0,
                 1,
                 0,
-                0,
-                0,
-                0,
-                1,
-                0,
-                1
-              ],
-              [
-                2,
-                2,
-                2,
                 0,
                 0,
                 0,
@@ -5430,49 +5180,121 @@
               [
                 0,
                 1,
-                0,
-                0,
-                0,
                 1,
                 0,
                 0,
                 0,
-                1
+                0,
+                0,
+                0,
+                0
               ],
               [
-                0,
                 2,
-                1,
-                0,
-                0,
-                0,
+                2,
+                2,
                 0,
                 1,
+                1,
+                1,
+                0,
                 0,
                 0
               ],
               [
                 0,
+                0,
+                0,
+                0,
+                1,
+                0,
                 1,
                 0,
                 0,
+                0
+              ],
+              [
                 0,
                 0,
                 0,
                 0,
+                0,
+                1,
+                0,
+                1,
                 0,
                 1
               ]
             ],
             [
               [
+                0,
                 2,
+                0,
+                0,
+                0,
+                1,
+                1,
+                0,
+                0,
+                0
+              ],
+              [
+                1,
                 2,
-                2,
-                2,
+                0,
+                1,
+                1,
                 2,
                 1,
                 0,
+                0,
+                0
+              ],
+              [
+                0,
+                2,
+                1,
+                0,
+                0,
+                2,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                2,
+                0,
+                0,
+                0,
+                0,
+                0,
+                2,
+                2,
+                1
+              ],
+              [
+                1,
+                1,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                1,
+                0
+              ],
+              [
+                2,
+                2,
+                2,
+                2,
+                2,
+                0,
+                2,
                 0,
                 0,
                 1
@@ -5482,9 +5304,9 @@
                 0,
                 0,
                 0,
-                0,
                 1,
                 0,
+                2,
                 0,
                 0,
                 1
@@ -5496,8 +5318,20 @@
                 0,
                 1,
                 0,
+                2,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
                 0,
                 1,
+                1,
+                0,
                 1,
                 0
               ],
@@ -5511,89 +5345,17 @@
                 0,
                 0,
                 0,
-                0
-              ],
-              [
-                2,
-                2,
-                2,
-                1,
-                0,
-                0,
-                0,
-                1,
-                0,
-                1
-              ],
-              [
-                0,
-                0,
-                1,
-                0,
-                1,
-                0,
-                0,
-                1,
-                0,
-                1
-              ],
-              [
-                0,
-                0,
-                0,
-                0,
-                1,
-                0,
-                0,
-                0,
-                0,
-                1
-              ],
-              [
-                0,
-                1,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                1
-              ],
-              [
-                2,
-                2,
-                0,
-                0,
-                0,
-                1,
-                1,
-                0,
-                0,
-                0
-              ],
-              [
-                0,
-                0,
-                0,
-                1,
-                0,
-                0,
-                0,
-                0,
-                1,
                 0
               ]
             ]
           ]
         },
-        "player_id": "u2",
+        "player_id": "u1",
         "other_player_id": null,
         "move": {
           "type": "fire",
-          "x": 0,
-          "y": 8
+          "x": 5,
+          "y": 3
         },
         "expected_state": {
           "phase": "BATTLE",
@@ -5605,24 +5367,24 @@
                   "size": 5,
                   "cells": [
                     [
-                      0,
-                      0
+                      8,
+                      5
                     ],
                     [
-                      1,
-                      0
+                      8,
+                      6
                     ],
                     [
-                      2,
-                      0
+                      8,
+                      7
                     ],
                     [
-                      3,
-                      0
+                      8,
+                      8
                     ],
                     [
-                      4,
-                      0
+                      8,
+                      9
                     ]
                   ]
                 },
@@ -5631,10 +5393,6 @@
                   "size": 4,
                   "cells": [
                     [
-                      0,
-                      2
-                    ],
-                    [
                       1,
                       2
                     ],
@@ -5644,6 +5402,10 @@
                     ],
                     [
                       3,
+                      2
+                    ],
+                    [
+                      4,
                       2
                     ]
                   ]
@@ -5653,16 +5415,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      4
+                      3,
+                      5
                     ],
                     [
-                      1,
-                      4
+                      4,
+                      5
                     ],
                     [
-                      2,
-                      4
+                      5,
+                      5
                     ]
                   ]
                 },
@@ -5672,15 +5434,15 @@
                   "cells": [
                     [
                       0,
-                      6
+                      7
                     ],
                     [
                       1,
-                      6
+                      7
                     ],
                     [
                       2,
-                      6
+                      7
                     ]
                   ]
                 },
@@ -5689,12 +5451,12 @@
                   "size": 2,
                   "cells": [
                     [
-                      0,
-                      8
+                      8,
+                      1
                     ],
                     [
-                      1,
-                      8
+                      8,
+                      2
                     ]
                   ]
                 }
@@ -5709,23 +5471,23 @@
                   "cells": [
                     [
                       0,
-                      0
+                      5
                     ],
                     [
                       1,
-                      0
+                      5
                     ],
                     [
                       2,
-                      0
+                      5
                     ],
                     [
                       3,
-                      0
+                      5
                     ],
                     [
                       4,
-                      0
+                      5
                     ]
                   ]
                 },
@@ -5734,20 +5496,20 @@
                   "size": 4,
                   "cells": [
                     [
-                      0,
-                      2
+                      1,
+                      0
+                    ],
+                    [
+                      1,
+                      1
                     ],
                     [
                       1,
                       2
                     ],
                     [
-                      2,
-                      2
-                    ],
-                    [
-                      3,
-                      2
+                      1,
+                      3
                     ]
                   ]
                 },
@@ -5756,16 +5518,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      4
+                      6,
+                      5
                     ],
                     [
-                      1,
-                      4
+                      6,
+                      6
                     ],
                     [
-                      2,
-                      4
+                      6,
+                      7
                     ]
                   ]
                 },
@@ -5774,16 +5536,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      6
+                      5,
+                      1
                     ],
                     [
-                      1,
-                      6
+                      5,
+                      2
                     ],
                     [
-                      2,
-                      6
+                      5,
+                      3
                     ]
                   ]
                 },
@@ -5792,12 +5554,12 @@
                   "size": 2,
                   "cells": [
                     [
-                      0,
-                      8
+                      7,
+                      3
                     ],
                     [
-                      1,
-                      8
+                      8,
+                      3
                     ]
                   ]
                 }
@@ -5808,22 +5570,34 @@
           "attacks": [
             [
               [
-                2,
-                2,
-                2,
-                2,
-                2,
+                0,
+                0,
+                0,
                 1,
                 0,
                 0,
                 1,
+                0,
+                0,
+                0
+              ],
+              [
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
                 0
               ],
               [
                 0,
                 0,
                 0,
-                1,
+                0,
                 0,
                 0,
                 0,
@@ -5832,57 +5606,33 @@
                 0
               ],
               [
-                2,
-                2,
-                2,
-                2,
-                1,
                 0,
                 0,
-                0,
-                0,
-                1
-              ],
-              [
-                0,
-                0,
-                1,
                 1,
                 0,
                 0,
                 1,
                 0,
                 1,
+                0,
                 0
               ],
               [
-                2,
-                2,
-                2,
+                0,
+                0,
+                1,
+                1,
                 0,
                 0,
                 0,
                 0,
                 0,
-                0,
-                1
+                0
               ],
               [
                 1,
-                0,
                 1,
                 0,
-                0,
-                0,
-                0,
-                1,
-                0,
-                1
-              ],
-              [
-                2,
-                2,
-                2,
                 0,
                 0,
                 0,
@@ -5894,49 +5644,121 @@
               [
                 0,
                 1,
-                0,
-                0,
-                0,
                 1,
                 0,
                 0,
                 0,
-                1
+                0,
+                0,
+                0,
+                0
               ],
               [
                 2,
                 2,
-                1,
-                0,
-                0,
-                0,
+                2,
                 0,
                 1,
+                1,
+                1,
+                0,
                 0,
                 0
               ],
               [
                 0,
+                0,
+                0,
+                0,
+                1,
+                0,
                 1,
                 0,
                 0,
+                0
+              ],
+              [
                 0,
                 0,
                 0,
                 0,
+                0,
+                1,
+                0,
+                1,
                 0,
                 1
               ]
             ],
             [
               [
+                0,
                 2,
+                0,
+                0,
+                0,
+                1,
+                1,
+                0,
+                0,
+                0
+              ],
+              [
+                1,
                 2,
-                2,
-                2,
+                0,
+                1,
+                1,
                 2,
                 1,
                 0,
+                0,
+                0
+              ],
+              [
+                0,
+                2,
+                1,
+                0,
+                0,
+                2,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                2,
+                0,
+                0,
+                0,
+                2,
+                0,
+                2,
+                2,
+                1
+              ],
+              [
+                1,
+                1,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                1,
+                0
+              ],
+              [
+                2,
+                2,
+                2,
+                2,
+                2,
+                0,
+                2,
                 0,
                 0,
                 1
@@ -5946,9 +5768,9 @@
                 0,
                 0,
                 0,
-                0,
                 1,
                 0,
+                2,
                 0,
                 0,
                 1
@@ -5960,8 +5782,20 @@
                 0,
                 1,
                 0,
+                2,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
                 0,
                 1,
+                1,
+                0,
                 1,
                 0
               ],
@@ -5975,108 +5809,36 @@
                 0,
                 0,
                 0,
-                0
-              ],
-              [
-                2,
-                2,
-                2,
-                1,
-                0,
-                0,
-                0,
-                1,
-                0,
-                1
-              ],
-              [
-                0,
-                0,
-                1,
-                0,
-                1,
-                0,
-                0,
-                1,
-                0,
-                1
-              ],
-              [
-                0,
-                0,
-                0,
-                0,
-                1,
-                0,
-                0,
-                0,
-                0,
-                1
-              ],
-              [
-                0,
-                1,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                1
-              ],
-              [
-                2,
-                2,
-                0,
-                0,
-                0,
-                1,
-                1,
-                0,
-                0,
-                0
-              ],
-              [
-                0,
-                0,
-                0,
-                1,
-                0,
-                0,
-                0,
-                0,
-                1,
                 0
               ]
             ]
           ],
-          "turnIdx": 1,
-          "winnerIdx": 1,
+          "turnIdx": 0,
+          "winnerIdx": 0,
           "last": {
-            "by": 1,
-            "x": 0,
-            "y": 8,
+            "by": 0,
+            "x": 5,
+            "y": 3,
             "hit": true,
-            "sunk": "Destroyer",
+            "sunk": "Submarine",
             "gameOver": true
           },
-          "moves": 74
+          "moves": 64
         },
         "expected_turn": null,
         "expected_view_of_mover": {
           "phase": "BATTLE",
-          "turnIdx": 1,
-          "winnerIdx": 1,
+          "turnIdx": 0,
+          "winnerIdx": 0,
           "last": {
-            "by": 1,
-            "x": 0,
-            "y": 8,
+            "by": 0,
+            "x": 5,
+            "y": 3,
             "hit": true,
-            "sunk": "Destroyer",
+            "sunk": "Submarine",
             "gameOver": true
           },
-          "moves": 74,
+          "moves": 64,
           "boards": [
             {
               "ships": [
@@ -6085,24 +5847,24 @@
                   "size": 5,
                   "cells": [
                     [
-                      0,
-                      0
+                      8,
+                      5
                     ],
                     [
-                      1,
-                      0
+                      8,
+                      6
                     ],
                     [
-                      2,
-                      0
+                      8,
+                      7
                     ],
                     [
-                      3,
-                      0
+                      8,
+                      8
                     ],
                     [
-                      4,
-                      0
+                      8,
+                      9
                     ]
                   ]
                 },
@@ -6111,10 +5873,6 @@
                   "size": 4,
                   "cells": [
                     [
-                      0,
-                      2
-                    ],
-                    [
                       1,
                       2
                     ],
@@ -6124,6 +5882,10 @@
                     ],
                     [
                       3,
+                      2
+                    ],
+                    [
+                      4,
                       2
                     ]
                   ]
@@ -6133,16 +5895,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      4
+                      3,
+                      5
                     ],
                     [
-                      1,
-                      4
+                      4,
+                      5
                     ],
                     [
-                      2,
-                      4
+                      5,
+                      5
                     ]
                   ]
                 },
@@ -6152,15 +5914,15 @@
                   "cells": [
                     [
                       0,
-                      6
+                      7
                     ],
                     [
                       1,
-                      6
+                      7
                     ],
                     [
                       2,
-                      6
+                      7
                     ]
                   ]
                 },
@@ -6169,12 +5931,12 @@
                   "size": 2,
                   "cells": [
                     [
-                      0,
-                      8
+                      8,
+                      1
                     ],
                     [
-                      1,
-                      8
+                      8,
+                      2
                     ]
                   ]
                 }
@@ -6189,23 +5951,23 @@
                   "cells": [
                     [
                       0,
-                      0
+                      5
                     ],
                     [
                       1,
-                      0
+                      5
                     ],
                     [
                       2,
-                      0
+                      5
                     ],
                     [
                       3,
-                      0
+                      5
                     ],
                     [
                       4,
-                      0
+                      5
                     ]
                   ]
                 },
@@ -6214,20 +5976,20 @@
                   "size": 4,
                   "cells": [
                     [
-                      0,
-                      2
+                      1,
+                      0
+                    ],
+                    [
+                      1,
+                      1
                     ],
                     [
                       1,
                       2
                     ],
                     [
-                      2,
-                      2
-                    ],
-                    [
-                      3,
-                      2
+                      1,
+                      3
                     ]
                   ]
                 },
@@ -6236,16 +5998,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      4
+                      6,
+                      5
                     ],
                     [
-                      1,
-                      4
+                      6,
+                      6
                     ],
                     [
-                      2,
-                      4
+                      6,
+                      7
                     ]
                   ]
                 },
@@ -6254,16 +6016,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      6
+                      5,
+                      1
                     ],
                     [
-                      1,
-                      6
+                      5,
+                      2
                     ],
                     [
-                      2,
-                      6
+                      5,
+                      3
                     ]
                   ]
                 },
@@ -6272,12 +6034,12 @@
                   "size": 2,
                   "cells": [
                     [
-                      0,
-                      8
+                      7,
+                      3
                     ],
                     [
-                      1,
-                      8
+                      8,
+                      3
                     ]
                   ]
                 }
@@ -6288,22 +6050,34 @@
           "attacks": [
             [
               [
-                2,
-                2,
-                2,
-                2,
-                2,
+                0,
+                0,
+                0,
                 1,
                 0,
                 0,
                 1,
+                0,
+                0,
+                0
+              ],
+              [
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
                 0
               ],
               [
                 0,
                 0,
                 0,
-                1,
+                0,
                 0,
                 0,
                 0,
@@ -6312,57 +6086,33 @@
                 0
               ],
               [
-                2,
-                2,
-                2,
-                2,
-                1,
                 0,
                 0,
-                0,
-                0,
-                1
-              ],
-              [
-                0,
-                0,
-                1,
                 1,
                 0,
                 0,
                 1,
                 0,
                 1,
+                0,
                 0
               ],
               [
-                2,
-                2,
-                2,
+                0,
+                0,
+                1,
+                1,
                 0,
                 0,
                 0,
                 0,
                 0,
-                0,
-                1
+                0
               ],
               [
                 1,
-                0,
                 1,
                 0,
-                0,
-                0,
-                0,
-                1,
-                0,
-                1
-              ],
-              [
-                2,
-                2,
-                2,
                 0,
                 0,
                 0,
@@ -6374,49 +6124,121 @@
               [
                 0,
                 1,
-                0,
-                0,
-                0,
                 1,
                 0,
                 0,
                 0,
-                1
+                0,
+                0,
+                0,
+                0
               ],
               [
                 2,
                 2,
-                1,
-                0,
-                0,
-                0,
+                2,
                 0,
                 1,
+                1,
+                1,
+                0,
                 0,
                 0
               ],
               [
                 0,
+                0,
+                0,
+                0,
+                1,
+                0,
                 1,
                 0,
                 0,
+                0
+              ],
+              [
                 0,
                 0,
                 0,
                 0,
+                0,
+                1,
+                0,
+                1,
                 0,
                 1
               ]
             ],
             [
               [
+                0,
                 2,
+                0,
+                0,
+                0,
+                1,
+                1,
+                0,
+                0,
+                0
+              ],
+              [
+                1,
                 2,
-                2,
-                2,
+                0,
+                1,
+                1,
                 2,
                 1,
                 0,
+                0,
+                0
+              ],
+              [
+                0,
+                2,
+                1,
+                0,
+                0,
+                2,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                2,
+                0,
+                0,
+                0,
+                2,
+                0,
+                2,
+                2,
+                1
+              ],
+              [
+                1,
+                1,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                1,
+                0
+              ],
+              [
+                2,
+                2,
+                2,
+                2,
+                2,
+                0,
+                2,
                 0,
                 0,
                 1
@@ -6426,9 +6248,9 @@
                 0,
                 0,
                 0,
-                0,
                 1,
                 0,
+                2,
                 0,
                 0,
                 1
@@ -6440,8 +6262,20 @@
                 0,
                 1,
                 0,
+                2,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
                 0,
                 1,
+                1,
+                0,
                 1,
                 0
               ],
@@ -6455,78 +6289,6 @@
                 0,
                 0,
                 0,
-                0
-              ],
-              [
-                2,
-                2,
-                2,
-                1,
-                0,
-                0,
-                0,
-                1,
-                0,
-                1
-              ],
-              [
-                0,
-                0,
-                1,
-                0,
-                1,
-                0,
-                0,
-                1,
-                0,
-                1
-              ],
-              [
-                0,
-                0,
-                0,
-                0,
-                1,
-                0,
-                0,
-                0,
-                0,
-                1
-              ],
-              [
-                0,
-                1,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                1
-              ],
-              [
-                2,
-                2,
-                0,
-                0,
-                0,
-                1,
-                1,
-                0,
-                0,
-                0
-              ],
-              [
-                0,
-                0,
-                0,
-                1,
-                0,
-                0,
-                0,
-                0,
-                1,
                 0
               ]
             ]
@@ -6534,17 +6296,17 @@
         },
         "expected_view_of_other": {
           "phase": "BATTLE",
-          "turnIdx": 1,
-          "winnerIdx": 1,
+          "turnIdx": 0,
+          "winnerIdx": 0,
           "last": {
-            "by": 1,
-            "x": 0,
-            "y": 8,
+            "by": 0,
+            "x": 5,
+            "y": 3,
             "hit": true,
-            "sunk": "Destroyer",
+            "sunk": "Submarine",
             "gameOver": true
           },
-          "moves": 74,
+          "moves": 64,
           "boards": [
             {
               "ships": [
@@ -6553,24 +6315,24 @@
                   "size": 5,
                   "cells": [
                     [
-                      0,
-                      0
+                      8,
+                      5
                     ],
                     [
-                      1,
-                      0
+                      8,
+                      6
                     ],
                     [
-                      2,
-                      0
+                      8,
+                      7
                     ],
                     [
-                      3,
-                      0
+                      8,
+                      8
                     ],
                     [
-                      4,
-                      0
+                      8,
+                      9
                     ]
                   ]
                 },
@@ -6579,10 +6341,6 @@
                   "size": 4,
                   "cells": [
                     [
-                      0,
-                      2
-                    ],
-                    [
                       1,
                       2
                     ],
@@ -6592,6 +6350,10 @@
                     ],
                     [
                       3,
+                      2
+                    ],
+                    [
+                      4,
                       2
                     ]
                   ]
@@ -6601,16 +6363,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      4
+                      3,
+                      5
                     ],
                     [
-                      1,
-                      4
+                      4,
+                      5
                     ],
                     [
-                      2,
-                      4
+                      5,
+                      5
                     ]
                   ]
                 },
@@ -6620,15 +6382,15 @@
                   "cells": [
                     [
                       0,
-                      6
+                      7
                     ],
                     [
                       1,
-                      6
+                      7
                     ],
                     [
                       2,
-                      6
+                      7
                     ]
                   ]
                 },
@@ -6637,12 +6399,12 @@
                   "size": 2,
                   "cells": [
                     [
-                      0,
-                      8
+                      8,
+                      1
                     ],
                     [
-                      1,
-                      8
+                      8,
+                      2
                     ]
                   ]
                 }
@@ -6657,23 +6419,23 @@
                   "cells": [
                     [
                       0,
-                      0
+                      5
                     ],
                     [
                       1,
-                      0
+                      5
                     ],
                     [
                       2,
-                      0
+                      5
                     ],
                     [
                       3,
-                      0
+                      5
                     ],
                     [
                       4,
-                      0
+                      5
                     ]
                   ]
                 },
@@ -6682,20 +6444,20 @@
                   "size": 4,
                   "cells": [
                     [
-                      0,
-                      2
+                      1,
+                      0
+                    ],
+                    [
+                      1,
+                      1
                     ],
                     [
                       1,
                       2
                     ],
                     [
-                      2,
-                      2
-                    ],
-                    [
-                      3,
-                      2
+                      1,
+                      3
                     ]
                   ]
                 },
@@ -6704,16 +6466,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      4
+                      6,
+                      5
                     ],
                     [
-                      1,
-                      4
+                      6,
+                      6
                     ],
                     [
-                      2,
-                      4
+                      6,
+                      7
                     ]
                   ]
                 },
@@ -6722,16 +6484,16 @@
                   "size": 3,
                   "cells": [
                     [
-                      0,
-                      6
+                      5,
+                      1
                     ],
                     [
-                      1,
-                      6
+                      5,
+                      2
                     ],
                     [
-                      2,
-                      6
+                      5,
+                      3
                     ]
                   ]
                 },
@@ -6740,12 +6502,12 @@
                   "size": 2,
                   "cells": [
                     [
-                      0,
-                      8
+                      7,
+                      3
                     ],
                     [
-                      1,
-                      8
+                      8,
+                      3
                     ]
                   ]
                 }
@@ -6756,22 +6518,34 @@
           "attacks": [
             [
               [
-                2,
-                2,
-                2,
-                2,
-                2,
+                0,
+                0,
+                0,
                 1,
                 0,
                 0,
                 1,
+                0,
+                0,
+                0
+              ],
+              [
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
                 0
               ],
               [
                 0,
                 0,
                 0,
-                1,
+                0,
                 0,
                 0,
                 0,
@@ -6780,57 +6554,33 @@
                 0
               ],
               [
-                2,
-                2,
-                2,
-                2,
-                1,
                 0,
                 0,
-                0,
-                0,
-                1
-              ],
-              [
-                0,
-                0,
-                1,
                 1,
                 0,
                 0,
                 1,
                 0,
                 1,
+                0,
                 0
               ],
               [
-                2,
-                2,
-                2,
+                0,
+                0,
+                1,
+                1,
                 0,
                 0,
                 0,
                 0,
                 0,
-                0,
-                1
+                0
               ],
               [
                 1,
-                0,
                 1,
                 0,
-                0,
-                0,
-                0,
-                1,
-                0,
-                1
-              ],
-              [
-                2,
-                2,
-                2,
                 0,
                 0,
                 0,
@@ -6842,49 +6592,121 @@
               [
                 0,
                 1,
-                0,
-                0,
-                0,
                 1,
                 0,
                 0,
                 0,
-                1
+                0,
+                0,
+                0,
+                0
               ],
               [
                 2,
                 2,
-                1,
-                0,
-                0,
-                0,
+                2,
                 0,
                 1,
+                1,
+                1,
+                0,
                 0,
                 0
               ],
               [
                 0,
+                0,
+                0,
+                0,
+                1,
+                0,
                 1,
                 0,
                 0,
+                0
+              ],
+              [
                 0,
                 0,
                 0,
                 0,
+                0,
+                1,
+                0,
+                1,
                 0,
                 1
               ]
             ],
             [
               [
+                0,
                 2,
+                0,
+                0,
+                0,
+                1,
+                1,
+                0,
+                0,
+                0
+              ],
+              [
+                1,
                 2,
-                2,
-                2,
+                0,
+                1,
+                1,
                 2,
                 1,
                 0,
+                0,
+                0
+              ],
+              [
+                0,
+                2,
+                1,
+                0,
+                0,
+                2,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                2,
+                0,
+                0,
+                0,
+                2,
+                0,
+                2,
+                2,
+                1
+              ],
+              [
+                1,
+                1,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                1,
+                0
+              ],
+              [
+                2,
+                2,
+                2,
+                2,
+                2,
+                0,
+                2,
                 0,
                 0,
                 1
@@ -6894,9 +6716,9 @@
                 0,
                 0,
                 0,
-                0,
                 1,
                 0,
+                2,
                 0,
                 0,
                 1
@@ -6908,8 +6730,20 @@
                 0,
                 1,
                 0,
+                2,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
                 0,
                 1,
+                1,
+                0,
                 1,
                 0
               ],
@@ -6923,78 +6757,6 @@
                 0,
                 0,
                 0,
-                0
-              ],
-              [
-                2,
-                2,
-                2,
-                1,
-                0,
-                0,
-                0,
-                1,
-                0,
-                1
-              ],
-              [
-                0,
-                0,
-                1,
-                0,
-                1,
-                0,
-                0,
-                1,
-                0,
-                1
-              ],
-              [
-                0,
-                0,
-                0,
-                0,
-                1,
-                0,
-                0,
-                0,
-                0,
-                1
-              ],
-              [
-                0,
-                1,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                1
-              ],
-              [
-                2,
-                2,
-                0,
-                0,
-                0,
-                1,
-                1,
-                0,
-                0,
-                0
-              ],
-              [
-                0,
-                0,
-                0,
-                1,
-                0,
-                0,
-                0,
-                0,
-                1,
                 0
               ]
             ]
@@ -7746,6 +7508,6 @@
       "server_bad_phase": "bad phase",
       "server_battle_start_p1_fires_hit_keeps_your_turn": "Battle start! P1 fires. HIT keeps your turn!"
     },
-    "ui_code": "const KIND=\"battleship\";\nconst SOURCE_STRINGS={\"title\":\"Battleship (Declarative)\"};\nconst SOURCE_KEYS={\"Declarative\":\"text_0\",\"Player {n}\":\"text_1\",\"Your turn · {name}\":\"text_2\",\"{name} to play\":\"text_3\",\"Game over\":\"text_4\",\"Winner: {name}\":\"text_5\",\"Your fleet\":\"text_6\",\"Target waters\":\"text_7\",\"Place fleet and start battle\":\"text_8\",\"Places a valid fleet with clear water between ships.\":\"text_9\",\"Continue the capture with the highlighted checker.\":\"text_10\",\"A capture is required.\":\"text_11\",\"Move diagonally; kings move either direction.\":\"text_12\",\"queen\":\"text_13\",\"rook\":\"text_14\",\"bishop\":\"text_15\",\"knight\":\"text_16\",\"Promote at {square} to {piece}\":\"text_17\",\"Eliminate this army\":\"text_18\",\"Pass (no legal move)\":\"text_19\",\"Resign\":\"text_20\",\"Move pawn\":\"text_21\",\"Place wall\":\"text_22\",\"Walls remaining · {counts}\":\"text_23\",\"Top card {card} · suit {suit} · {n} cards to draw\":\"text_24\",\"Play {card} as {suit}\":\"text_25\",\"Play {card}\":\"text_26\",\"Draw a card ({n} left)\":\"text_27\",\"Ask {name} for {rank}\":\"text_28\",\"Draw cards\":\"text_29\",\"Pass\":\"text_30\",\"{name} · books {ranks}\":\"text_31\",\"Collect trick\":\"text_32\",\"Your character: {name}\":\"text_33\",\"Your character is private\":\"text_34\",\"Ask: {question}\":\"text_35\",\"Yes\":\"text_36\",\"No\":\"text_37\",\"{name}: guessed {character} · {result}\":\"text_38\",\"correct\":\"text_39\",\"incorrect\":\"text_40\",\"Are they wearing glasses?\":\"text_41\",\"Are they wearing a hat?\":\"text_42\",\"Do they have facial hair?\":\"text_43\",\"Are their ears showing?\":\"text_44\",\"Do they have blonde hair?\":\"text_45\",\"Do they have brown hair?\":\"text_46\",\"Do they have black hair?\":\"text_47\",\"Do they have red hair?\":\"text_48\",\"Do they have gray hair?\":\"text_49\",\"Do they have long hair?\":\"text_50\",\"Do they have short hair?\":\"text_51\",\"Do they have blue eyes?\":\"text_52\",\"Do they have brown eyes?\":\"text_53\",\"Do they have green eyes?\":\"text_54\",\"Select piece at row {r}, column {c}\":\"text_55\",\"Move to row {r}, column {c}\":\"text_56\"};\n// Shared presentation for HTML games converted to the portable declarative UI.\n// Rules and private information remain in each game's existing server module.\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state || {};\n    const active = m.status === 'ongoing' && !m.replay &&\n      m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const legal = active;\n    const scene = {pieces: [], targets: [], controls: [], labels: [], paths: []};\n    const offers = [];\n    let selectedMode = 'pawn';\n    let selectedFrom = null;\n    const text = (source, values = {}) => String(m.strings?.[SOURCE_KEYS[source]] ?? source).replace(/\\{(\\w+)\\}/g, (match, key) => values[key] == null ? match : String(values[key]));\n    const playerNames = (m.players || []).map((p, i) => p.name || text('Player {n}', {n:i + 1}));\n    const mySeat = Number.isInteger(m.my_player_index) ? m.my_player_index : 0;\n    const title = m.strings?.title || SOURCE_STRINGS.title || KIND;\n    const turnSeat = Number.isInteger(s.turnIdx) ? s.turnIdx :\n      Number.isInteger(s.current) ? s.current : Number.isInteger(s.toMove) ? s.toMove : null;\n    scene.labels.push({id: 'title', text: title, x: 22, y: 16, font_size: 26});\n    if (turnSeat !== null) {\n      scene.labels.push({id: 'status', text: active ? text('Your turn · {name}', {name:playerNames[turnSeat] || text('Player {n}', {n:turnSeat + 1})}) :\n        (m.status === 'over' ? text('Game over') : text('{name} to play', {name:playerNames[turnSeat] || text('Player {n}', {n:turnSeat + 1})})),\n        x: 22, y: 52, font_size: 17});\n    }\n    if (m.status === 'over' && Number.isInteger(s.winner)) {\n      scene.labels.push({id: 'winner', text: text('Winner: {name}', {name:playerNames[s.winner] || text('Player {n}', {n:s.winner + 1})}),\n        x: 22, y: 78, font_size: 16});\n    }\n    const intent = (move, label, surface, position, presentation, aria_label) => {\n      if (!active) return null;\n      const id = `intent_${offers.length}`;\n      offers.push(move);\n      if (presentation === 'piece' || presentation?.startsWith('person_')) {\n        scene.pieces.push({id, type: presentation === 'piece' ? 'card' : presentation, board: surface, position, text: label,\n          actions: ['tap'], ...(aria_label ? {aria_label} : {})});\n      } else if (presentation === 'target') {\n        const destination = move.to || (Number.isInteger(move.tr) ? {r:move.tr,c:move.tc} : null);\n        scene.targets.push({id, board: surface, position, label: label || '•', ...(destination ? {aria_label:text('Move to row {r}, column {c}', {r:destination.r+1,c:destination.c+1})} : {})});\n      } else {\n        scene.controls.push({id, kind: 'button', label});\n      }\n      return id;\n    };\n    const staticPiece = (id, type, board, position, extra = {}) =>\n      scene.pieces.push(Object.assign({id, type, board, position, actions: []}, extra));\n    const label = (id, text, x, y, size = 14) =>\n      scene.labels.push({id, text: String(text), x, y, font_size: size});\n    const cardText = card => String(card || '').replace(/S$/, '♠').replace(/H$/, '♥')\n      .replace(/D$/, '♦').replace(/C$/, '♣');\n    const cardPos = index => ({x: 34 + (index % 8) * 66, y: 120 + Math.floor(index / 8) * 92});\n    const eventId = message.type === 'ui_event' && message.event?.type === 'tap' ? String(message.event.id || '') : '';\n    const intentMatch = /^intent_(\\d+)$/.exec(eventId);\n    const selectFrom = (moves, from, position) => {\n      const origins = new Map(moves.map(move => {const cell=from(move);return [`${cell.r}_${cell.c}`,cell];}));\n      const requested = /^select_(\\d+_\\d+)$/.exec(eventId)?.[1];\n      const retained = localState?.move_count === m.move_count && localState?.viewer === mySeat ? localState.selectedFrom : null;\n      selectedFrom = origins.has(requested) ? requested : origins.has(retained) ? retained : null;\n      for (const [key, cell] of origins) scene.targets.push({id:`select_${key}`,board:'main',position:position(cell),label:key===selectedFrom?'◉':'◇',aria_label:text('Select piece at row {r}, column {c}', {r:cell.r+1,c:cell.c+1})});\n      return moves.filter(move => {const cell=from(move);return `${cell.r}_${cell.c}`===selectedFrom;});\n    };\n\n    if (KIND === 'battleship') {\n      const left = {x: 20, y: 120}, right = {x: 435, y: 120};\n      scene.labels.push({id: 'own-title', text: text('Your fleet'), x: left.x, y: 84, font_size: 18});\n      scene.labels.push({id: 'target-title', text: text('Target waters'), x: right.x, y: 84, font_size: 18});\n      const me = mySeat, opponent = 1 - me;\n      const ownShips = (s.boards && s.boards[me] && s.boards[me].ships) || [];\n      const ownCells = new Set();\n      for (const ship of ownShips) for (const c of ship.cells || []) ownCells.add(`${c[0]},${c[1]}`);\n      for (let r = 0; r < 10; r++) for (let c = 0; c < 10; c++) {\n        const pos = {cell: String(r * 10 + c)};\n        const ownAttack = s.attacks && s.attacks[me] ? s.attacks[me][r][c] : 0;\n        const enemyAttack = s.attacks && s.attacks[opponent] ? s.attacks[opponent][r][c] : 0;\n        const ownMark = ownAttack === 2 ? '✹' : ownAttack === 1 ? '·' : ownCells.has(`${c},${r}`) ? '■' : '';\n        const ownType = ownAttack === 2 ? 'mark_hit' : ownAttack === 1 ? 'mark_miss' :\n          ownCells.has(`${c},${r}`) ? 'mark_ship' : 'mark_water';\n        staticPiece(`own_${r}_${c}`, ownType, 'own', pos, {text: ownMark});\n        const targetMark = enemyAttack === 2 ? '✹' : enemyAttack === 1 ? '·' : '';\n        if (active && s.phase === 'BATTLE' && enemyAttack === 0) {\n          intent({type: 'fire', x: c, y: r}, '•', 'target', pos, 'target');\n        } else {\n          staticPiece(`target_${r}_${c}`, enemyAttack === 2 ? 'mark_hit' : enemyAttack === 1 ? 'mark_miss' : 'mark_water',\n            'target', pos, {text: targetMark});\n        }\n      }\n      if (active && s.phase === 'SETUP') {\n        const ships = [\n          {name: 'Carrier', cells: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]]},\n          {name: 'Battleship', cells: [[0, 2], [1, 2], [2, 2], [3, 2]]},\n          {name: 'Cruiser', cells: [[0, 4], [1, 4], [2, 4]]},\n          {name: 'Submarine', cells: [[0, 6], [1, 6], [2, 6]]},\n          {name: 'Destroyer', cells: [[0, 8], [1, 8]]}\n        ];\n        intent({type: 'place', ships}, text('Place fleet and start battle'), null, null, 'control');\n        label('setup-help', text('Places a valid fleet with clear water between ships.'), 22, 594, 14);\n      }\n    } else if (KIND === 'checkers') {\n      const board = s.board || [];\n      const moves = legal ? (s.moves || []) : [];\n      board.forEach((row, r) => row.forEach((piece, c) => {\n        if (!piece) return;\n        const owner = piece.c === 0 ? 'p0' : 'p1';\n        staticPiece(`piece_${r}_${c}`, piece.k ? 'king_' + owner : owner, 'main',\n          {cell: String(r * 8 + c)}, {text: piece.k ? '♛' : ''});\n      }));\n      selectFrom(moves,move=>move.from,cell=>({cell:String(cell.r*8+cell.c)})).forEach(move => intent({from: move.from, to: move.to}, move.cap ? '×' : '•', 'main',\n        {cell: String(move.to.r * 8 + move.to.c)}, 'target'));\n      label('chain', s.chain ? text('Continue the capture with the highlighted checker.') :\n        (moves.some(mv => mv.cap) ? text('A capture is required.') : text('Move diagonally; kings move either direction.')), 22, 670);\n    } else if (KIND === 'chess' || KIND === 'four_player_chess') {\n      const size = KIND === 'chess' ? 8 : 14;\n      const boardId = 'main';\n      const board = KIND === 'chess' ? (s.bd || []) : s.board || {};\n      const symbols = {wK:'♔',wQ:'♕',wR:'♖',wB:'♗',wN:'♘',wP:'♙',bK:'♚',bQ:'♛',bR:'♜',bB:'♝',bN:'♞',bP:'♟'};\n      const fourSymbols = {K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙'};\n      if (KIND === 'chess') {\n        const pieceNames = {1:'P', 2:'N', 3:'B', 4:'R', 5:'Q', 6:'K'};\n        board.forEach((piece, index) => {\n          if (!piece) return;\n          const r = Math.floor(index / 8), c = index % 8;\n          const name = pieceNames[Math.abs(piece)] || 'P';\n          const code = `${piece > 0 ? 'w' : 'b'}${name}`;\n          staticPiece(`piece_${r}_${c}`, piece > 0 ? 'white_piece' : 'black_piece', boardId,\n            {cell: String(index)}, {text: symbols[code] || name});\n        });\n      } else {\n        for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {\n          if (KIND === 'four_player_chess' && !((r >= 3 && r <= 10) || (c >= 3 && c <= 10))) continue;\n          const pos = KIND === 'chess' ? {cell: String(r * size + c)} : {x: 21 + c * 42, y: 21 + r * 42};\n          const squareType = (r + c) % 2 ? 'square_dark' : 'square_light';\n          if (KIND === 'four_player_chess') staticPiece(`square_${r}_${c}`, squareType, boardId, pos);\n        }\n        for (const [square, piece] of Object.entries(board)) {\n          const [r, c] = square.split(',').map(Number);\n          if (!Number.isInteger(r) || !Number.isInteger(c)) continue;\n          const type = Number(piece.o) || 0;\n          staticPiece(`piece_${r}_${c}`, `seat_${type}`, boardId, {x: 21 + c * 42, y: 21 + r * 42},\n            {text: fourSymbols[piece.t] || piece.t});\n        }\n      }\n      const legalMoves = legal ? (s.legalMoves || []) : [];\n      const selectedMoves = selectFrom(legalMoves,move=>({r:move.fr,c:move.fc}),cell=>KIND==='chess'?{cell:String(cell.r*size+cell.c)}:{x:21+cell.c*42,y:21+cell.r*42});\n      for (const mv of selectedMoves) {\n        const move = KIND === 'chess'\n          ? {fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc, ...(mv.promo ? {promo: mv.promo} : {})}\n          : {kind: 'move', fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc};\n        const position = KIND === 'chess' ? {cell: String(mv.tr * size + mv.tc)} :\n          {x: 21 + mv.tc * 42, y: 21 + mv.tr * 42};\n        if (KIND === 'chess' && mv.promo) {\n          const files = 'abcdefgh';\n          const promotionNames = {Q: text('queen'), R: text('rook'), B: text('bishop'), N: text('knight')};\n          intent(move, text('Promote at {square} to {piece}', {square:files[mv.tc]+(size-mv.tr),piece:promotionNames[mv.promo]||mv.promo}),\n            null, null, 'control');\n        } else intent(move, '•', boardId, position, 'target');\n      }\n      if (KIND === 'four_player_chess' && active && !(s.legalMoves || []).length && s.winnerTeam === null) {\n        intent({kind: s.inCheck ? 'elim' : 'pass'}, s.inCheck ? text('Eliminate this army') : text('Pass (no legal move)'),\n          null, null, 'control');\n      }\n      if (KIND === 'chess' && s.winner === null && active) {\n        intent({resign: true}, text('Resign'), null, null, 'control');\n      }\n    } else if (KIND === 'quoridor') {\n      const cells = [];\n      for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {\n        const x = 44 + c * 54, y = 112 + r * 54;\n        cells.push({r, c, x, y});\n        staticPiece(`square_${r}_${c}`, 'square', 'main', {x, y}, {text: ''});\n      }\n      (s.walls || []).forEach((w, i) => {\n        if (w.o === 'H') scene.paths.push({id: `wall_${i}`, points: [\n          {x: 44 + w.c * 54, y: 112 + (w.r + 0.5) * 54},\n          {x: 44 + (w.c + 2) * 54, y: 112 + (w.r + 0.5) * 54}], color: '#fbbf24', width: 10});\n        else scene.paths.push({id: `wall_${i}`, points: [\n          {x: 44 + (w.c + 0.5) * 54, y: 112 + w.r * 54},\n          {x: 44 + (w.c + 0.5) * 54, y: 112 + (w.r + 2) * 54}], color: '#fbbf24', width: 10});\n      });\n      for (let seat = 0; seat < (s.pawns || []).length; seat++) {\n        const p = s.pawns[seat];\n        staticPiece(`pawn_${seat}`, seat === 0 ? 'p0' : 'p1', 'main',\n          {x: 44 + p.c * 54, y: 112 + p.r * 54}, {text: seat === 0 ? '1' : '2'});\n      }\n      const mode = eventId === 'mode_wall' ? 'wall' : eventId === 'mode_pawn' ? 'pawn' :\n        localState && localState.move_count === m.move_count && localState.mode === 'wall' ? 'wall' : 'pawn';\n      selectedMode = mode;\n      if (active) {\n        scene.controls.push({id: 'mode_pawn', kind: 'button', label: (mode === 'pawn' ? '✓ ' : '') + text('Move pawn')});\n        scene.controls.push({id: 'mode_wall', kind: 'button', label: (mode === 'wall' ? '✓ ' : '') + text('Place wall')});\n        if (mode === 'pawn') (s.legalMoves || []).forEach(([r, c]) =>\n          intent({type: 'pawn', r, c}, '•', 'main', {x: 44 + c * 54, y: 112 + r * 54}, 'target'));\n        else (s.legalWalls || []).forEach(w => intent({type: 'wall', r: w.r, c: w.c, o: w.o},\n          w.o === 'H' ? '—' : '│', 'main', w.o === 'H'\n            ? {x: 44 + (w.c + 1) * 54, y: 112 + (w.r + 0.5) * 54}\n            : {x: 44 + (w.c + 0.5) * 54, y: 112 + (w.r + 1) * 54}, 'target'));\n      }\n      label('walls-left', text('Walls remaining · {counts}', {counts:s.wallsLeft ? s.wallsLeft.join(' / ') : ''}), 22, 614);\n      if (message.type === 'ui_event' && active && (eventId === 'mode_pawn' || eventId === 'mode_wall')) {\n        selectedMode = eventId === 'mode_wall' ? 'wall' : 'pawn';\n        return {scene, local_state: {mode:selectedMode,move_count:m.move_count,\n          intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move}))}};\n      }\n    } else if (KIND === 'crazy_eights') {\n      label('table', text('Top card {card} · suit {suit} · {n} cards to draw', {card:cardText(cardFromNumber(s.top)),suit:SUITS[s.suit]||'',n:s.deckCount||0}), 22, 94, 16);\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      const playable = new Set(s.playable || []);\n      hand.forEach((card, i) => {\n        const r = card % 13 + 1, labelText = cardText(cardFromNumber(card));\n        if (playable.has(card)) {\n          if (r === 8) {\n            staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: labelText});\n            for (let chosenSuit = 0; chosenSuit < 4; chosenSuit++)\n              intent({card, chosenSuit}, text('Play {card} as {suit}', {card:labelText,suit:SUITS[chosenSuit]}), null, null, 'control');\n          } else intent({card}, text('Play {card}', {card:labelText}), 'table', cardPos(i), 'piece');\n        } else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: labelText});\n      });\n      if (active) intent('draw', text('Draw a card ({n} left)', {n:s.deckCount||0}), null, null, 'control');\n    } else if (KIND === 'go_fish') {\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      hand.forEach((card, i) => staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: cardText(card)}));\n      const rankSet = [...new Set(hand.map(card => String(card).replace(/[♠♥♦♣]$/, '')))].sort((a, b) => RANKS.indexOf(a) - RANKS.indexOf(b));\n      for (let seat = 0; seat < playerNames.length; seat++) if (active && seat !== mySeat) {\n        for (const rank of rankSet) intent({target: seat, rank}, text('Ask {name} for {rank}', {name:playerNames[seat],rank}), null, null, 'control');\n      }\n      if (active && hand.length === 0) {\n        if (s.deckCount > 0) intent({draw: true}, text('Draw cards'), null, null, 'control');\n        else intent({pass: true}, text('Pass'), null, null, 'control');\n      }\n      (s.books || []).forEach((books, seat) => label(`books_${seat}`, text('{name} · books {ranks}', {name:playerNames[seat]||text('Player {n}', {n:seat+1}),ranks:(books||[]).join(', ')||'—'}),\n        24, 460 + seat * 25, 14));\n    } else if (KIND === 'hearts' || KIND === 'spades') {\n      const isHearts = KIND === 'hearts';\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      const current = isHearts ? s.cur : s.current;\n      const trick = s.trick || [];\n      const legalCards = isHearts ? new Set(s.legal || []) :\n        (s.pendingWin !== null && s.pendingWin !== undefined ? new Set() : new Set(hand));\n      hand.forEach((card, i) => {\n        const moves = legalCards.has(card) ? [{card}] : [];\n        if (moves.length) intent(moves[0], cardText(card), 'table', cardPos(i), 'piece');\n        else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: cardText(card)});\n      });\n      trick.forEach((play, i) => staticPiece(`trick_${i}`, 'played', 'table',\n        {x: 300 + (play.player ?? play.seat) * 72, y: 400}, {text: cardText(play.card)}));\n      if (KIND === 'spades' && s.pendingWin !== null && s.pendingWin !== undefined && active)\n        intent({collect: true}, text('Collect trick'), null, null, 'control');\n      const scores = isHearts ? s.taken : s.tricksWon;\n      if (Array.isArray(scores)) scores.forEach((score, seat) =>\n        label(`score_${seat}`, `${playerNames[seat] || text('Player {n}', {n:seat + 1})} · ${score}`, 22 + seat * 170, 92, 14));\n    } else if (KIND === 'guess_who') {\n      const names = CHARACTER_NAMES;\n      const secret = Number.isInteger(s.mySecret) ? text('Your character: {name}', {name:names[s.mySecret]}) : text('Your character is private');\n      label('your-secret', secret, 22, 88, 18);\n      for (let i = 0; i < names.length; i++) {\n        const description = names[i]+': '+QUESTIONS.map((question,q)=>text(question)+' '+text(SOURCE_CHARACTER_ANSWERS[i][q]?'Yes':'No')).join('; ');\n        if (active) intent({kind:'guess',idx:i}, names[i], 'main', {cell:String(i)}, `person_${i}`, description);\n        else staticPiece(`person_${i}`, `person_${i}`, 'main', {cell:String(i)}, {text:names[i],aria_label:description});\n      }\n      const asked = new Set((s.hist || []).filter(item => item.by === mySeat && Number.isInteger(item.q)).map(item => item.q));\n      if (active) QUESTIONS.forEach((question, q) => {\n        if (!asked.has(q)) intent({kind: 'ask', q}, text('Ask: {question}', {question:text(question)}), null, null, 'control');\n      });\n      (s.hist || []).slice(-8).forEach((item, i) => {\n        const who = playerNames[item.by] || text('Player {n}', {n:item.by + 1});\n        const historyText = Number.isInteger(item.q) ? `${who}: ${text(QUESTIONS[item.q])} · ${item.ans ? text('Yes') : text('No')}` :\n          text('{name}: guessed {character} · {result}', {name:who,character:names[item.guess]||'—',result:item.correct?text('correct'):text('incorrect')});\n        label(`history_${i}`, historyText, 22, 520 + i * 18, 13);\n      });\n    }\n\n    const emitted = intentMatch && legal ? offers[Number(intentMatch[1])] : undefined;\n    if (message.type === 'ui_event' && active && emitted !== undefined) {\n      const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move})),selectedFrom,move_count:m.move_count,viewer:mySeat};\n      if (KIND === 'quoridor') Object.assign(nextLocal,{mode:selectedMode,move_count:m.move_count});\n      return {scene, local_state: nextLocal, make_move: emitted};\n    }\n    const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move})),selectedFrom,move_count:m.move_count,viewer:mySeat};\n    if (KIND === 'quoridor') Object.assign(nextLocal,{mode:selectedMode,move_count:m.move_count});\n    return {scene, local_state: nextLocal};\n  }\n};\n\nconst SUITS = ['♠', '♥', '♦', '♣'];\nconst RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];\nfunction cardFromNumber(value) {\n  const suit = Math.floor(Number(value) / 13), rank = Number(value) % 13 + 1;\n  return `${RANKS[(rank + 12) % 13]}${SUITS[suit] || ''}`;\n}\nconst QUESTIONS = ['Are they wearing glasses?', 'Are they wearing a hat?', 'Do they have facial hair?',\n  'Are their ears showing?', 'Do they have blonde hair?', 'Do they have brown hair?',\n  'Do they have black hair?', 'Do they have red hair?', 'Do they have gray hair?',\n  'Do they have long hair?', 'Do they have short hair?', 'Do they have blue eyes?',\n  'Do they have brown eyes?', 'Do they have green eyes?'];\nconst CHARACTER_NAMES = ['Ava', 'Ben', 'Cleo', 'Dan', 'Eli', 'Fay', 'Gus', 'Hana', 'Ivan', 'Jade', 'Kai', 'Lena',\n  'Max', 'Nora', 'Omar', 'Pia', 'Quinn', 'Rosa', 'Sam', 'Tara', 'Umar', 'Vera', 'Will', 'Yuki'];\n"
+    "ui_code": "const KIND=\"battleship\";\nconst SOURCE_STRINGS={\"title\":\"Battleship (Declarative)\"};\nconst SOURCE_KEYS={\"Declarative\":\"text_0\",\"Player {n}\":\"text_1\",\"Your turn · {name}\":\"text_2\",\"{name} to play\":\"text_3\",\"Game over\":\"text_4\",\"Winner: {name}\":\"text_5\",\"Your fleet\":\"text_6\",\"Target waters\":\"text_7\",\"Place fleet and start battle\":\"text_8\",\"Places a valid fleet with clear water between ships.\":\"text_9\",\"Continue the capture with the highlighted checker.\":\"text_10\",\"A capture is required.\":\"text_11\",\"Move diagonally; kings move either direction.\":\"text_12\",\"queen\":\"text_13\",\"rook\":\"text_14\",\"bishop\":\"text_15\",\"knight\":\"text_16\",\"Promote at {square} to {piece}\":\"text_17\",\"Eliminate this army\":\"text_18\",\"Pass (no legal move)\":\"text_19\",\"Resign\":\"text_20\",\"Move pawn\":\"text_21\",\"Place wall\":\"text_22\",\"Walls remaining · {counts}\":\"text_23\",\"Top card {card} · suit {suit} · {n} cards to draw\":\"text_24\",\"Play {card} as {suit}\":\"text_25\",\"Play {card}\":\"text_26\",\"Draw a card ({n} left)\":\"text_27\",\"Ask {name} for {rank}\":\"text_28\",\"Draw cards\":\"text_29\",\"Pass\":\"text_30\",\"{name} · books {ranks}\":\"text_31\",\"Collect trick\":\"text_32\",\"Your character: {name}\":\"text_33\",\"Your character is private\":\"text_34\",\"Ask: {question}\":\"text_35\",\"Yes\":\"text_36\",\"No\":\"text_37\",\"{name}: guessed {character} · {result}\":\"text_38\",\"correct\":\"text_39\",\"incorrect\":\"text_40\",\"Are they wearing glasses?\":\"text_41\",\"Are they wearing a hat?\":\"text_42\",\"Do they have facial hair?\":\"text_43\",\"Are their ears showing?\":\"text_44\",\"Do they have blonde hair?\":\"text_45\",\"Do they have brown hair?\":\"text_46\",\"Do they have black hair?\":\"text_47\",\"Do they have red hair?\":\"text_48\",\"Do they have gray hair?\":\"text_49\",\"Do they have long hair?\":\"text_50\",\"Do they have short hair?\":\"text_51\",\"Do they have blue eyes?\":\"text_52\",\"Do they have brown eyes?\":\"text_53\",\"Do they have green eyes?\":\"text_54\",\"Select piece at row {r}, column {c}\":\"text_55\",\"Move to row {r}, column {c}\":\"text_56\"};\n// Shared presentation for HTML games converted to the portable declarative UI.\n// Rules and private information remain in each game's existing server module.\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state || {};\n    const active = m.status === 'ongoing' && !m.replay &&\n      m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const legal = active;\n    const scene = {pieces: [], targets: [], controls: [], labels: [], paths: []};\n    const offers = [];\n    let selectedMode = 'pawn';\n    let selectedFrom = null;\n    const text = (source, values = {}) => String(m.strings?.[SOURCE_KEYS[source]] ?? source).replace(/\\{(\\w+)\\}/g, (match, key) => values[key] == null ? match : String(values[key]));\n    const playerNames = (m.players || []).map((p, i) => p.name || text('Player {n}', {n:i + 1}));\n    const mySeat = Number.isInteger(m.my_player_index) ? m.my_player_index : 0;\n    const title = m.strings?.title || SOURCE_STRINGS.title || KIND;\n    const turnSeat = Number.isInteger(s.turnIdx) ? s.turnIdx :\n      Number.isInteger(s.current) ? s.current : Number.isInteger(s.toMove) ? s.toMove : null;\n    scene.labels.push({id: 'title', text: title, x: 22, y: 16, font_size: 26});\n    if (turnSeat !== null) {\n      scene.labels.push({id: 'status', text: active ? text('Your turn · {name}', {name:playerNames[turnSeat] || text('Player {n}', {n:turnSeat + 1})}) :\n        (m.status === 'over' ? text('Game over') : text('{name} to play', {name:playerNames[turnSeat] || text('Player {n}', {n:turnSeat + 1})})),\n        x: 22, y: 52, font_size: 17});\n    }\n    if (m.status === 'over' && Number.isInteger(s.winner)) {\n      scene.labels.push({id: 'winner', text: text('Winner: {name}', {name:playerNames[s.winner] || text('Player {n}', {n:s.winner + 1})}),\n        x: 22, y: 78, font_size: 16});\n    }\n    const intent = (move, label, surface, position, presentation, aria_label) => {\n      if (!active) return null;\n      const id = `intent_${offers.length}`;\n      offers.push(move);\n      if (presentation === 'piece' || presentation?.startsWith('person_')) {\n        scene.pieces.push({id, type: presentation === 'piece' ? 'card' : presentation, board: surface, position, text: label,\n          actions: ['tap'], ...(aria_label ? {aria_label} : {})});\n      } else if (presentation === 'target') {\n        const destination = move.to || (Number.isInteger(move.tr) ? {r:move.tr,c:move.tc} : null);\n        scene.targets.push({id, board: surface, position, label: label || '•', ...(destination ? {aria_label:text('Move to row {r}, column {c}', {r:destination.r+1,c:destination.c+1})} : {})});\n      } else {\n        scene.controls.push({id, kind: 'button', label});\n      }\n      return id;\n    };\n    const staticPiece = (id, type, board, position, extra = {}) =>\n      scene.pieces.push(Object.assign({id, type, board, position, actions: []}, extra));\n    const label = (id, text, x, y, size = 14) =>\n      scene.labels.push({id, text: String(text), x, y, font_size: size});\n    const cardText = card => String(card || '').replace(/S$/, '♠').replace(/H$/, '♥')\n      .replace(/D$/, '♦').replace(/C$/, '♣');\n    const cardPos = index => ({x: 34 + (index % 8) * 66, y: 120 + Math.floor(index / 8) * 92});\n    const eventId = message.type === 'ui_event' && message.event?.type === 'tap' ? String(message.event.id || '') : '';\n    const intentMatch = /^intent_(\\d+)$/.exec(eventId);\n    const selectFrom = (moves, from, position) => {\n      const origins = new Map(moves.map(move => {const cell=from(move);return [`${cell.r}_${cell.c}`,cell];}));\n      const requested = /^select_(\\d+_\\d+)$/.exec(eventId)?.[1];\n      const retained = localState?.move_count === m.move_count && localState?.viewer === mySeat ? localState.selectedFrom : null;\n      selectedFrom = origins.has(requested) ? requested : origins.has(retained) ? retained : null;\n      for (const [key, cell] of origins) scene.targets.push({id:`select_${key}`,board:'main',position:position(cell),label:key===selectedFrom?'◉':'◇',aria_label:text('Select piece at row {r}, column {c}', {r:cell.r+1,c:cell.c+1})});\n      return moves.filter(move => {const cell=from(move);return `${cell.r}_${cell.c}`===selectedFrom;});\n    };\n\n    if (KIND === 'battleship') {\n      const left = {x: 20, y: 120}, right = {x: 435, y: 120};\n      scene.labels.push({id: 'own-title', text: text('Your fleet'), x: left.x, y: 84, font_size: 18});\n      scene.labels.push({id: 'target-title', text: text('Target waters'), x: right.x, y: 84, font_size: 18});\n      const me = mySeat, opponent = 1 - me;\n      const ownShips = (s.boards && s.boards[me] && s.boards[me].ships) || [];\n      const ownCells = new Set();\n      for (const ship of ownShips) for (const c of ship.cells || []) ownCells.add(`${c[0]},${c[1]}`);\n      for (let r = 0; r < 10; r++) for (let c = 0; c < 10; c++) {\n        const pos = {cell: String(r * 10 + c)};\n        const ownAttack = s.attacks && s.attacks[me] ? s.attacks[me][r][c] : 0;\n        const enemyAttack = s.attacks && s.attacks[opponent] ? s.attacks[opponent][r][c] : 0;\n        const ownMark = ownAttack === 2 ? '✹' : ownAttack === 1 ? '·' : ownCells.has(`${c},${r}`) ? '■' : '';\n        const ownType = ownAttack === 2 ? 'mark_hit' : ownAttack === 1 ? 'mark_miss' :\n          ownCells.has(`${c},${r}`) ? 'mark_ship' : 'mark_water';\n        staticPiece(`own_${r}_${c}`, ownType, 'own', pos, {text: ownMark});\n        const targetMark = enemyAttack === 2 ? '✹' : enemyAttack === 1 ? '·' : '';\n        if (active && s.phase === 'BATTLE' && enemyAttack === 0) {\n          intent({type: 'fire', x: c, y: r}, '•', 'target', pos, 'target');\n        } else {\n          staticPiece(`target_${r}_${c}`, enemyAttack === 2 ? 'mark_hit' : enemyAttack === 1 ? 'mark_miss' : 'mark_water',\n            'target', pos, {text: targetMark});\n        }\n      }\n      if (active && s.phase === 'SETUP') {\n        intent({type: 'auto_place'}, text('Place fleet and start battle'), null, null, 'control');\n        label('setup-help', text('Places a valid fleet with clear water between ships.'), 22, 594, 14);\n      }\n    } else if (KIND === 'checkers') {\n      const board = s.board || [];\n      const moves = legal ? (s.moves || []) : [];\n      board.forEach((row, r) => row.forEach((piece, c) => {\n        if (!piece) return;\n        const owner = piece.c === 0 ? 'p0' : 'p1';\n        staticPiece(`piece_${r}_${c}`, piece.k ? 'king_' + owner : owner, 'main',\n          {cell: String(r * 8 + c)}, {text: piece.k ? '♛' : ''});\n      }));\n      selectFrom(moves,move=>move.from,cell=>({cell:String(cell.r*8+cell.c)})).forEach(move => intent({from: move.from, to: move.to}, move.cap ? '×' : '•', 'main',\n        {cell: String(move.to.r * 8 + move.to.c)}, 'target'));\n      label('chain', s.chain ? text('Continue the capture with the highlighted checker.') :\n        (moves.some(mv => mv.cap) ? text('A capture is required.') : text('Move diagonally; kings move either direction.')), 22, 670);\n    } else if (KIND === 'chess' || KIND === 'four_player_chess') {\n      const size = KIND === 'chess' ? 8 : 14;\n      const boardId = 'main';\n      const board = KIND === 'chess' ? (s.bd || []) : s.board || {};\n      const symbols = {wK:'♔',wQ:'♕',wR:'♖',wB:'♗',wN:'♘',wP:'♙',bK:'♚',bQ:'♛',bR:'♜',bB:'♝',bN:'♞',bP:'♟'};\n      const fourSymbols = {K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙'};\n      if (KIND === 'chess') {\n        const pieceNames = {1:'P', 2:'N', 3:'B', 4:'R', 5:'Q', 6:'K'};\n        board.forEach((piece, index) => {\n          if (!piece) return;\n          const r = Math.floor(index / 8), c = index % 8;\n          const name = pieceNames[Math.abs(piece)] || 'P';\n          const code = `${piece > 0 ? 'w' : 'b'}${name}`;\n          staticPiece(`piece_${r}_${c}`, piece > 0 ? 'white_piece' : 'black_piece', boardId,\n            {cell: String(index)}, {text: symbols[code] || name});\n        });\n      } else {\n        for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {\n          if (KIND === 'four_player_chess' && !((r >= 3 && r <= 10) || (c >= 3 && c <= 10))) continue;\n          const pos = KIND === 'chess' ? {cell: String(r * size + c)} : {x: 21 + c * 42, y: 21 + r * 42};\n          const squareType = (r + c) % 2 ? 'square_dark' : 'square_light';\n          if (KIND === 'four_player_chess') staticPiece(`square_${r}_${c}`, squareType, boardId, pos);\n        }\n        for (const [square, piece] of Object.entries(board)) {\n          const [r, c] = square.split(',').map(Number);\n          if (!Number.isInteger(r) || !Number.isInteger(c)) continue;\n          const type = Number(piece.o) || 0;\n          staticPiece(`piece_${r}_${c}`, `seat_${type}`, boardId, {x: 21 + c * 42, y: 21 + r * 42},\n            {text: fourSymbols[piece.t] || piece.t});\n        }\n      }\n      const legalMoves = legal ? (s.legalMoves || []) : [];\n      const selectedMoves = selectFrom(legalMoves,move=>({r:move.fr,c:move.fc}),cell=>KIND==='chess'?{cell:String(cell.r*size+cell.c)}:{x:21+cell.c*42,y:21+cell.r*42});\n      for (const mv of selectedMoves) {\n        const move = KIND === 'chess'\n          ? {fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc, ...(mv.promo ? {promo: mv.promo} : {})}\n          : {kind: 'move', fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc};\n        const position = KIND === 'chess' ? {cell: String(mv.tr * size + mv.tc)} :\n          {x: 21 + mv.tc * 42, y: 21 + mv.tr * 42};\n        if (KIND === 'chess' && mv.promo) {\n          const files = 'abcdefgh';\n          const promotionNames = {Q: text('queen'), R: text('rook'), B: text('bishop'), N: text('knight')};\n          intent(move, text('Promote at {square} to {piece}', {square:files[mv.tc]+(size-mv.tr),piece:promotionNames[mv.promo]||mv.promo}),\n            null, null, 'control');\n        } else intent(move, '•', boardId, position, 'target');\n      }\n      if (KIND === 'four_player_chess' && active && !(s.legalMoves || []).length && s.winnerTeam === null) {\n        intent({kind: s.inCheck ? 'elim' : 'pass'}, s.inCheck ? text('Eliminate this army') : text('Pass (no legal move)'),\n          null, null, 'control');\n      }\n      if (KIND === 'chess' && s.winner === null && active) {\n        intent({resign: true}, text('Resign'), null, null, 'control');\n      }\n    } else if (KIND === 'quoridor') {\n      const cells = [];\n      for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {\n        const x = 44 + c * 54, y = 112 + r * 54;\n        cells.push({r, c, x, y});\n        staticPiece(`square_${r}_${c}`, 'square', 'main', {x, y}, {text: ''});\n      }\n      (s.walls || []).forEach((w, i) => {\n        if (w.o === 'H') scene.paths.push({id: `wall_${i}`, points: [\n          {x: 44 + w.c * 54, y: 112 + (w.r + 0.5) * 54},\n          {x: 44 + (w.c + 2) * 54, y: 112 + (w.r + 0.5) * 54}], color: '#fbbf24', width: 10});\n        else scene.paths.push({id: `wall_${i}`, points: [\n          {x: 44 + (w.c + 0.5) * 54, y: 112 + w.r * 54},\n          {x: 44 + (w.c + 0.5) * 54, y: 112 + (w.r + 2) * 54}], color: '#fbbf24', width: 10});\n      });\n      for (let seat = 0; seat < (s.pawns || []).length; seat++) {\n        const p = s.pawns[seat];\n        staticPiece(`pawn_${seat}`, seat === 0 ? 'p0' : 'p1', 'main',\n          {x: 44 + p.c * 54, y: 112 + p.r * 54}, {text: seat === 0 ? '1' : '2'});\n      }\n      const mode = eventId === 'mode_wall' ? 'wall' : eventId === 'mode_pawn' ? 'pawn' :\n        localState && localState.move_count === m.move_count && localState.mode === 'wall' ? 'wall' : 'pawn';\n      selectedMode = mode;\n      if (active) {\n        scene.controls.push({id: 'mode_pawn', kind: 'button', label: (mode === 'pawn' ? '✓ ' : '') + text('Move pawn')});\n        scene.controls.push({id: 'mode_wall', kind: 'button', label: (mode === 'wall' ? '✓ ' : '') + text('Place wall')});\n        if (mode === 'pawn') (s.legalMoves || []).forEach(([r, c]) =>\n          intent({type: 'pawn', r, c}, '•', 'main', {x: 44 + c * 54, y: 112 + r * 54}, 'target'));\n        else (s.legalWalls || []).forEach(w => intent({type: 'wall', r: w.r, c: w.c, o: w.o},\n          w.o === 'H' ? '—' : '│', 'main', w.o === 'H'\n            ? {x: 44 + (w.c + 1) * 54, y: 112 + (w.r + 0.5) * 54}\n            : {x: 44 + (w.c + 0.5) * 54, y: 112 + (w.r + 1) * 54}, 'target'));\n      }\n      label('walls-left', text('Walls remaining · {counts}', {counts:s.wallsLeft ? s.wallsLeft.join(' / ') : ''}), 22, 614);\n      if (message.type === 'ui_event' && active && (eventId === 'mode_pawn' || eventId === 'mode_wall')) {\n        selectedMode = eventId === 'mode_wall' ? 'wall' : 'pawn';\n        return {scene, local_state: {mode:selectedMode,move_count:m.move_count,\n          intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move}))}};\n      }\n    } else if (KIND === 'crazy_eights') {\n      label('table', text('Top card {card} · suit {suit} · {n} cards to draw', {card:cardText(cardFromNumber(s.top)),suit:SUITS[s.suit]||'',n:s.deckCount||0}), 22, 94, 16);\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      const playable = new Set(s.playable || []);\n      hand.forEach((card, i) => {\n        const r = card % 13 + 1, labelText = cardText(cardFromNumber(card));\n        if (playable.has(card)) {\n          if (r === 8) {\n            staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: labelText});\n            for (let chosenSuit = 0; chosenSuit < 4; chosenSuit++)\n              intent({card, chosenSuit}, text('Play {card} as {suit}', {card:labelText,suit:SUITS[chosenSuit]}), null, null, 'control');\n          } else intent({card}, text('Play {card}', {card:labelText}), 'table', cardPos(i), 'piece');\n        } else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: labelText});\n      });\n      if (active) intent('draw', text('Draw a card ({n} left)', {n:s.deckCount||0}), null, null, 'control');\n    } else if (KIND === 'go_fish') {\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      hand.forEach((card, i) => staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: cardText(card)}));\n      const rankSet = [...new Set(hand.map(card => String(card).replace(/[♠♥♦♣]$/, '')))].sort((a, b) => RANKS.indexOf(a) - RANKS.indexOf(b));\n      for (let seat = 0; seat < playerNames.length; seat++) if (active && seat !== mySeat) {\n        for (const rank of rankSet) intent({target: seat, rank}, text('Ask {name} for {rank}', {name:playerNames[seat],rank}), null, null, 'control');\n      }\n      if (active && hand.length === 0) {\n        if (s.deckCount > 0) intent({draw: true}, text('Draw cards'), null, null, 'control');\n        else intent({pass: true}, text('Pass'), null, null, 'control');\n      }\n      (s.books || []).forEach((books, seat) => label(`books_${seat}`, text('{name} · books {ranks}', {name:playerNames[seat]||text('Player {n}', {n:seat+1}),ranks:(books||[]).join(', ')||'—'}),\n        24, 460 + seat * 25, 14));\n    } else if (KIND === 'hearts' || KIND === 'spades') {\n      const isHearts = KIND === 'hearts';\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      const current = isHearts ? s.cur : s.current;\n      const trick = s.trick || [];\n      const legalCards = isHearts ? new Set(s.legal || []) :\n        (s.pendingWin !== null && s.pendingWin !== undefined ? new Set() : new Set(hand));\n      hand.forEach((card, i) => {\n        const moves = legalCards.has(card) ? [{card}] : [];\n        if (moves.length) intent(moves[0], cardText(card), 'table', cardPos(i), 'piece');\n        else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: cardText(card)});\n      });\n      trick.forEach((play, i) => staticPiece(`trick_${i}`, 'played', 'table',\n        {x: 300 + (play.player ?? play.seat) * 72, y: 400}, {text: cardText(play.card)}));\n      if (KIND === 'spades' && s.pendingWin !== null && s.pendingWin !== undefined && active)\n        intent({collect: true}, text('Collect trick'), null, null, 'control');\n      const scores = isHearts ? s.taken : s.tricksWon;\n      if (Array.isArray(scores)) scores.forEach((score, seat) =>\n        label(`score_${seat}`, `${playerNames[seat] || text('Player {n}', {n:seat + 1})} · ${score}`, 22 + seat * 170, 92, 14));\n    } else if (KIND === 'guess_who') {\n      const names = CHARACTER_NAMES;\n      const secret = Number.isInteger(s.mySecret) ? text('Your character: {name}', {name:names[s.mySecret]}) : text('Your character is private');\n      label('your-secret', secret, 22, 88, 18);\n      for (let i = 0; i < names.length; i++) {\n        const description = names[i]+': '+QUESTIONS.map((question,q)=>text(question)+' '+text(SOURCE_CHARACTER_ANSWERS[i][q]?'Yes':'No')).join('; ');\n        if (active) intent({kind:'guess',idx:i}, names[i], 'main', {cell:String(i)}, `person_${i}`, description);\n        else staticPiece(`person_${i}`, `person_${i}`, 'main', {cell:String(i)}, {text:names[i],aria_label:description});\n      }\n      const asked = new Set((s.hist || []).filter(item => item.by === mySeat && Number.isInteger(item.q)).map(item => item.q));\n      if (active) QUESTIONS.forEach((question, q) => {\n        if (!asked.has(q)) intent({kind: 'ask', q}, text('Ask: {question}', {question:text(question)}), null, null, 'control');\n      });\n      (s.hist || []).slice(-8).forEach((item, i) => {\n        const who = playerNames[item.by] || text('Player {n}', {n:item.by + 1});\n        const historyText = Number.isInteger(item.q) ? `${who}: ${text(QUESTIONS[item.q])} · ${item.ans ? text('Yes') : text('No')}` :\n          text('{name}: guessed {character} · {result}', {name:who,character:names[item.guess]||'—',result:item.correct?text('correct'):text('incorrect')});\n        label(`history_${i}`, historyText, 22, 520 + i * 18, 13);\n      });\n    }\n\n    const emitted = intentMatch && legal ? offers[Number(intentMatch[1])] : undefined;\n    if (message.type === 'ui_event' && active && emitted !== undefined) {\n      const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move})),selectedFrom,move_count:m.move_count,viewer:mySeat};\n      if (KIND === 'quoridor') Object.assign(nextLocal,{mode:selectedMode,move_count:m.move_count});\n      return {scene, local_state: nextLocal, make_move: emitted};\n    }\n    const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move})),selectedFrom,move_count:m.move_count,viewer:mySeat};\n    if (KIND === 'quoridor') Object.assign(nextLocal,{mode:selectedMode,move_count:m.move_count});\n    return {scene, local_state: nextLocal};\n  }\n};\n\nconst SUITS = ['♠', '♥', '♦', '♣'];\nconst RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];\nfunction cardFromNumber(value) {\n  const suit = Math.floor(Number(value) / 13), rank = Number(value) % 13 + 1;\n  return `${RANKS[(rank + 12) % 13]}${SUITS[suit] || ''}`;\n}\nconst QUESTIONS = ['Are they wearing glasses?', 'Are they wearing a hat?', 'Do they have facial hair?',\n  'Are their ears showing?', 'Do they have blonde hair?', 'Do they have brown hair?',\n  'Do they have black hair?', 'Do they have red hair?', 'Do they have gray hair?',\n  'Do they have long hair?', 'Do they have short hair?', 'Do they have blue eyes?',\n  'Do they have brown eyes?', 'Do they have green eyes?'];\nconst CHARACTER_NAMES = ['Ava', 'Ben', 'Cleo', 'Dan', 'Eli', 'Fay', 'Gus', 'Hana', 'Ivan', 'Jade', 'Kai', 'Lena',\n  'Max', 'Nora', 'Omar', 'Pia', 'Quinn', 'Rosa', 'Sam', 'Tara', 'Umar', 'Vera', 'Will', 'Yuki'];\n"
   }
 }

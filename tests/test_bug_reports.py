@@ -273,3 +273,30 @@ def test_report_diagnostic_bodies_do_not_enter_http_logs(caplog):
              for record in caplog.records if "API_CALL " in record.getMessage()]
     assert len(calls) == 3
     assert all("request_body" not in call and "response_body" not in call for call in calls)
+
+
+def test_incomplete_report_upload_times_out_without_storing_private_evidence(monkeypatch):
+    import asyncio
+    import game_platform.bug_reports as module
+
+    api = Api()
+    cancelled = []
+
+    async def incomplete_stream(self):
+        yield b'{"text":"private-incomplete-report'
+        try:
+            await asyncio.sleep(10)
+        finally:
+            cancelled.append(True)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(module, "UPLOAD_TIMEOUT_SECONDS", 0.01)
+        patch.setattr(module.Request, "stream", incomplete_stream)
+        response = api.client.post("/bug-reports", json=payload())
+    assert response.status_code == 408
+    assert response.json()["detail"] == "bug report upload timed out"
+    assert response.headers["cache-control"] == "private, no-store"
+    assert cancelled == [True]
+    assert api.platform._store.list_bug_reports(status=None, limit=1) == ([], None)
+    # Cancellation cannot poison later requests or consume a report slot.
+    assert api.client.post("/bug-reports", json=payload()).status_code == 201

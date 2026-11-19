@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {PortalApi} from '../src/core/api';
-import {diagnosticSnapshot,recordDiagnosticLog,recordDiagnosticEvent,recordDiagnosticPage,rememberDiagnosticSecrets,startDiagnosticRequest,diagnosticPath} from '../src/core/diagnostics';
+import {diagnosticSnapshot,recordDiagnosticLog,recordDiagnosticEvent,recordDiagnosticPage,rememberDiagnosticSecrets,startDiagnosticRequest,diagnosticPath,setDiagnosticScope} from '../src/core/diagnostics';
 
 test('flight recorder scrubs credentials including secrets learned after logging, URLs, and sensitive keys',()=>{
   recordDiagnosticLog('error','later-learned-password password=hidden Authorization: Bearer auth-hidden https://example.test/path?token=leaked#proof=secret');
@@ -40,4 +40,26 @@ test('API metadata includes failed calls and response sizes without bodies or pa
   const unavailable=new PortalApi('',()=> 'en',async()=>{throw new TypeError('Network request failed');});
   await assert.rejects(unavailable.request('GET','/test'));
   assert.equal((diagnosticSnapshot() as any).apiCalls.at(-1).state,'failed');
+});
+
+test('switching accounts or API origins removes earlier diagnostics and pending calls while retaining redaction',()=>{
+  setDiagnosticScope('origin-one:alice');
+  rememberDiagnosticSecrets(['old-account-credential']);
+  recordDiagnosticLog('error','private Alice activity');
+  recordDiagnosticPage({matchId:'alice-private-match'});
+  recordDiagnosticEvent('private_alice_event');
+  const finish=startDiagnosticRequest('GET','/matches/alice-private-match');
+  const first=diagnosticSnapshot();
+  setDiagnosticScope('origin-one:bob');
+  finish(200);
+  let next=diagnosticSnapshot() as any;
+  assert.notEqual(next.sessionId,first.sessionId);
+  assert.deepEqual([next.logs,next.pages,next.events,next.apiCalls],[[],[],[],[]]);
+  recordDiagnosticLog('error','old-account-credential');
+  setDiagnosticScope('origin-one:bob');
+  assert.equal((diagnosticSnapshot() as any).logs.length,1);
+  assert.ok(!JSON.stringify(diagnosticSnapshot()).includes('old-account-credential'));
+  setDiagnosticScope('origin-two:bob');
+  next=diagnosticSnapshot() as any;
+  assert.deepEqual([next.logs,next.pages,next.events,next.apiCalls],[[],[],[],[]]);
 });

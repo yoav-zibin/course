@@ -154,7 +154,7 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
 export default function App() {
   const p=usePortal();
   const embedded=Platform.OS==='web'?document.getElementById('declarative-spec'):null;
-  return <SafeAreaProvider><ErrorBoundary>{embedded?<EmbeddedGameHost spec={JSON.parse(embedded.textContent||'null')}/>:<PortalApp p={p}/>}</ErrorBoundary><BugReporter p={p} screen={p.selectedMatch?'match':p.selectedGameId?'game':'portal'}/><BugButton/></SafeAreaProvider>;
+  return <SafeAreaProvider><ErrorBoundary>{embedded?<EmbeddedGameHost spec={JSON.parse(embedded.textContent||'null')}/>:<PortalApp p={p}/>}</ErrorBoundary><BugReporter key={JSON.stringify([p.baseUrl,p.account?.id??'visitor'])} p={p} screen={p.selectedMatch?'match':p.selectedGameId?'game':'portal'}/><BugButton/></SafeAreaProvider>;
 }
 const s = StyleSheet.create({
   safe:{flex:1,backgroundColor:colors.background}, header:{minHeight:104,paddingHorizontal:20,paddingTop:38,paddingBottom:12,borderBottomWidth:1,borderColor:colors.border,backgroundColor:colors.surface,flexDirection:'row',alignItems:'center',gap:16,flexWrap:'wrap'},
