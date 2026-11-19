@@ -97,6 +97,21 @@ def test_compact_mcp_hierarchy_preserves_real_native_labels_bounds_and_ids():
         audit.expand_compact_hierarchy({"ui_schema": {"platform": "android"}, "elements": []})
 
 
+def test_board_scroll_uses_real_far_edge_swipe_until_target_is_in_safe_viewport(tmp_path):
+    runner = audit.Audit(tmp_path, "maestro")
+    runner.device = UDID
+    trees = iter([{"attributes": {"accessibilityText": "Play history", "bounds": "[10,900][110,930]"}},
+                  {"attributes": {"accessibilityText": "Play history", "bounds": "[10,750][110,780]"}}])
+    runner.hierarchy = lambda name, timeout: next(trees)
+    calls = []
+    runner.mcp_tool = lambda *args: calls.append(args) or {"success": True}
+    runner.edge_scroll("board", "Play history", "DOWN")
+    assert len(calls) == 1
+    assert json.loads(calls[0][2]["yaml"]) == [{"swipe": {"start": "99%,80%", "end": "99%,25%", "duration": 500}}]
+    assert calls[0][1] == "run" and calls[0][2]["device_id"] == UDID
+    assert runner.report["scrollActions"][0]["driver"] == "Maestro/XCTest physical swipe"
+
+
 @pytest.mark.parametrize("change", ["source", "fork", "workflow", "artifact", "expired", "digest", "build"])
 def test_untrusted_or_unsuccessful_artifact_rejected(change):
     run, artifact, jobs = provenance()

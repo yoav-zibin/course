@@ -396,12 +396,38 @@ class Audit:
         print(f"{name}: real Maestro/XCTest flow passed in {time.monotonic() - started:.1f}s", flush=True)
         self.first = False
 
-    def hierarchy(self, name):
-        compact = self.mcp_tool(name + "-hierarchy", "inspect_screen", {"device_id": self.device}, 90)
+    def hierarchy(self, name, timeout=90):
+        compact = self.mcp_tool(name + "-hierarchy", "inspect_screen", {"device_id": self.device}, timeout)
         (self.output / (name + "-compact-hierarchy.json")).write_text(json.dumps(compact, indent=2) + "\n")
         tree = expand_compact_hierarchy(compact)
         (self.output / (name + "-hierarchy.json")).write_text(json.dumps(tree, indent=2) + "\n")
         return tree
+
+    def edge_scroll(self, name, label, direction, timeout=25):
+        # The renderer legitimately claims drags starting on playable cells.
+        # Scroll the page through the blank right margin, never the board center.
+        deadline = time.monotonic() + timeout
+        for attempt in range(8):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            tree = self.hierarchy(f"{name}-{attempt}", remaining)
+            for node in flat_nodes(tree):
+                box = bounds(node)
+                if node_label(node) == label and box and box["height"] > 0 and box["y"] >= 65 and box["y"] + box["height"] <= 840:
+                    return
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            start, end = ("99%,25%", "99%,80%") if direction == "UP" else ("99%,80%", "99%,25%")
+            command = {"swipe": {"start": start, "end": end, "duration": 500}}
+            self.mcp_tool(f"{name}-edge-swipe{attempt}", "run", {"device_id": self.device, "yaml": json.dumps([command])}, remaining)
+            self.report.setdefault("scrollActions", []).append({"stage": name, "driver": "Maestro/XCTest physical swipe", **command})
+        raise RuntimeError(f"{name}: {label} did not enter the visible viewport after bounded physical edge scrolling")
+
+    def frame_board(self, name, title):
+        self.edge_scroll(name + "-top", title, "UP")
+        self.edge_scroll(name + "-bottom", "Play history", "DOWN")
 
     def save_report(self):
         (self.output / "manifest.json").write_text(json.dumps(self.report, indent=2) + "\n")
@@ -460,7 +486,9 @@ class Audit:
             {"tapOn": selector("On this device")}, {"assertVisible": selector("Practice with a computer")},
             {"takeScreenshot": "page-local"},
             {"scrollUntilVisible": {"element": selector("Preferences"), "direction": "DOWN", "timeout": 30000}},
-            {"tapOn": selector("Preferences")}, {"assertVisible": selector("Navigation layout")},
+            {"tapOn": selector("Preferences")},
+            {"scrollUntilVisible": {"element": selector("Navigation layout"), "direction": "UP", "timeout": 30000}},
+            {"assertVisible": selector("Navigation layout")},
             {"takeScreenshot": "page-preferences"},
             {"tapOn": selector("Log in")}, {"assertVisible": selector("Continue as guest")},
             {"takeScreenshot": "page-account"}, {"tapOn": selector("Close dialog")},
@@ -475,10 +503,11 @@ class Audit:
             open_selector = {**selector("Open match"), "below": selector(package["name"]), "index": 0}
             self.flow(game["slug"] + "-open", [
                 {"tapOn": selector("On this device")},
+                {"scrollUntilVisible": {"element": selector("Practice with a computer"), "direction": "UP", "timeout": 30000}},
                 {"scrollUntilVisible": {"element": open_selector, "direction": "DOWN", "timeout": 30000}},
                 {"tapOn": open_selector}, {"tapOn": selector("Focus mode")},
-                {"scrollUntilVisible": {"element": selector("Play history"), "direction": "DOWN", "timeout": 25000}},
             ])
+            self.frame_board(game["slug"] + "-initial-frame", package["name"])
             self.board_stage(game, game["slug"] + "-initial", game["initial"], game["initialScene"])
             for step in game["steps"]:
                 stage = f'{game["slug"]}-step{step["number"]}'
@@ -491,8 +520,8 @@ class Audit:
             self.run(game["slug"] + "-relaunch", ["xcrun", "simctl", "launch", self.device, BUNDLE], 120)
             self.flow(game["slug"] + "-restart-view", [
                 {"tapOn": selector("Focus mode")},
-                {"scrollUntilVisible": {"element": selector("Play history"), "direction": "DOWN", "timeout": 25000}},
             ])
+            self.frame_board(game["slug"] + "-restart-frame", package["name"])
             final = game["steps"][-1]
             self.board_stage(game, game["slug"] + "-restart", final["expectedMatch"], final["scene"])
             self.flow(game["slug"] + "-zoom", [{"tapOn": selector("Zoom in")}, {"takeScreenshot": game["slug"] + "-zoom125"}, {"tapOn": selector("Reset board view")}, {"tapOn": selector("Exit focus mode")}])
@@ -501,13 +530,14 @@ class Audit:
         before = set(read_data(self.container)["local"])
         self.flow("extra-practice-seat2", [
             {"tapOn": selector("BuildPlay home")},
+            {"scrollUntilVisible": {"element": selector("Let’s play."), "direction": "UP", "timeout": 30000}},
             {"scrollUntilVisible": {"element": selector("Play Tic-tac-toe"), "direction": "DOWN", "timeout": 30000}},
             {"tapOn": selector("Play Tic-tac-toe")},
             {"scrollUntilVisible": {"element": selector("Your seat against computers: Player 2"), "direction": "DOWN", "timeout": 30000}},
             {"tapOn": selector("Your seat against computers: Player 2")},
             {"tapOn": selector("Practice with computers")}, {"tapOn": selector("Focus mode")},
-            {"scrollUntilVisible": {"element": selector("Play history"), "direction": "DOWN", "timeout": 25000}},
         ])
+        self.frame_board("extra-practice-seat2-frame", "Tic-tac-toe")
         data = read_data(self.container)
         added = [match for key, match in data["local"].items() if key not in before]
         if (len(added) != 1 or added[0]["players"][1]["kind"] != "human"
@@ -575,6 +605,11 @@ class Audit:
         except Exception as error:
             self.report["error"] = str(error)
             if self.device:
+                if self.mcp:
+                    try:
+                        self.hierarchy("failure")
+                    except Exception as hierarchy_error:
+                        self.report["failureHierarchyError"] = str(hierarchy_error)
                 try:
                     self.driver_diagnostics()
                 except Exception as diagnostic_error:
