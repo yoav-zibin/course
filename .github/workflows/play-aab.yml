@@ -6,6 +6,7 @@ on:
 jobs:
   android-play:
     name: BuildPlay Android (Play AAB)
+    if: github.ref == 'refs/heads/main' && github.repository == 'yoav-zibin/course'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -38,20 +39,35 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
         run: |
-          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.keystore"
+          set -euo pipefail
+          umask 077
+          test -n "$KEYSTORE_BASE64" || { echo 'Android upload keystore secret is missing.' >&2; exit 1; }
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.keystore"
       - run: npx expo prebuild --platform android --no-install --no-clean
       - name: Build signed AAB for Play
         env:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
         run: |
           set -o pipefail
-          bash android/gradlew --project-dir android --no-daemon --max-workers=2 \
-            -Pandroid.enableMinifyInReleaseBuilds=false \
-            "-Pandroid.injected.signing.store.file=$RUNNER_TEMP/upload.keystore" \
-            "-Pandroid.injected.signing.store.password=<redacted>" \
-            "-Pandroid.injected.signing.key.alias=upload" \
-            "-Pandroid.injected.signing.key.password=<redacted>" \
-            :app:bundleRelease 2>&1 | tee "$GITHUB_WORKSPACE/buildplay-aab-build.log"
+          python3 - <<'PY' 2>&1 | tee "$GITHUB_WORKSPACE/buildplay-aab-build.log"
+          import os, subprocess
+          password = os.environ.get('KEYSTORE_PASSWORD')
+          if not password:
+              raise SystemExit('Android upload keystore password is missing.')
+          properties = {
+              'android.injected.signing.store.file': os.path.join(os.environ['RUNNER_TEMP'], 'upload.keystore'),
+              'android.injected.signing.store.password': password,
+              'android.injected.signing.key.alias': 'upload',
+              'android.injected.signing.key.password': password,
+          }
+          # Gradle's CI project-property environment keeps passwords out of argv.
+          # Keep Bash explicit: POSIX sh can drop environment names containing dots.
+          environment = {**os.environ, **{'ORG_GRADLE_PROJECT_' + key: value for key, value in properties.items()}}
+          result = subprocess.run(['bash', 'android/gradlew', '--project-dir', 'android',
+                                   '--no-daemon', '--max-workers=2', '-Pandroid.enableMinifyInReleaseBuilds=false',
+                                   ':app:bundleRelease'], env=environment)
+          raise SystemExit(result.returncode)
+          PY
           cp android/app/build/outputs/bundle/release/app-release.aab "$GITHUB_WORKSPACE/BuildPlay.aab"
           keytool -printcert -jarfile "$GITHUB_WORKSPACE/BuildPlay.aab" | grep -i "SHA256" | head -2
       - uses: actions/upload-artifact@v4
@@ -67,3 +83,7 @@ jobs:
           name: BuildPlay-aab-gradle-log
           path: buildplay-aab-build.log
           if-no-files-found: warn
+      - name: Remove upload keystore
+        if: always()
+        run: |
+          rm -f -- "$RUNNER_TEMP/upload.keystore"

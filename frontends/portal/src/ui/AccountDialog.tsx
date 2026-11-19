@@ -1,6 +1,6 @@
 import {copyText} from '../platform/i18n';
 import React, {useEffect, useState} from 'react';
-import {Image, View} from 'react-native';
+import {Image, Linking, View} from 'react-native';
 import {Button, Card, Choices, Copy, Dialog, Field, Notice, Row, Title, colors} from './components';
 import {text,useApp} from './context';
 import GoogleLogin from './GoogleLogin';
@@ -19,6 +19,7 @@ export function AccountDialog({visible,onClose}: {visible:boolean;onClose:()=>vo
     <Choices label={t('ui.language.label','Language')} value={p.locale} options={getLocales().map(item=>({value:item.code,label:item.native_name||item.name||item.code}))} onChange={value=>act(()=>p.actions.setLocale(value))}/>
     {p.account&&<Card style={{padding:16}}><Row>{p.account.picture_url&&<Image source={{uri:new URL(p.account.picture_url,p.baseUrl).href}} style={{width:52,height:52,borderRadius:26}}/>}<View style={{flex:1,gap:4}}><Title small>{p.account.display_name}</Title><Copy small muted>{p.account.linked?.length?copyText("Verified account"):copyText("Guest account")} · {p.profile?.token_balance??0} {copyText("tokens")}</Copy></View></Row>
       <Row><Button compact secondary onPress={()=>setEditing(!editing)}>{t('ui.auth.edit_name','Edit profile')}</Button><Button compact secondary onPress={()=>act(async()=>{await p.actions.logout();onClose();})}>{t('ui.auth.log_out','Log out')}</Button></Row>
+      <Button compact secondary onPress={()=>act(()=>Linking.openURL(new URL('/delete-account',p.baseUrl).href))}>{copyText('Request account deletion')}</Button>
       {editing&&<><Field label={t('ui.auth.display_name','Display name')} value={name} onChangeText={setName} maxLength={200}/><Button disabled={!name.trim()} onPress={()=>act(async()=>{await p.actions.updateProfile({display_name:name.trim()});setEditing(false);})}>{t('ui.action.save','Save')}</Button></>}
     </Card>}
     {p.account&&<>{(p.profile?.referral_code||p.account.referral_code)&&<Copy selectable small>{copyText('Your player code: {v0}',{v0:p.profile?.referral_code||p.account.referral_code})}</Copy>}<NotificationPreferences/></>}

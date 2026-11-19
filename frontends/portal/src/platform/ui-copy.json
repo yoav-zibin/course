@@ -3130,5 +3130,14 @@
     "zh": "Google Analytics 停用浏览器插件",
     "hi": "Google Analytics से ऑप्ट आउट करने वाला ब्राउज़र ऐड-ऑन",
     "ar": "إضافة المتصفح لإيقاف Google Analytics"
+  },
+  "Request account deletion": {
+    "es": "Solicitar la eliminación de la cuenta",
+    "fr": "Demander la suppression du compte",
+    "de": "Kontolöschung beantragen",
+    "pt": "Solicitar a exclusão da conta",
+    "zh": "申请删除账户",
+    "hi": "खाता हटाने का अनुरोध करें",
+    "ar": "طلب حذف الحساب"
   }
 }
