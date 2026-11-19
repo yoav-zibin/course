@@ -98,7 +98,14 @@ def test_query_retirement_resumes_and_physically_removes_children_and_related_da
             break
     assert [store.get_user(name).token_balance for name in ("alice", "bob")] == [10, 10]
     assert store.get_match(old.id) is None
-    assert store.ref("matches", old.id).get().to_dict() == {"tombstone": True}
+    # Association-only metadata stays discoverable until child cleanup finishes;
+    # a later account purge must still find the already-hidden move history.
+    assert store.ref("matches", old.id).get().to_dict() == {
+        "tombstone": True, "id": old.id, "owner_user_id": "alice",
+        "participants": ["alice", "bob"],
+        "historical_participants": ["alice", "bob"],
+        "deletion_metadata_version": 1,
+    }
     # Restart with fresh caches after refund, before deleting all 205 child moves.
     restarted = QueryStore(store.client, namespace=store.namespace)
     platform = ScalablePlatform(store=TimedStore(restarted, Monitor()))
