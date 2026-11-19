@@ -8,6 +8,8 @@ attachment and accepts one description of a bug or feature request.
 Native draft editing stays inside the displayed form, without relaying every
 controlled input value through the modal overlay. The report adjusts around
 the keyboard, and an unsent draft survives closing and reopening the dialog.
+A successful submission clears only its submitted text, preserving newer edits
+made before the response arrives.
 
 Web screenshots use `html-to-image` to rasterize the visible viewport and
 preserve nested scroll positions in the rasterized copy. Password

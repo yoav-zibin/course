@@ -4,6 +4,30 @@ import {E2E_ADMIN_HEADERS} from './helpers';
 test.beforeEach(async({baseURL})=>{if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Bug reporter tests require a disposable loopback server.');});
 const label='Report a bug or request a feature';
 
+test('a late report success preserves a newer reopened draft',async({page})=>{
+  let respond:(()=>Promise<void>)|undefined;
+  await page.route('**/bug-reports',route=>{respond=()=>route.fulfill({status:201,json:{id:'delayed-report',status:'open'}});});
+  await page.goto('/portal');
+  const bug=page.getByRole('button',{name:label,exact:true});
+  const input=page.getByRole('textbox',{name:'Bug or feature request'});
+  await bug.click();await input.fill('The first report is still being sent.');
+  const finished=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname==='/bug-reports');
+  await page.getByRole('button',{name:'Send report',exact:true}).click();
+  await expect.poll(()=>Boolean(respond)).toBe(true);
+  await page.getByRole('button',{name:'Close dialog',exact:true}).click();
+  await bug.click();const nextDraft='Keep this newer unsent draft after the earlier report finishes.';
+  await input.fill(nextDraft);await respond!();await (await finished).finished();
+  await expect(input).toHaveValue(nextDraft);
+  await page.getByRole('button',{name:'Close dialog',exact:true}).click();await bug.click();
+  await expect(input).toHaveValue(nextDraft);
+  // A successful send still clears its own unchanged draft.
+  respond=undefined;await page.getByRole('button',{name:'Send report',exact:true}).click();
+  await expect.poll(()=>Boolean(respond)).toBe(true);await respond!();
+  await expect(page.getByText('Thanks! Your report was sent.')).toBeVisible();
+  await page.getByRole('button',{name:'Close',exact:true}).click();await bug.click();
+  await expect(input).toHaveValue('');
+});
+
 test('fast draft edits retain their input and survive closing above the account modal without sending',async({page})=>{
   let sent=0;page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname==='/bug-reports')sent++;});
   await page.goto('/portal');await page.getByRole('button',{name:'Log in',exact:true}).click();

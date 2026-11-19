@@ -16,7 +16,7 @@ type Portal=PortalState&{actions:{request:(method:string,path:string,body?:unkno
 // parent/modal effect can overwrite newer native keystrokes with an older value.
 function BugReportForm({p,screenshot,captureError,captured,draft,onClose,onSent}: {
   p:Portal;screenshot:string|null;captureError:string;captured:{current:Record<string,unknown>};
-  draft:{current:string};onClose:()=>void;onSent:()=>void;
+  draft:{current:string};onClose:()=>void;onSent:(submittedText:string)=>void;
 }) {
   const [text,setText]=useState(draft.current),[error,setError]=useState(''),[sent,setSent]=useState('');
   return sent?<><Notice>{copyText("Thanks! Your report was sent.")}</Notice><Copy small muted>{copyText("Report {v0}",{v0:sent})}</Copy><Button onPress={onClose}>{copyText("Close")}</Button></>:<>
@@ -27,7 +27,7 @@ function BugReportForm({p,screenshot,captureError,captured,draft,onClose,onSent}
     <Field label={copyText("Bug or feature request")} multiline value={text} onChangeText={value=>{draft.current=value;setText(value);}} maxLength={10000}/>
     {error&&<Notice error>{error}</Notice>}
     <Button disabled={text.trim().length<5||!p.network} onPress={async()=>{
-      try{const result=await p.actions.request('POST','/bug-reports',{text:text.trim(),screenshot,diagnostics:diagnosticSnapshot({...captured.current.context as Record<string,unknown>,screenshotCapturedAt:captured.current.capturedAt})});recordDiagnosticEvent('bug_report_sent',{id:result.id});onSent();setSent(result.id);}
+      try{const result=await p.actions.request('POST','/bug-reports',{text:text.trim(),screenshot,diagnostics:diagnosticSnapshot({...captured.current.context as Record<string,unknown>,screenshotCapturedAt:captured.current.capturedAt})});recordDiagnosticEvent('bug_report_sent',{id:result.id});onSent(text);setSent(result.id);}
       catch(e){setError(e instanceof Error?e.message:String(e));}
     }}>{copyText("Send report")}</Button>
   </>;
@@ -59,6 +59,10 @@ export function BugReporter({p,screen}: {p:Portal;screen:string}) {
   }),[dimensions.width,dimensions.height]);
   const close=()=>{opened.current=false;setVisible(false);if(submitted.current)setScreenshot(null);recordDiagnosticEvent('bug_report_closed');};
   return <BugReportDialog visible={visible} title={copyText("Report a bug or feature request")} onClose={close} wide>
-    <BugReportForm p={p} screenshot={screenshot} captureError={captureError} captured={captured} draft={draft} onClose={close} onSent={()=>{draft.current='';submitted.current=true;}}/>
+    <BugReportForm p={p} screenshot={screenshot} captureError={captureError} captured={captured} draft={draft} onClose={close} onSent={submittedText=>{
+      // A late response must not erase edits made while it was in flight.
+      if(draft.current===submittedText)draft.current='';
+      submitted.current=true;
+    }}/>
   </BugReportDialog>;
 }
